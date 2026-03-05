@@ -127,12 +127,69 @@ _memory_pool = cp.get_default_memory_pool()
 _pinned_memory_pool = cp.get_default_pinned_memory_pool()
 
 
+def _canonicalize_device(device: Optional[str]) -> str:
+    """Normalize device identifiers to supported canonical values."""
+    if device is None:
+        return _device
+    if not isinstance(device, str):
+        raise TypeError(f"device must be a string, got {type(device).__name__}")
+    normalized = device.strip().lower()
+    if normalized == "cpu":
+        return "cpu"
+    if normalized == "cuda" or normalized.startswith("cuda:") or normalized == "gpu":
+        return "cuda"
+    raise ValueError(f"Unknown device: {device}")
+
+
+def _normalize_numeric_dtype(dtype_like, context: str) -> np.dtype:
+    """Parse and validate numeric dtypes used by tensor data paths."""
+    try:
+        resolved = np.dtype(dtype_like)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"Invalid {context}: {dtype_like!r}") from exc
+
+    if resolved == np.dtype(np.object_):
+        raise TypeError(f"{context} object dtype is not supported")
+
+    is_numeric = np.issubdtype(resolved, np.number) or np.issubdtype(resolved, np.bool_)
+    if not is_numeric:
+        raise TypeError(f"{context} must be numeric or bool, got {resolved}")
+    return resolved
+
+
+def _infer_data_dtype(data) -> Optional[np.dtype]:
+    """Infer dtype from array-like/scalar inputs, if possible."""
+    if isinstance(data, (cp.ndarray, np.ndarray, np.generic, cp.generic)):
+        return _normalize_numeric_dtype(data.dtype, "data dtype")
+    try:
+        inferred = np.asarray(data).dtype
+    except Exception:
+        return None
+    return _normalize_numeric_dtype(inferred, "data dtype")
+
+
+def _resolve_tensor_dtype(data, dtype, device: str) -> np.dtype:
+    """Resolve target tensor dtype with explicit mixed precision semantics."""
+    if dtype is not None:
+        return _normalize_numeric_dtype(dtype, "dtype")
+
+    inferred_dtype = _infer_data_dtype(data)
+    default_dtype = _normalize_numeric_dtype(_default_dtype, "default dtype")
+
+    if inferred_dtype is None:
+        inferred_dtype = default_dtype
+
+    if _mixed_precision and _canonicalize_device(device) == "cuda":
+        if np.issubdtype(inferred_dtype, np.floating) and inferred_dtype.itemsize > 2:
+            return np.dtype(np.float16)
+
+    return inferred_dtype
+
+
 def set_device(device: str):
     """Set compute device: 'cuda' or 'cpu'"""
     global _device
-    if device not in ('cuda', 'cpu'):
-        raise ValueError(f"Unknown device: {device}")
-    _device = device
+    _device = _canonicalize_device(device)
 
 
 def get_device() -> str:
@@ -394,8 +451,8 @@ class Tensor:
 
     def __init__(self, data, _children=(), _op='', label='', device=None,
                  requires_grad=True, dtype=None):
-        device = device or _device
-        dtype = dtype or (_default_dtype if not _mixed_precision else cp.float16)
+        device = _canonicalize_device(device or _device)
+        dtype = _resolve_tensor_dtype(data, dtype=dtype, device=device)
 
         if device == 'cuda':
             if isinstance(data, cp.ndarray):
@@ -456,12 +513,18 @@ class Tensor:
 
     def to(self, device: str):
         """Move tensor to specified device."""
+        device = _canonicalize_device(device)
         if device == self._device:
             return self
-        new_data = to_cpu(self.data) if device == 'cpu' else to_gpu(self.data)
-        new_tensor = Tensor(new_data, device=device, requires_grad=self._requires_grad)
+        new_data = to_cpu(self.data) if device == 'cpu' else to_gpu(self.data, dtype=self.data.dtype)
+        new_tensor = Tensor(
+            new_data,
+            device=device,
+            requires_grad=self._requires_grad,
+            dtype=self.data.dtype,
+        )
         if self.grad is not None:
-            new_tensor.grad = to_cpu(self.grad) if device == 'cpu' else to_gpu(self.grad)
+            new_tensor.grad = to_cpu(self.grad) if device == 'cpu' else to_gpu(self.grad, dtype=self.grad.dtype)
         return new_tensor
 
     def cpu(self):
@@ -615,6 +678,68 @@ class Tensor:
 
     # ==================== INDEXING ====================
 
+    @staticmethod
+    def _index_to_numpy(idx):
+        """Convert CuPy index objects to NumPy-compatible index objects."""
+        if isinstance(idx, tuple):
+            return tuple(Tensor._index_to_numpy(i) for i in idx)
+        if isinstance(idx, list):
+            return [Tensor._index_to_numpy(i) for i in idx]
+        if isinstance(idx, cp.ndarray):
+            return cp.asnumpy(idx)
+        return idx
+
+    def _scatter_add(self, target, idx, src):
+        """Accumulate src into target using duplicate-index-safe semantics."""
+        xp = self.xp
+        target_dtype = _normalize_numeric_dtype(target.dtype, "scatter target dtype")
+        src_dtype = _normalize_numeric_dtype(src.dtype, "scatter source dtype")
+        idx_np = Tensor._index_to_numpy(idx)
+
+        # Validate index form/bounds up front to produce deterministic errors.
+        try:
+            np.empty(target.shape, dtype=np.int8)[idx_np]
+        except Exception as exc:
+            raise IndexError(f"Invalid scatter index for target shape {target.shape}: {exc}") from exc
+
+        def _accumulate_numpy(target_np, idx_cpu, src_np):
+            if np.issubdtype(target_dtype, np.integer) and target_dtype != np.dtype(np.bool_):
+                promoted = np.promote_types(target_dtype, np.int64)
+                tmp = target_np.astype(promoted, copy=True)
+                np.add.at(tmp, idx_cpu, src_np.astype(promoted, copy=False))
+                limits = np.iinfo(target_dtype)
+                if tmp.min() < limits.min or tmp.max() > limits.max:
+                    raise OverflowError(
+                        f"scatter_add overflow for dtype {target_dtype}: "
+                        f"range [{tmp.min()}, {tmp.max()}] outside [{limits.min}, {limits.max}]"
+                    )
+                target_np[...] = tmp.astype(target_dtype, copy=False)
+                return
+
+            if np.issubdtype(target_dtype, np.bool_):
+                raise TypeError("scatter_add does not support boolean targets")
+
+            np.add.at(target_np, idx_cpu, src_np.astype(target_dtype, copy=False))
+
+        if xp == np:
+            _accumulate_numpy(target, idx_np, src)
+            return
+
+        xp_scatter_add = getattr(cupyx, 'scatter_add', None)
+        if xp_scatter_add is not None:
+            try:
+                xp_scatter_add(target, idx, src)
+                return
+            except Exception:
+                # Fall back to NumPy add.at for unsupported index patterns.
+                pass
+
+        cpu_target = cp.asnumpy(target)
+        cpu_idx = idx_np
+        cpu_src = cp.asnumpy(src)
+        _accumulate_numpy(cpu_target, cpu_idx, cpu_src)
+        target[...] = cp.asarray(cpu_target)
+
     def __getitem__(self, idx):
         """Advanced indexing with gradient support."""
         xp = self.xp
@@ -623,14 +748,7 @@ class Tensor:
 
         def _backward():
             grad = xp.zeros_like(self.data)
-            if isinstance(idx, tuple):
-                xp_scatter_add = getattr(cupyx, 'scatter_add', None) if xp == cp else None
-                if xp_scatter_add is not None:
-                    xp_scatter_add(grad, idx, out.grad)
-                else:
-                    grad[idx] += out.grad
-            else:
-                grad[idx] += out.grad
+            self._scatter_add(grad, idx, out.grad)
             self.grad += grad
         out._backward = _backward
 
@@ -708,20 +826,71 @@ class Tensor:
         out = Tensor(self.data @ other.data, (self, other), '@', device=self._device)
 
         def _backward():
+            xp = self.xp
+            lhs = self.data
+            rhs = other.data
+            if lhs.ndim == 0 or rhs.ndim == 0:
+                raise ValueError(
+                    f"matmul backward requires operands with ndim >= 1, got {lhs.ndim} and {rhs.ndim}"
+                )
+
+            grad_out = out.grad
+            if not hasattr(grad_out, "shape"):
+                grad_out = xp.asarray(grad_out)
+
+            expected_shape = out.data.shape
+            if expected_shape == ():
+                if grad_out.size != 1:
+                    raise ValueError(
+                        f"matmul backward expected scalar grad_out, got shape {grad_out.shape}"
+                    )
+                grad_out = grad_out.reshape(())
+            elif grad_out.shape != expected_shape:
+                raise ValueError(
+                    f"matmul backward grad_out shape mismatch: expected {expected_shape}, got {grad_out.shape}"
+                )
+
+            def _is_diff_dtype(arr):
+                arr_dtype = np.dtype(arr.dtype)
+                return np.issubdtype(arr_dtype, np.floating) or np.issubdtype(arr_dtype, np.complexfloating)
+
+            if self.grad is not None and not _is_diff_dtype(lhs):
+                raise TypeError(f"matmul backward requires floating/complex lhs, got {lhs.dtype}")
+            if other.grad is not None and not _is_diff_dtype(rhs):
+                raise TypeError(f"matmul backward requires floating/complex rhs, got {rhs.dtype}")
+
+            lhs_was_vector = lhs.ndim == 1
+            rhs_was_vector = rhs.ndim == 1
+
+            lhs_mat = lhs[xp.newaxis, :] if lhs_was_vector else lhs
+            rhs_mat = rhs[:, xp.newaxis] if rhs_was_vector else rhs
+
+            if lhs_was_vector and rhs_was_vector:
+                grad_out_mat = grad_out.reshape((1, 1))
+            elif lhs_was_vector:
+                grad_out_mat = xp.expand_dims(grad_out, axis=-2)
+            elif rhs_was_vector:
+                grad_out_mat = xp.expand_dims(grad_out, axis=-1)
+            else:
+                grad_out_mat = grad_out
+
+            rhs_t = rhs_mat.swapaxes(-1, -2)
+            lhs_t = lhs_mat.swapaxes(-1, -2)
+            if np.issubdtype(np.dtype(rhs_t.dtype), np.complexfloating):
+                rhs_t = xp.conj(rhs_t)
+            if np.issubdtype(np.dtype(lhs_t.dtype), np.complexfloating):
+                lhs_t = xp.conj(lhs_t)
+
             if self.grad is not None:
-                if self.data.ndim == 1:
-                    self.grad += out.grad @ other.data.T
-                elif out.grad.ndim == 1:
-                    self.grad += self.xp.outer(out.grad, other.data)
-                else:
-                    self.grad += out.grad @ other.data.swapaxes(-1, -2)
+                grad_self = xp.matmul(grad_out_mat, rhs_t)
+                if lhs_was_vector:
+                    grad_self = grad_self.squeeze(axis=-2)
+                self.grad += self._unbroadcast(grad_self, lhs.shape)
             if other.grad is not None:
-                if other.data.ndim == 1:
-                    other.grad += self.data.T @ out.grad
-                elif self.data.ndim == 1:
-                    other.grad += self.xp.outer(self.data, out.grad)
-                else:
-                    other.grad += self.data.swapaxes(-1, -2) @ out.grad
+                grad_other = xp.matmul(lhs_t, grad_out_mat)
+                if rhs_was_vector:
+                    grad_other = grad_other.squeeze(axis=-1)
+                other.grad += self._unbroadcast(grad_other, rhs.shape)
         out._backward = _backward
 
         return out
@@ -1036,21 +1205,57 @@ class Tensor:
     def _unbroadcast(self, grad, shape):
         """Reduce gradient to match original shape after broadcasting."""
         xp = self.xp
-        if grad.shape == shape:
+        if shape is None or not isinstance(shape, (tuple, list)):
+            raise TypeError(f"shape must be tuple/list of ints, got {shape!r}")
+
+        try:
+            target_shape = tuple(int(dim) for dim in shape)
+        except Exception as exc:
+            raise TypeError(f"shape must contain integer dimensions, got {shape!r}") from exc
+
+        if any(dim < 0 for dim in target_shape):
+            raise ValueError(f"shape dimensions must be non-negative, got {target_shape}")
+
+        if grad is None:
+            raise ValueError("grad cannot be None")
+        if not hasattr(grad, "shape"):
+            grad = xp.asarray(grad)
+
+        if grad.shape == target_shape:
             return grad
 
-        ndims_added = grad.ndim - len(shape)
-        for _ in range(ndims_added):
+        if grad.ndim < len(target_shape):
+            raise ValueError(
+                f"cannot unbroadcast grad with shape {grad.shape} to higher-rank shape {target_shape}"
+            )
+
+        while grad.ndim > len(target_shape):
             grad = grad.sum(axis=0)
 
-        for i, dim in enumerate(shape):
-            if dim == 1 and grad.shape[i] != 1:
-                grad = grad.sum(axis=i, keepdims=True)
+        for axis, (gdim, sdim) in enumerate(zip(grad.shape, target_shape)):
+            if sdim == 1:
+                if gdim != 1:
+                    grad = grad.sum(axis=axis, keepdims=True)
+            elif gdim != sdim:
+                raise ValueError(
+                    f"incompatible unbroadcast axis {axis}: grad dim {gdim} cannot map to target dim {sdim}"
+                )
+
+        if grad.shape != target_shape:
+            raise ValueError(
+                f"unbroadcast produced shape {grad.shape}, expected {target_shape}"
+            )
 
         return grad
 
-    def backward(self):
-        """Run backpropagation from this tensor."""
+    def backward(self, gradient=None):
+        """
+        Run backpropagation from this tensor.
+
+        Args:
+            gradient: Optional gradient to start with. If None, defaults to 1.0
+                     (only if this tensor is scalar or has all-zero grad).
+        """
         xp = self.xp
         topo = []
         visited = set()
@@ -1064,9 +1269,16 @@ class Tensor:
 
         build_topo(self)
 
-        if self.grad is None:
-            self.grad = xp.ones_like(self.data)
-        else:
+        if gradient is not None:
+            if isinstance(gradient, Tensor):
+                gradient = gradient.data
+            grad_val = xp.asarray(gradient, dtype=self.dtype)
+            if self.grad is None:
+                self.grad = grad_val
+            else:
+                self.grad += grad_val
+        elif self.grad is None or xp.all(self.grad == 0):
+            # Default to ones if no gradient provided and current grad is zero/None
             self.grad = xp.ones_like(self.data)
 
         for v in reversed(topo):
@@ -1086,12 +1298,34 @@ _einsum_path_cache = {}
 _EINSUM_CACHE_MAX_SIZE = 1000
 
 
-def einsum(subscripts: str, *operands, optimize: Union[bool, str] = True, use_cache: bool = True):
+def einsum(subscripts: str, *operands, optimize: Union[bool, str] = True, use_cache: bool = True) -> Tensor:
     """
     Einstein summation with gradient support and path optimization.
 
     Supports all NumPy/CuPy einsum operations with automatic differentiation.
     Uses path caching for repeated patterns to improve performance.
+
+    Common operations:
+    - Trace: 'ii' or 'ii->'
+    - Diagonal: 'ii->i'
+    - Sum: 'ij->'
+    - Transpose: 'ij->ji'
+    - Matrix multiplication: 'ij,jk->ik'
+    - Batch matrix multiplication: 'bij,bjk->bik'
+    - Inner product: 'i,i->' or 'i,i'
+    - Outer product: 'i,j->ij'
+    - Batch Dot Product: 'bi,bi->b'
+
+    Examples:
+    >>> # Matrix multiplication
+    >>> x = Tensor([[1, 2], [3, 4]])
+    >>> y = Tensor([[5, 6], [7, 8]])
+    >>> out = einsum('ij,jk->ik', x, y)
+    >>>
+    >>> # Batch Matrix multiplication
+    >>> a = Tensor(np.random.randn(10, 3, 4))
+    >>> b = Tensor(np.random.randn(10, 4, 5))
+    >>> c = einsum('bij,bjk->bik', a, b)
 
     Args:
         subscripts: Einsum subscripts string (e.g., 'ij,jk->ik')
@@ -1148,17 +1382,31 @@ def einsum(subscripts: str, *operands, optimize: Union[bool, str] = True, use_ca
             other_subs = input_subscripts[:i] + input_subscripts[i+1:]
             other_data = data_list[:i] + data_list[i+1:]
 
-            if output_str:
+            if not other_subs:
+                # Single operand einsum (like sum, transpose, view)
+                if output_str is None or output_str == "":
+                    # Case: einsum('i', x) or einsum('i->', x)
+                    t.grad += xp.broadcast_to(out.grad, t.shape)
+                else:
+                    # Case: einsum('ij->ji', x) or einsum('i->ij', x) [if supported]
+                    try:
+                        grad_sub = f"{output_str}->{subs}"
+                        grad = xp.einsum(grad_sub, out.grad, optimize=True)
+                        t.grad += grad
+                    except:
+                        # Fallback for broadcasting
+                        t.grad += xp.broadcast_to(out.grad, t.shape)
+                continue
+
+            if output_str is not None:
                 grad_subscript = f"{output_str},{','.join(other_subs)}->{subs}"
             else:
-                grad_subscript = f"{','.join([output_str or ''] + other_subs)}->{subs}"
+                # For implicit output (e.g. 'i,i'), output is scalar. 
+                # We use an empty string before the first comma to represent the scalar.
+                grad_subscript = f",{','.join(other_subs)}->{subs}"
 
-            try:
-                grad = xp.einsum(grad_subscript, out.grad, *other_data, optimize=True)
-                t.grad += grad
-            except:
-                # Fallback: numerical gradient would go here
-                pass
+            grad = xp.einsum(grad_subscript, out.grad, *other_data, optimize=True)
+            t.grad += grad
 
     out._backward = _backward
     return out
@@ -1535,29 +1783,47 @@ def to_nchw(tensor: Tensor) -> Tensor:
 
 # ==================== IM2COL HELPERS ====================
 
-def get_im2col_indices(x_shape, field_height, field_width, padding=1, stride=1):
-    """Compute indices for im2col transformation."""
-    N, C, H, W = x_shape
-    out_height = (H + 2 * padding - field_height) // stride + 1
-    out_width = (W + 2 * padding - field_width) // stride + 1
+_im2col_idx_cache = {}
 
-    i0 = cp.repeat(cp.arange(field_height), field_width)
-    i0 = cp.tile(i0, C)
-    i1 = stride * cp.repeat(cp.arange(out_height), out_width)
-    j0 = cp.tile(cp.arange(field_width), field_height * C)
-    j1 = stride * cp.tile(cp.arange(out_width), out_height)
+def get_im2col_indices(x_shape, field_height, field_width, padding=1, stride=1, xp=cp):
+    """Compute indices for im2col transformation with caching."""
+    # Use a cache to avoid recomputing indices for the same shapes
+    cache_key = (x_shape, field_height, field_width, padding, stride, str(xp))
+    if cache_key in _im2col_idx_cache:
+        return _im2col_idx_cache[cache_key]
+
+    N, C, H, W = x_shape
+    
+    stride_h, stride_w = (stride, stride) if isinstance(stride, int) else stride
+    pad_h, pad_w = (padding, padding) if isinstance(padding, int) else padding
+    
+    out_height = (H + 2 * pad_h - field_height) // stride_h + 1
+    out_width = (W + 2 * pad_w - field_width) // stride_w + 1
+
+    i0 = xp.repeat(xp.arange(field_height), field_width)
+    i0 = xp.tile(i0, C)
+    i1 = stride_h * xp.repeat(xp.arange(out_height), out_width)
+    j0 = xp.tile(xp.arange(field_width), field_height * C)
+    j1 = stride_w * xp.tile(xp.arange(out_width), out_height)
     i = i0.reshape(-1, 1) + i1.reshape(1, -1)
     j = j0.reshape(-1, 1) + j1.reshape(1, -1)
-    k = cp.repeat(cp.arange(C), field_height * field_width).reshape(-1, 1)
+    k = xp.repeat(xp.arange(C), field_height * field_width).reshape(-1, 1)
 
-    return (k.astype(cp.int32), i.astype(cp.int32), j.astype(cp.int32))
+    indices = (k.astype(xp.int32), i.astype(xp.int32), j.astype(xp.int32))
+    
+    # Cache the result
+    if len(_im2col_idx_cache) < 1000:
+        _im2col_idx_cache[cache_key] = indices
+        
+    return indices
 
 
 def im2col_indices(x, field_height, field_width, padding=1, stride=1):
     """Transform input tensor to column format."""
-    p = padding
-    x_padded = cp.pad(x, ((0, 0), (0, 0), (p, p), (p, p)), mode='constant')
-    k, i, j = get_im2col_indices(x.shape, field_height, field_width, padding, stride)
+    xp = cp if isinstance(x, cp.ndarray) else np
+    pad_h, pad_w = (padding, padding) if isinstance(padding, int) else padding
+    x_padded = xp.pad(x, ((0, 0), (0, 0), (pad_h, pad_h), (pad_w, pad_w)), mode='constant')
+    k, i, j = get_im2col_indices(x.shape, field_height, field_width, padding, stride, xp=xp)
     cols = x_padded[:, k, i, j]
     C = x.shape[1]
     cols = cols.transpose(1, 2, 0).reshape(field_height * field_width * C, -1)
@@ -1566,16 +1832,27 @@ def im2col_indices(x, field_height, field_width, padding=1, stride=1):
 
 def col2im_indices(cols, x_shape, field_height, field_width, padding=1, stride=1):
     """Transform column format back to tensor."""
+    xp = cp if isinstance(cols, cp.ndarray) else np
     N, C, H, W = x_shape
-    H_padded, W_padded = H + 2 * padding, W + 2 * padding
-    x_padded = cp.zeros((N, C, H_padded, W_padded), dtype=cols.dtype)
-    k, i, j = get_im2col_indices(x_shape, field_height, field_width, padding, stride)
+    pad_h, pad_w = (padding, padding) if isinstance(padding, int) else padding
+    H_padded, W_padded = H + 2 * pad_h, W + 2 * pad_w
+    x_padded = xp.zeros((N, C, H_padded, W_padded), dtype=cols.dtype)
+    k, i, j = get_im2col_indices(x_shape, field_height, field_width, padding, stride, xp=xp)
     cols_reshaped = cols.reshape(C * field_height * field_width, -1, N)
     cols_reshaped = cols_reshaped.transpose(2, 0, 1)
-    cupyx.scatter_add(x_padded, (slice(None), k, i, j), cols_reshaped)
-    if padding == 0:
+    
+    if xp == cp:
+        cupyx.scatter_add(x_padded, (slice(None), k, i, j), cols_reshaped)
+    else:
+        # Fallback for numpy (slower)
+        np.add.at(x_padded, (slice(None), k, i, j), cols_reshaped)
+    
+    if pad_h == 0 and pad_w == 0:
         return x_padded
-    return x_padded[:, :, padding:-padding, padding:-padding]
+    
+    h_slice = slice(pad_h, -pad_h) if pad_h > 0 else slice(None)
+    w_slice = slice(pad_w, -pad_w) if pad_w > 0 else slice(None)
+    return x_padded[:, :, h_slice, w_slice]
 
 
 # ==================== NEURAL NETWORK MODULES ====================
@@ -1588,16 +1865,62 @@ class Module:
         self._training = True
 
     def zero_grad(self):
-        xp = cp if self._device == 'cuda' else np
+        """Zero out gradients of all parameters."""
         for p in self.parameters():
             if p.grad is not None:
-                p.grad = xp.zeros_like(p.data)
+                p.grad.fill(0)
 
     def parameters(self) -> List[Tensor]:
-        return []
+        """Return a list of all parameters in this module and its submodules."""
+        params = []
+        for _, p in self.named_parameters():
+            params.append(p)
+        return params
 
     def named_parameters(self) -> List[Tuple[str, Tensor]]:
-        return []
+        """Return an iterator over module parameters, yielding both name and parameter."""
+        params = []
+        # Use a set to avoid duplicates (e.g. if same parameter is assigned to multiple names)
+        seen = set()
+        
+        for name in dir(self):
+            if name.startswith('_'):
+                continue
+            try:
+                attr = getattr(self, name)
+                if isinstance(attr, Tensor) and attr._requires_grad:
+                    if id(attr) not in seen:
+                        params.append((name, attr))
+                        seen.add(id(attr))
+                elif isinstance(attr, Module) and attr is not self:
+                    for child_name, child_param in attr.named_parameters():
+                        full_name = f"{name}.{child_name}"
+                        if id(child_param) not in seen:
+                            params.append((full_name, child_param))
+                            seen.add(id(child_param))
+            except AttributeError:
+                continue
+        return params
+
+    def named_modules(self, memo: set = None, prefix: str = '') -> List[Tuple[str, 'Module']]:
+        """Return an iterator over all modules in the network, yielding both name and module."""
+        if memo is None:
+            memo = set()
+        
+        if self not in memo:
+            memo.add(self)
+            yield prefix, self
+            for name in dir(self):
+                if name.startswith('_'):
+                    continue
+                try:
+                    attr = getattr(self, name)
+                    if isinstance(attr, Module) and attr is not self:
+                        submodule_prefix = prefix + ('.' if prefix else '') + name
+                        for m in attr.named_modules(memo, submodule_prefix):
+                            yield m
+                except AttributeError:
+                    continue
 
     def train(self):
         self._training = True
@@ -1617,11 +1940,31 @@ class Module:
 
     def to(self, device: str):
         self._device = device
+        # Move parameters of this module
         for p in self.parameters():
             new_p = p.to(device)
             p.data = new_p.data
             p.grad = new_p.grad
             p._device = device
+        
+        # Recursively move submodules
+        for name in dir(self):
+            if name.startswith('_'):
+                continue
+            try:
+                attr = getattr(self, name)
+                if isinstance(attr, Module) and attr is not self:
+                    attr.to(device)
+                elif isinstance(attr, (list, tuple)):
+                    for item in attr:
+                        if isinstance(item, Module):
+                            item.to(device)
+                elif isinstance(attr, dict):
+                    for item in attr.values():
+                        if isinstance(item, Module):
+                            item.to(device)
+            except AttributeError:
+                continue
         return self
 
     def cuda(self):
@@ -1720,10 +2063,16 @@ class Conv2D(Module):
         if self.data_format == 'NHWC':
             N, H, W, C = x.data.shape
             x_nchw_data = x.data.transpose(0, 3, 1, 2)
-            x_nchw = Tensor(x_nchw_data, device=self._device, requires_grad=x._requires_grad)
+            # Preserve input dtype when bridging NHWC <-> NCHW.
+            x_nchw = Tensor(
+                x_nchw_data,
+                device=self._device,
+                requires_grad=x._requires_grad,
+                dtype=x.data.dtype,
+            )
             out_nchw = self._conv_standard(x_nchw) if self.groups == 1 else self._conv_grouped(x_nchw)
             out_data = out_nchw.data.transpose(0, 2, 3, 1)
-            out = Tensor(out_data, (x,), 'Conv2D_NHWC', device=self._device)
+            out = Tensor(out_data, (x,), 'Conv2D_NHWC', device=self._device, dtype=out_data.dtype)
             def _nhwc_backward():
                 if out.grad is not None:
                     out_nchw.grad = out.grad.transpose(0, 3, 1, 2)
@@ -1885,7 +2234,7 @@ class SeparableConv2D(Module):
 
 
 class MaxPool2D(Module):
-    """2D Max Pooling layer."""
+    """2D Max Pooling layer using im2col."""
 
     def __init__(self, kernel_size, stride=None):
         super().__init__()
@@ -1901,25 +2250,35 @@ class MaxPool2D(Module):
         H_out = (H - HH) // stride + 1
         W_out = (W - WW) // stride + 1
 
-        x_reshaped = x.data.reshape(N, C, H_out, stride, W_out, stride)
-        out_data = x_reshaped.max(axis=(3, 5))
+        # Use im2col for general pooling support
+        x_reshaped = x.data.reshape(N * C, 1, H, W)
+        x_col = im2col_indices(x_reshaped, HH, WW, padding=0, stride=stride)
+        
+        max_idx = xp.argmax(x_col, axis=0)
+        out_data = xp.max(x_col, axis=0).reshape(H_out, W_out, N, C).transpose(2, 3, 0, 1)
 
         out = Tensor(out_data, (x,), 'MaxPool2D', device=self._device)
 
         def _backward():
-            x_reshaped_copy = x.data.reshape(N, C, H_out, stride, W_out, stride)
-            out_broadcast = out_data.reshape(N, C, H_out, 1, W_out, 1)
-            mask = (x_reshaped_copy == out_broadcast)
-            dout_broadcast = out.grad.reshape(N, C, H_out, 1, W_out, 1)
-            grad_reshaped = mask * dout_broadcast
-            x.grad += grad_reshaped.reshape(N, C, H, W)
+            dout = out.grad.transpose(2, 3, 0, 1).reshape(-1)
+            dcol = xp.zeros_like(x_col)
+            # Efficiently distribute gradient to max positions
+            if xp == cp:
+                # CuPy optimization
+                dcol[max_idx, cp.arange(max_idx.size)] = dout
+            else:
+                dcol[max_idx, np.arange(max_idx.size)] = dout
+            
+            dx = col2im_indices(dcol, (N * C, 1, H, W), HH, WW, padding=0, stride=stride)
+            if x.grad is not None:
+                x.grad += dx.reshape(N, C, H, W)
 
         out._backward = _backward
         return out
 
 
 class AvgPool2D(Module):
-    """2D Average Pooling layer."""
+    """2D Average Pooling layer using im2col."""
 
     def __init__(self, kernel_size, stride=None):
         super().__init__()
@@ -1935,29 +2294,70 @@ class AvgPool2D(Module):
         H_out = (H - HH) // stride + 1
         W_out = (W - WW) // stride + 1
 
-        x_reshaped = x.data.reshape(N, C, H_out, stride, W_out, stride)
-        out_data = x_reshaped.mean(axis=(3, 5))
+        x_reshaped = x.data.reshape(N * C, 1, H, W)
+        x_col = im2col_indices(x_reshaped, HH, WW, padding=0, stride=stride)
+        
+        out_data = xp.mean(x_col, axis=0).reshape(H_out, W_out, N, C).transpose(2, 3, 0, 1)
 
         out = Tensor(out_data, (x,), 'AvgPool2D', device=self._device)
 
         def _backward():
-            scale = 1.0 / (stride * stride)
-            dout_broadcast = out.grad.reshape(N, C, H_out, 1, W_out, 1)
-            grad_reshaped = xp.broadcast_to(dout_broadcast * scale, (N, C, H_out, stride, W_out, stride))
-            x.grad += grad_reshaped.reshape(N, C, H, W)
+            dout = out.grad.transpose(2, 3, 0, 1).reshape(-1)
+            dcol = xp.ones_like(x_col) * (dout / (HH * WW))
+            
+            dx = col2im_indices(dcol, (N * C, 1, H, W), HH, WW, padding=0, stride=stride)
+            if x.grad is not None:
+                x.grad += dx.reshape(N, C, H, W)
 
         out._backward = _backward
         return out
 
 
 class AdaptiveAvgPool2D(Module):
-    """Adaptive 2D Average Pooling."""
+    """Adaptive 2D Average Pooling using im2col for performance."""
 
-    def __init__(self, output_size):
+    def __init__(self, output_size, data_format='NCHW'):
         super().__init__()
         self.output_size = output_size if isinstance(output_size, tuple) else (output_size, output_size)
+        self.data_format = data_format
+        if data_format not in ('NCHW', 'NHWC'):
+            raise ValueError(f"data_format must be 'NCHW' or 'NHWC', got {data_format}")
 
     def __call__(self, x):
+        if self.data_format == 'NHWC':
+            # Fast path for Global Average Pooling (1, 1) in NHWC
+            if self.output_size == (1, 1):
+                xp = x.xp
+                out_data = xp.mean(x.data, axis=(1, 2), keepdims=True)
+                out = Tensor(out_data, (x,), 'GlobalAvgPool2D_NHWC', device=self._device)
+                def _gap_backward():
+                    if out.grad is not None:
+                        h, w = x.data.shape[1], x.data.shape[2]
+                        x.grad += xp.broadcast_to(out.grad / (h * w), x.data.shape)
+                out._backward = _gap_backward
+                return out
+
+            N, H, W, C = x.data.shape
+            x_nchw_data = x.data.transpose(0, 3, 1, 2)
+            x_nchw = Tensor(x_nchw_data, device=self._device, requires_grad=x._requires_grad, dtype=x.data.dtype)
+            
+            out_nchw = self._pool_nchw(x_nchw)
+            
+            out_data = out_nchw.data.transpose(0, 2, 3, 1)
+            out = Tensor(out_data, (x,), 'AdaptiveAvgPool2D_NHWC', device=self._device, dtype=out_data.dtype)
+            
+            def _nhwc_backward():
+                if out.grad is not None:
+                    out_nchw.grad = out.grad.transpose(0, 3, 1, 2)
+                    out_nchw._backward()
+                    if x.grad is not None:
+                        x.grad += x_nchw.grad.transpose(0, 2, 3, 1)
+            out._backward = _nhwc_backward
+            return out
+            
+        return self._pool_nchw(x)
+
+    def _pool_nchw(self, x):
         xp = cp if self._device == 'cuda' else np
         N, C, H, W = x.data.shape
         out_h, out_w = self.output_size
@@ -1968,27 +2368,23 @@ class AdaptiveAvgPool2D(Module):
         kernel_h = H - (out_h - 1) * stride_h
         kernel_w = W - (out_w - 1) * stride_w
 
-        out_data = xp.zeros((N, C, out_h, out_w), dtype=x.data.dtype)
-
-        for i in range(out_h):
-            for j in range(out_w):
-                h_start = i * stride_h
-                h_end = h_start + kernel_h
-                w_start = j * stride_w
-                w_end = w_start + kernel_w
-                out_data[:, :, i, j] = x.data[:, :, h_start:h_end, w_start:w_end].mean(axis=(2, 3))
+        # Use im2col for faster execution
+        x_reshaped = x.data.reshape(N * C, 1, H, W)
+        x_col = im2col_indices(x_reshaped, kernel_h, kernel_w, padding=0, stride=(stride_h, stride_w))
+        
+        out_data = xp.mean(x_col, axis=0).reshape(out_h, out_w, N, C).transpose(2, 3, 0, 1)
 
         out = Tensor(out_data, (x,), 'AdaptiveAvgPool2D', device=self._device)
 
         def _backward():
-            for i in range(out_h):
-                for j in range(out_w):
-                    h_start = i * stride_h
-                    h_end = h_start + kernel_h
-                    w_start = j * stride_w
-                    w_end = w_start + kernel_w
-                    scale = 1.0 / (kernel_h * kernel_w)
-                    x.grad[:, :, h_start:h_end, w_start:w_end] += out.grad[:, :, i:i+1, j:j+1] * scale
+            if x.grad is None:
+                return
+            
+            dout = out.grad.transpose(2, 3, 0, 1).reshape(-1)
+            dcol = xp.ones_like(x_col) * (dout / (kernel_h * kernel_w))
+            
+            dx = col2im_indices(dcol, (N * C, 1, H, W), kernel_h, kernel_w, padding=0, stride=(stride_h, stride_w))
+            x.grad += dx.reshape(N, C, H, W)
 
         out._backward = _backward
         return out
@@ -2263,6 +2659,12 @@ class GroupNorm(Module):
 
     def __init__(self, num_groups, num_channels, eps=1e-5):
         super().__init__()
+        if num_groups <= 0:
+            raise ValueError(f"num_groups must be positive, got {num_groups}")
+        if num_channels % num_groups != 0:
+            raise ValueError(
+                f"num_channels ({num_channels}) must be divisible by num_groups ({num_groups})"
+            )
         self.num_groups = num_groups
         self.num_channels = num_channels
         self.eps = eps
@@ -2275,6 +2677,8 @@ class GroupNorm(Module):
         xp = cp if self._device == 'cuda' else np
         N, C, H, W = x.data.shape
         G = self.num_groups
+        if C != self.num_channels:
+            raise ValueError(f"GroupNorm expected {self.num_channels} channels, got {C}")
 
         # Reshape to (N, G, C//G, H, W)
         x_reshaped = x.data.reshape(N, G, C // G, H, W)
@@ -2991,6 +3395,33 @@ class GradScaler:
 
     Automatically adjusts loss scale to prevent gradient overflow/underflow
     in FP16 training while maximizing numerical range utilization.
+    
+    Why use it?
+    In mixed precision (FP16), small gradient values can underflow to zero,
+    and large values can overflow to infinity. GradScaler multiplies the 
+    loss by a 'scale' factor before backprop, keeping gradients within 
+    representable range of FP16. It then 'unscales' them before updating weights.
+
+    Example:
+        scaler = GradScaler()
+        for input, target in data:
+            optimizer.zero_grad()
+            
+            # Forward pass with mixed precision context if available
+            with tg.enable_mixed_precision():
+                output = model(input)
+                loss = criterion(output, target)
+            
+            # Scale loss and backward
+            scaler.scale(loss).backward()
+            
+            # Unscale and step
+            # step() internally calls unscale_(optimizer) if not already called
+            # and only performs optimizer.step() if no Inf/NaN were found
+            scaler.step(optimizer)
+            
+            # Update scale (increase if no overflow, decrease if overflow)
+            scaler.update()
     """
 
     def __init__(self, init_scale: float = 65536.0, growth_factor: float = 2.0,
@@ -3052,6 +3483,10 @@ class GradScaler:
         if not self.enabled:
             return
 
+        # Prevent double unscaling
+        if getattr(optimizer, "_is_unscaled", False):
+            return
+
         xp = cp if optimizer._device == 'cuda' else np
         inv_scale = 1.0 / self._scale
 
@@ -3073,6 +3508,8 @@ class GradScaler:
                     self._found_inf = True
                     if zero_nan_grads:
                         p.grad = xp.zeros_like(p.grad)
+        
+        optimizer._is_unscaled = True
 
     def step(self, optimizer, clip_grad_norm=None):
         """Step optimizer if gradients are valid."""
@@ -3080,9 +3517,15 @@ class GradScaler:
             optimizer.step(clip_grad_norm=clip_grad_norm)
             return
 
+        if not getattr(optimizer, "_is_unscaled", False):
+            self.unscale_(optimizer)
+
         if self._found_inf:
+            optimizer._is_unscaled = False
             return  # Skip update on overflow
+        
         optimizer.step(clip_grad_norm=clip_grad_norm)
+        optimizer._is_unscaled = False
 
     def update(self):
         """Update scale factor based on overflow status."""
@@ -3252,10 +3695,40 @@ def checkpoint(function: Callable, *args) -> Tensor:
     """
     Gradient checkpointing for memory-efficient training.
 
-    Recomputes forward pass during backward instead of storing activations.
+    Recomputes forward pass during backward pass instead of storing intermediate
+    activations. This trades compute for memory, allowing training of much
+    larger models that would otherwise not fit in GPU memory.
+    
+    Memory Complexity:
+    - Standard: O(L) where L is the number of layers (all activations stored).
+    - Checkpointed: O(sqrt(L)) if applied at regular intervals, or O(1) for
+      the checkpointed block (only inputs and outputs stored).
 
-    Usage:
-        output = checkpoint(expensive_function, input1, input2)
+    Note:
+        - The function should not have side effects (e.g., modifying global state).
+        - Random number generator state is NOT currently handled. If the
+          function uses dropout or other stochastic operations, the results
+          during recomputation might differ unless the seed is manually managed.
+        - All input tensors that require gradients will have their gradients
+          updated correctly.
+        - The checkpointed function must return a Tensor or a collection of Tensors.
+
+    Example:
+        def expensive_block(x):
+            return residual_connection(attention(x))
+        
+        # Standard way (stores all activations in attention)
+        # y = expensive_block(x)
+        
+        # Checkpointed way (frees activations, recomputes during backward)
+        y = checkpoint(expensive_block, x)
+
+    Args:
+        function: Callable that performs the forward pass of the block to checkpoint.
+        *args: Input arguments to the function.
+
+    Returns:
+        Output tensor that tracks the checkpointed operation.
     """
     # Forward pass without gradient tracking
     with no_grad():
@@ -3277,21 +3750,22 @@ def checkpoint(function: Callable, *args) -> Tensor:
             new_args = []
             for arg in CheckpointFunction.saved_args:
                 if isinstance(arg, Tensor):
-                    new_arg = Tensor(arg.data, device=arg._device)
-                    new_arg.grad = arg.xp.zeros_like(arg.data)
+                    new_arg = Tensor(arg.data, device=arg._device, requires_grad=arg._requires_grad)
+                    new_arg.grad = arg.xp.zeros_like(arg.data) if arg._requires_grad else None
                     new_args.append(new_arg)
                 else:
                     new_args.append(arg)
 
             # Recompute
             recomputed = CheckpointFunction.saved_fn(*new_args)
-            recomputed.grad = out.grad.copy()
-            recomputed.backward()
+            
+            if out.grad is not None:
+                recomputed.backward(out.grad)
 
-            # Copy gradients back
-            for orig, new in zip(CheckpointFunction.saved_args, new_args):
-                if isinstance(orig, Tensor) and orig.grad is not None:
-                    orig.grad += new.grad
+                # Copy gradients back
+                for orig, new in zip(CheckpointFunction.saved_args, new_args):
+                    if isinstance(orig, Tensor) and orig.grad is not None and new.grad is not None:
+                        orig.grad += new.grad
 
     out._backward = _backward
     return out
@@ -3365,6 +3839,32 @@ def save_checkpoint(path: str, model, optimizer=None, scaler=None,
         pickle.dump(checkpoint, f)
 
 
+class SafeUnpickler(pickle.Unpickler):
+    """Restricted unpickler for security."""
+    def find_class(self, module, name):
+        # Only allow safe modules/classes
+        if module in ("numpy", "numpy.core.multiarray", "numpy.core.numeric", "numpy.dtype"):
+            import numpy
+            if module == "numpy.core.multiarray" and name == "_reconstruct":
+                import numpy.core.multiarray
+                return numpy.core.multiarray._reconstruct
+            return getattr(numpy, name)
+        if module in ("cupy", "cupy._core.core", "cupy._core.flags"):
+            import cupy
+            return getattr(cupy, name)
+        if module == "builtins" and name in ("dict", "list", "set", "int", "float", "str", "bool", "complex", "tuple"):
+            import builtins
+            return getattr(builtins, name)
+        # For tensor state dicts
+        if module == "tensor_gpu_v2" or module == "__main__":
+             if name == "Tensor":
+                 return Tensor
+             if name == "CHECKPOINT_VERSION":
+                 return CHECKPOINT_VERSION
+        
+        raise pickle.UnpicklingError(f"Global '{module}.{name}' is forbidden")
+
+
 def load_checkpoint(path: str, model, optimizer=None, scaler=None,
                    scheduler=None, strict: bool = True) -> dict:
     """
@@ -3382,7 +3882,8 @@ def load_checkpoint(path: str, model, optimizer=None, scaler=None,
         Dict with 'epoch', 'global_step', and any 'extra_state'
     """
     with open(path, 'rb') as f:
-        checkpoint = pickle.load(f)
+        unpickler = SafeUnpickler(f)
+        checkpoint = unpickler.load()
 
     # Version check
     version = checkpoint.get('version', '0.0')
@@ -3755,10 +4256,11 @@ def chunk(tensor: Tensor, chunks: int, dim: int = 0) -> List[Tensor]:
         start = i * chunk_size
         end = min(start + chunk_size, tensor.shape[dim])
 
-        def _backward(s=start, e=end):
-            idx = [slice(None)] * tensor.ndim
-            idx[dim] = slice(s, e)
-            tensor.grad[tuple(idx)] += out.grad
+        def _backward(s=start, e=end, out_chunk=out):
+            if tensor.grad is not None:
+                idx = [slice(None)] * tensor.ndim
+                idx[dim] = slice(s, e)
+                tensor.grad[tuple(idx)] += out_chunk.grad
 
         out._backward = _backward
         result.append(out)
@@ -3828,7 +4330,188 @@ def eye(n, m=None, device=None, dtype=None, requires_grad=False) -> Tensor:
 # ==================== BACKWARDS COMPATIBILITY ====================
 
 # Aliases for compatibility with tensor_gpu.py
-ConvTranspose2D = None  # Import from conv_transpose module if needed
+class ConvTranspose2D(Module):
+    """
+    2D Transposed Convolutional layer (Deconvolution).
+    
+    Uses col2im for forward pass and im2col for backward pass.
+    Supports NCHW and NHWC formats.
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0,
+                 output_padding=0, groups=1, bias=True, data_format='NCHW'):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
+        self.stride = stride if isinstance(stride, tuple) else (stride, stride)
+        self.padding = padding if isinstance(padding, tuple) else (padding, padding)
+        self.output_padding = output_padding if isinstance(output_padding, tuple) else (output_padding, output_padding)
+        self.groups = groups
+        self.use_bias = bias
+        self.data_format = data_format
+
+        if data_format not in ('NCHW', 'NHWC'):
+            raise ValueError(f"data_format must be 'NCHW' or 'NHWC', got {data_format}")
+            
+        if in_channels % groups != 0:
+            raise ValueError(f"in_channels must be divisible by groups, got {in_channels} and {groups}")
+        if out_channels % groups != 0:
+            raise ValueError(f"out_channels must be divisible by groups, got {out_channels} and {groups}")
+
+        xp = cp if _device == 'cuda' else np
+        scale = xp.sqrt(2.0 / (in_channels * self.kernel_size[0] * self.kernel_size[1]))
+        
+        # Weight shape: (in_channels, out_channels // groups, kH, kW)
+        self.w = Tensor(xp.random.randn(in_channels, out_channels // groups, self.kernel_size[0], self.kernel_size[1]).astype(xp.float32) * scale, device=_device)
+        
+        if bias:
+            self.b = Tensor(xp.zeros((out_channels,), dtype=xp.float32), device=_device)
+        else:
+            self.b = None
+
+    def __call__(self, x):
+        if self.data_format == 'NHWC':
+            N, H, W, C = x.shape
+            # Convert NHWC to NCHW
+            x_nchw_data = x.data.transpose(0, 3, 1, 2)
+            x_nchw = Tensor(x_nchw_data, device=self._device, requires_grad=x._requires_grad, dtype=x.dtype)
+            
+            if self.groups == 1:
+                out_nchw = self._forward_nchw(x_nchw)
+            else:
+                out_nchw = self._forward_grouped(x_nchw)
+            
+            # Convert NCHW back to NHWC
+            out_data = out_nchw.data.transpose(0, 2, 3, 1)
+            out = Tensor(out_data, (x,), 'ConvTranspose2D_NHWC', device=self._device, dtype=out_data.dtype)
+            
+            def _nhwc_backward():
+                if out.grad is not None:
+                    out_nchw.grad = out.grad.transpose(0, 3, 1, 2)
+                    out_nchw._backward()
+                    if x.grad is not None:
+                        x.grad += x_nchw.grad.transpose(0, 2, 3, 1)
+            out._backward = _nhwc_backward
+            return out
+            
+        if self.groups == 1:
+            return self._forward_nchw(x)
+        else:
+            return self._forward_grouped(x)
+
+    def _forward_grouped(self, x):
+        xp = cp if self._device == 'cuda' else np
+        N, C_in, H_in, W_in = x.shape
+        C_out = self.out_channels
+        G = self.groups
+        HH, WW = self.kernel_size
+        sh, sw = self.stride
+        ph, pw = self.padding
+        oph, opw = self.output_padding
+
+        H_out = (H_in - 1) * sh - 2 * ph + HH + oph
+        W_out = (W_in - 1) * sw - 2 * pw + WW + opw
+        
+        C_in_g = C_in // G
+        C_out_g = C_out // G
+        
+        # Reshape weight: (G, C_in_g, C_out_g, HH, WW)
+        w_grouped = self.w.data.reshape(G, C_in_g, C_out_g, HH, WW)
+        w_grouped_flat = w_grouped.reshape(G, C_in_g, -1)
+        w_grouped_T = w_grouped_flat.transpose(0, 2, 1)
+        
+        # Reshape input: (N, G, C_in_g, H_in, W_in) -> (G, C_in_g, H_in * W_in * N)
+        x_grouped = x.data.reshape(N, G, C_in_g, H_in, W_in)
+        x_grouped = x_grouped.transpose(1, 2, 3, 4, 0).reshape(G, C_in_g, -1)
+        
+        # Batched matmul: (G, K, C_in_g) @ (G, C_in_g, M * N) -> (G, K, M * N)
+        out_grouped = xp.matmul(w_grouped_T, x_grouped)
+        
+        # Reshape out_grouped
+        out_grouped = out_grouped.reshape(G, C_out_g, HH * WW, -1) 
+        out_grouped = out_grouped.reshape(C_out, HH * WW, -1) 
+        out_col = out_grouped.reshape(C_out * HH * WW, -1)
+        
+        # col2im
+        out_data = col2im_indices(out_col, (N, C_out, H_out, W_out), HH, WW, padding=(ph, pw), stride=(sh, sw))
+        
+        if self.use_bias:
+            out_data = out_data + self.b.data.reshape(1, -1, 1, 1)
+            
+        out = Tensor(out_data, (x, self.w) + ((self.b,) if self.use_bias else ()), 'GroupedConvTranspose2D', device=self._device)
+        
+        # Cache for backward
+        x_grouped_cache = x_grouped
+        w_grouped_cache = w_grouped
+        
+        def _backward():
+            dout = out.grad
+            if self.use_bias:
+                self.b.grad += dout.sum(axis=(0, 2, 3))
+                
+            # im2col on dout
+            dout_col = im2col_indices(dout, HH, WW, padding=(ph, pw), stride=(sh, sw))
+            dout_grouped = dout_col.reshape(G, C_out_g * HH * WW, -1)
+            
+            # dw_grouped
+            dw_grouped = xp.matmul(x_grouped_cache, dout_grouped.transpose(0, 2, 1))
+            self.w.grad += dw_grouped.reshape(self.w.data.shape)
+            
+            if x.grad is not None:
+                # dx_g
+                w_g_flat = w_grouped_cache.reshape(G, C_in_g, -1)
+                dx_grouped = xp.matmul(w_g_flat, dout_grouped)
+                
+                dx_grouped = dx_grouped.reshape(G, C_in_g, H_in, W_in, N)
+                dx_grouped = dx_grouped.transpose(4, 0, 1, 2, 3).reshape(N, C_in, H_in, W_in)
+                x.grad += dx_grouped
+
+        out._backward = _backward
+        return out
+
+    def _forward_nchw(self, x):
+        xp = cp if self._device == 'cuda' else np
+        N, C_in, H_in, W_in = x.shape
+        C_out = self.out_channels
+        HH, WW = self.kernel_size
+        sh, sw = self.stride
+        ph, pw = self.padding
+        oph, opw = self.output_padding
+
+        H_out = (H_in - 1) * sh - 2 * ph + HH + oph
+        W_out = (W_in - 1) * sw - 2 * pw + WW + opw
+        
+        w_col = self.w.data.reshape(C_in, -1)
+        x_col = x.data.transpose(1, 2, 3, 0).reshape(C_in, -1)
+        out_col = w_col.T @ x_col
+        
+        out_data = col2im_indices(out_col, (N, C_out, H_out, W_out), HH, WW, padding=(ph, pw), stride=(sh, sw))
+        
+        if self.use_bias:
+            out_data = out_data + self.b.data.reshape(1, -1, 1, 1)
+            
+        out = Tensor(out_data, (x, self.w) + ((self.b,) if self.use_bias else ()), 'ConvTranspose2D', device=self._device)
+        
+        def _backward():
+            dout_col = im2col_indices(out.grad, HH, WW, padding=(ph, pw), stride=(sh, sw))
+            
+            if self.use_bias:
+                self.b.grad += out.grad.sum(axis=(0, 2, 3))
+                
+            dw_col = x_col.reshape(C_in, -1) @ dout_col.T
+            self.w.grad += dw_col.reshape(self.w.data.shape)
+            
+            if x.grad is not None:
+                dx_col = w_col @ dout_col
+                x.grad += dx_col.reshape(C_in, H_in, W_in, N).transpose(3, 0, 1, 2)
+
+        out._backward = _backward
+        return out
+
+    def parameters(self):
+        if self.use_bias:
+            return [self.w, self.b]
+        return [self.w]
 
 # Initialize streams on import
 if _device == 'cuda':
