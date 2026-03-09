@@ -1283,6 +1283,7 @@ class Tensor:
 
         for v in reversed(topo):
             v._backward()
+            v._backward = lambda: None  # Free closure and its captured tensors
 
     def zero_grad(self):
         """Zero out gradient."""
@@ -1620,18 +1621,6 @@ def flash_attention(query: Tensor, key: Tensor, value: Tensor,
 
     out = Tensor(output, (query, key, value), 'FlashAttention', device=device)
 
-    # Store for backward pass
-    _flash_cache = {
-        'query_data': query_data,
-        'key_data': key_data,
-        'value_data': value_data,
-        'scale': scale,
-        'is_causal': is_causal,
-        'block_size': block_size,
-        'B': B, 'H': H, 'L': L, 'D': D, 'S': S,
-        'squeeze_output': squeeze_output
-    }
-
     def _backward():
         # Memory-efficient backward: recompute attention for each block
         # This is the key insight of FlashAttention - trading compute for memory
@@ -1784,6 +1773,7 @@ def to_nchw(tensor: Tensor) -> Tensor:
 # ==================== IM2COL HELPERS ====================
 
 _im2col_idx_cache = {}
+_IM2COL_CACHE_MAX_SIZE = 128
 
 def get_im2col_indices(x_shape, field_height, field_width, padding=1, stride=1, xp=cp):
     """Compute indices for im2col transformation with caching."""
@@ -1810,11 +1800,13 @@ def get_im2col_indices(x_shape, field_height, field_width, padding=1, stride=1, 
     k = xp.repeat(xp.arange(C), field_height * field_width).reshape(-1, 1)
 
     indices = (k.astype(xp.int32), i.astype(xp.int32), j.astype(xp.int32))
-    
-    # Cache the result
-    if len(_im2col_idx_cache) < 1000:
-        _im2col_idx_cache[cache_key] = indices
-        
+
+    # Cache with FIFO eviction to bound GPU memory usage
+    if len(_im2col_idx_cache) >= _IM2COL_CACHE_MAX_SIZE:
+        oldest_key = next(iter(_im2col_idx_cache))
+        del _im2col_idx_cache[oldest_key]
+    _im2col_idx_cache[cache_key] = indices
+
     return indices
 
 
