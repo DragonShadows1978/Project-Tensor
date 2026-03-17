@@ -21,6 +21,7 @@ import weakref
 import threading
 import hashlib
 import os
+import functools
 
 # ==================== KERNEL CACHE ====================
 
@@ -118,6 +119,7 @@ _device = 'cuda'
 _default_dtype = cp.float32
 _mixed_precision = False
 _grad_enabled = True
+_active_autocast_dtype = None  # None means autocast is not active
 _streams: List[cp.cuda.Stream] = []
 _current_stream_idx = 0
 _stream_lock = threading.Lock()
@@ -179,6 +181,11 @@ def _resolve_tensor_dtype(data, dtype, device: str) -> np.dtype:
     if inferred_dtype is None:
         inferred_dtype = default_dtype
 
+    # autocast context takes precedence over the global mixed-precision flag
+    if _active_autocast_dtype is not None and _canonicalize_device(device) == "cuda":
+        if np.issubdtype(inferred_dtype, np.floating):
+            return np.dtype(_active_autocast_dtype)
+
     if _mixed_precision and _canonicalize_device(device) == "cuda":
         if np.issubdtype(inferred_dtype, np.floating) and inferred_dtype.itemsize > 2:
             return np.dtype(np.float16)
@@ -208,12 +215,27 @@ def is_mixed_precision() -> bool:
     return _mixed_precision
 
 
-def no_grad():
-    """Context manager to disable gradient computation."""
-    return _NoGradContext()
+class no_grad:
+    """Disable gradient computation for a block of code.
 
+    Can be used as a **context manager** or a **decorator**.
 
-class _NoGradContext:
+    Context manager::
+
+        with no_grad():
+            y = model(x)          # no grads tracked
+            loss = criterion(y, t)
+
+    Decorator::
+
+        @no_grad()
+        def evaluate(model, x):
+            return model(x)
+
+    Nesting is safe — the previous state is restored on exit regardless
+    of exceptions.
+    """
+
     def __enter__(self):
         global _grad_enabled
         self._prev = _grad_enabled
@@ -223,6 +245,142 @@ class _NoGradContext:
     def __exit__(self, *args):
         global _grad_enabled
         _grad_enabled = self._prev
+
+    def __call__(self, fn):
+        """Allow @no_grad() decorator usage."""
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            with no_grad():
+                return fn(*args, **kwargs)
+        return wrapper
+
+
+class enable_grad:
+    """Re-enable gradient computation inside a ``no_grad`` block.
+
+    Useful when most of an eval loop runs without grads but one sub-call
+    (e.g. a meta-learner inner loop) still needs them.
+
+    Can be used as a **context manager** or a **decorator**::
+
+        with no_grad():
+            feats = encoder(x)          # no grad
+            with enable_grad():
+                loss = meta(feats)      # grad back on
+
+        @enable_grad()
+        def inner_loop(x):
+            return model(x)
+    """
+
+    def __enter__(self):
+        global _grad_enabled
+        self._prev = _grad_enabled
+        _grad_enabled = True
+        return self
+
+    def __exit__(self, *args):
+        global _grad_enabled
+        _grad_enabled = self._prev
+
+    def __call__(self, fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            with enable_grad():
+                return fn(*args, **kwargs)
+        return wrapper
+
+
+def set_grad_enabled(mode: bool):
+    """Globally enable or disable gradient computation.
+
+    Unlike ``no_grad`` / ``enable_grad``, this is a permanent toggle
+    until called again.  Useful for switching an entire script between
+    training and evaluation modes.
+
+    Args:
+        mode: ``True`` to enable gradients, ``False`` to disable.
+    """
+    global _grad_enabled
+    _grad_enabled = bool(mode)
+
+
+def is_grad_enabled() -> bool:
+    """Return ``True`` if gradient tracking is currently active."""
+    return _grad_enabled
+
+
+class autocast:
+    """Automatic mixed-precision context manager / decorator.
+
+    Inside the block every new floating-point Tensor created on the GPU
+    is cast to *dtype* (default ``float16``).  Integer and boolean tensors
+    are left unchanged.  On exit the previous dtype policy is restored.
+
+    Can be used as a **context manager** or a **decorator**::
+
+        # FP16 training step
+        with autocast():
+            logits = model(x)
+            loss   = criterion(logits, y)
+        scaler.scale(loss).backward()
+
+        # BF16 (better dynamic range, same memory as FP16)
+        with autocast(dtype='bfloat16'):
+            ...
+
+        @autocast()
+        def train_step(x, y):
+            return model(x), criterion(model(x), y)
+
+        # Disable inside a larger autocast block
+        with autocast():
+            safe_out = risky_layer(x)               # fp16
+            with autocast(enabled=False):
+                stable_out = stable_layer(safe_out) # fp32
+
+    Args:
+        enabled: If ``False`` this is a no-op (useful for conditional AMP).
+        dtype:   Target floating-point dtype.  Accepts numpy/cupy dtype
+                 objects, dtype strings (``'float16'``, ``'bfloat16'``,
+                 ``'float32'``), or ``None`` (defaults to ``float16`` on
+                 CUDA, ``float32`` on CPU).
+    """
+
+    def __init__(self, enabled: bool = True, dtype=None):
+        self.enabled = enabled
+        if dtype is None:
+            dtype = cp.float16 if _device == 'cuda' else np.float32
+        # Normalise to a numpy dtype so comparisons are stable
+        try:
+            self._dtype = np.dtype(dtype)
+        except TypeError:
+            self._dtype = np.dtype(np.float16)
+
+    def __enter__(self):
+        global _mixed_precision, _active_autocast_dtype
+        self._prev_mp    = _mixed_precision
+        self._prev_dtype = _active_autocast_dtype
+        if self.enabled:
+            _mixed_precision       = True
+            _active_autocast_dtype = self._dtype
+        return self
+
+    def __exit__(self, *args):
+        global _mixed_precision, _active_autocast_dtype
+        _mixed_precision       = self._prev_mp
+        _active_autocast_dtype = self._prev_dtype
+
+    def __call__(self, fn):
+        """Allow @autocast() decorator usage."""
+        dtype   = self._dtype
+        enabled = self.enabled
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            with autocast(enabled=enabled, dtype=dtype):
+                return fn(*args, **kwargs)
+        return wrapper
 
 
 # ==================== STREAM MANAGEMENT ====================
@@ -3908,7 +4066,7 @@ def checkpoint(function: Callable, *args) -> Tensor:
 
     def _backward():
         # Recompute forward pass with gradients
-        with _grad_enabled_context():
+        with enable_grad():
             # Create fresh tensors from saved data
             new_args = []
             for arg in CheckpointFunction.saved_args:
@@ -3932,18 +4090,6 @@ def checkpoint(function: Callable, *args) -> Tensor:
 
     out._backward = _backward
     return out
-
-
-class _grad_enabled_context:
-    def __enter__(self):
-        global _grad_enabled
-        self._prev = _grad_enabled
-        _grad_enabled = True
-        return self
-
-    def __exit__(self, *args):
-        global _grad_enabled
-        _grad_enabled = self._prev
 
 
 # ==================== MODEL CHECKPOINTING ====================
