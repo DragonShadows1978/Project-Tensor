@@ -8683,8 +8683,7 @@ def _default_collate(batch):
         return batch
     elem = batch[0]
     if isinstance(elem, Tensor):
-        stacked = np.stack([b.data if b._device == 'cpu' else
-                            (cp.asnumpy(b.data) if _has_cupy else b.data)
+        stacked = np.stack([b.data if b._device == 'cpu' else cp.asnumpy(b.data)
                             for b in batch], axis=0)
         dev = batch[0]._device
         xp  = cp if dev == 'cuda' else np
