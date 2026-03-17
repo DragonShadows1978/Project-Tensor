@@ -2122,6 +2122,10 @@ class Linear(Module):
             return [self.w, self.b]
         return [self.w]
 
+    def __repr__(self):
+        nin, nout = self.w.data.shape
+        return f"Linear(in_features={nin}, out_features={nout}, bias={self.use_bias})"
+
 
 class Conv2D(Module):
     """
@@ -2313,6 +2317,11 @@ class Conv2D(Module):
             return [self.w, self.b]
         return [self.w]
 
+    def __repr__(self):
+        return (f"Conv2D({self.in_channels}, {self.out_channels}, "
+                f"kernel_size={self.kernel_size}, stride={self.stride}, "
+                f"padding={self.padding}, groups={self.groups}, bias={self.use_bias})")
+
 
 class DepthwiseConv2D(Conv2D):
     """Depthwise convolution (groups=in_channels)."""
@@ -2335,6 +2344,14 @@ class SeparableConv2D(Module):
 
     def parameters(self):
         return self.depthwise.parameters() + self.pointwise.parameters()
+
+    def __repr__(self):
+        ic = self.depthwise.in_channels
+        oc = self.pointwise.out_channels
+        ks = self.depthwise.kernel_size
+        s = self.depthwise.stride
+        p = self.depthwise.padding
+        return f"SeparableConv2D({ic}, {oc}, kernel_size={ks}, stride={s}, padding={p})"
 
 
 class MaxPool2D(Module):
@@ -2380,6 +2397,9 @@ class MaxPool2D(Module):
         out._backward = _backward
         return out
 
+    def __repr__(self):
+        return f"MaxPool2D(kernel_size={self.kernel_size}, stride={self.stride})"
+
 
 class AvgPool2D(Module):
     """2D Average Pooling layer using im2col."""
@@ -2415,6 +2435,9 @@ class AvgPool2D(Module):
 
         out._backward = _backward
         return out
+
+    def __repr__(self):
+        return f"AvgPool2D(kernel_size={self.kernel_size}, stride={self.stride})"
 
 
 class AdaptiveAvgPool2D(Module):
@@ -2493,6 +2516,9 @@ class AdaptiveAvgPool2D(Module):
         out._backward = _backward
         return out
 
+    def __repr__(self):
+        return f"AdaptiveAvgPool2D(output_size={self.output_size})"
+
 
 class BatchNorm2D(Module):
     """2D Batch Normalization."""
@@ -2558,6 +2584,9 @@ class BatchNorm2D(Module):
 
     def parameters(self):
         return [self.gamma, self.beta]
+
+    def __repr__(self):
+        return f"BatchNorm2D({self.num_features}, eps={self.eps}, momentum={self.momentum})"
 
 
 class FusedBatchNormReLU(Module):
@@ -2691,6 +2720,9 @@ class FusedBatchNormReLU(Module):
     def parameters(self):
         return [self.gamma, self.beta]
 
+    def __repr__(self):
+        return f"FusedBatchNormReLU({self.num_features}, eps={self.eps}, momentum={self.momentum})"
+
 
 class LayerNorm(Module):
     """Layer Normalization."""
@@ -2756,6 +2788,9 @@ class LayerNorm(Module):
 
     def parameters(self):
         return [self.gamma, self.beta]
+
+    def __repr__(self):
+        return f"LayerNorm({self.normalized_shape}, eps={self.eps})"
 
 
 class GroupNorm(Module):
@@ -2827,6 +2862,9 @@ class GroupNorm(Module):
     def parameters(self):
         return [self.gamma, self.beta]
 
+    def __repr__(self):
+        return f"GroupNorm(num_groups={self.num_groups}, num_channels={self.num_channels}, eps={self.eps})"
+
 
 class Dropout(Module):
     """Dropout regularization."""
@@ -2857,6 +2895,9 @@ class Dropout(Module):
         out._backward = _backward
 
         return out
+
+    def __repr__(self):
+        return f"Dropout(p={self.p})"
 
 
 class Embedding(Module):
@@ -2895,6 +2936,9 @@ class Embedding(Module):
     def parameters(self):
         return [self.weight]
 
+    def __repr__(self):
+        return f"Embedding({self.num_embeddings}, {self.embedding_dim})"
+
 
 # ==================== LOSS FUNCTIONS ====================
 
@@ -2918,6 +2962,9 @@ class MSELoss(Module):
             return sq.sum()
         else:
             return sq
+
+    def __repr__(self):
+        return f"MSELoss(reduction='{self.reduction}')"
 
 
 class CrossEntropyLoss(Module):
@@ -2976,6 +3023,9 @@ class CrossEntropyLoss(Module):
 
         return out
 
+    def __repr__(self):
+        return f"CrossEntropyLoss(reduction='{self.reduction}', label_smoothing={self.label_smoothing})"
+
 
 class BCEWithLogitsLoss(Module):
     """Binary Cross Entropy with logits (numerically stable)."""
@@ -3027,6 +3077,9 @@ class BCEWithLogitsLoss(Module):
 
         return out
 
+    def __repr__(self):
+        return f"BCEWithLogitsLoss(reduction='{self.reduction}')"
+
 
 class L1Loss(Module):
     """L1 (Mean Absolute Error) loss."""
@@ -3052,6 +3105,9 @@ class L1Loss(Module):
         elif self.reduction == 'sum':
             return abs_diff.sum()
         return abs_diff
+
+    def __repr__(self):
+        return f"L1Loss(reduction='{self.reduction}')"
 
 
 class SmoothL1Loss(Module):
@@ -3092,6 +3148,9 @@ class SmoothL1Loss(Module):
         elif self.reduction == 'sum':
             return out.sum()
         return out
+
+    def __repr__(self):
+        return f"SmoothL1Loss(reduction='{self.reduction}', beta={self.beta})"
 
 
 # ==================== OPTIMIZERS ====================
@@ -4617,6 +4676,11 @@ class ConvTranspose2D(Module):
             return [self.w, self.b]
         return [self.w]
 
+    def __repr__(self):
+        return (f"ConvTranspose2D({self.in_channels}, {self.out_channels}, "
+                f"kernel_size={self.kernel_size}, stride={self.stride}, "
+                f"padding={self.padding}, groups={self.groups}, bias={self.use_bias})")
+
 # Initialize streams on import
 # additions placeholder
 
@@ -5800,6 +5864,9 @@ class _MultiHeadAttentionModule(Module):
     def parameters(self):
         return [self.w_q, self.w_k, self.w_v, self.w_o, self.b_o]
 
+    def __repr__(self):
+        return f"MultiHeadAttention(d_model={self.d_model}, nhead={self.nhead}, dropout={self.dropout_p})"
+
 
 class TransformerEncoder(Module):
     """Stack of N TransformerEncoderLayers with optional final norm."""
@@ -5892,14 +5959,14 @@ void fused_linear_silu_bwd(const float* x, const float* dout, float* dx, int n) 
 
 
 def _get_fused_gelu_kernels():
-    fwd = _get_cached_kernel(_FUSED_LINEAR_GELU_KERNEL, 'fused_linear_gelu_fwd')
-    bwd = _get_cached_kernel(_FUSED_LINEAR_GELU_KERNEL, 'fused_linear_gelu_bwd')
+    fwd = _get_cached_kernel('fused_linear_gelu_fwd', _FUSED_LINEAR_GELU_KERNEL, 'fused_linear_gelu_fwd')
+    bwd = _get_cached_kernel('fused_linear_gelu_bwd', _FUSED_LINEAR_GELU_KERNEL, 'fused_linear_gelu_bwd')
     return fwd, bwd
 
 
 def _get_fused_silu_kernels():
-    fwd = _get_cached_kernel(_FUSED_LINEAR_SILU_KERNEL, 'fused_linear_silu_fwd')
-    bwd = _get_cached_kernel(_FUSED_LINEAR_SILU_KERNEL, 'fused_linear_silu_bwd')
+    fwd = _get_cached_kernel('fused_linear_silu_fwd', _FUSED_LINEAR_SILU_KERNEL, 'fused_linear_silu_fwd')
+    bwd = _get_cached_kernel('fused_linear_silu_bwd', _FUSED_LINEAR_SILU_KERNEL, 'fused_linear_silu_bwd')
     return fwd, bwd
 
 
@@ -6115,7 +6182,7 @@ class FusedAdam:
 
     def _get_kernel(self):
         if self._kernel is None and self._device == 'cuda':
-            self._kernel = _get_cached_kernel(_FUSED_ADAM_KERNEL_CODE, 'fused_adam_step')
+            self._kernel = _get_cached_kernel('fused_adam_step', _FUSED_ADAM_KERNEL_CODE, 'fused_adam_step')
         return self._kernel
 
     def step(self):
@@ -7784,8 +7851,8 @@ class RMSNorm(Module):
 
     def _get_kernels(self):
         if self._device == 'cuda' and self._fwd_k is None:
-            self._fwd_k = _get_cached_kernel(_RMSNORM_FWD_KERNEL, 'rmsnorm_fwd')
-            self._bwd_k = _get_cached_kernel(_RMSNORM_BWD_KERNEL, 'rmsnorm_bwd')
+            self._fwd_k = _get_cached_kernel('rmsnorm_fwd', _RMSNORM_FWD_KERNEL, 'rmsnorm_fwd')
+            self._bwd_k = _get_cached_kernel('rmsnorm_bwd', _RMSNORM_BWD_KERNEL, 'rmsnorm_bwd')
 
     def __call__(self, x):
         xp = cp if self._device == 'cuda' else np
