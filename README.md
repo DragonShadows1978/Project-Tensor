@@ -12,41 +12,52 @@ A from-scratch implementation of a deep learning tensor library with:
 
 Built across 4 development cycles, evolving from 826 lines (v1) to 3,835 lines (v2).
 
-## Features
+## Installation
 
-### Core Tensor Operations
-- Full autograd with backward pass
-- Broadcasting, reshape, transpose
-- Matmul, conv2d, conv_transpose2d
-- Batch normalization, layer normalization
-- Dropout, embedding layers
+### Requirements
 
-### Activation Functions (Optimized)
-- GELU (5.22x speedup over naive)
-- SiLU/Swish (2.50x speedup)
-- ReLU, Tanh, Sigmoid, Softmax
+- Python 3.9+
+- CUDA toolkit 11.x or 12.x
+- CuPy matching your CUDA version
 
-### Transformer Components
-- **FlashAttention** - 17.5x memory reduction
-- Multi-head attention
-- **FusedBatchNormReLU** - 21.33x speedup
-- Einsum with caching
-- Weight tying for embeddings
+### From source (recommended for development)
 
-### Training Utilities
-- SGD, Adam, AdamW optimizers
-- Learning rate schedulers
-- Gradient clipping
-- Gradient accumulation
-- **Dynamic Loss Scaling** for mixed precision
-- Model checkpointing
-- Profiling integration
+```bash
+git clone <repo-url>
+cd Project-Tensor
 
-### Memory Optimizations
-- NHWC convolution layout
-- Grouped convolutions (1.21x speedup)
-- Persistent kernel cache
-- Half-precision (FP16) support
+# Pick the CuPy variant that matches your CUDA toolkit:
+pip install -e ".[cuda11]"   # CUDA 11.x
+pip install -e ".[cuda12]"   # CUDA 12.x
+```
+
+The `-e` flag installs in **editable mode** — changes to the source files
+take effect immediately without reinstalling.
+
+### Production install
+
+```bash
+pip install ".[cuda12]"   # no -e flag; installs a fixed snapshot
+```
+
+### Manual CuPy install (if you need a specific CUDA sub-version)
+
+```bash
+pip install .                        # installs without cupy
+pip install cupy-cuda12x             # or cupy-cuda11x, cupy-cuda120, etc.
+```
+
+See the [CuPy installation guide](https://docs.cupy.dev/en/stable/install.html)
+for the full list of available wheels.
+
+### Verify the install
+
+```python
+import tensor_gpu_v2 as tg
+print(tg.get_device())   # 'cuda'
+x = tg.Tensor.randn(4, 4, device='cuda')
+print(x)
+```
 
 ## Usage
 
@@ -73,6 +84,80 @@ optimizer = Adam([linear1.w, linear1.b, linear2.w, linear2.b], lr=1e-3)
 optimizer.step()
 ```
 
+### Mixed precision (AMP)
+
+```python
+from tensor_gpu_v2 import autocast, GradScaler
+
+scaler = GradScaler()
+
+with autocast():                 # tensors cast to float16 automatically
+    logits = model(x)
+    loss = criterion(logits, y)
+
+scaler.scale(loss).backward()
+scaler.step(optimizer)
+scaler.update()
+```
+
+### Gradient control
+
+```python
+import tensor_gpu_v2 as tg
+
+# Disable gradient tracking for inference
+with tg.no_grad():
+    predictions = model(x)
+
+# As a decorator
+@tg.no_grad()
+def evaluate(model, loader):
+    ...
+
+# Re-enable inside a no_grad block
+with tg.no_grad():
+    features = backbone(x)
+    with tg.enable_grad():
+        loss = head(features)   # gradients back on just here
+```
+
+## Features
+
+### Core Tensor Operations
+- Full autograd with backward pass
+- Broadcasting, reshape, transpose
+- Matmul, conv2d, conv_transpose2d
+- Batch normalization, layer normalization
+- Dropout, embedding layers
+
+### Activation Functions (Optimized)
+- GELU (5.22x speedup over naive)
+- SiLU/Swish (2.50x speedup)
+- ReLU, Tanh, Sigmoid, Softmax
+
+### Transformer Components
+- **FlashAttention** - 17.5x memory reduction
+- Multi-head attention
+- **FusedBatchNormReLU** - 21.33x speedup
+- Einsum with caching
+- Weight tying for embeddings
+
+### Training Utilities
+- SGD, Adam, AdamW, Adagrad, RMSProp optimizers
+- Learning rate schedulers
+- Gradient clipping
+- Gradient accumulation
+- **Dynamic Loss Scaling** for mixed precision (`GradScaler`)
+- `no_grad` / `enable_grad` / `autocast` context managers + decorators
+- Model checkpointing (`save_checkpoint` / `load_checkpoint`)
+- Profiling integration
+
+### Memory Optimizations
+- NHWC convolution layout
+- Grouped convolutions (1.21x speedup)
+- Persistent kernel cache
+- Half-precision (FP16) support
+
 ## Requirements
 
 - Python 3.8+
@@ -91,10 +176,11 @@ pip install cupy-cuda11x numpy
 | 2 | Dropout p=1.0 fix, half() dtype fix, grouped conv optimization (1.21x) |
 | 3 | FlashAttention (17.5x memory), FusedBatchNormReLU (21.33x), NHWC Conv2D, einsum caching |
 | 4 | Dynamic loss scaling, weight tying, kernel cache, gradient clipping, checkpointing |
+| 5 | `no_grad`/`enable_grad`/`autocast` context managers, pip-installable package |
 
 ## Philosophy
 
-This library exists to prove that you don't need massive frameworks to do deep learning. A single file with 3,800 lines of focused code can train real models on real GPUs.
+This library exists to prove that you don't need massive frameworks to do deep learning. Focused, readable code can train real models on real GPUs.
 
 No abstraction layers. No plugin systems. No enterprise patterns. Just tensors, gradients, and CUDA.
 
