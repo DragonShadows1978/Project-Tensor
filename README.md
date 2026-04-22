@@ -158,6 +158,24 @@ with tg.no_grad():
 - Persistent kernel cache
 - Half-precision (FP16) support
 
+### TurboQuant
+- `TurboQuantMSE` for unit-sphere vector quantization with stored vector norms
+- `TurboQuantProd` for inner-product / attention-score approximation
+- Lloyd-Max scalar codebook construction for beta-distributed sphere coordinates
+- CPU/CuPy-compatible APIs that accept NumPy arrays, CuPy arrays, or `Tensor`
+
+```python
+import tensor_gpu_v2 as tg
+
+quantizer = tg.TurboQuantMSE(dimension=128, bits=4, seed=2026)
+encoding = quantizer.quantize(vectors)
+reconstructed = quantizer.dequantize(encoding)
+
+prod = tg.TurboQuantProd(dimension=128, bits=4, seed=2026)
+key_encoding = prod.quantize(keys)
+approx_scores = prod.attention_score(query, key_encoding)
+```
+
 ## Requirements
 
 - Python 3.8+
@@ -177,6 +195,7 @@ pip install cupy-cuda11x numpy
 | 3 | FlashAttention (17.5x memory), FusedBatchNormReLU (21.33x), NHWC Conv2D, einsum caching |
 | 4 | Dynamic loss scaling, weight tying, kernel cache, gradient clipping, checkpointing |
 | 5 | `no_grad`/`enable_grad`/`autocast` context managers, pip-installable package |
+| 6 | TurboQuant MSE/product quantizers, validation harness, CPU-only import guard |
 
 ## Philosophy
 

@@ -2103,4 +2103,10 @@ class DataLoader:
 
 
 if get_device() == 'cuda':
-    init_streams(4)
+    try:
+        cp.cuda.runtime.getDeviceCount()
+        init_streams(4)
+    except Exception:
+        # Importing the package should remain possible on CPU-only systems even
+        # when the default logical device is "cuda".
+        pass

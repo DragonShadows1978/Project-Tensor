@@ -17,5 +17,6 @@ from ._core import _get_cached_kernel
 from ._nn import *
 from ._training import *
 from ._ext import *
+from ._quant import *
 
 __version__ = '2.0.0'
