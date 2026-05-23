@@ -1870,6 +1870,457 @@ def flash_attention(query: Tensor, key: Tensor, value: Tensor,
     return out
 
 
+_apa_quantizer_cache = {}
+_apa_zscore_cache = {}
+
+
+def _apa_zscore(refine_pct: float) -> float:
+    if refine_pct not in _apa_zscore_cache:
+        from scipy.stats import norm as _norm
+        _apa_zscore_cache[refine_pct] = float(_norm.ppf(1.0 - refine_pct))
+    return _apa_zscore_cache[refine_pct]
+
+
+def _compute_per_head_concentration(bulk_scores, xp):
+    bulk_max = bulk_scores.max(axis=-1, keepdims=True)
+    bulk_shifted = xp.exp(bulk_scores - bulk_max)
+    bulk_softmax = bulk_shifted / bulk_shifted.sum(axis=-1, keepdims=True)
+    max_w = bulk_softmax.max(axis=-1)
+    mean_w = bulk_softmax.mean(axis=-1)
+    per_query_conc = max_w / (mean_w + 1e-10)
+    return per_query_conc.mean(axis=(0, 2))
+
+
+def _allocate_per_head_budget(concentration, H, global_budget,
+                              min_pct=0.01, max_pct=0.50):
+    xp = cp if isinstance(concentration, cp.ndarray) else np
+    weights = concentration / (concentration.sum() + 1e-30)
+    raw = weights * H * global_budget
+    allocated = xp.clip(raw, min_pct, max_pct)
+    total_target = H * global_budget
+    for _ in range(10):
+        current_total = float(allocated.sum())
+        if abs(current_total - total_target) < 1e-6:
+            break
+        clamped = (allocated <= min_pct + 1e-8) | (allocated >= max_pct - 1e-8)
+        free_mask = ~clamped
+        free_count = int(free_mask.sum())
+        if free_count == 0:
+            break
+        deficit = total_target - current_total
+        adjustment = deficit / free_count
+        allocated = xp.where(free_mask, allocated + adjustment, allocated)
+        allocated = xp.clip(allocated, min_pct, max_pct)
+    return allocated
+
+
+def apa_quant_attention(
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    bulk_bits: int = 2,
+    refine_percentile: float = 0.15,
+    is_causal: bool = False,
+    attn_mask: Optional[Tensor] = None,
+    scale: Optional[float] = None,
+    dropout_p: float = 0.0,
+    block_size: int = 64,
+    adaptive_heads: bool = False,
+) -> Tensor:
+    import math
+    from ._quant import TurboQuantMSE
+    if bulk_bits not in (1, 2, 4, 8):
+        raise ValueError(f"bulk_bits must be one of (1, 2, 4, 8), got {bulk_bits}")
+    if not math.isfinite(refine_percentile):
+        raise ValueError(f"refine_percentile must be finite, got {refine_percentile}")
+    if not (0.0 <= dropout_p < 1.0):
+        raise ValueError(f"dropout_p must be in [0, 1), got {dropout_p}")
+    if scale is not None and (not math.isfinite(scale) or scale <= 0):
+        raise ValueError(f"scale must be a positive finite number, got {scale}")
+    if block_size <= 0:
+        raise ValueError(f"block_size must be positive, got {block_size}")
+    refine_percentile = max(0.0, min(1.0, refine_percentile))
+
+    xp = query.xp
+    device = query._device
+
+    if query.ndim == 3:
+        B, L, D = query.shape
+        H = 1
+        query_data = query.data.reshape(B, 1, L, D)
+        key_data = key.data.reshape(B, 1, key.shape[1], D)
+        value_data = value.data.reshape(B, 1, value.shape[1], D)
+        squeeze_output = True
+    else:
+        B, H, L, D = query.shape
+        query_data = query.data
+        key_data = key.data
+        value_data = value.data
+        squeeze_output = False
+
+    S = key_data.shape[2]
+    scale_f = scale or (D ** -0.5)
+
+    if refine_percentile >= 1.0:
+        output = xp.zeros((B, H, L, D), dtype=query_data.dtype)
+        m_prev = xp.full((B, H, L, 1), -xp.inf, dtype=query_data.dtype)
+        l_prev = xp.zeros((B, H, L, 1), dtype=query_data.dtype)
+        for i in range(0, L, block_size):
+            end_i = min(i + block_size, L)
+            Qi = query_data[:, :, i:end_i]
+            scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
+            if is_causal:
+                ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
+                ci = xp.arange(S).reshape(1, 1, 1, -1)
+                scores = xp.where(ci > ri, xp.float32(-1e9), scores)
+            if attn_mask is not None:
+                amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+                if amask.ndim == 2:
+                    scores = scores + amask[i:end_i, :]
+                else:
+                    scores = scores + amask[:, :, i:end_i, :]
+            m_curr = scores.max(axis=-1, keepdims=True)
+            m_bp = m_prev[:, :, i:end_i]
+            l_bp = l_prev[:, :, i:end_i]
+            o_bp = output[:, :, i:end_i]
+            m_new = xp.maximum(m_bp, m_curr)
+            exp_s = xp.exp(scores - m_new)
+            corr = xp.exp(m_bp - m_new)
+            l_new = corr * l_bp + exp_s.sum(axis=-1, keepdims=True)
+            pv = xp.einsum('bhij,bhjd->bhid', exp_s, value_data)
+            output[:, :, i:end_i] = (corr * l_bp * o_bp + pv) / l_new
+            m_prev[:, :, i:end_i] = m_new
+            l_prev[:, :, i:end_i] = l_new
+        if squeeze_output:
+            output = output.reshape(B, L, D)
+        out = Tensor(output, (query, key, value), 'APAQuantAttention', device=device)
+        def _backward_full():
+            grad_q = xp.zeros_like(query_data)
+            grad_k = xp.zeros_like(key_data)
+            grad_v = xp.zeros_like(value_data)
+            grad_out = out.grad.reshape(B, H, L, D) if squeeze_output else out.grad
+            for i in range(0, L, block_size):
+                end_i = min(i + block_size, L)
+                Qi = query_data[:, :, i:end_i]
+                dOi = grad_out[:, :, i:end_i]
+                scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
+                if is_causal:
+                    ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
+                    ci = xp.arange(S).reshape(1, 1, 1, -1)
+                    cmask = ci > ri
+                    scores = xp.where(cmask, xp.float32(-1e9), scores)
+                if attn_mask is not None:
+                    amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+                    if amask.ndim == 2:
+                        scores = scores + amask[i:end_i, :]
+                    else:
+                        scores = scores + amask[:, :, i:end_i, :]
+                sm = scores.max(axis=-1, keepdims=True)
+                es = xp.exp(scores - sm)
+                attn_w = es / es.sum(axis=-1, keepdims=True)
+                grad_v += xp.einsum('bhij,bhid->bhjd', attn_w, dOi)
+                dAttn = xp.einsum('bhid,bhjd->bhij', dOi, value_data)
+                sum_dA = (attn_w * dAttn).sum(axis=-1, keepdims=True)
+                dS = attn_w * (dAttn - sum_dA) * scale_f
+                if is_causal:
+                    dS = xp.where(cmask, 0.0, dS)
+                grad_q[:, :, i:end_i] += xp.einsum('bhij,bhjd->bhid', dS, key_data)
+                grad_k += xp.einsum('bhij,bhid->bhjd', dS, Qi)
+            if query.grad is not None:
+                query.grad += grad_q.reshape(query.shape)
+            if key.grad is not None:
+                key.grad += grad_k.reshape(key.shape)
+            if value.grad is not None:
+                value.grad += grad_v.reshape(value.shape)
+        out._backward = _backward_full
+        return out
+
+    quantizers = {}
+    for h in range(H):
+        cache_key = (D, bulk_bits, h)
+        if cache_key not in _apa_quantizer_cache:
+            _apa_quantizer_cache[cache_key] = TurboQuantMSE(D, bulk_bits, seed=h * 1337 + 42)
+        quantizers[h] = _apa_quantizer_cache[cache_key]
+    key_quant_data = xp.zeros_like(key_data)
+    for h in range(H):
+        k_h = key_data[:, h]
+        orig_shape = k_h.shape
+        k_flat = k_h.reshape(-1, D)
+        enc = quantizers[h].quantize(k_flat)
+        recon = quantizers[h].dequantize(enc).reshape(orig_shape)
+        key_quant_data[:, h] = recon.astype(key_data.dtype)
+
+    attn_mem_bytes = B * H * L * S * 4
+    use_tiled = attn_mem_bytes > 256 * 1024 * 1024
+
+    refine_k = max(1, int(S * refine_percentile))
+
+    if not use_tiled:
+        bulk_scores = xp.einsum('bhid,bhjd->bhij', query_data, key_quant_data) * scale_f
+        if is_causal:
+            cmask = xp.triu(xp.ones((L, S), dtype=xp.bool_), k=1)
+            bulk_scores = xp.where(cmask, xp.float32(-1e9), bulk_scores)
+        if attn_mask is not None:
+            amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+            bulk_scores = bulk_scores + amask
+
+        if adaptive_heads and H > 1 and refine_k < S:
+            concentration = _compute_per_head_concentration(bulk_scores, xp)
+            per_head_pct = _allocate_per_head_budget(
+                concentration, H, refine_percentile)
+            per_head_k = xp.clip(
+                (xp.asarray(per_head_pct) * S).astype(xp.int32), 1, S)
+        else:
+            per_head_pct = None
+            per_head_k = None
+
+        if refine_k >= S and per_head_k is None:
+            full_scores = xp.einsum('bhid,bhjd->bhij', query_data, key_data) * scale_f
+            if is_causal:
+                full_scores = xp.where(cmask, xp.float32(-1e9), full_scores)
+            if attn_mask is not None:
+                full_scores = full_scores + amask
+            scores = full_scores
+            refine_mask = xp.ones((B, H, L, S), dtype=xp.bool_)
+        else:
+            ranking_scores = xp.einsum('bhid,bhjd->bhij', query_data, key_data) * scale_f
+            if is_causal:
+                ranking_scores = xp.where(cmask, xp.float32(-1e9), ranking_scores)
+            if attn_mask is not None:
+                ranking_scores = ranking_scores + amask
+            abs_ranking = xp.abs(ranking_scores)
+            if is_causal:
+                abs_ranking = xp.where(cmask, xp.float32(0.0), abs_ranking)
+
+            if per_head_k is not None:
+                refine_mask = xp.zeros((B, H, L, S), dtype=xp.bool_)
+                for h in range(H):
+                    k_h = int(per_head_k[h])
+                    if k_h >= S:
+                        refine_mask[:, h, :, :] = True
+                    else:
+                        abs_h = abs_ranking[:, h, :, :]
+                        thr_idx = S - k_h
+                        part = xp.partition(abs_h, thr_idx, axis=-1)
+                        thr = part[:, :, thr_idx:thr_idx + 1]
+                        refine_mask[:, h, :, :] = abs_h >= thr
+            elif S > 256:
+                z = _apa_zscore(refine_percentile)
+                mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
+                std_ab = abs_ranking.std(axis=-1, keepdims=True)
+                threshold = mean_ab + z * std_ab
+                refine_mask = abs_ranking >= threshold
+            else:
+                threshold_idx = S - refine_k
+                partitioned = xp.partition(abs_ranking, threshold_idx, axis=-1)
+                threshold = partitioned[:, :, :, threshold_idx:threshold_idx + 1]
+                refine_mask = abs_ranking >= threshold
+
+            scores = xp.where(refine_mask, ranking_scores, bulk_scores)
+
+        stored_refine_masks = {0: refine_mask}
+        sm = scores.max(axis=-1, keepdims=True)
+        es = xp.exp(scores - sm)
+        attn_w = es / es.sum(axis=-1, keepdims=True)
+
+        if dropout_p > 0 and _grad_enabled:
+            drop_mask = (xp.random.rand(*attn_w.shape) > dropout_p).astype(attn_w.dtype)
+            attn_w = attn_w * drop_mask / (1 - dropout_p)
+
+        output = xp.einsum('bhij,bhjd->bhid', attn_w, value_data)
+    else:
+        output = xp.zeros((B, H, L, D), dtype=query_data.dtype)
+        m_prev = xp.full((B, H, L, 1), -xp.inf, dtype=query_data.dtype)
+        l_prev = xp.zeros((B, H, L, 1), dtype=query_data.dtype)
+        stored_refine_masks = {}
+        tiled_per_head_k = None
+
+        for i in range(0, L, block_size):
+            end_i = min(i + block_size, L)
+            Qi = query_data[:, :, i:end_i]
+            block_len = end_i - i
+
+            if is_causal:
+                ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
+                ci = xp.arange(S).reshape(1, 1, 1, -1)
+                causal_mask = ci > ri
+
+            bulk_scores = xp.einsum('bhid,bhjd->bhij', Qi, key_quant_data) * scale_f
+            if is_causal:
+                bulk_scores = xp.where(causal_mask, xp.float32(-1e9), bulk_scores)
+            if attn_mask is not None:
+                amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+                if amask.ndim == 2:
+                    bulk_scores = bulk_scores + amask[i:end_i, :]
+                else:
+                    bulk_scores = bulk_scores + amask[:, :, i:end_i, :]
+
+            if adaptive_heads and H > 1 and i == 0 and refine_k < S:
+                concentration = _compute_per_head_concentration(
+                    bulk_scores, xp)
+                per_head_pct = _allocate_per_head_budget(
+                    concentration, H, refine_percentile)
+                tiled_per_head_k = xp.clip(
+                    (xp.asarray(per_head_pct) * S).astype(xp.int32), 1, S)
+
+            masked_positions = xp.zeros((B, H, block_len, S), dtype=xp.bool_)
+            if is_causal:
+                masked_positions = masked_positions | causal_mask
+
+            if refine_k >= S and tiled_per_head_k is None:
+                full_scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
+                if is_causal:
+                    full_scores = xp.where(causal_mask, xp.float32(-1e9), full_scores)
+                if attn_mask is not None:
+                    if amask.ndim == 2:
+                        full_scores = full_scores + amask[i:end_i, :]
+                    else:
+                        full_scores = full_scores + amask[:, :, i:end_i, :]
+                scores = full_scores
+                refine_mask = xp.ones((B, H, block_len, S), dtype=xp.bool_)
+            else:
+                ranking_scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
+                if is_causal:
+                    ranking_scores = xp.where(causal_mask, xp.float32(-1e9), ranking_scores)
+                if attn_mask is not None:
+                    if amask.ndim == 2:
+                        ranking_scores = ranking_scores + amask[i:end_i, :]
+                    else:
+                        ranking_scores = ranking_scores + amask[:, :, i:end_i, :]
+                abs_ranking = xp.abs(ranking_scores)
+                abs_ranking = xp.where(masked_positions, xp.float32(0.0), abs_ranking)
+
+                if tiled_per_head_k is not None:
+                    refine_mask = xp.zeros((B, H, block_len, S), dtype=xp.bool_)
+                    for h in range(H):
+                        k_h = int(tiled_per_head_k[h])
+                        if k_h >= S:
+                            refine_mask[:, h, :, :] = True
+                        else:
+                            abs_h = abs_ranking[:, h, :, :]
+                            thr_idx = S - k_h
+                            part = xp.partition(abs_h, thr_idx, axis=-1)
+                            thr = part[:, :, thr_idx:thr_idx + 1]
+                            refine_mask[:, h, :, :] = abs_h >= thr
+                elif S > 256:
+                    z = _apa_zscore(refine_percentile)
+                    mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
+                    std_ab = abs_ranking.std(axis=-1, keepdims=True)
+                    threshold = mean_ab + z * std_ab
+                    refine_mask = abs_ranking >= threshold
+                else:
+                    threshold_idx = S - refine_k
+                    partitioned = xp.partition(abs_ranking, threshold_idx, axis=-1)
+                    threshold = partitioned[:, :, :, threshold_idx:threshold_idx + 1]
+                    refine_mask = abs_ranking >= threshold
+
+                scores = xp.where(refine_mask, ranking_scores, bulk_scores)
+
+            stored_refine_masks[i] = refine_mask
+
+            m_curr = scores.max(axis=-1, keepdims=True)
+            m_bp = m_prev[:, :, i:end_i]
+            l_bp = l_prev[:, :, i:end_i]
+            o_bp = output[:, :, i:end_i]
+            m_new = xp.maximum(m_bp, m_curr)
+            exp_s = xp.exp(scores - m_new)
+            corr = xp.exp(m_bp - m_new)
+            l_new = corr * l_bp + exp_s.sum(axis=-1, keepdims=True)
+            pv = xp.einsum('bhij,bhjd->bhid', exp_s, value_data)
+            output[:, :, i:end_i] = (corr * l_bp * o_bp + pv) / l_new
+            m_prev[:, :, i:end_i] = m_new
+            l_prev[:, :, i:end_i] = l_new
+
+        if dropout_p > 0 and _grad_enabled:
+            drop_mask = (xp.random.rand(*output.shape) > dropout_p).astype(output.dtype)
+            output = output * drop_mask / (1 - dropout_p)
+
+    if squeeze_output:
+        output = output.reshape(B, L, D)
+
+    out = Tensor(output, (query, key, value), 'APAQuantAttention', device=device)
+
+    def _backward():
+        grad_q = xp.zeros_like(query_data)
+        grad_k = xp.zeros_like(key_data)
+        grad_v = xp.zeros_like(value_data)
+        grad_out = out.grad.reshape(B, H, L, D) if squeeze_output else out.grad
+
+        if not use_tiled:
+            r_mask = stored_refine_masks[0]
+            scores = xp.einsum('bhid,bhjd->bhij', query_data, key_data) * scale_f
+            if is_causal:
+                cmask = xp.triu(xp.ones((L, S), dtype=xp.bool_), k=1)
+                scores = xp.where(cmask, xp.float32(-1e9), scores)
+            if attn_mask is not None:
+                amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+                scores = scores + amask
+            sm = scores.max(axis=-1, keepdims=True)
+            es = xp.exp(scores - sm)
+            attn_w = es / es.sum(axis=-1, keepdims=True)
+            grad_v += xp.einsum('bhij,bhid->bhjd', attn_w, grad_out)
+            dAttn = xp.einsum('bhid,bhjd->bhij', grad_out, value_data)
+            sum_dA = (attn_w * dAttn).sum(axis=-1, keepdims=True)
+            dS = attn_w * (dAttn - sum_dA) * scale_f
+            if is_causal:
+                dS = xp.where(cmask, 0.0, dS)
+            dS_full = xp.where(r_mask, dS, xp.zeros_like(dS))
+            dS_bulk = xp.where(r_mask, xp.zeros_like(dS), dS)
+            grad_q += xp.einsum('bhij,bhjd->bhid', dS_full, key_data)
+            grad_q += xp.einsum('bhij,bhjd->bhid', dS_bulk, key_quant_data)
+            grad_k += xp.einsum('bhij,bhid->bhjd', dS, query_data)
+        else:
+            for i in range(0, L, block_size):
+                end_i = min(i + block_size, L)
+                Qi = query_data[:, :, i:end_i]
+                dOi = grad_out[:, :, i:end_i]
+                r_mask = stored_refine_masks[i]
+
+                if is_causal:
+                    ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
+                    ci = xp.arange(S).reshape(1, 1, 1, -1)
+                    cmask = ci > ri
+
+                scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
+                if is_causal:
+                    scores = xp.where(cmask, xp.float32(-1e9), scores)
+                if attn_mask is not None:
+                    amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
+                    if amask.ndim == 2:
+                        scores = scores + amask[i:end_i, :]
+                    else:
+                        scores = scores + amask[:, :, i:end_i, :]
+
+                sm = scores.max(axis=-1, keepdims=True)
+                es = xp.exp(scores - sm)
+                attn_w = es / es.sum(axis=-1, keepdims=True)
+
+                grad_v += xp.einsum('bhij,bhid->bhjd', attn_w, dOi)
+                dAttn = xp.einsum('bhid,bhjd->bhij', dOi, value_data)
+                sum_dA = (attn_w * dAttn).sum(axis=-1, keepdims=True)
+                dS = attn_w * (dAttn - sum_dA) * scale_f
+
+                if is_causal:
+                    dS = xp.where(cmask, 0.0, dS)
+
+                dS_full = xp.where(r_mask, dS, xp.zeros_like(dS))
+                dS_bulk = xp.where(r_mask, xp.zeros_like(dS), dS)
+
+                grad_q[:, :, i:end_i] += xp.einsum('bhij,bhjd->bhid', dS_full, key_data)
+                grad_q[:, :, i:end_i] += xp.einsum('bhij,bhjd->bhid', dS_bulk, key_quant_data)
+                grad_k += xp.einsum('bhij,bhid->bhjd', dS, Qi)
+
+        if query.grad is not None:
+            query.grad += grad_q.reshape(query.shape)
+        if key.grad is not None:
+            key.grad += grad_k.reshape(key.shape)
+        if value.grad is not None:
+            value.grad += grad_v.reshape(value.shape)
+
+    out._backward = _backward
+    return out
+
+
 def multi_head_attention(query: Tensor, key: Tensor, value: Tensor,
                          embed_dim: int, num_heads: int,
                          q_proj: 'Linear', k_proj: 'Linear', v_proj: 'Linear',
