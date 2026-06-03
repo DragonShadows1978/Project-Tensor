@@ -64,3 +64,25 @@ def apply_rotary(x, cos, sin):
     x2 = x.slice(-1, half, half)
     rot = tc.cat([-x2, x1], dim=-1)   # rotate_half
     return x * cos + rot * sin
+
+
+def get_alibi_slopes(n_heads):
+    import math
+
+    def pow2(n):
+        start = 2 ** (-(2 ** -(math.log2(n) - 3)))
+        return [start * (start ** i) for i in range(n)]
+
+    if math.log2(n_heads).is_integer():
+        return pow2(n_heads)
+    closest = 2 ** math.floor(math.log2(n_heads))
+    return pow2(closest) + get_alibi_slopes(2 * closest)[0::2][: n_heads - closest]
+
+
+def build_alibi_bias(n_heads, seqlen, device="cuda"):
+    """ALiBi additive bias (n_heads, seqlen, seqlen) = -slope * |i - j|."""
+    slopes = np.array(get_alibi_slopes(n_heads), dtype=np.float32)
+    ctx = np.arange(seqlen)
+    dist = np.abs(ctx[None, :] - ctx[:, None]).astype(np.float32)  # (L, L)
+    bias = -slopes[:, None, None] * dist[None, :, :]              # (H, L, L)
+    return tc.tensor(bias, device=device)

@@ -104,6 +104,28 @@ def load_checkpoint(path, model):
     return {k[len("extra."):]: data[k] for k in data.files if k.startswith("extra.")}
 
 
+def weight_tie(src_module, src_attr, dst_module, dst_attr):
+    """Tie two parameters to share one Tensor (e.g. embedding <-> LM head).
+
+    Both modules then reference the same parameter object; gradients accumulate
+    once and optimizers (which dedup by identity) update it once.
+    """
+    shared = getattr(src_module, src_attr)
+    setattr(dst_module, dst_attr, shared)
+    return shared
+
+
+def checkpoint(fn, *inputs):
+    """Gradient checkpointing.
+
+    NOTE: the current engine builds the graph normally (this is a transparent,
+    correct wrapper). True activation-recompute checkpointing needs a Python
+    grad_fn hook and is tracked in ROADMAP; the API is provided for
+    compatibility so models written against it run unchanged.
+    """
+    return fn(*inputs)
+
+
 def synchronize():
     _C.synchronize()
 
@@ -134,5 +156,6 @@ __all__ = [
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
+    "weight_tie", "checkpoint",
 ]
 __version__ = "0.1.0-phase1"

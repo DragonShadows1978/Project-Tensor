@@ -167,6 +167,63 @@ class Tanh(Module):
     def forward(self, x): return x.tanh()
 
 
+class LeakyReLU(Module):
+    def __init__(self, negative_slope=0.01):
+        super().__init__()
+        self.alpha = negative_slope
+
+    def forward(self, x):
+        return x.maximum(x * self.alpha)
+
+
+class ELU(Module):
+    def __init__(self, alpha=1.0):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, x):
+        pos = x.__gt__(0.0)
+        return tc.where(pos, x, (x.exp().__add__(-1.0)) * self.alpha)
+
+
+class Softmax(Module):
+    def __init__(self, dim=-1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x): return x.softmax(self.dim)
+
+
+class GeGLU(Module):
+    """Gated GELU: split a 2*d projection into value and gate."""
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.proj = Linear(in_dim, 2 * out_dim)
+        self.out_dim = out_dim
+
+    def forward(self, x):
+        h = self.proj(x)
+        a = h.slice(-1, 0, self.out_dim)
+        b = h.slice(-1, self.out_dim, self.out_dim)
+        return a * b.gelu()
+
+
+class FusedLinearGELU(Module):
+    def __init__(self, in_f, out_f):
+        super().__init__()
+        self.lin = Linear(in_f, out_f)
+
+    def forward(self, x): return self.lin(x).gelu()
+
+
+class FusedLinearSiLU(Module):
+    def __init__(self, in_f, out_f):
+        super().__init__()
+        self.lin = Linear(in_f, out_f)
+
+    def forward(self, x): return self.lin(x).silu()
+
+
 class Sequential(Module):
     def __init__(self, *layers):
         super().__init__()
@@ -238,12 +295,14 @@ class MultiheadAttention(Module):
     def _split(self, x, B, L):
         return x.reshape([B, L, self.num_heads, self.head_dim]).transpose(1, 2)
 
-    def forward(self, x, attn_mask=None, is_causal=False):
+    def forward(self, x, kv=None, attn_mask=None, is_causal=False):
         from . import functional as F
+        kv = x if kv is None else kv
         B, L, _ = x.shape
+        S = kv.shape[1]
         q = self._split(self.q_proj(x), B, L)
-        k = self._split(self.k_proj(x), B, L)
-        v = self._split(self.v_proj(x), B, L)
+        k = self._split(self.k_proj(kv), B, S)
+        v = self._split(self.v_proj(kv), B, S)
         out = F.scaled_dot_product_attention(q, k, v, attn_mask, is_causal)
         out = out.transpose(1, 2).reshape([B, L, self.embed_dim])
         return self.out_proj(out)
@@ -350,6 +409,88 @@ class BatchNorm2D(Module):
             mean = self.running_mean.reshape([1, self.C, 1, 1]).detach()
             var = self.running_var.reshape([1, self.C, 1, 1]).detach()
         return (x - mean) * (var + self.eps).pow(-0.5) * w + b
+
+
+class BatchNorm1D(Module):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
+        super().__init__()
+        self.eps, self.momentum, self.C = eps, momentum, num_features
+        self.weight = parameter(np.ones(num_features))
+        self.bias = parameter(np.zeros(num_features))
+        self.running_mean = tc.zeros(num_features)
+        self.running_var = tc.ones(num_features)
+
+    def forward(self, x):
+        # x: (N, C) or (N, C, L) -> normalize over N (and L)
+        axes = [0] if x.ndim == 2 else [0, 2]
+        wshape = [1, self.C] if x.ndim == 2 else [1, self.C, 1]
+        w = self.weight.reshape(wshape); b = self.bias.reshape(wshape)
+        if self.training:
+            mean = x.mean(axes, True); var = x.var(axes, True)
+            mn = mean.numpy().ravel(); vr = var.numpy().ravel()
+            self.running_mean = tc.tensor((1 - self.momentum) * self.running_mean.numpy() + self.momentum * mn)
+            self.running_var = tc.tensor((1 - self.momentum) * self.running_var.numpy() + self.momentum * vr)
+        else:
+            mean = self.running_mean.reshape(wshape).detach()
+            var = self.running_var.reshape(wshape).detach()
+        return (x - mean) * (var + self.eps).pow(-0.5) * w + b
+
+
+class GroupNorm(Module):
+    def __init__(self, num_groups, num_channels, eps=1e-5):
+        super().__init__()
+        self.G, self.C, self.eps = num_groups, num_channels, eps
+        self.weight = parameter(np.ones(num_channels))
+        self.bias = parameter(np.zeros(num_channels))
+
+    def forward(self, x):
+        N, C = x.shape[0], x.shape[1]
+        spatial = list(x.shape[2:])
+        g = x.reshape([N, self.G, -1])
+        mean = g.mean([2], True); var = g.var([2], True)
+        g = (g - mean) * (var + self.eps).pow(-0.5)
+        g = g.reshape([N, C] + spatial)
+        wshape = [1, C] + [1] * len(spatial)
+        return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+
+
+class InstanceNorm2D(Module):
+    def __init__(self, num_features, eps=1e-5):
+        super().__init__()
+        self.C, self.eps = num_features, eps
+        self.weight = parameter(np.ones(num_features))
+        self.bias = parameter(np.zeros(num_features))
+
+    def forward(self, x):
+        mean = x.mean([2, 3], True); var = x.var([2, 3], True)
+        xn = (x - mean) * (var + self.eps).pow(-0.5)
+        return xn * self.weight.reshape([1, self.C, 1, 1]) + self.bias.reshape([1, self.C, 1, 1])
+
+
+class Conv1D(Module):
+    """1D conv implemented as a height-1 Conv2D."""
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0, bias=True):
+        super().__init__()
+        self.conv = Conv2D(in_ch, out_ch, (1, kernel_size), (1, stride), (0, padding), bias)
+
+    def forward(self, x):  # x: (N, C, L)
+        N, C, L = x.shape
+        out = self.conv(x.reshape([N, C, 1, L]))
+        return out.reshape([N, out.shape[1], out.shape[3]])
+
+
+class AdaptiveAvgPool2D(Module):
+    def __init__(self, output_size):
+        super().__init__()
+        self.out = output_size if isinstance(output_size, (tuple, list)) else (output_size, output_size)
+
+    def forward(self, x):
+        H, W = x.shape[2], x.shape[3]
+        oh, ow = self.out
+        if oh == 1 and ow == 1:
+            return x.mean([2, 3], True)
+        kh, kw = H // oh, W // ow
+        return tc._C.avg_pool2d(x, kh, kw, kh, kw, 0, 0)
 
 
 # ------------------------------------------------------------- recurrent
@@ -467,6 +608,54 @@ class SmoothL1Loss(Module):
         lin = d - 0.5 * self.beta
         small = d.__lt__(self.beta)  # detached 0/1
         return tc.where(small, quad, lin).mean()
+
+
+class KLDivLoss(Module):
+    """input = log-probabilities, target = probabilities (batchmean)."""
+    def __init__(self, eps=1e-8):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, log_q, p):
+        term = p * ((p + self.eps).log() - log_q)
+        return term.sum([-1]).mean()
+
+
+class PositionalEncoding(Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        pe = np.zeros((max_len, d_model), np.float32)
+        pos = np.arange(max_len)[:, None]
+        div = np.exp(np.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
+        pe[:, 0::2] = np.sin(pos * div)
+        pe[:, 1::2] = np.cos(pos * div)
+        self.pe = tc.tensor(pe)  # buffer (requires_grad=False)
+        self.d_model = d_model
+
+    def forward(self, x):
+        L = x.shape[1]
+        return x + self.pe.slice(0, 0, L).reshape([1, L, self.d_model])
+
+
+class TransformerDecoderLayer(Module):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, activation="gelu"):
+        super().__init__()
+        self.self_attn = MultiheadAttention(d_model, nhead)
+        self.cross_attn = MultiheadAttention(d_model, nhead)
+        self.linear1 = Linear(d_model, dim_feedforward)
+        self.linear2 = Linear(dim_feedforward, d_model)
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+        self.norm3 = LayerNorm(d_model)
+        self.act = activation
+
+    def forward(self, x, memory, tgt_causal=True):
+        x = self.norm1(x + self.self_attn(x, is_causal=tgt_causal))
+        x = self.norm2(x + self.cross_attn(x, kv=memory))
+        h = self.linear1(x)
+        h = h.gelu() if self.act == "gelu" else h.relu()
+        x = self.norm3(x + self.linear2(h))
+        return x
 
 
 class CrossEntropyLoss(Module):

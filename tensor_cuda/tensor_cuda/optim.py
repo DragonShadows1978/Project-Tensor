@@ -15,7 +15,11 @@ def _zeros_like_param(p):
 
 class Optimizer:
     def __init__(self, params):
-        self.params = list(params)
+        # Dedup by identity so tied/shared parameters are updated exactly once.
+        seen = {}
+        for p in params:
+            seen.setdefault(id(p), p)
+        self.params = list(seen.values())
 
     def zero_grad(self):
         for p in self.params:

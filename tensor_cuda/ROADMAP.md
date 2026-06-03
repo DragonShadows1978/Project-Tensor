@@ -119,13 +119,22 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
 - Optimizers: RAdam, Lion (in-place kernels). Schedulers: MultiStep/Exponential/
   Constant/Linear/OneCycle/Cyclic/ReduceLROnPlateau.
 
+### ✅ Phase 8 — nn breadth + training utilities
+- Activations: LeakyReLU, ELU, Softmax module. Gated/fused: GeGLU,
+  FusedLinearGELU/SiLU. Norms: BatchNorm1D, GroupNorm, InstanceNorm2D. Conv1D,
+  AdaptiveAvgPool2D. Losses: KLDivLoss. PositionalEncoding, ALiBi
+  (`functional.build_alibi_bias`), TransformerDecoderLayer (self + cross attn).
+- Cross-attention in MultiheadAttention (optional `kv`).
+- `weight_tie` (shared parameter) + optimizer param dedup; `checkpoint`
+  (transparent wrapper; see note).
+
 ## Cross-cutting remaining work (the long tail)
 Each lands with the consumer that needs it: strided/zero-copy views; einsum;
 sort/topk; boolean/advanced indexing & `__setitem__`; depthwise/separable/
-transpose conv; cosine/triplet losses; true op-level autocast; gradient
-checkpointing; a single fused flash-attention kernel. The architecture and
-conventions above make each a localized addition (kernel + op + binding + test),
-not a refactor.
+transpose conv; cosine/triplet losses; true op-level autocast; true
+activation-recompute checkpointing (needs a Python grad_fn hook); a single fused
+flash-attention kernel. The architecture/conventions make each a localized
+addition (kernel + op + binding + test), not a refactor.
 
 ## Build & test (each phase)
 ```bash
