@@ -41,6 +41,52 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     return tc.matmul(weights, value)
 
 
+def einsum(equation, *operands):
+    """General einsum over engine ops (broadcast-multiply-sum).
+
+    Supports single- and multi-operand contractions without repeated indices
+    within a single term (no diagonals). Covers all standard attention/linear
+    patterns. Differentiable end to end.
+    """
+    eq = equation.replace(" ", "")
+    if "->" in eq:
+        ins, out = eq.split("->")
+    else:
+        ins = eq
+        from collections import Counter
+        c = Counter(ins.replace(",", ""))
+        out = "".join(sorted(k for k in c if c[k] == 1))
+    terms = ins.split(",")
+    assert len(terms) == len(operands), "einsum: term/operand count mismatch"
+
+    all_idx = []
+    for s in terms + [out]:
+        for ch in s:
+            if ch not in all_idx:
+                all_idx.append(ch)
+
+    factors = []
+    for t, s in zip(operands, terms):
+        order = [ch for ch in all_idx if ch in s]
+        perm = [s.index(ch) for ch in order]
+        tt = t.permute(perm) if perm != list(range(len(perm))) else t
+        shape = [(t.shape[s.index(ch)] if ch in s else 1) for ch in all_idx]
+        factors.append(tt.reshape(shape))
+
+    prod = factors[0]
+    for f in factors[1:]:
+        prod = prod * f
+
+    sum_axes = [i for i, ch in enumerate(all_idx) if ch not in out]
+    if sum_axes:
+        prod = prod.sum(sum_axes, False)
+    remaining = [ch for ch in all_idx if ch in out]
+    perm = [remaining.index(ch) for ch in out]
+    if perm != list(range(len(perm))):
+        prod = prod.permute(perm)
+    return prod
+
+
 _rope_cache = {}
 
 

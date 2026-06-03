@@ -128,13 +128,19 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
 - `weight_tie` (shared parameter) + optimizer param dedup; `checkpoint`
   (transparent wrapper; see note).
 
+### ✅ Phase 9 — einsum, topk, grouped conv, metric losses
+- `einsum` (general broadcast-multiply-sum over engine ops, differentiable).
+- `topk` (selection kernel, values differentiable via scatter-add).
+- DepthwiseConv2D / SeparableConv2D (composed from im2col + reduce).
+- CosineEmbeddingLoss, TripletMarginLoss.
+
 ## Cross-cutting remaining work (the long tail)
-Each lands with the consumer that needs it: strided/zero-copy views; einsum;
-sort/topk; boolean/advanced indexing & `__setitem__`; depthwise/separable/
-transpose conv; cosine/triplet losses; true op-level autocast; true
-activation-recompute checkpointing (needs a Python grad_fn hook); a single fused
-flash-attention kernel. The architecture/conventions make each a localized
-addition (kernel + op + binding + test), not a refactor.
+Genuinely-deferred items (lower value / larger risk; each is localized):
+strided/zero-copy views; full `sort`; boolean/advanced indexing & `__setitem__`;
+ConvTranspose2D; true op-level autocast; true activation-recompute checkpointing
+(needs a Python grad_fn hook); a single *fused* flash-attention kernel (the
+current attention already runs in C++/cuBLAS, this would cut memory traffic
+further). The architecture/conventions make each a localized addition.
 
 ## Build & test (each phase)
 ```bash

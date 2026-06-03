@@ -1028,6 +1028,54 @@ NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim, const NDArray& 
   if (n) { DISPATCH_FLOAT(src.dtype, T, { scatter_add_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(src.data_ptr()), static_cast<int64_t*>(index.data_ptr()), static_cast<float*>(outf.data_ptr()), s, n); }); cuda_check_last("scatter_add"); }
   return outf.astype(dtype);
 }
+namespace {
+template <typename T>
+__global__ void topk_kernel(const T* a, T* vals, int64_t* idxs,
+                            int64_t outer, int64_t S, int k, int largest) {
+  int64_t row = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (row >= outer) return;
+  const T* arow = a + row * S;
+  float prev_val = largest ? 3.4e38f : -3.4e38f;
+  int64_t prev_idx = -1;
+  for (int p = 0; p < k; ++p) {
+    float best_val = largest ? -3.4e38f : 3.4e38f;
+    int64_t best_idx = -1;
+    for (int64_t j = 0; j < S; ++j) {
+      float v = ld<T>(arow, j);
+      bool after = largest ? (v < prev_val || (v == prev_val && j > prev_idx))
+                           : (v > prev_val || (v == prev_val && j > prev_idx));
+      if (!after) continue;
+      bool better;
+      if (best_idx < 0) better = true;
+      else better = largest ? (v > best_val || (v == best_val && j < best_idx))
+                            : (v < best_val || (v == best_val && j < best_idx));
+      if (better) { best_val = v; best_idx = j; }
+    }
+    st<T>(vals, row * k + p, best_val);
+    idxs[row * k + p] = best_idx;
+    prev_val = best_val; prev_idx = best_idx;
+  }
+}
+}  // namespace
+
+std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest) {
+  int nd = a.ndim();
+  int64_t S = a.shape[nd - 1];
+  int64_t outer = a.numel() / S;
+  Shape os = a.shape; os[nd - 1] = k;
+  NDArray vals(os, a.dtype, a.device);
+  NDArray idxs(os, DType::Int64, a.device);
+  if (outer > 0) {
+    DISPATCH_FLOAT(a.dtype, T, {
+      topk_kernel<T><<<nblk(outer), kT>>>(static_cast<T*>(a.data_ptr()),
+          static_cast<T*>(vals.data_ptr()), static_cast<int64_t*>(idxs.data_ptr()),
+          outer, S, k, largest ? 1 : 0);
+    });
+    cuda_check_last("topk");
+  }
+  return {vals, idxs};
+}
+
 NDArray flip_nd(const NDArray& a, const std::vector<int>& dims) {
   int nd = a.ndim();
   FlipSpec s{}; s.ndim = nd;

@@ -362,6 +362,43 @@ class Conv2D(Module):
         return out
 
 
+class DepthwiseConv2D(Module):
+    """Per-channel conv (groups == channels), composed from im2col + reduce."""
+    def __init__(self, channels, kernel_size, stride=1, padding=0, bias=True):
+        super().__init__()
+        self.C = channels
+        self.kh, self.kw = _pair(kernel_size)
+        self.sh, self.sw = _pair(stride)
+        self.ph, self.pw = _pair(padding)
+        bound = 1.0 / math.sqrt(self.kh * self.kw)
+        self.weight = parameter(np.random.uniform(-bound, bound, (channels, self.kh * self.kw)))
+        self.bias = parameter(np.zeros(channels)) if bias else None
+
+    def forward(self, x):
+        N, C, H, W = x.shape
+        cols = tc._C.im2col(x, self.kh, self.kw, self.sh, self.sw, self.ph, self.pw)
+        L = cols.shape[-1]
+        cols = cols.reshape([N, C, self.kh * self.kw, L])
+        w = self.weight.reshape([1, C, self.kh * self.kw, 1])
+        out = (cols * w).sum([2], False)  # (N, C, L)
+        OH = (H + 2 * self.ph - self.kh) // self.sh + 1
+        OW = (W + 2 * self.pw - self.kw) // self.sw + 1
+        out = out.reshape([N, C, OH, OW])
+        if self.bias is not None:
+            out = out + self.bias.reshape([1, C, 1, 1])
+        return out
+
+
+class SeparableConv2D(Module):
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0):
+        super().__init__()
+        self.depth = DepthwiseConv2D(in_ch, kernel_size, stride, padding)
+        self.point = Conv2D(in_ch, out_ch, 1)
+
+    def forward(self, x):
+        return self.point(self.depth(x))
+
+
 class MaxPool2D(Module):
     def __init__(self, kernel_size, stride=None, padding=0):
         super().__init__()
@@ -608,6 +645,33 @@ class SmoothL1Loss(Module):
         lin = d - 0.5 * self.beta
         small = d.__lt__(self.beta)  # detached 0/1
         return tc.where(small, quad, lin).mean()
+
+
+class CosineEmbeddingLoss(Module):
+    def __init__(self, margin=0.0, eps=1e-8):
+        super().__init__()
+        self.margin, self.eps = margin, eps
+
+    def forward(self, x1, x2, y):
+        dot = (x1 * x2).sum([-1])
+        n1 = (x1 * x1).sum([-1]).pow(0.5)
+        n2 = (x2 * x2).sum([-1]).pow(0.5)
+        cos = dot / (n1 * n2 + self.eps)
+        pos = cos * -1.0 + 1.0                      # 1 - cos
+        neg = (cos + (-self.margin)).relu()         # max(0, cos - margin)
+        mask = y.__gt__(0.0)                        # y == +1
+        return tc.where(mask, pos, neg).mean()
+
+
+class TripletMarginLoss(Module):
+    def __init__(self, margin=1.0):
+        super().__init__()
+        self.margin = margin
+
+    def forward(self, anchor, positive, negative):
+        d_ap = ((anchor - positive).pow(2.0)).sum([-1]).pow(0.5)
+        d_an = ((anchor - negative).pow(2.0)).sum([-1]).pow(0.5)
+        return (d_ap - d_an + self.margin).relu().mean()
 
 
 class KLDivLoss(Module):

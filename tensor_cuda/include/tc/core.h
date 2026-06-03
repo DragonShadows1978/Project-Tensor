@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace tc {
@@ -139,6 +140,8 @@ NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim,
                        const NDArray& index, const NDArray& src);
 // reverse `a` along the given dims.
 NDArray flip_nd(const NDArray& a, const std::vector<int>& dims);
+// top-k along the last axis -> (values same dtype, indices int64), last dim = k.
+std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest);
 
 // Shape ops.
 NDArray transpose2d_last(const NDArray& a);            // swap last two dims

@@ -88,6 +88,7 @@ Tensor argmin(const Tensor& a, int axis);
 Tensor cumsum(const Tensor& a, int axis);
 Tensor gather(const Tensor& a, int dim, const Tensor& index);
 Tensor flip(const Tensor& a, const std::vector<int>& dims);
+std::tuple<Tensor, Tensor> topk(const Tensor& a, int k, bool largest);  // (values, indices)
 
 // Shape.
 Tensor permute(const Tensor& a, const std::vector<int>& dims);

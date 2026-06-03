@@ -60,6 +60,11 @@ def where(cond, x, y):
     return _C.where(cond, x, y)
 
 
+def einsum(equation, *operands):
+    from . import functional
+    return functional.einsum(equation, *operands)
+
+
 def embedding(weight, idx):
     if not isinstance(idx, Tensor):
         idx = _C.tensor(np.ascontiguousarray(np.asarray(idx, dtype=np.int64)), "cuda", False)
@@ -156,6 +161,6 @@ __all__ = [
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
-    "weight_tie", "checkpoint",
+    "weight_tie", "checkpoint", "einsum",
 ]
 __version__ = "0.1.0-phase1"

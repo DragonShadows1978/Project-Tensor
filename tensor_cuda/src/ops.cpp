@@ -414,6 +414,18 @@ Tensor flip(const Tensor& a, const std::vector<int>& dims) {
     a.v->accumulate_grad(flip_nd(g, dims));
   });
 }
+std::tuple<Tensor, Tensor> topk(const Tensor& a, int k, bool largest) {
+  NDArray vals_nd, idx_nd;
+  std::tie(vals_nd, idx_nd) = tc::topk_nd(a.data(), k, largest);
+  Shape in_shape = a.shape();
+  NDArray idx = idx_nd;
+  DType dt = a.dtype();
+  int dim = a.ndim() - 1;
+  Tensor values = Tensor::from_op(vals_nd, {a}, "topk", [a, idx, in_shape, dt, dim](const NDArray& g) {
+    a.v->accumulate_grad(scatter_add_nd(in_shape, dt, dim, idx, g));
+  });
+  return {values, Tensor::make(idx_nd, false)};
+}
 
 Tensor permute(const Tensor& a, const std::vector<int>& dims) {
   NDArray out = tc::permute(a.data(), dims);

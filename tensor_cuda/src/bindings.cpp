@@ -156,6 +156,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("cumsum", [](Tensor& t, int ax) { return ops::cumsum(t, ax); }, py::arg("axis") = -1)
       .def("gather", [](Tensor& t, int dim, Tensor& idx) { return ops::gather(t, dim, idx); })
       .def("flip", [](Tensor& t, std::vector<int> dims) { return ops::flip(t, dims); })
+      .def("topk", [](Tensor& t, int k, bool largest) {
+        auto pr = ops::topk(t, k, largest);
+        return py::make_tuple(std::get<0>(pr), std::get<1>(pr));
+      }, py::arg("k"), py::arg("largest") = true)
       .def("permute", [](Tensor& t, std::vector<int> d) { return ops::permute(t, d); })
       .def("transpose", [](Tensor& t, int a, int b) { return ops::transpose(t, a, b); })
       .def("squeeze", [](Tensor& t, int d) { return ops::squeeze(t, d); }, py::arg("dim") = 0)
