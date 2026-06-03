@@ -145,6 +145,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                         double b1, double b2, double eps, int64_t t, double wd, bool dec) {
     tc::adam_step(p.data(), g.data(), m_.data(), v_.data(), lr, b1, b2, eps, t, wd, dec);
   });
+  m.def("rmsprop_step", [](Tensor& p, Tensor& g, Tensor& sq, double lr, double alpha, double eps, double wd) {
+    tc::rmsprop_step(p.data(), g.data(), sq.data(), lr, alpha, eps, wd);
+  });
+  m.def("adagrad_step", [](Tensor& p, Tensor& g, Tensor& acc, double lr, double eps, double wd) {
+    tc::adagrad_step(p.data(), g.data(), acc.data(), lr, eps, wd);
+  });
+  m.def("scale_", [](Tensor& t, double s) { tc::scale_(t.data(), s); });
+  m.def("axpy_", [](Tensor& p, Tensor& o, double a) { tc::axpy_(p.data(), o.data(), a); });
 
   // grad mode
   m.def("is_grad_enabled", &grad_enabled);

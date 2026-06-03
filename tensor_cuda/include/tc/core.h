@@ -151,8 +151,13 @@ void sgd_step(NDArray& param, const NDArray& grad, NDArray& momentum_buf,
 void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
                double lr, double b1, double b2, double eps, int64_t t,
                double weight_decay, bool decoupled);
-// param.data += alpha * other  (in place); used by misc utilities.
+void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq_avg,
+                  double lr, double alpha, double eps, double weight_decay);
+void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc,
+                  double lr, double eps, double weight_decay);
+// param.data += alpha * other  (in place); param.data *= s (in place).
 void axpy_(NDArray& param, const NDArray& other, double alpha);
+void scale_(NDArray& param, double s);
 
 // CUDA bookkeeping.
 void cuda_sync();

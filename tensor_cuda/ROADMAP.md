@@ -61,11 +61,13 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   (+ depthwise/separable/transpose, im2col kernels), pooling, more losses
   (BCE/L1/SmoothL1/KLDiv), ModuleList/ModuleDict, state_dict, hooks.
 
-### ⬜ Phase 4 — Optimizers, schedulers, training infra
-SGD/Adam/AdamW/RMSprop/Adagrad/RAdam/Lion/FusedAdam (in-place CUDA update
-kernels), LR schedulers (Step/MultiStep/Exp/Cosine/OneCycle/Cyclic/Plateau/
-warmup), grad clipping, GradScaler/autocast (AMP), gradient accumulation,
-gradient checkpointing, weight tying, checkpoint save/load, profiler.
+### ✅ Phase 4 — Optimizers, schedulers, grad clipping (core done)
+- Optimizers: SGD/Adam/AdamW (Phase 3) + RMSprop, Adagrad (in-place CUDA step
+  kernels). `clip_grad_norm_`. Schedulers: StepLR, CosineAnnealingLR,
+  LinearWarmupCosineDecay.
+- **Remaining for Phase 4b**: RAdam/Lion, MultiStep/Exp/OneCycle/Cyclic/Plateau,
+  GradScaler + autocast (AMP), gradient accumulation/checkpointing, weight tying,
+  checkpoint save/load, profiler.
 
 ### ⬜ Phase 5 — Sequence & transformer models
 RNN/LSTM/GRU (cells + layers), PositionalEncoding, RoPE, ALiBi,

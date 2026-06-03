@@ -643,7 +643,62 @@ __global__ void adam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,
   if (decoupled) pi -= lr * wd * pi;  // AdamW decoupled weight decay
   st<T>(p, i, pi - lr * mhat / (sqrtf(vhat) + eps));
 }
+template <typename T>
+__global__ void rmsprop_kernel(T* p, const T* g, T* sq, int64_t n, float lr,
+                               float alpha, float eps, float wd) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float gi = ld<T>(g, i) + wd * ld<T>(p, i);
+  float s = alpha * ld<T>(sq, i) + (1.f - alpha) * gi * gi;
+  st<T>(sq, i, s);
+  st<T>(p, i, ld<T>(p, i) - lr * gi / (sqrtf(s) + eps));
+}
+template <typename T>
+__global__ void adagrad_kernel(T* p, const T* g, T* acc, int64_t n, float lr, float eps, float wd) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float gi = ld<T>(g, i) + wd * ld<T>(p, i);
+  float a = ld<T>(acc, i) + gi * gi;
+  st<T>(acc, i, a);
+  st<T>(p, i, ld<T>(p, i) - lr * gi / (sqrtf(a) + eps));
+}
+template <typename T>
+__global__ void scale_kernel(T* p, int64_t n, float s) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) st<T>(p, i, ld<T>(p, i) * s);
+}
 }  // namespace
+
+void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq, double lr,
+                  double alpha, double eps, double wd) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    rmsprop_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(sq.data_ptr()), n,
+        (float)lr, (float)alpha, (float)eps, (float)wd);
+  });
+  cuda_check_last("rmsprop_step");
+}
+void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc, double lr,
+                  double eps, double wd) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    adagrad_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(acc.data_ptr()), n,
+        (float)lr, (float)eps, (float)wd);
+  });
+  cuda_check_last("adagrad_step");
+}
+void scale_(NDArray& param, double s) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    scale_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()), n, (float)s);
+  });
+  cuda_check_last("scale_");
+}
 
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {
   int64_t V = weight.shape[0];
