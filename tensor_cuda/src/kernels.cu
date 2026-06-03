@@ -253,7 +253,8 @@ __global__ void binary_kernel(const T* a, const T* b, T* out, DimSpec s,
   }
   float x = ld<T>(a, ao), y = ld<T>(b, bo), r;
   switch (op) { case 0: r = x + y; break; case 1: r = x - y; break;
-                case 2: r = x * y; break; default: r = x / y; }
+                case 2: r = x * y; break; case 3: r = x / y; break;
+                case 4: r = fmaxf(x, y); break; default: r = fminf(x, y); }
   st<T>(out, idx, r);
 }
 
@@ -286,9 +287,19 @@ __global__ void unary_kernel(const T* a, T* out, int64_t n, int op) {
     case U_RECIP: r = 1.f / x; break;
     case U_ABS: r = fabsf(x); break;
     case U_SIGN: r = (x > 0) - (x < 0); break;
+    case U_SIN: r = sinf(x); break;
+    case U_COS: r = cosf(x); break;
     default: r = x;
   }
   st<T>(out, i, r);
+}
+
+template <typename T>
+__global__ void clamp_kernel(const T* a, T* out, int64_t n, float lo, float hi) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float x = ld<T>(a, i);
+  st<T>(out, i, x < lo ? lo : (x > hi ? hi : x));
 }
 
 template <typename T>
@@ -337,6 +348,12 @@ NDArray ew_unary(const NDArray& a, int op) {
         static_cast<T*>(out.data_ptr()), n, op);
   });
   cuda_check_last("ew_unary");
+  return out;
+}
+NDArray ew_clamp(const NDArray& a, double lo, double hi) {
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = a.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { clamp_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)lo, (float)hi); }); cuda_check_last("clamp"); }
   return out;
 }
 NDArray ge_scalar(const NDArray& a, double sval) {
@@ -808,6 +825,19 @@ NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
   if (n) { DISPATCH_FLOAT(a.dtype, T, { dimcopy_kernel<T, 0><<<nblk(n), kT>>>(nullptr, static_cast<T*>(out.data_ptr()), static_cast<T*>(a.data_ptr()), nullptr, s, n); }); }
   cuda_check_last("slice");
   return out;
+}
+NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t start) {
+  int nd = (int)big_shape.size();
+  if (dim < 0) dim += nd;
+  NDArray big = NDArray::zeros(big_shape, small.dtype, small.device);
+  Shape big_str = contiguous_strides(big_shape);
+  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
+  Shape istr = contiguous_strides(small.shape);
+  for (int d = 0; d < nd; ++d) { s.iter_shape[d] = small.shape[d]; s.iter_str[d] = istr[d]; s.big_str[d] = big_str[d]; }
+  int64_t n = small.numel();
+  if (n) { DISPATCH_FLOAT(small.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(small.data_ptr()), nullptr, nullptr, static_cast<T*>(big.data_ptr()), s, n); }); }
+  cuda_check_last("pad_into");
+  return big;
 }
 
 }  // namespace tc

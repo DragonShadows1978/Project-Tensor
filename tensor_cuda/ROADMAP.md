@@ -74,9 +74,14 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   `nn.MultiheadAttention`, `nn.RMSNorm`, `nn.TransformerEncoderLayer`. `abs` op.
 - Tests: SDPA parity vs NumPy (dense + causal), MHA/encoder shapes, transformer
   training loop.
-- **Remaining for Phase 5b**: RNN/LSTM/GRU, PositionalEncoding, RoPE, ALiBi,
-  fused flash-attention CUDA kernel, TransformerDecoder, GeGLU, fused
-  Linear+GELU/SiLU. (RoPE needs the slice/narrow op from Phase 2b.)
+### ✅ Phase 5b — RNN family + RoPE + losses
+- RNNCell/LSTMCell/GRUCell + RNN/LSTM/GRU (time-stepped), RoPE
+  (`functional.rope_tables`/`apply_rotary`), losses L1/BCEWithLogits/SmoothL1.
+- New ops (Phase 2b folded in): slice/narrow (+ grad via pad_into), sin, cos,
+  reciprocal, clamp, elementwise maximum/minimum.
+- **Still remaining**: ALiBi, fused flash-attention kernel, TransformerDecoder,
+  GeGLU, fused Linear+GELU/SiLU; Conv/pooling (3b); AMP (4b); einsum/sort/topk/
+  gather/scatter/cumsum (2b); strided views.
 
 ### ✅ Phase 6 — Quantization & APA (on the standalone engine)
 - Lloyd-Max codebook builder + per-head rotations (numpy, cached);

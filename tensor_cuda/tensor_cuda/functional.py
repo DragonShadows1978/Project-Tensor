@@ -39,3 +39,28 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
         scores = scores + attn_mask
     weights = scores.softmax(-1)
     return tc.matmul(weights, value)
+
+
+_rope_cache = {}
+
+
+def rope_tables(seq_len, head_dim, device, base=10000.0):
+    key = (seq_len, head_dim, device)
+    t = _rope_cache.get(key)
+    if t is None:
+        inv = 1.0 / (base ** (np.arange(0, head_dim, 2, dtype=np.float32) / head_dim))
+        pos = np.arange(seq_len, dtype=np.float32)[:, None] * inv[None, :]  # (L, D/2)
+        emb = np.concatenate([pos, pos], axis=-1)                          # (L, D)
+        t = (tc.tensor(np.cos(emb), device=device), tc.tensor(np.sin(emb), device=device))
+        _rope_cache[key] = t
+    return t
+
+
+def apply_rotary(x, cos, sin):
+    """RoPE on x (B, H, L, D). cos/sin are (L, D)."""
+    D = x.shape[-1]
+    half = D // 2
+    x1 = x.slice(-1, 0, half)
+    x2 = x.slice(-1, half, half)
+    rot = tc.cat([-x2, x1], dim=-1)   # rotate_half
+    return x * cos + rot * sin

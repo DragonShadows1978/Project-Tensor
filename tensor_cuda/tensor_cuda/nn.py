@@ -204,8 +204,121 @@ class TransformerEncoderLayer(Module):
         return x
 
 
+# ------------------------------------------------------------- recurrent
+class RNNCell(Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.ih = Linear(input_size, hidden_size)
+        self.hh = Linear(hidden_size, hidden_size)
+
+    def forward(self, x, h):
+        return (self.ih(x) + self.hh(h)).tanh()
+
+
+class LSTMCell(Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.ih = Linear(input_size, 4 * hidden_size)
+        self.hh = Linear(hidden_size, 4 * hidden_size)
+
+    def forward(self, x, state):
+        h, c = state
+        g = self.ih(x) + self.hh(h)
+        H = self.hidden_size
+        i = g.slice(-1, 0, H).sigmoid()
+        f = g.slice(-1, H, H).sigmoid()
+        gg = g.slice(-1, 2 * H, H).tanh()
+        o = g.slice(-1, 3 * H, H).sigmoid()
+        c2 = f * c + i * gg
+        h2 = o * c2.tanh()
+        return h2, c2
+
+
+class GRUCell(Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.ih = Linear(input_size, 3 * hidden_size)
+        self.hh = Linear(hidden_size, 3 * hidden_size)
+
+    def forward(self, x, h):
+        H = self.hidden_size
+        xi, hi = self.ih(x), self.hh(h)
+        r = (xi.slice(-1, 0, H) + hi.slice(-1, 0, H)).sigmoid()
+        z = (xi.slice(-1, H, H) + hi.slice(-1, H, H)).sigmoid()
+        n = (xi.slice(-1, 2 * H, H) + r * hi.slice(-1, 2 * H, H)).tanh()
+        return (z * -1.0 + 1.0) * n + z * h
+
+
+class _RNNBase(Module):
+    """Iterates a cell over the time dimension (input (B, T, input_size))."""
+    cell_cls = None
+    has_cell_state = False
+
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.cell = self.cell_cls(input_size, hidden_size)
+
+    def forward(self, x):
+        B, T, _ = x.shape
+        dev = x.device.split(":")[0]
+        h = tc.zeros(B, self.hidden_size, device=dev)
+        c = tc.zeros(B, self.hidden_size, device=dev) if self.has_cell_state else None
+        outs = []
+        for t in range(T):
+            xt = x.slice(1, t, 1).reshape([B, x.shape[2]])
+            if self.has_cell_state:
+                h, c = self.cell(xt, (h, c))
+            else:
+                h = self.cell(xt, h)
+            outs.append(h)
+        return tc.stack(outs, dim=1)  # (B, T, hidden)
+
+
+class RNN(_RNNBase):
+    cell_cls = RNNCell
+
+
+class LSTM(_RNNBase):
+    cell_cls = LSTMCell
+    has_cell_state = True
+
+
+class GRU(_RNNBase):
+    cell_cls = GRUCell
+
+
+# ------------------------------------------------------------- losses
 class MSELoss(Module):
     def forward(self, pred, target): return tc.mse_loss(pred, target)
+
+
+class L1Loss(Module):
+    def forward(self, pred, target):
+        return (pred - target).abs().mean()
+
+
+class BCEWithLogitsLoss(Module):
+    def forward(self, x, y):
+        # max(x,0) - x*y + log(1 + exp(-|x|))
+        term = x.relu() - x * y + (x.abs() * -1.0).exp().__add__(1.0).log()
+        return term.mean()
+
+
+class SmoothL1Loss(Module):
+    def __init__(self, beta=1.0):
+        super().__init__()
+        self.beta = beta
+
+    def forward(self, pred, target):
+        d = (pred - target).abs()
+        quad = d.pow(2.0) * (0.5 / self.beta)
+        lin = d - 0.5 * self.beta
+        small = d.__lt__(self.beta)  # detached 0/1
+        return tc.where(small, quad, lin).mean()
 
 
 class CrossEntropyLoss(Module):

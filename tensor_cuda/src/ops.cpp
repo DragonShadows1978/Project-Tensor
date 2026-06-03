@@ -130,6 +130,58 @@ Tensor abs(const Tensor& a) {
   });
 }
 
+Tensor sin(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_SIN);
+  return Tensor::from_op(out, {a}, "sin", [a](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(a.data(), U_COS)));
+  });
+}
+Tensor cos(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_COS);
+  return Tensor::from_op(out, {a}, "cos", [a](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(ew_unary(a.data(), U_SIN), U_NEG)));
+  });
+}
+Tensor reciprocal(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_RECIP);
+  return Tensor::from_op(out, {a}, "reciprocal", [a, out](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(nmul(out, out), U_NEG)));  // -1/x^2
+  });
+}
+Tensor clamp(const Tensor& a, double lo, double hi) {
+  NDArray out = ew_clamp(a.data(), lo, hi);
+  NDArray ad = a.data();
+  return Tensor::from_op(out, {a}, "clamp", [a, ad, lo, hi](const NDArray& g) {
+    // grad passes through where lo <= x <= hi
+    NDArray inb = nmul(compare_scalar(ad, lo, 1), compare_scalar(ad, hi, 3));  // (x>=lo)*(x<=hi)
+    a.v->accumulate_grad(nmul(g, inb));
+  });
+}
+Tensor maximum(const Tensor& a, const Tensor& b) {
+  NDArray out = ew_binary(a.data(), b.data(), 4);
+  return Tensor::from_op(out, {a, b}, "maximum", [a, b](const NDArray& g) {
+    NDArray amask = tc::compare(a.data(), b.data(), 1);  // a>=b -> a
+    a.v->accumulate_grad(nmul(g, amask));
+    b.v->accumulate_grad(nmul(g, tc::compare(b.data(), a.data(), 0)));  // b>a
+  });
+}
+Tensor minimum(const Tensor& a, const Tensor& b) {
+  NDArray out = ew_binary(a.data(), b.data(), 5);
+  return Tensor::from_op(out, {a, b}, "minimum", [a, b](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, tc::compare(a.data(), b.data(), 3)));   // a<=b
+    b.v->accumulate_grad(nmul(g, tc::compare(b.data(), a.data(), 2)));   // b<a
+  });
+}
+Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len) {
+  NDArray out = slice_nd(a.data(), dim, start, len);
+  Shape in_shape = a.shape();
+  int nd = a.ndim();
+  int d = dim < 0 ? dim + nd : dim;
+  return Tensor::from_op(out, {a}, "slice", [a, in_shape, d, start](const NDArray& g) {
+    a.v->accumulate_grad(pad_into(g, in_shape, d, start));
+  });
+}
+
 // ------------------------------------------------------------- linalg
 Tensor matmul(const Tensor& a, const Tensor& b) {
   NDArray out = tc::matmul(a.data(), b.data());

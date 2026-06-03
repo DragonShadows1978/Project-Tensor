@@ -27,6 +27,13 @@ Tensor tanh(const Tensor& a);
 Tensor gelu(const Tensor& a);
 Tensor silu(const Tensor& a);
 Tensor abs(const Tensor& a);
+Tensor sin(const Tensor& a);
+Tensor cos(const Tensor& a);
+Tensor reciprocal(const Tensor& a);
+Tensor clamp(const Tensor& a, double lo, double hi);
+Tensor maximum(const Tensor& a, const Tensor& b);
+Tensor minimum(const Tensor& a, const Tensor& b);
+Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len);
 
 // Linear algebra.
 Tensor matmul(const Tensor& a, const Tensor& b);

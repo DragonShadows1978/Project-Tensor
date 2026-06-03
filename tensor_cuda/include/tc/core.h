@@ -105,10 +105,11 @@ NDArray ew_scalar(const NDArray& a, double scalar, int op, bool scalar_lhs);
 // Elementwise unary. op enum mirrors UnaryOp below.
 enum UnaryOp {
   U_NEG, U_EXP, U_LOG, U_SQRT, U_RELU, U_SIGMOID, U_TANH, U_GELU, U_SILU,
-  U_RECIP, U_ABS, U_SIGN,
+  U_RECIP, U_ABS, U_SIGN, U_SIN, U_COS,
 };
 NDArray ew_unary(const NDArray& a, int op);
 NDArray ew_pow(const NDArray& a, double exponent);
+NDArray ew_clamp(const NDArray& a, double lo, double hi);  // clamp to [lo,hi]
 
 // Comparisons. op: 0=gt 1=ge 2=lt 3=le 4=eq 5=ne. Result is same dtype, 0/1.
 NDArray compare(const NDArray& a, const NDArray& b, int op);     // broadcasting
@@ -131,6 +132,8 @@ NDArray broadcast_to(const NDArray& a, const Shape& shape);
 // Concatenate along `dim`; slice [start, start+len) along `dim` (cat backward).
 NDArray cat_nd(const std::vector<NDArray>& arrs, int dim);
 NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len);
+// Scatter `small` into a zeroed `big_shape` tensor at [start..) along dim (slice backward).
+NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t start);
 
 // Batched matmul over leading dims; last two dims are (M,K)x(K,N). cuBLAS.
 NDArray matmul(const NDArray& a, const NDArray& b);
