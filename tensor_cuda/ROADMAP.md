@@ -36,14 +36,17 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
 - Tests: forward, broadcasting, batched matmul, softmax, FD gradcheck, a
   converging linear-regression training loop.
 
-### ⬜ Phase 2 — Op surface completion
-Remaining Tensor ops to reach reference parity: pow, the rest of the math
-(sin/cos/tan/…, clamp, round/floor/ceil, nan_to_num, isnan/isinf), comparisons,
-`where`, `masked_fill`, gather/scatter/index_select, indexing
-(`__getitem__`/`__setitem__`), cat/stack/chunk, flip/roll/repeat/tile,
-sort/topk/argmax/argmin, var/std/norm/prod/cumsum/cumprod, expand/squeeze/
-unsqueeze, `einsum`. log_softmax, cross-entropy. Strided views (remove the
-"always contiguous" restriction) land here for zero-copy transpose/slicing.
+### ✅ Phase 2 — Op surface (core breadth)
+- pow, comparisons (gt/ge/lt/le/eq/ne, tensor + scalar), `where`, `masked_fill`.
+- Reductions with grad: max/min along axis (tie-split subgradient), var, std.
+- Shape: permute, transpose, squeeze, unsqueeze, expand/broadcast_to, flatten,
+  cat, stack (+ grads via slice).
+- log_softmax, cross_entropy (one-hot; Python wrapper accepts int labels).
+- New kernels: pow, compare (bcast + scalar), 3-way `where`, reduce_min, cat/slice.
+- **Deferred to Phase 2b** (added alongside the consumers that need them):
+  gather/scatter/index_select (with Embedding), advanced `__getitem__`/setitem,
+  einsum, sort/topk/argmax-as-index, cumsum/cumprod/prod, flip/roll/repeat/tile,
+  trig/clamp/round family, strided (zero-copy) views.
 
 ### ⬜ Phase 3 — nn.Module system + core layers
 `Module` base (parameters/buffers/state_dict/hooks), `Sequential`/`ModuleList`/

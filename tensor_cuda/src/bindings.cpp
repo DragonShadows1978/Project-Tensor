@@ -82,6 +82,29 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("log", [](Tensor& t) { return ops::log(t); })
       .def("sqrt", [](Tensor& t) { return ops::sqrt(t); })
       .def("softmax", [](Tensor& t, int axis) { return ops::softmax(t, axis); }, py::arg("axis") = -1)
+      .def("log_softmax", [](Tensor& t, int axis) { return ops::log_softmax(t, axis); }, py::arg("axis") = -1)
+      .def("pow", [](Tensor& t, double p) { return ops::pow_scalar(t, p); })
+      .def("max", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::max(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("min", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::min(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("var", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::var(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("std", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::std(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("permute", [](Tensor& t, std::vector<int> d) { return ops::permute(t, d); })
+      .def("transpose", [](Tensor& t, int a, int b) { return ops::transpose(t, a, b); })
+      .def("squeeze", [](Tensor& t, int d) { return ops::squeeze(t, d); }, py::arg("dim") = 0)
+      .def("unsqueeze", [](Tensor& t, int d) { return ops::unsqueeze(t, d); })
+      .def("expand", [](Tensor& t, std::vector<int64_t> s) { return ops::expand(t, s); })
+      .def("flatten", [](Tensor& t, int s, int e) { return ops::flatten(t, s, e); }, py::arg("start_dim") = 0, py::arg("end_dim") = -1)
+      .def("masked_fill", [](Tensor& t, Tensor& m, double v) { return ops::masked_fill(t, m, v); })
+      .def("gt", [](Tensor& a, Tensor& b) { return ops::compare(a, b, 0); })
+      .def("ge", [](Tensor& a, Tensor& b) { return ops::compare(a, b, 1); })
+      .def("lt", [](Tensor& a, Tensor& b) { return ops::compare(a, b, 2); })
+      .def("le", [](Tensor& a, Tensor& b) { return ops::compare(a, b, 3); })
+      .def("eq", [](Tensor& a, Tensor& b) { return ops::compare(a, b, 4); })
+      .def("__gt__", [](Tensor& a, double s) { return ops::compare_scalar(a, s, 0); })
+      .def("__ge__", [](Tensor& a, double s) { return ops::compare_scalar(a, s, 1); })
+      .def("__lt__", [](Tensor& a, double s) { return ops::compare_scalar(a, s, 2); })
+      .def("__le__", [](Tensor& a, double s) { return ops::compare_scalar(a, s, 3); })
+      .def("__pow__", [](Tensor& a, double p) { return ops::pow_scalar(a, p); })
       // operator overloads (Tensor op Tensor and Tensor op scalar)
       .def("__add__", [](Tensor& a, Tensor& b) { return ops::add(a, b); })
       .def("__add__", [](Tensor& a, double s) { return ops::add_scalar(a, s); })
@@ -103,8 +126,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // free-function ops
   m.def("matmul", &ops::matmul);
   m.def("mse_loss", &ops::mse_loss);
+  m.def("cross_entropy", &ops::cross_entropy);
   m.def("add", &ops::add);
   m.def("mul", &ops::mul);
+  m.def("where", &ops::where);
+  m.def("cat", [](std::vector<Tensor> ts, int dim) { return ops::cat(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
+  m.def("stack", [](std::vector<Tensor> ts, int dim) { return ops::stack(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
 
   // grad mode
   m.def("is_grad_enabled", &grad_enabled);

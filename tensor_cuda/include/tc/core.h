@@ -108,16 +108,29 @@ enum UnaryOp {
   U_RECIP, U_ABS, U_SIGN,
 };
 NDArray ew_unary(const NDArray& a, int op);
+NDArray ew_pow(const NDArray& a, double exponent);
+
+// Comparisons. op: 0=gt 1=ge 2=lt 3=le 4=eq 5=ne. Result is same dtype, 0/1.
+NDArray compare(const NDArray& a, const NDArray& b, int op);     // broadcasting
+NDArray compare_scalar(const NDArray& a, double s, int op);
+// Select: cond != 0 ? x : y (all NumPy-broadcast together).
+NDArray where_nd(const NDArray& cond, const NDArray& x, const NDArray& y);
 
 // Reductions. axes empty => reduce all. Returns reduced array (keepdim aware).
 NDArray reduce_sum(const NDArray& a, const std::vector<int>& axes, bool keepdim);
 NDArray reduce_max(const NDArray& a, const std::vector<int>& axes, bool keepdim);
+NDArray reduce_min(const NDArray& a, const std::vector<int>& axes, bool keepdim);
 // Sum `a` down to `target` shape (NumPy-broadcast reduction); used by autograd.
 NDArray reduce_to(const NDArray& a, const Shape& target);
 
 // Shape ops.
 NDArray transpose2d_last(const NDArray& a);            // swap last two dims
 NDArray permute(const NDArray& a, const std::vector<int>& dims);
+NDArray broadcast_to(const NDArray& a, const Shape& shape);
+
+// Concatenate along `dim`; slice [start, start+len) along `dim` (cat backward).
+NDArray cat_nd(const std::vector<NDArray>& arrs, int dim);
+NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len);
 
 // Batched matmul over leading dims; last two dims are (M,K)x(K,N). cuBLAS.
 NDArray matmul(const NDArray& a, const NDArray& b);

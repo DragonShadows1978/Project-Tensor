@@ -56,6 +56,31 @@ def mse_loss(pred, target):
     return _C.mse_loss(pred, target)
 
 
+def where(cond, x, y):
+    return _C.where(cond, x, y)
+
+
+def cat(tensors, dim=0):
+    return _C.cat(list(tensors), dim)
+
+
+def stack(tensors, dim=0):
+    return _C.stack(list(tensors), dim)
+
+
+def cross_entropy(logits, target, *, device="cuda"):
+    """Cross-entropy from logits. `target` may be int class labels (1D) or a
+    float one-hot Tensor matching `logits`."""
+    if isinstance(target, Tensor):
+        return _C.cross_entropy(logits, target)
+    labels = np.asarray(target).astype(np.int64).ravel()
+    num_classes = logits.shape[-1]
+    onehot = np.zeros((labels.shape[0], num_classes), dtype=np.float32)
+    onehot[np.arange(labels.shape[0]), labels] = 1.0
+    onehot = onehot.reshape(logits.shape)
+    return _C.cross_entropy(logits, _C.tensor(onehot, device, False))
+
+
 def synchronize():
     _C.synchronize()
 
@@ -76,6 +101,7 @@ def no_grad():
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "mse_loss", "synchronize", "no_grad", "is_grad_enabled",
+    "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack",
+    "synchronize", "no_grad", "is_grad_enabled",
 ]
 __version__ = "0.1.0-phase1"

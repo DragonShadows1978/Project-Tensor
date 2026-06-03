@@ -362,7 +362,7 @@ struct ReduceSpec {
   int64_t red_size;               // product of reduced dim sizes
 };
 
-template <typename T, int IS_MAX>
+template <typename T, int MODE>  // 0=sum 1=max 2=min
 __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) {
   int64_t oidx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   if (oidx >= out_n) return;
@@ -375,9 +375,8 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
     coord[d] = s.reduced[d] ? 0 : c;
     base += coord[d] * s.in_str[d];
   }
-  float acc = IS_MAX ? -3.4e38f : 0.f;
+  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : 3.4e38f);
   for (int64_t r = 0; r < s.red_size; ++r) {
-    // map r -> multi-index over reduced dims
     int64_t rr = r, off = 0;
     for (int d = s.ndim - 1; d >= 0; --d) {
       if (!s.reduced[d]) continue;
@@ -386,12 +385,14 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
       off += c * s.in_str[d];
     }
     float v = ld<T>(in, base + off);
-    if (IS_MAX) acc = v > acc ? v : acc; else acc += v;
+    if (MODE == 0) acc += v;
+    else if (MODE == 1) acc = v > acc ? v : acc;
+    else acc = v < acc ? v : acc;
   }
   st<T>(out, oidx, acc);
 }
 
-NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int is_max) {
+NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int mode) {
   int nd = a.ndim();
   if (axes.empty()) for (int d = 0; d < nd; ++d) axes.push_back(d);
   ReduceSpec s{};
@@ -407,7 +408,8 @@ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int i
   int64_t out_n = out.numel();
   if (out_n > 0) {
     DISPATCH_FLOAT(a.dtype, T, {
-      if (is_max) reduce_kernel<T, 1><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
+      if (mode == 1) reduce_kernel<T, 1><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
+      else if (mode == 2) reduce_kernel<T, 2><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
       else reduce_kernel<T, 0><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
     });
     cuda_check_last("reduce");
@@ -425,6 +427,9 @@ NDArray reduce_sum(const NDArray& a, const std::vector<int>& axes, bool keepdim)
 }
 NDArray reduce_max(const NDArray& a, const std::vector<int>& axes, bool keepdim) {
   return reduce_impl(a, axes, keepdim, 1);
+}
+NDArray reduce_min(const NDArray& a, const std::vector<int>& axes, bool keepdim) {
+  return reduce_impl(a, axes, keepdim, 2);
 }
 NDArray reduce_to(const NDArray& a, const Shape& target) {
   if (a.shape == target) return a.clone();
@@ -477,6 +482,139 @@ NDArray transpose2d_last(const NDArray& a) {
   for (int d = 0; d < nd; ++d) dims[d] = d;
   std::swap(dims[nd - 1], dims[nd - 2]);
   return permute(a, dims);
+}
+
+// ------------------------------------------------------------- pow / compare / where
+namespace {
+template <typename T>
+__global__ void pow_kernel(const T* a, T* out, int64_t n, float p) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) st<T>(out, i, powf(ld<T>(a, i), p));
+}
+__device__ __forceinline__ float cmp(float x, float y, int op) {
+  switch (op) { case 0: return x > y; case 1: return x >= y; case 2: return x < y;
+                case 3: return x <= y; case 4: return x == y; default: return x != y; }
+}
+template <typename T>
+__global__ void compare_kernel(const T* a, const T* b, T* out, DimSpec s, int64_t n, int op) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, ao = 0, bo = 0;
+  for (int d = 0; d < s.ndim; ++d) { int64_t c = rem / s.out_str[d]; rem -= c * s.out_str[d]; ao += c * s.a_str[d]; bo += c * s.b_str[d]; }
+  st<T>(out, idx, cmp(ld<T>(a, ao), ld<T>(b, bo), op));
+}
+template <typename T>
+__global__ void compare_scalar_kernel(const T* a, T* out, int64_t n, float s, int op) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) st<T>(out, i, cmp(ld<T>(a, i), s, op));
+}
+struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };
+template <typename T>
+__global__ void where_kernel(const T* c, const T* x, const T* y, T* out, Dim3Spec s, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, co = 0, xo = 0, yo = 0;
+  for (int d = 0; d < s.ndim; ++d) { int64_t cc = rem / s.out_str[d]; rem -= cc * s.out_str[d]; co += cc * s.c_str[d]; xo += cc * s.x_str[d]; yo += cc * s.y_str[d]; }
+  st<T>(out, idx, ld<T>(c, co) != 0.f ? ld<T>(x, xo) : ld<T>(y, yo));
+}
+}  // namespace
+
+NDArray ew_pow(const NDArray& a, double p) {
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = a.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { pow_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)p); }); cuda_check_last("pow"); }
+  return out;
+}
+NDArray compare(const NDArray& a, const NDArray& b, int op) {
+  if (a.dtype != b.dtype) throw std::runtime_error("compare dtype mismatch");
+  Shape os = broadcast_shape(a.shape, b.shape);
+  NDArray out(os, a.dtype, a.device);
+  int64_t n = out.numel();
+  if (!n) return out;
+  DimSpec s{}; s.ndim = (int)os.size();
+  Shape ostr = contiguous_strides(os);
+  for (int d = 0; d < s.ndim; ++d) { s.out_shape[d] = os[d]; s.out_str[d] = ostr[d]; }
+  bcast_strides(a.shape, os, s.a_str); bcast_strides(b.shape, os, s.b_str);
+  DISPATCH_FLOAT(a.dtype, T, { compare_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(b.data_ptr()), static_cast<T*>(out.data_ptr()), s, n, op); });
+  cuda_check_last("compare");
+  return out;
+}
+NDArray compare_scalar(const NDArray& a, double sv, int op) {
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = a.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { compare_scalar_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)sv, op); }); cuda_check_last("compare_scalar"); }
+  return out;
+}
+NDArray where_nd(const NDArray& c, const NDArray& x, const NDArray& y) {
+  Shape os = broadcast_shape(broadcast_shape(c.shape, x.shape), y.shape);
+  NDArray out(os, x.dtype, x.device);
+  int64_t n = out.numel();
+  if (!n) return out;
+  Dim3Spec s{}; s.ndim = (int)os.size();
+  Shape ostr = contiguous_strides(os);
+  for (int d = 0; d < s.ndim; ++d) s.out_str[d] = ostr[d];
+  bcast_strides(c.shape, os, s.c_str); bcast_strides(x.shape, os, s.x_str); bcast_strides(y.shape, os, s.y_str);
+  DISPATCH_FLOAT(x.dtype, T, { where_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(c.data_ptr()), static_cast<T*>(x.data_ptr()), static_cast<T*>(y.data_ptr()), static_cast<T*>(out.data_ptr()), s, n); });
+  cuda_check_last("where");
+  return out;
+}
+NDArray broadcast_to(const NDArray& a, const Shape& shape) {
+  return ew_binary(NDArray::zeros(shape, a.dtype, a.device), a, 0);
+}
+
+// ------------------------------------------------------------- cat / slice
+namespace {
+struct DimCopySpec { int ndim; int64_t iter_shape[TC_MAX_DIMS]; int64_t iter_str[TC_MAX_DIMS]; int64_t big_str[TC_MAX_DIMS]; int dim; int64_t off; };
+template <typename T, int FORWARD>  // FORWARD: big[bigoff]=small[i]; else small[i]=big[bigoff]
+__global__ void dimcopy_kernel(const T* small_in, T* small_out, const T* big_in, T* big_out, DimCopySpec s, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, bigoff = 0;
+  for (int d = 0; d < s.ndim; ++d) {
+    int64_t c = rem / s.iter_str[d]; rem -= c * s.iter_str[d];
+    if (d == s.dim) c += s.off;
+    bigoff += c * s.big_str[d];
+  }
+  if (FORWARD) st<T>(big_out, bigoff, ld<T>(small_in, idx));
+  else st<T>(small_out, idx, ld<T>(big_in, bigoff));
+}
+}  // namespace
+
+NDArray cat_nd(const std::vector<NDArray>& arrs, int dim) {
+  if (arrs.empty()) throw std::runtime_error("cat: empty input");
+  int nd = arrs[0].ndim();
+  if (dim < 0) dim += nd;
+  Shape os = arrs[0].shape;
+  int64_t total = 0;
+  for (auto& a : arrs) total += a.shape[dim];
+  os[dim] = total;
+  NDArray out(os, arrs[0].dtype, arrs[0].device);
+  Shape big_str = contiguous_strides(os);
+  int64_t running = 0;
+  for (auto& a : arrs) {
+    DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = running;
+    Shape istr = contiguous_strides(a.shape);
+    for (int d = 0; d < nd; ++d) { s.iter_shape[d] = a.shape[d]; s.iter_str[d] = istr[d]; s.big_str[d] = big_str[d]; }
+    int64_t n = a.numel();
+    if (n) { DISPATCH_FLOAT(out.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), nullptr, nullptr, static_cast<T*>(out.data_ptr()), s, n); }); }
+    running += a.shape[dim];
+  }
+  cuda_check_last("cat");
+  return out;
+}
+NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
+  int nd = a.ndim();
+  if (dim < 0) dim += nd;
+  Shape os = a.shape; os[dim] = len;
+  NDArray out(os, a.dtype, a.device);
+  Shape big_str = contiguous_strides(a.shape);
+  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
+  Shape ostr = contiguous_strides(os);
+  for (int d = 0; d < nd; ++d) { s.iter_shape[d] = os[d]; s.iter_str[d] = ostr[d]; s.big_str[d] = big_str[d]; }
+  int64_t n = out.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { dimcopy_kernel<T, 0><<<nblk(n), kT>>>(nullptr, static_cast<T*>(out.data_ptr()), static_cast<T*>(a.data_ptr()), nullptr, s, n); }); }
+  cuda_check_last("slice");
+  return out;
 }
 
 }  // namespace tc

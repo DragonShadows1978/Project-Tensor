@@ -186,5 +186,160 @@ Tensor mse_loss(const Tensor& pred, const Tensor& target) {
   return mean(mul(d, d), {}, false);
 }
 
+// ------------------------------------------------------------- Phase 2
+Tensor pow_scalar(const Tensor& a, double p) {
+  NDArray out = ew_pow(a.data(), p);
+  return Tensor::from_op(out, {a}, "pow", [a, p](const NDArray& g) {
+    // d/dx x^p = p * x^(p-1)
+    a.v->accumulate_grad(nmul(g, nmuls(ew_pow(a.data(), p - 1.0), p)));
+  });
+}
+Tensor sub_scalar(const Tensor& a, double s) { return add_scalar(a, -s); }
+
+Tensor compare(const Tensor& a, const Tensor& b, int op) {
+  return Tensor::make(tc::compare(a.data(), b.data(), op), false);
+}
+Tensor compare_scalar(const Tensor& a, double s, int op) {
+  return Tensor::make(tc::compare_scalar(a.data(), s, op), false);
+}
+
+Tensor where(const Tensor& cond, const Tensor& x, const Tensor& y) {
+  NDArray out = where_nd(cond.data(), x.data(), y.data());
+  NDArray c = cond.data();  // constant
+  return Tensor::from_op(out, {x, y}, "where", [x, y, c](const NDArray& g) {
+    NDArray z = NDArray::zeros(g.shape, g.dtype, g.device);
+    x.v->accumulate_grad(where_nd(c, g, z));
+    y.v->accumulate_grad(where_nd(c, z, g));
+  });
+}
+Tensor masked_fill(const Tensor& a, const Tensor& mask, double value) {
+  NDArray fill = NDArray::full(a.shape(), value, a.dtype(), a.device());
+  NDArray out = where_nd(mask.data(), fill, a.data());
+  NDArray m = mask.data();
+  return Tensor::from_op(out, {a}, "masked_fill", [a, m](const NDArray& g) {
+    NDArray z = NDArray::zeros(g.shape, g.dtype, g.device);
+    a.v->accumulate_grad(where_nd(m, z, g));  // grad only where not filled
+  });
+}
+
+Tensor max(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+  NDArray out = reduce_max(a.data(), axes, keepdim);
+  NDArray mxk = reduce_max(a.data(), axes, true);  // keepdim for broadcasting
+  Shape in_shape = a.shape();
+  Shape kshape = keepdim_shape(in_shape, axes);
+  std::vector<int> ax = axes;
+  return Tensor::from_op(out, {a}, "max", [a, mxk, in_shape, kshape, ax](const NDArray& g) {
+    NDArray mask = tc::compare(a.data(), broadcast_to(mxk, in_shape), 4);  // ==max
+    NDArray cnt = broadcast_to(reduce_sum(mask, ax, true), in_shape);
+    NDArray gk = broadcast_to(g.reshape(kshape), in_shape);
+    a.v->accumulate_grad(ndiv(nmul(gk, mask), cnt));
+  });
+}
+Tensor min(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+  NDArray out = reduce_min(a.data(), axes, keepdim);
+  NDArray mnk = reduce_min(a.data(), axes, true);
+  Shape in_shape = a.shape();
+  Shape kshape = keepdim_shape(in_shape, axes);
+  std::vector<int> ax = axes;
+  return Tensor::from_op(out, {a}, "min", [a, mnk, in_shape, kshape, ax](const NDArray& g) {
+    NDArray mask = tc::compare(a.data(), broadcast_to(mnk, in_shape), 4);
+    NDArray cnt = broadcast_to(reduce_sum(mask, ax, true), in_shape);
+    NDArray gk = broadcast_to(g.reshape(kshape), in_shape);
+    a.v->accumulate_grad(ndiv(nmul(gk, mask), cnt));
+  });
+}
+Tensor var(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+  Tensor m = mean(a, axes, /*keepdim=*/true);
+  Tensor d = sub(a, m);
+  return mean(mul(d, d), axes, keepdim);  // population variance (ddof=0)
+}
+Tensor std(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+  return sqrt(var(a, axes, keepdim));
+}
+
+Tensor permute(const Tensor& a, const std::vector<int>& dims) {
+  NDArray out = tc::permute(a.data(), dims);
+  std::vector<int> inv(dims.size());
+  int nd = (int)dims.size();
+  for (int d = 0; d < nd; ++d) { int sd = dims[d] < 0 ? dims[d] + nd : dims[d]; inv[sd] = d; }
+  return Tensor::from_op(out, {a}, "permute", [a, inv](const NDArray& g) {
+    a.v->accumulate_grad(tc::permute(g, inv));
+  });
+}
+Tensor transpose(const Tensor& a, int dim0, int dim1) {
+  int nd = a.ndim();
+  std::vector<int> dims(nd);
+  for (int d = 0; d < nd; ++d) dims[d] = d;
+  int i = dim0 < 0 ? dim0 + nd : dim0, j = dim1 < 0 ? dim1 + nd : dim1;
+  int tmp = dims[i]; dims[i] = dims[j]; dims[j] = tmp;
+  return permute(a, dims);
+}
+Tensor squeeze(const Tensor& a, int dim) {
+  int nd = a.ndim();
+  int d = dim < 0 ? dim + nd : dim;
+  Shape s;
+  for (int i = 0; i < nd; ++i) if (i != d || a.shape()[i] != 1) s.push_back(a.shape()[i]);
+  return reshape(a, s);
+}
+Tensor unsqueeze(const Tensor& a, int dim) {
+  int nd = a.ndim();
+  int d = dim < 0 ? dim + nd + 1 : dim;
+  Shape s = a.shape();
+  s.insert(s.begin() + d, 1);
+  return reshape(a, s);
+}
+Tensor expand(const Tensor& a, const Shape& shape) {
+  NDArray out = broadcast_to(a.data(), shape);
+  Shape in_shape = a.shape();
+  return Tensor::from_op(out, {a}, "expand", [a, in_shape](const NDArray& g) {
+    a.v->accumulate_grad(reduce_to(g, in_shape));
+  });
+}
+Tensor flatten(const Tensor& a, int start_dim, int end_dim) {
+  int nd = a.ndim();
+  int s = start_dim < 0 ? start_dim + nd : start_dim;
+  int e = end_dim < 0 ? end_dim + nd : end_dim;
+  Shape out;
+  for (int d = 0; d < s; ++d) out.push_back(a.shape()[d]);
+  int64_t merged = 1;
+  for (int d = s; d <= e; ++d) merged *= a.shape()[d];
+  out.push_back(merged);
+  for (int d = e + 1; d < nd; ++d) out.push_back(a.shape()[d]);
+  return reshape(a, out);
+}
+Tensor cat(const std::vector<Tensor>& ts, int dim) {
+  std::vector<NDArray> datas;
+  for (auto& t : ts) datas.push_back(t.data());
+  NDArray out = cat_nd(datas, dim);
+  int nd = ts[0].ndim();
+  int d = dim < 0 ? dim + nd : dim;
+  std::vector<int64_t> sizes;
+  for (auto& t : ts) sizes.push_back(t.shape()[d]);
+  return Tensor::from_op(out, ts, "cat", [ts, d, sizes](const NDArray& g) {
+    int64_t start = 0;
+    for (size_t i = 0; i < ts.size(); ++i) {
+      ts[i].v->accumulate_grad(slice_nd(g, d, start, sizes[i]));
+      start += sizes[i];
+    }
+  });
+}
+Tensor stack(const std::vector<Tensor>& ts, int dim) {
+  std::vector<Tensor> expanded;
+  for (auto& t : ts) expanded.push_back(unsqueeze(t, dim));
+  return cat(expanded, dim);
+}
+
+Tensor log_softmax(const Tensor& a, int axis) {
+  NDArray mx = reduce_max(a.data(), {axis}, true);  // constant
+  Tensor shifted = sub(a, Tensor::make(mx, false));
+  Tensor s = sum(exp(shifted), {axis}, true);
+  return sub(shifted, log(s));
+}
+Tensor cross_entropy(const Tensor& logits, const Tensor& onehot) {
+  Tensor ls = log_softmax(logits, -1);
+  Tensor per = sum(mul(onehot, ls), {-1}, false);
+  return mul_scalar(mean(per, {}, false), -1.0);
+}
+
 }  // namespace ops
 }  // namespace tc
