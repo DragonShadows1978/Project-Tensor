@@ -341,5 +341,15 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& onehot) {
   return mul_scalar(mean(per, {}, false), -1.0);
 }
 
+Tensor embedding(const Tensor& weight, const Tensor& idx) {
+  NDArray out = embedding_forward(weight.data(), idx.data());
+  NDArray idx_nd = idx.data();
+  Shape wshape = weight.shape();
+  DType wdt = weight.dtype();
+  return Tensor::from_op(out, {weight}, "embedding", [weight, idx_nd, wshape, wdt](const NDArray& g) {
+    weight.v->accumulate_grad(embedding_backward(g, idx_nd, wshape, wdt));
+  });
+}
+
 }  // namespace ops
 }  // namespace tc

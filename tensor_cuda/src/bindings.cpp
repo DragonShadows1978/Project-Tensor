@@ -18,6 +18,8 @@ DType numpy_dtype(const py::array& a) {
   auto dt = a.dtype();
   if (dt.kind() == 'f' && dt.itemsize() == 4) return DType::Float32;
   if (dt.kind() == 'f' && dt.itemsize() == 2) return DType::Float16;
+  if (dt.kind() == 'i' && dt.itemsize() == 8) return DType::Int64;
+  if (dt.kind() == 'b') return DType::Bool;
   return DType::Float32;  // others are force-cast to float32 by the wrapper
 }
 
@@ -37,6 +39,7 @@ py::array tensor_to_numpy(Tensor& t) {
   std::vector<py::ssize_t> shape(a.shape.begin(), a.shape.end());
   py::array out;
   if (a.dtype == DType::Float16) out = py::array(py::dtype("float16"), shape);
+  else if (a.dtype == DType::Int64) out = py::array(py::dtype("int64"), shape);
   else out = py::array(py::dtype("float32"), shape);
   NDArray host = a.device.is_cuda() ? a : a;  // to_host handles D2H
   host.to_host(out.request().ptr);
@@ -132,6 +135,16 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("where", &ops::where);
   m.def("cat", [](std::vector<Tensor> ts, int dim) { return ops::cat(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("stack", [](std::vector<Tensor> ts, int dim) { return ops::stack(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
+  m.def("embedding", &ops::embedding);
+
+  // in-place optimizer steps (param/state mutated on device)
+  m.def("sgd_step", [](Tensor& p, Tensor& g, Tensor& buf, double lr, double mom, double wd) {
+    tc::sgd_step(p.data(), g.data(), buf.data(), lr, mom, wd);
+  });
+  m.def("adam_step", [](Tensor& p, Tensor& g, Tensor& m_, Tensor& v_, double lr,
+                        double b1, double b2, double eps, int64_t t, double wd, bool dec) {
+    tc::adam_step(p.data(), g.data(), m_.data(), v_.data(), lr, b1, b2, eps, t, wd, dec);
+  });
 
   // grad mode
   m.def("is_grad_enabled", &grad_enabled);

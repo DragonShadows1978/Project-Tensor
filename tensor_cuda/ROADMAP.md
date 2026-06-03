@@ -48,12 +48,18 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   einsum, sort/topk/argmax-as-index, cumsum/cumprod/prod, flip/roll/repeat/tile,
   trig/clamp/round family, strided (zero-copy) views.
 
-### ⬜ Phase 3 — nn.Module system + core layers
-`Module` base (parameters/buffers/state_dict/hooks), `Sequential`/`ModuleList`/
-`ModuleDict`. Layers: Linear, Embedding, Dropout, LayerNorm/RMSNorm/GroupNorm/
-BatchNorm{1,2}D, Conv1D/Conv2D (+ depthwise/separable/transpose, im2col kernels),
-pooling (Max/Avg/Adaptive), losses (MSE/CE/BCE/L1/SmoothL1/KLDiv/…), activations
-as modules. Parameter registration drives autograd leaves.
+### ✅ Phase 3 — nn.Module system + core layers (in progress → base done)
+- `Module` base (param/buffer/submodule registration, parameters(), train/eval,
+  zero_grad), `Sequential`. Layers: Linear, Embedding (+ scatter-add backward
+  kernel), LayerNorm, Dropout, activation modules (ReLU/GELU/SiLU/Sigmoid/Tanh),
+  losses (MSELoss, CrossEntropyLoss).
+- Optimizers (folded in so the stack trains): SGD (+momentum/wd), Adam, AdamW —
+  in-place CUDA step kernels.
+- Tests: layer shapes, LayerNorm normalization, embedding grad, and full
+  MLP classification + linear-regression training loops.
+- **Remaining for Phase 3b**: RMSNorm/GroupNorm/BatchNorm{1,2}D, Conv1D/Conv2D
+  (+ depthwise/separable/transpose, im2col kernels), pooling, more losses
+  (BCE/L1/SmoothL1/KLDiv), ModuleList/ModuleDict, state_dict, hooks.
 
 ### ⬜ Phase 4 — Optimizers, schedulers, training infra
 SGD/Adam/AdamW/RMSprop/Adagrad/RAdam/Lion/FusedAdam (in-place CUDA update

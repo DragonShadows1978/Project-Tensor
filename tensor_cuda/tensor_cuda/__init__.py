@@ -60,6 +60,12 @@ def where(cond, x, y):
     return _C.where(cond, x, y)
 
 
+def embedding(weight, idx):
+    if not isinstance(idx, Tensor):
+        idx = _C.tensor(np.ascontiguousarray(np.asarray(idx, dtype=np.int64)), "cuda", False)
+    return _C.embedding(weight, idx)
+
+
 def cat(tensors, dim=0):
     return _C.cat(list(tensors), dim)
 
@@ -99,9 +105,12 @@ def no_grad():
         _C.set_grad_enabled(prev)
 
 
+from . import nn  # noqa: E402  (after _C and helpers are defined)
+from . import optim  # noqa: E402
+
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack",
-    "synchronize", "no_grad", "is_grad_enabled",
+    "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "synchronize", "no_grad", "is_grad_enabled", "nn", "optim",
 ]
 __version__ = "0.1.0-phase1"

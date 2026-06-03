@@ -602,6 +602,115 @@ NDArray cat_nd(const std::vector<NDArray>& arrs, int dim) {
   cuda_check_last("cat");
   return out;
 }
+// ------------------------------------------------------------- embedding + optim
+namespace {
+template <typename T>
+__global__ void embed_fwd_kernel(const T* w, const int64_t* idx, T* out, int64_t row, int64_t n) {
+  int64_t k = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (k >= n) return;
+  int64_t i = k / row, j = k % row;
+  st<T>(out, k, ld<T>(w, idx[i] * row + j));
+}
+template <typename T>
+__global__ void embed_bwd_kernel(const T* grad, const int64_t* idx, float* gWf, int64_t row, int64_t n) {
+  int64_t k = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (k >= n) return;
+  int64_t i = k / row, j = k % row;
+  atomicAdd(&gWf[idx[i] * row + j], ld<T>(grad, k));
+}
+template <typename T>
+__global__ void sgd_kernel(T* p, const T* g, T* buf, int64_t n, float lr, float mom, float wd) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float gi = ld<T>(g, i) + wd * ld<T>(p, i);
+  float b = mom * ld<T>(buf, i) + gi;
+  st<T>(buf, i, b);
+  st<T>(p, i, ld<T>(p, i) - lr * b);
+}
+template <typename T>
+__global__ void adam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,
+                            float b1, float b2, float eps, float bc1, float bc2,
+                            float wd, int decoupled) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float pi = ld<T>(p, i);
+  float gi = ld<T>(g, i);
+  if (!decoupled) gi += wd * pi;
+  float mi = b1 * ld<T>(m, i) + (1.f - b1) * gi;
+  float vi = b2 * ld<T>(v, i) + (1.f - b2) * gi * gi;
+  st<T>(m, i, mi); st<T>(v, i, vi);
+  float mhat = mi / bc1, vhat = vi / bc2;
+  if (decoupled) pi -= lr * wd * pi;  // AdamW decoupled weight decay
+  st<T>(p, i, pi - lr * mhat / (sqrtf(vhat) + eps));
+}
+}  // namespace
+
+NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {
+  int64_t V = weight.shape[0];
+  int64_t row = weight.numel() / V;
+  int64_t nidx = idx.numel();
+  Shape os(idx.shape);
+  for (size_t d = 1; d < weight.shape.size(); ++d) os.push_back(weight.shape[d]);
+  NDArray out(os, weight.dtype, weight.device);
+  int64_t n = nidx * row;
+  if (n) {
+    DISPATCH_FLOAT(weight.dtype, T, {
+      embed_fwd_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(weight.data_ptr()),
+          static_cast<int64_t*>(idx.data_ptr()), static_cast<T*>(out.data_ptr()), row, n);
+    });
+    cuda_check_last("embedding_fwd");
+  }
+  return out;
+}
+NDArray embedding_backward(const NDArray& grad, const NDArray& idx,
+                           const Shape& weight_shape, DType weight_dtype) {
+  int64_t V = weight_shape[0];
+  int64_t row = numel_of(weight_shape) / V;
+  int64_t nidx = idx.numel();
+  NDArray gWf = NDArray::zeros(weight_shape, DType::Float32, grad.device);
+  int64_t n = nidx * row;
+  if (n) {
+    DISPATCH_FLOAT(grad.dtype, T, {
+      embed_bwd_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(grad.data_ptr()),
+          static_cast<int64_t*>(idx.data_ptr()), static_cast<float*>(gWf.data_ptr()), row, n);
+    });
+    cuda_check_last("embedding_bwd");
+  }
+  return gWf.astype(weight_dtype);
+}
+void axpy_(NDArray& param, const NDArray& other, double alpha) {
+  // param += alpha*other  (shapes equal)
+  NDArray upd = ew_binary(param, ew_scalar(other, alpha, 2, false), 0);
+  size_t bytes = param.numel() * dtype_size(param.dtype);
+  cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+}
+void sgd_step(NDArray& param, const NDArray& grad, NDArray& buf, double lr,
+              double momentum, double wd) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    sgd_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(buf.data_ptr()), n,
+        (float)lr, (float)momentum, (float)wd);
+  });
+  cuda_check_last("sgd_step");
+}
+void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
+               double lr, double b1, double b2, double eps, int64_t t,
+               double wd, bool decoupled) {
+  int64_t n = param.numel();
+  if (!n) return;
+  float bc1 = 1.f - powf((float)b1, (float)t);
+  float bc2 = 1.f - powf((float)b2, (float)t);
+  DISPATCH_FLOAT(param.dtype, T, {
+    adam_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(m.data_ptr()),
+        static_cast<T*>(v.data_ptr()), n, (float)lr, (float)b1, (float)b2,
+        (float)eps, bc1, bc2, (float)wd, decoupled ? 1 : 0);
+  });
+  cuda_check_last("adam_step");
+}
+
 NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
   int nd = a.ndim();
   if (dim < 0) dim += nd;

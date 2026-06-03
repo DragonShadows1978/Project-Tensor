@@ -138,6 +138,22 @@ NDArray matmul(const NDArray& a, const NDArray& b);
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
 
+// Embedding: gather rows of `weight` (V, ...) by int64 `idx` (any shape).
+// Output shape = idx.shape ++ weight.shape[1:].
+NDArray embedding_forward(const NDArray& weight, const NDArray& idx);
+// Scatter-add `grad` back into a zeroed weight-shaped tensor (accumulated fp32).
+NDArray embedding_backward(const NDArray& grad, const NDArray& idx,
+                           const Shape& weight_shape, DType weight_dtype);
+
+// In-place optimizer steps (compute in fp32, store in param dtype).
+void sgd_step(NDArray& param, const NDArray& grad, NDArray& momentum_buf,
+              double lr, double momentum, double weight_decay);
+void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
+               double lr, double b1, double b2, double eps, int64_t t,
+               double weight_decay, bool decoupled);
+// param.data += alpha * other  (in place); used by misc utilities.
+void axpy_(NDArray& param, const NDArray& other, double alpha);
+
 // CUDA bookkeeping.
 void cuda_sync();
 void cuda_check_last(const char* where);

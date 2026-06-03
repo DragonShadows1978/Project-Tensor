@@ -73,5 +73,8 @@ Tensor stack(const std::vector<Tensor>& ts, int dim);
 Tensor log_softmax(const Tensor& a, int axis);
 Tensor cross_entropy(const Tensor& logits, const Tensor& onehot_target);
 
+// Indexing.
+Tensor embedding(const Tensor& weight, const Tensor& idx);  // idx: int64 Tensor
+
 }  // namespace ops
 }  // namespace tc
