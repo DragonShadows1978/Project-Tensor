@@ -197,6 +197,21 @@ pip install cupy-cuda11x numpy
 | 5 | `no_grad`/`enable_grad`/`autocast` context managers, pip-installable package |
 | 6 | TurboQuant MSE/product quantizers, validation harness, CPU-only import guard |
 
+## APA-Quant attention — C++/CUDA (drop-in for PyTorch)
+
+The CuPy reference `apa_quant_attention` is great for research, but its per-call
+Python overhead makes it unfair to benchmark against PyTorch's compiled
+attention. [`apa_cuda/`](apa_cuda/) ports it to a PyTorch C++/CUDA extension —
+a drop-in replacement for `torch.nn.functional.scaled_dot_product_attention`
+with hand-written CUDA kernels (fused quantize+gather and refinement score-mix)
+plus cuBLAS GEMMs, forward + backward, fp16/fp32. See
+[`apa_cuda/README.md`](apa_cuda/README.md).
+
+```python
+from apa_attention import apa_scaled_dot_product_attention as apa_sdpa
+out = apa_sdpa(q, k, v, is_causal=True)   # drop-in for F.scaled_dot_product_attention
+```
+
 ## Philosophy
 
 This library exists to prove that you don't need massive frameworks to do deep learning. Focused, readable code can train real models on real GPUs.
