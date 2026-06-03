@@ -402,6 +402,15 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& onehot) {
 
 Tensor detach(const Tensor& a) { return Tensor::make(a.data(), false); }
 
+Tensor cast(const Tensor& a, DType dt) {
+  if (dt == a.dtype()) return a;
+  NDArray out = a.data().astype(dt);
+  DType src = a.dtype();
+  return Tensor::from_op(out, {a}, "cast", [a, src](const NDArray& g) {
+    a.v->accumulate_grad(g.astype(src));
+  });
+}
+
 Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
   NDArray out = tc::im2col(a.data(), kh, kw, sh, sw, ph, pw);
   Shape xs = a.shape();

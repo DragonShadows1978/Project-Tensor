@@ -67,9 +67,14 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
 - Optimizers: SGD/Adam/AdamW (Phase 3) + RMSprop, Adagrad (in-place CUDA step
   kernels). `clip_grad_norm_`. Schedulers: StepLR, CosineAnnealingLR,
   LinearWarmupCosineDecay.
-- **Remaining for Phase 4b**: RAdam/Lion, MultiStep/Exp/OneCycle/Cyclic/Plateau,
-  GradScaler + autocast (AMP), gradient accumulation/checkpointing, weight tying,
-  checkpoint save/load, profiler.
+### ✅ Phase 4b — AMP, checkpointing, containers, casts
+- Differentiable `half()`/`float()` casts; `GradScaler` (dynamic loss scaling,
+  overflow skip); `Module.half()`; `state_dict`/`load_state_dict`/
+  `named_parameters`; `save_checkpoint`/`load_checkpoint` (.npz);
+  `ModuleList`/`ModuleDict`. Gradient accumulation works by deferring zero_grad.
+- **Still remaining**: RAdam/Lion, more schedulers (MultiStep/Exp/OneCycle/
+  Cyclic/Plateau), true op-level autocast, gradient checkpointing, weight tying,
+  profiler.
 
 ### ✅ Phase 5 — Attention & transformer (core done)
 - `functional.scaled_dot_product_attention` (causal + additive mask),

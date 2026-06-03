@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 import tensor_cuda as tc
 
 _C = tc._C
@@ -86,6 +88,53 @@ class Adagrad(Optimizer):
             if g is None:
                 continue
             _C.adagrad_step(p, g, self._acc[id(p)], self.lr, self.eps, self.weight_decay)
+
+
+class GradScaler:
+    """Dynamic loss scaling for fp16 training.
+
+    Usage::
+        scaler = GradScaler()
+        loss = scaler.scale_loss(criterion(model(x), y))
+        loss.backward()
+        scaler.step(opt)   # unscales, skips on overflow, adjusts scale
+    """
+    def __init__(self, init_scale=65536.0, growth_factor=2.0,
+                 backoff_factor=0.5, growth_interval=2000):
+        self.scale = init_scale
+        self.growth_factor = growth_factor
+        self.backoff_factor = backoff_factor
+        self.growth_interval = growth_interval
+        self._good_steps = 0
+
+    def scale_loss(self, loss):
+        return loss * self.scale
+
+    def step(self, optimizer):
+        finite = True
+        for p in optimizer.params:
+            g = p.grad
+            if g is None:
+                continue
+            if not np.isfinite(float((g * g).sum().numpy())):
+                finite = False
+                break
+        if finite:
+            inv = 1.0 / self.scale
+            for p in optimizer.params:
+                if p.grad is not None:
+                    _C.scale_(p.grad, inv)
+            optimizer.step()
+            self._good_steps += 1
+            if self._good_steps % self.growth_interval == 0:
+                self.scale *= self.growth_factor
+        else:
+            self.scale *= self.backoff_factor
+            self._good_steps = 0
+        return finite
+
+    def update(self):  # API-compat no-op (scale already updated in step)
+        pass
 
 
 def clip_grad_norm_(params, max_norm, norm_type=2.0):

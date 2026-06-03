@@ -87,6 +87,23 @@ def cross_entropy(logits, target, *, device="cuda"):
     return _C.cross_entropy(logits, _C.tensor(onehot, device, False))
 
 
+def save_checkpoint(path, model, **extra):
+    """Save model parameters (+ optional extra scalars) to a .npz file."""
+    sd = model.state_dict()
+    payload = {f"model.{k}": v for k, v in sd.items()}
+    for k, v in extra.items():
+        payload[f"extra.{k}"] = np.array(v)
+    np.savez(path, **payload)
+
+
+def load_checkpoint(path, model):
+    """Load parameters saved by save_checkpoint into `model`. Returns extras."""
+    data = np.load(path, allow_pickle=True)
+    sd = {k[len("model."):]: data[k] for k in data.files if k.startswith("model.")}
+    model.load_state_dict(sd)
+    return {k[len("extra."):]: data[k] for k in data.files if k.startswith("extra.")}
+
+
 def synchronize():
     _C.synchronize()
 
@@ -116,6 +133,6 @@ __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
-    "quant", "apa_quant_attention",
+    "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
 ]
 __version__ = "0.1.0-phase1"

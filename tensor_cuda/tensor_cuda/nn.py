@@ -54,6 +54,39 @@ class Module:
     def eval(self):
         return self.train(False)
 
+    def named_parameters(self, prefix=""):
+        for n, p in self._params.items():
+            yield prefix + n, p
+        for n, m in self._modules.items():
+            yield from m.named_parameters(prefix + n + ".")
+
+    def state_dict(self, prefix=""):
+        d = {}
+        for n, p in self._params.items():
+            d[prefix + n] = p.numpy()
+        for n, b in self._buffers.items():
+            d[prefix + n] = b.numpy()
+        for n, m in self._modules.items():
+            d.update(m.state_dict(prefix + n + "."))
+        return d
+
+    def load_state_dict(self, sd, prefix=""):
+        for n in list(self._params):
+            setattr(self, n, tc.tensor(sd[prefix + n], requires_grad=True))
+        for n in list(self._buffers):
+            setattr(self, n, tc.tensor(sd[prefix + n]))
+        for n, m in self._modules.items():
+            m.load_state_dict(sd, prefix + n + ".")
+
+    def half(self):
+        """Cast all parameters to fp16 (for mixed-precision training)."""
+        for n in list(self._params):
+            setattr(self, n, tc.tensor(self._params[n].numpy().astype("float16"),
+                                       dtype="float16", requires_grad=True))
+        for m in self._modules.values():
+            m.half()
+        return self
+
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
@@ -145,6 +178,39 @@ class Sequential(Module):
         for l in self.layers:
             x = l(x)
         return x
+
+
+class ModuleList(Module):
+    def __init__(self, modules=None):
+        super().__init__()
+        self._list = []
+        for m in (modules or []):
+            self.append(m)
+
+    def append(self, m):
+        self._modules[str(len(self._list))] = m
+        self._list.append(m)
+        return self
+
+    def __iter__(self):
+        return iter(self._list)
+
+    def __getitem__(self, i):
+        return self._list[i]
+
+    def __len__(self):
+        return len(self._list)
+
+
+class ModuleDict(Module):
+    def __init__(self, modules=None):
+        super().__init__()
+        for k, m in (modules or {}).items():
+            self._modules[k] = m
+            object.__setattr__(self, k, m)
+
+    def __getitem__(self, k):
+        return self._modules[k]
 
 
 class RMSNorm(Module):

@@ -86,6 +86,8 @@ Tensor embedding(const Tensor& weight, const Tensor& idx);  // idx: int64 Tensor
 
 // Stop-gradient: returns a constant view sharing storage (no autograd parents).
 Tensor detach(const Tensor& a);
+// Differentiable dtype cast (grad cast back to the input dtype).
+Tensor cast(const Tensor& a, DType dt);
 
 // Conv/pool (NCHW). Conv2D = im2col + matmul (composed in Python nn).
 Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);

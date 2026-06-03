@@ -81,6 +81,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("silu", [](Tensor& t) { return ops::silu(t); })
       .def("abs", [](Tensor& t) { return ops::abs(t); })
       .def("detach", [](Tensor& t) { return ops::detach(t); })
+      .def("half", [](Tensor& t) { return ops::cast(t, DType::Float16); })
+      .def("float", [](Tensor& t) { return ops::cast(t, DType::Float32); })
       .def("sin", [](Tensor& t) { return ops::sin(t); })
       .def("cos", [](Tensor& t) { return ops::cos(t); })
       .def("reciprocal", [](Tensor& t) { return ops::reciprocal(t); })
