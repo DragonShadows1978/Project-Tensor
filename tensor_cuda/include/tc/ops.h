@@ -87,5 +87,10 @@ Tensor embedding(const Tensor& weight, const Tensor& idx);  // idx: int64 Tensor
 // Stop-gradient: returns a constant view sharing storage (no autograd parents).
 Tensor detach(const Tensor& a);
 
+// Conv/pool (NCHW). Conv2D = im2col + matmul (composed in Python nn).
+Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
+Tensor avg_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
+Tensor max_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
+
 }  // namespace ops
 }  // namespace tc

@@ -402,6 +402,29 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& onehot) {
 
 Tensor detach(const Tensor& a) { return Tensor::make(a.data(), false); }
 
+Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
+  NDArray out = tc::im2col(a.data(), kh, kw, sh, sw, ph, pw);
+  Shape xs = a.shape();
+  return Tensor::from_op(out, {a}, "im2col", [a, xs, kh, kw, sh, sw, ph, pw](const NDArray& g) {
+    a.v->accumulate_grad(tc::col2im(g, xs, kh, kw, sh, sw, ph, pw));
+  });
+}
+Tensor avg_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
+  NDArray out = tc::avgpool2d(a.data(), kh, kw, sh, sw, ph, pw);
+  Shape xs = a.shape();
+  return Tensor::from_op(out, {a}, "avg_pool2d", [a, xs, kh, kw, sh, sw, ph, pw](const NDArray& g) {
+    a.v->accumulate_grad(tc::avgpool2d_bwd(g, xs, kh, kw, sh, sw, ph, pw));
+  });
+}
+Tensor max_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
+  NDArray argmax;
+  NDArray out = tc::maxpool2d(a.data(), kh, kw, sh, sw, ph, pw, argmax);
+  Shape xs = a.shape();
+  return Tensor::from_op(out, {a}, "max_pool2d", [a, argmax, xs](const NDArray& g) {
+    a.v->accumulate_grad(tc::maxpool2d_bwd(g, argmax, xs));
+  });
+}
+
 Tensor embedding(const Tensor& weight, const Tensor& idx) {
   NDArray out = embedding_forward(weight.data(), idx.data());
   NDArray idx_nd = idx.data();

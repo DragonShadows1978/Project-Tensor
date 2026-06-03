@@ -146,6 +146,18 @@ NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
 NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
                             const NDArray& codebook);
 
+// Conv helpers (NCHW). im2col -> (N, C*kh*kw, OH*OW); col2im scatter-adds back.
+NDArray im2col(const NDArray& x, int kh, int kw, int sh, int sw, int ph, int pw);
+NDArray col2im(const NDArray& cols, const Shape& x_shape, int kh, int kw,
+               int sh, int sw, int ph, int pw);
+// Pooling (NCHW). maxpool writes the flat argmax (int64) for backward.
+NDArray avgpool2d(const NDArray& x, int kh, int kw, int sh, int sw, int ph, int pw);
+NDArray avgpool2d_bwd(const NDArray& g, const Shape& x_shape, int kh, int kw,
+                      int sh, int sw, int ph, int pw);
+NDArray maxpool2d(const NDArray& x, int kh, int kw, int sh, int sw, int ph, int pw,
+                  NDArray& argmax_out);
+NDArray maxpool2d_bwd(const NDArray& g, const NDArray& argmax, const Shape& x_shape);
+
 // Embedding: gather rows of `weight` (V, ...) by int64 `idx` (any shape).
 // Output shape = idx.shape ++ weight.shape[1:].
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx);

@@ -204,6 +204,88 @@ class TransformerEncoderLayer(Module):
         return x
 
 
+# ------------------------------------------------------------- convolution
+def _pair(x):
+    return x if isinstance(x, (tuple, list)) else (x, x)
+
+
+class Conv2D(Module):
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0, bias=True):
+        super().__init__()
+        self.in_ch, self.out_ch = in_ch, out_ch
+        self.kh, self.kw = _pair(kernel_size)
+        self.sh, self.sw = _pair(stride)
+        self.ph, self.pw = _pair(padding)
+        fan_in = in_ch * self.kh * self.kw
+        bound = 1.0 / math.sqrt(fan_in)
+        self.weight = parameter(np.random.uniform(
+            -bound, bound, (out_ch, in_ch, self.kh, self.kw)))
+        self.bias = parameter(np.zeros(out_ch)) if bias else None
+
+    def forward(self, x):
+        N = x.shape[0]
+        K = self.in_ch * self.kh * self.kw
+        cols = tc._C.im2col(x, self.kh, self.kw, self.sh, self.sw, self.ph, self.pw)
+        L = cols.shape[-1]
+        W2 = self.weight.reshape([self.out_ch, K])
+        out = tc.matmul(cols.transpose(1, 2), W2.transpose(0, 1))  # (N, L, out)
+        OH = (x.shape[2] + 2 * self.ph - self.kh) // self.sh + 1
+        OW = (x.shape[3] + 2 * self.pw - self.kw) // self.sw + 1
+        out = out.transpose(1, 2).reshape([N, self.out_ch, OH, OW])
+        if self.bias is not None:
+            out = out + self.bias.reshape([1, self.out_ch, 1, 1])
+        return out
+
+
+class MaxPool2D(Module):
+    def __init__(self, kernel_size, stride=None, padding=0):
+        super().__init__()
+        self.kh, self.kw = _pair(kernel_size)
+        s = stride if stride is not None else kernel_size
+        self.sh, self.sw = _pair(s)
+        self.ph, self.pw = _pair(padding)
+
+    def forward(self, x):
+        return tc._C.max_pool2d(x, self.kh, self.kw, self.sh, self.sw, self.ph, self.pw)
+
+
+class AvgPool2D(Module):
+    def __init__(self, kernel_size, stride=None, padding=0):
+        super().__init__()
+        self.kh, self.kw = _pair(kernel_size)
+        s = stride if stride is not None else kernel_size
+        self.sh, self.sw = _pair(s)
+        self.ph, self.pw = _pair(padding)
+
+    def forward(self, x):
+        return tc._C.avg_pool2d(x, self.kh, self.kw, self.sh, self.sw, self.ph, self.pw)
+
+
+class BatchNorm2D(Module):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
+        super().__init__()
+        self.eps, self.momentum, self.C = eps, momentum, num_features
+        self.weight = parameter(np.ones(num_features))
+        self.bias = parameter(np.zeros(num_features))
+        self.running_mean = tc.zeros(num_features)      # buffers (no grad)
+        self.running_var = tc.ones(num_features)
+
+    def forward(self, x):
+        w = self.weight.reshape([1, self.C, 1, 1])
+        b = self.bias.reshape([1, self.C, 1, 1])
+        if self.training:
+            mean = x.mean([0, 2, 3], True)
+            var = x.var([0, 2, 3], True)
+            mn = mean.numpy().ravel(); vr = var.numpy().ravel()
+            rm = self.running_mean.numpy(); rv = self.running_var.numpy()
+            self.running_mean = tc.tensor((1 - self.momentum) * rm + self.momentum * mn)
+            self.running_var = tc.tensor((1 - self.momentum) * rv + self.momentum * vr)
+        else:
+            mean = self.running_mean.reshape([1, self.C, 1, 1]).detach()
+            var = self.running_var.reshape([1, self.C, 1, 1]).detach()
+        return (x - mean) * (var + self.eps).pow(-0.5) * w + b
+
+
 # ------------------------------------------------------------- recurrent
 class RNNCell(Module):
     def __init__(self, input_size, hidden_size):

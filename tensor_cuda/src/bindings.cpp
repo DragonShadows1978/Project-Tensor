@@ -148,6 +148,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });
+  m.def("im2col", &ops::im2col);
+  m.def("avg_pool2d", &ops::avg_pool2d);
+  m.def("max_pool2d", &ops::max_pool2d);
 
   // in-place optimizer steps (param/state mutated on device)
   m.def("sgd_step", [](Tensor& p, Tensor& g, Tensor& buf, double lr, double mom, double wd) {

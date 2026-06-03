@@ -57,9 +57,11 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   in-place CUDA step kernels.
 - Tests: layer shapes, LayerNorm normalization, embedding grad, and full
   MLP classification + linear-regression training loops.
-- **Remaining for Phase 3b**: RMSNorm/GroupNorm/BatchNorm{1,2}D, Conv1D/Conv2D
-  (+ depthwise/separable/transpose, im2col kernels), pooling, more losses
-  (BCE/L1/SmoothL1/KLDiv), ModuleList/ModuleDict, state_dict, hooks.
+- **Done in Phase 3b**: Conv2D (im2col+matmul), MaxPool2D/AvgPool2D, BatchNorm2D
+  (see below). RMSNorm shipped in Phase 5.
+- **Still remaining**: Conv1D, depthwise/separable/transpose conv, GroupNorm/
+  BatchNorm1D, AdaptiveAvgPool, KLDiv loss, ModuleList/ModuleDict, state_dict,
+  hooks.
 
 ### ✅ Phase 4 — Optimizers, schedulers, grad clipping (core done)
 - Optimizers: SGD/Adam/AdamW (Phase 3) + RMSprop, Adagrad (in-place CUDA step
