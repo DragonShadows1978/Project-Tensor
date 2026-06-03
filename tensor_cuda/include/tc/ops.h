@@ -114,6 +114,9 @@ Tensor cast(const Tensor& a, DType dt);
 
 // Conv/pool (NCHW). Conv2D = im2col + matmul (composed in Python nn).
 Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
+// col2im as a forward op (scatter cols into an (N,C,OH,OW) image); for ConvTranspose.
+Tensor col2im(const Tensor& cols, int64_t N, int64_t C, int64_t OH, int64_t OW,
+              int kh, int kw, int sh, int sw, int ph, int pw);
 Tensor avg_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
 Tensor max_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw);
 

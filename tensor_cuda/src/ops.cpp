@@ -529,6 +529,14 @@ Tensor im2col(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
     a.v->accumulate_grad(tc::col2im(g, xs, kh, kw, sh, sw, ph, pw));
   });
 }
+Tensor col2im(const Tensor& cols, int64_t N, int64_t C, int64_t OH, int64_t OW,
+              int kh, int kw, int sh, int sw, int ph, int pw) {
+  Shape xs = {N, C, OH, OW};
+  NDArray out = tc::col2im(cols.data(), xs, kh, kw, sh, sw, ph, pw);
+  return Tensor::from_op(out, {cols}, "col2im", [cols, kh, kw, sh, sw, ph, pw](const NDArray& g) {
+    cols.v->accumulate_grad(tc::im2col(g, kh, kw, sh, sw, ph, pw));
+  });
+}
 Tensor avg_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int pw) {
   NDArray out = tc::avgpool2d(a.data(), kh, kw, sh, sw, ph, pw);
   Shape xs = a.shape();

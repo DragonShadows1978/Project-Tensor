@@ -160,6 +160,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         auto pr = ops::topk(t, k, largest);
         return py::make_tuple(std::get<0>(pr), std::get<1>(pr));
       }, py::arg("k"), py::arg("largest") = true)
+      .def("sort", [](Tensor& t, bool descending) {
+        auto pr = ops::topk(t, t.shape().back(), descending);
+        return py::make_tuple(std::get<0>(pr), std::get<1>(pr));
+      }, py::arg("descending") = false)
       .def("permute", [](Tensor& t, std::vector<int> d) { return ops::permute(t, d); })
       .def("transpose", [](Tensor& t, int a, int b) { return ops::transpose(t, a, b); })
       .def("squeeze", [](Tensor& t, int d) { return ops::squeeze(t, d); }, py::arg("dim") = 0)
@@ -209,6 +213,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });
   m.def("im2col", &ops::im2col);
+  m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);
   m.def("max_pool2d", &ops::max_pool2d);
 

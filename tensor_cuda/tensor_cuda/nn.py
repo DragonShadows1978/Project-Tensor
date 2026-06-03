@@ -399,6 +399,32 @@ class SeparableConv2D(Module):
         return self.point(self.depth(x))
 
 
+class ConvTranspose2D(Module):
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0, bias=True):
+        super().__init__()
+        self.in_ch, self.out_ch = in_ch, out_ch
+        self.kh, self.kw = _pair(kernel_size)
+        self.sh, self.sw = _pair(stride)
+        self.ph, self.pw = _pair(padding)
+        bound = 1.0 / math.sqrt(out_ch * self.kh * self.kw)
+        self.weight = parameter(np.random.uniform(
+            -bound, bound, (in_ch, out_ch, self.kh, self.kw)))
+        self.bias = parameter(np.zeros(out_ch)) if bias else None
+
+    def forward(self, x):
+        N, Cin, H, W = x.shape
+        Wt = self.weight.reshape([self.in_ch, self.out_ch * self.kh * self.kw])
+        x2 = x.reshape([N, Cin, H * W]).transpose(1, 2)        # (N, HW, Cin)
+        oc = tc.matmul(x2, Wt).transpose(1, 2)                 # (N, Cout*kh*kw, HW)
+        OH = (H - 1) * self.sh - 2 * self.ph + self.kh
+        OW = (W - 1) * self.sw - 2 * self.pw + self.kw
+        out = tc._C.col2im(oc, N, self.out_ch, OH, OW,
+                           self.kh, self.kw, self.sh, self.sw, self.ph, self.pw)
+        if self.bias is not None:
+            out = out + self.bias.reshape([1, self.out_ch, 1, 1])
+        return out
+
+
 class MaxPool2D(Module):
     def __init__(self, kernel_size, stride=None, padding=0):
         super().__init__()

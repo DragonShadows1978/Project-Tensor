@@ -47,6 +47,21 @@ def test_depthwise_separable_conv():
     assert nn.SeparableConv2D(4, 6, 3, padding=1)(x).shape == (2, 6, 8, 8)
 
 
+def test_sort():
+    x = tc.tensor(np.array([[3.0, 1.0, 2.0]], np.float32))
+    vals, idx = x.sort(False)
+    assert np.allclose(_np(vals), [[1, 2, 3]])
+    assert np.allclose(idx.numpy().ravel(), [1, 2, 0])
+
+
+def test_conv_transpose_upsamples():
+    x = tc.tensor(np.random.randn(2, 3, 4, 4).astype(np.float32))
+    ct = nn.ConvTranspose2D(3, 5, 2, stride=2)
+    out = ct(x)
+    assert out.shape == (2, 5, 8, 8)
+    out.sum().backward() if x.requires_grad else None
+
+
 def test_cosine_triplet_losses():
     rng = np.random.default_rng(2)
     a = tc.tensor(rng.standard_normal((5, 8)).astype(np.float32))

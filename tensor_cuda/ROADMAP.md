@@ -134,13 +134,17 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
 - DepthwiseConv2D / SeparableConv2D (composed from im2col + reduce).
 - CosineEmbeddingLoss, TripletMarginLoss.
 
+### ✅ Phase 10 — ConvTranspose2D + sort
+- Differentiable `col2im` op; `ConvTranspose2D` (matmul + col2im). `sort` (full
+  topk along last axis).
+
 ## Cross-cutting remaining work (the long tail)
 Genuinely-deferred items (lower value / larger risk; each is localized):
-strided/zero-copy views; full `sort`; boolean/advanced indexing & `__setitem__`;
-ConvTranspose2D; true op-level autocast; true activation-recompute checkpointing
-(needs a Python grad_fn hook); a single *fused* flash-attention kernel (the
-current attention already runs in C++/cuBLAS, this would cut memory traffic
-further). The architecture/conventions make each a localized addition.
+strided/zero-copy views; boolean/advanced indexing & `__setitem__`; true
+op-level autocast; true activation-recompute checkpointing (needs a Python
+grad_fn hook); a single *fused* flash-attention kernel (attention already runs
+in C++/cuBLAS — this would cut memory traffic further). The architecture/
+conventions make each a localized addition, not a refactor.
 
 ## Build & test (each phase)
 ```bash
