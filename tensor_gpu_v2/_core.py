@@ -1926,6 +1926,7 @@ def apa_quant_attention(
     dropout_p: float = 0.0,
     block_size: int = 64,
     adaptive_heads: bool = False,
+    apa_rotation: bool = True,
 ) -> Tensor:
     import math
     from ._quant import TurboQuantMSE
@@ -2037,9 +2038,10 @@ def apa_quant_attention(
 
     quantizers = {}
     for h in range(H):
-        cache_key = (D, bulk_bits, h)
+        seed_h = (h * 1337 + 42) if apa_rotation else 0
+        cache_key = (D, bulk_bits, h, seed_h)
         if cache_key not in _apa_quantizer_cache:
-            _apa_quantizer_cache[cache_key] = TurboQuantMSE(D, bulk_bits, seed=h * 1337 + 42)
+            _apa_quantizer_cache[cache_key] = TurboQuantMSE(D, bulk_bits, seed=seed_h)
         quantizers[h] = _apa_quantizer_cache[cache_key]
     key_quant_data = xp.zeros_like(key_data)
     for h in range(H):
@@ -2093,17 +2095,13 @@ def apa_quant_attention(
                 abs_ranking = xp.where(cmask, xp.float32(0.0), abs_ranking)
 
             if per_head_k is not None:
-                refine_mask = xp.zeros((B, H, L, S), dtype=xp.bool_)
-                for h in range(H):
-                    k_h = int(per_head_k[h])
-                    if k_h >= S:
-                        refine_mask[:, h, :, :] = True
-                    else:
-                        abs_h = abs_ranking[:, h, :, :]
-                        thr_idx = S - k_h
-                        part = xp.partition(abs_h, thr_idx, axis=-1)
-                        thr = part[:, :, thr_idx:thr_idx + 1]
-                        refine_mask[:, h, :, :] = abs_h >= thr
+                per_head_z = xp.array([
+                    _apa_zscore(float(p)) for p in per_head_pct
+                ], dtype=xp.float32).reshape(1, H, 1, 1)
+                mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
+                std_ab = abs_ranking.std(axis=-1, keepdims=True)
+                threshold = mean_ab + per_head_z * std_ab
+                refine_mask = abs_ranking >= threshold
             elif S > 256:
                 z = _apa_zscore(refine_percentile)
                 mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
@@ -2134,6 +2132,7 @@ def apa_quant_attention(
         l_prev = xp.zeros((B, H, L, 1), dtype=query_data.dtype)
         stored_refine_masks = {}
         tiled_per_head_k = None
+        tiled_per_head_z = None
 
         for i in range(0, L, block_size):
             end_i = min(i + block_size, L)
@@ -2158,10 +2157,14 @@ def apa_quant_attention(
             if adaptive_heads and H > 1 and i == 0 and refine_k < S:
                 concentration = _compute_per_head_concentration(
                     bulk_scores, xp)
-                per_head_pct = _allocate_per_head_budget(
+                tiled_per_head_pct = _allocate_per_head_budget(
                     concentration, H, refine_percentile)
                 tiled_per_head_k = xp.clip(
-                    (xp.asarray(per_head_pct) * S).astype(xp.int32), 1, S)
+                    (xp.asarray(tiled_per_head_pct) * S).astype(xp.int32),
+                    1, S)
+                tiled_per_head_z = xp.array([
+                    _apa_zscore(float(p)) for p in tiled_per_head_pct
+                ], dtype=xp.float32).reshape(1, H, 1, 1)
 
             masked_positions = xp.zeros((B, H, block_len, S), dtype=xp.bool_)
             if is_causal:
@@ -2191,17 +2194,10 @@ def apa_quant_attention(
                 abs_ranking = xp.where(masked_positions, xp.float32(0.0), abs_ranking)
 
                 if tiled_per_head_k is not None:
-                    refine_mask = xp.zeros((B, H, block_len, S), dtype=xp.bool_)
-                    for h in range(H):
-                        k_h = int(tiled_per_head_k[h])
-                        if k_h >= S:
-                            refine_mask[:, h, :, :] = True
-                        else:
-                            abs_h = abs_ranking[:, h, :, :]
-                            thr_idx = S - k_h
-                            part = xp.partition(abs_h, thr_idx, axis=-1)
-                            thr = part[:, :, thr_idx:thr_idx + 1]
-                            refine_mask[:, h, :, :] = abs_h >= thr
+                    mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
+                    std_ab = abs_ranking.std(axis=-1, keepdims=True)
+                    threshold = mean_ab + tiled_per_head_z * std_ab
+                    refine_mask = abs_ranking >= threshold
                 elif S > 256:
                     z = _apa_zscore(refine_percentile)
                     mean_ab = abs_ranking.mean(axis=-1, keepdims=True)
