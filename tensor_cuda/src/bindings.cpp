@@ -115,6 +115,23 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("float", [](Tensor& t) { return ops::cast(t, DType::Float32); })
       .def("sin", [](Tensor& t) { return ops::sin(t); })
       .def("cos", [](Tensor& t) { return ops::cos(t); })
+      .def("tan", [](Tensor& t) { return ops::tan(t); })
+      .def("asin", [](Tensor& t) { return ops::asin(t); })
+      .def("acos", [](Tensor& t) { return ops::acos(t); })
+      .def("atan", [](Tensor& t) { return ops::atan(t); })
+      .def("sinh", [](Tensor& t) { return ops::sinh(t); })
+      .def("cosh", [](Tensor& t) { return ops::cosh(t); })
+      .def("log2", [](Tensor& t) { return ops::log2(t); })
+      .def("log10", [](Tensor& t) { return ops::log10(t); })
+      .def("sign", [](Tensor& t) { return ops::sign(t); })
+      .def("floor", [](Tensor& t) { return ops::floor(t); })
+      .def("ceil", [](Tensor& t) { return ops::ceil(t); })
+      .def("round", [](Tensor& t) { return ops::round(t); })
+      .def("isnan", [](Tensor& t) { return ops::isnan(t); })
+      .def("isinf", [](Tensor& t) { return ops::isinf(t); })
+      .def("isfinite", [](Tensor& t) { return ops::isfinite(t); })
+      .def("nan_to_num", [](Tensor& t, double n, double p, double m) { return ops::nan_to_num(t, n, p, m); },
+           py::arg("nan") = 0.0, py::arg("posinf") = 1e30, py::arg("neginf") = -1e30)
       .def("reciprocal", [](Tensor& t) { return ops::reciprocal(t); })
       .def("clamp", [](Tensor& t, double lo, double hi) { return ops::clamp(t, lo, hi); })
       .def("maximum", [](Tensor& a, Tensor& b) { return ops::maximum(a, b); })
@@ -133,6 +150,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("min", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::min(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
       .def("var", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::var(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
       .def("std", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::std(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("prod", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::prod(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
+      .def("argmax", [](Tensor& t, int ax) { return ops::argmax(t, ax); }, py::arg("axis") = -1)
+      .def("argmin", [](Tensor& t, int ax) { return ops::argmin(t, ax); }, py::arg("axis") = -1)
+      .def("cumsum", [](Tensor& t, int ax) { return ops::cumsum(t, ax); }, py::arg("axis") = -1)
+      .def("gather", [](Tensor& t, int dim, Tensor& idx) { return ops::gather(t, dim, idx); })
+      .def("flip", [](Tensor& t, std::vector<int> dims) { return ops::flip(t, dims); })
       .def("permute", [](Tensor& t, std::vector<int> d) { return ops::permute(t, d); })
       .def("transpose", [](Tensor& t, int a, int b) { return ops::transpose(t, a, b); })
       .def("squeeze", [](Tensor& t, int d) { return ops::squeeze(t, d); }, py::arg("dim") = 0)
@@ -195,6 +218,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   });
   m.def("rmsprop_step", [](Tensor& p, Tensor& g, Tensor& sq, double lr, double alpha, double eps, double wd) {
     tc::rmsprop_step(p.data(), g.data(), sq.data(), lr, alpha, eps, wd);
+  });
+  m.def("lion_step", [](Tensor& p, Tensor& g, Tensor& m_, double lr, double b1, double b2, double wd) {
+    tc::lion_step(p.data(), g.data(), m_.data(), lr, b1, b2, wd);
+  });
+  m.def("radam_step", [](Tensor& p, Tensor& g, Tensor& m_, Tensor& v_, double lr, double b1,
+                         double b2, double eps, double bc1, double bc2, double rect, bool rectified,
+                         double wd, bool dec) {
+    tc::radam_step(p.data(), g.data(), m_.data(), v_.data(), lr, b1, b2, eps, bc1, bc2, rect, rectified, wd, dec);
   });
   m.def("adagrad_step", [](Tensor& p, Tensor& g, Tensor& acc, double lr, double eps, double wd) {
     tc::adagrad_step(p.data(), g.data(), acc.data(), lr, eps, wd);

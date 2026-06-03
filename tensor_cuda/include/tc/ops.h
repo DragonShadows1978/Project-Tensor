@@ -29,6 +29,22 @@ Tensor silu(const Tensor& a);
 Tensor abs(const Tensor& a);
 Tensor sin(const Tensor& a);
 Tensor cos(const Tensor& a);
+Tensor tan(const Tensor& a);
+Tensor asin(const Tensor& a);
+Tensor acos(const Tensor& a);
+Tensor atan(const Tensor& a);
+Tensor sinh(const Tensor& a);
+Tensor cosh(const Tensor& a);
+Tensor log2(const Tensor& a);
+Tensor log10(const Tensor& a);
+Tensor sign(const Tensor& a);
+Tensor floor(const Tensor& a);
+Tensor ceil(const Tensor& a);
+Tensor round(const Tensor& a);
+Tensor isnan(const Tensor& a);
+Tensor isinf(const Tensor& a);
+Tensor isfinite(const Tensor& a);
+Tensor nan_to_num(const Tensor& a, double nan, double posinf, double neginf);
 Tensor reciprocal(const Tensor& a);
 Tensor clamp(const Tensor& a, double lo, double hi);
 Tensor maximum(const Tensor& a, const Tensor& b);
@@ -66,6 +82,12 @@ Tensor max(const Tensor& a, const std::vector<int>& axes, bool keepdim);
 Tensor min(const Tensor& a, const std::vector<int>& axes, bool keepdim);
 Tensor var(const Tensor& a, const std::vector<int>& axes, bool keepdim);
 Tensor std(const Tensor& a, const std::vector<int>& axes, bool keepdim);
+Tensor prod(const Tensor& a, const std::vector<int>& axes, bool keepdim);
+Tensor argmax(const Tensor& a, int axis);   // detached int64
+Tensor argmin(const Tensor& a, int axis);
+Tensor cumsum(const Tensor& a, int axis);
+Tensor gather(const Tensor& a, int dim, const Tensor& index);
+Tensor flip(const Tensor& a, const std::vector<int>& dims);
 
 // Shape.
 Tensor permute(const Tensor& a, const std::vector<int>& dims);

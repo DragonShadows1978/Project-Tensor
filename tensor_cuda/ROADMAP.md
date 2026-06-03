@@ -111,16 +111,21 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   from the differentiable slice/squeeze ops. End-to-end integration test (tiny
   causal transformer LM + checkpoint round-trip + APA drop-in).
 
+### ✅ Phase 7 — Op/optimizer tail
+- Math ops: tan/asin/acos/atan/sinh/cosh/log2/log10/floor/ceil/round/sign/
+  isnan/isinf/isfinite/nan_to_num (+ grads where defined).
+- Reductions/indexing: prod, argmax/argmin, cumsum, gather (+scatter-add bwd),
+  flip — all with CUDA kernels and grads.
+- Optimizers: RAdam, Lion (in-place kernels). Schedulers: MultiStep/Exponential/
+  Constant/Linear/OneCycle/Cyclic/ReduceLROnPlateau.
+
 ## Cross-cutting remaining work (the long tail)
-Not yet ported (each lands with the consumer that needs it): strided/zero-copy
-views; einsum; sort/topk/argmax-as-index; gather/scatter/general index_select;
-cumsum/cumprod/prod; step!=1 / boolean / advanced indexing & `__setitem__`;
-Conv1D + depthwise/separable/transpose conv; GroupNorm/BatchNorm1D/InstanceNorm;
-AdaptiveAvgPool; KLDiv/cosine/triplet losses; RAdam/Lion + more schedulers; true
-op-level autocast; gradient checkpointing; weight tying; ALiBi; a single fused
-flash-attention kernel; TransformerDecoder/GeGLU. The architecture and
-conventions above make each of these a localized addition (kernel + op + binding
-+ test), not a refactor.
+Each lands with the consumer that needs it: strided/zero-copy views; einsum;
+sort/topk; boolean/advanced indexing & `__setitem__`; depthwise/separable/
+transpose conv; cosine/triplet losses; true op-level autocast; gradient
+checkpointing; a single fused flash-attention kernel. The architecture and
+conventions above make each a localized addition (kernel + op + binding + test),
+not a refactor.
 
 ## Build & test (each phase)
 ```bash

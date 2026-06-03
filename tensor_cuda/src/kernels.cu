@@ -289,9 +289,33 @@ __global__ void unary_kernel(const T* a, T* out, int64_t n, int op) {
     case U_SIGN: r = (x > 0) - (x < 0); break;
     case U_SIN: r = sinf(x); break;
     case U_COS: r = cosf(x); break;
+    case U_TAN: r = tanf(x); break;
+    case U_ASIN: r = asinf(x); break;
+    case U_ACOS: r = acosf(x); break;
+    case U_ATAN: r = atanf(x); break;
+    case U_SINH: r = sinhf(x); break;
+    case U_COSH: r = coshf(x); break;
+    case U_LOG2: r = log2f(x); break;
+    case U_LOG10: r = log10f(x); break;
+    case U_FLOOR: r = floorf(x); break;
+    case U_CEIL: r = ceilf(x); break;
+    case U_ROUND: r = roundf(x); break;
+    case U_ISNAN: r = isnan(x) ? 1.f : 0.f; break;
+    case U_ISINF: r = isinf(x) ? 1.f : 0.f; break;
+    case U_ISFINITE: r = isfinite(x) ? 1.f : 0.f; break;
     default: r = x;
   }
   st<T>(out, i, r);
+}
+
+template <typename T>
+__global__ void nan_to_num_kernel(const T* a, T* out, int64_t n, float nan, float pinf, float ninf) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float x = ld<T>(a, i);
+  if (isnan(x)) x = nan;
+  else if (isinf(x)) x = x > 0 ? pinf : ninf;
+  st<T>(out, i, x);
 }
 
 template <typename T>
@@ -356,6 +380,12 @@ NDArray ew_clamp(const NDArray& a, double lo, double hi) {
   if (n) { DISPATCH_FLOAT(a.dtype, T, { clamp_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)lo, (float)hi); }); cuda_check_last("clamp"); }
   return out;
 }
+NDArray ew_nan_to_num(const NDArray& a, double nan, double pinf, double ninf) {
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = a.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { nan_to_num_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)nan, (float)pinf, (float)ninf); }); cuda_check_last("nan_to_num"); }
+  return out;
+}
 NDArray ge_scalar(const NDArray& a, double sval) {
   NDArray out(a.shape, a.dtype, a.device);
   int64_t n = a.numel();
@@ -379,7 +409,7 @@ struct ReduceSpec {
   int64_t red_size;               // product of reduced dim sizes
 };
 
-template <typename T, int MODE>  // 0=sum 1=max 2=min
+template <typename T, int MODE>  // 0=sum 1=max 2=min 3=prod
 __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) {
   int64_t oidx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   if (oidx >= out_n) return;
@@ -392,7 +422,7 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
     coord[d] = s.reduced[d] ? 0 : c;
     base += coord[d] * s.in_str[d];
   }
-  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : 3.4e38f);
+  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
   for (int64_t r = 0; r < s.red_size; ++r) {
     int64_t rr = r, off = 0;
     for (int d = s.ndim - 1; d >= 0; --d) {
@@ -404,7 +434,8 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
     float v = ld<T>(in, base + off);
     if (MODE == 0) acc += v;
     else if (MODE == 1) acc = v > acc ? v : acc;
-    else acc = v < acc ? v : acc;
+    else if (MODE == 2) acc = v < acc ? v : acc;
+    else acc *= v;
   }
   st<T>(out, oidx, acc);
 }
@@ -427,6 +458,7 @@ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int m
     DISPATCH_FLOAT(a.dtype, T, {
       if (mode == 1) reduce_kernel<T, 1><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
       else if (mode == 2) reduce_kernel<T, 2><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
+      else if (mode == 3) reduce_kernel<T, 3><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
       else reduce_kernel<T, 0><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
     });
     cuda_check_last("reduce");
@@ -447,6 +479,9 @@ NDArray reduce_max(const NDArray& a, const std::vector<int>& axes, bool keepdim)
 }
 NDArray reduce_min(const NDArray& a, const std::vector<int>& axes, bool keepdim) {
   return reduce_impl(a, axes, keepdim, 2);
+}
+NDArray reduce_prod(const NDArray& a, const std::vector<int>& axes, bool keepdim) {
+  return reduce_impl(a, axes, keepdim, 3);
 }
 NDArray reduce_to(const NDArray& a, const Shape& target) {
   if (a.shape == target) return a.clone();
@@ -661,6 +696,34 @@ __global__ void adam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,
   st<T>(p, i, pi - lr * mhat / (sqrtf(vhat) + eps));
 }
 template <typename T>
+__global__ void lion_kernel(T* p, const T* g, T* m, int64_t n, float lr,
+                            float b1, float b2, float wd) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float gi = ld<T>(g, i), mi = ld<T>(m, i), pi = ld<T>(p, i);
+  float upd = b1 * mi + (1.f - b1) * gi;
+  float s = upd > 0 ? 1.f : (upd < 0 ? -1.f : 0.f);
+  st<T>(p, i, pi - lr * (s + wd * pi));        // decoupled weight decay
+  st<T>(m, i, b2 * mi + (1.f - b2) * gi);
+}
+template <typename T>
+__global__ void radam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,
+                             float b1, float b2, float eps, float bc1, float bc2,
+                             float rect, int rectified, float wd, int decoupled) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float pi = ld<T>(p, i), gi = ld<T>(g, i);
+  if (!decoupled) gi += wd * pi;
+  float mi = b1 * ld<T>(m, i) + (1.f - b1) * gi;
+  float vi = b2 * ld<T>(v, i) + (1.f - b2) * gi * gi;
+  st<T>(m, i, mi); st<T>(v, i, vi);
+  float mhat = mi / bc1;
+  if (decoupled) pi -= lr * wd * pi;
+  if (rectified) { float vhat = sqrtf(vi / bc2) + eps; pi -= lr * rect * mhat / vhat; }
+  else pi -= lr * mhat;
+  st<T>(p, i, pi);
+}
+template <typename T>
 __global__ void rmsprop_kernel(T* p, const T* g, T* sq, int64_t n, float lr,
                                float alpha, float eps, float wd) {
   int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
@@ -686,6 +749,30 @@ __global__ void scale_kernel(T* p, int64_t n, float s) {
 }
 }  // namespace
 
+void lion_step(NDArray& param, const NDArray& grad, NDArray& m, double lr,
+               double b1, double b2, double wd) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    lion_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(m.data_ptr()), n,
+        (float)lr, (float)b1, (float)b2, (float)wd);
+  });
+  cuda_check_last("lion_step");
+}
+void radam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
+                double lr, double b1, double b2, double eps, double bc1, double bc2,
+                double rect, bool rectified, double wd, bool decoupled) {
+  int64_t n = param.numel();
+  if (!n) return;
+  DISPATCH_FLOAT(param.dtype, T, {
+    radam_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()),
+        static_cast<T*>(grad.data_ptr()), static_cast<T*>(m.data_ptr()),
+        static_cast<T*>(v.data_ptr()), n, (float)lr, (float)b1, (float)b2, (float)eps,
+        (float)bc1, (float)bc2, (float)rect, rectified ? 1 : 0, (float)wd, decoupled ? 1 : 0);
+  });
+  cuda_check_last("radam_step");
+}
 void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq, double lr,
                   double alpha, double eps, double wd) {
   int64_t n = param.numel();
@@ -826,6 +913,133 @@ NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
   cuda_check_last("slice");
   return out;
 }
+// ------------------------------------------------------------- arg/cumsum/gather/flip
+namespace {
+template <typename T>
+__global__ void arg_kernel(const T* a, int64_t* out, int64_t outer, int64_t A, int64_t inner, int is_max) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t n = outer * inner;
+  if (idx >= n) return;
+  int64_t o = idx / inner, i = idx % inner;
+  float best = is_max ? -3.4e38f : 3.4e38f; int64_t bj = 0;
+  for (int64_t j = 0; j < A; ++j) {
+    float v = ld<T>(a, o * A * inner + j * inner + i);
+    if ((is_max && v > best) || (!is_max && v < best)) { best = v; bj = j; }
+  }
+  out[idx] = bj;
+}
+template <typename T>
+__global__ void cumsum_kernel(const T* a, T* out, int64_t outer, int64_t A, int64_t inner) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t n = outer * inner;
+  if (idx >= n) return;
+  int64_t o = idx / inner, i = idx % inner;
+  float acc = 0.f;
+  for (int64_t j = 0; j < A; ++j) {
+    int64_t off = o * A * inner + j * inner + i;
+    acc += ld<T>(a, off);
+    st<T>(out, off, acc);
+  }
+}
+struct GatherSpec { int ndim; int64_t idx_str[TC_MAX_DIMS]; int64_t a_str[TC_MAX_DIMS]; int64_t idx_shape[TC_MAX_DIMS]; int dim; };
+template <typename T>
+__global__ void gather_kernel(const T* a, const int64_t* index, T* out, GatherSpec s, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, aoff = 0;
+  for (int d = 0; d < s.ndim; ++d) {
+    int64_t c = rem / s.idx_str[d]; rem -= c * s.idx_str[d];
+    if (d == s.dim) c = index[idx];
+    aoff += c * s.a_str[d];
+  }
+  st<T>(out, idx, ld<T>(a, aoff));
+}
+template <typename T>
+__global__ void scatter_add_kernel(const T* src, const int64_t* index, float* out, GatherSpec s, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, aoff = 0;
+  for (int d = 0; d < s.ndim; ++d) {
+    int64_t c = rem / s.idx_str[d]; rem -= c * s.idx_str[d];
+    if (d == s.dim) c = index[idx];
+    aoff += c * s.a_str[d];
+  }
+  atomicAdd(&out[aoff], ld<T>(src, idx));
+}
+struct FlipSpec { int ndim; int64_t shape[TC_MAX_DIMS]; int64_t str[TC_MAX_DIMS]; int flip[TC_MAX_DIMS]; };
+template <typename T>
+__global__ void flip_kernel(const T* a, T* out, FlipSpec s, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t rem = idx, aoff = 0;
+  for (int d = 0; d < s.ndim; ++d) {
+    int64_t c = rem / s.str[d]; rem -= c * s.str[d];
+    if (s.flip[d]) c = s.shape[d] - 1 - c;
+    aoff += c * s.str[d];
+  }
+  st<T>(out, idx, ld<T>(a, aoff));
+}
+void axis_split(const Shape& shape, int axis, int64_t& outer, int64_t& A, int64_t& inner) {
+  int nd = (int)shape.size();
+  if (axis < 0) axis += nd;
+  outer = 1; inner = 1; A = shape[axis];
+  for (int d = 0; d < axis; ++d) outer *= shape[d];
+  for (int d = axis + 1; d < nd; ++d) inner *= shape[d];
+}
+}  // namespace
+
+NDArray reduce_arg(const NDArray& a, int axis, bool is_max) {
+  int nd = a.ndim();
+  if (axis < 0) axis += nd;
+  int64_t outer, A, inner; axis_split(a.shape, axis, outer, A, inner);
+  Shape os; for (int d = 0; d < nd; ++d) if (d != axis) os.push_back(a.shape[d]);
+  if (os.empty()) os.push_back(1);
+  NDArray out(os, DType::Int64, a.device);
+  int64_t n = outer * inner;
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { arg_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<int64_t*>(out.data_ptr()), outer, A, inner, is_max ? 1 : 0); }); cuda_check_last("arg"); }
+  return out;
+}
+NDArray cumsum_nd(const NDArray& a, int axis) {
+  int64_t outer, A, inner; axis_split(a.shape, axis, outer, A, inner);
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = outer * inner;
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { cumsum_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), outer, A, inner); }); cuda_check_last("cumsum"); }
+  return out;
+}
+NDArray gather_nd(const NDArray& a, int dim, const NDArray& index) {
+  int nd = a.ndim();
+  if (dim < 0) dim += nd;
+  NDArray out(index.shape, a.dtype, a.device);
+  GatherSpec s{}; s.ndim = nd; s.dim = dim;
+  Shape istr = contiguous_strides(index.shape), astr = contiguous_strides(a.shape);
+  for (int d = 0; d < nd; ++d) { s.idx_str[d] = istr[d]; s.a_str[d] = astr[d]; s.idx_shape[d] = index.shape[d]; }
+  int64_t n = out.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { gather_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<int64_t*>(index.data_ptr()), static_cast<T*>(out.data_ptr()), s, n); }); cuda_check_last("gather"); }
+  return out;
+}
+NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim, const NDArray& index, const NDArray& src) {
+  int nd = (int)shape.size();
+  if (dim < 0) dim += nd;
+  NDArray outf = NDArray::zeros(shape, DType::Float32, src.device);
+  GatherSpec s{}; s.ndim = nd; s.dim = dim;
+  Shape istr = contiguous_strides(index.shape), astr = contiguous_strides(shape);
+  for (int d = 0; d < nd; ++d) { s.idx_str[d] = istr[d]; s.a_str[d] = astr[d]; s.idx_shape[d] = index.shape[d]; }
+  int64_t n = src.numel();
+  if (n) { DISPATCH_FLOAT(src.dtype, T, { scatter_add_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(src.data_ptr()), static_cast<int64_t*>(index.data_ptr()), static_cast<float*>(outf.data_ptr()), s, n); }); cuda_check_last("scatter_add"); }
+  return outf.astype(dtype);
+}
+NDArray flip_nd(const NDArray& a, const std::vector<int>& dims) {
+  int nd = a.ndim();
+  FlipSpec s{}; s.ndim = nd;
+  Shape str = contiguous_strides(a.shape);
+  for (int d = 0; d < nd; ++d) { s.shape[d] = a.shape[d]; s.str[d] = str[d]; s.flip[d] = 0; }
+  for (int d : dims) { int dd = d < 0 ? d + nd : d; s.flip[dd] = 1; }
+  NDArray out(a.shape, a.dtype, a.device);
+  int64_t n = a.numel();
+  if (n) { DISPATCH_FLOAT(a.dtype, T, { flip_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, n); }); cuda_check_last("flip"); }
+  return out;
+}
+
 NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t start) {
   int nd = (int)big_shape.size();
   if (dim < 0) dim += nd;

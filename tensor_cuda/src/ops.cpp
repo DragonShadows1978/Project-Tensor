@@ -142,6 +142,70 @@ Tensor cos(const Tensor& a) {
     a.v->accumulate_grad(nmul(g, ew_unary(ew_unary(a.data(), U_SIN), U_NEG)));
   });
 }
+Tensor tan(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_TAN);
+  return Tensor::from_op(out, {a}, "tan", [a, out](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, nadds(nmul(out, out), 1.0)));  // 1+tan^2
+  });
+}
+Tensor asin(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_ASIN);
+  return Tensor::from_op(out, {a}, "asin", [a](const NDArray& g) {
+    NDArray denom = ew_unary(nsubsl(1.0, nmul(a.data(), a.data())), U_SQRT);
+    a.v->accumulate_grad(ndiv(g, denom));
+  });
+}
+Tensor acos(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_ACOS);
+  return Tensor::from_op(out, {a}, "acos", [a](const NDArray& g) {
+    NDArray denom = ew_unary(nsubsl(1.0, nmul(a.data(), a.data())), U_SQRT);
+    a.v->accumulate_grad(ew_unary(ndiv(g, denom), U_NEG));
+  });
+}
+Tensor atan(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_ATAN);
+  return Tensor::from_op(out, {a}, "atan", [a](const NDArray& g) {
+    a.v->accumulate_grad(ndiv(g, nadds(nmul(a.data(), a.data()), 1.0)));  // 1/(1+x^2)
+  });
+}
+Tensor sinh(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_SINH);
+  return Tensor::from_op(out, {a}, "sinh", [a](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(a.data(), U_COSH)));
+  });
+}
+Tensor cosh(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_COSH);
+  return Tensor::from_op(out, {a}, "cosh", [a](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(a.data(), U_SINH)));
+  });
+}
+Tensor log2(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_LOG2);
+  return Tensor::from_op(out, {a}, "log2", [a](const NDArray& g) {
+    a.v->accumulate_grad(ndiv(g, nmuls(a.data(), 0.6931471805599453)));
+  });
+}
+Tensor log10(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_LOG10);
+  return Tensor::from_op(out, {a}, "log10", [a](const NDArray& g) {
+    a.v->accumulate_grad(ndiv(g, nmuls(a.data(), 2.302585092994046)));
+  });
+}
+// Non-differentiable (piecewise-constant / predicate) ops -> detached results.
+Tensor sign(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_SIGN), false); }
+Tensor floor(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_FLOOR), false); }
+Tensor ceil(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_CEIL), false); }
+Tensor round(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_ROUND), false); }
+Tensor isnan(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_ISNAN), false); }
+Tensor isinf(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_ISINF), false); }
+Tensor isfinite(const Tensor& a) { return Tensor::make(ew_unary(a.data(), U_ISFINITE), false); }
+Tensor nan_to_num(const Tensor& a, double nan, double pinf, double ninf) {
+  NDArray out = ew_nan_to_num(a.data(), nan, pinf, ninf);
+  return Tensor::from_op(out, {a}, "nan_to_num", [a](const NDArray& g) {
+    a.v->accumulate_grad(g);  // identity grad where input was finite
+  });
+}
 Tensor reciprocal(const Tensor& a) {
   NDArray out = ew_unary(a.data(), U_RECIP);
   return Tensor::from_op(out, {a}, "reciprocal", [a, out](const NDArray& g) {
@@ -314,6 +378,41 @@ Tensor var(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
 }
 Tensor std(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
   return sqrt(var(a, axes, keepdim));
+}
+Tensor prod(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+  NDArray out = reduce_prod(a.data(), axes, keepdim);
+  NDArray pk = reduce_prod(a.data(), axes, true);
+  Shape in_shape = a.shape();
+  Shape kshape = keepdim_shape(in_shape, axes);
+  return Tensor::from_op(out, {a}, "prod", [a, pk, in_shape, kshape](const NDArray& g) {
+    NDArray gk = broadcast_to(g.reshape(kshape), in_shape);
+    NDArray pb = broadcast_to(pk.reshape(kshape), in_shape);
+    a.v->accumulate_grad(ndiv(nmul(gk, pb), a.data()));  // g * prod / x
+  });
+}
+Tensor argmax(const Tensor& a, int axis) { return Tensor::make(reduce_arg(a.data(), axis, true), false); }
+Tensor argmin(const Tensor& a, int axis) { return Tensor::make(reduce_arg(a.data(), axis, false), false); }
+Tensor cumsum(const Tensor& a, int axis) {
+  NDArray out = cumsum_nd(a.data(), axis);
+  return Tensor::from_op(out, {a}, "cumsum", [a, axis](const NDArray& g) {
+    // grad_i = sum_{j>=i} g_j = flip(cumsum(flip(g)))
+    a.v->accumulate_grad(flip_nd(cumsum_nd(flip_nd(g, {axis}), axis), {axis}));
+  });
+}
+Tensor gather(const Tensor& a, int dim, const Tensor& index) {
+  NDArray out = gather_nd(a.data(), dim, index.data());
+  NDArray idx = index.data();
+  Shape in_shape = a.shape();
+  DType dt = a.dtype();
+  return Tensor::from_op(out, {a}, "gather", [a, idx, in_shape, dt, dim](const NDArray& g) {
+    a.v->accumulate_grad(scatter_add_nd(in_shape, dt, dim, idx, g));
+  });
+}
+Tensor flip(const Tensor& a, const std::vector<int>& dims) {
+  NDArray out = flip_nd(a.data(), dims);
+  return Tensor::from_op(out, {a}, "flip", [a, dims](const NDArray& g) {
+    a.v->accumulate_grad(flip_nd(g, dims));
+  });
 }
 
 Tensor permute(const Tensor& a, const std::vector<int>& dims) {

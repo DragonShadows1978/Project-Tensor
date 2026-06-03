@@ -106,10 +106,13 @@ NDArray ew_scalar(const NDArray& a, double scalar, int op, bool scalar_lhs);
 enum UnaryOp {
   U_NEG, U_EXP, U_LOG, U_SQRT, U_RELU, U_SIGMOID, U_TANH, U_GELU, U_SILU,
   U_RECIP, U_ABS, U_SIGN, U_SIN, U_COS,
+  U_TAN, U_ASIN, U_ACOS, U_ATAN, U_SINH, U_COSH,
+  U_LOG2, U_LOG10, U_FLOOR, U_CEIL, U_ROUND, U_ISNAN, U_ISINF, U_ISFINITE,
 };
 NDArray ew_unary(const NDArray& a, int op);
 NDArray ew_pow(const NDArray& a, double exponent);
 NDArray ew_clamp(const NDArray& a, double lo, double hi);  // clamp to [lo,hi]
+NDArray ew_nan_to_num(const NDArray& a, double nan, double posinf, double neginf);
 
 // Comparisons. op: 0=gt 1=ge 2=lt 3=le 4=eq 5=ne. Result is same dtype, 0/1.
 NDArray compare(const NDArray& a, const NDArray& b, int op);     // broadcasting
@@ -121,8 +124,21 @@ NDArray where_nd(const NDArray& cond, const NDArray& x, const NDArray& y);
 NDArray reduce_sum(const NDArray& a, const std::vector<int>& axes, bool keepdim);
 NDArray reduce_max(const NDArray& a, const std::vector<int>& axes, bool keepdim);
 NDArray reduce_min(const NDArray& a, const std::vector<int>& axes, bool keepdim);
+NDArray reduce_prod(const NDArray& a, const std::vector<int>& axes, bool keepdim);
 // Sum `a` down to `target` shape (NumPy-broadcast reduction); used by autograd.
 NDArray reduce_to(const NDArray& a, const Shape& target);
+
+// argmax/argmin along a single axis (returns int64, axis removed).
+NDArray reduce_arg(const NDArray& a, int axis, bool is_max);
+// Cumulative sum along `axis` (same shape).
+NDArray cumsum_nd(const NDArray& a, int axis);
+// gather along `dim` using int64 `index` (index.shape == output shape).
+NDArray gather_nd(const NDArray& a, int dim, const NDArray& index);
+// scatter-add `src` into a zeroed `shape` tensor along `dim` by `index` (gather bwd).
+NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim,
+                       const NDArray& index, const NDArray& src);
+// reverse `a` along the given dims.
+NDArray flip_nd(const NDArray& a, const std::vector<int>& dims);
 
 // Shape ops.
 NDArray transpose2d_last(const NDArray& a);            // swap last two dims
@@ -171,6 +187,11 @@ void sgd_step(NDArray& param, const NDArray& grad, NDArray& momentum_buf,
 void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
                double lr, double b1, double b2, double eps, int64_t t,
                double weight_decay, bool decoupled);
+void lion_step(NDArray& param, const NDArray& grad, NDArray& m,
+               double lr, double b1, double b2, double weight_decay);
+void radam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
+                double lr, double b1, double b2, double eps, double bc1, double bc2,
+                double rect, bool rectified, double weight_decay, bool decoupled);
 void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq_avg,
                   double lr, double alpha, double eps, double weight_decay);
 void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc,
