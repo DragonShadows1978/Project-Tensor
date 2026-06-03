@@ -123,6 +123,13 @@ Tensor silu(const Tensor& a) {
   });
 }
 
+Tensor abs(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_ABS);
+  return Tensor::from_op(out, {a}, "abs", [a](const NDArray& g) {
+    a.v->accumulate_grad(nmul(g, ew_unary(a.data(), U_SIGN)));
+  });
+}
+
 // ------------------------------------------------------------- linalg
 Tensor matmul(const Tensor& a, const Tensor& b) {
   NDArray out = tc::matmul(a.data(), b.data());

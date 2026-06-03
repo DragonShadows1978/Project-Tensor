@@ -26,6 +26,7 @@ Tensor sigmoid(const Tensor& a);
 Tensor tanh(const Tensor& a);
 Tensor gelu(const Tensor& a);
 Tensor silu(const Tensor& a);
+Tensor abs(const Tensor& a);
 
 // Linear algebra.
 Tensor matmul(const Tensor& a, const Tensor& b);

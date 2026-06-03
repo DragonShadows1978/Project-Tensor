@@ -79,6 +79,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("relu", [](Tensor& t) { return ops::relu(t); })
       .def("gelu", [](Tensor& t) { return ops::gelu(t); })
       .def("silu", [](Tensor& t) { return ops::silu(t); })
+      .def("abs", [](Tensor& t) { return ops::abs(t); })
       .def("sigmoid", [](Tensor& t) { return ops::sigmoid(t); })
       .def("tanh", [](Tensor& t) { return ops::tanh(t); })
       .def("exp", [](Tensor& t) { return ops::exp(t); })

@@ -69,11 +69,14 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   GradScaler + autocast (AMP), gradient accumulation/checkpointing, weight tying,
   checkpoint save/load, profiler.
 
-### ⬜ Phase 5 — Sequence & transformer models
-RNN/LSTM/GRU (cells + layers), PositionalEncoding, RoPE, ALiBi,
-scaled_dot_product_attention, flash_attention (online-softmax tiled kernel),
-multi-head attention, TransformerEncoder/DecoderLayer, GeGLU, fused
-Linear+GELU/SiLU.
+### ✅ Phase 5 — Attention & transformer (core done)
+- `functional.scaled_dot_product_attention` (causal + additive mask),
+  `nn.MultiheadAttention`, `nn.RMSNorm`, `nn.TransformerEncoderLayer`. `abs` op.
+- Tests: SDPA parity vs NumPy (dense + causal), MHA/encoder shapes, transformer
+  training loop.
+- **Remaining for Phase 5b**: RNN/LSTM/GRU, PositionalEncoding, RoPE, ALiBi,
+  fused flash-attention CUDA kernel, TransformerDecoder, GeGLU, fused
+  Linear+GELU/SiLU. (RoPE needs the slice/narrow op from Phase 2b.)
 
 ### ⬜ Phase 6 — Quantization & APA
 TurboQuant MSE/Prod (Lloyd-Max codebook builder + quantize/dequantize kernels),
