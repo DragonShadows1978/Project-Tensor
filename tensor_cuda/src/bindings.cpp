@@ -51,6 +51,36 @@ py::object grad_of(Tensor& t) {
   return py::cast(Tensor::make(t.v->grad, false));
 }
 
+// __getitem__ for ints and unit-step slices (single key or per-dim tuple),
+// composed from the differentiable slice/squeeze ops.
+Tensor getitem(Tensor& t, py::object key) {
+  std::vector<py::object> keys;
+  if (py::isinstance<py::tuple>(key))
+    for (auto k : key.cast<py::tuple>()) keys.push_back(py::reinterpret_borrow<py::object>(k));
+  else
+    keys.push_back(key);
+
+  Tensor cur = t;
+  int dim = 0;
+  for (auto& k : keys) {
+    if (py::isinstance<py::int_>(k)) {
+      int64_t i = k.cast<int64_t>();
+      int64_t sz = cur.shape()[dim];
+      if (i < 0) i += sz;
+      cur = ops::squeeze(ops::slice(cur, dim, i, 1), dim);  // dim removed; keep `dim`
+    } else if (py::isinstance<py::slice>(k)) {
+      size_t start, stop, step, len;
+      k.cast<py::slice>().compute(cur.shape()[dim], &start, &stop, &step, &len);
+      if (step != 1) throw std::runtime_error("getitem: only step==1 slices supported");
+      cur = ops::slice(cur, dim, (int64_t)start, (int64_t)len);
+      ++dim;
+    } else {
+      throw std::runtime_error("getitem: unsupported index type");
+    }
+  }
+  return cur;
+}
+
 }  // namespace
 
 PYBIND11_MODULE(_tensor_cuda, m) {
@@ -90,6 +120,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("maximum", [](Tensor& a, Tensor& b) { return ops::maximum(a, b); })
       .def("minimum", [](Tensor& a, Tensor& b) { return ops::minimum(a, b); })
       .def("slice", [](Tensor& t, int dim, int64_t start, int64_t len) { return ops::slice(t, dim, start, len); })
+      .def("__getitem__", &getitem)
       .def("sigmoid", [](Tensor& t) { return ops::sigmoid(t); })
       .def("tanh", [](Tensor& t) { return ops::tanh(t); })
       .def("exp", [](Tensor& t) { return ops::exp(t); })

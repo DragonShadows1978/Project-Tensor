@@ -106,9 +106,21 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   per-head budget, tiled/flash APA kernel, the reference's approximate backward
   as an opt-in.
 
-## Cross-cutting remaining work (2b/3b/4b/5b)
-Strided views; full indexing/einsum/sort/topk/cumsum/trig; Conv/RNN/pooling;
-AMP/checkpointing; RoPE/ALiBi; fused flash kernels. Tracked above per phase.
+### ✅ Phase 2b (partial) — indexing
+- `__getitem__` (int + unit-step slice, single key or per-dim tuple), composed
+  from the differentiable slice/squeeze ops. End-to-end integration test (tiny
+  causal transformer LM + checkpoint round-trip + APA drop-in).
+
+## Cross-cutting remaining work (the long tail)
+Not yet ported (each lands with the consumer that needs it): strided/zero-copy
+views; einsum; sort/topk/argmax-as-index; gather/scatter/general index_select;
+cumsum/cumprod/prod; step!=1 / boolean / advanced indexing & `__setitem__`;
+Conv1D + depthwise/separable/transpose conv; GroupNorm/BatchNorm1D/InstanceNorm;
+AdaptiveAvgPool; KLDiv/cosine/triplet losses; RAdam/Lion + more schedulers; true
+op-level autocast; gradient checkpointing; weight tying; ALiBi; a single fused
+flash-attention kernel; TransformerDecoder/GeGLU. The architecture and
+conventions above make each of these a localized addition (kernel + op + binding
++ test), not a refactor.
 
 ## Build & test (each phase)
 ```bash

@@ -212,6 +212,32 @@ from apa_attention import apa_scaled_dot_product_attention as apa_sdpa
 out = apa_sdpa(q, k, v, is_causal=True)   # drop-in for F.scaled_dot_product_attention
 ```
 
+## Full C++/CUDA rework — `tensor_cuda/`
+
+The complete framework-free rework of this library into a **standalone C++/CUDA
+engine with a thin Python wrapper** (no PyTorch, no CuPy) lives in
+[`tensor_cuda/`](tensor_cuda/). It has its own `Storage`→`NDArray`→`Tensor`
+stack, a reverse-mode autograd engine, hand-written CUDA kernels (+ cuBLAS for
+GEMMs), and a NumPy-friendly API:
+
+```python
+import tensor_cuda as tc
+from tensor_cuda import nn, optim
+
+model = nn.Sequential(nn.Linear(16, 32), nn.ReLU(), nn.Linear(32, 2))
+opt = optim.Adam(model.parameters(), lr=1e-2)
+loss = tc.cross_entropy(model(tc.tensor(X)), labels)
+opt.zero_grad(); loss.backward(); opt.step()
+
+out = tc.apa_quant_attention(q, k, v, bulk_bits=2, refine_percentile=0.15)  # APA, framework-free
+```
+
+Built in phases (see [`tensor_cuda/ROADMAP.md`](tensor_cuda/ROADMAP.md)):
+autograd engine → op surface → nn.Module + layers → optimizers/schedulers →
+attention/transformer → TurboQuant + APA → Conv/pool/BatchNorm, RNN/LSTM/GRU,
+RoPE, AMP, checkpointing, indexing. Build with `cd tensor_cuda && ./build.sh 86`
+(RTX 3070) and `PYTHONPATH=. python -m pytest tests`.
+
 ## Philosophy
 
 This library exists to prove that you don't need massive frameworks to do deep learning. Focused, readable code can train real models on real GPUs.
