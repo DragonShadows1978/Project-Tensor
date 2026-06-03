@@ -348,6 +348,8 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& onehot) {
   return mul_scalar(mean(per, {}, false), -1.0);
 }
 
+Tensor detach(const Tensor& a) { return Tensor::make(a.data(), false); }
+
 Tensor embedding(const Tensor& weight, const Tensor& idx) {
   NDArray out = embedding_forward(weight.data(), idx.data());
   NDArray idx_nd = idx.data();

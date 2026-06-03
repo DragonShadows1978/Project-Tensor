@@ -108,10 +108,14 @@ def no_grad():
 from . import functional  # noqa: E402
 from . import nn  # noqa: E402  (after _C and helpers are defined)
 from . import optim  # noqa: E402
+from . import quant  # noqa: E402
+
+apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
+    "quant", "apa_quant_attention",
 ]
 __version__ = "0.1.0-phase1"

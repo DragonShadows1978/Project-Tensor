@@ -77,5 +77,8 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& onehot_target);
 // Indexing.
 Tensor embedding(const Tensor& weight, const Tensor& idx);  // idx: int64 Tensor
 
+// Stop-gradient: returns a constant view sharing storage (no autograd parents).
+Tensor detach(const Tensor& a);
+
 }  // namespace ops
 }  // namespace tc

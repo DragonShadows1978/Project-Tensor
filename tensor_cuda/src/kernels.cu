@@ -700,6 +700,35 @@ void scale_(NDArray& param, double s) {
   cuda_check_last("scale_");
 }
 
+namespace {
+template <typename T>
+__global__ void apa_qg_kernel(const T* rotated, const T* boundaries, const T* codebook,
+                              T* out, int nb, int64_t n) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float x = ld<T>(rotated, i);
+  int lo = 0, hi = nb;
+  while (lo < hi) { int mid = (lo + hi) >> 1; if (ld<T>(boundaries, mid) < x) lo = mid + 1; else hi = mid; }
+  st<T>(out, i, ld<T>(codebook, lo));
+}
+}  // namespace
+
+NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
+                            const NDArray& codebook) {
+  NDArray out(rotated.shape, rotated.dtype, rotated.device);
+  int64_t n = rotated.numel();
+  int nb = (int)boundaries.numel();
+  if (n) {
+    DISPATCH_FLOAT(rotated.dtype, T, {
+      apa_qg_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(rotated.data_ptr()),
+          static_cast<T*>(boundaries.data_ptr()), static_cast<T*>(codebook.data_ptr()),
+          static_cast<T*>(out.data_ptr()), nb, n);
+    });
+    cuda_check_last("apa_quantize_gather");
+  }
+  return out;
+}
+
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {
   int64_t V = weight.shape[0];
   int64_t row = weight.numel() / V;

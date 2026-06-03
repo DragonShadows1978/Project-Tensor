@@ -78,12 +78,25 @@ optimizers/schedulers, RNN/LSTM/GRU, transformer layers, RoPE/ALiBi, TurboQuant
   fused flash-attention CUDA kernel, TransformerDecoder, GeGLU, fused
   Linear+GELU/SiLU. (RoPE needs the slice/narrow op from Phase 2b.)
 
-### ⬜ Phase 6 — Quantization & APA
-TurboQuant MSE/Prod (Lloyd-Max codebook builder + quantize/dequantize kernels),
-`apa_quant_attention` (port from `apa_cuda/`, but on this engine's autograd
-instead of a PyTorch extension). At this point the standalone library is a
-self-contained, framework-free home for APA — fulfilling the original goal with
-no PyTorch dependency at all.
+### ✅ Phase 6 — Quantization & APA (on the standalone engine)
+- Lloyd-Max codebook builder + per-head rotations (numpy, cached);
+  `apa_quantize_gather` CUDA kernel (searchsorted + codebook gather).
+- `tc.apa_quant_attention` composed from engine ops: per-head quantized "bulk"
+  scores + full-precision "ranking", z-score refinement, mixed softmax·V. The
+  quantized-key path is detached, so exact autograd gives the same grad-routing
+  as the reference (full key on refined positions, quantized key on bulk).
+- Tests: forward parity vs a NumPy reference (dense, causal, multi-bit,
+  full-precision), and finite backward.
+- **This fulfills the original goal**: APA now runs on a self-contained,
+  framework-free C++/CUDA stack with no PyTorch dependency.
+- **Remaining for Phase 6b**: TurboQuantProd (inner-product estimator),
+  exact top-k refinement path (needs sort/topk from Phase 2b), adaptive
+  per-head budget, tiled/flash APA kernel, the reference's approximate backward
+  as an opt-in.
+
+## Cross-cutting remaining work (2b/3b/4b/5b)
+Strided views; full indexing/einsum/sort/topk/cumsum/trig; Conv/RNN/pooling;
+AMP/checkpointing; RoPE/ALiBi; fused flash kernels. Tracked above per phase.
 
 ## Build & test (each phase)
 ```bash

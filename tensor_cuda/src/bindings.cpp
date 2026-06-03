@@ -80,6 +80,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("gelu", [](Tensor& t) { return ops::gelu(t); })
       .def("silu", [](Tensor& t) { return ops::silu(t); })
       .def("abs", [](Tensor& t) { return ops::abs(t); })
+      .def("detach", [](Tensor& t) { return ops::detach(t); })
       .def("sigmoid", [](Tensor& t) { return ops::sigmoid(t); })
       .def("tanh", [](Tensor& t) { return ops::tanh(t); })
       .def("exp", [](Tensor& t) { return ops::exp(t); })
@@ -137,6 +138,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("cat", [](std::vector<Tensor> ts, int dim) { return ops::cat(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("stack", [](std::vector<Tensor> ts, int dim) { return ops::stack(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("embedding", &ops::embedding);
+  m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
+    return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
+  });
 
   // in-place optimizer steps (param/state mutated on device)
   m.def("sgd_step", [](Tensor& p, Tensor& g, Tensor& buf, double lr, double mom, double wd) {

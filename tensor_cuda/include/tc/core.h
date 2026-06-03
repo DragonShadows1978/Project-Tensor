@@ -138,6 +138,11 @@ NDArray matmul(const NDArray& a, const NDArray& b);
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
 
+// APA quantization: per-element searchsorted against `boundaries` (sorted)
+// followed by a gather from `codebook` (len = boundaries+1). Same dtype out.
+NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
+                            const NDArray& codebook);
+
 // Embedding: gather rows of `weight` (V, ...) by int64 `idx` (any shape).
 // Output shape = idx.shape ++ weight.shape[1:].
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx);
