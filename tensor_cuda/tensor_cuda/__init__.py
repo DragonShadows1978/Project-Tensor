@@ -19,7 +19,12 @@ except ImportError:  # pragma: no cover
 
 Tensor = _C.Tensor
 
-_NP_DTYPE = {"float32": np.float32, "float16": np.float16}
+_NP_DTYPE = {
+    "float32": np.float32,
+    "float16": np.float16,
+    "int64": np.int64,
+    "bool": np.bool_,
+}
 
 
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):

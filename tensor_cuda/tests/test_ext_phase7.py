@@ -68,7 +68,11 @@ def test_scheduler_family():
     seen = []
     for _ in range(5):
         sch.step(); seen.append(round(opt.lr, 4))
-    assert seen[1] != seen[2]  # dropped at milestone
+    # Milestones [2, 4] with 1-indexed stepping drop at the 0->1 and 2->3
+    # boundaries (matches PyTorch: [1.0, 0.5, 0.5, 0.25, 0.25]).
+    assert seen[0] != seen[1]  # dropped at milestone 2
+    assert seen[2] != seen[3]  # dropped at milestone 4
+    assert seen == [1.0, 0.5, 0.5, 0.25, 0.25]
 
 
 if __name__ == "__main__":

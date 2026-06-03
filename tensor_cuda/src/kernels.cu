@@ -466,7 +466,7 @@ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int m
   if (keepdim) return out;
   Shape squeezed;
   for (int d = 0; d < nd; ++d) if (!s.reduced[d]) squeezed.push_back(a.shape[d]);
-  if (squeezed.empty()) squeezed.push_back(1);
+  // All axes reduced -> rank-0 scalar (empty shape), not shape (1,).
   return out.reshape(squeezed);
 }
 }  // namespace

@@ -10,6 +10,17 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Disable LTO/IPO. pybind11 enables -flto for Release builds, but nvcc's
+# device-link object carries the CUDA toolkit's LTO bytecode version (e.g. 12.0)
+# while the host gcc expects its own (e.g. 13.1), so the final link dies with a
+# "bytecode stream ... LTO version" mismatch. Setting this BEFORE pybind11 is
+# configured makes pybind11 skip its -flto injection entirely (it only adds LTO
+# when CMAKE_INTERPROCEDURAL_OPTIMIZATION is unset). Override on the command line
+# if your gcc and CUDA toolkit LTO versions actually match.
+if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+endif()
+
 # RTX 3070 is sm_86; include a spread of common archs. Override with
 #   -DCMAKE_CUDA_ARCHITECTURES=86
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
