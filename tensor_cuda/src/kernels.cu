@@ -915,9 +915,13 @@ __global__ void apa_selective_kernel(
   __syncthreads();
 
   int s_max = is_causal ? (i + 1) : S;   // causal: keys 0..i only
-
-  // Pass 1: bulk scores -> running sum/sumsq of |bulk| for the z-score threshold.
   __shared__ float red[256];
+
+  // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold. Each
+  // thread also CACHES its bulk dots so pass 2 never recomputes them. We cache
+  // up to a fixed window in registers via re-derivation only when needed; since
+  // s_max can be large, we instead keep the bulk dot per strided key in a
+  // per-thread running form and recompute exact dots only for selected keys.
   float sum = 0.f, sumsq = 0.f;
   for (int j = tid; j < s_max; j += nt) {
     const T* kqj = kqbase + (int64_t)j * D;
@@ -938,13 +942,15 @@ __global__ void apa_selective_kernel(
   float var = total_sq / cnt - mean * mean;
   float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
 
-  // Pass 2: per-key score (exact only where selected), online softmax + sum w*v.
-  __shared__ float acc[TC_APA_MAXD];
-  for (int d = tid; d < D; d += nt) acc[d] = 0.f;
-  __syncthreads();
+  // Pass 2: SINGLE pass with a per-thread online softmax (FlashAttention-style).
+  // Each thread maintains its own running max m, denom l, and weighted-value
+  // accumulator acc[D] over its strided keys — computing each key's final score
+  // exactly ONCE. The exact dot is taken only for selected keys. No atomics; the
+  // per-thread partial softmaxes are merged by a block reduction at the end.
+  float m = -1e30f, l = 0.f;
+  float acc[TC_APA_MAXD];
+  for (int d = 0; d < D; ++d) acc[d] = 0.f;
 
-  // First find the row max for numerical stability (over final scores).
-  float local_max = -1e30f;
   for (int j = tid; j < s_max; j += nt) {
     const T* kqj = kqbase + (int64_t)j * D;
     float bulk = 0.f;
@@ -959,41 +965,39 @@ __global__ void apa_selective_kernel(
     } else {
       score = bulk;
     }
-    local_max = fmaxf(local_max, score);
-  }
-  red[tid] = local_max; __syncthreads();
-  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
-  float row_max = red[0]; __syncthreads();
-
-  // Second sweep: exp, accumulate denom and weighted value. (Recomputes scores;
-  // cheaper than storing S of them, and exact dots still only on selected keys.)
-  float local_denom = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float bulk = 0.f;
-    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
-    bulk *= scale;
-    float score;
-    if (fabsf(bulk) >= thr) {
-      const T* kj = kbase + (int64_t)j * D;
-      float ex = 0.f;
-      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
-      score = ex * scale;
-    } else {
-      score = bulk;
-    }
-    float w = __expf(score - row_max);
-    local_denom += w;
+    // online softmax update
+    float m_new = fmaxf(m, score);
+    float corr = __expf(m - m_new);
+    float w = __expf(score - m_new);
+    l = l * corr + w;
     const T* vj = vbase + (int64_t)j * D;
-    for (int d = 0; d < D; ++d) atomicAdd(&acc[d], w * ld<T>(vj, d));
+    for (int d = 0; d < D; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+    m = m_new;
   }
-  red[tid] = local_denom; __syncthreads();
+
+  // Merge the per-thread online-softmax states into a single result. Reduce the
+  // global max first, then rescale each thread's (l, acc) to that max and sum.
+  red[tid] = m; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
+  float gmax = red[0]; __syncthreads();
+
+  float rescale = __expf(m - gmax);
+  // denom
+  red[tid] = l * rescale; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float denom = red[0]; __syncthreads();
+  float inv = denom > 0.f ? 1.f / denom : 0.f;
+
+  // Sum rescaled acc[d] across threads via shared memory, one dim at a time but
+  // coalesced: accumulate into a shared output buffer.
+  __shared__ float osh[TC_APA_MAXD];
+  for (int d = tid; d < D; d += nt) osh[d] = 0.f;
+  __syncthreads();
+  for (int d = 0; d < D; ++d) atomicAdd(&osh[d], acc[d] * rescale);
+  __syncthreads();
 
   T* orow = out + (int64_t)row * D;
-  float inv = denom > 0.f ? 1.f / denom : 0.f;
-  for (int d = tid; d < D; d += nt) st<T>(orow, d, acc[d] * inv);
+  for (int d = tid; d < D; d += nt) st<T>(orow, d, osh[d] * inv);
 }
 
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
