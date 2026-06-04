@@ -188,11 +188,45 @@ NDArray NDArray::to(Device dev) const {
   if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k);
   return out;
 }
+namespace {
+// float/half -> uint8 (round, clamp [0,255]) and uint8 -> float/half.
+template <typename T>
+__global__ void cast_to_u8_kernel(const T* s, uint8_t* d, int64_t n) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) {
+    float v = ld<T>(s, i);
+    v = fminf(255.f, fmaxf(0.f, rintf(v)));
+    d[i] = (uint8_t)v;
+  }
+}
+template <typename T>
+__global__ void cast_from_u8_kernel(const uint8_t* s, T* d, int64_t n) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) st<T>(d, i, (float)s[i]);
+}
+}  // namespace
+
 NDArray NDArray::astype(DType dt) const {
   if (dt == dtype) return clone();
   NDArray out(shape, dt, device);
   int64_t n = numel();
   if (n == 0) return out;
+  if (dt == DType::Uint8 && dtype != DType::Uint8) {
+    DISPATCH_FLOAT(dtype, ST, {
+      cast_to_u8_kernel<ST><<<nblk(n), kT>>>(static_cast<ST*>(data_ptr()),
+                                             static_cast<uint8_t*>(out.data_ptr()), n);
+    });
+    cuda_check_last("astype_u8");
+    return out;
+  }
+  if (dtype == DType::Uint8 && dt != DType::Uint8) {
+    DISPATCH_FLOAT(dt, DT, {
+      cast_from_u8_kernel<DT><<<nblk(n), kT>>>(static_cast<uint8_t*>(data_ptr()),
+                                               static_cast<DT*>(out.data_ptr()), n);
+    });
+    cuda_check_last("astype_from_u8");
+    return out;
+  }
   DISPATCH_FLOAT(dtype, ST, {
     DISPATCH_FLOAT(dt, DT, {
       cast_kernel<ST, DT><<<nblk(n), kT>>>(static_cast<ST*>(data_ptr()),
@@ -856,17 +890,24 @@ template <typename T>
 __global__ void apa_selective_kernel(
     const T* q, const T* k, const T* kq, const T* v, T* out,
     int B, int H, int L, int S, int D, float scale, float zthr,
-    int is_causal) {
-  int row = blockIdx.x;            // flat (b,h,i)
+    int is_causal, int KVH, int group) {
+  // GQA-aware: q has H query heads; k/kq/v have KVH key/value heads (KVH <= H,
+  // group = H/KVH). Query head h reads KV head h/group, so the KV tensors are
+  // NEVER expanded to H heads — saves materializing the 4x-repeated k_rep/v_rep.
+  int row = blockIdx.x;            // flat (b,h,i) over the Q heads
   int i = row % L;
   int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;            // which of the KVH heads this query head uses
   int tid = threadIdx.x;
   int nt = blockDim.x;
 
   const T* qrow = q + (int64_t)row * D;
-  const T* kbase = k + (int64_t)bh * S * D;
-  const T* kqbase = kq + (int64_t)bh * S * D;
-  const T* vbase = v + (int64_t)bh * S * D;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kbase = k + kvbh * S * D;
+  const T* kqbase = kq + kvbh * S * D;
+  const T* vbase = v + kvbh * S * D;
 
   // Load this query vector into shared memory (D <= TC_APA_MAXD).
   __shared__ float qsh[TC_APA_MAXD];
@@ -960,6 +1001,9 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 float scale, float zthr, bool is_causal) {
   int B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
   int S = k.shape[2];
+  // GQA: k/kq/v carry KVH heads (<= H). group = H/KVH query heads per KV head.
+  int KVH = (int)k.shape[1];
+  int group = (KVH > 0) ? (H / KVH) : 1;
   NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)D}, q.dtype, q.device);
   int rows = B * H * L;
   int threads = 128;
@@ -969,7 +1013,7 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
           static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
           static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
           static_cast<T*>(out.data_ptr()), B, H, L, S, D, scale, zthr,
-          is_causal ? 1 : 0);
+          is_causal ? 1 : 0, KVH, group);
     });
     cuda_check_last("apa_selective");
   }

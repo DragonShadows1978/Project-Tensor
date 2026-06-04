@@ -115,6 +115,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("detach", [](Tensor& t) { return ops::detach(t); })
       .def("half", [](Tensor& t) { return ops::cast(t, DType::Float16); })
       .def("float", [](Tensor& t) { return ops::cast(t, DType::Float32); })
+      .def("astype", [](Tensor& t, const std::string& dt) {
+        return ops::cast(t, dtype_from_string(dt));
+      })
       .def("sin", [](Tensor& t) { return ops::sin(t); })
       .def("cos", [](Tensor& t) { return ops::cos(t); })
       .def("tan", [](Tensor& t) { return ops::tan(t); })
