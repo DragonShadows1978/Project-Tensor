@@ -170,6 +170,15 @@ NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
 NDArray int4_linear(const NDArray& x, const NDArray& packed,
                     const NDArray& scales, const NDArray& zeros, int group_size);
 
+// Fused sparse APA-Quant attention. q,k,kq,v: (B,H,L,D)/(B,H,S,D). For each
+// query row, the refine threshold is built from the quantized (bulk) scores;
+// the full-precision dot is computed ONLY for keys whose |bulk| >= threshold
+// (mean+zthr*std), the rest keep their quantized score. Online softmax over the
+// resulting scores. Never materializes the L x S score matrix. Inference only.
+NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
+                                const NDArray& kq, const NDArray& v,
+                                float scale, float zthr, bool is_causal);
+
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
 

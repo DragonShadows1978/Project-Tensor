@@ -836,6 +836,146 @@ NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
   return out;
 }
 
+// ------------------------------------------------------- selective APA attention
+// Fused sparse APA-Quant attention. One block per (b,h,query-row); blockDim
+// threads cooperate over the S keys. Mirrors the Rust selective reference:
+//   1) bulk_j = q . k_quant_j   over ALL keys (cheap, quantized keys)
+//   2) build a refine threshold from the BULK scores (z-score: mean+z*std of
+//      |bulk|), so the top ~refine_percentile keys are "selected"
+//   3) score_j = selected ? (q . k_exact_j)   [full precision, ONLY here]
+//                         : bulk_j
+//   4) online softmax over score_j, accumulate sum_j softmax_j * v_j
+// The full-precision dot is computed ONLY for selected keys — that is the whole
+// point: ~85% of keys never get an exact matmul. Never materializes L x S.
+//
+// q,k,k_quant,v: (B,H,L,D) / (B,H,S,D) row-major. out: (B,H,L,D). z is the
+// precomputed z-score for refine_percentile (host-side _norm_ppf). is_causal
+// masks keys j>i. D is capped at TC_APA_MAXD for the per-thread reduction buffers.
+constexpr int TC_APA_MAXD = 256;
+template <typename T>
+__global__ void apa_selective_kernel(
+    const T* q, const T* k, const T* kq, const T* v, T* out,
+    int B, int H, int L, int S, int D, float scale, float zthr,
+    int is_causal) {
+  int row = blockIdx.x;            // flat (b,h,i)
+  int i = row % L;
+  int bh = row / L;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+
+  const T* qrow = q + (int64_t)row * D;
+  const T* kbase = k + (int64_t)bh * S * D;
+  const T* kqbase = kq + (int64_t)bh * S * D;
+  const T* vbase = v + (int64_t)bh * S * D;
+
+  // Load this query vector into shared memory (D <= TC_APA_MAXD).
+  __shared__ float qsh[TC_APA_MAXD];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  int s_max = is_causal ? (i + 1) : S;   // causal: keys 0..i only
+
+  // Pass 1: bulk scores -> running sum/sumsq of |bulk| for the z-score threshold.
+  __shared__ float red[256];
+  float sum = 0.f, sumsq = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float dot = 0.f;
+    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+    float a = fabsf(dot * scale);
+    sum += a; sumsq += a * a;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float total_sq = red[0]; __syncthreads();
+
+  float cnt = (float)s_max;
+  float mean = total / cnt;
+  float var = total_sq / cnt - mean * mean;
+  float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
+
+  // Pass 2: per-key score (exact only where selected), online softmax + sum w*v.
+  __shared__ float acc[TC_APA_MAXD];
+  for (int d = tid; d < D; d += nt) acc[d] = 0.f;
+  __syncthreads();
+
+  // First find the row max for numerical stability (over final scores).
+  float local_max = -1e30f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else {
+      score = bulk;
+    }
+    local_max = fmaxf(local_max, score);
+  }
+  red[tid] = local_max; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
+  float row_max = red[0]; __syncthreads();
+
+  // Second sweep: exp, accumulate denom and weighted value. (Recomputes scores;
+  // cheaper than storing S of them, and exact dots still only on selected keys.)
+  float local_denom = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else {
+      score = bulk;
+    }
+    float w = __expf(score - row_max);
+    local_denom += w;
+    const T* vj = vbase + (int64_t)j * D;
+    for (int d = 0; d < D; ++d) atomicAdd(&acc[d], w * ld<T>(vj, d));
+  }
+  red[tid] = local_denom; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float denom = red[0]; __syncthreads();
+
+  T* orow = out + (int64_t)row * D;
+  float inv = denom > 0.f ? 1.f / denom : 0.f;
+  for (int d = tid; d < D; d += nt) st<T>(orow, d, acc[d] * inv);
+}
+
+NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
+                                const NDArray& kq, const NDArray& v,
+                                float scale, float zthr, bool is_causal) {
+  int B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
+  int S = k.shape[2];
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)D}, q.dtype, q.device);
+  int rows = B * H * L;
+  int threads = 128;
+  if (rows > 0) {
+    DISPATCH_FLOAT(q.dtype, T, {
+      apa_selective_kernel<T><<<rows, threads>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+          static_cast<T*>(out.data_ptr()), B, H, L, S, D, scale, zthr,
+          is_causal ? 1 : 0);
+    });
+    cuda_check_last("apa_selective");
+  }
+  return out;
+}
+
 // ------------------------------------------------------------- int4 quant linear
 // Dequantize a per-group 4-bit weight into a (K, N) fp16/fp32 matrix laid out
 // TRANSPOSED relative to the (N, K) logical weight, so the result feeds straight

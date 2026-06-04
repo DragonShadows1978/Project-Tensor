@@ -230,6 +230,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
      py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
+  // Fused sparse selective APA attention (inference only, no autograd).
+  m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
+                                      double scale, double zthr, bool is_causal) {
+    return Tensor::make(
+        tc::apa_selective_attention(q.data(), k.data(), kq.data(), v.data(),
+                                    (float)scale, (float)zthr, is_causal),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
+     py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
   m.def("im2col", &ops::im2col);
   m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);

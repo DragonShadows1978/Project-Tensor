@@ -68,6 +68,13 @@ def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
+def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
+    """Fused sparse selective APA attention: full-precision dot only on the keys
+    the bulk/quantized pass selects (|bulk| >= mean+zthr*std), rest stay quantized.
+    q,k,kq,v: (B,H,L,D)/(B,H,S,D). Inference only (no autograd)."""
+    return _C.apa_selective_attention(q, k, kq, v, scale, zthr, is_causal)
+
+
 def mse_loss(pred, target):
     return _C.mse_loss(pred, target)
 
@@ -178,5 +185,6 @@ __all__ = [
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_dequant",
+    "apa_selective_attention",
 ]
 __version__ = "0.1.0-phase1"
