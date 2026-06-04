@@ -24,6 +24,7 @@ _NP_DTYPE = {
     "float16": np.float16,
     "int64": np.int64,
     "bool": np.bool_,
+    "uint8": np.uint8,
 }
 
 
@@ -55,6 +56,16 @@ def from_numpy(arr, *, device="cuda", requires_grad=False):
 
 def matmul(a, b):
     return _C.matmul(a, b)
+
+
+def int4_linear(x, packed, scales, zeros, group_size=128):
+    """INT4 group-quantized linear: y = x @ dequant(W)^T. Inference only."""
+    return _C.int4_linear(x, packed, scales, zeros, group_size)
+
+
+def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
+    """Dequantize packed INT4 weight to a (K, N) transposed fp16/fp32 matrix."""
+    return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
 def mse_loss(pred, target):
@@ -166,6 +177,6 @@ __all__ = [
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
-    "weight_tie", "checkpoint", "einsum",
+    "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_dequant",
 ]
 __version__ = "0.1.0-phase1"

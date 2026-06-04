@@ -109,16 +109,24 @@ def _norm_ppf(p):
 
 
 def _quantize_keys(k, R, CB, BND):
-    """k (B,H,S,D) -> dequantized keys (detached constant)."""
-    kd = k.detach()
+    """k (B,H,S,D) -> dequantized keys (detached constant).
+
+    The rotation/quantization tables are fp32; the rotation is done in fp32 for
+    numerical stability regardless of the key dtype, then cast back to the key
+    dtype so the result is consistent with the rest of the attention math (real
+    models run fp16 keys, which would otherwise mismatch the fp32 tables).
+    """
+    out_dtype = k.dtype
+    kd = k.detach().float()
     B, H, S, D = kd.shape
     norms = (kd * kd).sum([-1], True).pow(0.5)
     unit = kd / (norms + 1e-12)
-    Rb = R.reshape([1, H, D, D]).expand([B, H, D, D])
+    Rb = R.float().reshape([1, H, D, D]).expand([B, H, D, D])
     rotated = tc.matmul(unit, Rb.transpose(-2, -1))
-    centroids = tc._C.apa_quantize_gather(rotated, BND, CB)
+    centroids = tc._C.apa_quantize_gather(rotated, BND.float(), CB.float())
     recon = tc.matmul(centroids, Rb) * norms
-    return recon.detach()
+    recon = recon.detach()
+    return recon.half() if out_dtype == "float16" else recon
 
 
 def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.15,

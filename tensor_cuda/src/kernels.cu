@@ -24,6 +24,7 @@ size_t dtype_size(DType dt) {
     case DType::Float16: return 2;
     case DType::Int64: return 8;
     case DType::Bool: return 1;
+    case DType::Uint8: return 1;
   }
   return 4;
 }
@@ -33,6 +34,7 @@ const char* dtype_name(DType dt) {
     case DType::Float16: return "float16";
     case DType::Int64: return "int64";
     case DType::Bool: return "bool";
+    case DType::Uint8: return "uint8";
   }
   return "float32";
 }
@@ -41,6 +43,7 @@ DType dtype_from_string(const std::string& s) {
   if (s == "float16" || s == "half" || s == "f16") return DType::Float16;
   if (s == "int64" || s == "long") return DType::Int64;
   if (s == "bool") return DType::Bool;
+  if (s == "uint8" || s == "u8" || s == "byte") return DType::Uint8;
   throw std::runtime_error("unknown dtype: " + s);
 }
 
@@ -831,6 +834,60 @@ NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
     cuda_check_last("apa_quantize_gather");
   }
   return out;
+}
+
+// ------------------------------------------------------------- int4 quant linear
+// Dequantize a per-group 4-bit weight into a (K, N) fp16/fp32 matrix laid out
+// TRANSPOSED relative to the (N, K) logical weight, so the result feeds straight
+// into matmul(x, W_kn) to compute y = x @ dequant(W)^T. One thread per output
+// element of the (K, N) transposed matrix.
+//   packed : (N, K/2) uint8, even col = low nibble, odd col = high nibble
+//   scales : (N, G) fp16,  zeros : (N, G) fp16,  G = K/group_size
+template <typename T>
+__global__ void int4_dequant_t_kernel(const uint8_t* packed, const __half* scales,
+                                      const __half* zeros, T* out_kn,
+                                      int64_t N, int64_t K, int group_size,
+                                      int64_t G, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;            // idx walks the (K, N) transposed output
+  int64_t k = idx / N;             // input-feature index  [0, K)
+  int64_t col = idx - k * N;       // output-feature index [0, N)  (== row of W)
+  int64_t byte_idx = col * (K / 2) + (k >> 1);
+  uint8_t byte = packed[byte_idx];
+  int q = (k & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+  int64_t g = k / group_size;
+  float scale = __half2float(scales[col * G + g]);
+  float zero = __half2float(zeros[col * G + g]);
+  float w = (float)q * scale + zero;
+  st<T>(out_kn, idx, w);
+}
+
+NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int group_size, DType out_dtype) {
+  int64_t N = packed.shape[0];
+  int64_t K = packed.shape[1] * 2;
+  int64_t G = K / group_size;
+  // Output is the TRANSPOSED dequantized weight: (K, N).
+  NDArray out({K, N}, out_dtype, packed.device);
+  int64_t n = K * N;
+  if (n) {
+    DISPATCH_FLOAT(out_dtype, T, {
+      int4_dequant_t_kernel<T><<<nblk(n), kT>>>(
+          static_cast<uint8_t*>(packed.data_ptr()),
+          static_cast<__half*>(scales.data_ptr()),
+          static_cast<__half*>(zeros.data_ptr()),
+          static_cast<T*>(out.data_ptr()), N, K, group_size, G, n);
+    });
+    cuda_check_last("int4_dequant");
+  }
+  return out;
+}
+
+NDArray int4_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int group_size) {
+  // Dequant W into (K, N) and matmul: (..., K) @ (K, N) -> (..., N).
+  NDArray w_kn = int4_dequant(packed, scales, zeros, group_size, x.dtype);
+  return matmul(x, w_kn);
 }
 
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {

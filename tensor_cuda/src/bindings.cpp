@@ -19,6 +19,7 @@ DType numpy_dtype(const py::array& a) {
   if (dt.kind() == 'f' && dt.itemsize() == 4) return DType::Float32;
   if (dt.kind() == 'f' && dt.itemsize() == 2) return DType::Float16;
   if (dt.kind() == 'i' && dt.itemsize() == 8) return DType::Int64;
+  if (dt.kind() == 'u' && dt.itemsize() == 1) return DType::Uint8;  // packed int4
   if (dt.kind() == 'b') return DType::Bool;
   return DType::Float32;  // others are force-cast to float32 by the wrapper
 }
@@ -40,6 +41,7 @@ py::array tensor_to_numpy(Tensor& t) {
   py::array out;
   if (a.dtype == DType::Float16) out = py::array(py::dtype("float16"), shape);
   else if (a.dtype == DType::Int64) out = py::array(py::dtype("int64"), shape);
+  else if (a.dtype == DType::Uint8) out = py::array(py::dtype("uint8"), shape);
   else out = py::array(py::dtype("float32"), shape);
   NDArray host = a.device.is_cuda() ? a : a;  // to_host handles D2H
   host.to_host(out.request().ptr);
@@ -212,6 +214,22 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });
+  // INT4 group-quantized linear (inference only, no autograd).
+  m.def("int4_linear", [](Tensor& x, Tensor& packed, Tensor& scales,
+                          Tensor& zeros, int group_size) {
+    return Tensor::make(
+        tc::int4_linear(x.data(), packed.data(), scales.data(), zeros.data(), group_size),
+        false);
+  }, py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("group_size") = 128);
+  m.def("int4_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
+                           int group_size, const std::string& out_dtype) {
+    return Tensor::make(
+        tc::int4_dequant(packed.data(), scales.data(), zeros.data(), group_size,
+                         dtype_from_string(out_dtype)),
+        false);
+  }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
   m.def("im2col", &ops::im2col);
   m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);

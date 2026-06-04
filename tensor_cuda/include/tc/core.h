@@ -26,7 +26,7 @@ namespace tc {
 constexpr int TC_MAX_DIMS = 8;
 
 // ----------------------------------------------------------------------- dtype
-enum class DType : int8_t { Float32 = 0, Float16 = 1, Int64 = 2, Bool = 3 };
+enum class DType : int8_t { Float32 = 0, Float16 = 1, Int64 = 2, Bool = 3, Uint8 = 4 };
 
 size_t dtype_size(DType dt);
 const char* dtype_name(DType dt);
@@ -156,6 +156,19 @@ NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t 
 
 // Batched matmul over leading dims; last two dims are (M,K)x(K,N). cuBLAS.
 NDArray matmul(const NDArray& a, const NDArray& b);
+
+// INT4 group-quantized linear: y = x @ dequant(W)^T.
+//   x       : (..., K) fp16/fp32 activations (K == in_features)
+//   packed  : (N, K/2) uint8 — two 4-bit weights per byte, even=low nibble,
+//             odd=high nibble; N == out_features
+//   scales  : (N, K/group_size) fp16 per-group scale
+//   zeros   : (N, K/group_size) fp16 per-group zero point (min)
+// Dequant rule mirrors the reference QuantizedLinear: w = q*scale + zero, with
+// q the 4-bit code in [0,15]. Output dtype = x.dtype, shape (..., N).
+NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int group_size, DType out_dtype);
+NDArray int4_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int group_size);
 
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
