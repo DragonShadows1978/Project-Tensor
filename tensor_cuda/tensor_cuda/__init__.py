@@ -75,6 +75,14 @@ def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
     return _C.apa_selective_attention(q, k, kq, v, scale, zthr, is_causal)
 
 
+def apa_blend_softmax(bulk, rank, zthr):
+    """Fused APA blend+softmax over precomputed bulk/rank score matrices (..., S):
+    per row thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ? rank : bulk;
+    returns softmax(score). Causal masking must be baked into bulk/rank as large
+    negative scores by the caller. Pairs with cuBLAS bulk/rank matmuls."""
+    return _C.apa_blend_softmax(bulk, rank, zthr)
+
+
 def mse_loss(pred, target):
     return _C.mse_loss(pred, target)
 

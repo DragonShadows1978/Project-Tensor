@@ -242,6 +242,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
      py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  // Fused APA blend+softmax over precomputed bulk/rank score matrices (causal
+  // masking baked into the inputs as large-negative scores).
+  m.def("apa_blend_softmax", [](Tensor& bulk, Tensor& rank, double zthr) {
+    return Tensor::make(tc::apa_blend_softmax(bulk.data(), rank.data(),
+                                              (float)zthr, nullptr), false);
+  }, py::arg("bulk"), py::arg("rank"), py::arg("zthr"));
   m.def("im2col", &ops::im2col);
   m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);

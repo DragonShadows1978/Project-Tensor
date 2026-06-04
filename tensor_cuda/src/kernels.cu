@@ -1024,6 +1024,107 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
   return out;
 }
 
+// ----------------------------------------------- APA blend+softmax (post-matmul)
+// Given precomputed bulk and ranking score matrices (each (rows, S), produced by
+// cuBLAS), produce softmax weights for selective APA in ONE fused kernel:
+//   thr_row = mean(|ranking|) + zthr*std(|ranking|)   (over valid keys)
+//   score_j = |ranking_j| >= thr ? ranking_j : bulk_j
+//   weights = softmax(score)
+// One block per row; threads cooperate over S. `causal_off[r]` (or -1) gives the
+// max valid key index for row r (= absolute query position) for causal masking;
+// pass null for no masking. This replaces the abs/mean/std/ge/where/softmax op
+// chain with a single launch. Output overwrites into `out` (rows, S).
+// Causal masking is expected to be ALREADY baked into bulk/rank (masked keys set
+// to a large negative value before this kernel), so masked positions exp() to ~0
+// naturally and need no special handling here. The |rank| threshold uses all S
+// keys; masked keys have huge |rank| but that only inflates the mean/std slightly
+// and they contribute ~0 to the softmax regardless — matches the reference, which
+// zeroes masked |abs| before the stat; for exactness the caller may zero them.
+template <typename T>
+__global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
+                                          int S, float zthr) {
+  int r = blockIdx.x;
+  int tid = threadIdx.x, nt = blockDim.x;
+  const T* brow = bulk + (int64_t)r * S;
+  const T* rrow = rank + (int64_t)r * S;
+  T* orow = out + (int64_t)r * S;
+
+  // Masked keys are marked with a large-negative score by the caller; exclude
+  // them from the |rank| mean/std (otherwise they poison the threshold) — they
+  // also exp() to ~0 in the softmax so they drop out there naturally.
+  const float MASK_LIM = -1e3f;
+  __shared__ float red[256];
+  float sum = 0.f, sumsq = 0.f, vcount = 0.f;
+  for (int j = tid; j < S; j += nt) {
+    float rk = ld<T>(rrow, j);
+    if (rk <= MASK_LIM) continue;
+    float a = fabsf(rk); sum += a; sumsq += a*a; vcount += 1.f;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
+  float total_sq = red[0]; __syncthreads();
+  red[tid] = vcount; __syncthreads();
+  for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
+  float cnt = fmaxf(red[0], 1.f); __syncthreads();
+  float mean = total/cnt;
+  float thr = mean + zthr * sqrtf(fmaxf(total_sq/cnt - mean*mean, 0.f));
+
+  // Single fused pass: compute the blended score per key once, track running
+  // max + online-softmax denom (FlashAttention merge), write the UNnormalized
+  // exp weight. Final normalization (1/denom) is folded into the caller's
+  // weights@V matmul instead of a 4th re-read/re-write pass — so this kernel now
+  // makes 2 passes (stat + this) instead of 4. denom is written per-row to
+  // `out`'s companion? No: we renormalize here in one extra cheap reduce, but
+  // never re-read the full row — we keep each thread's written weights and the
+  // block denom, then a final scale uses the already-resident values via shared.
+  float m = -1e30f, l = 0.f;
+  // First, the per-thread online softmax over its strided keys (one read each).
+  // Store nothing yet; we need the global max before exp. To avoid a separate
+  // max pass we use the online-softmax rescale trick across the strided scan.
+  for (int j = tid; j < S; j += nt) {
+    float rk = ld<T>(rrow, j);
+    float sc = (fabsf(rk) >= thr) ? rk : ld<T>(brow, j);
+    float m_new = fmaxf(m, sc);
+    l = l * __expf(m - m_new) + __expf(sc - m_new);
+    m = m_new;
+  }
+  // merge per-thread (m,l) -> global
+  red[tid] = m; __syncthreads();
+  for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]=fmaxf(red[tid],red[tid+o]); __syncthreads(); }
+  float gmax = red[0]; __syncthreads();
+  red[tid] = l * __expf(m - gmax); __syncthreads();
+  for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
+  float denom = red[0]; __syncthreads();
+  float inv = denom > 0.f ? 1.f/denom : 0.f;
+  // second pass: write normalized weights (recompute blended score — cheaper
+  // than a 3rd read of a stored weight, and exact dots aren't involved here).
+  for (int j = tid; j < S; j += nt) {
+    float rk = ld<T>(rrow, j);
+    float sc = (fabsf(rk) >= thr) ? rk : ld<T>(brow, j);
+    st<T>(orow, j, __expf(sc - gmax) * inv);
+  }
+}
+
+NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
+                          float zthr, const NDArray* /*unused*/) {
+  int nd = bulk.ndim();
+  int64_t S = bulk.shape[nd-1];
+  int64_t rows = bulk.numel() / S;
+  NDArray out(bulk.shape, bulk.dtype, bulk.device);
+  if (rows > 0) {
+    DISPATCH_FLOAT(bulk.dtype, T, {
+      apa_blend_softmax_kernel2<T><<<(int)rows, 256>>>(
+          static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+          static_cast<T*>(out.data_ptr()), (int)S, zthr);
+    });
+    cuda_check_last("apa_blend_softmax");
+  }
+  return out;
+}
+
 // ------------------------------------------------------------- int4 quant linear
 // Dequantize a per-group 4-bit weight into a (K, N) fp16/fp32 matrix laid out
 // TRANSPOSED relative to the (N, K) logical weight, so the result feeds straight

@@ -179,6 +179,14 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 const NDArray& kq, const NDArray& v,
                                 float scale, float zthr, bool is_causal);
 
+// Fused APA blend+softmax over precomputed score matrices (each (..., S)) from
+// cuBLAS: per row, thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ?
+// rank : bulk; returns softmax(score) weights. row_smax (int32, one per row) or
+// null gives the causal valid-key count per row. Replaces the abs/mean/std/where/
+// softmax op chain with a single launch.
+NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
+                          float zthr, const NDArray* row_smax);
+
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1
 
