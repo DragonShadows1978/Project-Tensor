@@ -37,6 +37,8 @@ Tensor tensor_from_numpy(py::array arr, const std::string& device, bool requires
 
 py::array tensor_to_numpy(Tensor& t) {
   NDArray a = t.data();
+  // numpy has no bf16 — upcast to fp32 on device so the host buffer is fp32.
+  if (a.dtype == DType::BFloat16) a = a.astype(DType::Float32);
   std::vector<py::ssize_t> shape(a.shape.begin(), a.shape.end());
   py::array out;
   if (a.dtype == DType::Float16) out = py::array(py::dtype("float16"), shape);

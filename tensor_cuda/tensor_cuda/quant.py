@@ -126,7 +126,10 @@ def _quantize_keys(k, R, CB, BND):
     centroids = tc._C.apa_quantize_gather(rotated, BND.float(), CB.float())
     recon = tc.matmul(centroids, Rb) * norms
     recon = recon.detach()
-    return recon.half() if out_dtype == "float16" else recon
+    # cast back to the key dtype (fp16/bf16) so it matches the query in matmuls
+    if out_dtype in ("float16", "bfloat16"):
+        return recon.astype(out_dtype)
+    return recon
 
 
 def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.15,

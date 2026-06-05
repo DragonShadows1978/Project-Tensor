@@ -20,8 +20,12 @@ def _causal_mask(L, S, device, dtype):
     key = (L, S, device, dtype)
     m = _causal_cache.get(key)
     if m is None:
-        bias = np.triu(np.full((L, S), -1e9, dtype=np.float32), k=1)
-        m = tc.tensor(bias, device=device, dtype=dtype)
+        # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
+        # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
+        bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1)
+        m = tc.tensor(bias, device=device)
+        if dtype in ("float16", "bfloat16"):
+            m = m.astype(dtype)
         _causal_cache[key] = m
     return m
 

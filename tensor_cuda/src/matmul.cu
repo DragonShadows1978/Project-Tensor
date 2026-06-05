@@ -9,6 +9,7 @@
 
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 #include <stdexcept>
 
 namespace tc {
@@ -54,6 +55,11 @@ NDArray matmul(const NDArray& a, const NDArray& b) {
       cublasGemmEx(handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
                    &alpha, bp, CUDA_R_16F, (int)N, ap, CUDA_R_16F, (int)K,
                    &beta, cp, CUDA_R_16F, (int)N, CUBLAS_COMPUTE_32F,
+                   CUBLAS_GEMM_DEFAULT);
+    } else if (a.dtype == DType::BFloat16) {
+      cublasGemmEx(handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+                   &alpha, bp, CUDA_R_16BF, (int)N, ap, CUDA_R_16BF, (int)K,
+                   &beta, cp, CUDA_R_16BF, (int)N, CUBLAS_COMPUTE_32F,
                    CUBLAS_GEMM_DEFAULT);
     } else {
       throw std::runtime_error("matmul supports float32/float16 only");

@@ -26,7 +26,7 @@ namespace tc {
 constexpr int TC_MAX_DIMS = 8;
 
 // ----------------------------------------------------------------------- dtype
-enum class DType : int8_t { Float32 = 0, Float16 = 1, Int64 = 2, Bool = 3, Uint8 = 4 };
+enum class DType : int8_t { Float32 = 0, Float16 = 1, Int64 = 2, Bool = 3, Uint8 = 4, BFloat16 = 5 };
 
 size_t dtype_size(DType dt);
 const char* dtype_name(DType dt);

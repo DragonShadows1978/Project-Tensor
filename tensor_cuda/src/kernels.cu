@@ -7,6 +7,7 @@
 
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 
 #include <cmath>
 #include <cstdio>
@@ -25,6 +26,7 @@ size_t dtype_size(DType dt) {
     case DType::Int64: return 8;
     case DType::Bool: return 1;
     case DType::Uint8: return 1;
+    case DType::BFloat16: return 2;
   }
   return 4;
 }
@@ -35,6 +37,7 @@ const char* dtype_name(DType dt) {
     case DType::Int64: return "int64";
     case DType::Bool: return "bool";
     case DType::Uint8: return "uint8";
+    case DType::BFloat16: return "bfloat16";
   }
   return "float32";
 }
@@ -44,6 +47,7 @@ DType dtype_from_string(const std::string& s) {
   if (s == "int64" || s == "long") return DType::Int64;
   if (s == "bool") return DType::Bool;
   if (s == "uint8" || s == "u8" || s == "byte") return DType::Uint8;
+  if (s == "bfloat16" || s == "bf16" || s == "bfloat") return DType::BFloat16;
   throw std::runtime_error("unknown dtype: " + s);
 }
 
@@ -117,9 +121,11 @@ namespace {
 template <typename T> __device__ __forceinline__ float ld(const T* p, int64_t i);
 template <> __device__ __forceinline__ float ld<float>(const float* p, int64_t i) { return p[i]; }
 template <> __device__ __forceinline__ float ld<__half>(const __half* p, int64_t i) { return __half2float(p[i]); }
+template <> __device__ __forceinline__ float ld<__nv_bfloat16>(const __nv_bfloat16* p, int64_t i) { return __bfloat162float(p[i]); }
 template <typename T> __device__ __forceinline__ void st(T* p, int64_t i, float v);
 template <> __device__ __forceinline__ void st<float>(float* p, int64_t i, float v) { p[i] = v; }
 template <> __device__ __forceinline__ void st<__half>(__half* p, int64_t i, float v) { p[i] = __float2half(v); }
+template <> __device__ __forceinline__ void st<__nv_bfloat16>(__nv_bfloat16* p, int64_t i, float v) { p[i] = __float2bfloat16(v); }
 
 constexpr int kT = 256;
 inline int nblk(int64_t n) { return static_cast<int>((n + kT - 1) / kT); }
@@ -140,7 +146,8 @@ __global__ void cast_kernel(const SrcT* s, DstT* d, int64_t n) {
   do {                                                                   \
     if ((DT) == DType::Float32) { using T = float; __VA_ARGS__; }        \
     else if ((DT) == DType::Float16) { using T = __half; __VA_ARGS__; }  \
-    else throw std::runtime_error("op supports float32/float16 only");   \
+    else if ((DT) == DType::BFloat16) { using T = __nv_bfloat16; __VA_ARGS__; } \
+    else throw std::runtime_error("op supports float32/float16/bfloat16 only"); \
   } while (0)
 
 NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
