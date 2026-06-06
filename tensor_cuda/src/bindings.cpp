@@ -227,6 +227,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
      py::arg("group_size") = 128);
+  m.def("int4_linear_fused", [](Tensor& x, Tensor& packed, Tensor& scales,
+                                Tensor& zeros, int group_size) {
+    return Tensor::make(
+        tc::int4_linear_fused(x.data(), packed.data(), scales.data(), zeros.data(), group_size),
+        false);
+  }, py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("group_size") = 128);
   m.def("int4_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
                            int group_size, const std::string& out_dtype) {
     return Tensor::make(
@@ -284,4 +291,5 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("is_grad_enabled", &grad_enabled);
   m.def("set_grad_enabled", &set_grad_enabled);
   m.def("synchronize", &cuda_sync);
+  m.def("empty_cache", &empty_cache);
 }

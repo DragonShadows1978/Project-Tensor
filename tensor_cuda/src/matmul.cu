@@ -40,30 +40,36 @@ NDArray matmul(const NDArray& a, const NDArray& b) {
 
   NDArray out(out_shape, a.dtype, a.device);
   int64_t strideA = M * K, strideB = Kb * N, strideC = M * N;
+  // b may be a 2D operand broadcast across the batch: stride 0 reuses it (cuBLAS
+  // strided-batched supports a zero stride). Collapse the former per-batch loop
+  // into a single strided-batched launch — one kernel-launch + cuBLAS heuristic
+  // pick for the whole batch instead of `batch` of them.
+  int64_t sB = b_batched ? strideB : 0;
   float alpha = 1.f, beta = 0.f;
+  void* ap = a.data_ptr();
+  void* bp = b.data_ptr();
+  void* cp = out.data_ptr();
 
-  for (int64_t bi = 0; bi < batch; ++bi) {
-    const char* ap = static_cast<char*>(a.data_ptr()) + bi * strideA * dtype_size(a.dtype);
-    const char* bp = static_cast<char*>(b.data_ptr()) + (b_batched ? bi * strideB : 0) * dtype_size(b.dtype);
-    char* cp = static_cast<char*>(out.data_ptr()) + bi * strideC * dtype_size(a.dtype);
-    if (a.dtype == DType::Float32) {
-      cublasSgemm(handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-                  &alpha, reinterpret_cast<const float*>(bp), (int)N,
-                  reinterpret_cast<const float*>(ap), (int)K,
-                  &beta, reinterpret_cast<float*>(cp), (int)N);
-    } else if (a.dtype == DType::Float16) {
-      cublasGemmEx(handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-                   &alpha, bp, CUDA_R_16F, (int)N, ap, CUDA_R_16F, (int)K,
-                   &beta, cp, CUDA_R_16F, (int)N, CUBLAS_COMPUTE_32F,
-                   CUBLAS_GEMM_DEFAULT);
-    } else if (a.dtype == DType::BFloat16) {
-      cublasGemmEx(handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-                   &alpha, bp, CUDA_R_16BF, (int)N, ap, CUDA_R_16BF, (int)K,
-                   &beta, cp, CUDA_R_16BF, (int)N, CUBLAS_COMPUTE_32F,
-                   CUBLAS_GEMM_DEFAULT);
-    } else {
-      throw std::runtime_error("matmul supports float32/float16 only");
-    }
+  if (a.dtype == DType::Float32) {
+    cublasSgemmStridedBatched(
+        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, reinterpret_cast<const float*>(bp), (int)N, sB,
+        reinterpret_cast<const float*>(ap), (int)K, strideA,
+        &beta, reinterpret_cast<float*>(cp), (int)N, strideC, (int)batch);
+  } else if (a.dtype == DType::Float16) {
+    cublasGemmStridedBatchedEx(
+        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, bp, CUDA_R_16F, (int)N, sB, ap, CUDA_R_16F, (int)K, strideA,
+        &beta, cp, CUDA_R_16F, (int)N, strideC, (int)batch,
+        CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
+  } else if (a.dtype == DType::BFloat16) {
+    cublasGemmStridedBatchedEx(
+        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, bp, CUDA_R_16BF, (int)N, sB, ap, CUDA_R_16BF, (int)K, strideA,
+        &beta, cp, CUDA_R_16BF, (int)N, strideC, (int)batch,
+        CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
+  } else {
+    throw std::runtime_error("matmul supports float32/float16/bfloat16 only");
   }
   cuda_check_last("matmul");
   return out;

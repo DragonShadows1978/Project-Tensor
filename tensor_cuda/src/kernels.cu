@@ -15,6 +15,9 @@
 #include <cstring>
 #include <stdexcept>
 #include <utility>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 
 namespace tc {
 
@@ -89,6 +92,20 @@ void cuda_sync() {
 }
 
 // --------------------------------------------------------------------- Storage
+// Plain cudaMalloc/cudaFree per allocation.
+//
+// NOTE: a caching free-list allocator was tried (exact-size-keyed pool behind
+// Storage ctor/dtor) and REVERTED. On an 8GB card it regressed the context
+// ceiling badly: a forward pass allocates many DIFFERENTLY-sized transients
+// (per-layer attention scores, FFN intermediates, the blend path's H*L*S
+// tensors at varying S), and exact-size bucketing retained a separate block per
+// distinct size instead of letting the driver reuse one region — pinning ~2GB
+// and cutting the Mistral refine=0.05 ceiling from 16384 to 8192 (measured).
+// The pool's speed benefit was never measured to justify that. A properly
+// size-ranged / arena allocator could be revisited later as its own change,
+// gated on a context-ceiling benchmark — not reintroduced blind.
+void empty_cache() { /* no pool to release; kept so the binding stays valid */ }
+
 Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(device_) {
   if (nbytes == 0) { ptr = nullptr; return; }
   if (device.is_cuda()) {
@@ -893,7 +910,13 @@ NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
 // precomputed z-score for refine_percentile (host-side _norm_ppf). is_causal
 // masks keys j>i. D is capped at TC_APA_MAXD for the per-thread reduction buffers.
 constexpr int TC_APA_MAXD = 256;
-template <typename T>
+// DMAX is the compile-time size of the per-thread acc[] register array. Sizing it
+// to the actual head_dim (64/128) instead of the 256 worst case keeps acc[] in
+// registers/L1 instead of spilling to local (global-backed) memory — a large win
+// on the selective kernel's hot inner loop. The launcher dispatches the smallest
+// DMAX >= D. qsh/osh stay TC_APA_MAXD: they are __shared__, not per-thread, so
+// they cost shared memory (cheap, plentiful) not registers.
+template <typename T, int DMAX>
 __global__ void apa_selective_kernel(
     const T* q, const T* k, const T* kq, const T* v, T* out,
     int B, int H, int L, int S, int D, float scale, float zthr,
@@ -916,8 +939,8 @@ __global__ void apa_selective_kernel(
   const T* kqbase = kq + kvbh * S * D;
   const T* vbase = v + kvbh * S * D;
 
-  // Load this query vector into shared memory (D <= TC_APA_MAXD).
-  __shared__ float qsh[TC_APA_MAXD];
+  // Load this query vector into shared memory (D <= DMAX <= TC_APA_MAXD).
+  __shared__ float qsh[DMAX];
   for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
   __syncthreads();
 
@@ -955,7 +978,7 @@ __global__ void apa_selective_kernel(
   // exactly ONCE. The exact dot is taken only for selected keys. No atomics; the
   // per-thread partial softmaxes are merged by a block reduction at the end.
   float m = -1e30f, l = 0.f;
-  float acc[TC_APA_MAXD];
+  float acc[DMAX];               // DMAX == smallest power-of-two head_dim >= D
   for (int d = 0; d < D; ++d) acc[d] = 0.f;
 
   for (int j = tid; j < s_max; j += nt) {
@@ -995,12 +1018,33 @@ __global__ void apa_selective_kernel(
   float denom = red[0]; __syncthreads();
   float inv = denom > 0.f ? 1.f / denom : 0.f;
 
-  // Sum rescaled acc[d] across threads via shared memory, one dim at a time but
-  // coalesced: accumulate into a shared output buffer.
-  __shared__ float osh[TC_APA_MAXD];
-  for (int d = tid; d < D; d += nt) osh[d] = 0.f;
+  // Sum rescaled acc[d] across threads. The previous merge had all nt threads
+  // atomicAdd into the same osh[d] addresses — nt-way same-address contention,
+  // fully serialized per dim. Instead: each warp reduces its lanes' acc[d] with
+  // warp shuffles (no atomics, no bank conflicts) and writes one per-warp partial
+  // per dim into shared; then a SINGLE __syncthreads precedes combining the (few)
+  // per-warp partials. nt is 128 (== 4 warps) by construction, so this is 2
+  // barriers total instead of ~D serialized atomic rounds.
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = (nt + 31) >> 5;     // == 4 for nt=128
+  __shared__ float osh[DMAX];
+  __shared__ float wpart[4][DMAX];   // [warp][dim] partials; nt=128 -> 4 warps
+  for (int d = 0; d < D; ++d) {
+    float val = acc[d] * rescale;
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1)
+      val += __shfl_down_sync(FULL, val, off);
+    if (lane == 0) wpart[warp][d] = val;
+  }
   __syncthreads();
-  for (int d = 0; d < D; ++d) atomicAdd(&osh[d], acc[d] * rescale);
+  // Combine the nwarp per-warp partials per dim, distributed across threads.
+  for (int d = tid; d < D; d += nt) {
+    float s = 0.f;
+    for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
+    osh[d] = s;
+  }
   __syncthreads();
 
   T* orow = out + (int64_t)row * D;
@@ -1019,12 +1063,24 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
   int rows = B * H * L;
   int threads = 128;
   if (rows > 0) {
+    // Dispatch the smallest compile-time DMAX >= D so acc[] stays register/L1
+    // resident. Real head_dims are 64 (TinyLlama) and 128 (Mistral/Qwen/OLMoE);
+    // 256 is the safety fallback (== the old behaviour) for anything larger.
+    if (D > TC_APA_MAXD) {
+      throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD");
+    }
     DISPATCH_FLOAT(q.dtype, T, {
-      apa_selective_kernel<T><<<rows, threads>>>(
-          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
-          static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
-          static_cast<T*>(out.data_ptr()), B, H, L, S, D, scale, zthr,
-          is_causal ? 1 : 0, KVH, group);
+      auto launch = [&](auto dmax_tag) {
+        constexpr int DMAX = decltype(dmax_tag)::value;
+        apa_selective_kernel<T, DMAX><<<rows, threads>>>(
+            static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+            static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+            static_cast<T*>(out.data_ptr()), B, H, L, S, D, scale, zthr,
+            is_causal ? 1 : 0, KVH, group);
+      };
+      if (D <= 64)        launch(std::integral_constant<int, 64>{});
+      else if (D <= 128)  launch(std::integral_constant<int, 128>{});
+      else                launch(std::integral_constant<int, TC_APA_MAXD>{});
     });
     cuda_check_last("apa_selective");
   }
@@ -1034,19 +1090,18 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
 // ----------------------------------------------- APA blend+softmax (post-matmul)
 // Given precomputed bulk and ranking score matrices (each (rows, S), produced by
 // cuBLAS), produce softmax weights for selective APA in ONE fused kernel:
-//   thr_row = mean(|ranking|) + zthr*std(|ranking|)   (over valid keys)
-//   score_j = |ranking_j| >= thr ? ranking_j : bulk_j
+//   thr_row = mean(|bulk|) + zthr*std(|bulk|)   (over valid keys)
+//   score_j = |bulk_j| >= thr ? ranking_j : bulk_j
 //   weights = softmax(score)
-// One block per row; threads cooperate over S. `causal_off[r]` (or -1) gives the
-// max valid key index for row r (= absolute query position) for causal masking;
-// pass null for no masking. This replaces the abs/mean/std/ge/where/softmax op
-// chain with a single launch. Output overwrites into `out` (rows, S).
-// Causal masking is expected to be ALREADY baked into bulk/rank (masked keys set
-// to a large negative value before this kernel), so masked positions exp() to ~0
-// naturally and need no special handling here. The |rank| threshold uses all S
-// keys; masked keys have huge |rank| but that only inflates the mean/std slightly
-// and they contribute ~0 to the softmax regardless — matches the reference, which
-// zeroes masked |abs| before the stat; for exactness the caller may zero them.
+// Selection is on |bulk| (the cheap quantized scores), matching the fused
+// apa_selective_kernel and the Python reference: APA picks which keys to refine
+// using only the signal it already has, never the expensive |ranking| it is
+// deciding whether to recompute.
+// One block per row; threads cooperate over S. This replaces the
+// abs/mean/std/ge/where/softmax op chain with a single launch. Output overwrites
+// into `out` (rows, S). Causal masking is expected to be ALREADY baked into
+// bulk/rank (masked keys set to a large negative value before this kernel), so
+// masked positions exp() to ~0 naturally; they are also excluded from the stat.
 template <typename T>
 __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
                                           int S, float zthr) {
@@ -1056,16 +1111,19 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   const T* rrow = rank + (int64_t)r * S;
   T* orow = out + (int64_t)r * S;
 
-  // Masked keys are marked with a large-negative score by the caller; exclude
-  // them from the |rank| mean/std (otherwise they poison the threshold) — they
-  // also exp() to ~0 in the softmax so they drop out there naturally.
-  const float MASK_LIM = -1e3f;
+  // Masked keys are marked with a large-negative score by the caller (in BOTH
+  // bulk and rank); exclude them from the |bulk| mean/std (otherwise they poison
+  // the threshold) — they also exp() to ~0 in the softmax so they drop out there.
+  // The causal mask bias is -1e4 (functional.py / _cublas_blend_attention); set
+  // the cutoff safely between real scaled logits (O(+-50)) and -1e4 so a
+  // legitimate very-negative logit is never mistaken for a masked key.
+  const float MASK_LIM = -5e3f;
   __shared__ float red[256];
   float sum = 0.f, sumsq = 0.f, vcount = 0.f;
   for (int j = tid; j < S; j += nt) {
-    float rk = ld<T>(rrow, j);
-    if (rk <= MASK_LIM) continue;
-    float a = fabsf(rk); sum += a; sumsq += a*a; vcount += 1.f;
+    float bk = ld<T>(brow, j);
+    if (bk <= MASK_LIM) continue;
+    float a = fabsf(bk); sum += a; sumsq += a*a; vcount += 1.f;
   }
   red[tid] = sum; __syncthreads();
   for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
@@ -1091,9 +1149,11 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   // First, the per-thread online softmax over its strided keys (one read each).
   // Store nothing yet; we need the global max before exp. To avoid a separate
   // max pass we use the online-softmax rescale trick across the strided scan.
+  // Selection on |bulk|: a masked key (bulk <= MASK_LIM) keeps its large-negative
+  // bulk value (exp()s to ~0); otherwise refine to rank when |bulk| >= thr.
   for (int j = tid; j < S; j += nt) {
-    float rk = ld<T>(rrow, j);
-    float sc = (fabsf(rk) >= thr) ? rk : ld<T>(brow, j);
+    float bk = ld<T>(brow, j);
+    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
     float m_new = fmaxf(m, sc);
     l = l * __expf(m - m_new) + __expf(sc - m_new);
     m = m_new;
@@ -1108,10 +1168,13 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   float inv = denom > 0.f ? 1.f/denom : 0.f;
   // second pass: write normalized weights (recompute blended score — cheaper
   // than a 3rd read of a stored weight, and exact dots aren't involved here).
+  // Clamp sc-gmax at the low end so masked/very-negative scores hit a safe
+  // __expf input (expf flushes to 0 below ~-88 for fp32; clamp avoids any
+  // denormal/edge behaviour) — weight is ~0 there anyway.
   for (int j = tid; j < S; j += nt) {
-    float rk = ld<T>(rrow, j);
-    float sc = (fabsf(rk) >= thr) ? rk : ld<T>(brow, j);
-    st<T>(orow, j, __expf(sc - gmax) * inv);
+    float bk = ld<T>(brow, j);
+    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+    st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
   }
 }
 
@@ -1160,6 +1223,18 @@ __global__ void int4_dequant_t_kernel(const uint8_t* packed, const __half* scale
 
 NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
                      const NDArray& zeros, int group_size, DType out_dtype) {
+  // The kernel reinterprets scales/zeros as __half* unconditionally; fp32 inputs
+  // would be read as 2-byte halves (garbage weights, silently). Fail loud.
+  if (scales.dtype != DType::Float16 || zeros.dtype != DType::Float16) {
+    throw std::runtime_error(
+        "int4_dequant: scales and zeros must be float16 (got scales=" +
+        std::string(dtype_name(scales.dtype)) + ", zeros=" +
+        std::string(dtype_name(zeros.dtype)) + ")");
+  }
+  if (packed.dtype != DType::Uint8) {
+    throw std::runtime_error("int4_dequant: packed weights must be uint8 (got " +
+                             std::string(dtype_name(packed.dtype)) + ")");
+  }
   int64_t N = packed.shape[0];
   int64_t K = packed.shape[1] * 2;
   int64_t G = K / group_size;
@@ -1184,6 +1259,85 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
   // Dequant W into (K, N) and matmul: (..., K) @ (K, N) -> (..., N).
   NDArray w_kn = int4_dequant(packed, scales, zeros, group_size, x.dtype);
   return matmul(x, w_kn);
+}
+
+// ----------------------------------------------- fused int4 dequant-GEMM (#12)
+// y[M,N] = x[M,K] @ dequant(W)[N,K]^T, with the int4 weight dequantized into
+// shared-memory tiles INSIDE the GEMM — never materializing the full (K,N) fp16
+// weight buffer that int4_linear's two-stage path allocates (~112 MB for a
+// 14336x4096 down_proj; ~416 MB/layer of transient). This removes that peak-VRAM
+// transient (the real prize) and the extra round-trip of writing+rereading the
+// dequantized weight. A classic 16x16 shared-memory tiled GEMM; the B (weight)
+// tile is unpacked + scaled on load. Correctness-identical to int4_linear; this
+// is an OPT-IN path (the cuBLAS two-stage stays the default until benchmarked to
+// win — a hand GEMM can lose to cuBLAS at large N).
+//   packed (N,K/2) uint8, scales/zeros (N,G) fp16, G=K/group_size.
+#define TC_I4_TILE 16
+template <typename T>
+__global__ void int4_gemm_fused_kernel(
+    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,
+    T* y, int M, int N, int K, int group_size, int G) {
+  __shared__ float xs[TC_I4_TILE][TC_I4_TILE];   // x tile  [row][k]
+  __shared__ float ws[TC_I4_TILE][TC_I4_TILE];   // Wdq tile [k][col]
+  int row = blockIdx.y * TC_I4_TILE + threadIdx.y;   // m in [0,M)
+  int col = blockIdx.x * TC_I4_TILE + threadIdx.x;   // n in [0,N)
+  float acc = 0.f;
+  for (int k0 = 0; k0 < K; k0 += TC_I4_TILE) {
+    // load x[row, k0+tx]
+    int kx = k0 + threadIdx.x;
+    xs[threadIdx.y][threadIdx.x] =
+        (row < M && kx < K) ? ld<T>(x, (int64_t)row * K + kx) : 0.f;
+    // load + dequant W[col, k0+ty]  (weight row = output col)
+    int kw = k0 + threadIdx.y;
+    float wv = 0.f;
+    if (col < N && kw < K) {
+      int64_t byte_idx = (int64_t)col * (K / 2) + (kw >> 1);
+      uint8_t byte = packed[byte_idx];
+      int q = (kw & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+      int g = kw / group_size;
+      float sc = __half2float(scales[(int64_t)col * G + g]);
+      float ze = __half2float(zeros[(int64_t)col * G + g]);
+      wv = (float)q * sc + ze;
+    }
+    ws[threadIdx.y][threadIdx.x] = wv;
+    __syncthreads();
+    #pragma unroll
+    for (int t = 0; t < TC_I4_TILE; ++t) acc += xs[threadIdx.y][t] * ws[t][threadIdx.x];
+    __syncthreads();
+  }
+  if (row < M && col < N) st<T>(y, (int64_t)row * N + col, acc);
+}
+
+NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int group_size) {
+  if (scales.dtype != DType::Float16 || zeros.dtype != DType::Float16)
+    throw std::runtime_error("int4_linear_fused: scales/zeros must be float16");
+  if (packed.dtype != DType::Uint8)
+    throw std::runtime_error("int4_linear_fused: packed must be uint8");
+  int nd = x.ndim();
+  int64_t K = x.shape[nd - 1];
+  int64_t N = packed.shape[0];
+  if (packed.shape[1] * 2 != K)
+    throw std::runtime_error("int4_linear_fused: K mismatch");
+  int64_t M = x.numel() / K;
+  int G = (int)(K / group_size);
+  Shape os;
+  for (int d = 0; d < nd - 1; ++d) os.push_back(x.shape[d]);
+  os.push_back(N);
+  NDArray out(os, x.dtype, x.device);
+  if (M == 0 || N == 0) return out;
+  dim3 block(TC_I4_TILE, TC_I4_TILE);
+  dim3 grid((int)((N + TC_I4_TILE - 1) / TC_I4_TILE),
+            (int)((M + TC_I4_TILE - 1) / TC_I4_TILE));
+  DISPATCH_FLOAT(x.dtype, T, {
+    int4_gemm_fused_kernel<T><<<grid, block>>>(
+        static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
+        static_cast<__half*>(scales.data_ptr()), static_cast<__half*>(zeros.data_ptr()),
+        static_cast<T*>(out.data_ptr()), (int)M, (int)N, (int)K, group_size, G);
+  });
+  cuda_check_last("int4_linear_fused");
+  return out;
 }
 
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {

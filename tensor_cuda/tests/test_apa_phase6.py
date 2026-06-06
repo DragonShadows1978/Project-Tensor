@@ -38,7 +38,11 @@ def _ref(q, k, v, bits, pct, causal):
     if pct >= 1.0:
         scores = ranking
     else:
-        absr = np.abs(ranking)
+        # Selection is on |bulk| (the cheap quantized scores), matching the fused
+        # apa_selective_kernel: APA picks which keys to refine using only the
+        # signal it already has, never the expensive |ranking| it is deciding
+        # whether to compute. (kernels.cu apa_selective_kernel.)
+        absr = np.abs(bulk)
         if causal:
             absr = np.where(np.triu(np.ones((q.shape[2], S), bool), 1), 0.0, absr)
         from tensor_cuda.quant import _norm_ppf

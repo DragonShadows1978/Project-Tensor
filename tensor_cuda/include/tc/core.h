@@ -169,6 +169,11 @@ NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
                      const NDArray& zeros, int group_size, DType out_dtype);
 NDArray int4_linear(const NDArray& x, const NDArray& packed,
                     const NDArray& scales, const NDArray& zeros, int group_size);
+// Fused dequant-GEMM variant: same result as int4_linear but dequantizes the
+// int4 weight into shared-memory tiles inside the GEMM, avoiding the full (K,N)
+// fp16 weight transient. Opt-in (a custom GEMM may lose to cuBLAS at large N).
+NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros, int group_size);
 
 // Fused sparse APA-Quant attention. q,k,kq,v: (B,H,L,D)/(B,H,S,D). For each
 // query row, the refine threshold is built from the quantized (bulk) scores;
@@ -236,5 +241,10 @@ void scale_(NDArray& param, double s);
 // CUDA bookkeeping.
 void cuda_sync();
 void cuda_check_last(const char* where);
+
+// Release all device blocks held idle by the caching allocator back to the
+// driver. Live tensors are unaffected. Call under memory pressure or to measure
+// true steady-state usage.
+void empty_cache();
 
 }  // namespace tc

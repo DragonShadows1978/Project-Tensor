@@ -159,13 +159,25 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
     if refine_percentile >= 1.0:
         scores = ranking
     else:
-        absr = ranking.abs()
+        # Selection criterion must match the fused apa_selective_kernel, which
+        # thresholds on |bulk| (the cheap quantized scores) and refines the keys
+        # it picks — you cannot legitimately peek at the expensive |ranking| to
+        # decide whether to compute it. (kernels.cu apa_selective_kernel:937-967.)
+        # Compute the mean/std stat in fp32 (chaining mean/var/std through fp16
+        # loses ~3 digits and diverges the Python mask from the fp32 kernel on
+        # top-percentile boundary keys), then compare in fp32 and cast the 0/1
+        # mask back to the operand dtype — tc.where dispatches on the operand
+        # dtype and reinterprets the condition buffer as that same dtype, so a
+        # fp32 mask against fp16 operands would be read as garbage.
+        absr_f = bulk.abs().float()
         if is_causal:
             cmask = np.triu(np.ones((L, S), np.float32), 1)
-            absr = absr.masked_fill(tc.tensor(cmask, device=dev), 0.0)
+            absr_f = absr_f.masked_fill(tc.tensor(cmask, device=dev), 0.0)
         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
-        thr = absr.mean([-1], True) + absr.std([-1], True) * z
-        mask = absr.ge(thr)            # detached 0/1
+        thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
+        mask = absr_f.ge(thr)          # detached 0/1, fp32 comparison
+        if bulk.dtype != "float32":
+            mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
         scores = tc.where(mask, ranking, bulk)
 
     weights = scores.softmax(-1)

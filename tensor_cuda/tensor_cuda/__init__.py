@@ -27,9 +27,19 @@ _NP_DTYPE = {
     "uint8": np.uint8,
 }
 
+# bfloat16 has no NumPy equivalent: build the host array as fp32 and cast the
+# device tensor to bf16 afterward. Listing it here so callers passing
+# dtype="bfloat16" no longer fall through _NP_DTYPE.get(..., np.float32) and get
+# a SILENT fp32 downcast (which corrupts bf16 constants for OLMoE/Qwen-class
+# models). dtype_from_string in the C++ already supports "bfloat16".
+_DEVICE_CAST_DTYPE = {"bfloat16"}
+
 
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
     """Create a Tensor from array-like data."""
+    if dtype in _DEVICE_CAST_DTYPE:
+        arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+        return _C.tensor(arr, device, requires_grad).astype(dtype)
     arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
     arr = np.ascontiguousarray(arr)
     return _C.tensor(arr, device, requires_grad)
@@ -39,6 +49,9 @@ def _factory(np_fn):
     def make(*shape, device="cuda", dtype="float32", requires_grad=False):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
             shape = tuple(shape[0])
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
         arr = np_fn(shape).astype(_NP_DTYPE.get(dtype, np.float32))
         return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
     return make
@@ -59,8 +72,17 @@ def matmul(a, b):
 
 
 def int4_linear(x, packed, scales, zeros, group_size=128):
-    """INT4 group-quantized linear: y = x @ dequant(W)^T. Inference only."""
+    """INT4 group-quantized linear: y = x @ dequant(W)^T. Inference only.
+    Two-stage: dequant W to a full (K,N) fp16 buffer then cuBLAS matmul."""
     return _C.int4_linear(x, packed, scales, zeros, group_size)
+
+
+def int4_linear_fused(x, packed, scales, zeros, group_size=128):
+    """INT4 linear via a fused dequant-GEMM — same result as int4_linear but
+    dequantizes the weight in shared-memory tiles inside the GEMM, avoiding the
+    full (K,N) fp16 weight transient. Opt-in: a hand GEMM can lose to cuBLAS at
+    large N, so benchmark before defaulting to it."""
+    return _C.int4_linear_fused(x, packed, scales, zeros, group_size)
 
 
 def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
@@ -166,6 +188,12 @@ def synchronize():
     _C.synchronize()
 
 
+def empty_cache():
+    """Release device blocks held idle by the caching allocator back to the
+    driver. Live tensors are unaffected."""
+    _C.empty_cache()
+
+
 def is_grad_enabled():
     return _C.is_grad_enabled()
 
@@ -190,9 +218,9 @@ apa_quant_attention = quant.apa_quant_attention
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
     "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
-    "synchronize", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
+    "synchronize", "empty_cache", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
-    "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_dequant",
-    "apa_selective_attention",
+    "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
+    "int4_dequant", "apa_selective_attention",
 ]
 __version__ = "0.1.0-phase1"
