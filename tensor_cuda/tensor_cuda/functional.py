@@ -22,7 +22,14 @@ def _causal_mask(L, S, device, dtype):
     if m is None:
         # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
         # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
-        bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1)
+        # BOTTOM-RIGHT aligned (k = 1 + S - L): when S > L the L queries are the
+        # LAST L positions of S keys (KV-cache decode, grafted/injected prefix),
+        # so row i attends cols 0..(S-L)+i — prefix fully visible, causal among
+        # the queries. Square (S == L) reduces to the standard k=1 mask. A plain
+        # triu(k=1) on a rectangle is TOP-LEFT aligned and silently blinds the
+        # queries to most of the prefix AND to each other (measured: predicted
+        # ' briefing' from the first visible graft tokens instead of recall).
+        bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1 + (S - L))
         m = tc.tensor(bias, device=device)
         if dtype in ("float16", "bfloat16"):
             m = m.astype(dtype)
