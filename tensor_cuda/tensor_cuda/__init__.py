@@ -67,8 +67,17 @@ def from_numpy(arr, *, device="cuda", requires_grad=False):
     return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
 
 
-def matmul(a, b):
-    return _C.matmul(a, b)
+def matmul(a, b, alpha=1.0, trans_b=False):
+    # trans_b reads b as (..., N, K) row-major via cuBLAS OP_T — no transpose
+    # copy. alpha is applied in the fp32 accumulator before the 16-bit store.
+    return _C.matmul(a, b, alpha, trans_b)
+
+
+def rms_norm(x, w, eps=1e-6):
+    """Fused RMSNorm over the last dim (single kernel, fp32 accumulate,
+    output in x's dtype). Inference-only: backward raises — training code
+    must use an unfused op chain. w must be fp32."""
+    return _C.rms_norm(x, w, eps)
 
 
 def int4_linear(x, packed, scales, zeros, group_size=128):
@@ -194,6 +203,15 @@ def empty_cache():
     _C.empty_cache()
 
 
+def set_alloc_pooling(enabled):
+    """Enable the stream-ordered transients pool. Call AFTER model/weight
+    loading: allocations made while disabled use raw cudaMalloc (persistents
+    must stay raw — live pooled blocks pin pool chunks and cost context
+    ceiling at OOM walls). Forward-pass transients allocated while enabled
+    are pooled, removing the cudaMalloc/cudaFree serialization tax."""
+    _C.set_alloc_pooling(bool(enabled))
+
+
 def is_grad_enabled():
     return _C.is_grad_enabled()
 
@@ -217,8 +235,8 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
-    "synchronize", "empty_cache", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
+    "matmul", "rms_norm", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "int4_dequant", "apa_selective_attention",

@@ -207,7 +207,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("requires_grad") = false);
 
   // free-function ops
-  m.def("matmul", &ops::matmul);
+  m.def("matmul", &ops::matmul, py::arg("a"), py::arg("b"),
+        py::arg("alpha") = 1.f, py::arg("trans_b") = false);
+  m.def("rms_norm", &ops::rms_norm, py::arg("x"), py::arg("w"), py::arg("eps"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);
   m.def("add", &ops::add);
@@ -292,4 +294,5 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("set_grad_enabled", &set_grad_enabled);
   m.def("synchronize", &cuda_sync);
   m.def("empty_cache", &empty_cache);
+  m.def("set_alloc_pooling", &set_alloc_pooling);
 }

@@ -52,7 +52,10 @@ Tensor minimum(const Tensor& a, const Tensor& b);
 Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len);
 
 // Linear algebra.
-Tensor matmul(const Tensor& a, const Tensor& b);
+Tensor matmul(const Tensor& a, const Tensor& b, float alpha = 1.f, bool trans_b = false);
+
+// Fused RMSNorm over the last dim (inference-only: backward throws).
+Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
 
 // Reductions.
 Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim);

@@ -103,7 +103,7 @@ class Linear(Module):
         self.bias = parameter(np.zeros(out_features)) if bias else None
 
     def forward(self, x):
-        out = tc.matmul(x, self.weight.transpose(0, 1))
+        out = tc.matmul(x, self.weight, trans_b=True)
         if self.bias is not None:
             out = out + self.bias
         return out

@@ -43,7 +43,9 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     D = query.shape[-1]
     L, S = query.shape[-2], key.shape[-2]
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
-    scores = tc.matmul(query, key.transpose(-2, -1)) * scale
+    # OP_T GEMM: no materialized K^T copy; scale folded into the fp32
+    # accumulator (one fewer 16-bit rounding + one fewer full pass over scores).
+    scores = tc.matmul(query, key, alpha=scale, trans_b=True)
     if is_causal:
         scores = scores + _causal_mask(L, S, query.device.split(":")[0], query.dtype)
     if attn_mask is not None:

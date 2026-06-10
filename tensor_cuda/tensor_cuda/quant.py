@@ -147,8 +147,8 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
     R, CB, BND = _tables(D, bulk_bits, H, apa_rotation, dev)
 
     key_quant = _quantize_keys(key, R, CB, BND)
-    bulk = tc.matmul(query, key_quant.transpose(-2, -1)) * scale
-    ranking = tc.matmul(query, key.transpose(-2, -1)) * scale
+    bulk = tc.matmul(query, key_quant, alpha=scale, trans_b=True)
+    ranking = tc.matmul(query, key, alpha=scale, trans_b=True)
 
     causal_add = None
     if is_causal:

@@ -22,13 +22,16 @@ cublasHandle_t handle() {
 }
 }  // namespace
 
-NDArray matmul(const NDArray& a, const NDArray& b) {
+NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   int nda = a.ndim(), ndb = b.ndim();
   if (nda < 2 || ndb < 2) throw std::runtime_error("matmul needs >=2D inputs");
   if (a.dtype != b.dtype) throw std::runtime_error("matmul dtype mismatch");
 
+  // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
+  // operand without a materialized transpose copy (cuBLAS reads it via OP_T).
   int64_t M = a.shape[nda - 2], K = a.shape[nda - 1];
-  int64_t Kb = b.shape[ndb - 2], N = b.shape[ndb - 1];
+  int64_t Kb = trans_b ? b.shape[ndb - 1] : b.shape[ndb - 2];
+  int64_t N  = trans_b ? b.shape[ndb - 2] : b.shape[ndb - 1];
   if (K != Kb) throw std::runtime_error("matmul inner dim mismatch");
 
   // Batch = product of a's leading dims (b must match or be 2D broadcast).
@@ -45,27 +48,31 @@ NDArray matmul(const NDArray& a, const NDArray& b) {
   // into a single strided-batched launch — one kernel-launch + cuBLAS heuristic
   // pick for the whole batch instead of `batch` of them.
   int64_t sB = b_batched ? strideB : 0;
-  float alpha = 1.f, beta = 0.f;
+  float beta = 0.f;
   void* ap = a.data_ptr();
   void* bp = b.data_ptr();
   void* cp = out.data_ptr();
+  // Column-major view: first operand slot holds B. Row-major B(N,K) read via
+  // OP_T is the col-major (K,N) buffer with ld=K — same bytes, no copy.
+  cublasOperation_t opB = trans_b ? CUBLAS_OP_T : CUBLAS_OP_N;
+  int ldb = trans_b ? (int)K : (int)N;
 
   if (a.dtype == DType::Float32) {
     cublasSgemmStridedBatched(
-        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-        &alpha, reinterpret_cast<const float*>(bp), (int)N, sB,
+        handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, reinterpret_cast<const float*>(bp), ldb, sB,
         reinterpret_cast<const float*>(ap), (int)K, strideA,
         &beta, reinterpret_cast<float*>(cp), (int)N, strideC, (int)batch);
   } else if (a.dtype == DType::Float16) {
     cublasGemmStridedBatchedEx(
-        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-        &alpha, bp, CUDA_R_16F, (int)N, sB, ap, CUDA_R_16F, (int)K, strideA,
+        handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, bp, CUDA_R_16F, ldb, sB, ap, CUDA_R_16F, (int)K, strideA,
         &beta, cp, CUDA_R_16F, (int)N, strideC, (int)batch,
         CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
   } else if (a.dtype == DType::BFloat16) {
     cublasGemmStridedBatchedEx(
-        handle(), CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-        &alpha, bp, CUDA_R_16BF, (int)N, sB, ap, CUDA_R_16BF, (int)K, strideA,
+        handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+        &alpha, bp, CUDA_R_16BF, ldb, sB, ap, CUDA_R_16BF, (int)K, strideA,
         &beta, cp, CUDA_R_16BF, (int)N, strideC, (int)batch,
         CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
   } else {

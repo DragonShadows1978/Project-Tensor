@@ -7,6 +7,7 @@
 
 #include "tc/ops.h"
 
+#include <stdexcept>
 #include <vector>
 
 namespace tc {
@@ -247,11 +248,25 @@ Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len) {
 }
 
 // ------------------------------------------------------------- linalg
-Tensor matmul(const Tensor& a, const Tensor& b) {
-  NDArray out = tc::matmul(a.data(), b.data());
-  return Tensor::from_op(out, {a, b}, "matmul", [a, b](const NDArray& g) {
-    a.v->accumulate_grad(tc::matmul(g, transpose2d_last(b.data())));
-    b.v->accumulate_grad(tc::matmul(transpose2d_last(a.data()), g));
+Tensor rms_norm(const Tensor& x, const Tensor& w, double eps) {
+  NDArray out = tc::rms_norm(x.data(), w.data(), eps, x.data().dtype);
+  return Tensor::from_op(out, {x, w}, "rms_norm", [](const NDArray&) -> void {
+    // Inference-only fusion: training paths must use the unfused chain
+    // (RMSNormTC guards on is_grad_enabled). Loud failure > silent wrong grad.
+    throw std::runtime_error("rms_norm: no backward — use the unfused chain for training");
+  });
+}
+
+Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
+  NDArray out = tc::matmul(a.data(), b.data(), alpha, trans_b);
+  return Tensor::from_op(out, {a, b}, "matmul", [a, b, alpha, trans_b](const NDArray& g) {
+    // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
+    // the no-copy OP_T read.  dB: non-trans alpha*A^T@g, trans alpha*g^T@A.
+    a.v->accumulate_grad(tc::matmul(g, b.data(), alpha, !trans_b));
+    if (trans_b)
+      b.v->accumulate_grad(tc::matmul(transpose2d_last(g), a.data(), alpha, false));
+    else
+      b.v->accumulate_grad(tc::matmul(transpose2d_last(a.data()), g, alpha, false));
   });
 }
 

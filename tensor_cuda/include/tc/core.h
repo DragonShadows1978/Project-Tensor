@@ -54,6 +54,7 @@ struct Storage {
   void* ptr = nullptr;
   size_t nbytes = 0;
   Device device;
+  bool pooled = false;  // allocated via cudaMallocAsync (small) vs raw cudaMalloc (large)
 
   Storage(size_t nbytes, Device device);
   ~Storage();
@@ -155,7 +156,18 @@ NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len);
 NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t start);
 
 // Batched matmul over leading dims; last two dims are (M,K)x(K,N). cuBLAS.
-NDArray matmul(const NDArray& a, const NDArray& b);
+// trans_b reads b as (N,K) row-major via OP_T (no transpose copy); alpha is
+// folded into the GEMM (applied in the fp32 accumulator, before the 16-bit store).
+NDArray matmul(const NDArray& a, const NDArray& b, float alpha = 1.f, bool trans_b = false);
+
+// Enable/disable the transients pool (call AFTER weight loading; see Storage
+// in kernels.cu — persistents must stay raw or they pin pool chunks at walls).
+void set_alloc_pooling(bool enabled);
+
+// Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
+// accumulate, single kernel + single output alloc (vs the 9-op chain).
+// w must be fp32; out_dtype is typically x's dtype.
+NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype);
 
 // INT4 group-quantized linear: y = x @ dequant(W)^T.
 //   x       : (..., K) fp16/fp32 activations (K == in_features)

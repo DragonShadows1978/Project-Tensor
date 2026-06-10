@@ -92,34 +92,98 @@ void cuda_sync() {
 }
 
 // --------------------------------------------------------------------- Storage
-// Plain cudaMalloc/cudaFree per allocation.
+// Stream-ordered allocation: cudaMallocAsync/cudaFreeAsync on the legacy
+// default stream (ALL engine kernels + cuBLAS run on it, so stream-ordering ==
+// program-ordering here).
 //
-// NOTE: a caching free-list allocator was tried (exact-size-keyed pool behind
-// Storage ctor/dtor) and REVERTED. On an 8GB card it regressed the context
-// ceiling badly: a forward pass allocates many DIFFERENTLY-sized transients
-// (per-layer attention scores, FFN intermediates, the blend path's H*L*S
-// tensors at varying S), and exact-size bucketing retained a separate block per
-// distinct size instead of letting the driver reuse one region — pinning ~2GB
-// and cutting the Mistral refine=0.05 ceiling from 16384 to 8192 (measured).
-// The pool's speed benefit was never measured to justify that. A properly
-// size-ranged / arena allocator could be revisited later as its own change,
-// gated on a context-ceiling benchmark — not reintroduced blind.
-void empty_cache() { /* no pool to release; kept so the binding stays valid */ }
+// WHY: nsys on a MiniCPM3 prefill measured cudaMalloc+cudaFree as the #1 cost
+// of the whole engine — ~6,700 alloc/free pairs per forward, cudaFree's
+// implicit device-sync serializing CPU and GPU (8.6s of blocking API time
+// across 3 forwards vs 0.14s of kernel launches). The async pool removes the
+// sync and recycles within the stream.
+//
+// NOTE: a HOMEMADE caching free-list (exact-size-keyed) was tried earlier and
+// REVERTED — exact-size bucketing pinned ~2GB of differently-sized transients
+// and cut the Mistral refine=0.05 ceiling 16384->8192 (measured). The driver's
+// suballocating pool is NOT that design, and the release threshold below is
+// deliberately small so idle memory returns to the driver at sync points. The
+// context-ceiling spot-check is a MANDATORY gate on any change here.
+namespace {
+constexpr uint64_t kPoolReleaseThreshold = 256ull * 1024 * 1024;  // 256MB
+void init_default_pool() {
+  static bool done = false;
+  if (done) return;
+  done = true;
+  int dev = 0;
+  cudaGetDevice(&dev);
+  cudaMemPool_t pool;
+  if (cudaDeviceGetDefaultMemPool(&pool, dev) == cudaSuccess) {
+    uint64_t thr = kPoolReleaseThreshold;
+    cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &thr);
+  }
+}
+}  // namespace
+
+void empty_cache() {
+  // Return all pooled-but-unused memory to the driver.
+  int dev = 0;
+  cudaGetDevice(&dev);
+  cudaMemPool_t pool;
+  if (cudaDeviceGetDefaultMemPool(&pool, dev) == cudaSuccess)
+    cudaMemPoolTrimTo(pool, 0);
+}
+
+// LOAD/RUNTIME SPLIT: pooling is gated on a global flag callers enable AFTER
+// weight loading (tc.set_alloc_pooling(True)). Persistents (weights, scales,
+// norm params — allocated while the flag is off) live in raw cudaMalloc
+// memory; ONLY forward-pass transients enter the pool. The wall bisect forced
+// this design: pooled LIVE blocks pin reserved chunks that TrimTo cannot
+// release, and size-capped hybrids measured either wall loss (<=16MB cap:
+// Mistral r0.05@16384 OOM) or no speedup (<=1MB cap: 2539ms vs 2611 raw — at
+// S=1024 nearly every transient exceeds 1MB). With a transients-only pool the
+// OOM retry's sync+trim empties the pool COMPLETELY, so the raw retry sees
+// exactly the pure-raw engine's free memory at the wall.
+namespace {
+bool g_pool_transients = false;
+}
+
+void set_alloc_pooling(bool enabled) {
+  init_default_pool();
+  g_pool_transients = enabled;
+  if (!enabled) empty_cache();
+}
 
 Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(device_) {
   if (nbytes == 0) { ptr = nullptr; return; }
   if (device.is_cuda()) {
-    cudaError_t e = cudaMalloc(&ptr, nbytes);
+    init_default_pool();
+    pooled = g_pool_transients;
+    cudaError_t e = pooled ? cudaMallocAsync(&ptr, nbytes, 0)
+                           : cudaMalloc(&ptr, nbytes);
+    if (e == cudaErrorMemoryAllocation) {
+      // Near the wall: sync materializes every pending cudaFreeAsync, trim
+      // returns all idle pool reservations to the driver, then retry once.
+      cudaGetLastError();  // clear sticky error
+      cudaStreamSynchronize(0);
+      empty_cache();
+      e = pooled ? cudaMallocAsync(&ptr, nbytes, 0) : cudaMalloc(&ptr, nbytes);
+    }
     if (e != cudaSuccess)
-      throw std::runtime_error(std::string("cudaMalloc failed: ") + cudaGetErrorString(e));
+      throw std::runtime_error(std::string(pooled ? "cudaMallocAsync failed: "
+                                                  : "cudaMalloc failed: ") +
+                               cudaGetErrorString(e));
   } else {
     ptr = std::malloc(nbytes);
   }
 }
 Storage::~Storage() {
   if (!ptr) return;
-  if (device.is_cuda()) cudaFree(ptr);
-  else std::free(ptr);
+  if (device.is_cuda()) {
+    if (pooled) cudaFreeAsync(ptr, 0);
+    else cudaFree(ptr);
+  } else {
+    std::free(ptr);
+  }
 }
 
 // --------------------------------------------------------------------- NDArray
@@ -1607,6 +1671,60 @@ NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t 
   if (n) { DISPATCH_FLOAT(small.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(small.data_ptr()), nullptr, nullptr, static_cast<T*>(big.data_ptr()), s, n); }); }
   cuda_check_last("pad_into");
   return big;
+}
+
+// ------------------------------------------------------------ fused RMSNorm
+// One block per row; replaces the 9-launch / 9-alloc unfused chain
+// (cast-up, mul, reduce, mul_scalar, add_scalar, pow, mul, mul-weight,
+// cast-down) with a single kernel and a single output allocation. Numerics
+// mirror the chain: fp32 accumulate, ms = ssum * (1/D), inv = powf(ms+eps,
+// -0.5f) (matching ew_pow), out = (x_f32 * inv) * w, one rounding at the
+// store. Only the summation ORDER differs (tree vs serial reduce).
+namespace {
+template <typename XT, typename OT>
+__global__ void rms_norm_kernel(const XT* x, const float* w, OT* o,
+                                int64_t D, float inv_d, float eps) {
+  // fp64 accumulation: costs nothing (bandwidth-bound) and makes the mean
+  // MORE accurate than the fp32 serial chain — measured to keep ppl inside
+  // the +-0.05 gate where fp32 tree-reduce drifted 0.004 past it.
+  __shared__ double sh[kT];
+  const XT* xr = x + (int64_t)blockIdx.x * D;
+  OT* orow = o + (int64_t)blockIdx.x * D;
+  double ss = 0.0;
+  for (int64_t c = threadIdx.x; c < D; c += blockDim.x) {
+    float v = ld<XT>(xr, c);
+    ss += (double)v * (double)v;
+  }
+  sh[threadIdx.x] = ss;
+  __syncthreads();
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if ((int)threadIdx.x < s) sh[threadIdx.x] += sh[threadIdx.x + s];
+    __syncthreads();
+  }
+  float inv = powf((float)(sh[0] * (double)inv_d) + eps, -0.5f);
+  for (int64_t c = threadIdx.x; c < D; c += blockDim.x)
+    st<OT>(orow, c, ld<XT>(xr, c) * inv * w[c]);
+}
+}  // namespace
+
+NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype) {
+  if (x.ndim() < 1) throw std::runtime_error("rms_norm needs >=1D input");
+  if (w.dtype != DType::Float32)
+    throw std::runtime_error("rms_norm expects fp32 weight (chain stores fp32)");
+  int64_t D = x.shape[x.ndim() - 1];
+  if (w.numel() != D) throw std::runtime_error("rms_norm weight/dim mismatch");
+  int64_t rows = x.numel() / D;
+  NDArray out(x.shape, out_dtype, x.device);
+  if (rows == 0 || D == 0) return out;
+  DISPATCH_FLOAT(x.dtype, XT, {
+    DISPATCH_FLOAT(out_dtype, OT, {
+      rms_norm_kernel<XT, OT><<<(int)rows, kT>>>(
+          static_cast<XT*>(x.data_ptr()), static_cast<float*>(w.data_ptr()),
+          static_cast<OT*>(out.data_ptr()), D, 1.0f / (float)D, (float)eps);
+    });
+  });
+  cuda_check_last("rms_norm");
+  return out;
 }
 
 }  // namespace tc
