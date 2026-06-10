@@ -248,6 +248,13 @@ Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len) {
 }
 
 // ------------------------------------------------------------- linalg
+Tensor causal_softmax(const Tensor& scores) {
+  NDArray out = tc::causal_softmax(scores.data());
+  return Tensor::from_op(out, {scores}, "causal_softmax", [](const NDArray&) -> void {
+    throw std::runtime_error("causal_softmax: no backward — use the eager chain for training");
+  });
+}
+
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps) {
   NDArray out = tc::rms_norm(x.data(), w.data(), eps, x.data().dtype);
   return Tensor::from_op(out, {x, w}, "rms_norm", [](const NDArray&) -> void {

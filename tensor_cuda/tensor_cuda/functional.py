@@ -37,6 +37,11 @@ def _causal_mask(L, S, device, dtype):
     return m
 
 
+# Flag for the fused causal-softmax path in scaled_dot_product_attention
+# (default off until ppl-gated; flip per-run or at merge).
+USE_FUSED_SOFTMAX = False
+
+
 def scaled_dot_product_attention(query, key, value, attn_mask=None,
                                  is_causal=False, scale=None):
     """query/key/value: (B, H, L, D). Returns (B, H, L, D)."""
@@ -46,6 +51,11 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     # OP_T GEMM: no materialized K^T copy; scale folded into the fp32
     # accumulator (one fewer 16-bit rounding + one fewer full pass over scores).
     scores = tc.matmul(query, key, alpha=scale, trans_b=True)
+    if (USE_FUSED_SOFTMAX and is_causal and attn_mask is None and S >= L
+            and not tc.is_grad_enabled()):
+        # single-kernel bottom-right causal softmax: no mask tensor, masked
+        # columns never read (inference-only; backward raises).
+        return tc.matmul(tc.causal_softmax(scores), value)
     if is_causal:
         scores = scores + _causal_mask(L, S, query.device.split(":")[0], query.dtype)
     if attn_mask is not None:

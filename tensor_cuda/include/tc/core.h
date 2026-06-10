@@ -164,6 +164,11 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha = 1.f, bool trans
 // in kernels.cu — persistents must stay raw or they pin pool chunks at walls).
 void set_alloc_pooling(bool enabled);
 
+// Fused bottom-right-aligned causal softmax over the last dim of (...,L,S)
+// scores (S >= L). Masked columns are never read; exact-zero like the eager
+// -1e4-bias path. Inference-only at the Tensor level.
+NDArray causal_softmax(const NDArray& scores);
+
 // Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
 // accumulate, single kernel + single output alloc (vs the 9-op chain).
 // w must be fp32; out_dtype is typically x's dtype.

@@ -73,6 +73,13 @@ def matmul(a, b, alpha=1.0, trans_b=False):
     return _C.matmul(a, b, alpha, trans_b)
 
 
+def causal_softmax(scores):
+    """Fused bottom-right causal softmax over (..., L, S) scores, S >= L.
+    Inference-only (backward raises). Equivalent to adding the -1e4 causal
+    bias then softmax, with masked entries exactly zero."""
+    return _C.causal_softmax(scores)
+
+
 def rms_norm(x, w, eps=1e-6):
     """Fused RMSNorm over the last dim (single kernel, fp32 accumulate,
     output in x's dtype). Inference-only: backward raises — training code
@@ -235,7 +242,7 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "rms_norm", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "matmul", "rms_norm", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

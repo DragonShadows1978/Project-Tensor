@@ -1707,6 +1707,72 @@ __global__ void rms_norm_kernel(const XT* x, const float* w, OT* o,
 }
 }  // namespace
 
+// ----------------------------------------------------- fused causal softmax
+// Row-wise softmax with the BOTTOM-RIGHT-aligned causal bound computed from
+// indices: row i of L queries over S keys sees columns 0..(S-L)+i (the
+// rectangular KV-cache/prefix case; square reduces to standard causal). No
+// mask tensor exists — masked columns are never read or written non-zero.
+// Numerics: replaces eager's [+(-1e4) bias, max, sub, exp(->16-bit tensor),
+// sum, div] chain. With the -1e4 bias eager's masked terms underflow to
+// exactly 0.0, so skipping them is equivalent; max is order-independent; the
+// sum here accumulates UNROUNDED fp32 expf values in fp64 (eager serially
+// fp32-sums 16-bit-rounded exps) — strictly more accurate, single rounding
+// at the store. One kernel + one alloc, ~3 row passes vs eager's ~6.
+namespace {
+template <typename T>
+__global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S) {
+  __shared__ float shm[kT];
+  __shared__ double shd[kT];
+  int64_t row = blockIdx.x;
+  int64_t i = row % L;                  // query index within the L rows
+  int64_t visible = S - L + i + 1;      // bottom-right causal bound (S >= L)
+  const T* xr = x + row * S;
+  T* orow = o + row * S;
+
+  float mx = -3.0e38f;
+  for (int64_t c = threadIdx.x; c < visible; c += blockDim.x)
+    mx = fmaxf(mx, ld<T>(xr, c));
+  shm[threadIdx.x] = mx;
+  __syncthreads();
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if ((int)threadIdx.x < s)
+      shm[threadIdx.x] = fmaxf(shm[threadIdx.x], shm[threadIdx.x + s]);
+    __syncthreads();
+  }
+  float m = shm[0];
+
+  double ss = 0.0;
+  for (int64_t c = threadIdx.x; c < visible; c += blockDim.x)
+    ss += (double)expf(ld<T>(xr, c) - m);
+  shd[threadIdx.x] = ss;
+  __syncthreads();
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if ((int)threadIdx.x < s) shd[threadIdx.x] += shd[threadIdx.x + s];
+    __syncthreads();
+  }
+  float inv = (float)(1.0 / shd[0]);
+
+  for (int64_t c = threadIdx.x; c < S; c += blockDim.x)
+    st<T>(orow, c, c < visible ? expf(ld<T>(xr, c) - m) * inv : 0.0f);
+}
+}  // namespace
+
+NDArray causal_softmax(const NDArray& scores) {
+  if (scores.ndim() < 2) throw std::runtime_error("causal_softmax needs >=2D scores");
+  int64_t L = scores.shape[scores.ndim() - 2];
+  int64_t S = scores.shape[scores.ndim() - 1];
+  if (S < L) throw std::runtime_error("causal_softmax: S < L (queries outnumber keys)");
+  int64_t rows = scores.numel() / S;
+  NDArray out(scores.shape, scores.dtype, scores.device);
+  if (rows == 0 || S == 0) return out;
+  DISPATCH_FLOAT(scores.dtype, T, {
+    causal_softmax_kernel<T><<<(int)rows, kT>>>(
+        static_cast<T*>(scores.data_ptr()), static_cast<T*>(out.data_ptr()), L, S);
+  });
+  cuda_check_last("causal_softmax");
+  return out;
+}
+
 NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype) {
   if (x.ndim() < 1) throw std::runtime_error("rms_norm needs >=1D input");
   if (w.dtype != DType::Float32)
