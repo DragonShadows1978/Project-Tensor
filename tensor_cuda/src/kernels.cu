@@ -1372,6 +1372,51 @@ __global__ void int4_gemm_fused_kernel(
   if (row < M && col < N) st<T>(y, (int64_t)row * N + col, acc);
 }
 
+// ---------------------------------------------- int4 GEMV (M==1 decode path)
+// y[N] = x[K] . dequant(W)[N,K]. The 16x16 tiled GEMM above wastes 15/16 of
+// each tile at M=1 and refetches scales per element; decode is GEMV-shaped,
+// so stream each weight row ONCE at packed-int4 width instead. One warp per
+// output n: lanes read the row as uchar4 (8 weights, one quant group when
+// group_size % 8 == 0 — guaranteed by the host guard), x staged in dynamic
+// shared memory as fp32, fp32 accumulate (same as the GEMM), warp-shuffle
+// reduce. Memory-bound at packed size: ~30x less traffic than the tile path.
+template <typename T>
+__global__ void int4_gemv_kernel(
+    const T* __restrict__ x, const uint8_t* __restrict__ packed,
+    const __half* __restrict__ scales, const __half* __restrict__ zeros,
+    T* __restrict__ y, int N, int K, int group_size, int G) {
+  extern __shared__ float xs[];                       // K floats
+  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = ld<T>(x, k);
+  __syncthreads();
+  const int warps = blockDim.x >> 5;
+  const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  const int n = blockIdx.x * warps + wid;
+  if (n >= N) return;
+  const int Kb = K >> 1;                              // packed bytes per row
+  const uchar4* row4 = reinterpret_cast<const uchar4*>(packed + (int64_t)n * Kb);
+  const __half* srow = scales + (int64_t)n * G;
+  const __half* zrow = zeros + (int64_t)n * G;
+  float acc = 0.f;
+  const int nb4 = Kb >> 2;
+  for (int b4 = lane; b4 < nb4; b4 += 32) {
+    uchar4 v = row4[b4];
+    int k0 = b4 << 3;                                 // first of 8 weights
+    int g = k0 / group_size;
+    float sc = __half2float(srow[g]), ze = __half2float(zrow[g]);
+    const float* xk = xs + k0;
+    acc += ((float)(v.x & 0x0F) * sc + ze) * xk[0]
+         + ((float)((v.x >> 4) & 0x0F) * sc + ze) * xk[1]
+         + ((float)(v.y & 0x0F) * sc + ze) * xk[2]
+         + ((float)((v.y >> 4) & 0x0F) * sc + ze) * xk[3]
+         + ((float)(v.z & 0x0F) * sc + ze) * xk[4]
+         + ((float)((v.z >> 4) & 0x0F) * sc + ze) * xk[5]
+         + ((float)(v.w & 0x0F) * sc + ze) * xk[6]
+         + ((float)((v.w >> 4) & 0x0F) * sc + ze) * xk[7];
+  }
+  for (int off = 16; off; off >>= 1) acc += __shfl_down_sync(0xffffffffu, acc, off);
+  if (lane == 0) st<T>(y, n, acc);
+}
+
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros,
                           int group_size) {
@@ -1391,6 +1436,22 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   os.push_back(N);
   NDArray out(os, x.dtype, x.device);
   if (M == 0 || N == 0) return out;
+  // GEMV fast path: decode-shaped calls. Guards: 8-weight vector loads must
+  // stay inside one quant group and one row, and x must fit in shared memory.
+  if (M == 1 && (group_size % 8) == 0 && (K % 8) == 0 &&
+      (size_t)K * sizeof(float) <= 48 * 1024) {
+    const int threads = 256, warps = threads / 32;
+    dim3 ggrid((int)((N + warps - 1) / warps));
+    size_t shmem = (size_t)K * sizeof(float);
+    DISPATCH_FLOAT(x.dtype, T, {
+      int4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
+          static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
+          static_cast<__half*>(scales.data_ptr()), static_cast<__half*>(zeros.data_ptr()),
+          static_cast<T*>(out.data_ptr()), (int)N, (int)K, group_size, (int)G);
+    });
+    cuda_check_last("int4_gemv");
+    return out;
+  }
   dim3 block(TC_I4_TILE, TC_I4_TILE);
   dim3 grid((int)((N + TC_I4_TILE - 1) / TC_I4_TILE),
             (int)((M + TC_I4_TILE - 1) / TC_I4_TILE));
