@@ -222,21 +222,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });
-  // INT4 group-quantized linear (inference only, no autograd).
-  m.def("int4_linear", [](Tensor& x, Tensor& packed, Tensor& scales,
-                          Tensor& zeros, int group_size) {
-    return Tensor::make(
-        tc::int4_linear(x.data(), packed.data(), scales.data(), zeros.data(), group_size),
-        false);
-  }, py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
-     py::arg("group_size") = 128);
-  m.def("int4_linear_fused", [](Tensor& x, Tensor& packed, Tensor& scales,
-                                Tensor& zeros, int group_size) {
-    return Tensor::make(
-        tc::int4_linear_fused(x.data(), packed.data(), scales.data(), zeros.data(), group_size),
-        false);
-  }, py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
-     py::arg("group_size") = 128);
+  // INT4 group-quantized linear. Weights are frozen (uint8/fp16 buffers,
+  // never differentiable); the VJP covers x only — dx = g @ W^T with the
+  // weight re-dequantized transiently at backward time (ops.cpp).
+  m.def("int4_linear", &ops::int4_linear,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("group_size") = 128);
+  m.def("int4_linear_fused", &ops::int4_linear_fused,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("group_size") = 128);
   m.def("int4_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
                            int group_size, const std::string& out_dtype) {
     return Tensor::make(

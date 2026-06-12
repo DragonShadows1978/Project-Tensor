@@ -277,6 +277,36 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
   });
 }
 
+// Shared VJP for both int4 linear variants: forward is y = x @ W_kn with
+// W_kn = dequant(W) laid out (K, N), so dx = g @ W_kn^T. The dequantized
+// weight is rebuilt inside the closure at backward time and freed on
+// return — only the packed/scales/zeros handles (already resident for
+// inference) are captured. Weights are frozen: no VJP for them exists.
+static GradFn int4_grad(const Tensor& x, const Tensor& packed,
+                        const Tensor& scales, const Tensor& zeros,
+                        int group_size) {
+  return [x, packed, scales, zeros, group_size](const NDArray& g) {
+    NDArray w_kn = tc::int4_dequant(packed.data(), scales.data(),
+                                    zeros.data(), group_size, g.dtype);
+    x.v->accumulate_grad(tc::matmul(g, w_kn, 1.f, /*trans_b=*/true));
+  };
+}
+Tensor int4_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
+                   const Tensor& zeros, int group_size) {
+  NDArray out = tc::int4_linear(x.data(), packed.data(), scales.data(),
+                                zeros.data(), group_size);
+  return Tensor::from_op(out, {x}, "int4_linear",
+                         int4_grad(x, packed, scales, zeros, group_size));
+}
+Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
+                         const Tensor& scales, const Tensor& zeros,
+                         int group_size) {
+  NDArray out = tc::int4_linear_fused(x.data(), packed.data(), scales.data(),
+                                      zeros.data(), group_size);
+  return Tensor::from_op(out, {x}, "int4_linear_fused",
+                         int4_grad(x, packed, scales, zeros, group_size));
+}
+
 // ------------------------------------------------------------- reductions
 static Shape keepdim_shape(const Shape& in, const std::vector<int>& axes) {
   Shape s = in;

@@ -54,6 +54,18 @@ Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len);
 // Linear algebra.
 Tensor matmul(const Tensor& a, const Tensor& b, float alpha = 1.f, bool trans_b = false);
 
+// INT4 group-quantized linear: y = x @ dequant(W). The weight is FROZEN
+// (packed uint8 + fp16 scales/zeros — not a differentiable parameter); the
+// VJP exists for x only: dx = g @ W_kn^T with the (K,N) dequantized weight
+// rebuilt transiently inside the backward and freed on return. Nothing
+// weight-sized is retained in the graph, so a frozen INT4 model can sit in
+// a training loop (e.g. SCRIBE's L-func reader) at zero resident overhead.
+Tensor int4_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
+                   const Tensor& zeros, int group_size);
+Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
+                         const Tensor& scales, const Tensor& zeros,
+                         int group_size);
+
 // Fused causal softmax (inference-only: backward throws).
 Tensor causal_softmax(const Tensor& scores);
 

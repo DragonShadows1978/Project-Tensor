@@ -74,6 +74,14 @@ void Tensor::backward(const NDArray& seed) {
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     Variable* node = *it;
     if (node->grad_fn && node->grad.defined()) node->grad_fn(node->grad);
+    // An op node's grad is consumed exactly once — by the grad_fn call
+    // above (post-order guarantees it was fully accumulated first). Freeing
+    // it here keeps backward's live set to one grad wave instead of the
+    // whole graph's, halving peak memory on deep graphs (62-layer reader
+    // backward OOM'd an 8 GB card without this). Leaves (null grad_fn)
+    // keep grads for the optimizer; re-backward still accumulates
+    // correctly on leaves (and no longer double-counts op nodes).
+    if (node->grad_fn) node->grad = NDArray();
   }
 }
 
