@@ -1867,7 +1867,7 @@ NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype
 //   v:    (B, H,  Dv) fp32
 //   a,b:  (B, H)      fp32  raw in_proj_a / in_proj_b outputs
 //   A_neg,dt_bias: H fp32 elements (-exp(A_log), dt_bias)
-//   state:(B, H, Dk, Dv) fp32 — UPDATED IN PLACE (single-stream decode)
+//   state:(B, H, Dk, Dv) fp32 — FUNCTIONAL: a NEW state is returned
 //   out:  (B, H, Dv) fp32
 //
 // Launch: grid (Dv/4, H, B), block (32, 4) — each warp owns one state
@@ -1876,8 +1876,9 @@ __global__ void gated_delta_step_kernel(
     const float* __restrict__ q, const float* __restrict__ k,
     const float* __restrict__ v, const float* __restrict__ a,
     const float* __restrict__ b, const float* __restrict__ A_neg,
-    const float* __restrict__ dtb, float* __restrict__ state,
-    float* __restrict__ out, int H, int Hk, int Dk, int Dv) {
+    const float* __restrict__ dtb, const float* __restrict__ state_in,
+    float* __restrict__ state_out, float* __restrict__ out,
+    int H, int Hk, int Dk, int Dv) {
   const int j = blockIdx.x * blockDim.y + threadIdx.y;   // state column
   const int h = blockIdx.y, bb = blockIdx.z, lane = threadIdx.x;
   if (j >= Dv) return;
@@ -1908,10 +1909,11 @@ __global__ void gated_delta_step_kernel(
   const float alpha = expf(A_neg[h] * softplus);
   const float beta = 1.f / (1.f + expf(-b[(int64_t)bb * H + h]));
   // state column j: decay-first delta rule + readout
-  float* srow = state + (((int64_t)bb * H + h) * Dk) * Dv + j;
+  const float* sin_ = state_in + (((int64_t)bb * H + h) * Dk) * Dv + j;
+  float* sout_ = state_out + (((int64_t)bb * H + h) * Dk) * Dv + j;
   float kv = 0.f;
   for (int r = 0; r < R; ++r) {
-    sl[r] = srow[(int64_t)(lane + (r << 5)) * Dv];
+    sl[r] = sin_[(int64_t)(lane + (r << 5)) * Dv];
     kv += sl[r] * (kl[r] * rk);
   }
   for (int off = 16; off; off >>= 1)
@@ -1922,7 +1924,7 @@ __global__ void gated_delta_step_kernel(
   float o = 0.f;
   for (int r = 0; r < R; ++r) {
     sl[r] = alpha * sl[r] + (kl[r] * rk) * delta;
-    srow[(int64_t)(lane + (r << 5)) * Dv] = sl[r];
+    sout_[(int64_t)(lane + (r << 5)) * Dv] = sl[r];
     o += sl[r] * (ql[r] * rq);
   }
   for (int off = 16; off; off >>= 1)
@@ -1930,10 +1932,10 @@ __global__ void gated_delta_step_kernel(
   if (lane == 0) out[((int64_t)bb * H + h) * Dv + j] = o;
 }
 
-NDArray gated_delta_step(const NDArray& q, const NDArray& k,
-                         const NDArray& v, const NDArray& a,
-                         const NDArray& b, const NDArray& A_neg,
-                         const NDArray& dt_bias, NDArray& state) {
+std::pair<NDArray, NDArray> gated_delta_step(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    const NDArray& a, const NDArray& b, const NDArray& A_neg,
+    const NDArray& dt_bias, const NDArray& state) {
   const NDArray* ins[8] = {&q, &k, &v, &a, &b, &A_neg, &dt_bias, &state};
   for (int t = 0; t < 8; ++t)
     if (ins[t]->dtype != DType::Float32)
@@ -1949,6 +1951,7 @@ NDArray gated_delta_step(const NDArray& q, const NDArray& k,
     throw std::runtime_error("gated_delta_step: head mismatch");
   NDArray out({(int64_t)B, (int64_t)H, (int64_t)Dv}, DType::Float32,
               state.device);
+  NDArray new_state(state.shape, DType::Float32, state.device);
   dim3 grid(Dv / 4, H, B), block(32, 4);
   gated_delta_step_kernel<<<grid, block>>>(
       static_cast<float*>(q.data_ptr()), static_cast<float*>(k.data_ptr()),
@@ -1957,9 +1960,10 @@ NDArray gated_delta_step(const NDArray& q, const NDArray& k,
       static_cast<float*>(A_neg.data_ptr()),
       static_cast<float*>(dt_bias.data_ptr()),
       static_cast<float*>(state.data_ptr()),
+      static_cast<float*>(new_state.data_ptr()),
       static_cast<float*>(out.data_ptr()), H, Hk, Dk, Dv);
   cuda_check_last("gated_delta_step");
-  return out;
+  return {out, new_state};
 }
 
 }  // namespace tc

@@ -46,18 +46,22 @@ def test_gated_delta_step_exact(B):
     S0 = (rng.standard_normal((B, H, Dk, Dv)) * 0.1).astype(np.float32)
 
     S_dev = tc.tensor(S0.copy())
+    S_first = S_dev
     outs = []
     S_ref = S0.copy()
     for step in range(3):                      # sequential consistency
-        o = tc.gated_delta_step(
+        o, S_dev = tc.gated_delta_step(
             tc.tensor(q + step), tc.tensor(k - step), tc.tensor(v),
             tc.tensor(a), tc.tensor(b), tc.tensor(A_neg), tc.tensor(dtb),
             S_dev)
         outs.append(o.numpy())
         ref = _ref_step(q + step, k - step, v, a, b, A_neg, dtb, S_ref)
         np.testing.assert_allclose(outs[-1], ref, rtol=2e-4, atol=2e-4)
-    # in-place state mutation matches the reference trajectory
+    # returned state matches the reference trajectory ...
     np.testing.assert_allclose(S_dev.numpy(), S_ref, rtol=2e-4, atol=2e-4)
+    # ... and the FUNCTIONAL contract holds: the input state is untouched
+    # (branch/save semantics — the GRM restore-once-decode-many pattern).
+    np.testing.assert_array_equal(S_first.numpy(), S0)
 
 
 def test_gated_delta_step_rejects_bad_dtype():

@@ -109,10 +109,11 @@ def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
 def gated_delta_step(q, k, v, a, b, A_neg, dt_bias, state):
     """Fused Gated DeltaNet decode step (one token, one layer, ONE launch):
     l2norm(q,k) + gate math (sigmoid/softplus/exp) + decay-first delta-rule
-    state update + readout. All fp32. STATE IS UPDATED IN PLACE (single-
-    stream decode only). q,k (B,Hk,Dk) raw heads; v (B,H,Dv); a,b (B,H);
-    A_neg = -exp(A_log), dt_bias: H elements; state (B,H,Dk,Dv).
-    Returns out (B,H,Dv). Inference only (no autograd)."""
+    state update + readout. All fp32. FUNCTIONAL: returns (out, new_state)
+    and leaves the input state untouched, so callers may branch or hold
+    references freely (the GRM restore-once-decode-many contract).
+    q,k (B,Hk,Dk) raw heads; v (B,H,Dv); a,b (B,H); A_neg = -exp(A_log),
+    dt_bias: H elements; state (B,H,Dk,Dv). Inference only (no autograd)."""
     return _C.gated_delta_step(q, k, v, a, b, A_neg, dt_bias, state)
 
 
