@@ -264,6 +264,16 @@ Tensor rms_norm(const Tensor& x, const Tensor& w, double eps) {
   });
 }
 
+Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,
+                  int64_t pos0) {
+  NDArray out = tc::rope_apply(x.data(), cs.data(), sn.data(), pos0);
+  return Tensor::from_op(out, {x}, "rope_apply", [](const NDArray&) -> void {
+    // Inference-only fusion (callers guard on is_grad_enabled and fall
+    // back to the composed slice/cat/mul chain for training).
+    throw std::runtime_error("rope_apply: no backward — use the composed chain");
+  });
+}
+
 Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
   NDArray out = tc::matmul(a.data(), b.data(), alpha, trans_b);
   return Tensor::from_op(out, {a, b}, "matmul", [a, b, alpha, trans_b](const NDArray& g) {

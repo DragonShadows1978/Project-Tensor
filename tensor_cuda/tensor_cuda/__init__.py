@@ -87,6 +87,13 @@ def rms_norm(x, w, eps=1e-6):
     return _C.rms_norm(x, w, eps)
 
 
+def rope_apply(x, cos, sin, pos0=0):
+    """Fused RoPE: out = x*cos[pos0+l] + rotate_half(x)*sin[pos0+l] in
+    ONE launch (the composed chain is ~8). x (..., L, D); tables (T, D)
+    in x's dtype. Inference-only: backward raises."""
+    return _C.rope_apply(x, cos, sin, pos0)
+
+
 def int4_linear(x, packed, scales, zeros, group_size=128):
     """INT4 group-quantized linear: y = x @ dequant(W)^T. Inference only.
     Two-stage: dequant W to a full (K,N) fp16 buffer then cuBLAS matmul."""
@@ -253,7 +260,7 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "rms_norm", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "matmul", "rms_norm", "rope_apply", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

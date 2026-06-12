@@ -1391,8 +1391,12 @@ __global__ void int4_gemv_kernel(
     const T* __restrict__ x, const uint8_t* __restrict__ packed,
     const __half* __restrict__ scales, const __half* __restrict__ zeros,
     T* __restrict__ y, int N, int K, int group_size, int G) {
-  extern __shared__ float xs[];                       // K floats
-  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = ld<T>(x, k);
+  // x staged in NATIVE dtype: fp32 staging of a bf16/fp16 input added
+  // no information and doubled shared memory (K=15360 was 60KB —
+  // 1 block/SM; native bf16 is 30KB). Accumulation stays fp32.
+  extern __shared__ unsigned char xs_raw[];
+  T* xs = reinterpret_cast<T*>(xs_raw);
+  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = x[k];
   __syncthreads();
   const int warps = blockDim.x >> 5;
   const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
@@ -1410,15 +1414,15 @@ __global__ void int4_gemv_kernel(
     int g = k0 / group_size;
     float sc = __half2float(srow[g]);
     float ze = zrow ? __half2float(zrow[g]) : -8.f * sc;  // symmetric-8
-    const float* xk = xs + k0;
-    acc += ((float)(v.x & 0x0F) * sc + ze) * xk[0]
-         + ((float)((v.x >> 4) & 0x0F) * sc + ze) * xk[1]
-         + ((float)(v.y & 0x0F) * sc + ze) * xk[2]
-         + ((float)((v.y >> 4) & 0x0F) * sc + ze) * xk[3]
-         + ((float)(v.z & 0x0F) * sc + ze) * xk[4]
-         + ((float)((v.z >> 4) & 0x0F) * sc + ze) * xk[5]
-         + ((float)(v.w & 0x0F) * sc + ze) * xk[6]
-         + ((float)((v.w >> 4) & 0x0F) * sc + ze) * xk[7];
+    const T* xk = xs + k0;
+    acc += ((float)(v.x & 0x0F) * sc + ze) * ld<T>(xk, 0)
+         + ((float)((v.x >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 1)
+         + ((float)(v.y & 0x0F) * sc + ze) * ld<T>(xk, 2)
+         + ((float)((v.y >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 3)
+         + ((float)(v.z & 0x0F) * sc + ze) * ld<T>(xk, 4)
+         + ((float)((v.z >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 5)
+         + ((float)(v.w & 0x0F) * sc + ze) * ld<T>(xk, 6)
+         + ((float)((v.w >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 7);
   }
   for (int off = 16; off; off >>= 1) acc += __shfl_down_sync(0xffffffffu, acc, off);
   if (lane == 0) st<T>(y, n, acc);
@@ -1450,25 +1454,33 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   // (sm_86 allows ~99KB) — without this, K=15360 rows (Gemma 4 ffn_down,
   // ~21% of all decode weight reads) fall to the tile path and decode
   // crawls (measured 4.6 tok/s at the ready gate).
-  if (M == 1 && (group_size % 8) == 0 && (K % 8) == 0 &&
-      (size_t)K * sizeof(float) <= 96 * 1024) {
+  if (M == 1 && (group_size % 8) == 0 && (K % 8) == 0) {
     const int threads = 256, warps = threads / 32;
     dim3 ggrid((int)((N + warps - 1) / warps));
-    size_t shmem = (size_t)K * sizeof(float);
+    bool launched = false;
     DISPATCH_FLOAT(x.dtype, T, {
-      if (shmem > 48 * 1024) {
-        cudaFuncSetAttribute(int4_gemv_kernel<T>,
-                             cudaFuncAttributeMaxDynamicSharedMemorySize,
-                             96 * 1024);
+      // native-dtype staging: bf16/fp16 x needs K*2 bytes (fp32 K*4)
+      size_t shmem = (size_t)K * sizeof(T);
+      if (shmem <= 96 * 1024) {
+        if (shmem > 48 * 1024) {
+          cudaFuncSetAttribute(int4_gemv_kernel<T>,
+                               cudaFuncAttributeMaxDynamicSharedMemorySize,
+                               96 * 1024);
+        }
+        int4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
+            static_cast<T*>(x.data_ptr()),
+            static_cast<uint8_t*>(packed.data_ptr()),
+            static_cast<__half*>(scales.data_ptr()),
+            zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+            static_cast<T*>(out.data_ptr()), (int)N, (int)K, group_size,
+            (int)G);
+        launched = true;
       }
-      int4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
-          static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
-          static_cast<__half*>(scales.data_ptr()),
-          zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
-          static_cast<T*>(out.data_ptr()), (int)N, (int)K, group_size, (int)G);
     });
-    cuda_check_last("int4_gemv");
-    return out;
+    if (launched) {
+      cuda_check_last("int4_gemv");
+      return out;
+    }
   }
   dim3 block(TC_I4_TILE, TC_I4_TILE);
   dim3 grid((int)((N + TC_I4_TILE - 1) / TC_I4_TILE),
@@ -1870,6 +1882,54 @@ NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype
     });
   });
   cuda_check_last("rms_norm");
+  return out;
+}
+
+// ------------------------------------------------------ fused RoPE apply
+// out = x * cos[pos0+l] + rotate_half(x) * sin[pos0+l], one launch.
+// The composed chain (2 table slices + 2 x-slices + neg + cat + 2 muls
+// + add) is ~8 Python-dispatched launches PER TENSOR — at 2 tensors x
+// 40 sliding layers that was ~14 ms of pure launch overhead per decoded
+// token on the Gemma 4 port. Tables are (T, D) in x's dtype; rotation
+// math in fp32. Inference-only.
+template <typename T>
+__global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
+                            const T* __restrict__ sn, T* __restrict__ y,
+                            int64_t pos0, int64_t L, int64_t D, int64_t n) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  int64_t d = i % D;
+  int64_t l = (i / D) % L;
+  int64_t half = D >> 1;
+  float xv = ld<T>(x, i);
+  float xr = (d < half) ? -ld<T>(x, i + half) : ld<T>(x, i - half);
+  int64_t t = (pos0 + l) * D + d;
+  st<T>(y, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t));
+}
+
+NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
+                   int64_t pos0) {
+  if (x.ndim() < 2) throw std::runtime_error("rope_apply needs >=2D input");
+  int64_t D = x.shape[x.ndim() - 1];
+  int64_t L = x.shape[x.ndim() - 2];
+  if (D % 2) throw std::runtime_error("rope_apply: odd head_dim");
+  if (cs.dtype != x.dtype || sn.dtype != x.dtype)
+    throw std::runtime_error("rope_apply: table/x dtype mismatch");
+  if (cs.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
+    throw std::runtime_error("rope_apply: tables must be (T, D)");
+  if (pos0 + L > cs.shape[0])
+    throw std::runtime_error("rope_apply: position past table end");
+  NDArray out(x.shape, x.dtype, x.device);
+  int64_t n = x.numel();
+  if (n) {
+    DISPATCH_FLOAT(x.dtype, T, {
+      rope_kernel<T><<<nblk(n), kT>>>(
+          static_cast<T*>(x.data_ptr()), static_cast<T*>(cs.data_ptr()),
+          static_cast<T*>(sn.data_ptr()), static_cast<T*>(out.data_ptr()),
+          pos0, L, D, n);
+    });
+    cuda_check_last("rope_apply");
+  }
   return out;
 }
 
