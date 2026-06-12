@@ -20,6 +20,11 @@ def _causal_mask(L, S, device, dtype):
     key = (L, S, device, dtype)
     m = _causal_cache.get(key)
     if m is None:
+        # cap the cache: chunked long prefill creates one (L, S) entry
+        # per chunk x context-length pair — at 24K context that is
+        # ~500MB of cached masks that empty_cache() cannot reach
+        if len(_causal_cache) >= 16:
+            _causal_cache.clear()
         # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
         # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
         # BOTTOM-RIGHT aligned (k = 1 + S - L): when S > L the L queries are the
