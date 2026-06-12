@@ -1446,12 +1446,21 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   if (M == 0 || N == 0) return out;
   // GEMV fast path: decode-shaped calls. Guards: 8-weight vector loads must
   // stay inside one quant group and one row, and x must fit in shared memory.
+  // Above the 48KB default the kernel opts in to large dynamic shmem
+  // (sm_86 allows ~99KB) — without this, K=15360 rows (Gemma 4 ffn_down,
+  // ~21% of all decode weight reads) fall to the tile path and decode
+  // crawls (measured 4.6 tok/s at the ready gate).
   if (M == 1 && (group_size % 8) == 0 && (K % 8) == 0 &&
-      (size_t)K * sizeof(float) <= 48 * 1024) {
+      (size_t)K * sizeof(float) <= 96 * 1024) {
     const int threads = 256, warps = threads / 32;
     dim3 ggrid((int)((N + warps - 1) / warps));
     size_t shmem = (size_t)K * sizeof(float);
     DISPATCH_FLOAT(x.dtype, T, {
+      if (shmem > 48 * 1024) {
+        cudaFuncSetAttribute(int4_gemv_kernel<T>,
+                             cudaFuncAttributeMaxDynamicSharedMemorySize,
+                             96 * 1024);
+      }
       int4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
           static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
           static_cast<__half*>(scales.data_ptr()),
