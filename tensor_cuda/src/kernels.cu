@@ -1280,7 +1280,10 @@ __global__ void int4_dequant_t_kernel(const uint8_t* packed, const __half* scale
   int q = (k & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
   int64_t g = k / group_size;
   float scale = __half2float(scales[col * G + g]);
-  float zero = __half2float(zeros[col * G + g]);
+  // zeros == nullptr selects the SYMMETRIC-8 convention (z = -8*s): the
+  // exact q4_0 grid (w = s*(q-8)) without materializing a zeros tensor
+  // that is pure redundancy (QAT import path).
+  float zero = zeros ? __half2float(zeros[col * G + g]) : -8.f * scale;
   float w = (float)q * scale + zero;
   st<T>(out_kn, idx, w);
 }
@@ -1289,7 +1292,9 @@ NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
                      const NDArray& zeros, int group_size, DType out_dtype) {
   // The kernel reinterprets scales/zeros as __half* unconditionally; fp32 inputs
   // would be read as 2-byte halves (garbage weights, silently). Fail loud.
-  if (scales.dtype != DType::Float16 || zeros.dtype != DType::Float16) {
+  // An EMPTY zeros tensor selects the symmetric-8 convention (z = -8*s).
+  if (scales.dtype != DType::Float16 ||
+      (zeros.numel() > 0 && zeros.dtype != DType::Float16)) {
     throw std::runtime_error(
         "int4_dequant: scales and zeros must be float16 (got scales=" +
         std::string(dtype_name(scales.dtype)) + ", zeros=" +
@@ -1310,7 +1315,7 @@ NDArray int4_dequant(const NDArray& packed, const NDArray& scales,
       int4_dequant_t_kernel<T><<<nblk(n), kT>>>(
           static_cast<uint8_t*>(packed.data_ptr()),
           static_cast<__half*>(scales.data_ptr()),
-          static_cast<__half*>(zeros.data_ptr()),
+          zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
           static_cast<T*>(out.data_ptr()), N, K, group_size, G, n);
     });
     cuda_check_last("int4_dequant");
@@ -1360,7 +1365,8 @@ __global__ void int4_gemm_fused_kernel(
       int q = (kw & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
       int g = kw / group_size;
       float sc = __half2float(scales[(int64_t)col * G + g]);
-      float ze = __half2float(zeros[(int64_t)col * G + g]);
+      float ze = zeros ? __half2float(zeros[(int64_t)col * G + g])
+                       : -8.f * sc;          // symmetric-8 (q4_0 grid)
       wv = (float)q * sc + ze;
     }
     ws[threadIdx.y][threadIdx.x] = wv;
@@ -1395,14 +1401,15 @@ __global__ void int4_gemv_kernel(
   const int Kb = K >> 1;                              // packed bytes per row
   const uchar4* row4 = reinterpret_cast<const uchar4*>(packed + (int64_t)n * Kb);
   const __half* srow = scales + (int64_t)n * G;
-  const __half* zrow = zeros + (int64_t)n * G;
+  const __half* zrow = zeros ? zeros + (int64_t)n * G : nullptr;
   float acc = 0.f;
   const int nb4 = Kb >> 2;
   for (int b4 = lane; b4 < nb4; b4 += 32) {
     uchar4 v = row4[b4];
     int k0 = b4 << 3;                                 // first of 8 weights
     int g = k0 / group_size;
-    float sc = __half2float(srow[g]), ze = __half2float(zrow[g]);
+    float sc = __half2float(srow[g]);
+    float ze = zrow ? __half2float(zrow[g]) : -8.f * sc;  // symmetric-8
     const float* xk = xs + k0;
     acc += ((float)(v.x & 0x0F) * sc + ze) * xk[0]
          + ((float)((v.x >> 4) & 0x0F) * sc + ze) * xk[1]
@@ -1420,7 +1427,8 @@ __global__ void int4_gemv_kernel(
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros,
                           int group_size) {
-  if (scales.dtype != DType::Float16 || zeros.dtype != DType::Float16)
+  if (scales.dtype != DType::Float16 ||
+      (zeros.numel() > 0 && zeros.dtype != DType::Float16))
     throw std::runtime_error("int4_linear_fused: scales/zeros must be float16");
   if (packed.dtype != DType::Uint8)
     throw std::runtime_error("int4_linear_fused: packed must be uint8");
@@ -1446,7 +1454,8 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
     DISPATCH_FLOAT(x.dtype, T, {
       int4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
           static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
-          static_cast<__half*>(scales.data_ptr()), static_cast<__half*>(zeros.data_ptr()),
+          static_cast<__half*>(scales.data_ptr()),
+          zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
           static_cast<T*>(out.data_ptr()), (int)N, (int)K, group_size, (int)G);
     });
     cuda_check_last("int4_gemv");
@@ -1458,7 +1467,8 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   DISPATCH_FLOAT(x.dtype, T, {
     int4_gemm_fused_kernel<T><<<grid, block>>>(
         static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
-        static_cast<__half*>(scales.data_ptr()), static_cast<__half*>(zeros.data_ptr()),
+        static_cast<__half*>(scales.data_ptr()),
+        zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
         static_cast<T*>(out.data_ptr()), (int)M, (int)N, (int)K, group_size, G);
   });
   cuda_check_last("int4_linear_fused");
