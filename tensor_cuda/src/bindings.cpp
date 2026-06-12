@@ -231,6 +231,17 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("int4_linear_fused", &ops::int4_linear_fused,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("group_size") = 128);
+  // Fused GDN decode step (inference-only; mutates `state` in place).
+  m.def("gated_delta_step", [](Tensor& q, Tensor& k, Tensor& v, Tensor& a,
+                               Tensor& b, Tensor& A_neg, Tensor& dt_bias,
+                               Tensor& state) {
+    return Tensor::make(
+        tc::gated_delta_step(q.data(), k.data(), v.data(), a.data(),
+                             b.data(), A_neg.data(), dt_bias.data(),
+                             state.data()),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("a"), py::arg("b"),
+     py::arg("A_neg"), py::arg("dt_bias"), py::arg("state"));
   m.def("int4_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
                            int group_size, const std::string& out_dtype) {
     return Tensor::make(

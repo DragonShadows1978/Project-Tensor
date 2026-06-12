@@ -192,6 +192,16 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros, int group_size);
 
+// Fused Gated DeltaNet decode step (inference-only, all fp32; STATE IS
+// UPDATED IN PLACE): folds l2norm(q,k), gate math (sigmoid/softplus/exp)
+// and the decay-first delta-rule update + readout into one launch.
+// q,k (B,Hk,Dk) raw heads; v (B,H,Dv); a,b (B,H); A_neg/dt_bias H elems;
+// state (B,H,Dk,Dv). Returns out (B,H,Dv).
+NDArray gated_delta_step(const NDArray& q, const NDArray& k,
+                         const NDArray& v, const NDArray& a,
+                         const NDArray& b, const NDArray& A_neg,
+                         const NDArray& dt_bias, NDArray& state);
+
 // Fused sparse APA-Quant attention. q,k,kq,v: (B,H,L,D)/(B,H,S,D). For each
 // query row, the refine threshold is built from the quantized (bulk) scores;
 // the full-precision dot is computed ONLY for keys whose |bulk| >= threshold

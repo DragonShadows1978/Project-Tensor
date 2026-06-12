@@ -106,6 +106,16 @@ def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
+def gated_delta_step(q, k, v, a, b, A_neg, dt_bias, state):
+    """Fused Gated DeltaNet decode step (one token, one layer, ONE launch):
+    l2norm(q,k) + gate math (sigmoid/softplus/exp) + decay-first delta-rule
+    state update + readout. All fp32. STATE IS UPDATED IN PLACE (single-
+    stream decode only). q,k (B,Hk,Dk) raw heads; v (B,H,Dv); a,b (B,H);
+    A_neg = -exp(A_log), dt_bias: H elements; state (B,H,Dk,Dv).
+    Returns out (B,H,Dv). Inference only (no autograd)."""
+    return _C.gated_delta_step(q, k, v, a, b, A_neg, dt_bias, state)
+
+
 def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
     """Fused sparse selective APA attention: full-precision dot only on the keys
     the bulk/quantized pass selects (|bulk| >= mean+zthr*std), rest stay quantized.
@@ -246,6 +256,7 @@ __all__ = [
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
+    "gated_delta_step",
     "int4_dequant", "apa_selective_attention",
 ]
 __version__ = "0.1.0-phase1"
