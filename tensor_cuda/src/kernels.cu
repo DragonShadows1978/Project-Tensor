@@ -534,6 +534,45 @@ struct ReduceSpec {
   int64_t red_size;               // product of reduced dim sizes
 };
 
+// Trailing-axis fast path: one BLOCK per row (strided loads + shared-
+// memory tree). The generic kernel below parallelizes over OUTPUTS
+// only — for few-outputs/large-reduction shapes (softmax max/sum over
+// the key axis: 16 outputs x 700 elements) that is 16 serial threads
+// on the whole GPU, measured 533us for an 11K-element max.
+template <typename T, int MODE>  // 0=sum 1=max 2=min 3=prod
+__global__ void reduce_lastdim_kernel(const T* __restrict__ in,
+                                      T* __restrict__ out,
+                                      int64_t R, int64_t n_rows) {
+  int64_t row = blockIdx.x;
+  if (row >= n_rows) return;
+  const T* p = in + row * R;
+  float acc = MODE == 0 ? 0.f
+            : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
+  for (int64_t i = threadIdx.x; i < R; i += blockDim.x) {
+    float v = ld<T>(p, i);
+    if (MODE == 0) acc += v;
+    else if (MODE == 1) acc = v > acc ? v : acc;
+    else if (MODE == 2) acc = v < acc ? v : acc;
+    else acc *= v;
+  }
+  __shared__ float sh[256];
+  sh[threadIdx.x] = acc;
+  __syncthreads();
+  for (int off = blockDim.x >> 1; off; off >>= 1) {
+    if (threadIdx.x < off) {
+      float o = sh[threadIdx.x + off];
+      if (MODE == 0) sh[threadIdx.x] += o;
+      else if (MODE == 1) sh[threadIdx.x] =
+          o > sh[threadIdx.x] ? o : sh[threadIdx.x];
+      else if (MODE == 2) sh[threadIdx.x] =
+          o < sh[threadIdx.x] ? o : sh[threadIdx.x];
+      else sh[threadIdx.x] *= o;
+    }
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) st<T>(out, row, sh[0]);
+}
+
 template <typename T, int MODE>  // 0=sum 1=max 2=min 3=prod
 __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) {
   int64_t oidx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
@@ -579,7 +618,24 @@ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int m
   for (int d = 0; d < nd; ++d) s.out_str[d] = ostr[d];
   NDArray out(keep_shape, a.dtype, a.device);
   int64_t out_n = out.numel();
-  if (out_n > 0) {
+  // trailing-block fast path: reduced axes form the contiguous tail of
+  // the shape -> rows are contiguous, one block per row
+  bool trailing = true;
+  {
+    int first_red = nd;
+    for (int d = 0; d < nd; ++d) if (s.reduced[d]) { first_red = d; break; }
+    for (int d = first_red; d < nd; ++d) if (!s.reduced[d]) trailing = false;
+    if (first_red == nd) trailing = false;       // nothing reduced
+  }
+  if (out_n > 0 && trailing && s.red_size > 1) {
+    DISPATCH_FLOAT(a.dtype, T, {
+      if (mode == 1) reduce_lastdim_kernel<T, 1><<<(unsigned)out_n, 256>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s.red_size, out_n);
+      else if (mode == 2) reduce_lastdim_kernel<T, 2><<<(unsigned)out_n, 256>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s.red_size, out_n);
+      else if (mode == 3) reduce_lastdim_kernel<T, 3><<<(unsigned)out_n, 256>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s.red_size, out_n);
+      else reduce_lastdim_kernel<T, 0><<<(unsigned)out_n, 256>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s.red_size, out_n);
+    });
+    cuda_check_last("reduce_lastdim");
+  } else if (out_n > 0) {
     DISPATCH_FLOAT(a.dtype, T, {
       if (mode == 1) reduce_kernel<T, 1><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
       else if (mode == 2) reduce_kernel<T, 2><<<nblk(out_n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), s, out_n);
