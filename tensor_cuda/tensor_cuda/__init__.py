@@ -121,6 +121,18 @@ def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
+def kv_int4_pack(x, group=32):
+    """Quantize+pack a KV tensor (B,KV,S,D) to D-grouped 4-bit. Returns
+    (packed_uint8 (B,KV,S,D/2), scales (B,KV,S,D/group) in x.dtype).
+    Symmetric-8, group-32. Distinct from int4_dequant (weight, K-grouped)."""
+    return _C.kv_int4_pack(x, group)
+
+
+def kv_int4_unpack(packed, scales, group=32, lo=0, n=0, out_dtype="bfloat16"):
+    """Dequantize rows [lo:lo+n) of a packed KV buffer -> (B,KV,n,D)."""
+    return _C.kv_int4_unpack(packed, scales, group, lo, n, out_dtype)
+
+
 def gated_delta_step(q, k, v, a, b, A_neg, dt_bias, state):
     """Fused Gated DeltaNet decode step (one token, one layer, ONE launch):
     l2norm(q,k) + gate math (sigmoid/softplus/exp) + decay-first delta-rule
@@ -274,5 +286,6 @@ __all__ = [
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "gated_delta_step",
     "int4_dequant", "apa_selective_attention",
+    "kv_int4_pack", "kv_int4_unpack",
 ]
 __version__ = "0.1.0-phase1"

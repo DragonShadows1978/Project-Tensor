@@ -194,6 +194,17 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros, int group_size);
 
+// KV-cache INT4 storage (D-grouped, symmetric-8). Distinct from int4_dequant
+// (weight-shaped, K-grouped, transposed-matrix output): packs along the
+// innermost D of a (B,KV,S,D) cache and reads come out as a (B,KV,n,D) SLICE.
+//   kv_int4_pack  : x (B,KV,S,D) compute -> packed (B,KV,S,D/2) uint8; writes
+//                   the per-group scales into scales_out (B,KV,S,D/group).
+//   kv_int4_unpack: dequant rows [lo,lo+n) -> (B,KV,n,D) out_dtype.
+// group must divide D; D even. Symmetric-8 grid (q in [0,15], x=(q-8)*scale).
+NDArray kv_int4_pack(const NDArray& x, NDArray& scales_out, int group);
+NDArray kv_int4_unpack(const NDArray& packed, const NDArray& scales,
+                       int group, int64_t lo, int64_t n, DType out_dtype);
+
 // Fused Gated DeltaNet decode step (inference-only, all fp32,
 // FUNCTIONAL — returns {out, new_state}; the input state is untouched
 // so callers may branch/save freely): folds l2norm(q,k), gate math and

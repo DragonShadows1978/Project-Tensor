@@ -254,6 +254,23 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
      py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
+  // KV-cache INT4 storage (D-grouped symmetric-8). Distinct from int4_dequant
+  // (weight path, K-grouped). pack -> (packed_u8, scales); unpack reads a
+  // [lo:lo+n) slice on S. Inference-only (no autograd: the cache is frozen).
+  m.def("kv_int4_pack", [](Tensor& x, int group) {
+    NDArray scales;
+    NDArray packed = tc::kv_int4_pack(x.data(), scales, group);
+    return py::make_tuple(Tensor::make(packed, false),
+                          Tensor::make(scales, false));
+  }, py::arg("x"), py::arg("group") = 32);
+  m.def("kv_int4_unpack", [](Tensor& packed, Tensor& scales, int group,
+                             int64_t lo, int64_t n, const std::string& out_dtype) {
+    return Tensor::make(
+        tc::kv_int4_unpack(packed.data(), scales.data(), group, lo, n,
+                           dtype_from_string(out_dtype)),
+        false);
+  }, py::arg("packed"), py::arg("scales"), py::arg("group") = 32,
+     py::arg("lo") = 0, py::arg("n") = 0, py::arg("out_dtype") = "bfloat16");
   // Fused sparse selective APA attention (inference only, no autograd).
   m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                       double scale, double zthr, bool is_causal) {

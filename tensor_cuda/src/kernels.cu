@@ -1564,6 +1564,145 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   return out;
 }
 
+// =====================================================================
+// KV-cache INT4 storage (D-grouped, symmetric-8) — the tail-law primitive.
+//
+// int4_dequant above is WEIGHT-shaped: it packs along K (in-features) and
+// emits a transposed (K,N) matrix for a GEMM. The KV cache is a different
+// animal: (B, KV, S, D), packed along the contiguous innermost dim D, and
+// reads come out as a (B, KV, n, D) SLICE [lo:lo+n) — never the whole cap.
+// So it needs its own pair of kernels. Convention matches rt_int4 / the
+// QAT q4_0 grid already used for weights: group-32, symmetric-8
+//   scale = max|x_group| / 8   (8 == half the 4-bit code span)
+//   q     = round(x/scale) + 8   clamped to [0,15]
+//   x_hat = (q - 8) * scale
+// Packed layout: (B, KV, S, D/2) uint8 — element 2t -> low nibble of byte t,
+// element 2t+1 -> high nibble. Scales: (B, KV, S, D/32) in COMPUTE dtype
+// (bf16 here; a fp16-hardcode would dtype-mismatch the attention matmul,
+// the same trap _kv_quant documents). The segfault that killed the naive
+// uint8 strided-copy was st<uint8> instantiated through DISPATCH_FLOAT —
+// these kernels touch uint8 only as a raw uint8_t* (pack writes bytes by
+// hand; unpack READS bytes and st<T>'s a FLOAT out), so that template
+// arm is never instantiated.
+//
+// GROUP must divide D. NIB packing assumes D even (always true: D=512/256).
+
+// pack: float (B,KV,S,D) + precomputed scales (B,KV,S,G) -> uint8 (B,KV,S,D/2)
+// one thread per OUTPUT BYTE (== two source elements, same group since
+// GROUP is even and >= 2).
+template <typename T>
+__global__ void kv_int4_pack_kernel(const T* __restrict__ x,
+                                    const T* __restrict__ scales,
+                                    uint8_t* __restrict__ packed,
+                                    int64_t D, int group, int64_t G,
+                                    int64_t nbytes) {
+  int64_t b = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;  // output byte
+  if (b >= nbytes) return;
+  int64_t row = b / (D / 2);            // flattened (B*KV*S) row index
+  int64_t bin = b - row * (D / 2);      // byte within the row [0, D/2)
+  int64_t d0 = bin * 2;                 // first source element in this byte
+  int64_t g = d0 / group;               // group index (both elems share it)
+  float s = ld<T>(scales, row * G + g);
+  float invs = s > 0.f ? s : 1.f;       // guard div-by-zero (all-zero group)
+  int64_t base = row * D + d0;
+  float x0 = ld<T>(x, base);
+  float x1 = ld<T>(x, base + 1);
+  // DIVIDE (not reciprocal-multiply) so the quant grid is bit-identical to
+  // the rt_int4 reference that measured +5.55% ppl — recip-mul flips ~2 in
+  // 35k codes at half-step boundaries, harmless but avoidable for free.
+  int q0 = (int)lrintf(x0 / invs) + 8; q0 = q0 < 0 ? 0 : (q0 > 15 ? 15 : q0);
+  int q1 = (int)lrintf(x1 / invs) + 8; q1 = q1 < 0 ? 0 : (q1 > 15 ? 15 : q1);
+  packed[b] = (uint8_t)((q1 << 4) | q0);   // even -> low nibble, odd -> high
+}
+
+// unpack a slice: uint8 (B,KV,S,D/2) + scales (B,KV,S,G) -> float (B,KV,n,D),
+// reading source rows [lo, lo+n) on the S axis. One thread per OUTPUT elem.
+// The packed/scales rows are addressed at (s_out + lo); the output is dense.
+template <typename T>
+__global__ void kv_int4_unpack_kernel(const uint8_t* __restrict__ packed,
+                                      const T* __restrict__ scales,
+                                      T* __restrict__ out,
+                                      int64_t BKV, int64_t S, int64_t D,
+                                      int group, int64_t G, int64_t lo,
+                                      int64_t n_out, int64_t total) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;  // output elem
+  if (idx >= total) return;
+  int64_t d = idx % D;
+  int64_t so = (idx / D) % n_out;        // output row on S [0, n_out)
+  int64_t bkv = idx / (D * n_out);       // flattened (B*KV) index
+  int64_t src_row = bkv * S + (so + lo); // source row in packed/scales
+  int64_t byte_idx = src_row * (D / 2) + (d >> 1);
+  uint8_t byte = packed[byte_idx];
+  int q = (d & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+  int64_t g = d / group;
+  float s = ld<T>(scales, src_row * G + g);
+  st<T>(out, idx, (float)(q - 8) * s);
+}
+
+// Quantize+pack a KV tensor. x: (B,KV,S,D) compute dtype. Returns the packed
+// uint8 buffer; scales are computed here and written into `scales_out`
+// (caller-allocated (B,KV,S,G) compute dtype) so the ring can store them
+// alongside. Symmetric-8, group-32 along D.
+NDArray kv_int4_pack(const NDArray& x, NDArray& scales_out, int group) {
+  if (x.ndim() != 4)
+    throw std::runtime_error("kv_int4_pack: expects (B,KV,S,D)");
+  int64_t B = x.shape[0], KV = x.shape[1], S = x.shape[2], D = x.shape[3];
+  if (D % group != 0 || D % 2 != 0)
+    throw std::runtime_error("kv_int4_pack: D must be even and divisible by group");
+  int64_t G = D / group;
+  int64_t rows = B * KV * S;
+  // scales = max|x| over each group of `group` elems on D. Reshape to
+  // (rows, G, group), abs, max over last -> (rows, G), * (1/8). Done with
+  // engine ops so no bespoke reduction kernel (and it stays autograd-free
+  // via the no_grad caller).
+  NDArray xg = x.reshape({rows, G, (int64_t)group});
+  NDArray amax = reduce_max(ew_unary(xg, U_ABS), {2}, /*keepdim=*/false); // (rows,G)
+  NDArray scales = ew_scalar(amax, 1.0 / 8.0, /*op=*/2, false);  // * 1/8
+  scales = ew_scalar(scales, 1e-8, /*op=*/0, false);            // + eps
+  scales = scales.astype(x.dtype);
+  // hand the scales back in the (B,KV,S,G) view the ring stores
+  scales_out = scales.reshape({B, KV, S, G});
+  NDArray packed({B, KV, S, D / 2}, DType::Uint8, x.device);
+  int64_t nbytes = rows * (D / 2);
+  if (nbytes) {
+    DISPATCH_FLOAT(x.dtype, T, {
+      kv_int4_pack_kernel<T><<<nblk(nbytes), kT>>>(
+          static_cast<T*>(x.data_ptr()),
+          static_cast<T*>(scales_out.data_ptr()),
+          static_cast<uint8_t*>(packed.data_ptr()),
+          D, group, G, nbytes);
+    });
+    cuda_check_last("kv_int4_pack");
+  }
+  return packed;
+}
+
+// Dequantize a slice [lo:lo+n) of a packed KV buffer -> (B,KV,n,D) compute
+// dtype. packed: (B,KV,S,D/2) uint8; scales: (B,KV,S,G) compute dtype.
+NDArray kv_int4_unpack(const NDArray& packed, const NDArray& scales,
+                       int group, int64_t lo, int64_t n, DType out_dtype) {
+  if (packed.dtype != DType::Uint8)
+    throw std::runtime_error("kv_int4_unpack: packed must be uint8");
+  int64_t B = packed.shape[0], KV = packed.shape[1], S = packed.shape[2];
+  int64_t D = packed.shape[3] * 2;
+  if (lo < 0 || n < 0 || lo + n > S)
+    throw std::runtime_error("kv_int4_unpack: slice out of range");
+  int64_t G = D / group;
+  NDArray out({B, KV, n, D}, out_dtype, packed.device);
+  int64_t total = B * KV * n * D;
+  if (total) {
+    DISPATCH_FLOAT(out_dtype, T, {
+      kv_int4_unpack_kernel<T><<<nblk(total), kT>>>(
+          static_cast<uint8_t*>(packed.data_ptr()),
+          static_cast<T*>(scales.data_ptr()),
+          static_cast<T*>(out.data_ptr()),
+          B * KV, S, D, group, G, lo, n, total);
+    });
+    cuda_check_last("kv_int4_unpack");
+  }
+  return out;
+}
+
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {
   int64_t V = weight.shape[0];
   int64_t row = weight.numel() / V;
