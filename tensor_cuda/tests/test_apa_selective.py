@@ -16,14 +16,18 @@ import tensor_cuda as tc
 
 def ref_selective(q, k, kq, v, scale, z, causal):
     B, H, L, D = q.shape
-    S = k.shape[2]
+    KVH, S = k.shape[1], k.shape[2]
+    group = H // KVH                       # GQA: query head h -> KV head h//group
     out = np.zeros((B, H, L, D), np.float32)
     for b in range(B):
         for h in range(H):
+            kh = h // group
             for i in range(L):
-                s_max = (i + 1) if causal else S
+                # BOTTOM-RIGHT causal: query i is at absolute key index
+                # (S-L)+i, sees keys 0..(S-L)+i. Reduces to i+1 at S==L.
+                s_max = ((S - L) + i + 1) if causal else S
                 qi = q[b, h, i]
-                bulk = (kq[b, h, :s_max] @ qi) * scale          # (s_max,)
+                bulk = (kq[b, kh, :s_max] @ qi) * scale         # (s_max,)
                 a = np.abs(bulk)
                 mean = a.mean()
                 std = np.sqrt(max(a.var(), 0.0))
@@ -31,24 +35,25 @@ def ref_selective(q, k, kq, v, scale, z, causal):
                 score = np.empty(s_max, np.float32)
                 for j in range(s_max):
                     if abs(bulk[j]) >= thr:
-                        score[j] = (k[b, h, j] @ qi) * scale     # exact, selected
+                        score[j] = (k[b, kh, j] @ qi) * scale    # exact, selected
                     else:
                         score[j] = bulk[j]
                 m = score.max()
                 w = np.exp(score - m)
                 w /= w.sum()
-                out[b, h, i] = w @ v[b, h, :s_max]
+                out[b, h, i] = w @ v[b, kh, :s_max]
     return out
 
 
-def _run(causal):
+def _run(causal, L=64, S=None, D=64, H=4, KVH=None):
     rng = np.random.default_rng(0)
-    B, H, L, D = 1, 4, 64, 64
-    S = L
+    B = 1
+    S = L if S is None else S
+    KVH = H if KVH is None else KVH
     q = (rng.standard_normal((B, H, L, D)) * 0.1).astype(np.float32)
-    k = (rng.standard_normal((B, H, S, D)) * 0.1).astype(np.float32)
-    v = (rng.standard_normal((B, H, S, D)) * 0.1).astype(np.float32)
-    kq = (k + rng.standard_normal((B, H, S, D)) * 0.01).astype(np.float32)  # "quantized" keys
+    k = (rng.standard_normal((B, KVH, S, D)) * 0.1).astype(np.float32)
+    v = (rng.standard_normal((B, KVH, S, D)) * 0.1).astype(np.float32)
+    kq = (k + rng.standard_normal((B, KVH, S, D)) * 0.01).astype(np.float32)
     scale = 1.0 / np.sqrt(D)
     refine_pct = 0.15
     # z for top-percentile selection (same as engine _norm_ppf(1-pct)).
@@ -70,6 +75,28 @@ def test_selective_noncausal():
 
 def test_selective_causal():
     _run(True)
+
+
+def test_selective_noncausal_d512():
+    _run(False, D=512)          # Gemma 4 global head_dim
+
+
+def test_selective_causal_d512():
+    _run(True, D=512)
+
+
+def test_selective_rectangular_cache():
+    """S>L: queries continue onto a cached prefix (the bottom-right
+    causal regime). The old top-left s_max=i+1 SILENTLY blinded queries
+    to the most recent S-L keys here — this case is what catches it."""
+    _run(True, L=32, S=256, D=64)
+    _run(True, L=16, S=512, D=512)    # Gemma-shaped chunked-prefill
+
+
+def test_selective_mqa_d512():
+    """Gemma 4 global: MQA (1 KV head, 16 q heads), head_dim 512,
+    rectangular cache."""
+    _run(True, L=8, S=300, D=512, H=16, KVH=1)
 
 
 def test_selective_actually_sparse():

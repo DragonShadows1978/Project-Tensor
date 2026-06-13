@@ -1029,7 +1029,11 @@ NDArray apa_quantize_gather(const NDArray& rotated, const NDArray& boundaries,
 // q,k,k_quant,v: (B,H,L,D) / (B,H,S,D) row-major. out: (B,H,L,D). z is the
 // precomputed z-score for refine_percentile (host-side _norm_ppf). is_causal
 // masks keys j>i. D is capped at TC_APA_MAXD for the per-thread reduction buffers.
-constexpr int TC_APA_MAXD = 256;
+constexpr int TC_APA_MAXD = 512;   // bumped 256->512 for Gemma 4 global
+                                   // (MQA head_dim 512); nvcc-verified to
+                                   // compile clean at D=512 (42 regs, 0
+                                   // spills — acc[] is already local, the
+                                   // register-cliff fear was imaginary)
 // DMAX is the compile-time size of the per-thread acc[] register array. Sizing it
 // to the actual head_dim (64/128) instead of the 256 worst case keeps acc[] in
 // registers/L1 instead of spilling to local (global-backed) memory — a large win
@@ -1064,7 +1068,13 @@ __global__ void apa_selective_kernel(
   for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
   __syncthreads();
 
-  int s_max = is_causal ? (i + 1) : S;   // causal: keys 0..i only
+  // BOTTOM-RIGHT causal: query row i sits at ABSOLUTE key index
+  // (S-L)+i (the prefill-continuation / cache regime where S>L), so it
+  // sees keys 0..(S-L)+i. The old s_max=i+1 was top-left — correct only
+  // at S==L (square, no cache), and SILENTLY blinds queries to the most
+  // recent S-L keys otherwise (the 121->11M ppl bug class). Reduces to
+  // i+1 exactly when S==L.
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
   __shared__ float red[256];
 
   // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold. Each
@@ -1187,7 +1197,8 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
     // resident. Real head_dims are 64 (TinyLlama) and 128 (Mistral/Qwen/OLMoE);
     // 256 is the safety fallback (== the old behaviour) for anything larger.
     if (D > TC_APA_MAXD) {
-      throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD");
+      throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD "
+                               "(512); raise the cap + add a dispatch arm");
     }
     DISPATCH_FLOAT(q.dtype, T, {
       auto launch = [&](auto dmax_tag) {
@@ -1200,7 +1211,8 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
       };
       if (D <= 64)        launch(std::integral_constant<int, 64>{});
       else if (D <= 128)  launch(std::integral_constant<int, 128>{});
-      else                launch(std::integral_constant<int, TC_APA_MAXD>{});
+      else if (D <= 256)  launch(std::integral_constant<int, 256>{});
+      else                launch(std::integral_constant<int, 512>{});
     });
     cuda_check_last("apa_selective");
   }
