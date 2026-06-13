@@ -1941,6 +1941,56 @@ NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype
   return out;
 }
 
+// ------------------------------------------------------- ring-buffer write
+// In-place block write of L rows into a (.., CAP, D) buffer at ring
+// positions (start + l) % CAP. THE decode-cache primitive: replaces the
+// per-token cat+trim pair that allocated/copied the whole cache every
+// step (~670MB/token across Gemma 4's 40 sliding layers — measured
+// 0.8s/tok decode past 1K context from allocator churn alone).
+// MUTATES buf: inference-only (throws under grad), and callers own the
+// sharing contract — a written buffer must never be aliased by a held
+// cache (copy on save/mount).
+template <typename T>
+__global__ void write_rows_kernel(T* __restrict__ buf,
+                                  const T* __restrict__ src,
+                                  int64_t CAP, int64_t L, int64_t D,
+                                  int64_t start, int64_t n) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  int64_t d = i % D;
+  int64_t l = (i / D) % L;
+  int64_t b = i / (D * L);
+  int64_t row = (start + l) % CAP;
+  buf[(b * CAP + row) * D + d] = src[i];
+}
+
+void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
+  if (buf.dtype != src.dtype)
+    throw std::runtime_error("write_rows: dtype mismatch");
+  if (buf.ndim() < 2 || src.ndim() < 2)
+    throw std::runtime_error("write_rows: need >=2D buf and src");
+  int64_t D = buf.shape[buf.ndim() - 1];
+  int64_t CAP = buf.shape[buf.ndim() - 2];
+  int64_t Ls = src.shape[src.ndim() - 2];
+  if (src.shape[src.ndim() - 1] != D)
+    throw std::runtime_error("write_rows: last-dim mismatch");
+  int64_t lead_b = buf.numel() / (CAP * D);
+  int64_t lead_s = src.numel() / (Ls * D);
+  if (lead_b != lead_s)
+    throw std::runtime_error("write_rows: leading-dim mismatch");
+  if (Ls > CAP)
+    throw std::runtime_error("write_rows: src rows exceed capacity");
+  int64_t n = src.numel();
+  if (n) {
+    DISPATCH_FLOAT(buf.dtype, T, {
+      write_rows_kernel<T><<<nblk(n), kT>>>(
+          static_cast<T*>(buf.data_ptr()), static_cast<T*>(src.data_ptr()),
+          CAP, Ls, D, start, n);
+    });
+    cuda_check_last("write_rows");
+  }
+}
+
 // ------------------------------------------------------ fused RoPE apply
 // out = x * cos[pos0+l] + rotate_half(x) * sin[pos0+l], one launch.
 // The composed chain (2 table slices + 2 x-slices + neg + cat + 2 muls

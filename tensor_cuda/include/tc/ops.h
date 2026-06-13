@@ -72,6 +72,7 @@ Tensor causal_softmax(const Tensor& scores);
 // Fused RMSNorm over the last dim (inference-only: backward throws).
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn, int64_t pos0);
+void write_rows(Tensor& buf, const Tensor& src, int64_t start);
 
 // Reductions.
 Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim);

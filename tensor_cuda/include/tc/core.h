@@ -174,6 +174,7 @@ NDArray causal_softmax(const NDArray& scores);
 // w must be fp32; out_dtype is typically x's dtype.
 NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype);
 NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn, int64_t pos0);
+void write_rows(NDArray& buf, const NDArray& src, int64_t start);
 
 // INT4 group-quantized linear: y = x @ dequant(W)^T.
 //   x       : (..., K) fp16/fp32 activations (K == in_features)

@@ -94,6 +94,14 @@ def rope_apply(x, cos, sin, pos0=0):
     return _C.rope_apply(x, cos, sin, pos0)
 
 
+def write_rows(buf, src, start=0):
+    """IN-PLACE ring write: src rows land at (start+l) %% CAP along
+    buf's dim -2. The decode-cache primitive (zero-copy appends).
+    Inference-only (raises under grad). MUTATES buf — callers own the
+    sharing contract: never alias a written buffer from a held cache."""
+    _C.write_rows(buf, src, start)
+
+
 def int4_linear(x, packed, scales, zeros, group_size=128):
     """INT4 group-quantized linear: y = x @ dequant(W)^T. Inference only.
     Two-stage: dequant W to a full (K,N) fp16 buffer then cuBLAS matmul."""
@@ -260,7 +268,7 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "rms_norm", "rope_apply", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "matmul", "rms_norm", "rope_apply", "write_rows", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

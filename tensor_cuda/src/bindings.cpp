@@ -212,6 +212,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("rms_norm", &ops::rms_norm, py::arg("x"), py::arg("w"), py::arg("eps"));
   m.def("rope_apply", &ops::rope_apply, py::arg("x"), py::arg("cos"),
         py::arg("sin"), py::arg("pos0"));
+  m.def("write_rows", &ops::write_rows, py::arg("buf"), py::arg("src"),
+        py::arg("start"));
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);

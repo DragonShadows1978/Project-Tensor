@@ -264,6 +264,15 @@ Tensor rms_norm(const Tensor& x, const Tensor& w, double eps) {
   });
 }
 
+void write_rows(Tensor& buf, const Tensor& src, int64_t start) {
+  // In-place mutation: forbidden under autograd (would silently corrupt
+  // any graph that captured buf). Inference-only by construction.
+  if (tc::grad_enabled())
+    throw std::runtime_error("write_rows: in-place op is inference-only");
+  NDArray b = buf.data();
+  tc::write_rows(b, src.data(), start);
+}
+
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,
                   int64_t pos0) {
   NDArray out = tc::rope_apply(x.data(), cs.data(), sn.data(), pos0);
