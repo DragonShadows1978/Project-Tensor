@@ -30,6 +30,20 @@ def run():
         tc.write_rows(rb, row, 1023)
         assert float(rb.float().numpy()[:, :, 1023].sum()) == 8 * 64
         assert float(rb.float().numpy()[:, :, :1023].sum()) == 0
+
+        # UINT8 path (quantized KV-storage rings): exact byte copy,
+        # in-order + wrapped, untouched rows preserved
+        ub = tc.tensor(np.zeros((1, 1, 8, 4), np.uint8), dtype="uint8")
+        us = tc.tensor((np.arange(1 * 1 * 3 * 4) % 251 + 1
+                        ).astype(np.uint8).reshape(1, 1, 3, 4), dtype="uint8")
+        tc.write_rows(ub, us, 0)
+        assert np.array_equal(ub.numpy()[:, :, :3], us.numpy())
+        assert ub.numpy()[:, :, 3:].sum() == 0
+        tc.write_rows(ub, us, 7)                      # wrap: rows 7,0,1
+        u = ub.numpy()
+        assert np.array_equal(u[:, :, 7], us.numpy()[:, :, 0])
+        assert np.array_equal(u[:, :, 0], us.numpy()[:, :, 1])
+        assert np.array_equal(u[:, :, 1], us.numpy()[:, :, 2])
     try:
         tc.write_rows(buf, src, 0)
         raise AssertionError("grad guard missing")

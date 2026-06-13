@@ -1982,12 +1982,23 @@ void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
     throw std::runtime_error("write_rows: src rows exceed capacity");
   int64_t n = src.numel();
   if (n) {
-    DISPATCH_FLOAT(buf.dtype, T, {
-      write_rows_kernel<T><<<nblk(n), kT>>>(
-          static_cast<T*>(buf.data_ptr()), static_cast<T*>(src.data_ptr()),
-          CAP, Ls, D, start, n);
-    });
-    cuda_check_last("write_rows");
+    // write_rows is a raw row copy — works for any POD type. uint8 is
+    // dispatched explicitly (the float-only DISPATCH_FLOAT macro throws
+    // on it) so quantized KV-storage rings (uint8 kb/vb + scale buffers)
+    // can ring-write in place exactly like the bf16 rings.
+    if (buf.dtype == DType::Uint8) {
+      write_rows_kernel<uint8_t><<<nblk(n), kT>>>(
+          static_cast<uint8_t*>(buf.data_ptr()),
+          static_cast<uint8_t*>(src.data_ptr()), CAP, Ls, D, start, n);
+      cuda_check_last("write_rows");
+    } else {
+      DISPATCH_FLOAT(buf.dtype, T, {
+        write_rows_kernel<T><<<nblk(n), kT>>>(
+            static_cast<T*>(buf.data_ptr()),
+            static_cast<T*>(src.data_ptr()), CAP, Ls, D, start, n);
+      });
+      cuda_check_last("write_rows");
+    }
   }
 }
 
