@@ -642,7 +642,11 @@ bulk and rare in the tail.
 ## Acknowledgments
 
 This work was carried out independently, without funding, sponsorship, or
-institutional support. The author thanks the open-weight model teams whose
+institutional support. The evaluation missions ran on AtlasForge, the
+author's autonomous research platform, itself open source (MIT):
+https://github.com/DragonShadows1978/AI-AtlasForge (PyPI `ai-atlasforge`);
+the mission workspaces cited in Appendix A are project-local artifacts, not
+part of that repository. The author thanks the open-weight model teams whose
 releases made a consumer-hardware evaluation matrix possible, and acknowledges
 the AI systems named in the disclosure above as working collaborators in the
 implementation, evaluation, and writing.
