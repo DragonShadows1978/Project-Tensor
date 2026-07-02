@@ -246,4 +246,13 @@ No abstraction layers. No plugin systems. No enterprise patterns. Just tensors, 
 
 ## License
 
-MIT
+Copyright (C) 2026 David Perry.
+
+This repository is licensed under the GNU Affero General Public License
+v3.0 — see [LICENSE](LICENSE). Any software derived from this code,
+including software served over a network, must be released under the same
+terms. **Commercial licensing outside the AGPL terms is available** —
+contact `dave@ai-storyforge.com`.
+
+The associated research papers are licensed CC BY 4.0 via their Zenodo
+records.

@@ -2,7 +2,33 @@
 ## Adaptive Precision Attention
 ### Architecture-Agnostic Precision Allocation at the Attention-Kernel Level
 
-**Draft v0.1 — working preprint. Numbers marked `[PENDING]` are not yet measured; do not cite externally.**
+**David Perry** — Independent Researcher (no institutional affiliation)
+`dave@ai-storyforge.com`
+
+*Preprint v1.0-rc — 2026-07-02. Measurements marked OPEN in Appendix B are
+explicitly unfinished and are stated as such in the text; every quantitative
+claim traces to a gated, registered evaluation (see §8 and Appendix A).
+Text licensed CC BY 4.0; the implementations are separately licensed
+AGPL-3.0 with commercial licensing available.*
+
+---
+
+## Author's Note and Disclosure
+
+This paper is the work of an independent researcher without academic
+affiliation, and it was produced with substantial assistance from AI systems.
+Anthropic's Claude models and OpenAI's Codex served as implementation and
+drafting collaborators under the author's direction — writing and reviewing
+kernel code, executing registered evaluation gates, and drafting and editing
+this manuscript, including this section. The hypotheses, the experimental
+designs, the acceptance thresholds (registered before results were seen), and
+all editorial decisions are the author's, and the author accepts full
+responsibility for the content. All experiments were run on consumer hardware
+(RTX 3070 8 GB and RTX 4070 SUPER 12 GB); no institutional compute, funding,
+or sponsorship was involved. The disclosure is made in the interest of
+transparency, and with some appreciation of the recursion: a paper about
+allocating machine attention efficiently, written in part by the machines
+whose attention it allocates.
 
 ---
 
@@ -19,17 +45,23 @@ the distribution is not redistributed — the only approximation is the rounding
 un-refined keys the softmax was already suppressing. The hypothesis came from number
 theory: a precision-deficit law observed in a hierarchical number-theoretic system
 predicted that attention's per-interaction precision depth should decay
-geometrically, which we confirm by direct measurement (77–89% of interactions resolve
-at ≤2 bits; a power-law tail of 11–23%). APA operates at the kernel level — on the
+geometrically; direct measurement confirms the predicted two-regime,
+cheap-bulk structure — roughly half of all interactions resolve at 1 bit
+(49.6–60.9% across models, tolerances, and lengths; over half on every model
+at working tolerance ε=0.01), 60–86% by 2 bits — with the expensive
+remainder a heavy power-law tail. APA operates at the kernel level — on the
 QK-score/softmax operation every attention layer computes — so it is
 **architecture-agnostic by construction**: it has no component specific to how heads
-share K/V or how experts route. We confirm this across six families (MHA/MQA/GQA/MLA
-and MoE), retrofit and trained-from-birth. The one architecture-dependent quantity is
-the bulk bit-width, predicted by a **bulk-bits law** we report (qk-normed → 4-bit, raw
-→ 8-bit); set there, APA matches or improves full-precision perplexity, and below it
-trades quality for context.
-Context extension is architecture-dependent — up to 16× on MLA, parity on
-sliding-window models — and decode-time speedup reaches ~2.1× at long sequence length.
+share K/V or how experts route. We confirm this across the four attention families
+(MHA, MQA, GQA, MLA) plus MoE routing — seven models, retrofit and
+trained-from-birth. The one architecture-dependent quantity is the bulk bit-width,
+predicted by a **bulk-bits law** we report: key normalization pins the safe bulk
+floor at 4 bits uniformly, while raw-key models have model-specific floors (2–8
+bits measured) that must be swept. At or above the floor, APA matches or improves
+full-precision perplexity; below it, it trades quality for context.
+Context extension is architecture-dependent — over 10× on MLA (engine-vs-engine),
+parity on sliding-window models — and decode-time speedup reaches ~2.1× at long
+sequence length.
 
 ---
 
@@ -60,15 +92,27 @@ a structural law: in hierarchical computational systems, the precision required 
 each step decays geometrically, and sustained high-precision operations are
 exponentially rare and structurally unsustainable. Attention is such a system — a
 hierarchical accumulation of query–key interactions — so the law should apply to it.
-It does (§3.4): we measured the precision-depth distribution directly and found the
-predicted geometric decay.
+It does in shape (§3.4): direct measurement finds the predicted cheap-bulk /
+rare-tail structure — most interactions resolve at 1–2 bits — with the
+bulk's exact distribution family tolerance-dependent (geometric is
+Vuong-preferred at loose tolerance on three of four models; power-law
+dominates the tail throughout).
 
 The transfer is structural rather than numerical: the decay *constant* differs across
-domains (≈0.079 in the number-theoretic setting, 0.13–0.80 in attention), so the
+domains (≈0.079 in the number-theoretic setting, 0.15–0.76 in attention), so the
 attention result rests on its own measurement, not on a borrowed value. What carried
 across domains is the *shape* of the law — and that a precision-deficit principle
 proven in one hierarchical system predicted, correctly, the compressibility of
 another is the reason APA exists.
+
+The mechanism also has an older, informal ancestor worth recording: before
+the number-theoretic work, the author's design sketch for attention was a
+"memory manager" — a cheap reader that scans the full context and directs
+each head's expensive attention. The bulk/refine split is that sketch made
+mechanism: the low-bit bulk pass is the cheap reader; the refine set is the
+direction. The full lineage of the program, including the published
+catalyst that connected the sketch to frozen-model attention, is recorded
+in the companion memory-system paper [22].
 
 ### 1.3 Contributions
 
@@ -77,16 +121,18 @@ another is the reason APA exists.
    fraction, exact denominator, nothing dropped (§2).
 2. **Architecture-agnostic by construction**: APA acts on the QK-score/softmax
    operation common to all attention, with no architecture-specific component, so it
-   composes with any transformer. The six families (MHA/MQA/GQA/MLA, MoE) are not a
-   "happens to generalize" coverage argument — they confirm a mechanism that has
-   nothing architecture-specific to break. KV-sharing-independence is one instance:
-   precision allocation is a separate axis from how heads share K/V (§4).
+   composes with any transformer. The four attention families plus MoE
+   (MHA/MQA/GQA/MLA, MoE; seven models) are not a "happens to generalize" coverage
+   argument — they confirm a mechanism that has nothing architecture-specific to
+   break. KV-sharing-independence is one instance: precision allocation is a
+   separate axis from how heads share K/V (§4).
 3. A complexity/cost model separating operation count (`O((1+r)n²)`, quadratic like
    Flash) from precision-weighted cost (`O(b_bulk·n² + b_full·r·n²)`), and a
    **memory-wall argument** showing the dense full-precision baseline cannot be run
    at the long-context configs APA reaches (§2.3, §5).
 4. The **bulk-bits law**: key-normalization structure predicts the safe bulk
-   precision (qk-normed → 4-bit; raw → 8-bit), validated across six architectures
+   precision — normalized keys pin the floor at 4 bits uniformly; raw keys have
+   model-specific floors that must be measured — validated across six architectures
    (§4.3).
 5. A **native-training existence proof**: a 232M MLA model trained from birth under
    APA (refine 0.15) over a 12,288-token window, with a window-use probe showing
@@ -172,33 +218,56 @@ already suppressing.
 
 Selection (step 2) requires only that the bulk scores **order** keys roughly like the
 full-precision scores would — the top-`r` by bulk must overlap the top-`r` by exact.
-TurboQuant product quantization is chosen precisely because it preserves
-inner-product ordering. `[PENDING: Spearman/Kendall rank-correlation between bulk and
-exact scores per architecture — this single number proves §3.3 and should be
-measured directly.]`
+The TurboQuant quantizer (Zandieh et al., 2025; implemented in-project) is chosen
+precisely because it preserves inner-product ordering. The direct evidence is
+partial but sharp: on Qwen (raw keys), bulk-vs-exact score-rank correlation is
+**0.85 at 8-bit bulk versus 0.03 at 2-bit** — above the floor the ranking survives,
+below it the router is blind, which is the mechanism behind the bulk-bits cliff of
+§4.3. A full Spearman/Kendall sweep per architecture remains open (Appendix B.1).
 
 ### 3.4 Measured precision-depth distribution (GHOST_PRECISION)
 
-We measured, across GPT-2 124M, TinyLlama 1.1B, and Qwen2.5 1.5B (~100M
-interactions), the **interaction depth** `δ(qᵢ,kⱼ) = min{b : quantize_b(qᵢ·kⱼ) ≈
-qᵢ·kⱼ}` — the bits needed to resolve each dot product to the softmax's tolerance.
+We measured, across GPT-2 124M, TinyLlama 1.1B, Qwen2.5 1.5B, and Mistral-7B
+(hundreds of millions of measured pairs over 21 configurations; 70.6M per
+configuration at 7B), the **interaction depth** `δ(qᵢ,kⱼ) = min{b :
+quantize_b(qᵢ·kⱼ) ≈ qᵢ·kⱼ}` — the bits needed to resolve each dot product to
+the softmax's tolerance. All figures below are from the study's final,
+post-bug-fix analysis cycle (the instrument's mutation-testing and bug-fix
+history is documented in the companion note [21]).
 
-- **Geometric bulk.** 77–89% of interactions stabilize at ≤2 bits. Geometric beats
-  power-law decisively at ε=0.01 (Vuong Z = 27–612, p≈0).
-- **Power-law tail.** At tight tolerance (ε≤0.001) the tail (11–23%) is power-law.
-  The real distribution is **geometric bulk + power-law tail** — i.e. a bulk-quantize
-  + tail-refine split, read directly off the data. The tail fraction (11–23%)
-  brackets the refine fractions (0.10–0.15) we operate at.
+- **Low-bit bulk.** At working tolerance ε=0.01, over half of all
+  interactions stabilize at 1 bit on every model (50.5–60.9% across both
+  sequence lengths) and 60–86% by 2 bits; at ε≤0.001 the 1-bit fraction is
+  49.6–51.4%. At loose tolerance the geometric distribution is
+  Vuong-preferred on three of the four models — decisive even at 7B
+  (Mistral, Z=646.5, p≈0; the study's largest geometric statistic is GPT-2
+  at seq 512, Z=1579.6) — while Qwen2.5 prefers a power-law at every
+  tolerance and the largest-magnitude statistics overall favor power-law at
+  tight tolerance. The universal, load-bearing fact is the two-regime
+  shape: a cheap bulk carrying most of the mass, plus an expensive minority
+  tail — i.e. a bulk-quantize + tail-refine split, read directly off the data.
+- **Heavy tail.** At tight tolerance (ε≤0.001) the tail is power-law on all
+  four models. The expensive minority brackets the refine fractions
+  (0.10–0.15) we operate at.
 - **Phantoms yes, ghosts no.** High-weight-but-cheap-to-resolve interactions
-  ("phantoms": 209–516/config) exist; high-depth-but-low-weight ones ("ghosts": 0)
-  do not. The tail we approximate is genuinely low-mass.
-- **Context helps.** 512-token sequences decay faster than 128-token — APA gets
-  *more* efficient as context grows, predicting the long-context wins of §4.
-- **Layer-uniform, architecture-consistent.** CoV <15% across layers; decay rates
-  within ~1.9× across the three models.
+  ("phantoms") appear by the hundreds in every configuration (counts at the
+  500-pattern detection cap); high-depth-but-low-weight ones ("ghosts")
+  number zero everywhere. The tail we approximate is genuinely low-mass.
+- **Context helps.** 512-token sequences decay faster than 128-token on every
+  model measured at both lengths — APA gets *more* efficient as context
+  grows, predicting the long-context wins of §4.
+- **Roughly uniform across layers on most configurations; stable across
+  scale.** Layer-to-layer CV of the fitted decay rate spans ~0.04–0.39
+  across the 21 configurations — below 0.15 for most Mistral-7B and GPT-2
+  configurations, 0.14–0.18 for Qwen2.5, but up to 0.39 for TinyLlama at
+  512 tokens/ε=0.01, which the study itself flags as position-dependent
+  decay structure. Cross-model mean decay spans only 0.28–0.43, with
+  Mistral-7B (0.288) indistinguishable from Qwen2.5-1.5B (0.282) — the
+  structure does not wash out with scale.
 
-The decay constant (0.13–0.80) differs from the number-theoretic origin's 0.079 by
-1.6–10× (§1.2): the shape transferred, the constant did not.
+The decay constants (0.15–0.76 across configurations) differ from the
+number-theoretic origin's 0.079 by 2–10× (§1.2): the shape transferred, the
+constant did not.
 
 ---
 
@@ -206,9 +275,9 @@ The decay constant (0.13–0.80) differs from the number-theoretic origin's 0.07
 
 APA attaches to the QK-score/softmax operation, which is invariant across attention
 designs, so there is no per-architecture port — the same kernel runs on each. The
-table below is the confirmation: six families, one mechanism, no architecture-specific
-code path. The only value that changes across rows is the bulk bit-width, set by the
-bulk-bits law (§4.3).
+table below is the confirmation: seven models across four attention families plus
+MoE, one mechanism, no architecture-specific code path. The only value that changes
+across rows is the bulk bit-width, set by the bulk-bits law (§4.3).
 
 ### 4.1 The agnosticism table
 
@@ -220,23 +289,35 @@ research board and per-model port ledgers); they are not re-derived here. Parity
 engine-vs-engine (APA vs the same engine's standard attention) and, where noted,
 against an fp32 ground-truth oracle.
 
-| Family | Model | Bulk | Refine | Quality vs full-precision (gated) | Context | Speed |
-|---|---|---|---|---|---|---|
-| **MLA** | MiniCPM3-4B | 4-bit | 0.10 | ppl 20.065→**19.817 (−0.25, noise-free)**; standard reproduced exactly in-process | 3K→**32K** (trained window) | 21.6 ms/tok (31×) |
-| **MLA (native)** | GRAPA-232M | 4-bit | 0.15 | trained native from birth; window-use holds (§6) | 12,288 | ~33 tok/s train |
-| **MQA+SW** | Gemma-4 12B | 4-bit | 0.10 | **APA near-tie-only vs fp32 QAT GT** (gated ×8); refine 0.15/0.10/0.05 within noise of standard | 8K (parity)* | 31 tok/s (6.7×) |
-| **GQA** | Qwen3.5-9B | 4-bit | 0.15 | **zero top-1 flips vs standard** (one 0.062-logit flip, noise floor) | 2K→GRM | 38 tok/s (1.5× vs ollama) |
-| **GQA** | TinyLlama-1.1B | 2-bit | 0.10 | +ppl at extended ctx (sub-floor trade, §4.2) | 2K→**10K (5×)** | 0.69× latency @1024 |
-| **MoE** | OLMoE-1B-7B | 2-bit | 0.10 | +ppl at extended ctx (sub-floor trade, §4.2) | 2K→3K+ | 0.67× latency @1024 |
-| MHA | GPT-2 (PoC) | 2-bit | 0.10 | +8% ppl, 0.37× — **abandoned prototype, §4.4** | — | — |
+| Family | Model | Bulk | Refine | Quality (gated) | Context | Speed |
+|----------|-------------|-----|------|-----------------|-----------|-----------|
+| **MLA** | MiniCPM3-4B | 4-bit | 0.10 | **free** (a) | 3K→**32K** | 21.6 ms/tok (31×) |
+| **MLA (native)** | GRAPA-232M | 4-bit | 0.15 | trained from birth (§6) | 12,288 | ~33 tok/s train |
+| **MQA+SW** | Gemma-4 12B | 4-bit | 0.10 | **near-tie vs fp32 GT** (b) | 8K (parity)* | 31 tok/s (6.7×) |
+| **GQA** | Qwen3.5-9B | 4-bit | 0.15 | **zero top-1 flips** (c) | 2K→GRM | 38 tok/s (1.5×) |
+| **GQA** | TinyLlama-1.1B | 2-bit | 0.10 | +ppl, sub-floor (§4.2) | 2K→**10K (5×)** | 0.69× @1024 |
+| **MoE** | OLMoE-1B-7B | 2-bit | 0.10 | +ppl, sub-floor (§4.2) | 2K→3K+ | 0.67× @1024 |
+| MHA | GPT-2 (PoC) | 2-bit | 0.10 | +8% ppl — abandoned (§4.4) | — | — |
 
-*Gemma-4 is the *parity-catch-up* case, not a context win. An earlier APA decode
+(a) ppl 20.065→**19.817** (−0.25, noise-level free); standard attention
+reproduced exactly in-process, so the APA code path adds zero drift. Context
+win is over the trained window (3K engine-standard ceiling → the full 32K).
+(b) gated ×8 against the fp32 QAT ground-truth oracle; refine 0.15/0.10/0.05
+all within noise of standard.
+(c) zero flips on the APA gate itself (all ground-truth prompts, bulk-4 /
+refine 0.15); the final everything-on suite recorded one 0.062-logit flip —
+noise floor. Speed is vs the ollama baseline.
+
+\*Gemma-4 is the *parity-catch-up* case, not a context win. An earlier APA decode
 OOM in `_quantize_keys` (the cuBLAS KV-expansion path) was fixed by an incremental
 `kq` cache: APA now serves 8K decode at 73.9 ms/tok, 7.61 GB — lighter than
 standard's own 8K high-water (7.64 GB), i.e. APA *caught up to* standard's ceiling.
 It does not *exceed* it on Gemma (the incremental ring carries +50% resident; 12K
-still OOMs in prefill). This contrast — 32× extension on MLA/MiniCPM3 vs.
-parity-catch-up on Gemma's MQA+sliding — is itself a finding (§4.2.1).
+still OOMs in the un-optimized prefill path; a follow-up session — fused
+dispatch, chunked prefill quantize, INT8-V KV storage — moved the prefill
+wall to 12K solid at 7,802 MiB, with 16K still OOM: a managed rising wall,
+not MLA-flat). This contrast — ~10.7× extension (3K→32K) on MLA/MiniCPM3
+vs. parity-catch-up on Gemma's MQA+sliding — is itself a finding (§7).
 
 **The MLA cells carry the thesis.** MLA is the most aggressive KV-sharing scheme (a
 low-rank latent), so APA-composes-with-MLA is the hardest case for orthogonality to
@@ -260,22 +341,41 @@ makes it a law rather than an observation.
 | Architecture | Key normalization | Safe bulk bits |
 |---|---|---|
 | Llama-2 | raw keys | 2 |
-| Qwen3.5 | raw keys (GQA) | 8 |
+| Qwen2.5 | raw keys (GQA) | 8 |
+| Qwen3.5 | qk-norm (hybrid, GQA attention layers) | 4 |
 | OLMoE | qk-norm | 4 |
 | MiniCPM3 (MLA) | half-normalized latent | 4 |
-| Gemma-4 | qk-norm (global+sliding) | 4 |
+| Gemma-4 | qk-norm (global MQA + sliding) | 4 |
 | Mistral-7B | qk-norm | 4 (predicted — port started, testing not completed) |
 
-**Law:** key-normalization tracks safe bulk precision. qk-normed attention → 4-bit
-bulk suffices; raw attention → needs 8-bit. Normalization bounds the dynamic range of
-the dot products, which is exactly what low-bit quantization needs to preserve
-ordering (§3.3). `[PENDING: confirm Mistral-7B 4-bit prediction.]`
+Note that GQA appears twice among the six measured architectures — once
+raw-key (Qwen2.5) and once qk-normed (Qwen3.5) — and the two land on
+different floors. That is the law's sharpest evidence: the floor tracks
+normalization, not attention family.
+
+**Law:** key normalization pins the bulk floor. Every normalized-key architecture
+measured — qk-norm (OLMoE, Qwen3.5, Gemma-4) and the half-normalized MLA latent
+(MiniCPM3) — lands on a 4-bit floor. Raw-key models have real but *model-specific*
+floors (Llama-2: 2-bit; Qwen2.5: 8-bit). The mechanism: normalization bounds the
+dynamic range of the dot products, which is exactly what low-bit quantization needs
+to preserve ordering (§3.3); without it, the floor depends on the model's score
+statistics. The practical rule: normalized keys → set 4 bits and go; raw keys →
+sweep the floor first. [OPEN: confirm the Mistral-7B 4-bit prediction — Appendix
+B.3.]
+
+*(Provenance note: the Llama-2, Qwen2.5, and OLMoE floor entries — and the
+2-bit collapse/rank-correlation figures below — derive from the project's
+earlier APA-Quant mission logs and research-board records rather than the
+per-model port ledgers cited in §4.1; consolidating them into one citable
+ledger is queued in Appendix B.)*
 
 **The law was discovered at the cliff, and the cliff is sharp.** It did not come from
 theory but from observing that low-bit bulk attention catastrophically fails on some
 architectures and not others, then finding that the failure tracks key-normalization.
 The controlled demonstration is a single model swept across its own floor — MiniCPM3
-(MLA), bulk-only (no refinement), wikitext ppl@1024, standard reproduced exactly
+(MLA), refine 0.10 (the gated ledger protocol; because selection routes on
+the bulk scores, the sweep still isolates the bulk floor — a blind bulk pass
+cannot be rescued by refinement), wikitext ppl@1024, standard reproduced exactly
 in-process so the APA code path adds zero drift (gated, registered):
 
 | bulk bits | ppl@1024 | vs standard |
@@ -289,7 +389,7 @@ Only the bulk bit-width changes; same model, same eval. The 8→4-bit step is fr
 4→2-bit step falls off a cliff. The floor is a threshold, not a gradient — which is
 what makes it a law rather than a trend, and the law predicts which side of it any
 (architecture, bit-width) pair lands on. On raw-key models the cliff is far steeper
-(2-bit Qwen collapses to ppl >19,000, score-rank correlation 0.03), and because
+(2-bit Qwen2.5 collapses to ppl >19,000, score-rank correlation 0.03), and because
 selection routes on the bulk scores, refinement *cannot* recover a sub-floor bulk pass
 — the routing itself is blind. This is APA's one hard precondition: run at or above the
 bulk-bits floor, which the law tells you in advance.
@@ -375,7 +475,7 @@ visible through its quantized bulk score; the mild degradation shows the refine
 budget lands on the right keys across the full 12K. This is the same claim as the
 Pareto knee (§ below), viewed along the depth axis.
 
-**Open / `[PENDING]`:**
+**Open measurements (tracked in Appendix B):**
 - Pareto frontier r0.05→0.30, Δppl-from-r-max vs precision-weighted cost, per family
   — the central figure; partial points exist (Gemma4: 121.3/117.3/119.5 at
   0.05/0.10/0.15, non-monotonic, within noise) but a dense single-model sweep is not
@@ -407,7 +507,7 @@ Pareto knee (§ below), viewed along the depth axis.
    Gemma-4 (MQA+sliding): the incremental `kq` cache that fixed the decode OOM
    carries +50% resident memory, so APA catches standard's ~8K ceiling rather than
    exceeding it, and 12K OOMs in prefill. The extension magnitude tracks how much
-   the architecture's KV footprint dominates residency (§4.2.1) — APA is not a
+   the architecture's KV footprint dominates residency — APA is not a
    uniform context multiplier.
 6. **Stop-gradient selection** (§6): the selection is non-differentiable at the
    threshold, so training uses a straight-through estimator. The 232M model trains
@@ -460,8 +560,8 @@ A line of 2025–2026 work shares APA's premise — that quantisation error conc
 in the few interactions the softmax weights most heavily — and is the relevant
 comparison set. We position APA against the three closest precisely.
 
-**ThriftAttention** (Sharratt et al., arXiv 2605.23081, 2026) is the closest in
-spirit. It independently reaches the same core insight — *"the output impact of
+**ThriftAttention** (Sharratt, arXiv 2605.23081, 2026 — notably also
+single-author, independent work) is the closest in spirit. It independently reaches the same core insight — *"the output impact of
 quantisation error is highly non-uniform and increases with the importance of each
 query–key interaction"* — and the same no-drop response: select a small fraction of
 query–key pairs for FP16, compute the rest in FP4, and merge both via online softmax,
@@ -472,8 +572,9 @@ four respects: **(i) routing signal** — ThriftAttention scores importance with
 separate block-mean statistic (`Q̄ᵢ·K̄ⱼᵀ`), whereas APA routes on the low-bit bulk
 scores it has *already computed*, with no separate pooling pass; **(ii) granularity**
 — ThriftAttention promotes whole 64-token *blocks*; APA selects *per key* per query
-row; **(iii) breadth** — we validate across six attention families (MHA/MQA/GQA/MLA
-and MoE), retrofit and native; **(iv) training** — ThriftAttention is *training-free
+row; **(iii) breadth** — we validate across the four attention families plus
+MoE routing (MHA/MQA/GQA/MLA, MoE; seven models), retrofit and native;
+**(iv) training** — ThriftAttention is *training-free
 only*, and its own conclusion names training-through-the-mechanism as future work
 (*"promoting sensitive interactions in the forward and backward attention computation
 to FP16 could help address stability issues in sub-byte attention training"*). APA is
@@ -481,14 +582,15 @@ training-free *and* trainable: the same algorithm runs zero-fit on any frozen mo
 (§4) and carries a differentiable backward used to train a 232M model from birth (§6).
 The capability ThriftAttention lists as open is one we demonstrate.
 
-**SALE** (arXiv 2505.24179, 2026) routes the way APA does — *"low-bit quantized
-query–key products"* estimate per-pair importance (its *Relative Attention Score*) —
+**SALE** (Ji et al., arXiv 2505.24179, 2025) routes the way APA does — *"4-bit
+quantized query-key products"* estimate per-pair importance (its *Relative
+Attention Score*) —
 but it is, by its own description, *"a training-free block-**Sparse** Attention
 technique"*: the unselected blocks are **masked out of the computation**, dropped from
 the softmax entirely. SALE matches APA on *route-on-quantized-scores* and is the
 opposite of APA on *keep-the-tail*. It is prefill-only and training-free.
 
-**MCBP** (arXiv 2509.10372, MICRO 2025) is a hardware accelerator that uses low-bit
+**MCBP** (Wang et al., arXiv 2509.10372, 2025) is a hardware accelerator that uses low-bit
 "filtering rounds" to pick top-k Key candidates, then computes the formal stage
 *"using only these selected Keys and Values"* — again a drop, and inference-only.
 
@@ -496,7 +598,8 @@ opposite of APA on *keep-the-tail*. It is prefill-only and training-free.
 ThriftAttention is no-drop but block-routed and inference-only; no prior work is
 trainable. APA's contribution is the conjunction none of them hold at once:
 **route on the quantized scores, keep the tail at those scores (no drop), at per-key
-granularity, with a differentiable backward** — across six architecture families.
+granularity, with a differentiable backward** — across four attention
+families plus MoE, seven models.
 A reviewer could ask whether this is an obvious composition of SALE (routing) +
 ThriftAttention (no-drop) + an STE selection; §3.2 answers why it is not — keeping the
 tail at low precision is precisely what bounds the gradient noise that lets the
@@ -508,10 +611,14 @@ version rather than merely co-occurring with it.
 `refine` is a free scalar on a continuum from exact attention (`r=1.0`, which
 reproduces SDPA bit-for-bit, §8) to maximal compression, with no weight or structural
 dependence on its value. It can therefore be exposed as a runtime control, tuned per
-request with no retraining; our current implementation sets it per configuration. No
-prior method in §9.2 exposes a single inference-time precision/quality dial of this
-range, because each either fixes a sparsity pattern (SALE, MCBP) or a promotion
-budget at a single operating point.
+request with no retraining; our current implementation sets it per configuration.
+SALE and MCBP fix a sparsity pattern, so their budgets trade quality against
+*dropped* keys rather than precision. ThriftAttention's FP16 block budget `k`
+is, like `refine`, a runtime quality dial (its Fig. 1 sweeps it from FP4
+toward FP16); the differences are granularity and reach — `k` promotes whole
+64-token blocks and exists only at inference, whereas `refine` acts per key
+per query row, reproduces SDPA bit-for-bit at `r=1.0` (§8), and is the same
+dial the model can be trained through (§6).
 
 ---
 
@@ -522,12 +629,92 @@ its precision on interactions the softmax then discards; APA reclaims that preci
 by scoring the bulk cheaply, refining the softmax-dominant fraction exactly, and
 keeping the denominator whole so nothing is dropped. Because this is an allocation of
 precision rather than a change to KV-sharing, it composes with every attention family
-and with MoE routing — demonstrated across six architectures, retrofit and native.
+and with MoE routing — demonstrated across seven models spanning four
+attention families plus MoE, retrofit and native.
 The method's wins (long-context extension, precision-weighted speedup, memory
 headroom that lets a dense baseline not even fit) and its honest boundaries (diffuse
 attention, short sequences, sub-floor bulk precision) both follow from a single
 measured fact: the precision depth of attention interactions is geometric in the
 bulk and rare in the tail.
+
+---
+
+## Acknowledgments
+
+This work was carried out independently, without funding, sponsorship, or
+institutional support. The author thanks the open-weight model teams whose
+releases made a consumer-hardware evaluation matrix possible, and acknowledges
+the AI systems named in the disclosure above as working collaborators in the
+implementation, evaluation, and writing.
+
+---
+
+## References
+
+*All arXiv identifiers, titles, and author lists below were verified against
+the arXiv record or the primary source on 2026-07-02.*
+
+1. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez,
+   A. N., Kaiser, L., Polosukhin, I. *Attention Is All You Need.* NeurIPS
+   2017. arXiv:1706.03762.
+2. Beltagy, I., Peters, M. E., Cohan, A. *Longformer: The Long-Document
+   Transformer.* 2020. arXiv:2004.05150.
+3. Zaheer, M., Guruganesh, G., Dubey, A., et al. *Big Bird: Transformers for
+   Longer Sequences.* NeurIPS 2020. arXiv:2007.14062.
+4. Choromanski, K., Likhosherstov, V., Dohan, D., et al. *Rethinking
+   Attention with Performers.* ICLR 2021. arXiv:2009.14794.
+5. Dao, T., Fu, D. Y., Ermon, S., Rudra, A., Ré, C. *FlashAttention: Fast and
+   Memory-Efficient Exact Attention with IO-Awareness.* NeurIPS 2022.
+   arXiv:2205.14135.
+6. Shazeer, N. *Fast Transformer Decoding: One Write-Head is All You Need.*
+   2019. arXiv:1911.02150. (MQA)
+7. Ainslie, J., Lee-Thorp, J., de Jong, M., Zemlyanskiy, Y., Lebrón, F.,
+   Sanghai, S. *GQA: Training Generalized Multi-Query Transformer Models from
+   Multi-Head Checkpoints.* EMNLP 2023. arXiv:2305.13245.
+8. DeepSeek-AI. *DeepSeek-V2: A Strong, Economical, and Efficient
+   Mixture-of-Experts Language Model.* 2024. arXiv:2405.04434. (MLA)
+9. Bengio, Y., Léonard, N., Courville, A. *Estimating or Propagating
+   Gradients Through Stochastic Neurons for Conditional Computation.* 2013.
+   arXiv:1308.3432. (straight-through estimator)
+10. Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., Sutskever, I.
+    *Language Models are Unsupervised Multitask Learners.* OpenAI, 2019.
+    (GPT-2)
+11. Touvron, H., Martin, L., Stone, K., et al. *Llama 2: Open Foundation and
+    Fine-Tuned Chat Models.* 2023. arXiv:2307.09288.
+12. Zhang, P., Zeng, G., Wang, T., Lu, W. *TinyLlama: An Open-Source Small
+    Language Model.* 2024. arXiv:2401.02385.
+13. Muennighoff, N., Soldaini, L., Groeneveld, D., et al. *OLMoE: Open
+    Mixture-of-Experts Language Models.* 2024. arXiv:2409.02060.
+14. Hu, S., Tu, Y., Han, X., et al. *MiniCPM: Unveiling the Potential of
+    Small Language Models with Scalable Training Strategies.* 2024.
+    arXiv:2404.06395. Evaluated model: OpenBMB *MiniCPM3-4B* (model card,
+    Hugging Face, 2024).
+15. Gemma Team, Google DeepMind. *Introducing Gemma 4 12B: a unified,
+    encoder-free multimodal model.* Model release and model card, June 2026.
+    https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemma-4-12b/
+16. Qwen Team, Alibaba. *Qwen2.5 Technical Report.* 2024. arXiv:2412.15115.
+    And: *Qwen3.5: Towards Native Multimodal Agents.* Model release,
+    February–March 2026. https://qwen.ai/blog?id=qwen3.5 (evaluated model:
+    Qwen3.5-9B, released 2026-03-02).
+17. Sharratt, J. *ThriftAttention: Selective Mixed Precision for Long-Context
+    FP4 Attention.* 2026. arXiv:2605.23081.
+18. Ji, X., Zhang, H., Fu, F., Cui, B. *SALE: Low-bit Estimation for
+    Efficient Sparse Attention in Long-context LLM Prefilling.* 2025.
+    arXiv:2505.24179.
+19. Wang, H., Wang, Z., Yue, Z., et al. *MCBP: A Memory-Compute Efficient LLM
+    Inference Accelerator Leveraging Bit-Slice-enabled Sparsity and
+    Repetitiveness.* 2025. arXiv:2509.10372.
+20. Zandieh, A., et al. *TurboQuant: Online Vector Quantization with
+    Near-optimal Distortion Rate.* ICLR 2026. arXiv:2504.19874. (The bulk
+    quantizer of §2.1 is an in-project implementation of this method.)
+21. Perry, D. *Ghost Geometry: A Precision-Collapse Framework for the Collatz
+    Conjecture, and Its Measured Transfer to Transformer Attention.*
+    Companion note, 2026, released alongside this paper (Zenodo DOI on
+    release). Source of the precision-decay hypothesis (§1.2) and the
+    GHOST_PRECISION interaction-depth study summarized in §3.4.
+22. Perry, D. *Grafted Memory — GRM: A Routed, Tokenless K/V Memory Runtime
+    for Frozen Language Models.* Companion paper, 2026, released alongside
+    this paper (Zenodo DOI on release).
 
 ---
 
@@ -544,7 +731,7 @@ bulk and rare in the tail.
 - Native training: `GRAPA-Native-LLM/` (kernels: `Project-Tensor/tensor_cuda/src/kernels.cu`, `apa_selective_*`)
 - Origin note: `collatz-experimental-data/collatz-ml-bridge.md` (§6.1 only; structural, not numerical)
 
-## Appendix B — `[PENDING]` worklist (gates before submission)
+## Appendix B — Open-measurement worklist (gates before submission)
 
 **Note on evidence source:** §4 quality/parity numbers are drawn from the project's
 registered research board (`/mnt/Shared/AI_Research_Board.md`) and per-model port
@@ -570,3 +757,7 @@ the gates that produced them.
    the gated MiniCPM3 8/4/2-bit sweep from the ledger (20.065/20.080/19.817/29.145).
 6. Attention-peakedness (entropy) vs APA-efficiency scatter → turns §7 boundary into a figure.
 7. GRAPA copy: tokenizer-singleton probe (merged-token copy under this setup?).
+8. Consolidate the raw-key/OLMoE bulk-floor evidence (Llama-2 2-bit, Qwen2.5
+   8-bit incl. the 2-bit ppl>19,000 collapse and 0.85/0.03 rank correlations,
+   OLMoE 4-bit) from the APA-Quant mission artifacts and board history into a
+   single citable ledger; §4.3 currently cites them by provenance note.
