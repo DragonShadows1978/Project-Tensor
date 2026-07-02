@@ -5,7 +5,7 @@
 **David Perry** — Independent Researcher (no institutional affiliation)
 `dave@ai-storyforge.com`
 
-*Preprint v1.0 — 2026-07-02. Measurements marked OPEN in Appendix B are
+*Preprint v1.0 — 2026-07-02. DOI: 10.5281/zenodo.21137970. Measurements marked OPEN in Appendix B are
 explicitly unfinished and are stated as such in the text; every quantitative
 claim traces to a gated, registered evaluation (see §8 and Appendix A).
 Text licensed CC BY 4.0; the implementations are separately licensed
