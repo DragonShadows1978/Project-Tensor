@@ -325,6 +325,9 @@ NDArray NDArray::astype(DType dt) const {
   return out;
 }
 NDArray NDArray::reshape(const Shape& new_shape) const {
+  if (numel_of(new_shape) != numel()) {
+    throw std::runtime_error("reshape: element count mismatch");
+  }
   NDArray out = *this;  // shares storage
   out.shape = new_shape;
   return out;
@@ -1043,7 +1046,7 @@ constexpr int TC_APA_MAXD = 512;   // bumped 256->512 for Gemma 4 global
 template <typename T, int DMAX>
 __global__ void apa_selective_kernel(
     const T* q, const T* k, const T* kq, const T* v, T* out,
-    int B, int H, int L, int S, int D, float scale, float zthr,
+    int B, int H, int L, int S, int D, int VD, float scale, float zthr,
     int is_causal, int KVH, int group) {
   // GQA-aware: q has H query heads; k/kq/v have KVH key/value heads (KVH <= H,
   // group = H/KVH). Query head h reads KV head h/group, so the KV tensors are
@@ -1061,7 +1064,7 @@ __global__ void apa_selective_kernel(
   int64_t kvbh = (int64_t)b * KVH + kv_h;
   const T* kbase = k + kvbh * S * D;
   const T* kqbase = kq + kvbh * S * D;
-  const T* vbase = v + kvbh * S * D;
+  const T* vbase = v + kvbh * S * VD;
 
   // Load this query vector into shared memory (D <= DMAX <= TC_APA_MAXD).
   __shared__ float qsh[DMAX];
@@ -1104,12 +1107,12 @@ __global__ void apa_selective_kernel(
 
   // Pass 2: SINGLE pass with a per-thread online softmax (FlashAttention-style).
   // Each thread maintains its own running max m, denom l, and weighted-value
-  // accumulator acc[D] over its strided keys — computing each key's final score
+  // accumulator acc[VD] over its strided keys — computing each key's final score
   // exactly ONCE. The exact dot is taken only for selected keys. No atomics; the
   // per-thread partial softmaxes are merged by a block reduction at the end.
   float m = -1e30f, l = 0.f;
-  float acc[DMAX];               // DMAX == smallest power-of-two head_dim >= D
-  for (int d = 0; d < D; ++d) acc[d] = 0.f;
+  float acc[DMAX];               // DMAX >= max(score_dim, value_dim)
+  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
 
   for (int j = tid; j < s_max; j += nt) {
     const T* kqj = kqbase + (int64_t)j * D;
@@ -1130,8 +1133,8 @@ __global__ void apa_selective_kernel(
     float corr = __expf(m - m_new);
     float w = __expf(score - m_new);
     l = l * corr + w;
-    const T* vj = vbase + (int64_t)j * D;
-    for (int d = 0; d < D; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+    const T* vj = vbase + (int64_t)j * VD;
+    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
     m = m_new;
   }
 
@@ -1161,7 +1164,7 @@ __global__ void apa_selective_kernel(
   int nwarp = (nt + 31) >> 5;     // == 4 for nt=128
   __shared__ float osh[DMAX];
   __shared__ float wpart[4][DMAX];   // [warp][dim] partials; nt=128 -> 4 warps
-  for (int d = 0; d < D; ++d) {
+  for (int d = 0; d < VD; ++d) {
     float val = acc[d] * rescale;
     #pragma unroll
     for (int off = 16; off > 0; off >>= 1)
@@ -1170,15 +1173,15 @@ __global__ void apa_selective_kernel(
   }
   __syncthreads();
   // Combine the nwarp per-warp partials per dim, distributed across threads.
-  for (int d = tid; d < D; d += nt) {
+  for (int d = tid; d < VD; d += nt) {
     float s = 0.f;
     for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
     osh[d] = s;
   }
   __syncthreads();
 
-  T* orow = out + (int64_t)row * D;
-  for (int d = tid; d < D; d += nt) st<T>(orow, d, osh[d] * inv);
+  T* orow = out + (int64_t)row * VD;
+  for (int d = tid; d < VD; d += nt) st<T>(orow, d, osh[d] * inv);
 }
 
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
@@ -1186,17 +1189,21 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 float scale, float zthr, bool is_causal) {
   int B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
   int S = k.shape[2];
+  int VD = v.shape[3];
   // GQA: k/kq/v carry KVH heads (<= H). group = H/KVH query heads per KV head.
   int KVH = (int)k.shape[1];
   int group = (KVH > 0) ? (H / KVH) : 1;
-  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)D}, q.dtype, q.device);
+  if (k.shape[3] != D || kq.shape[3] != D) throw std::runtime_error("apa_selective: q/k/kq dim mismatch");
+  if (v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S) throw std::runtime_error("apa_selective: v shape mismatch");
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD}, q.dtype, q.device);
   int rows = B * H * L;
   int threads = 128;
   if (rows > 0) {
     // Dispatch the smallest compile-time DMAX >= D so acc[] stays register/L1
     // resident. Real head_dims are 64 (TinyLlama) and 128 (Mistral/Qwen/OLMoE);
     // 256 is the safety fallback (== the old behaviour) for anything larger.
-    if (D > TC_APA_MAXD) {
+    int cap = D > VD ? D : VD;
+    if (cap > TC_APA_MAXD) {
       throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD "
                                "(512); raise the cap + add a dispatch arm");
     }
@@ -1206,17 +1213,326 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
         apa_selective_kernel<T, DMAX><<<rows, threads>>>(
             static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
             static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
-            static_cast<T*>(out.data_ptr()), B, H, L, S, D, scale, zthr,
+            static_cast<T*>(out.data_ptr()), B, H, L, S, D, VD, scale, zthr,
             is_causal ? 1 : 0, KVH, group);
       };
-      if (D <= 64)        launch(std::integral_constant<int, 64>{});
-      else if (D <= 128)  launch(std::integral_constant<int, 128>{});
-      else if (D <= 256)  launch(std::integral_constant<int, 256>{});
-      else                launch(std::integral_constant<int, 512>{});
+      if (cap <= 64)        launch(std::integral_constant<int, 64>{});
+      else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
+      else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
+      else                  launch(std::integral_constant<int, 512>{});
     });
     cuda_check_last("apa_selective");
   }
   return out;
+}
+
+// ============================================================================
+// APA SELECTIVE — TRAINING forward + backward (O(L) memory, the graft-native
+// training path). The inference kernel above never materializes the L x L
+// score matrix; these mirror it so training does not either. The selection is
+// a STOP-GRADIENT (POC 2.1): the threshold and the bulk/refined CHOICE are
+// constants; gradients flow only through the score dots and the softmax. That
+// makes this backward far simpler than a general FlashAttention backward — no
+// gradient through the threshold, and unselected keys feed gradient through q
+// only (kq is detached).
+//
+// Forward (training) additionally saves, per query row, the logsumexp
+// L_se = gmax + log(denom) and the threshold thr, so the backward recomputes
+// every key's softmax weight exactly without storing the L x L matrix.
+// ============================================================================
+
+template <typename T, int DMAX>
+__global__ void apa_selective_fwd_train_kernel(
+    const T* q, const T* k, const T* kq, const T* v, T* out,
+    float* lse_out, float* thr_out,
+    int B, int H, int L, int S, int D, int VD, float scale, float zthr,
+    int is_causal, int KVH, int group) {
+  int row = blockIdx.x;
+  int i = row % L;
+  int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+
+  const T* qrow = q + (int64_t)row * D;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kbase = k + kvbh * S * D;
+  const T* kqbase = kq + kvbh * S * D;
+  const T* vbase = v + kvbh * S * VD;
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
+  __shared__ float red[256];
+
+  // Pass 1: |bulk| stats -> z-score threshold (identical to inference).
+  float sum = 0.f, sumsq = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float dot = 0.f;
+    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+    float a = fabsf(dot * scale);
+    sum += a; sumsq += a * a;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
+  float total_sq = red[0]; __syncthreads();
+  float cnt = (float)s_max;
+  float mean = total / cnt;
+  float var = total_sq / cnt - mean * mean;
+  float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
+
+  // Pass 2: online softmax -> output, accumulating m and l (same as inference).
+  float m = -1e30f, l = 0.f;
+  float acc[DMAX];
+  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else score = bulk;
+    float m_new = fmaxf(m, score);
+    float corr = __expf(m - m_new);
+    float w = __expf(score - m_new);
+    l = l * corr + w;
+    const T* vj = vbase + (int64_t)j * VD;
+    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+    m = m_new;
+  }
+  // merge per-thread (m,l,acc)
+  red[tid] = m; __syncthreads();
+  for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]=fmaxf(red[tid],red[tid+off]); __syncthreads(); }
+  float gmax = red[0]; __syncthreads();
+  float rescale = __expf(m - gmax);
+  red[tid] = l * rescale; __syncthreads();
+  for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
+  float denom = red[0]; __syncthreads();
+  float inv = denom > 0.f ? 1.f / denom : 0.f;
+
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31, warp = tid >> 5, nwarp = (nt + 31) >> 5;
+  __shared__ float osh[DMAX];
+  __shared__ float wpart[4][DMAX];
+  for (int d = 0; d < VD; ++d) {
+    float val = acc[d] * rescale;
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1) val += __shfl_down_sync(FULL, val, off);
+    if (lane == 0) wpart[warp][d] = val;
+  }
+  __syncthreads();
+  for (int d = tid; d < VD; d += nt) {
+    float s = 0.f; for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
+    osh[d] = s;
+  }
+  __syncthreads();
+  T* orow = out + (int64_t)row * VD;
+  for (int d = tid; d < VD; d += nt) st<T>(orow, d, osh[d] * inv);
+  // SAVE backward state: per-row logsumexp and threshold.
+  if (tid == 0) {
+    lse_out[row] = gmax + logf(fmaxf(denom, 1e-30f));
+    thr_out[row] = thr;
+  }
+}
+
+// Backward. One block per query row. Recomputes each key's score and softmax
+// weight from saved (lse, thr), then accumulates dV, dK (selected only), and a
+// thread-local dQ that is block-reduced and written once. dK/dV use atomicAdd
+// (multiple query rows touch the same KV row). Two passes over keys: pass A
+// computes the softmax-jacobian row term rowdot = sum_j p_j (dO . v_j); pass B
+// uses it to form dScore_j and scatters the gradients.
+template <typename T, int DMAX>
+__global__ void apa_selective_bwd_kernel(
+    const T* q, const T* k, const T* kq, const T* v, const T* dO,
+    const float* lse, const float* thr_in,
+    T* dq, T* dk, T* dv,
+    int B, int H, int L, int S, int D, int VD, float scale,
+    int is_causal, int KVH, int group) {
+  int row = blockIdx.x;
+  int i = row % L;
+  int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;
+  int tid = threadIdx.x, nt = blockDim.x;
+
+  const T* qrow = q + (int64_t)row * D;
+  const T* dOrow = dO + (int64_t)row * VD;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kbase = k + kvbh * S * D;
+  const T* kqbase = kq + kvbh * S * D;
+  const T* vbase = v + kvbh * S * VD;
+  T* dkbase = dk + kvbh * S * D;
+  T* dvbase = dv + kvbh * S * VD;
+
+  __shared__ float qsh[DMAX];
+  __shared__ float dOsh[DMAX];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  for (int d = tid; d < VD; d += nt) dOsh[d] = ld<T>(dOrow, d);
+  __syncthreads();
+
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
+  float L_se = lse[row];
+  float thr = thr_in[row];
+  __shared__ float red[256];
+
+  // Pass A: rowdot = sum_j p_j * (dO . v_j)
+  float partial = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f; for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else score = bulk;
+    float p = __expf(score - L_se);
+    const T* vj = vbase + (int64_t)j * VD;
+    float dov = 0.f; for (int d = 0; d < VD; ++d) dov += dOsh[d] * ld<T>(vj, d);
+    partial += p * dov;
+  }
+  red[tid] = partial; __syncthreads();
+  for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
+  float rowdot = red[0]; __syncthreads();
+
+  // Pass B: per-key gradients. dScore_j = p_j * (dO.v_j - rowdot).
+  // dV_j += p_j * dO ; dQ += dScore_j*scale * (k_j or kq_j) ; dK_j += dScore_j*scale*q (selected).
+  float dq_acc[DMAX];
+  for (int d = 0; d < D; ++d) dq_acc[d] = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    bool sel = fabsf(bulk) >= thr;
+    float score;
+    const T* kj = kbase + (int64_t)j * D;
+    if (sel) { float ex=0.f; for(int d=0;d<D;++d) ex+=qsh[d]*ld<T>(kj,d); score=ex*scale; }
+    else score = bulk;
+    float p = __expf(score - L_se);
+    const T* vj = vbase + (int64_t)j * VD;
+    float dov = 0.f; for (int d = 0; d < VD; ++d) dov += dOsh[d] * ld<T>(vj, d);
+    float dscore = p * (dov - rowdot);
+    T* dvj = dvbase + (int64_t)j * VD;
+    T* dkj = dkbase + (int64_t)j * D;
+    for (int d = 0; d < VD; ++d) {
+      // dV_j += p * dO
+      atomicAdd(&dvj[d], (T)(p * dOsh[d]));
+    }
+    for (int d = 0; d < D; ++d) {
+      // dQ accumulates dscore*scale * key (selected: k_j; else: kq_j detached -> still feeds q)
+      float kv = sel ? ld<T>(kj, d) : ld<T>(kqj, d);
+      dq_acc[d] += dscore * scale * kv;
+      // dK only for selected keys (kq is detached, so unselected dk = 0)
+      if (sel) atomicAdd(&dkj[d], (T)(dscore * scale * qsh[d]));
+    }
+  }
+  // reduce dq_acc across threads -> write dq[row]
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31, warp = tid >> 5, nwarp = (nt + 31) >> 5;
+  __shared__ float wpart[4][DMAX];
+  for (int d = 0; d < D; ++d) {
+    float val = dq_acc[d];
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1) val += __shfl_down_sync(FULL, val, off);
+    if (lane == 0) wpart[warp][d] = val;
+  }
+  __syncthreads();
+  T* dqrow = dq + (int64_t)row * D;
+  for (int d = tid; d < D; d += nt) {
+    float s = 0.f; for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
+    st<T>(dqrow, d, s);
+  }
+}
+
+// Training forward: returns out and fills the saved (lse, thr) NDArrays.
+std::tuple<NDArray, NDArray, NDArray> apa_selective_fwd_train(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    float scale, float zthr, bool is_causal) {
+  int B=q.shape[0], H=q.shape[1], L=q.shape[2], D=q.shape[3];
+  int S=k.shape[2];
+  int VD=v.shape[3];
+  int KVH=(int)k.shape[1]; int group=(KVH>0)?(H/KVH):1;
+  if (k.shape[3] != D || kq.shape[3] != D) throw std::runtime_error("apa_selective_train: q/k/kq dim mismatch");
+  if (v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S) throw std::runtime_error("apa_selective_train: v shape mismatch");
+  NDArray out({(int64_t)B,(int64_t)H,(int64_t)L,(int64_t)VD}, q.dtype, q.device);
+  NDArray lse({(int64_t)B,(int64_t)H,(int64_t)L}, DType::Float32, q.device);
+  NDArray thr({(int64_t)B,(int64_t)H,(int64_t)L}, DType::Float32, q.device);
+  int rows=B*H*L, threads=128;
+  if (rows>0) {
+    int cap = D > VD ? D : VD;
+    if (cap>TC_APA_MAXD) throw std::runtime_error("apa_selective_train: head_dim exceeds cap");
+    DISPATCH_FLOAT(q.dtype, T, {
+      auto launch=[&](auto tag){ constexpr int DMAX=decltype(tag)::value;
+        apa_selective_fwd_train_kernel<T,DMAX><<<rows,threads>>>(
+          static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+          static_cast<T*>(out.data_ptr()),
+          static_cast<float*>(lse.data_ptr()),static_cast<float*>(thr.data_ptr()),
+          B,H,L,S,D,VD,scale,zthr,is_causal?1:0,KVH,group); };
+      if (cap<=64) launch(std::integral_constant<int,64>{});
+      else if (cap<=128) launch(std::integral_constant<int,128>{});
+      else if (cap<=256) launch(std::integral_constant<int,256>{});
+      else launch(std::integral_constant<int,512>{});
+    });
+    cuda_check_last("apa_selective_fwd_train");
+  }
+  return {out, lse, thr};
+}
+
+// Training backward: returns dq, dk, dv.
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    const NDArray& dO, const NDArray& lse, const NDArray& thr,
+    float scale, bool is_causal) {
+  int B=q.shape[0], H=q.shape[1], L=q.shape[2], D=q.shape[3];
+  int S=k.shape[2];
+  int VD=v.shape[3];
+  int KVH=(int)k.shape[1]; int group=(KVH>0)?(H/KVH):1;
+  if (k.shape[3] != D || kq.shape[3] != D) throw std::runtime_error("apa_selective_bwd: q/k/kq dim mismatch");
+  if (v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S) throw std::runtime_error("apa_selective_bwd: v shape mismatch");
+  if (dO.shape[0] != B || dO.shape[1] != H || dO.shape[2] != L || dO.shape[3] != VD) throw std::runtime_error("apa_selective_bwd: dO shape mismatch");
+  NDArray dq({(int64_t)B,(int64_t)H,(int64_t)L,(int64_t)D}, q.dtype, q.device);
+  NDArray dk = NDArray::zeros({(int64_t)B,(int64_t)KVH,(int64_t)S,(int64_t)D}, q.dtype, q.device);
+  NDArray dv = NDArray::zeros({(int64_t)B,(int64_t)KVH,(int64_t)S,(int64_t)VD}, q.dtype, q.device);
+  int rows=B*H*L, threads=128;
+  if (rows>0) {
+    int cap = D > VD ? D : VD;
+    if (cap>TC_APA_MAXD) throw std::runtime_error("apa_selective_bwd: head_dim exceeds cap");
+    DISPATCH_FLOAT(q.dtype, T, {
+      auto launch=[&](auto tag){ constexpr int DMAX=decltype(tag)::value;
+        apa_selective_bwd_kernel<T,DMAX><<<rows,threads>>>(
+          static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+          static_cast<T*>(dO.data_ptr()),
+          static_cast<float*>(lse.data_ptr()),static_cast<float*>(thr.data_ptr()),
+          static_cast<T*>(dq.data_ptr()),static_cast<T*>(dk.data_ptr()),
+          static_cast<T*>(dv.data_ptr()),
+          B,H,L,S,D,VD,scale,is_causal?1:0,KVH,group); };
+      if (cap<=64) launch(std::integral_constant<int,64>{});
+      else if (cap<=128) launch(std::integral_constant<int,128>{});
+      else if (cap<=256) launch(std::integral_constant<int,256>{});
+      else launch(std::integral_constant<int,512>{});
+    });
+    cuda_check_last("apa_selective_bwd");
+  }
+  return {dq, dk, dv};
 }
 
 // ----------------------------------------------- APA blend+softmax (post-matmul)
@@ -2153,6 +2469,145 @@ void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
   }
 }
 
+// -------------------------------------------------------- cache row splice
+// Functional arena surgery: output = old[:head] + insert + old[tail_start:].
+// Copies raw bytes so bf16/fp16/fp32/uint8 cache payloads all share the same
+// kernel and exact-storage semantics.
+__global__ void splice_rows_bytes_kernel(
+    uint8_t* __restrict__ out, const uint8_t* __restrict__ old_cache,
+    const uint8_t* __restrict__ insert, int64_t old_seq, int64_t insert_seq,
+    int64_t out_seq, int64_t row_bytes, int64_t head_tokens,
+    int64_t tail_start, int64_t nbytes) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= nbytes) return;
+  int64_t out_stride = out_seq * row_bytes;
+  int64_t old_stride = old_seq * row_bytes;
+  int64_t insert_stride = insert_seq * row_bytes;
+  int64_t outer = i / out_stride;
+  int64_t rem = i - outer * out_stride;
+  int64_t row = rem / row_bytes;
+  int64_t byte = rem - row * row_bytes;
+  const uint8_t* src = nullptr;
+  if (row < head_tokens) {
+    src = old_cache + outer * old_stride + row * row_bytes + byte;
+  } else if (row < head_tokens + insert_seq) {
+    int64_t ins_row = row - head_tokens;
+    src = insert + outer * insert_stride + ins_row * row_bytes + byte;
+  } else {
+    int64_t tail_row = tail_start + (row - head_tokens - insert_seq);
+    src = old_cache + outer * old_stride + tail_row * row_bytes + byte;
+  }
+  out[i] = *src;
+}
+
+__global__ void export_rows_bytes_kernel(
+    uint8_t* __restrict__ out, const uint8_t* __restrict__ cache,
+    int64_t old_seq, int64_t out_seq, int64_t row_bytes,
+    int64_t start, int64_t nbytes) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= nbytes) return;
+  int64_t out_stride = out_seq * row_bytes;
+  int64_t old_stride = old_seq * row_bytes;
+  int64_t outer = i / out_stride;
+  int64_t rem = i - outer * out_stride;
+  int64_t row = rem / row_bytes;
+  int64_t byte = rem - row * row_bytes;
+  out[i] = cache[outer * old_stride + (start + row) * row_bytes + byte];
+}
+
+static int64_t product_dims(const Shape& shape, int first, int last) {
+  int64_t out = 1;
+  for (int i = first; i < last; ++i) out *= shape[i];
+  return out;
+}
+
+static int normalize_dim(int dim, int nd, const char* where) {
+  int d = dim < 0 ? dim + nd : dim;
+  if (d < 0 || d >= nd) throw std::runtime_error(std::string(where) + ": dim out of range");
+  return d;
+}
+
+NDArray export_rows(const NDArray& cache, int dim, int64_t start,
+                    int64_t len) {
+  if (!cache.device.is_cuda())
+    throw std::runtime_error("export_rows: CUDA tensor required");
+  if (cache.ndim() == 0)
+    throw std::runtime_error("export_rows: rank must be nonzero");
+  int d = normalize_dim(dim, cache.ndim(), "export_rows");
+  int64_t old_seq = cache.shape[d];
+  if (start < 0 || len < 0 || start + len > old_seq)
+    throw std::runtime_error("export_rows: invalid span");
+  Shape out_shape = cache.shape;
+  out_shape[d] = len;
+  NDArray out(out_shape, cache.dtype, cache.device);
+  int64_t inner_elems = product_dims(cache.shape, d + 1, cache.ndim());
+  int64_t row_bytes = inner_elems * (int64_t)dtype_size(cache.dtype);
+  int64_t nbytes = out.numel() * (int64_t)dtype_size(cache.dtype);
+  if (nbytes > 0) {
+    export_rows_bytes_kernel<<<nblk(nbytes), kT>>>(
+        static_cast<uint8_t*>(out.data_ptr()),
+        static_cast<const uint8_t*>(cache.data_ptr()),
+        old_seq, len, row_bytes, start, nbytes);
+    cuda_check_last("export_rows");
+  }
+  return out;
+}
+
+NDArray splice_rows(const NDArray& old_cache, const NDArray& insert,
+                    int dim, int64_t head_tokens, int64_t tail_start) {
+  if (old_cache.dtype != insert.dtype)
+    throw std::runtime_error("splice_rows: dtype mismatch");
+  if (old_cache.device.type != insert.device.type ||
+      old_cache.device.index != insert.device.index)
+    throw std::runtime_error("splice_rows: device mismatch");
+  if (!old_cache.device.is_cuda())
+    throw std::runtime_error("splice_rows: CUDA tensors required");
+  if (old_cache.ndim() == 0 || insert.ndim() != old_cache.ndim())
+    throw std::runtime_error("splice_rows: rank mismatch");
+  int d = normalize_dim(dim, old_cache.ndim(), "splice_rows");
+  for (int i = 0; i < old_cache.ndim(); ++i) {
+    if (i != d && old_cache.shape[i] != insert.shape[i])
+      throw std::runtime_error("splice_rows: shape mismatch outside splice dim");
+  }
+  int64_t old_seq = old_cache.shape[d];
+  int64_t insert_seq = insert.shape[d];
+  if (head_tokens < 0 || tail_start < head_tokens || tail_start > old_seq)
+    throw std::runtime_error("splice_rows: invalid head/tail");
+  Shape out_shape = old_cache.shape;
+  out_shape[d] = head_tokens + insert_seq + (old_seq - tail_start);
+  NDArray out(out_shape, old_cache.dtype, old_cache.device);
+  int64_t inner_elems = product_dims(old_cache.shape, d + 1, old_cache.ndim());
+  int64_t row_bytes = inner_elems * (int64_t)dtype_size(old_cache.dtype);
+  int64_t nbytes = out.numel() * (int64_t)dtype_size(old_cache.dtype);
+  if (nbytes > 0) {
+    splice_rows_bytes_kernel<<<nblk(nbytes), kT>>>(
+        static_cast<uint8_t*>(out.data_ptr()),
+        static_cast<const uint8_t*>(old_cache.data_ptr()),
+        static_cast<const uint8_t*>(insert.data_ptr()),
+        old_seq, insert_seq, out_shape[d], row_bytes, head_tokens,
+        tail_start, nbytes);
+    cuda_check_last("splice_rows");
+  }
+  return out;
+}
+
+NDArray evict_rows(const NDArray& old_cache, int dim, int64_t head_tokens,
+                   int64_t drop_tokens) {
+  if (!old_cache.device.is_cuda())
+    throw std::runtime_error("evict_rows: CUDA tensor required");
+  if (old_cache.ndim() == 0)
+    throw std::runtime_error("evict_rows: rank must be nonzero");
+  int d = normalize_dim(dim, old_cache.ndim(), "evict_rows");
+  int64_t old_seq = old_cache.shape[d];
+  if (head_tokens < 0 || drop_tokens < 0 || head_tokens > old_seq ||
+      drop_tokens > old_seq - head_tokens)
+    throw std::runtime_error("evict_rows: drop exceeds live tail");
+  Shape insert_shape = old_cache.shape;
+  insert_shape[d] = 0;
+  NDArray empty(insert_shape, old_cache.dtype, old_cache.device);
+  return splice_rows(old_cache, empty, d, head_tokens, head_tokens + drop_tokens);
+}
+
 // ------------------------------------------------------ fused RoPE apply
 // out = x * cos[pos0+l] + rotate_half(x) * sin[pos0+l], one launch.
 // The composed chain (2 table slices + 2 x-slices + neg + cat + 2 muls
@@ -2163,20 +2618,27 @@ void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
 template <typename T>
 __global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
                             const T* __restrict__ sn, T* __restrict__ y,
-                            int64_t pos0, int64_t L, int64_t D, int64_t n) {
+                            int64_t pos0, int64_t L, int64_t D, int64_t n,
+                            float sin_sign, int pair_swap) {
   int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= n) return;
   int64_t d = i % D;
   int64_t l = (i / D) % L;
   int64_t half = D >> 1;
-  float xv = ld<T>(x, i);
-  float xr = (d < half) ? -ld<T>(x, i + half) : ld<T>(x, i - half);
+  int64_t base = i - d;
+  auto src_d = [half, pair_swap](int64_t dd) {
+    return pair_swap ? ((dd < half) ? 2 * dd : 2 * (dd - half) + 1) : dd;
+  };
+  float xv = ld<T>(x, base + src_d(d));
+  float xr = (d < half)
+      ? -ld<T>(x, base + src_d(d + half))
+      : ld<T>(x, base + src_d(d - half));
   int64_t t = (pos0 + l) * D + d;
-  st<T>(y, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t));
+  st<T>(y, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);
 }
 
 NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
-                   int64_t pos0) {
+                   int64_t pos0, bool inverse, bool pair_swap) {
   if (x.ndim() < 2) throw std::runtime_error("rope_apply needs >=2D input");
   int64_t D = x.shape[x.ndim() - 1];
   int64_t L = x.shape[x.ndim() - 2];
@@ -2194,11 +2656,211 @@ NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
       rope_kernel<T><<<nblk(n), kT>>>(
           static_cast<T*>(x.data_ptr()), static_cast<T*>(cs.data_ptr()),
           static_cast<T*>(sn.data_ptr()), static_cast<T*>(out.data_ptr()),
-          pos0, L, D, n);
+          pos0, L, D, n, inverse ? -1.0F : 1.0F, pair_swap ? 1 : 0);
     });
     cuda_check_last("rope_apply");
   }
   return out;
+}
+
+template <typename T>
+__global__ void export_rope_rows_kernel(
+    const T* __restrict__ cache, const T* __restrict__ cs,
+    const T* __restrict__ sn, T* __restrict__ out, int64_t old_seq,
+    int64_t out_seq, int64_t D, int64_t start, int64_t pos0,
+    int64_t n, float sin_sign, int pair_swap) {
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  int64_t d = i % D;
+  int64_t l = (i / D) % out_seq;
+  int64_t outer = i / (out_seq * D);
+  int64_t half = D >> 1;
+  int64_t src_base = (outer * old_seq + start + l) * D;
+  auto src_d = [half, pair_swap](int64_t dd) {
+    return pair_swap ? ((dd < half) ? 2 * dd : 2 * (dd - half) + 1) : dd;
+  };
+  float xv = ld<T>(cache, src_base + src_d(d));
+  float xr = (d < half)
+      ? -ld<T>(cache, src_base + src_d(d + half))
+      : ld<T>(cache, src_base + src_d(d - half));
+  int64_t t = (pos0 + l) * D + d;
+  st<T>(out, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);
+}
+
+NDArray export_rope_rows(const NDArray& cache, const NDArray& cs,
+                         const NDArray& sn, int dim, int64_t start,
+                         int64_t len, int64_t pos0, bool inverse,
+                         bool pair_swap) {
+  if (!cache.device.is_cuda())
+    throw std::runtime_error("export_rope_rows: CUDA tensor required");
+  if (cache.ndim() < 2)
+    throw std::runtime_error("export_rope_rows: needs >=2D input");
+  int d = normalize_dim(dim, cache.ndim(), "export_rope_rows");
+  if (d != cache.ndim() - 2)
+    throw std::runtime_error("export_rope_rows: seq dim must be -2");
+  int64_t D = cache.shape[cache.ndim() - 1];
+  int64_t old_seq = cache.shape[d];
+  if (D % 2) throw std::runtime_error("export_rope_rows: odd head_dim");
+  if (start < 0 || len < 0 || start + len > old_seq)
+    throw std::runtime_error("export_rope_rows: invalid span");
+  if (cache.dtype != cs.dtype || cache.dtype != sn.dtype)
+    throw std::runtime_error("export_rope_rows: table/cache dtype mismatch");
+  if (cs.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
+    throw std::runtime_error("export_rope_rows: tables must be (T, D)");
+  if (pos0 < 0 || pos0 + len > cs.shape[0])
+    throw std::runtime_error("export_rope_rows: position past table end");
+  Shape out_shape = cache.shape;
+  out_shape[d] = len;
+  NDArray out(out_shape, cache.dtype, cache.device);
+  int64_t n = out.numel();
+  if (n) {
+    DISPATCH_FLOAT(cache.dtype, T, {
+      export_rope_rows_kernel<T><<<nblk(n), kT>>>(
+          static_cast<T*>(cache.data_ptr()), static_cast<T*>(cs.data_ptr()),
+          static_cast<T*>(sn.data_ptr()), static_cast<T*>(out.data_ptr()),
+          old_seq, len, D, start, pos0, n, inverse ? -1.0F : 1.0F,
+          pair_swap ? 1 : 0);
+    });
+    cuda_check_last("export_rope_rows");
+  }
+  return out;
+}
+
+std::tuple<NDArray, NDArray> export_row_pair(
+    const NDArray& raw_cache, const NDArray& rope_cache, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t raw_start,
+    int64_t rope_start, int64_t len, int64_t pos0, bool inverse,
+    bool pair_swap) {
+  NDArray raw = export_rows(raw_cache, raw_dim, raw_start, len);
+  NDArray rope = export_rope_rows(
+      rope_cache, cs, sn, rope_dim, rope_start, len, pos0, inverse,
+      pair_swap);
+  return std::make_tuple(raw, rope);
+}
+
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> export_row_pairs(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim,
+    const std::vector<int64_t>& raw_starts,
+    const std::vector<int64_t>& rope_starts, int64_t len, int64_t pos0,
+    bool inverse, bool pair_swap) {
+  size_t n = raw_caches.size();
+  if (rope_caches.size() != n || raw_starts.size() != n ||
+      rope_starts.size() != n) {
+    throw std::runtime_error("export_row_pairs: input list size mismatch");
+  }
+  std::vector<NDArray> raw_out;
+  std::vector<NDArray> rope_out;
+  raw_out.reserve(n);
+  rope_out.reserve(n);
+  for (size_t i = 0; i < n; ++i) {
+    auto out = export_row_pair(raw_caches[i], rope_caches[i], cs, sn, raw_dim,
+                               rope_dim, raw_starts[i], rope_starts[i], len,
+                               pos0, inverse, pair_swap);
+    raw_out.push_back(std::get<0>(out));
+    rope_out.push_back(std::get<1>(out));
+  }
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> swap_row_pairs_with_rope(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches,
+    const std::vector<NDArray>& raw_inserts,
+    const std::vector<NDArray>& rope_inserts, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t head_tokens,
+    int64_t tail_start, int64_t pos0, bool pair_swap) {
+  size_t n = raw_caches.size();
+  if (rope_caches.size() != n || raw_inserts.size() != n ||
+      rope_inserts.size() != n) {
+    throw std::runtime_error("swap_row_pairs_with_rope: input list size mismatch");
+  }
+  std::vector<NDArray> raw_out;
+  std::vector<NDArray> rope_out;
+  raw_out.reserve(n);
+  rope_out.reserve(n);
+  for (size_t i = 0; i < n; ++i) {
+    raw_out.push_back(splice_rows(raw_caches[i], raw_inserts[i], raw_dim,
+                                  head_tokens, tail_start));
+    NDArray rope_insert = rope_apply(rope_inserts[i], cs, sn, pos0, false,
+                                     pair_swap);
+    rope_out.push_back(splice_rows(rope_caches[i], rope_insert, rope_dim,
+                                   head_tokens, tail_start));
+  }
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> evict_row_pairs(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches, int raw_dim, int rope_dim,
+    int64_t head_tokens, int64_t drop_tokens) {
+  size_t n = raw_caches.size();
+  if (rope_caches.size() != n) {
+    throw std::runtime_error("evict_row_pairs: input list size mismatch");
+  }
+  std::vector<NDArray> raw_out;
+  std::vector<NDArray> rope_out;
+  raw_out.reserve(n);
+  rope_out.reserve(n);
+  for (size_t i = 0; i < n; ++i) {
+    raw_out.push_back(evict_rows(raw_caches[i], raw_dim, head_tokens,
+                                 drop_tokens));
+    rope_out.push_back(evict_rows(rope_caches[i], rope_dim, head_tokens,
+                                  drop_tokens));
+  }
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<NDArray>, std::vector<NDArray>, int64_t>
+arena_row_pair_transaction(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches,
+    const std::vector<NDArray>& raw_inserts,
+    const std::vector<NDArray>& rope_inserts, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t sink_tokens,
+    int64_t current_mount_tokens, int64_t arena_width, bool pair_swap) {
+  size_t layers = raw_caches.size();
+  if (rope_caches.size() != layers) {
+    throw std::runtime_error("arena_row_pair_transaction: cache list size mismatch");
+  }
+  if (sink_tokens < 0 || current_mount_tokens < 0 || arena_width < 0) {
+    throw std::runtime_error("arena_row_pair_transaction: negative arena state");
+  }
+  if (raw_inserts.empty() && rope_inserts.empty()) {
+    auto out = evict_row_pairs(raw_caches, rope_caches, raw_dim, rope_dim,
+                               sink_tokens, current_mount_tokens);
+    return std::make_tuple(std::get<0>(out), std::get<1>(out), (int64_t)0);
+  }
+  if (raw_inserts.size() != layers || rope_inserts.size() != layers) {
+    throw std::runtime_error("arena_row_pair_transaction: insert list size mismatch");
+  }
+  int rd = normalize_dim(raw_dim, raw_inserts[0].ndim(),
+                         "arena_row_pair_transaction raw");
+  int pd = normalize_dim(rope_dim, rope_inserts[0].ndim(),
+                         "arena_row_pair_transaction rope");
+  int64_t mount_tokens = raw_inserts[0].shape[rd];
+  if (mount_tokens < 0 || mount_tokens > arena_width) {
+    throw std::runtime_error("arena_row_pair_transaction: mount exceeds arena width");
+  }
+  if (rope_inserts[0].shape[pd] != mount_tokens) {
+    throw std::runtime_error("arena_row_pair_transaction: insert token mismatch");
+  }
+  for (size_t i = 1; i < layers; ++i) {
+    int rdi = normalize_dim(raw_dim, raw_inserts[i].ndim(),
+                            "arena_row_pair_transaction raw");
+    int pdi = normalize_dim(rope_dim, rope_inserts[i].ndim(),
+                            "arena_row_pair_transaction rope");
+    if (raw_inserts[i].shape[rdi] != mount_tokens ||
+        rope_inserts[i].shape[pdi] != mount_tokens) {
+      throw std::runtime_error("arena_row_pair_transaction: layer token mismatch");
+    }
+  }
+  auto out = swap_row_pairs_with_rope(
+      raw_caches, rope_caches, raw_inserts, rope_inserts, cs, sn, raw_dim,
+      rope_dim, sink_tokens, sink_tokens + current_mount_tokens, sink_tokens,
+      pair_swap);
+  return std::make_tuple(std::get<0>(out), std::get<1>(out), mount_tokens);
 }
 
 // -------------------------------------------- fused Gated DeltaNet step

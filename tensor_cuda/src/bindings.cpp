@@ -55,6 +55,65 @@ py::object grad_of(Tensor& t) {
   return py::cast(Tensor::make(t.v->grad, false));
 }
 
+py::tuple tensor_args(const std::vector<Tensor>& inputs) {
+  py::tuple args(inputs.size());
+  for (size_t i = 0; i < inputs.size(); ++i) args[i] = py::cast(inputs[i]);
+  return args;
+}
+
+Tensor checkpoint_py(py::function fn, std::vector<Tensor> inputs) {
+  bool any_req = false;
+  for (auto& t : inputs) any_req = any_req || t.requires_grad();
+  bool req = grad_enabled() && any_req;
+  if (!req) {
+    py::object obj = fn(*tensor_args(inputs));
+    return obj.cast<Tensor>();
+  }
+
+  py::object obj;
+  {
+    NoGradGuard guard;
+    obj = fn(*tensor_args(inputs));
+  }
+  Tensor out0 = obj.cast<Tensor>();
+  NDArray out_data = out0.data();
+
+  return Tensor::from_op(out_data, inputs, "checkpoint",
+      [fn, inputs](const NDArray& g) {
+        py::gil_scoped_acquire gil;
+
+        std::vector<Tensor> replay_inputs;
+        replay_inputs.reserve(inputs.size());
+        for (auto& t : inputs) {
+          replay_inputs.push_back(Tensor::make(t.data(), t.requires_grad()));
+        }
+
+        bool prev = grad_enabled();
+        set_grad_enabled(true);
+        py::object replay_obj;
+        try {
+          replay_obj = fn(*tensor_args(replay_inputs));
+        } catch (...) {
+          set_grad_enabled(prev);
+          throw;
+        }
+        Tensor replay_out = replay_obj.cast<Tensor>();
+        try {
+          replay_out.backward(g);
+        } catch (...) {
+          set_grad_enabled(prev);
+          throw;
+        }
+        set_grad_enabled(prev);
+
+        for (size_t i = 0; i < inputs.size(); ++i) {
+          if (inputs[i].requires_grad() && replay_inputs[i].grad().defined()) {
+            inputs[i].v->accumulate_grad(replay_inputs[i].grad());
+          }
+        }
+      });
+}
+
 // __getitem__ for ints and unit-step slices (single key or per-dim tuple),
 // composed from the differentiable slice/squeeze ops.
 Tensor getitem(Tensor& t, py::object key) {
@@ -211,9 +270,46 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("alpha") = 1.f, py::arg("trans_b") = false);
   m.def("rms_norm", &ops::rms_norm, py::arg("x"), py::arg("w"), py::arg("eps"));
   m.def("rope_apply", &ops::rope_apply, py::arg("x"), py::arg("cos"),
-        py::arg("sin"), py::arg("pos0"));
+        py::arg("sin"), py::arg("pos0"), py::arg("inverse") = false,
+        py::arg("pair_swap") = false);
   m.def("write_rows", &ops::write_rows, py::arg("buf"), py::arg("src"),
         py::arg("start"));
+  m.def("export_rows", &ops::export_rows, py::arg("cache"),
+        py::arg("dim"), py::arg("start"), py::arg("len"));
+  m.def("export_rope_rows", &ops::export_rope_rows, py::arg("cache"),
+        py::arg("cos"), py::arg("sin"), py::arg("dim"),
+        py::arg("start"), py::arg("len"), py::arg("pos0"),
+        py::arg("inverse") = false, py::arg("pair_swap") = false);
+  m.def("export_row_pair", &ops::export_row_pair, py::arg("raw_cache"),
+        py::arg("rope_cache"), py::arg("cos"), py::arg("sin"),
+        py::arg("raw_dim"), py::arg("rope_dim"), py::arg("raw_start"),
+        py::arg("rope_start"), py::arg("len"), py::arg("pos0"),
+        py::arg("inverse") = false, py::arg("pair_swap") = false);
+  m.def("export_row_pairs", &ops::export_row_pairs, py::arg("raw_caches"),
+        py::arg("rope_caches"), py::arg("cos"), py::arg("sin"),
+        py::arg("raw_dim"), py::arg("rope_dim"), py::arg("raw_starts"),
+        py::arg("rope_starts"), py::arg("len"), py::arg("pos0"),
+        py::arg("inverse") = false, py::arg("pair_swap") = false);
+  m.def("swap_row_pairs_with_rope", &ops::swap_row_pairs_with_rope,
+        py::arg("raw_caches"), py::arg("rope_caches"),
+        py::arg("raw_inserts"), py::arg("rope_inserts"), py::arg("cos"),
+        py::arg("sin"), py::arg("raw_dim"), py::arg("rope_dim"),
+        py::arg("head_tokens"), py::arg("tail_start"), py::arg("pos0"),
+        py::arg("pair_swap") = false);
+  m.def("evict_row_pairs", &ops::evict_row_pairs, py::arg("raw_caches"),
+        py::arg("rope_caches"), py::arg("raw_dim"), py::arg("rope_dim"),
+        py::arg("head_tokens"), py::arg("drop_tokens"));
+  m.def("arena_row_pair_transaction", &ops::arena_row_pair_transaction,
+        py::arg("raw_caches"), py::arg("rope_caches"),
+        py::arg("raw_inserts"), py::arg("rope_inserts"), py::arg("cos"),
+        py::arg("sin"), py::arg("raw_dim"), py::arg("rope_dim"),
+        py::arg("sink_tokens"), py::arg("current_mount_tokens"),
+        py::arg("arena_width"), py::arg("pair_swap") = false);
+  m.def("splice_rows", &ops::splice_rows, py::arg("old_cache"),
+        py::arg("insert"), py::arg("dim"), py::arg("head_tokens"),
+        py::arg("tail_start"));
+  m.def("evict_rows", &ops::evict_rows, py::arg("old_cache"),
+        py::arg("dim"), py::arg("head_tokens"), py::arg("drop_tokens"));
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);
@@ -235,6 +331,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("int4_linear_fused", &ops::int4_linear_fused,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("group_size") = 128);
+  // Differentiable O(L) selective attention (graft-native training path).
+  m.def("apa_selective_train", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
+                                  double scale, double zthr, bool is_causal) {
+    return ops::apa_selective_train(q, k, kq, v, (float)scale, (float)zthr,
+                                    is_causal);
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
+     py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
   // Fused GDN decode step (inference-only, functional: (out, new_state)).
   m.def("gated_delta_step", [](Tensor& q, Tensor& k, Tensor& v, Tensor& a,
                                Tensor& b, Tensor& A_neg, Tensor& dt_bias,
@@ -280,6 +383,29 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
      py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  // APA selective TRAINING forward: O(L) memory, saves (lse, thr) for backward.
+  // Returns (out, lse, thr) as plain (non-grad) tensors; Python wires autograd.
+  m.def("apa_selective_fwd_train", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
+                                      double scale, double zthr, bool is_causal) {
+    auto r = tc::apa_selective_fwd_train(q.data(), k.data(), kq.data(), v.data(),
+                                         (float)scale, (float)zthr, is_causal);
+    return py::make_tuple(Tensor::make(std::get<0>(r), false),
+                          Tensor::make(std::get<1>(r), false),
+                          Tensor::make(std::get<2>(r), false));
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
+     py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  // APA selective backward: returns (dq, dk, dv).
+  m.def("apa_selective_bwd", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
+                                Tensor& dO, Tensor& lse, Tensor& thr,
+                                double scale, bool is_causal) {
+    auto r = tc::apa_selective_bwd(q.data(), k.data(), kq.data(), v.data(),
+                                   dO.data(), lse.data(), thr.data(),
+                                   (float)scale, is_causal);
+    return py::make_tuple(Tensor::make(std::get<0>(r), false),
+                          Tensor::make(std::get<1>(r), false),
+                          Tensor::make(std::get<2>(r), false));
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"), py::arg("dO"),
+     py::arg("lse"), py::arg("thr"), py::arg("scale"), py::arg("is_causal") = false);
   // Fused APA blend+softmax over precomputed bulk/rank score matrices (causal
   // masking baked into the inputs as large-negative scores).
   m.def("apa_blend_softmax", [](Tensor& bulk, Tensor& rank, double zthr) {
@@ -319,6 +445,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // grad mode
   m.def("is_grad_enabled", &grad_enabled);
   m.def("set_grad_enabled", &set_grad_enabled);
+  m.def("checkpoint", &checkpoint_py, py::arg("fn"), py::arg("inputs"));
   m.def("synchronize", &cuda_sync);
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);

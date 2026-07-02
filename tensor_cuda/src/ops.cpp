@@ -273,14 +273,173 @@ void write_rows(Tensor& buf, const Tensor& src, int64_t start) {
   tc::write_rows(b, src.data(), start);
 }
 
+Tensor splice_rows(const Tensor& old_cache, const Tensor& insert,
+                   int dim, int64_t head_tokens, int64_t tail_start) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("splice_rows: cache surgery is inference-only");
+  return Tensor::make(tc::splice_rows(old_cache.data(), insert.data(), dim,
+                                      head_tokens, tail_start),
+                      false);
+}
+
+Tensor evict_rows(const Tensor& old_cache, int dim, int64_t head_tokens,
+                  int64_t drop_tokens) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("evict_rows: cache surgery is inference-only");
+  return Tensor::make(tc::evict_rows(old_cache.data(), dim, head_tokens,
+                                     drop_tokens),
+                      false);
+}
+
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,
-                  int64_t pos0) {
-  NDArray out = tc::rope_apply(x.data(), cs.data(), sn.data(), pos0);
+                  int64_t pos0, bool inverse, bool pair_swap) {
+  NDArray out = tc::rope_apply(x.data(), cs.data(), sn.data(), pos0, inverse,
+                               pair_swap);
   return Tensor::from_op(out, {x}, "rope_apply", [](const NDArray&) -> void {
     // Inference-only fusion (callers guard on is_grad_enabled and fall
     // back to the composed slice/cat/mul chain for training).
     throw std::runtime_error("rope_apply: no backward — use the composed chain");
   });
+}
+
+Tensor export_rows(const Tensor& cache, int dim, int64_t start, int64_t len) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("export_rows: cache export is inference-only");
+  return Tensor::make(tc::export_rows(cache.data(), dim, start, len), false);
+}
+
+Tensor export_rope_rows(const Tensor& cache, const Tensor& cs,
+                        const Tensor& sn, int dim, int64_t start,
+                        int64_t len, int64_t pos0, bool inverse,
+                        bool pair_swap) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("export_rope_rows: cache export is inference-only");
+  return Tensor::make(tc::export_rope_rows(
+      cache.data(), cs.data(), sn.data(), dim, start, len, pos0, inverse,
+      pair_swap), false);
+}
+
+std::tuple<Tensor, Tensor> export_row_pair(
+    const Tensor& raw_cache, const Tensor& rope_cache, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t raw_start,
+    int64_t rope_start, int64_t len, int64_t pos0, bool inverse,
+    bool pair_swap) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("export_row_pair: cache export is inference-only");
+  auto out = tc::export_row_pair(raw_cache.data(), rope_cache.data(),
+                                 cs.data(), sn.data(), raw_dim, rope_dim,
+                                 raw_start, rope_start, len, pos0, inverse,
+                                 pair_swap);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false));
+}
+
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> export_row_pairs(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim,
+    const std::vector<int64_t>& raw_starts,
+    const std::vector<int64_t>& rope_starts, int64_t len, int64_t pos0,
+    bool inverse, bool pair_swap) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("export_row_pairs: cache export is inference-only");
+  std::vector<NDArray> raw_nd;
+  std::vector<NDArray> rope_nd;
+  raw_nd.reserve(raw_caches.size());
+  rope_nd.reserve(rope_caches.size());
+  for (const auto& t : raw_caches) raw_nd.push_back(t.data());
+  for (const auto& t : rope_caches) rope_nd.push_back(t.data());
+  auto out = tc::export_row_pairs(raw_nd, rope_nd, cs.data(), sn.data(),
+                                  raw_dim, rope_dim, raw_starts, rope_starts,
+                                  len, pos0, inverse, pair_swap);
+  std::vector<Tensor> raw_out;
+  std::vector<Tensor> rope_out;
+  raw_out.reserve(std::get<0>(out).size());
+  rope_out.reserve(std::get<1>(out).size());
+  for (const auto& a : std::get<0>(out)) raw_out.push_back(Tensor::make(a, false));
+  for (const auto& a : std::get<1>(out)) rope_out.push_back(Tensor::make(a, false));
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> swap_row_pairs_with_rope(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches,
+    const std::vector<Tensor>& raw_inserts,
+    const std::vector<Tensor>& rope_inserts, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t head_tokens,
+    int64_t tail_start, int64_t pos0, bool pair_swap) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("swap_row_pairs_with_rope: cache surgery is inference-only");
+  std::vector<NDArray> raw_cache_nd, rope_cache_nd, raw_insert_nd, rope_insert_nd;
+  raw_cache_nd.reserve(raw_caches.size());
+  rope_cache_nd.reserve(rope_caches.size());
+  raw_insert_nd.reserve(raw_inserts.size());
+  rope_insert_nd.reserve(rope_inserts.size());
+  for (const auto& t : raw_caches) raw_cache_nd.push_back(t.data());
+  for (const auto& t : rope_caches) rope_cache_nd.push_back(t.data());
+  for (const auto& t : raw_inserts) raw_insert_nd.push_back(t.data());
+  for (const auto& t : rope_inserts) rope_insert_nd.push_back(t.data());
+  auto out = tc::swap_row_pairs_with_rope(
+      raw_cache_nd, rope_cache_nd, raw_insert_nd, rope_insert_nd, cs.data(),
+      sn.data(), raw_dim, rope_dim, head_tokens, tail_start, pos0, pair_swap);
+  std::vector<Tensor> raw_out, rope_out;
+  raw_out.reserve(std::get<0>(out).size());
+  rope_out.reserve(std::get<1>(out).size());
+  for (const auto& a : std::get<0>(out)) raw_out.push_back(Tensor::make(a, false));
+  for (const auto& a : std::get<1>(out)) rope_out.push_back(Tensor::make(a, false));
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> evict_row_pairs(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches, int raw_dim, int rope_dim,
+    int64_t head_tokens, int64_t drop_tokens) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("evict_row_pairs: cache surgery is inference-only");
+  std::vector<NDArray> raw_nd, rope_nd;
+  raw_nd.reserve(raw_caches.size());
+  rope_nd.reserve(rope_caches.size());
+  for (const auto& t : raw_caches) raw_nd.push_back(t.data());
+  for (const auto& t : rope_caches) rope_nd.push_back(t.data());
+  auto out = tc::evict_row_pairs(raw_nd, rope_nd, raw_dim, rope_dim,
+                                 head_tokens, drop_tokens);
+  std::vector<Tensor> raw_out, rope_out;
+  raw_out.reserve(std::get<0>(out).size());
+  rope_out.reserve(std::get<1>(out).size());
+  for (const auto& a : std::get<0>(out)) raw_out.push_back(Tensor::make(a, false));
+  for (const auto& a : std::get<1>(out)) rope_out.push_back(Tensor::make(a, false));
+  return std::make_tuple(raw_out, rope_out);
+}
+
+std::tuple<std::vector<Tensor>, std::vector<Tensor>, int64_t>
+arena_row_pair_transaction(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches,
+    const std::vector<Tensor>& raw_inserts,
+    const std::vector<Tensor>& rope_inserts, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t sink_tokens,
+    int64_t current_mount_tokens, int64_t arena_width, bool pair_swap) {
+  if (tc::grad_enabled())
+    throw std::runtime_error("arena_row_pair_transaction: cache surgery is inference-only");
+  std::vector<NDArray> raw_cache_nd, rope_cache_nd, raw_insert_nd, rope_insert_nd;
+  raw_cache_nd.reserve(raw_caches.size());
+  rope_cache_nd.reserve(rope_caches.size());
+  raw_insert_nd.reserve(raw_inserts.size());
+  rope_insert_nd.reserve(rope_inserts.size());
+  for (const auto& t : raw_caches) raw_cache_nd.push_back(t.data());
+  for (const auto& t : rope_caches) rope_cache_nd.push_back(t.data());
+  for (const auto& t : raw_inserts) raw_insert_nd.push_back(t.data());
+  for (const auto& t : rope_inserts) rope_insert_nd.push_back(t.data());
+  auto out = tc::arena_row_pair_transaction(
+      raw_cache_nd, rope_cache_nd, raw_insert_nd, rope_insert_nd, cs.data(),
+      sn.data(), raw_dim, rope_dim, sink_tokens, current_mount_tokens,
+      arena_width, pair_swap);
+  std::vector<Tensor> raw_out, rope_out;
+  raw_out.reserve(std::get<0>(out).size());
+  rope_out.reserve(std::get<1>(out).size());
+  for (const auto& a : std::get<0>(out)) raw_out.push_back(Tensor::make(a, false));
+  for (const auto& a : std::get<1>(out)) rope_out.push_back(Tensor::make(a, false));
+  return std::make_tuple(raw_out, rope_out, std::get<2>(out));
 }
 
 Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
@@ -324,6 +483,32 @@ Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                                       zeros.data(), group_size);
   return Tensor::from_op(out, {x}, "int4_linear_fused",
                          int4_grad(x, packed, scales, zeros, group_size));
+}
+
+// APA selective attention, DIFFERENTIABLE + O(L) memory (the graft-native
+// training path). Forward runs the fused training kernel (saves per-row lse +
+// thr); backward streams dq/dk/dv from the saved state. Selection is a
+// stop-gradient: kq (the quantized keys) is detached — no grad to it; dk is
+// nonzero only on selected keys. q,k,v get gradient. Inference-time grad-free
+// callers should use tc::apa_selective_attention instead.
+Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
+                           const Tensor& v, float scale, float zthr,
+                           bool is_causal) {
+  auto r = tc::apa_selective_fwd_train(q.data(), k.data(), kq.data(), v.data(),
+                                       scale, zthr, is_causal);
+  NDArray out = std::get<0>(r);
+  NDArray lse = std::get<1>(r);
+  NDArray thr = std::get<2>(r);
+  // capture detached NDArrays (q/k/kq/v data + saved stats) for the backward.
+  NDArray qd = q.data(), kd = k.data(), kqd = kq.data(), vd = v.data();
+  return Tensor::from_op(out, {q, k, v}, "apa_selective_train",
+      [q, k, v, qd, kd, kqd, vd, lse, thr, scale, is_causal](const NDArray& g) {
+        auto d = tc::apa_selective_bwd(qd, kd, kqd, vd, g, lse, thr,
+                                       scale, is_causal);
+        q.v->accumulate_grad(std::get<0>(d));
+        k.v->accumulate_grad(std::get<1>(d));
+        v.v->accumulate_grad(std::get<2>(d));
+      });
 }
 
 // ------------------------------------------------------------- reductions

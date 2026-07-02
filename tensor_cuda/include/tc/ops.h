@@ -5,6 +5,9 @@
 
 #include "tc/autograd.h"
 
+#include <tuple>
+#include <vector>
+
 namespace tc {
 namespace ops {
 
@@ -66,13 +69,62 @@ Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                          const Tensor& scales, const Tensor& zeros,
                          int group_size);
 
+// APA selective attention, differentiable + O(L) memory (graft-native training).
+// Selection is a stop-gradient (kq detached); q,k,v receive gradients.
+Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
+                           const Tensor& v, float scale, float zthr,
+                           bool is_causal);
+
 // Fused causal softmax (inference-only: backward throws).
 Tensor causal_softmax(const Tensor& scores);
 
 // Fused RMSNorm over the last dim (inference-only: backward throws).
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
-Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn, int64_t pos0);
+Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,
+                  int64_t pos0, bool inverse = false,
+                  bool pair_swap = false);
 void write_rows(Tensor& buf, const Tensor& src, int64_t start);
+Tensor export_rows(const Tensor& cache, int dim, int64_t start, int64_t len);
+Tensor export_rope_rows(const Tensor& cache, const Tensor& cs,
+                        const Tensor& sn, int dim, int64_t start,
+                        int64_t len, int64_t pos0, bool inverse = false,
+                        bool pair_swap = false);
+std::tuple<Tensor, Tensor> export_row_pair(
+    const Tensor& raw_cache, const Tensor& rope_cache, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t raw_start,
+    int64_t rope_start, int64_t len, int64_t pos0, bool inverse = false,
+    bool pair_swap = false);
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> export_row_pairs(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim,
+    const std::vector<int64_t>& raw_starts,
+    const std::vector<int64_t>& rope_starts, int64_t len, int64_t pos0,
+    bool inverse = false, bool pair_swap = false);
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> swap_row_pairs_with_rope(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches,
+    const std::vector<Tensor>& raw_inserts,
+    const std::vector<Tensor>& rope_inserts, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t head_tokens,
+    int64_t tail_start, int64_t pos0, bool pair_swap = false);
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> evict_row_pairs(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches, int raw_dim, int rope_dim,
+    int64_t head_tokens, int64_t drop_tokens);
+std::tuple<std::vector<Tensor>, std::vector<Tensor>, int64_t>
+arena_row_pair_transaction(
+    const std::vector<Tensor>& raw_caches,
+    const std::vector<Tensor>& rope_caches,
+    const std::vector<Tensor>& raw_inserts,
+    const std::vector<Tensor>& rope_inserts, const Tensor& cs,
+    const Tensor& sn, int raw_dim, int rope_dim, int64_t sink_tokens,
+    int64_t current_mount_tokens, int64_t arena_width,
+    bool pair_swap = false);
+Tensor splice_rows(const Tensor& old_cache, const Tensor& insert,
+                   int dim, int64_t head_tokens, int64_t tail_start);
+Tensor evict_rows(const Tensor& old_cache, int dim, int64_t head_tokens,
+                  int64_t drop_tokens);
 
 // Reductions.
 Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim);

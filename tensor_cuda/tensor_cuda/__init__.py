@@ -87,11 +87,11 @@ def rms_norm(x, w, eps=1e-6):
     return _C.rms_norm(x, w, eps)
 
 
-def rope_apply(x, cos, sin, pos0=0):
+def rope_apply(x, cos, sin, pos0=0, inverse=False, pair_swap=False):
     """Fused RoPE: out = x*cos[pos0+l] + rotate_half(x)*sin[pos0+l] in
     ONE launch (the composed chain is ~8). x (..., L, D); tables (T, D)
     in x's dtype. Inference-only: backward raises."""
-    return _C.rope_apply(x, cos, sin, pos0)
+    return _C.rope_apply(x, cos, sin, pos0, inverse, pair_swap)
 
 
 def write_rows(buf, src, start=0):
@@ -100,6 +100,58 @@ def write_rows(buf, src, start=0):
     Inference-only (raises under grad). MUTATES buf — callers own the
     sharing contract: never alias a written buffer from a held cache."""
     _C.write_rows(buf, src, start)
+
+
+def export_rows(cache, dim, start, length):
+    return _C.export_rows(cache, dim, start, length)
+
+
+def export_rope_rows(cache, cos, sin, dim, start, length, pos0,
+                     inverse=False, pair_swap=False):
+    return _C.export_rope_rows(cache, cos, sin, dim, start, length, pos0,
+                               inverse, pair_swap)
+
+
+def export_row_pair(raw_cache, rope_cache, cos, sin, raw_dim, rope_dim,
+                    raw_start, rope_start, length, pos0, inverse=False,
+                    pair_swap=False):
+    return _C.export_row_pair(raw_cache, rope_cache, cos, sin, raw_dim,
+                              rope_dim, raw_start, rope_start, length, pos0,
+                              inverse, pair_swap)
+
+
+def export_row_pairs(raw_caches, rope_caches, cos, sin, raw_dim, rope_dim,
+                     raw_starts, rope_starts, length, pos0, inverse=False,
+                     pair_swap=False):
+    return _C.export_row_pairs(list(raw_caches), list(rope_caches), cos, sin,
+                               raw_dim, rope_dim, list(raw_starts),
+                               list(rope_starts), length, pos0, inverse,
+                               pair_swap)
+
+
+def swap_row_pairs_with_rope(raw_caches, rope_caches, raw_inserts,
+                             rope_inserts, cos, sin, raw_dim, rope_dim,
+                             head_tokens, tail_start, pos0, pair_swap=False):
+    return _C.swap_row_pairs_with_rope(
+        list(raw_caches), list(rope_caches), list(raw_inserts),
+        list(rope_inserts), cos, sin, raw_dim, rope_dim, head_tokens,
+        tail_start, pos0, pair_swap)
+
+
+def evict_row_pairs(raw_caches, rope_caches, raw_dim, rope_dim, head_tokens,
+                    drop_tokens):
+    return _C.evict_row_pairs(list(raw_caches), list(rope_caches), raw_dim,
+                              rope_dim, head_tokens, drop_tokens)
+
+
+def arena_row_pair_transaction(raw_caches, rope_caches, raw_inserts,
+                               rope_inserts, cos, sin, raw_dim, rope_dim,
+                               sink_tokens, current_mount_tokens,
+                               arena_width, pair_swap=False):
+    return _C.arena_row_pair_transaction(
+        list(raw_caches), list(rope_caches), list(raw_inserts),
+        list(rope_inserts), cos, sin, raw_dim, rope_dim, sink_tokens,
+        current_mount_tokens, arena_width, pair_swap)
 
 
 def int4_linear(x, packed, scales, zeros, group_size=128):
@@ -182,6 +234,14 @@ def cat(tensors, dim=0):
     return _C.cat(list(tensors), dim)
 
 
+def splice_rows(old_cache, insert, dim, head_tokens, tail_start):
+    return _C.splice_rows(old_cache, insert, dim, head_tokens, tail_start)
+
+
+def evict_rows(old_cache, dim, head_tokens, drop_tokens):
+    return _C.evict_rows(old_cache, dim, head_tokens, drop_tokens)
+
+
 def stack(tensors, dim=0):
     return _C.stack(list(tensors), dim)
 
@@ -230,12 +290,11 @@ def weight_tie(src_module, src_attr, dst_module, dst_attr):
 def checkpoint(fn, *inputs):
     """Gradient checkpointing.
 
-    NOTE: the current engine builds the graph normally (this is a transparent,
-    correct wrapper). True activation-recompute checkpointing needs a Python
-    grad_fn hook and is tracked in ROADMAP; the API is provided for
-    compatibility so models written against it run unchanged.
+    Runs `fn(*inputs)` under no_grad during the forward pass and replays it
+    during backward, saving only the checkpoint inputs instead of the full
+    interior activation graph. The function must return one Tensor.
     """
-    return fn(*inputs)
+    return _C.checkpoint(fn, list(inputs))
 
 
 def synchronize():
@@ -280,12 +339,34 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "rms_norm", "rope_apply", "write_rows", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "matmul", "rms_norm", "rope_apply", "write_rows", "export_rows",
+    "export_rope_rows", "export_row_pair", "export_row_pairs",
+    "swap_row_pairs_with_rope", "evict_row_pairs",
+    "arena_row_pair_transaction", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "gated_delta_step",
     "int4_dequant", "apa_selective_attention",
     "kv_int4_pack", "kv_int4_unpack",
+    "apa_selective_fwd_train", "apa_selective_bwd", "apa_selective_train",
 ]
+
+
+def apa_selective_fwd_train(q, k, kq, v, scale, zthr, is_causal=False):
+    """O(L)-memory selective-attention training forward. Returns
+    (out, lse, thr) — lse/thr are the saved per-row state the backward needs."""
+    return _C.apa_selective_fwd_train(q, k, kq, v, scale, zthr, is_causal)
+
+
+def apa_selective_bwd(q, k, kq, v, dO, lse, thr, scale, is_causal=False):
+    """Selective-attention backward. Returns (dq, dk, dv)."""
+    return _C.apa_selective_bwd(q, k, kq, v, dO, lse, thr, scale, is_causal)
+
+
+def apa_selective_train(q, k, kq, v, scale, zthr, is_causal=False):
+    """Differentiable O(L)-memory selective attention (graft-native training).
+    Selection is a stop-gradient (kq detached); q,k,v receive gradients.
+    Returns a single (B,H,L,D) tensor with autograd wired."""
+    return _C.apa_selective_train(q, k, kq, v, scale, zthr, is_causal)
 __version__ = "0.1.0-phase1"

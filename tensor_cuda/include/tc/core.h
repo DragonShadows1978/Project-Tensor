@@ -173,8 +173,51 @@ NDArray causal_softmax(const NDArray& scores);
 // accumulate, single kernel + single output alloc (vs the 9-op chain).
 // w must be fp32; out_dtype is typically x's dtype.
 NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype);
-NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn, int64_t pos0);
+NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
+                   int64_t pos0, bool inverse = false,
+                   bool pair_swap = false);
 void write_rows(NDArray& buf, const NDArray& src, int64_t start);
+NDArray export_rows(const NDArray& cache, int dim, int64_t start,
+                    int64_t len);
+NDArray export_rope_rows(const NDArray& cache, const NDArray& cs,
+                         const NDArray& sn, int dim, int64_t start,
+                         int64_t len, int64_t pos0, bool inverse = false,
+                         bool pair_swap = false);
+std::tuple<NDArray, NDArray> export_row_pair(
+    const NDArray& raw_cache, const NDArray& rope_cache, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t raw_start,
+    int64_t rope_start, int64_t len, int64_t pos0, bool inverse = false,
+    bool pair_swap = false);
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> export_row_pairs(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim,
+    const std::vector<int64_t>& raw_starts,
+    const std::vector<int64_t>& rope_starts, int64_t len, int64_t pos0,
+    bool inverse = false, bool pair_swap = false);
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> swap_row_pairs_with_rope(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches,
+    const std::vector<NDArray>& raw_inserts,
+    const std::vector<NDArray>& rope_inserts, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t head_tokens,
+    int64_t tail_start, int64_t pos0, bool pair_swap = false);
+std::tuple<std::vector<NDArray>, std::vector<NDArray>> evict_row_pairs(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches, int raw_dim, int rope_dim,
+    int64_t head_tokens, int64_t drop_tokens);
+std::tuple<std::vector<NDArray>, std::vector<NDArray>, int64_t>
+arena_row_pair_transaction(
+    const std::vector<NDArray>& raw_caches,
+    const std::vector<NDArray>& rope_caches,
+    const std::vector<NDArray>& raw_inserts,
+    const std::vector<NDArray>& rope_inserts, const NDArray& cs,
+    const NDArray& sn, int raw_dim, int rope_dim, int64_t sink_tokens,
+    int64_t current_mount_tokens, int64_t arena_width, bool pair_swap = false);
+NDArray splice_rows(const NDArray& old_cache, const NDArray& insert,
+                    int dim, int64_t head_tokens, int64_t tail_start);
+NDArray evict_rows(const NDArray& old_cache, int dim, int64_t head_tokens,
+                   int64_t drop_tokens);
 
 // INT4 group-quantized linear: y = x @ dequant(W)^T.
 //   x       : (..., K) fp16/fp32 activations (K == in_features)
@@ -223,6 +266,20 @@ std::pair<NDArray, NDArray> gated_delta_step(
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 const NDArray& kq, const NDArray& v,
                                 float scale, float zthr, bool is_causal);
+
+// APA selective TRAINING forward: O(L)-memory (never materializes the L x L
+// score matrix), additionally saves per-row logsumexp + threshold for the
+// backward. Returns (out, lse, thr). Selection is a stop-gradient.
+std::tuple<NDArray, NDArray, NDArray> apa_selective_fwd_train(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    float scale, float zthr, bool is_causal);
+// APA selective backward: recomputes scores from the saved (lse, thr), streams
+// dQ/dK/dV in O(L) memory. dK is nonzero on SELECTED keys only (kq detached).
+// Returns (dq, dk, dv).
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    const NDArray& dO, const NDArray& lse, const NDArray& thr,
+    float scale, bool is_causal);
 
 // Fused APA blend+softmax over precomputed score matrices (each (..., S)) from
 // cuBLAS: per row, thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ?

@@ -103,9 +103,11 @@ class Linear(Module):
         self.bias = parameter(np.zeros(out_features)) if bias else None
 
     def forward(self, x):
-        out = tc.matmul(x, self.weight, trans_b=True)
+        w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
+        out = tc.matmul(x, w, trans_b=True)
         if self.bias is not None:
-            out = out + self.bias
+            b = self.bias if self.bias.dtype == out.dtype else self.bias.astype(out.dtype)
+            out = out + b
         return out
 
 
@@ -278,7 +280,8 @@ class RMSNorm(Module):
 
     def forward(self, x):
         ms = (x * x).mean([-1], True)
-        return x * (ms + self.eps).pow(-0.5) * self.weight
+        w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
+        return x * (ms + self.eps).pow(-0.5) * w
 
 
 class MultiheadAttention(Module):
