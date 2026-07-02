@@ -152,7 +152,12 @@ For query row `qᵢ` over keys `k₁…k_L`:
    low precision.
 2. **Threshold from the bulk scores.** `thr = mean(|bulk|) + z·std(|bulk|)`, with
    `z = Φ⁻¹(1 − r)` for refine fraction `r`. This selects the top ~`r·L` keys *by the
-   cheap pass*.
+   cheap pass*. The implementation applies this literal Gaussian-quantile
+   threshold, not a rank-based top-k; because the measured score
+   distributions are heavy-tailed (§3.4), the realized refined fraction
+   deviates from the nominal `r`. Every quality and context result in this
+   paper is gated at the realized operating point, so `r` functions as a
+   dial setting rather than a guaranteed quantile.
 3. **Refine pass (selected keys, full precision).** For keys above `thr`, recompute
    `scoreⱼ = qᵢ · kⱼ · scale` at full precision. Below-threshold keys keep `bulkⱼ`.
 4. **Exact softmax over all keys.** `out = softmax(score) · V`. The denominator sums
@@ -418,7 +423,9 @@ APA's speedup is sequence-length-dependent. On a controlled mixed-attention benc
 | 1024 | 7.49 | 5.79 | **0.77× (faster)** | 94.0% |
 | 2048 | 27.77 | 13.03 | **0.47× (2.1× faster)** | 95.7% |
 
-**APA loses at short sequence and wins at long.** The crossover is ~512 tokens:
+**APA loses at short sequence and wins at long.** The crossover lies
+between 512 and 1024 tokens (at 512, APA still runs 2.03× slower; by 1024
+it is 1.3× faster):
 below it, selection overhead dominates; above it, the avoided full-precision work
 dominates. APA is a long-context method; its speed claims apply to the bandwidth-bound
 long-sequence decode regime. MSE vs SDPA is 0.0% at r=0.15 across this sweep, and the
@@ -464,6 +471,14 @@ gradient checkpointing, RTX 4070 SUPER. The selection is trained through a
 *choice* are constants in the backward pass; gradients flow through the score dots
 and the softmax only. This is the standard estimator for hard top-k/quantization
 selection, and the 232M model (§6) trains stably under it from random init.
+Gradient scope over keys, stated explicitly: the quantized bulk tensor is
+detached, so un-refined keys receive no key-gradient through the score path
+in a given step — key-gradient sparsity follows forward selection (~`r` of
+visible keys per row, with coverage varying stochastically across rows and
+steps) — while *value* gradients flow to every key through the full softmax
+weights, whose exact denominator keeps all keys in the backward graph. The
+fused training kernel is gradient-checked bit-tight against a composed
+reference implementing exactly these semantics.
 
 **Trainability:** loss descends cleanly through the selective path (4.4→3.1 band over
 the run); APA r0.15 is trainable from birth, not merely tolerable at inference.
@@ -497,7 +512,8 @@ Pareto knee (§ below), viewed along the depth axis.
    low-bit bulk rounding hurts. There the refine fraction must rise; the limit r→1.0
    is exact attention. The GRAPA copy struggle is this boundary showing up in the one
    task that lives at it.
-2. **Short sequences.** APA is slower below ~512 tokens (§4.5). It is a long-context
+2. **Short sequences.** APA is slower at sequence lengths up to ~512
+   tokens, with the crossover between 512 and 1024 (§4.5). It is a long-context
    method.
 3. **Sub-floor bulk precision.** 2-bit bulk on architectures that need more (§4.2)
    trades quality for context rather than giving free parity.
