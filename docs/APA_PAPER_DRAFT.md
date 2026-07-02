@@ -732,12 +732,11 @@ the arXiv record or the primary source on 2026-07-02.*
     quantizer of §2.1 is an in-project implementation of this method.)
 21. Perry, D. *Ghost Geometry: A Precision-Collapse Framework for the Collatz
     Conjecture, and Its Measured Transfer to Transformer Attention.*
-    Companion note, 2026, released alongside this paper (Zenodo DOI on
-    release). Source of the precision-decay hypothesis (§1.2) and the
+    Companion note, 2026. Zenodo. doi:10.5281/zenodo.21138525. Source of the precision-decay hypothesis (§1.2) and the
     GHOST_PRECISION interaction-depth study summarized in §3.4.
 22. Perry, D. *Grafted Memory — GRM: A Routed, Tokenless K/V Memory Runtime
-    for Frozen Language Models.* Companion paper, 2026, released alongside
-    this paper (Zenodo DOI on release).
+    for Frozen Language Models.* Companion paper, 2026. Zenodo.
+    doi:10.5281/zenodo.21138607.
 
 ---
 
