@@ -45,6 +45,28 @@ def ref_selective(q, k, kq, v, scale, z, causal):
     return out
 
 
+def ref_blend_softmax_sink(bulk, rank, sinks, zthr):
+    B, H, L, S = bulk.shape
+    out = np.zeros_like(bulk, dtype=np.float32)
+    for b in range(B):
+        for h in range(H):
+            for i in range(L):
+                bk = bulk[b, h, i].astype(np.float32)
+                rk = rank[b, h, i].astype(np.float32)
+                valid = bk > -5e3
+                a = np.abs(bk[valid])
+                if a.size:
+                    thr = a.mean() + zthr * np.sqrt(max(a.var(), 0.0))
+                else:
+                    thr = 0.0
+                score = np.where(valid & (np.abs(bk) >= thr), rk, bk)
+                combined = np.concatenate([score, [float(sinks[h])]]).astype(np.float32)
+                w = np.exp(combined - combined.max())
+                w /= w.sum()
+                out[b, h, i] = w[:-1]
+    return out
+
+
 def _run(causal, L=64, S=None, D=64, H=4, KVH=None):
     rng = np.random.default_rng(0)
     B = 1
@@ -122,6 +144,38 @@ def test_selective_actually_sparse():
     # selective should be close to full (it refines the most important keys) but
     # not identical (bulk approximates the rest).
     assert np.abs(sel - full).max() < 0.05
+
+
+def test_apa_blend_softmax_sink_matches_reference_and_omits_sink_column():
+    rng = np.random.default_rng(20260706)
+    bulk = (rng.standard_normal((2, 3, 4, 11)) * 0.2).astype(np.float32)
+    rank = (bulk + rng.standard_normal(bulk.shape) * 0.05).astype(np.float32)
+    sinks = rng.standard_normal((3,)).astype(np.float32) * 0.3
+    bulk[:, :, :, -2:] = -1.0e4
+    rank[:, :, :, -2:] = -1.0e4
+    zthr = 0.4
+
+    got = tc.apa_blend_softmax_sink(
+        tc.tensor(bulk), tc.tensor(rank), tc.tensor(sinks), zthr
+    ).numpy()
+    expected = ref_blend_softmax_sink(bulk, rank, sinks, zthr)
+
+    assert got.shape == bulk.shape
+    np.testing.assert_allclose(got, expected, rtol=2e-5, atol=2e-5)
+    assert np.all(got[:, :, :, -2:] < 1e-6)
+
+
+def test_apa_blend_softmax_sink_sink_reduces_key_mass():
+    bulk = np.zeros((1, 2, 1, 5), dtype=np.float32)
+    rank = bulk.copy()
+    sinks = np.asarray([-10.0, 4.0], dtype=np.float32)
+
+    got = tc.apa_blend_softmax_sink(
+        tc.tensor(bulk), tc.tensor(rank), tc.tensor(sinks), 0.0
+    ).numpy()
+
+    assert got[0, 0, 0].sum() > 0.99
+    assert got[0, 1, 0].sum() < 0.1
 
 
 if __name__ == "__main__":

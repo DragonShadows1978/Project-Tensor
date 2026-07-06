@@ -251,6 +251,17 @@ def apa_blend_softmax(bulk, rank, zthr):
     return _C.apa_blend_softmax(bulk, rank, zthr)
 
 
+def apa_blend_softmax_sink(bulk, rank, sinks, zthr):
+    """Sink-aware APA blend weights for GPT-OSS attention.
+
+    `bulk` and `rank` are `(B,H,L,S)` score tensors with masks already baked in.
+    `sinks` is `(H,)`. Selection stats are computed over valid key scores only;
+    the sink logit participates in the softmax denominator but no sink column is
+    returned, so the result remains `(B,H,L,S)` for `weights @ V`.
+    """
+    return _C.apa_blend_softmax_sink(bulk, rank, sinks, zthr)
+
+
 def mse_loss(pred, target):
     return _C.mse_loss(pred, target)
 
@@ -392,6 +403,7 @@ __all__ = [
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
     "kv_int4_pack", "kv_int4_unpack",
+    "apa_blend_softmax_sink",
     "apa_selective_fwd_train", "apa_selective_bwd", "apa_selective_train",
 ]
 

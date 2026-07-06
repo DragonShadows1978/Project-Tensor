@@ -436,6 +436,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     return Tensor::make(tc::apa_blend_softmax(bulk.data(), rank.data(),
                                               (float)zthr, nullptr), false);
   }, py::arg("bulk"), py::arg("rank"), py::arg("zthr"));
+  m.def("apa_blend_softmax_sink", [](Tensor& bulk, Tensor& rank, Tensor& sinks,
+                                     double zthr) {
+    return Tensor::make(
+        tc::apa_blend_softmax_sink(bulk.data(), rank.data(), sinks.data(),
+                                   (float)zthr),
+        false);
+  }, py::arg("bulk"), py::arg("rank"), py::arg("sinks"), py::arg("zthr"));
   m.def("im2col", &ops::im2col);
   m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);

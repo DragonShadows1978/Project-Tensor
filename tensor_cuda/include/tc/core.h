@@ -318,6 +318,8 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd(
 // softmax op chain with a single launch.
 NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
                           float zthr, const NDArray* row_smax);
+NDArray apa_blend_softmax_sink(const NDArray& bulk, const NDArray& rank,
+                               const NDArray& sinks, float zthr);
 
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1

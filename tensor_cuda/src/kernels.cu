@@ -1643,6 +1643,111 @@ NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
   return out;
 }
 
+template <typename T>
+__global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,
+                                              const T* sinks, T* out,
+                                              int H, int L, int S,
+                                              float zthr) {
+  int r = blockIdx.x;
+  int tid = threadIdx.x, nt = blockDim.x;
+  int h = (r / L) % H;
+  const T* brow = bulk + (int64_t)r * S;
+  const T* rrow = rank + (int64_t)r * S;
+  T* orow = out + (int64_t)r * S;
+
+  const float MASK_LIM = -5e3f;
+  __shared__ float red[256];
+  float sum = 0.f, sumsq = 0.f, vcount = 0.f;
+  for (int j = tid; j < S; j += nt) {
+    float bk = ld<T>(brow, j);
+    if (bk <= MASK_LIM) continue;
+    float a = fabsf(bk);
+    sum += a;
+    sumsq += a * a;
+    vcount += 1.f;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int o = nt / 2; o > 0; o >>= 1) {
+    if (tid < o) red[tid] += red[tid + o];
+    __syncthreads();
+  }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int o = nt / 2; o > 0; o >>= 1) {
+    if (tid < o) red[tid] += red[tid + o];
+    __syncthreads();
+  }
+  float total_sq = red[0]; __syncthreads();
+  red[tid] = vcount; __syncthreads();
+  for (int o = nt / 2; o > 0; o >>= 1) {
+    if (tid < o) red[tid] += red[tid + o];
+    __syncthreads();
+  }
+  float cnt = fmaxf(red[0], 1.f); __syncthreads();
+  float mean = total / cnt;
+  float thr = mean + zthr * sqrtf(fmaxf(total_sq / cnt - mean * mean, 0.f));
+
+  float sink = ld<T>(sinks, h);
+  float m = -1e30f, l = 0.f;
+  for (int j = tid; j < S; j += nt) {
+    float bk = ld<T>(brow, j);
+    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+    float m_new = fmaxf(m, sc);
+    l = l * __expf(m - m_new) + __expf(sc - m_new);
+    m = m_new;
+  }
+  if (tid == 0) {
+    float m_new = fmaxf(m, sink);
+    l = l * __expf(m - m_new) + __expf(sink - m_new);
+    m = m_new;
+  }
+
+  red[tid] = m; __syncthreads();
+  for (int o = nt / 2; o > 0; o >>= 1) {
+    if (tid < o) red[tid] = fmaxf(red[tid], red[tid + o]);
+    __syncthreads();
+  }
+  float gmax = red[0]; __syncthreads();
+  red[tid] = l * __expf(m - gmax); __syncthreads();
+  for (int o = nt / 2; o > 0; o >>= 1) {
+    if (tid < o) red[tid] += red[tid + o];
+    __syncthreads();
+  }
+  float denom = red[0]; __syncthreads();
+  float inv = denom > 0.f ? 1.f / denom : 0.f;
+
+  for (int j = tid; j < S; j += nt) {
+    float bk = ld<T>(brow, j);
+    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+    st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+  }
+}
+
+NDArray apa_blend_softmax_sink(const NDArray& bulk, const NDArray& rank,
+                               const NDArray& sinks, float zthr) {
+  if (bulk.ndim() != 4 || rank.ndim() != 4)
+    throw std::runtime_error("apa_blend_softmax_sink: bulk/rank must be rank-4");
+  if (bulk.dtype != rank.dtype || bulk.dtype != sinks.dtype)
+    throw std::runtime_error("apa_blend_softmax_sink: dtype mismatch");
+  if (rank.shape != bulk.shape)
+    throw std::runtime_error("apa_blend_softmax_sink: rank shape mismatch");
+  int64_t B = bulk.shape[0], H = bulk.shape[1], L = bulk.shape[2], S = bulk.shape[3];
+  if (sinks.ndim() != 1 || sinks.shape[0] != H)
+    throw std::runtime_error("apa_blend_softmax_sink: sinks shape mismatch");
+  NDArray out(bulk.shape, bulk.dtype, bulk.device);
+  int64_t rows = B * H * L;
+  if (rows > 0) {
+    DISPATCH_FLOAT(bulk.dtype, T, {
+      apa_blend_softmax_sink_kernel<T><<<(int)rows, 256>>>(
+          static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+          static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
+          (int)H, (int)L, (int)S, zthr);
+    });
+    cuda_check_last("apa_blend_softmax_sink");
+  }
+  return out;
+}
+
 // ------------------------------------------------------------- int4 quant linear
 // Dequantize a per-group 4-bit weight into a (K, N) fp16/fp32 matrix laid out
 // TRANSPOSED relative to the (N, K) logical weight, so the result feeds straight
