@@ -17,3 +17,34 @@ come from a separate model-bound validation phase.
 As of the initial setup on 2026-07-06, the correct first move is to get the
 kernel sweep running with receipts, preserve the implementation plan as the
 fixed intent, and use the ledger for command-level evidence.
+
+After the baseline commit, the sweep harness was added as a direct consumer of
+the existing TensorCUDA APIs. That keeps this phase focused: it tests the
+native low-bit CUDA paths we already have, instead of introducing a second
+quantization implementation that would make the result harder to interpret.
+
+The first run produced both useful wins and useful failures. INT4 decode at
+M=1, N=2048, K=4096 compressed the weight footprint from 16.00 MiB to 4.25 MiB
+and ran faster than the dense BF16 reference. That is a real kernel-level win.
+However, INT2 and INT3 did not become faster on the same decode shape, and they
+paid much larger output error. On the M=16 prefill shape, every fused low-bit
+path lost badly to dense BF16 cuBLAS. That does not make the work useless; it
+identifies the current boundary. Decode can benefit from the low-bit path,
+while prefill needs a better kernel strategy before it should be sold as a
+speed win.
+
+The house-rule interpretation is explicit now: a failure is still a result. The
+SCRIBE and Translation work are the precedent for this project style. If a path
+does not work, the result is preserved with receipts so the next decision is
+better informed.
+
+The second run added progress and CPU pack timings. That exposed a separate
+finding: the reference NumPy packer dominates this quick sweep's wall time.
+For the 2048x4096 matrix, packing took about 14.6 seconds for INT4, 11.5-11.6
+seconds for INT3, and 8.5 seconds for INT2 each time the weight was quantized.
+The CUDA kernel timings are much smaller than that. So there are two different
+tracks now: runtime fused-kernel behavior, and offline quantization throughput.
+
+Regression coverage stayed green after adding the sweep harness: the existing
+INT4, symmetric INT4, INT2/INT3, and quantization math tests passed as a
+16-test set.
