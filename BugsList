@@ -1,0 +1,16 @@
+1. Embedding not transposed — GGUF stores token_embd.weight as [2816, 262144]
+  (hidden, vocab). HostEmbedding indexes by token ID on the first dimension, so
+  it needs [262144, 2816] (vocab, hidden). Without the .T, every embedding
+  lookup returns a 262K vector instead of a 2816 vector.
+  2. trans_b=True wrong for expert matmuls — GGUF weights are [in, out]. The
+  spec used trans_b=True which computes x @ W^T — shape mismatch. Should be
+  trans_b=False for x @ W since GGUF is already [in, out].
+  3. Expert slices still 3D — slicing a fused (2816, 1408, 128) tensor on the
+  expert dim gives (2816, 1408, 1) — still 3D. tc.matmul needs 2D. Missing a
+  .reshape() to drop the trailing dimension.
+
+  plus two medium issues:
+  - RoPE frequencies loaded from GGUF but deleted and never used (we hit this
+  same bug — use them directly as inv_freq)
+  - router gate scale might need to apply to weights not input
+
