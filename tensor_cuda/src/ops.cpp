@@ -485,6 +485,37 @@ Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                          int4_grad(x, packed, scales, zeros, group_size));
 }
 
+static GradFn intn_grad(const Tensor& x, const Tensor& packed,
+                        const Tensor& scales, const Tensor& zeros, int bits,
+                        int64_t in_features, int group_size) {
+  return [x, packed, scales, zeros, bits, in_features, group_size](
+             const NDArray& g) {
+    NDArray w_kn = tc::intn_dequant(packed.data(), scales.data(),
+                                    zeros.data(), bits, in_features,
+                                    group_size, g.dtype);
+    x.v->accumulate_grad(tc::matmul(g, w_kn, 1.f, /*trans_b=*/true));
+  };
+}
+Tensor intn_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
+                   const Tensor& zeros, int bits, int64_t in_features,
+                   int group_size) {
+  NDArray out = tc::intn_linear(x.data(), packed.data(), scales.data(),
+                                zeros.data(), bits, in_features, group_size);
+  return Tensor::from_op(
+      out, {x}, "intn_linear",
+      intn_grad(x, packed, scales, zeros, bits, in_features, group_size));
+}
+Tensor intn_linear_fused(const Tensor& x, const Tensor& packed,
+                         const Tensor& scales, const Tensor& zeros, int bits,
+                         int64_t in_features, int group_size) {
+  NDArray out = tc::intn_linear_fused(x.data(), packed.data(), scales.data(),
+                                      zeros.data(), bits, in_features,
+                                      group_size);
+  return Tensor::from_op(
+      out, {x}, "intn_linear_fused",
+      intn_grad(x, packed, scales, zeros, bits, in_features, group_size));
+}
+
 // APA selective attention, DIFFERENTIABLE + O(L) memory (the graft-native
 // training path). Forward runs the fused training kernel (saves per-row lse +
 // thr); backward streams dq/dk/dv from the saved state. Selection is a

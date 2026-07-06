@@ -1880,6 +1880,255 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   return out;
 }
 
+// ------------------------------------------------ packed INT2/INT3 quant linear
+// General low-bit weight path. Rows are bit-packed little-endian:
+// q[k]'s bit b is stored at bit offset k*bits+b within packed[row].
+// K is explicit because 3-bit rows carry byte padding.
+static inline void check_intn_bits(int bits, const char* where) {
+  if (bits != 2 && bits != 3) {
+    throw std::runtime_error(std::string(where) +
+                             ": bits must be 2 or 3 for this native path");
+  }
+}
+
+static inline int64_t intn_packed_bytes(int64_t K, int bits) {
+  return (K * (int64_t)bits + 7) / 8;
+}
+
+static inline void validate_intn_weight(const NDArray& packed,
+                                        const NDArray& scales,
+                                        const NDArray& zeros, int bits,
+                                        int64_t K, int group_size,
+                                        const char* where) {
+  check_intn_bits(bits, where);
+  if (group_size <= 0)
+    throw std::runtime_error(std::string(where) + ": group_size must be > 0");
+  if (K <= 0)
+    throw std::runtime_error(std::string(where) + ": in_features must be > 0");
+  if ((K % group_size) != 0)
+    throw std::runtime_error(std::string(where) +
+                             ": in_features must be divisible by group_size");
+  if (packed.dtype != DType::Uint8)
+    throw std::runtime_error(std::string(where) + ": packed must be uint8");
+  if (scales.dtype != DType::Float16 ||
+      (zeros.numel() > 0 && zeros.dtype != DType::Float16))
+    throw std::runtime_error(std::string(where) +
+                             ": scales/zeros must be float16");
+  if (packed.ndim() != 2 || scales.ndim() != 2)
+    throw std::runtime_error(std::string(where) +
+                             ": packed and scales must be rank-2");
+  int64_t N = packed.shape[0];
+  int64_t G = K / group_size;
+  int64_t bytes = intn_packed_bytes(K, bits);
+  if (packed.shape[1] != bytes)
+    throw std::runtime_error(std::string(where) + ": packed byte width mismatch");
+  if (scales.shape[0] != N || scales.shape[1] != G)
+    throw std::runtime_error(std::string(where) + ": scales shape mismatch");
+  if (zeros.numel() > 0 &&
+      (zeros.ndim() != 2 || zeros.shape[0] != N || zeros.shape[1] != G))
+    throw std::runtime_error(std::string(where) + ": zeros shape mismatch");
+}
+
+__device__ __forceinline__ int intn_read_q(const uint8_t* row, int64_t k,
+                                           int bits) {
+  int64_t bit0 = k * (int64_t)bits;
+  int q = 0;
+  #pragma unroll
+  for (int b = 0; b < 3; ++b) {
+    if (b < bits) {
+      int64_t bit = bit0 + b;
+      q |= (int)((row[bit >> 3] >> (bit & 7)) & 1u) << b;
+    }
+  }
+  return q;
+}
+
+template <typename T>
+__global__ void intn_dequant_t_kernel(const uint8_t* packed,
+                                      const __half* scales,
+                                      const __half* zeros, T* out_kn,
+                                      int64_t N, int64_t K,
+                                      int64_t bytes_per_row, int bits,
+                                      int group_size, int64_t G, int64_t n) {
+  int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  int64_t k = idx / N;
+  int64_t col = idx - k * N;
+  const uint8_t* row = packed + col * bytes_per_row;
+  int q = intn_read_q(row, k, bits);
+  int64_t g = k / group_size;
+  float scale = __half2float(scales[col * G + g]);
+  float zero = zeros ? __half2float(zeros[col * G + g])
+                     : -(float)(1 << (bits - 1)) * scale;
+  st<T>(out_kn, idx, (float)q * scale + zero);
+}
+
+NDArray intn_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int bits, int64_t in_features,
+                     int group_size, DType out_dtype) {
+  int64_t K = in_features;
+  validate_intn_weight(packed, scales, zeros, bits, K, group_size,
+                       "intn_dequant");
+  int64_t N = packed.shape[0];
+  int64_t G = K / group_size;
+  int64_t bytes = intn_packed_bytes(K, bits);
+  NDArray out({K, N}, out_dtype, packed.device);
+  int64_t n = K * N;
+  if (n) {
+    DISPATCH_FLOAT(out_dtype, T, {
+      intn_dequant_t_kernel<T><<<nblk(n), kT>>>(
+          static_cast<uint8_t*>(packed.data_ptr()),
+          static_cast<__half*>(scales.data_ptr()),
+          zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+          static_cast<T*>(out.data_ptr()), N, K, bytes, bits, group_size, G, n);
+    });
+    cuda_check_last("intn_dequant");
+  }
+  return out;
+}
+
+NDArray intn_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int bits,
+                    int64_t in_features, int group_size) {
+  if (x.ndim() < 1)
+    throw std::runtime_error("intn_linear: x must have at least one dimension");
+  if (x.shape[x.ndim() - 1] != in_features)
+    throw std::runtime_error("intn_linear: x last dimension mismatches K");
+  NDArray w_kn = intn_dequant(packed, scales, zeros, bits, in_features,
+                              group_size, x.dtype);
+  return matmul(x, w_kn);
+}
+
+template <typename T>
+__global__ void intn_gemm_fused_kernel(
+    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,
+    T* y, int M, int N, int K, int bytes_per_row, int bits, int group_size,
+    int G) {
+  __shared__ float xs[TC_I4_TILE][TC_I4_TILE];
+  __shared__ float ws[TC_I4_TILE][TC_I4_TILE];
+  int row = blockIdx.y * TC_I4_TILE + threadIdx.y;
+  int col = blockIdx.x * TC_I4_TILE + threadIdx.x;
+  float acc = 0.f;
+  for (int k0 = 0; k0 < K; k0 += TC_I4_TILE) {
+    int kx = k0 + threadIdx.x;
+    xs[threadIdx.y][threadIdx.x] =
+        (row < M && kx < K) ? ld<T>(x, (int64_t)row * K + kx) : 0.f;
+    int kw = k0 + threadIdx.y;
+    float wv = 0.f;
+    if (col < N && kw < K) {
+      const uint8_t* prow = packed + (int64_t)col * bytes_per_row;
+      int q = intn_read_q(prow, kw, bits);
+      int g = kw / group_size;
+      float sc = __half2float(scales[(int64_t)col * G + g]);
+      float ze = zeros ? __half2float(zeros[(int64_t)col * G + g])
+                       : -(float)(1 << (bits - 1)) * sc;
+      wv = (float)q * sc + ze;
+    }
+    ws[threadIdx.y][threadIdx.x] = wv;
+    __syncthreads();
+    #pragma unroll
+    for (int t = 0; t < TC_I4_TILE; ++t) {
+      acc += xs[threadIdx.y][t] * ws[t][threadIdx.x];
+    }
+    __syncthreads();
+  }
+  if (row < M && col < N) st<T>(y, (int64_t)row * N + col, acc);
+}
+
+template <typename T>
+__global__ void intn_gemv_kernel(
+    const T* __restrict__ x, const uint8_t* __restrict__ packed,
+    const __half* __restrict__ scales, const __half* __restrict__ zeros,
+    T* __restrict__ y, int N, int K, int bytes_per_row, int bits,
+    int group_size, int G) {
+  extern __shared__ unsigned char xs_raw[];
+  T* xs = reinterpret_cast<T*>(xs_raw);
+  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = x[k];
+  __syncthreads();
+  const int warps = blockDim.x >> 5;
+  const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  const int n = blockIdx.x * warps + wid;
+  if (n >= N) return;
+  const uint8_t* row = packed + (int64_t)n * bytes_per_row;
+  const __half* srow = scales + (int64_t)n * G;
+  const __half* zrow = zeros ? zeros + (int64_t)n * G : nullptr;
+  float acc = 0.f;
+  for (int k = lane; k < K; k += 32) {
+    int q = intn_read_q(row, k, bits);
+    int g = k / group_size;
+    float sc = __half2float(srow[g]);
+    float ze = zrow ? __half2float(zrow[g])
+                    : -(float)(1 << (bits - 1)) * sc;
+    acc += ((float)q * sc + ze) * ld<T>(xs, k);
+  }
+  for (int off = 16; off; off >>= 1) {
+    acc += __shfl_down_sync(0xffffffffu, acc, off);
+  }
+  if (lane == 0) st<T>(y, n, acc);
+}
+
+NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int bits, int64_t in_features, int group_size) {
+  if (x.ndim() < 1)
+    throw std::runtime_error(
+        "intn_linear_fused: x must have at least one dimension");
+  int64_t K = in_features;
+  if (x.shape[x.ndim() - 1] != K)
+    throw std::runtime_error("intn_linear_fused: x last dimension mismatches K");
+  validate_intn_weight(packed, scales, zeros, bits, K, group_size,
+                       "intn_linear_fused");
+  int64_t M = x.numel() / K;
+  int64_t N = packed.shape[0];
+  int64_t G = K / group_size;
+  int64_t bytes = intn_packed_bytes(K, bits);
+  Shape os;
+  for (int d = 0; d < x.ndim() - 1; ++d) os.push_back(x.shape[d]);
+  os.push_back(N);
+  NDArray out(os, x.dtype, x.device);
+  if (M == 0 || N == 0) return out;
+  if (M == 1) {
+    const int threads = 256, warps = threads / 32;
+    dim3 ggrid((int)((N + warps - 1) / warps));
+    bool launched = false;
+    DISPATCH_FLOAT(x.dtype, T, {
+      size_t shmem = (size_t)K * sizeof(T);
+      if (shmem <= 96 * 1024) {
+        if (shmem > 48 * 1024) {
+          cudaFuncSetAttribute(intn_gemv_kernel<T>,
+                               cudaFuncAttributeMaxDynamicSharedMemorySize,
+                               96 * 1024);
+        }
+        intn_gemv_kernel<T><<<ggrid, threads, shmem>>>(
+            static_cast<T*>(x.data_ptr()),
+            static_cast<uint8_t*>(packed.data_ptr()),
+            static_cast<__half*>(scales.data_ptr()),
+            zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+            static_cast<T*>(out.data_ptr()), (int)N, (int)K, (int)bytes, bits,
+            group_size, (int)G);
+        launched = true;
+      }
+    });
+    if (launched) {
+      cuda_check_last("intn_gemv");
+      return out;
+    }
+  }
+  dim3 block(TC_I4_TILE, TC_I4_TILE);
+  dim3 grid((int)((N + TC_I4_TILE - 1) / TC_I4_TILE),
+            (int)((M + TC_I4_TILE - 1) / TC_I4_TILE));
+  DISPATCH_FLOAT(x.dtype, T, {
+    intn_gemm_fused_kernel<T><<<grid, block>>>(
+        static_cast<T*>(x.data_ptr()), static_cast<uint8_t*>(packed.data_ptr()),
+        static_cast<__half*>(scales.data_ptr()),
+        zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+        static_cast<T*>(out.data_ptr()), (int)M, (int)N, (int)K, (int)bytes,
+        bits, group_size, (int)G);
+  });
+  cuda_check_last("intn_linear_fused");
+  return out;
+}
+
 // =====================================================================
 // KV-cache INT4 storage (D-grouped, symmetric-8) — the tail-law primitive.
 //
