@@ -145,3 +145,35 @@ Result:
 
 Next action:
 - Commit the Phase 1 sweep harness and updated ledger/synthesis.
+
+## 2026-07-06 15:12 EDT
+
+Action: Corrected validation scope after user review.
+
+User correction:
+- The Phase 1 work was not real model validation. It was kernel smoke testing
+  plus a structured synthetic linear sweep.
+- It did not run a model memory ceiling test.
+- It did not run model perplexity.
+- Therefore it did not establish whether INT3 or INT2 fall off a cliff at the
+  model level.
+
+Corrected status:
+- Kernel API/correctness: tested.
+- Structured synthetic linear behavior: tested.
+- Model memory behavior: not tested.
+- Model PPL behavior: not tested.
+- Production viability for INT2/INT3 weights: not established.
+
+Repo finding:
+- GraftRepository model adapters use `QuantLinearTC` for real model weights,
+  but that wrapper is currently hardwired to INT4.
+- Project-Tensor exposes native `intn_linear` and `intn_linear_fused`, but no
+  real model loader is currently wired to select INT2/INT3 weights.
+
+Required next step for an actual answer:
+- Add a selectable weight-bit path to the real model adapter layer, likely by
+  generalizing `QuantLinearTC` or adding an `IntNQuantLinearTC` wrapper.
+- Run a real model memory test.
+- Run real PPL over the established text-window protocol.
+- Record failure as a result if INT3/INT2 collapse.

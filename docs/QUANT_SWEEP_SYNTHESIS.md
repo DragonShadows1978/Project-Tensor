@@ -48,3 +48,18 @@ tracks now: runtime fused-kernel behavior, and offline quantization throughput.
 Regression coverage stayed green after adding the sweep harness: the existing
 INT4, symmetric INT4, INT2/INT3, and quantization math tests passed as a
 16-test set.
+
+The scope must be corrected. This was not real model validation. It was kernel
+smoke testing plus a structured linear sweep. That is useful, but it is not the
+same as loading a model, measuring resident memory, and running PPL. In
+particular, the current evidence does not answer the question that matters most:
+whether INT3 or INT2 survive model perplexity, or whether they fall off a cliff
+the way very low-bit model weights often do.
+
+The next real validation step is to wire the low-bit weight path into an actual
+model adapter. GraftRepository already has real Qwen/Gemma/MiniCPM/DeepSeek
+adapters that use `QuantLinearTC`, but that wrapper is still INT4-specific.
+Project-Tensor has the native INT2/INT3 kernels; the missing bridge is a model
+weight wrapper that can choose INT4, INT3, or INT2 and then run the established
+memory and PPL protocols on real text. Until that exists and is run, INT3 and
+INT2 are only kernel-tested, not model-tested.
