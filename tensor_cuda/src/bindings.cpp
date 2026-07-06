@@ -331,6 +331,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("int4_linear_fused", &ops::int4_linear_fused,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("group_size") = 128);
+  m.def("intn_linear", &ops::intn_linear,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("bits"), py::arg("in_features"),
+        py::arg("group_size") = 128);
+  m.def("intn_linear_fused", &ops::intn_linear_fused,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("bits"), py::arg("in_features"),
+        py::arg("group_size") = 128);
   // Differentiable O(L) selective attention (graft-native training path).
   m.def("apa_selective_train", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                   double scale, double zthr, bool is_causal) {
@@ -356,6 +364,17 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                          dtype_from_string(out_dtype)),
         false);
   }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
+  m.def("intn_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
+                           int bits, int64_t in_features, int group_size,
+                           const std::string& out_dtype) {
+    return Tensor::make(
+        tc::intn_dequant(packed.data(), scales.data(), zeros.data(), bits,
+                         in_features, group_size,
+                         dtype_from_string(out_dtype)),
+        false);
+  }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("bits"), py::arg("in_features"),
      py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
   // KV-cache INT4 storage (D-grouped symmetric-8). Distinct from int4_dequant
   // (weight path, K-grouped). pack -> (packed_u8, scales); unpack reads a

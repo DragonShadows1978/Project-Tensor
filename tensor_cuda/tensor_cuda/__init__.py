@@ -173,6 +173,27 @@ def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
+def intn_linear(x, packed, scales, zeros, bits, in_features, group_size=128):
+    """INT2/INT3 group-quantized linear: y = x @ dequant(W)^T."""
+    return _C.intn_linear(x, packed, scales, zeros, bits, in_features, group_size)
+
+
+def intn_linear_fused(x, packed, scales, zeros, bits, in_features, group_size=128):
+    """INT2/INT3 fused dequant-GEMM/GEMV path without a full weight transient."""
+    return _C.intn_linear_fused(
+        x, packed, scales, zeros, bits, in_features, group_size
+    )
+
+
+def intn_dequant(
+    packed, scales, zeros, bits, in_features, group_size=128, out_dtype="float16"
+):
+    """Dequantize packed INT2/INT3 weight to a (K, N) transposed matrix."""
+    return _C.intn_dequant(
+        packed, scales, zeros, bits, in_features, group_size, out_dtype
+    )
+
+
 def kv_int4_pack(x, group=32):
     """Quantize+pack a KV tensor (B,KV,S,D) to D-grouped 4-bit. Returns
     (packed_uint8 (B,KV,S,D/2), scales (B,KV,S,D/group) in x.dtype).
@@ -334,6 +355,7 @@ from . import functional  # noqa: E402
 from . import nn  # noqa: E402  (after _C and helpers are defined)
 from . import optim  # noqa: E402
 from . import quant  # noqa: E402
+from . import quantization  # noqa: E402
 
 apa_quant_attention = quant.apa_quant_attention
 
@@ -344,10 +366,11 @@ __all__ = [
     "swap_row_pairs_with_rope", "evict_row_pairs",
     "arena_row_pair_transaction", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
-    "quant", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
+    "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
+    "intn_linear", "intn_linear_fused",
     "gated_delta_step",
-    "int4_dequant", "apa_selective_attention",
+    "int4_dequant", "intn_dequant", "apa_selective_attention",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_selective_fwd_train", "apa_selective_bwd", "apa_selective_train",
 ]

@@ -237,6 +237,23 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros, int group_size);
 
+// Packed low-bit weight path for experimental INT2/INT3 loaders.
+//   packed : (N, ceil(K*bits/8)) uint8, little-endian bit stream per row
+//   bits   : 2 or 3 for this first native path
+//   K      : in_features is explicit because 3-bit rows carry byte padding
+//   scales/zeros : (N, K/group_size) fp16, or empty zeros for symmetric grid
+// Dequant returns a transposed (K, N) matrix so matmul(x, W_kn) computes
+// y = x @ dequant(W)^T. Empty zeros selects q - 2^(bits-1).
+NDArray intn_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int bits, int64_t in_features,
+                     int group_size, DType out_dtype);
+NDArray intn_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int bits,
+                    int64_t in_features, int group_size);
+NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int bits, int64_t in_features, int group_size);
+
 // KV-cache INT4 storage (D-grouped, symmetric-8). Distinct from int4_dequant
 // (weight-shaped, K-grouped, transposed-matrix output): packs along the
 // innermost D of a (B,KV,S,D) cache and reads come out as a (B,KV,n,D) SLICE.
