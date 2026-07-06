@@ -57,17 +57,11 @@ def pack_lowbit(codes: np.ndarray, bits: int) -> np.ndarray:
     if q.size and (q.min() < 0 or q.max() > qmax(bits)):
         raise ValueError(f"codes contain values outside the {bits}-bit range")
     rows, cols = q.shape
-    packed = np.zeros((rows, packed_width(cols, bits)), dtype=np.uint8)
-    q = q.astype(np.uint64, copy=False)
-    for row in range(rows):
-        for col in range(cols):
-            value = int(q[row, col])
-            bit0 = col * bits
-            for b in range(bits):
-                if value & (1 << b):
-                    bit = bit0 + b
-                    packed[row, bit >> 3] |= np.uint8(1 << (bit & 7))
-    return packed
+    if bits in (1, 2, 4):
+        return _pack_even_lowbit(q.astype(np.uint8, copy=False), bits, rows, cols)
+    if bits == 3:
+        return _pack_int3(q.astype(np.uint8, copy=False), rows, cols)
+    return _pack_lowbit_slow(q, bits, rows, cols)
 
 
 def unpack_lowbit(packed: np.ndarray, bits: int, in_features: int) -> np.ndarray:
@@ -92,6 +86,57 @@ def unpack_lowbit(packed: np.ndarray, bits: int, in_features: int) -> np.ndarray
                 value |= int((p[row, bit >> 3] >> (bit & 7)) & 1) << b
             codes[row, col] = value
     return codes
+
+
+def _pack_even_lowbit(q: np.ndarray, bits: int, rows: int, cols: int) -> np.ndarray:
+    per_byte = 8 // bits
+    width = packed_width(cols, bits)
+    padded_cols = ((cols + per_byte - 1) // per_byte) * per_byte
+    if padded_cols != cols:
+        qp = np.zeros((rows, padded_cols), dtype=np.uint8)
+        qp[:, :cols] = q
+    else:
+        qp = q
+    packed = np.zeros((rows, padded_cols // per_byte), dtype=np.uint8)
+    mask = (1 << bits) - 1
+    for i in range(per_byte):
+        packed |= ((qp[:, i::per_byte] & mask) << (i * bits)).astype(np.uint8)
+    return packed[:, :width]
+
+
+def _pack_int3(q: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    width = packed_width(cols, 3)
+    packed = np.zeros((rows, width), dtype=np.uint8)
+    bit0 = np.arange(cols, dtype=np.int64) * 3
+    byte_idx = bit0 >> 3
+    shift = (bit0 & 7).astype(np.uint16)
+    vals = (q.astype(np.uint16, copy=False) & 0x07) << shift[None, :]
+    lo = (vals & 0xFF).astype(np.uint8, copy=False)
+    hi = (vals >> 8).astype(np.uint8, copy=False)
+    spill = hi != 0
+    for row in range(rows):
+        np.bitwise_or.at(packed[row], byte_idx, lo[row])
+        if spill[row].any():
+            np.bitwise_or.at(
+                packed[row],
+                byte_idx[spill[row]] + 1,
+                hi[row, spill[row]],
+            )
+    return packed
+
+
+def _pack_lowbit_slow(q: np.ndarray, bits: int, rows: int, cols: int) -> np.ndarray:
+    packed = np.zeros((rows, packed_width(cols, bits)), dtype=np.uint8)
+    q64 = q.astype(np.uint64, copy=False)
+    for row in range(rows):
+        for col in range(cols):
+            value = int(q64[row, col])
+            bit0 = col * bits
+            for b in range(bits):
+                if value & (1 << b):
+                    bit = bit0 + b
+                    packed[row, bit >> 3] |= np.uint8(1 << (bit & 7))
+    return packed
 
 
 def quantize_affine_per_group(

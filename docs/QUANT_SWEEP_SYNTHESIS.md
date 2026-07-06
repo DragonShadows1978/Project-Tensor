@@ -63,3 +63,11 @@ Project-Tensor has the native INT2/INT3 kernels; the missing bridge is a model
 weight wrapper that can choose INT4, INT3, or INT2 and then run the established
 memory and PPL protocols on real text. Until that exists and is run, INT3 and
 INT2 are only kernel-tested, not model-tested.
+
+The first practical blocker for model testing was the packer, not CUDA. The
+original generic packer looped over every element in Python, which made full
+model INT2/INT3 quantization unrealistic. The packer now has vectorized paths
+for the bit widths needed by this project. On the same 2048x4096 matrix shape,
+packing dropped from seconds to roughly 44-57 ms for INT2/INT4 and about
+200 ms for INT3. This does not prove model quality, but it makes the real model
+PPL experiment feasible.

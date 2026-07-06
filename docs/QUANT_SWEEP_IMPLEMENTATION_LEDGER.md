@@ -177,3 +177,37 @@ Required next step for an actual answer:
 - Run a real model memory test.
 - Run real PPL over the established text-window protocol.
 - Record failure as a result if INT3/INT2 collapse.
+
+## 2026-07-06 15:58 EDT
+
+Action: Vectorized low-bit packing to make real model INT2/INT3 loading
+practical.
+
+Files changed:
+- `tensor_cuda/tensor_cuda/quantization/affine.py`
+
+Implementation notes:
+- Added vectorized pack paths for 1-bit, 2-bit, and 4-bit code rows.
+- Added a row-vectorized INT3 pack path that avoids the previous Python
+  element loop.
+- Kept the slow generic pack path for uncommon bit widths.
+
+Regression command:
+- `env PYTHONPATH=/mnt/ForgeRealm/Project-Tensor/tensor_cuda PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider' python3 -m pytest tensor_cuda/tests/test_quantization_math.py tensor_cuda/tests/test_intn_linear.py -q`
+
+Regression result:
+- `13 passed in 0.74s`
+
+Timing command:
+- `env PYTHONPATH=/mnt/ForgeRealm/Project-Tensor/tensor_cuda PYTHONDONTWRITEBYTECODE=1 python3 scripts/quant_weight_sweep.py --quick --compute-dtype bfloat16 --reps 1 --warmup 0`
+
+Pack timing receipt for a 2048x4096 weight matrix:
+- INT4: 57.0 ms and 46.2 ms across the two generated matrices.
+- INT3: 203.9 ms and 200.0 ms.
+- INT2: 44.1 ms and 45.2 ms.
+
+Interpretation:
+- This fixes the previous full-model blocker where the reference packer took
+  8.5-14.6 seconds per 2048x4096 matrix.
+- The one-rep kernel latency numbers from this command are not stable evidence;
+  this entry uses the run only as a packing-throughput receipt.
