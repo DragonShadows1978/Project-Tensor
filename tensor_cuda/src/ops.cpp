@@ -525,6 +525,16 @@ Tensor mxfp4_linear(const Tensor& x, const Tensor& blocks,
                                "mxfp4_linear backward is not implemented");
                          });
 }
+Tensor mxfp4_linear_expert(const Tensor& x, const Tensor& blocks,
+                           const Tensor& scales, int64_t expert_idx) {
+  NDArray out = tc::mxfp4_linear_expert(x.data(), blocks.data(), scales.data(),
+                                        expert_idx);
+  return Tensor::from_op(out, {x}, "mxfp4_linear_expert",
+                         [](const NDArray&) -> void {
+                           throw std::runtime_error(
+                               "mxfp4_linear_expert backward is not implemented");
+                         });
+}
 
 // APA selective attention, DIFFERENTIABLE + O(L) memory (the graft-native
 // training path). Forward runs the fused training kernel (saves per-row lse +

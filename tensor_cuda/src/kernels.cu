@@ -2234,16 +2234,39 @@ static inline void validate_mxfp4_weight(const NDArray& blocks,
     throw std::runtime_error(std::string(where) + ": scales shape mismatch");
 }
 
-NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
-                     const NDArray& scales) {
+static inline void validate_mxfp4_expert_weight(const NDArray& blocks,
+                                                const NDArray& scales,
+                                                int64_t expert_idx,
+                                                const char* where) {
+  if (blocks.dtype != DType::Uint8 || scales.dtype != DType::Uint8)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks and scales must be uint8");
+  if (blocks.ndim() != 4 || scales.ndim() != 3)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks must be rank-4 and scales rank-3");
+  if (blocks.shape[3] != 16)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks last dimension must be 16 bytes");
+  if (blocks.shape[0] != scales.shape[0] ||
+      blocks.shape[1] != scales.shape[1] ||
+      blocks.shape[2] != scales.shape[2])
+    throw std::runtime_error(std::string(where) + ": scales shape mismatch");
+  if (expert_idx < 0 || expert_idx >= blocks.shape[0])
+    throw std::runtime_error(std::string(where) + ": expert_idx out of range");
+}
+
+static NDArray mxfp4_linear_launch(const NDArray& x,
+                                   const uint8_t* blocks_ptr,
+                                   const uint8_t* scales_ptr,
+                                   int64_t N, int64_t G,
+                                   const char* where) {
   if (x.ndim() < 1)
-    throw std::runtime_error("mxfp4_linear: x must have at least one dimension");
-  validate_mxfp4_weight(blocks, scales, "mxfp4_linear");
-  int64_t N = blocks.shape[0];
-  int64_t G = blocks.shape[1];
+    throw std::runtime_error(std::string(where) +
+                             ": x must have at least one dimension");
   int64_t K = G * 32;
   if (x.shape[x.ndim() - 1] != K)
-    throw std::runtime_error("mxfp4_linear: x last dimension mismatches K");
+    throw std::runtime_error(std::string(where) +
+                             ": x last dimension mismatches K");
   int64_t M = x.numel() / K;
   Shape os;
   for (int d = 0; d < x.ndim() - 1; ++d) os.push_back(x.shape[d]);
@@ -2265,14 +2288,14 @@ NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
         }
         mxfp4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
             static_cast<T*>(x.data_ptr()),
-            static_cast<uint8_t*>(blocks.data_ptr()),
-            static_cast<uint8_t*>(scales.data_ptr()),
+            blocks_ptr,
+            scales_ptr,
             static_cast<T*>(out.data_ptr()), (int)N, (int)K, (int)G);
         launched = true;
       }
     });
     if (launched) {
-      cuda_check_last("mxfp4_gemv");
+      cuda_check_last(where);
       return out;
     }
   }
@@ -2283,12 +2306,41 @@ NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
   DISPATCH_FLOAT(x.dtype, T, {
     mxfp4_gemm_kernel<T><<<grid, block>>>(
         static_cast<T*>(x.data_ptr()),
-        static_cast<uint8_t*>(blocks.data_ptr()),
-        static_cast<uint8_t*>(scales.data_ptr()),
+        blocks_ptr,
+        scales_ptr,
         static_cast<T*>(out.data_ptr()), (int)M, (int)N, (int)K, (int)G);
   });
-  cuda_check_last("mxfp4_linear");
+  cuda_check_last(where);
   return out;
+}
+
+NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
+                     const NDArray& scales) {
+  validate_mxfp4_weight(blocks, scales, "mxfp4_linear");
+  return mxfp4_linear_launch(
+      x,
+      static_cast<uint8_t*>(blocks.data_ptr()),
+      static_cast<uint8_t*>(scales.data_ptr()),
+      blocks.shape[0],
+      blocks.shape[1],
+      "mxfp4_linear");
+}
+
+NDArray mxfp4_linear_expert(const NDArray& x, const NDArray& blocks,
+                            const NDArray& scales, int64_t expert_idx) {
+  validate_mxfp4_expert_weight(blocks, scales, expert_idx,
+                               "mxfp4_linear_expert");
+  int64_t N = blocks.shape[1];
+  int64_t G = blocks.shape[2];
+  int64_t block_offset = expert_idx * N * G * 16;
+  int64_t scale_offset = expert_idx * N * G;
+  return mxfp4_linear_launch(
+      x,
+      static_cast<uint8_t*>(blocks.data_ptr()) + block_offset,
+      static_cast<uint8_t*>(scales.data_ptr()) + scale_offset,
+      N,
+      G,
+      "mxfp4_linear_expert");
 }
 
 // =====================================================================

@@ -341,6 +341,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("group_size") = 128);
   m.def("mxfp4_linear", &ops::mxfp4_linear,
         py::arg("x"), py::arg("blocks"), py::arg("scales"));
+  m.def("mxfp4_linear_expert", &ops::mxfp4_linear_expert,
+        py::arg("x"), py::arg("blocks"), py::arg("scales"),
+        py::arg("expert_idx"));
   // Differentiable O(L) selective attention (graft-native training path).
   m.def("apa_selective_train", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                   double scale, double zthr, bool is_causal) {

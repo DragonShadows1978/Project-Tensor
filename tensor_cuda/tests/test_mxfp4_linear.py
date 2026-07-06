@@ -82,6 +82,31 @@ def test_mxfp4_linear_bfloat16_decode_shape_matches_reference():
     np.testing.assert_allclose(y, x_bf @ w_kn, rtol=0.025, atol=0.025)
 
 
+def test_mxfp4_linear_expert_matches_direct_selected_expert():
+    rng = np.random.default_rng(20260708)
+    experts, n, groups = 5, 40, 3
+    k = groups * 32
+    expert_idx = 3
+    blocks = rng.integers(0, 256, size=(experts, n, groups, 16), dtype=np.uint8)
+    scales = rng.integers(124, 131, size=(experts, n, groups), dtype=np.uint8)
+    x = rng.standard_normal((2, k), dtype=np.float32) * 0.1
+
+    with tc.no_grad():
+        y_expert = tc.mxfp4_linear_expert(
+            tc.tensor(x, dtype="float32"),
+            tc.tensor(blocks, dtype="uint8"),
+            tc.tensor(scales, dtype="uint8"),
+            expert_idx,
+        ).numpy()
+        y_direct = tc.mxfp4_linear(
+            tc.tensor(x, dtype="float32"),
+            tc.tensor(blocks[expert_idx], dtype="uint8"),
+            tc.tensor(scales[expert_idx], dtype="uint8"),
+        ).numpy()
+
+    np.testing.assert_allclose(y_expert, y_direct, rtol=0.0, atol=0.0)
+
+
 def test_mxfp4_linear_rejects_k_mismatch():
     blocks = np.zeros((8, 3, 16), dtype=np.uint8)
     scales = np.full((8, 3), 127, dtype=np.uint8)

@@ -204,6 +204,15 @@ def mxfp4_linear(x, blocks, scales):
     return _C.mxfp4_linear(x, blocks, scales)
 
 
+def mxfp4_linear_expert(x, blocks, scales, expert_idx):
+    """GPT-OSS resident MXFP4 expert linear from `[experts, N, G, 16]`.
+
+    `expert_idx` selects the packed expert inside the CUDA op, avoiding uint8
+    slicing in Python.
+    """
+    return _C.mxfp4_linear_expert(x, blocks, scales, expert_idx)
+
+
 def kv_int4_pack(x, group=32):
     """Quantize+pack a KV tensor (B,KV,S,D) to D-grouped 4-bit. Returns
     (packed_uint8 (B,KV,S,D/2), scales (B,KV,S,D/group) in x.dtype).
@@ -379,7 +388,7 @@ __all__ = [
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "intn_linear", "intn_linear_fused",
-    "mxfp4_linear",
+    "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
     "kv_int4_pack", "kv_int4_unpack",

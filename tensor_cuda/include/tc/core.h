@@ -264,6 +264,8 @@ NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
 // expert matrix.
 NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
                      const NDArray& scales);
+NDArray mxfp4_linear_expert(const NDArray& x, const NDArray& blocks,
+                            const NDArray& scales, int64_t expert_idx);
 
 // KV-cache INT4 storage (D-grouped, symmetric-8). Distinct from int4_dequant
 // (weight-shaped, K-grouped, transposed-matrix output): packs along the
