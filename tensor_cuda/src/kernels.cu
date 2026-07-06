@@ -2129,6 +2129,168 @@ NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
   return out;
 }
 
+// ------------------------------------------------ GPT-OSS MXFP4 expert linear
+// GPT-OSS stores each expert projection as:
+//   blocks [N, G, 16] uint8  -> 16 bytes = 32 FP4 values per K-group
+//   scales [N, G] uint8      -> E8M0 exponent, scale = 2^(scale - 127)
+// Dequant layout is conceptually W_kn [K, N], but this op never materializes it.
+__device__ __forceinline__ float mxfp4_value(int q) {
+  switch (q & 0x0F) {
+    case 0x0: return 0.0f;
+    case 0x1: return 0.5f;
+    case 0x2: return 1.0f;
+    case 0x3: return 1.5f;
+    case 0x4: return 2.0f;
+    case 0x5: return 3.0f;
+    case 0x6: return 4.0f;
+    case 0x7: return 6.0f;
+    case 0x8: return -0.0f;
+    case 0x9: return -0.5f;
+    case 0xA: return -1.0f;
+    case 0xB: return -1.5f;
+    case 0xC: return -2.0f;
+    case 0xD: return -3.0f;
+    case 0xE: return -4.0f;
+    default: return -6.0f;
+  }
+}
+
+__device__ __forceinline__ float mxfp4_read_weight(
+    const uint8_t* __restrict__ blocks, const uint8_t* __restrict__ scales,
+    int n, int k, int G) {
+  int g = k >> 5;                       // 32 dequantized weights per group
+  int j = k & 31;
+  uint8_t byte = blocks[((int64_t)n * G + g) * 16 + (j >> 1)];
+  int q = (j & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+  int exp = (int)scales[(int64_t)n * G + g] - 127;
+  return ldexpf(mxfp4_value(q), exp);
+}
+
+template <typename T>
+__global__ void mxfp4_gemm_kernel(
+    const T* __restrict__ x, const uint8_t* __restrict__ blocks,
+    const uint8_t* __restrict__ scales, T* __restrict__ y,
+    int M, int N, int K, int G) {
+  __shared__ float xs[TC_I4_TILE][TC_I4_TILE];
+  __shared__ float ws[TC_I4_TILE][TC_I4_TILE];
+  int row = blockIdx.y * TC_I4_TILE + threadIdx.y;
+  int col = blockIdx.x * TC_I4_TILE + threadIdx.x;
+  float acc = 0.f;
+  for (int k0 = 0; k0 < K; k0 += TC_I4_TILE) {
+    int kx = k0 + threadIdx.x;
+    xs[threadIdx.y][threadIdx.x] =
+        (row < M && kx < K) ? ld<T>(x, (int64_t)row * K + kx) : 0.f;
+    int kw = k0 + threadIdx.y;
+    ws[threadIdx.y][threadIdx.x] =
+        (col < N && kw < K) ? mxfp4_read_weight(blocks, scales, col, kw, G)
+                            : 0.f;
+    __syncthreads();
+    #pragma unroll
+    for (int t = 0; t < TC_I4_TILE; ++t) {
+      acc += xs[threadIdx.y][t] * ws[t][threadIdx.x];
+    }
+    __syncthreads();
+  }
+  if (row < M && col < N) st<T>(y, (int64_t)row * N + col, acc);
+}
+
+template <typename T>
+__global__ void mxfp4_gemv_kernel(
+    const T* __restrict__ x, const uint8_t* __restrict__ blocks,
+    const uint8_t* __restrict__ scales, T* __restrict__ y,
+    int N, int K, int G) {
+  extern __shared__ unsigned char xs_raw[];
+  T* xs = reinterpret_cast<T*>(xs_raw);
+  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = x[k];
+  __syncthreads();
+  const int warps = blockDim.x >> 5;
+  const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  const int n = blockIdx.x * warps + wid;
+  if (n >= N) return;
+  float acc = 0.f;
+  for (int k = lane; k < K; k += 32) {
+    acc += mxfp4_read_weight(blocks, scales, n, k, G) * ld<T>(xs, k);
+  }
+  for (int off = 16; off; off >>= 1) {
+    acc += __shfl_down_sync(0xffffffffu, acc, off);
+  }
+  if (lane == 0) st<T>(y, n, acc);
+}
+
+static inline void validate_mxfp4_weight(const NDArray& blocks,
+                                         const NDArray& scales,
+                                         const char* where) {
+  if (blocks.dtype != DType::Uint8 || scales.dtype != DType::Uint8)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks and scales must be uint8");
+  if (blocks.ndim() != 3 || scales.ndim() != 2)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks must be rank-3 and scales rank-2");
+  if (blocks.shape[2] != 16)
+    throw std::runtime_error(std::string(where) +
+                             ": blocks last dimension must be 16 bytes");
+  if (blocks.shape[0] != scales.shape[0] ||
+      blocks.shape[1] != scales.shape[1])
+    throw std::runtime_error(std::string(where) + ": scales shape mismatch");
+}
+
+NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
+                     const NDArray& scales) {
+  if (x.ndim() < 1)
+    throw std::runtime_error("mxfp4_linear: x must have at least one dimension");
+  validate_mxfp4_weight(blocks, scales, "mxfp4_linear");
+  int64_t N = blocks.shape[0];
+  int64_t G = blocks.shape[1];
+  int64_t K = G * 32;
+  if (x.shape[x.ndim() - 1] != K)
+    throw std::runtime_error("mxfp4_linear: x last dimension mismatches K");
+  int64_t M = x.numel() / K;
+  Shape os;
+  for (int d = 0; d < x.ndim() - 1; ++d) os.push_back(x.shape[d]);
+  os.push_back(N);
+  NDArray out(os, x.dtype, x.device);
+  if (M == 0 || N == 0) return out;
+
+  if (M == 1) {
+    const int threads = 256, warps = threads / 32;
+    dim3 ggrid((int)((N + warps - 1) / warps));
+    bool launched = false;
+    DISPATCH_FLOAT(x.dtype, T, {
+      size_t shmem = (size_t)K * sizeof(T);
+      if (shmem <= 96 * 1024) {
+        if (shmem > 48 * 1024) {
+          cudaFuncSetAttribute(mxfp4_gemv_kernel<T>,
+                               cudaFuncAttributeMaxDynamicSharedMemorySize,
+                               96 * 1024);
+        }
+        mxfp4_gemv_kernel<T><<<ggrid, threads, shmem>>>(
+            static_cast<T*>(x.data_ptr()),
+            static_cast<uint8_t*>(blocks.data_ptr()),
+            static_cast<uint8_t*>(scales.data_ptr()),
+            static_cast<T*>(out.data_ptr()), (int)N, (int)K, (int)G);
+        launched = true;
+      }
+    });
+    if (launched) {
+      cuda_check_last("mxfp4_gemv");
+      return out;
+    }
+  }
+
+  dim3 block(TC_I4_TILE, TC_I4_TILE);
+  dim3 grid((int)((N + TC_I4_TILE - 1) / TC_I4_TILE),
+            (int)((M + TC_I4_TILE - 1) / TC_I4_TILE));
+  DISPATCH_FLOAT(x.dtype, T, {
+    mxfp4_gemm_kernel<T><<<grid, block>>>(
+        static_cast<T*>(x.data_ptr()),
+        static_cast<uint8_t*>(blocks.data_ptr()),
+        static_cast<uint8_t*>(scales.data_ptr()),
+        static_cast<T*>(out.data_ptr()), (int)M, (int)N, (int)K, (int)G);
+  });
+  cuda_check_last("mxfp4_linear");
+  return out;
+}
+
 // =====================================================================
 // KV-cache INT4 storage (D-grouped, symmetric-8) — the tail-law primitive.
 //

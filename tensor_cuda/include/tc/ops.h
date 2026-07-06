@@ -74,6 +74,8 @@ Tensor intn_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
 Tensor intn_linear_fused(const Tensor& x, const Tensor& packed,
                          const Tensor& scales, const Tensor& zeros, int bits,
                          int64_t in_features, int group_size);
+Tensor mxfp4_linear(const Tensor& x, const Tensor& blocks,
+                    const Tensor& scales);
 
 // APA selective attention, differentiable + O(L) memory (graft-native training).
 // Selection is a stop-gradient (kq detached); q,k,v receive gradients.

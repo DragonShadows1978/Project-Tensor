@@ -516,6 +516,16 @@ Tensor intn_linear_fused(const Tensor& x, const Tensor& packed,
       intn_grad(x, packed, scales, zeros, bits, in_features, group_size));
 }
 
+Tensor mxfp4_linear(const Tensor& x, const Tensor& blocks,
+                    const Tensor& scales) {
+  NDArray out = tc::mxfp4_linear(x.data(), blocks.data(), scales.data());
+  return Tensor::from_op(out, {x}, "mxfp4_linear",
+                         [](const NDArray&) -> void {
+                           throw std::runtime_error(
+                               "mxfp4_linear backward is not implemented");
+                         });
+}
+
 // APA selective attention, DIFFERENTIABLE + O(L) memory (the graft-native
 // training path). Forward runs the fused training kernel (saves per-row lse +
 // thr); backward streams dq/dk/dv from the saved state. Selection is a

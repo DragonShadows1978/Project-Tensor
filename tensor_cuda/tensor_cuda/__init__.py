@@ -194,6 +194,16 @@ def intn_dequant(
     )
 
 
+def mxfp4_linear(x, blocks, scales):
+    """GPT-OSS MXFP4 expert linear: y = x @ dequant(blocks, scales).
+
+    `blocks` is shaped `(out_features, groups, 16)` uint8 and `scales` is
+    `(out_features, groups)` uint8. Each 16-byte group expands to 32 FP4
+    weights with E8M0 exponent scales. Inference-only frozen-weight path.
+    """
+    return _C.mxfp4_linear(x, blocks, scales)
+
+
 def kv_int4_pack(x, group=32):
     """Quantize+pack a KV tensor (B,KV,S,D) to D-grouped 4-bit. Returns
     (packed_uint8 (B,KV,S,D/2), scales (B,KV,S,D/group) in x.dtype).
@@ -369,6 +379,7 @@ __all__ = [
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "intn_linear", "intn_linear_fused",
+    "mxfp4_linear",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
     "kv_int4_pack", "kv_int4_unpack",

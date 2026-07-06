@@ -254,6 +254,17 @@ NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros,
                           int bits, int64_t in_features, int group_size);
 
+// GPT-OSS MXFP4 expert linear.
+//   x      : (..., K) fp32/fp16/bf16 activations
+//   blocks : (N, G, 16) uint8; each 16-byte group packs 32 FP4 values
+//            as low/high nibbles, matching HF GPT-OSS safetensors
+//   scales : (N, G) uint8; E8M0 exponent with value scale = 2^(scale - 127)
+//   K      : G * 32; output shape is (..., N), dtype = x.dtype
+// Inference/frozen-weight path; does not materialize the dequantized (K,N)
+// expert matrix.
+NDArray mxfp4_linear(const NDArray& x, const NDArray& blocks,
+                     const NDArray& scales);
+
 // KV-cache INT4 storage (D-grouped, symmetric-8). Distinct from int4_dequant
 // (weight-shaped, K-grouped, transposed-matrix output): packs along the
 // innermost D of a (B,KV,S,D) cache and reads come out as a (B,KV,n,D) SLICE.
