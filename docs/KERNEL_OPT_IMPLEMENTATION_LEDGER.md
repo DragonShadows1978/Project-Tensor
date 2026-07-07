@@ -428,6 +428,51 @@ Next action:
   verdicts unaffected by this entry (no Tier-C number ever gated
   anything — that discipline held and stands).
 
+Root cause (David, operator report, 2026-07-07): the investigation ran
+out of usage mid-flight — 59 subagents failed halfway, only 4 completed,
+then hourly limits hit. Explains the bimodal quality exactly: completed
+agents produced the internally-consistent clusters; the failed agents'
+research captures survived (webproxy_json/) but their analysis/
+verification passes never ran, and synthesis was assembled over partial
+material. Usage exhaustion, not model hallucination.
+
+## 2026-07-07 15:20 EDT
+
+Action: CLEAN-SESSION GATE VERDICTS (evidence class: kernel sweep, idle
+GPU for sweeps; e2e arms shared a window with rising ambient load).
+
+Receipts: baseline sweep kernel_microbench_full_20260707_132644.json
+(pt-baseline worktree @ d7e4704), tip sweep ..._133343.json, e2e logs +
+nsys traces + ncu retry in scratchpad/clean_session/.
+
+- A1 apa_selective split-K: **PASS**. Gate shapes (decode S=8192 all
+  geometries + gpt_oss S=32768): median +34.6%, min +24.5% — all above
+  the ≥15% threshold. Guard shapes (S≤2048, fused path): 0.0% median —
+  heuristic verified non-invasive. ADOPTED.
+- A2 mxfp4 branchless decode + scale hoist: **PASS**. GEMV gate shapes
+  median +61.1% (all three variants). Corroborated by ncu branch
+  efficiency 60.94%→75.03%. ADOPTED.
+- A3 int4_gemv bank-conflict pad: **FAIL — REVERTED** this entry. Median
+  −3.4% on gate shapes (gemma −5.1%): pad index arithmetic cost exceeds
+  the conflict cost, which is latency-hidden behind DRAM-bound weight
+  reads (71.6% DRAM/peak). Negative-result note left in kernels.cu.
+  Revert verified: int4 symmetric gate PASS max|d| 0.0, 7/7 tests.
+  Same lesson class as A4: theoretical-hazard reduction ≠ wall-clock win
+  when a different resource is the binding constraint.
+- Phase 1.1 device argmax: **GATE NOT MET on this measurement** — e2e
+  median +4.78% vs ≥5% threshold. Arms asymmetric: baseline spread
+  52.3–57.6 (σ≈2.3), tip 56.4–57.1 (σ≈0.3); windows differed as ambient
+  load rose (inv_0a7a5f94 running locally). REGISTERED NOW, before
+  running: ONE interleaved A-B-A-B-A-B retest (N=5 per arm) in a
+  verified-quiet window; if median delta <5%, the GraftRepository driver
+  edit reverts (the tested argmax_last_axis op itself stays as library
+  surface — unadopted, unused). No further retests after that.
+- Untouched-kernel "regressions" (13 shapes, all sub-ms, swiglu/rope/
+  norm/blend): dispatch-noise floor, present in both directions across
+  sweeps; not code effects. Registered as measurement noise floor ~±10%
+  for shapes under ~0.3ms — future gates on such shapes need rep counts
+  raised or shape sizes reconsidered.
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that

@@ -2495,31 +2495,11 @@ __global__ void int4_gemm_fused_kernel(
 // group_size % 8 == 0 — guaranteed by the host guard), x staged in dynamic
 // shared memory as fp32, fp32 accumulate (same as the GEMM), warp-shuffle
 // reduce. Memory-bound at packed size: ~30x less traffic than the tile path.
-// Shared-mem bank-conflict pad for int4_gemv_kernel's x staging (A3, addendum
-// 1; ncu measured 47% excessive shared-mem wavefronts / 1,572,864 excessive
-// of 3,342,336 total). Diagnosis (code inspection + ncu source/SASS view,
-// `ncu --page source` on ncu_int4_gemv.ncu-rep shows the reduction loop
-// compiles to two `LDS.128` per lane, not the elementwise reads/reduction):
-// each lane owns a private, disjoint 8-element window of `xs` starting at
-// `k0 = (lane + it*32)*8` elements -> for a fixed access offset the 32 lanes'
-// addresses are `8*sizeof(T)` bytes apart, a stride that is a multiple of
-// the 32-bank/4-byte cycle, so groups of 8 lanes alias into the same 4-bank
-// quartet (8-way conflict per LDS.128, confirmed by hand-simulating the SASS
-// addressing: banks {0-3},{8-11},{16-19},{24-27} each hit by lanes
-// {l,l+8,l+16,l+24}). This is a pure address-pattern conflict, not a
-// dtype-width or reduction issue — int4_dequant/reduction stay unchanged.
-// Fix: insert 1 pad element after every 8-element chunk in the staged copy
-// of x (stride 9 instead of 8, coprime with the 32-bank cycle) so lane
-// windows no longer land in lockstep; this is the reachable floor for a
-// 128-bit-per-lane load into 32-bit banks (32 lanes / 4-bank quartet =
-// 4-way is the best any stride achieves — verified by sweeping stride
-// 9..15, all give 4-way, vs 8-way unpadded), i.e. this halves the
-// conflict factor from 8x to 4x replay per shared load.
-__device__ __forceinline__ int i4_gemv_pad_index(int k) {
-  // k -> padded shared-memory slot: one extra element every 8.
-  return k + (k >> 3);
-}
-
+// NOTE: an 8-way->4-way shared-mem bank-conflict pad for the x staging was
+// tried and REVERTED (A3, KERNEL_OPT_IMPLEMENTATION_LEDGER 2026-07-07): the
+// pad's extra index arithmetic cost more than the conflicts, which are
+// latency-hidden behind the DRAM-bound packed-weight reads (-3.4% median on
+// clean A/B). Don't re-add padding here without new evidence.
 template <typename T>
 __global__ void int4_gemv_kernel(
     const T* __restrict__ x, const uint8_t* __restrict__ packed,
@@ -2528,12 +2508,10 @@ __global__ void int4_gemv_kernel(
   // x staged in NATIVE dtype: fp32 staging of a bf16/fp16 input added
   // no information and doubled shared memory (K=15360 was 60KB —
   // 1 block/SM; native bf16 is 30KB). Accumulation stays fp32.
-  // Staged with 1 pad element per 8-element chunk (see i4_gemv_pad_index)
-  // to break the 8-lane shared-mem bank aliasing in the read loop below.
   extern __shared__ unsigned char xs_raw[];
   T* xs = reinterpret_cast<T*>(xs_raw);
   for (int k = threadIdx.x; k < K; k += blockDim.x)
-    xs[i4_gemv_pad_index(k)] = x[k];
+    xs[k] = x[k];
   __syncthreads();
   const int warps = blockDim.x >> 5;
   const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
@@ -2551,10 +2529,7 @@ __global__ void int4_gemv_kernel(
     int g = k0 / group_size;
     float sc = __half2float(srow[g]);
     float ze = zrow ? __half2float(zrow[g]) : -8.f * sc;  // symmetric-8
-    // k0 is a multiple of 8 (one full pad chunk), so the padded window
-    // base is i4_gemv_pad_index(k0) == k0 + k0/8; the 8 weights inside one
-    // chunk stay contiguous (pad slot sits after them, not between).
-    const T* xk = xs + i4_gemv_pad_index(k0);
+    const T* xk = xs + k0;
     acc += ((float)(v.x & 0x0F) * sc + ze) * ld<T>(xk, 0)
          + ((float)((v.x >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 1)
          + ((float)(v.y & 0x0F) * sc + ze) * ld<T>(xk, 2)
@@ -2600,11 +2575,7 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
     bool launched = false;
     DISPATCH_FLOAT(x.dtype, T, {
       // native-dtype staging: bf16/fp16 x needs K*2 bytes (fp32 K*4).
-      // Padded element count for the bank-conflict fix above: 1 extra
-      // element per 8-wide chunk (K % 8 == 0 is guaranteed by the guard,
-      // so this divides evenly) -> K + K/8 elements, not K.
-      size_t padded_elems = (size_t)K + (size_t)K / 8;
-      size_t shmem = padded_elems * sizeof(T);
+      size_t shmem = (size_t)K * sizeof(T);
       if (shmem <= 96 * 1024) {
         if (shmem > 48 * 1024) {
           cudaFuncSetAttribute(int4_gemv_kernel<T>,
