@@ -663,6 +663,43 @@ Next action:
   the kernel GPT-OSS/qwen actually run at S ≤ 4096; board item 4a).
   Entry per plan; gate: kernel-level accept at S ≥ 2048.
 
+## 2026-07-07 20:40 EDT
+
+Action: Phase 3.1 ADOPTED (4fe45bc Project-Tensor; bbe74a0
+GraftRepository — NOTE: landed on `codex/intn-model-ppl-sweep`, the
+branch that repo was already on; clean 3-file commit, cherry-pickable,
+flagged to David). Remaining enumerated items dispositioned.
+
+Findings:
+- 3.1 composed-operation gate: +43% to +87% across 8 cells (mask build
+  + 2 full elementwise adds eliminated per layer per chunk); parity
+  reassociation-noise; multi-chunk indexing bug caught by the agent's
+  own purpose-built test before shipping. BOUNDED template dispatch
+  keeps legacy sentinel codegen-identical (ptxas exact match receipt).
+- MEASUREMENT LAW REGISTERED: this box's kernel timings are bimodal
+  (~9%) with GPU P-state/clock residency — an untouched control kernel
+  moved 0.493→0.535 same-binary same-session. Cross-run sweep
+  comparisons are NOT gate-grade at <10% effect size; the gate-grade
+  instrument is same-session interleaved A/B (as used for 3.1, 1.1,
+  Phase 2). Retroactively explains the 13:05 and 18:47 scan noise.
+- Dispositions of remaining plan items:
+  - 3.2 online causal softmax: LIVE — real production callers found in
+    5 core drivers (standard/non-APA paths). Final workstream, launched.
+  - 3.3 RoPE launch tuning/fusion: SKIPPED per its own registered
+    condition — 0.2 nsys never showed RoPE as a measurable share.
+  - 3.4 APA warp-vote/divergence opts: SUPERSEDED by A5 — in the
+    warp-cooperative path the refine branch is warp-uniform (whole warp
+    shares one key), divergence structurally eliminated; the surviving
+    per-thread D=64-decode path measured 99% branch efficiency at 0.2.
+  - 4.1 DP4A/Q8_1: stays DEFERRED-WITH-CAUSE (numerics-moving,
+    model-PPL-gated; DRAM-bound target; inv_0a7a5f94 weakened it).
+  - 4.2 launch-config sweep: SKIPPED-WITH-CAUSE — 0.4 ptxas receipts
+    (zero spills, 100% analytical occupancy) and 0.2 ncu (no kernel
+    block-limited) leave nothing for it to move.
+  - Phase 5 fusion (SwiGLU, RMSNorm+residual): entry gate MET (launch
+    share ~27% stands, graphs closed). Final workstream, launched with
+    its registered gate (kernel accept AND ≥2% e2e, else revert).
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that
