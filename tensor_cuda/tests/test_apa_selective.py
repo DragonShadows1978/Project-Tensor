@@ -45,6 +45,33 @@ def ref_selective(q, k, kq, v, scale, z, causal):
     return out
 
 
+def ref_selective_sink(q, k, kq, v, sinks, scale, z, causal):
+    B, H, L, D = q.shape
+    KVH, S, VD = k.shape[1], k.shape[2], v.shape[3]
+    group = H // KVH
+    out = np.zeros((B, H, L, VD), np.float32)
+    for b in range(B):
+        for h in range(H):
+            kh = h // group
+            for i in range(L):
+                s_max = ((S - L) + i + 1) if causal else S
+                qi = q[b, h, i]
+                bulk = (kq[b, kh, :s_max] @ qi) * scale
+                a = np.abs(bulk)
+                thr = a.mean() + z * np.sqrt(max(a.var(), 0.0))
+                score = np.empty(s_max, np.float32)
+                for j in range(s_max):
+                    if abs(bulk[j]) >= thr:
+                        score[j] = (k[b, kh, j] @ qi) * scale
+                    else:
+                        score[j] = bulk[j]
+                combined = np.concatenate([score, [float(sinks[h])]]).astype(np.float32)
+                w = np.exp(combined - combined.max())
+                w /= w.sum()
+                out[b, h, i] = w[:-1] @ v[b, kh, :s_max]
+    return out
+
+
 def ref_blend_softmax_sink(bulk, rank, sinks, zthr):
     B, H, L, S = bulk.shape
     out = np.zeros_like(bulk, dtype=np.float32)
@@ -119,6 +146,46 @@ def test_selective_mqa_d512():
     """Gemma 4 global: MQA (1 KV head, 16 q heads), head_dim 512,
     rectangular cache."""
     _run(True, L=8, S=300, D=512, H=16, KVH=1)
+
+
+def test_selective_sink_matches_reference_gqa_rectangular_value_dim():
+    rng = np.random.default_rng(20260707)
+    B, H, KVH, L, S, D, VD = 1, 4, 2, 7, 19, 64, 32
+    q = (rng.standard_normal((B, H, L, D)) * 0.1).astype(np.float32)
+    k = (rng.standard_normal((B, KVH, S, D)) * 0.1).astype(np.float32)
+    kq = (k + rng.standard_normal((B, KVH, S, D)) * 0.01).astype(np.float32)
+    v = (rng.standard_normal((B, KVH, S, VD)) * 0.1).astype(np.float32)
+    sinks = (rng.standard_normal(H) * 0.2).astype(np.float32)
+    scale = 1.0 / np.sqrt(D)
+    from tensor_cuda.quant import _norm_ppf
+    z = _norm_ppf(1.0 - 0.15)
+
+    expected = ref_selective_sink(q, k, kq, v, sinks, scale, z, True)
+    got = tc.apa_selective_attention_sink(
+        tc.tensor(q), tc.tensor(k), tc.tensor(kq), tc.tensor(v),
+        tc.tensor(sinks), float(scale), float(z), True).numpy()
+
+    np.testing.assert_allclose(got, expected, rtol=1e-3, atol=1e-3)
+
+
+def test_selective_sink_large_sink_reduces_value_mass():
+    q = np.ones((1, 1, 1, 64), dtype=np.float32) * 0.01
+    k = np.ones((1, 1, 4, 64), dtype=np.float32) * 0.01
+    kq = k.copy()
+    v = np.ones((1, 1, 4, 64), dtype=np.float32)
+    low_sink = np.asarray([-10.0], dtype=np.float32)
+    high_sink = np.asarray([8.0], dtype=np.float32)
+    scale = 1.0 / np.sqrt(64)
+
+    low = tc.apa_selective_attention_sink(
+        tc.tensor(q), tc.tensor(k), tc.tensor(kq), tc.tensor(v),
+        tc.tensor(low_sink), scale, 0.0, False).numpy()
+    high = tc.apa_selective_attention_sink(
+        tc.tensor(q), tc.tensor(k), tc.tensor(kq), tc.tensor(v),
+        tc.tensor(high_sink), scale, 0.0, False).numpy()
+
+    assert low.mean() > 0.99
+    assert high.mean() < 0.01
 
 
 def test_selective_actually_sparse():

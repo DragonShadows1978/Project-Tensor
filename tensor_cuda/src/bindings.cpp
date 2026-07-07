@@ -407,6 +407,17 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
      py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_selective_attention_sink",
+      [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v, Tensor& sinks,
+         double scale, double zthr, bool is_causal) {
+    return Tensor::make(
+        tc::apa_selective_attention_sink(q.data(), k.data(), kq.data(), v.data(),
+                                         sinks.data(), (float)scale,
+                                         (float)zthr, is_causal),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
+     py::arg("sinks"), py::arg("scale"), py::arg("zthr"),
+     py::arg("is_causal") = false);
   // APA selective TRAINING forward: O(L) memory, saves (lse, thr) for backward.
   // Returns (out, lse, thr) as plain (non-grad) tensors; Python wires autograd.
   m.def("apa_selective_fwd_train", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,

@@ -1226,6 +1226,183 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
   return out;
 }
 
+template <typename T, int DMAX>
+__global__ void apa_selective_sink_kernel(
+    const T* q, const T* k, const T* kq, const T* v, const T* sinks, T* out,
+    int B, int H, int L, int S, int D, int VD, float scale, float zthr,
+    int is_causal, int KVH, int group) {
+  int row = blockIdx.x;
+  int i = row % L;
+  int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+
+  const T* qrow = q + (int64_t)row * D;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kbase = k + kvbh * S * D;
+  const T* kqbase = kq + kvbh * S * D;
+  const T* vbase = v + kvbh * S * VD;
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
+  __shared__ float red[256];
+
+  float sum = 0.f, sumsq = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float dot = 0.f;
+    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+    float a = fabsf(dot * scale);
+    sum += a;
+    sumsq += a * a;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  float total_sq = red[0]; __syncthreads();
+
+  float cnt = (float)s_max;
+  float mean = total / cnt;
+  float var = total_sq / cnt - mean * mean;
+  float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
+
+  float m = -1e30f, l = 0.f;
+  float acc[DMAX];
+  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
+
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else {
+      score = bulk;
+    }
+    float m_new = fmaxf(m, score);
+    float corr = __expf(m - m_new);
+    float w = __expf(score - m_new);
+    l = l * corr + w;
+    const T* vj = vbase + (int64_t)j * VD;
+    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+    m = m_new;
+  }
+
+  // GPT-OSS learned sink: denominator only, zero value contribution.
+  if (tid == 0) {
+    float sink = ld<T>(sinks, h);
+    float m_new = fmaxf(m, sink);
+    float corr = __expf(m - m_new);
+    l = l * corr + __expf(sink - m_new);
+    for (int d = 0; d < VD; ++d) acc[d] *= corr;
+    m = m_new;
+  }
+
+  red[tid] = m; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+    __syncthreads();
+  }
+  float gmax = red[0]; __syncthreads();
+
+  float rescale = __expf(m - gmax);
+  red[tid] = l * rescale; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  float denom = red[0]; __syncthreads();
+  float inv = denom > 0.f ? 1.f / denom : 0.f;
+
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = (nt + 31) >> 5;
+  __shared__ float osh[DMAX];
+  __shared__ float wpart[4][DMAX];
+  for (int d = 0; d < VD; ++d) {
+    float val = acc[d] * rescale;
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1)
+      val += __shfl_down_sync(FULL, val, off);
+    if (lane == 0) wpart[warp][d] = val;
+  }
+  __syncthreads();
+  for (int d = tid; d < VD; d += nt) {
+    float s = 0.f;
+    for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
+    osh[d] = s;
+  }
+  __syncthreads();
+
+  T* orow = out + (int64_t)row * VD;
+  for (int d = tid; d < VD; d += nt) st<T>(orow, d, osh[d] * inv);
+}
+
+NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
+                                     const NDArray& kq, const NDArray& v,
+                                     const NDArray& sinks, float scale,
+                                     float zthr, bool is_causal) {
+  int B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
+  int S = k.shape[2];
+  int VD = v.shape[3];
+  int KVH = (int)k.shape[1];
+  int group = (KVH > 0) ? (H / KVH) : 1;
+  if (k.shape[3] != D || kq.shape[3] != D)
+    throw std::runtime_error("apa_selective_sink: q/k/kq dim mismatch");
+  if (v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S)
+    throw std::runtime_error("apa_selective_sink: v shape mismatch");
+  if (sinks.ndim() != 1 || sinks.shape[0] != H)
+    throw std::runtime_error("apa_selective_sink: sinks shape mismatch");
+  if (sinks.dtype != q.dtype)
+    throw std::runtime_error("apa_selective_sink: sinks dtype mismatch");
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD},
+              q.dtype, q.device);
+  int rows = B * H * L;
+  int threads = 128;
+  if (rows > 0) {
+    int cap = D > VD ? D : VD;
+    if (cap > TC_APA_MAXD) {
+      throw std::runtime_error("apa_selective_sink: head_dim exceeds TC_APA_MAXD");
+    }
+    DISPATCH_FLOAT(q.dtype, T, {
+      auto launch = [&](auto dmax_tag) {
+        constexpr int DMAX = decltype(dmax_tag)::value;
+        apa_selective_sink_kernel<T, DMAX><<<rows, threads>>>(
+            static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+            static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+            static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
+            B, H, L, S, D, VD, scale, zthr, is_causal ? 1 : 0, KVH, group);
+      };
+      if (cap <= 64)        launch(std::integral_constant<int, 64>{});
+      else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
+      else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
+      else                  launch(std::integral_constant<int, 512>{});
+    });
+    cuda_check_last("apa_selective_sink");
+  }
+  return out;
+}
+
 // ============================================================================
 // APA SELECTIVE — TRAINING forward + backward (O(L) memory, the graft-native
 // training path). The inference kernel above never materializes the L x L

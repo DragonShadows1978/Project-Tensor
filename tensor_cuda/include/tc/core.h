@@ -296,6 +296,10 @@ std::pair<NDArray, NDArray> gated_delta_step(
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 const NDArray& kq, const NDArray& v,
                                 float scale, float zthr, bool is_causal);
+NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
+                                     const NDArray& kq, const NDArray& v,
+                                     const NDArray& sinks, float scale,
+                                     float zthr, bool is_causal);
 
 // APA selective TRAINING forward: O(L)-memory (never materializes the L x L
 // score matrix), additionally saves per-row logsumexp + threshold for the

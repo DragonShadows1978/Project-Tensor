@@ -243,6 +243,16 @@ def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
     return _C.apa_selective_attention(q, k, kq, v, scale, zthr, is_causal)
 
 
+def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=False):
+    """Sink-aware fused sparse selective APA attention for GPT-OSS.
+
+    `sinks` is `(H,)`. Each head's sink logit participates in the online softmax
+    denominator and contributes no value vector, so the returned output remains
+    `(B,H,L,VD)`.
+    """
+    return _C.apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal)
+
+
 def apa_blend_softmax(bulk, rank, zthr):
     """Fused APA blend+softmax over precomputed bulk/rank score matrices (..., S):
     per row thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ? rank : bulk;
@@ -402,6 +412,7 @@ __all__ = [
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
+    "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink",
     "apa_selective_fwd_train", "apa_selective_bwd", "apa_selective_train",
