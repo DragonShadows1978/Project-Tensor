@@ -473,6 +473,66 @@ nsys traces + ncu retry in scratchpad/clean_session/.
   for shapes under ~0.3ms — future gates on such shapes need rep counts
   raised or shape sizes reconsidered.
 
+## 2026-07-07 15:45 EDT
+
+Action: Phase 2 ENTRY GATE MET — CUDA graphs GO.
+
+Findings (evidence class: kernel sweep; clean nsys traces, decode window
+= trailing 0.8s, both trees consistent):
+- ~1,460 kernel launches/token; gap share 27.3–29.1% (gate: ≥15%).
+- cudaLaunchKernel: 69,972 calls = 281.7ms of the 0.8s window (35% of
+  wall). cudaMallocAsync+FreeAsync: ~140K calls = 155ms (19%). Graphs
+  remove both (launch collapse + graph-owned memory nodes).
+- Ceiling estimate if CPU-side cost → ~0: 0.8s → ~0.6s ≈ +30% tok/s at
+  short context. Registered expectation, not a promise.
+- Design constraint identified up front: per-step scalars (position
+  offset, ring write index, mask bound) are currently kernel ARGUMENTS —
+  baked at capture. The capture-compatible pattern is a device-resident
+  step-state buffer kernels read instead. This is the bulk of the
+  Phase 2 diff, spread across rope/cache-write/softmax kernels.
+- Device-resident greedy loop now possible end-to-end: argmax_last_axis
+  output (device int64) feeds next step's embedding lookup directly;
+  host needs only an async 8-byte D2H for output/EOS.
+
+Next action:
+- Phase 2 implementation via Sonnet agent (design brief: device
+  step-state + whole-step capture/replay + ring-wrap re-capture policy;
+  correctness under contention OK, timing gate in a quiet window).
+- Phase 1.1 interleaved retest + inv_0a7a5f94 copy: pending
+  investigation completion (machine quiet).
+
+## 2026-07-07 16:20 EDT
+
+Action: inv_0a7a5f94 copied into Project-Tensor (David's instruction) and
+triaged (Sonnet, verification protocol). Addendum 2 (A5) registered.
+
+Findings:
+- Completion: 9/28 subagents finished; 19 died to per-agent 270s Haiku
+  timeouts (all started concurrently 13:40:04 — different failure than
+  inv_f32d181e's usage exhaustion, same bimodal-output consequence).
+  15 dead agents left real captures; sub_9 (fusion) cites bare URLs with
+  zero fetched payload — its numbers are weakest.
+- ONE genuinely new actionable finding: apa_selective key-load
+  coalescing, grounded in OUR OWN ncu receipt (25.3 sectors/request,
+  88.1% L1TEX stall — lead re-verified in the artifact). Registered as
+  Addendum 2 / A5, blocked behind Phase 2 (same-file surgery).
+  Correction of record: the Phase 0.3 reader called this access pattern
+  "coalesced"; the ncu counters prove otherwise.
+- DP4A: investigation WEAKENS the deferred Phase 4.1 case — DP4A needs
+  int8 activations (numerics-moving, already PPL-gated) and attacks
+  arithmetic in kernels that are DRAM-bound (71.6% peak BW): the A3
+  lesson class. Phase 4.1 stays deferred, now with cause.
+- Fusion recommendations (SwiGLU/QKV/bias+act): SYNTHESIS-ONLY numbers,
+  overlap with what CUDA graphs (in flight) already address, and weight
+  re-layout variants carry the A4 failure mode. Deprioritized.
+- sub_2 (completed) independently re-derived the APA function structure
+  consistent with the landed A1 — external corroboration of invariant
+  compliance.
+
+Next action:
+- Phase 2 agent still running. On completion: quiet-window batch =
+  Phase 2 timing gate + Phase 1.1 interleaved retest; then A5.
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that
