@@ -219,6 +219,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("prod", [](Tensor& t, std::vector<int> ax, bool kd) { return ops::prod(t, ax, kd); }, py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
       .def("argmax", [](Tensor& t, int ax) { return ops::argmax(t, ax); }, py::arg("axis") = -1)
       .def("argmin", [](Tensor& t, int ax) { return ops::argmin(t, ax); }, py::arg("axis") = -1)
+      .def("argmax_last_axis", [](Tensor& t) { return ops::argmax_last_axis(t); })
       .def("cumsum", [](Tensor& t, int ax) { return ops::cumsum(t, ax); }, py::arg("axis") = -1)
       .def("gather", [](Tensor& t, int dim, Tensor& idx) { return ops::gather(t, dim, idx); })
       .def("flip", [](Tensor& t, std::vector<int> dims) { return ops::flip(t, dims); })
@@ -311,6 +312,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("evict_rows", &ops::evict_rows, py::arg("old_cache"),
         py::arg("dim"), py::arg("head_tokens"), py::arg("drop_tokens"));
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
+  m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);
   m.def("add", &ops::add);

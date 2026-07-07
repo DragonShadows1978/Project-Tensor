@@ -132,6 +132,12 @@ NDArray reduce_to(const NDArray& a, const Shape& target);
 
 // argmax/argmin along a single axis (returns int64, axis removed).
 NDArray reduce_arg(const NDArray& a, int axis, bool is_max);
+// Block-per-row argmax over the LAST axis only (returns int64, axis removed).
+// Decode-loop fast path (Phase 1.1): grid-stride + warp-shuffle reduction so
+// a single row (e.g. one decode step's vocab-sized logits) still parallelizes
+// across a full block, unlike reduce_arg's one-thread-per-row generic path.
+// Tie-break matches numpy.argmax (lowest index wins).
+NDArray argmax_last_axis(const NDArray& a);
 // Cumulative sum along `axis` (same shape).
 NDArray cumsum_nd(const NDArray& a, int axis);
 // gather along `dim` using int64 `index` (index.shape == output shape).

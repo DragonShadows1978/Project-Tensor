@@ -699,6 +699,7 @@ Tensor prod(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
 }
 Tensor argmax(const Tensor& a, int axis) { return Tensor::make(reduce_arg(a.data(), axis, true), false); }
 Tensor argmin(const Tensor& a, int axis) { return Tensor::make(reduce_arg(a.data(), axis, false), false); }
+Tensor argmax_last_axis(const Tensor& a) { return Tensor::make(tc::argmax_last_axis(a.data()), false); }
 Tensor cumsum(const Tensor& a, int axis) {
   NDArray out = cumsum_nd(a.data(), axis);
   return Tensor::from_op(out, {a}, "cumsum", [a, axis](const NDArray& g) {

@@ -167,6 +167,9 @@ Tensor std(const Tensor& a, const std::vector<int>& axes, bool keepdim);
 Tensor prod(const Tensor& a, const std::vector<int>& axes, bool keepdim);
 Tensor argmax(const Tensor& a, int axis);   // detached int64
 Tensor argmin(const Tensor& a, int axis);
+// Decode-loop fast path: block-per-row argmax over the LAST axis only
+// (detached int64). See tc::argmax_last_axis in core.h for kernel design.
+Tensor argmax_last_axis(const Tensor& a);
 Tensor cumsum(const Tensor& a, int axis);
 Tensor gather(const Tensor& a, int dim, const Tensor& index);
 Tensor flip(const Tensor& a, const std::vector<int>& dims);

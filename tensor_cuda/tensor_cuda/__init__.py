@@ -80,6 +80,16 @@ def causal_softmax(scores):
     return _C.causal_softmax(scores)
 
 
+def argmax_last_axis(a):
+    """Device-side argmax over the LAST axis only (returns int64, axis
+    removed). Decode-loop fast path (KERNEL_OPT_IMPLEMENTATION_PLAN.md Phase
+    1.1): block-per-row grid-stride + warp-shuffle reduction, so a single
+    vocab-sized logits row still parallelizes across a full block instead of
+    the generic one-thread-per-row `Tensor.argmax`. Tie-break matches
+    numpy.argmax (lowest index wins). Detached (no autograd)."""
+    return _C.argmax_last_axis(a)
+
+
 def rms_norm(x, w, eps=1e-6):
     """Fused RMSNorm over the last dim (single kernel, fp32 accumulate,
     output in x's dtype). Inference-only: backward raises — training code
@@ -414,7 +424,7 @@ __all__ = [
     "int4_dequant", "intn_dequant", "apa_selective_attention",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
-    "apa_blend_softmax_sink",
+    "apa_blend_softmax_sink", "argmax_last_axis",
     "apa_selective_fwd_train", "apa_selective_bwd", "apa_selective_train",
 ]
 
