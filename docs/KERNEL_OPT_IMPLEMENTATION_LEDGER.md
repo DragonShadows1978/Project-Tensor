@@ -533,6 +533,43 @@ Next action:
 - Phase 2 agent still running. On completion: quiet-window batch =
   Phase 2 timing gate + Phase 1.1 interleaved retest; then A5.
 
+## 2026-07-07 17:30 EDT
+
+Action: Interleaved 3-arm gate batch (quiet window, GPU=0 procs) —
+Phase 1.1 and Phase 2 verdicts executed.
+
+Receipts: scratchpad/gates_interleaved/ (5 rounds × base/eager/graph,
+round-robin; parity re-check). Medians: base 57.6, tip-eager 57.1,
+tip-graph 59.0 tok/s.
+
+- Phase 1.1 device argmax: **FAIL — REVERTED** per the registered
+  one-shot rule (−0.9% vs base; the earlier +4.78% was window artifact;
+  a ~600KB/token PCIe copy is immaterial at 17.5ms/token). Eager driver
+  restored to host argmax with a revert note; `argmax_last_axis` op
+  remains in tensor_cuda (tested, used by graph-mode internally).
+- Phase 2 CUDA graphs: **GATE NOT MET — PARKED, not adopted.** +3.3% vs
+  eager (arms non-overlapping: graph 58.3–59.1 vs eager 56.3–57.7 —
+  real, just under the ≥5% gate). Structural cause: hybrid Qwen3.5 —
+  graphs capture the 24 DeltaNet layers; 8 eager attention layers bound
+  the win at short context. Full implementation + receipts + the
+  implementing agent's detailed ledger entry live on branch
+  `kernel-opt-phase2-parked` (b7a1c6d). REGISTERED RE-GATE CONDITION:
+  after A5 lands (faster attention → larger graph share), one re-run of
+  the same interleaved gate; pass → merge parked branch, fail → closed
+  as negative result. Parity re-check of the race-class fix: PASS
+  (identical ids).
+- Process note: the first Phase 2 agent spawned a 5-deep delegation
+  chain (one leaf working, four contexts idle-waiting) — killed by lead,
+  David caught it; relaunched flat with an explicit no-delegation rule
+  (now standing policy for all implementation briefs). The flat agent
+  found and fixed two real bugs in the chain's inherited code (missed
+  stream conversions; replay-ordering race that diverged parity at
+  token 29).
+
+Program branch state: a777ad5 + this ledger entry. Adopted so far:
+A1 (+34.6% long-S attention), A2 (+61.1% mxfp4 GEMV). Reverted: A3, A4,
+Phase 1.1. Parked: Phase 2. Next: A5 (key-load coalescing, Addendum 2).
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that
