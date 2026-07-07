@@ -321,15 +321,30 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd(
     const NDArray& dO, const NDArray& lse, const NDArray& thr,
     float scale, bool is_causal);
 
-// Fused APA blend+softmax over precomputed score matrices (each (..., S)) from
-// cuBLAS: per row, thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ?
-// rank : bulk; returns softmax(score) weights. row_smax (int32, one per row) or
-// null gives the causal valid-key count per row. Replaces the abs/mean/std/where/
-// softmax op chain with a single launch.
+// Fused APA blend+softmax over precomputed bulk/rank score matrices (each
+// (..., S), from cuBLAS): per row, thr = mean(|bulk|)+zthr*std(|bulk|); score
+// = |bulk|>=thr ? rank : bulk; returns softmax(score) weights. Replaces the
+// abs/mean/std/where/softmax op chain with a single launch.
+//
+// Two bounds conventions (Phase 3.1, board item 4a — kills the O(S^2)
+// additive-mask materialize+add on both bulk and rank):
+//   Lq <= 0 (row_smax arg unused, pass nullptr): legacy sentinel path. Caller
+//     has baked causal/window masking into bulk/rank as -1e4 bias; masked
+//     keys are detected in-kernel via a MASK_LIM sentinel check.
+//   Lq > 0: index-arithmetic path. No mask tensor read. row0 = absolute
+//     query-chunk start (tiled callers slice queries into blocks); Lq = FULL
+//     query length L (not the chunk length — the chunk length is recovered
+//     internally from bulk's own shape); window <= 0 = full causal (no
+//     sliding), else sliding window of that width. Bottom-right causal
+//     convention matches functional.py's _causal_mask exactly (row i sees
+//     keys 0..(S-Lq)+row0+i inclusive); sliding window matches
+//     gpt_oss20b_tc.py's _gpt_oss_attention_mask (keys (q_abs-window, q_abs]).
 NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
-                          float zthr, const NDArray* row_smax);
+                          float zthr, const NDArray* row_smax,
+                          int Lq = 0, int64_t row0 = 0, int window = 0);
 NDArray apa_blend_softmax_sink(const NDArray& bulk, const NDArray& rank,
-                               const NDArray& sinks, float zthr);
+                               const NDArray& sinks, float zthr,
+                               int Lq = 0, int64_t row0 = 0, int window = 0);
 
 // Fill / compare helpers.
 NDArray ge_scalar(const NDArray& a, double s);  // (a >= s) as same dtype 0/1

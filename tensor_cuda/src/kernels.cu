@@ -2610,12 +2610,38 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd(
 // deciding whether to recompute.
 // One block per row; threads cooperate over S. This replaces the
 // abs/mean/std/ge/where/softmax op chain with a single launch. Output overwrites
-// into `out` (rows, S). Causal masking is expected to be ALREADY baked into
-// bulk/rank (masked keys set to a large negative value before this kernel), so
-// masked positions exp() to ~0 naturally; they are also excluded from the stat.
-template <typename T>
+// into `out` (rows, S).
+//
+// Causal/window bounds (Phase 3.1, board item 4a): two calling conventions.
+//   1) Sentinel (legacy): Lq <= 0. Caller has ALREADY baked causal/window
+//      masking into bulk/rank as a large-negative additive bias (functional.py
+//      _causal_mask, -1e4). Masked keys are detected via bk <= MASK_LIM and
+//      excluded from the stat; they still get read once (still O(S) memory
+//      traffic on both bulk and rank) but need no separate mask tensor.
+//   2) Index-arithmetic (new): Lq > 0. No mask tensor is read or required —
+//      each row loops only over its valid key range, computed from the exact
+//      bottom-right causal convention in functional.py's _causal_mask
+//      (`np.triu(full(L,S,-1e4), k=1+(S-L))`, i.e. row i sees keys
+//      0..(S-L)+i inclusive) and, for sliding-window layers, GPT-OSS's
+//      _gpt_oss_attention_mask (`k_abs <= q_abs & k_abs > q_abs - window`,
+//      i.e. keys (q_abs-window, q_abs] inclusive). row0 is the ABSOLUTE
+//      query-chunk start (the tiled drivers slice queries into blocks; a row's
+//      absolute query index is row0 + (r % Lq)); Lq is the FULL query length L
+//      (not the chunk length) so S-Lq is the correct cache-prefix offset.
+//      window <= 0 means no sliding window (full causal from key 0).
+//
+// BOUNDED is a compile-time template parameter (same dispatch pattern as A5's
+// WCOOP): the launcher picks the instantiation on Lq>0. BOUNDED=false must
+// compile to codegen identical to the pre-3.1 kernel — a first draft carried
+// the bounds logic as a RUNTIME branch and the lead's regression scan caught
+// the legacy path ~9% slower at prefill_L512-class shapes (0.49→0.536ms)
+// from the added branch + register growth; gate receipt = ptxas registers
+// back to the pre-3.1 values for the BOUNDED=false instantiation.
+template <typename T, bool BOUNDED>
 __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
-                                          int S, float zthr) {
+                                          int S, float zthr,
+                                          int Lchunk, int Lq, int64_t row0,
+                                          int window) {
   int r = blockIdx.x;
   int tid = threadIdx.x, nt = blockDim.x;
   const T* brow = bulk + (int64_t)r * S;
@@ -2629,12 +2655,32 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   // the cutoff safely between real scaled logits (O(+-50)) and -1e4 so a
   // legitimate very-negative logit is never mistaken for a masked key.
   const float MASK_LIM = -5e3f;
+  int lo = 0, hi = S;  // valid key range [lo, hi) when BOUNDED
+  if constexpr (BOUNDED) {
+    // r flattens as (b*H + h)*Lchunk + i_local over THIS launch's rows only
+    // (Lchunk = this chunk's query count, e.g. `blk` in the tiled callers) —
+    // Lq (the FULL query length L) is a different quantity, used only to
+    // compute the absolute cache-prefix offset S-Lq below. Using Lq here
+    // instead of Lchunk was Phase 3.1's first-draft bug: caught by a
+    // multi-chunk parity re-run (attn_block < L), max|Δout| ~21 vs ~0.
+    int i_local = r % Lchunk;
+    int64_t abs_i = row0 + i_local;
+    int64_t valid_hi = (int64_t)S - Lq + abs_i + 1;  // bottom-right causal bound
+    hi = (int)(valid_hi < 0 ? 0 : (valid_hi > S ? S : valid_hi));
+    lo = (window > 0) ? (int)((hi - window) < 0 ? 0 : (hi - window)) : 0;
+  }
   __shared__ float red[256];
   float sum = 0.f, sumsq = 0.f, vcount = 0.f;
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    if (bk <= MASK_LIM) continue;
-    float a = fabsf(bk); sum += a; sumsq += a*a; vcount += 1.f;
+  if constexpr (BOUNDED) {
+    for (int j = lo + tid; j < hi; j += nt) {
+      float a = fabsf(ld<T>(brow, j)); sum += a; sumsq += a*a; vcount += 1.f;
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      if (bk <= MASK_LIM) continue;
+      float a = fabsf(bk); sum += a; sumsq += a*a; vcount += 1.f;
+    }
   }
   red[tid] = sum; __syncthreads();
   for (int o = nt/2; o > 0; o >>= 1) { if (tid < o) red[tid]+=red[tid+o]; __syncthreads(); }
@@ -2660,14 +2706,26 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   // First, the per-thread online softmax over its strided keys (one read each).
   // Store nothing yet; we need the global max before exp. To avoid a separate
   // max pass we use the online-softmax rescale trick across the strided scan.
-  // Selection on |bulk|: a masked key (bulk <= MASK_LIM) keeps its large-negative
-  // bulk value (exp()s to ~0); otherwise refine to rank when |bulk| >= thr.
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
-    float m_new = fmaxf(m, sc);
-    l = l * __expf(m - m_new) + __expf(sc - m_new);
-    m = m_new;
+  // Selection on |bulk|: a masked key (bulk <= MASK_LIM, sentinel path) keeps
+  // its large-negative bulk value (exp()s to ~0); otherwise refine to rank
+  // when |bulk| >= thr. Bounds path: every key in [lo,hi) is valid by
+  // construction, no sentinel check needed.
+  if constexpr (BOUNDED) {
+    for (int j = lo + tid; j < hi; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk;
+      float m_new = fmaxf(m, sc);
+      l = l * __expf(m - m_new) + __expf(sc - m_new);
+      m = m_new;
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+      float m_new = fmaxf(m, sc);
+      l = l * __expf(m - m_new) + __expf(sc - m_new);
+      m = m_new;
+    }
   }
   // merge per-thread (m,l) -> global
   red[tid] = m; __syncthreads();
@@ -2681,36 +2739,75 @@ __global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,
   // than a 3rd read of a stored weight, and exact dots aren't involved here).
   // Clamp sc-gmax at the low end so masked/very-negative scores hit a safe
   // __expf input (expf flushes to 0 below ~-88 for fp32; clamp avoids any
-  // denormal/edge behaviour) — weight is ~0 there anyway.
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
-    st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+  // denormal/edge behaviour) — weight is ~0 there anyway. Bounds path: every
+  // out-of-range column (both below lo and at/above hi) must be written 0 —
+  // the caller's cat/matmul reads the full (rows,S) row, so zero it rather
+  // than leaving it uninitialized.
+  if constexpr (BOUNDED) {
+    for (int j = tid; j < S; j += nt) {
+      if (j < lo || j >= hi) { st<T>(orow, j, 0.0f); continue; }
+      float bk = ld<T>(brow, j);
+      float sc = (fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk;
+      st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+      st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+    }
   }
 }
 
 NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
-                          float zthr, const NDArray* /*unused*/) {
+                          float zthr, const NDArray* /*unused*/,
+                          int Lq, int64_t row0, int window) {
   int nd = bulk.ndim();
   int64_t S = bulk.shape[nd-1];
+  // Lchunk = this call's query-row count (bulk's second-to-last dim, e.g.
+  // the tiled callers' `blk`) — NOT Lq (the model's full query length),
+  // which only enters the S-Lq cache-prefix offset. Falls back to `rows`
+  // itself for the (rare, non-4D) case nd<2 so BOUNDED still degrades
+  // safely rather than dividing by zero.
+  int64_t Lchunk = (nd >= 2) ? bulk.shape[nd-2] : (bulk.numel() / (S > 0 ? S : 1));
   int64_t rows = bulk.numel() / S;
   NDArray out(bulk.shape, bulk.dtype, bulk.device);
   if (rows > 0) {
+    // Compile-time dispatch (A5 WCOOP pattern): the legacy Lq<=0 sentinel
+    // path runs the BOUNDED=false instantiation, codegen-identical to the
+    // pre-3.1 kernel (no bounds branch, no register growth).
     DISPATCH_FLOAT(bulk.dtype, T, {
-      apa_blend_softmax_kernel2<T><<<(int)rows, 256>>>(
-          static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
-          static_cast<T*>(out.data_ptr()), (int)S, zthr);
+      if (Lq > 0) {
+        apa_blend_softmax_kernel2<T, true><<<(int)rows, 256>>>(
+            static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+            static_cast<T*>(out.data_ptr()), (int)S, zthr, (int)Lchunk, Lq,
+            row0, window);
+      } else {
+        apa_blend_softmax_kernel2<T, false><<<(int)rows, 256>>>(
+            static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+            static_cast<T*>(out.data_ptr()), (int)S, zthr, (int)Lchunk, Lq,
+            row0, window);
+      }
     });
     cuda_check_last("apa_blend_softmax");
   }
   return out;
 }
 
-template <typename T>
+// Bounds convention identical to apa_blend_softmax_kernel2 above. Lq <= 0 is
+// the legacy sentinel path (mask baked in as -1e4 bias, MASK_LIM-detected);
+// Lq > 0 is index-arithmetic: row0 is the absolute query-chunk start, Lq is
+// the FULL query length L, window <= 0 means full causal (no sliding). L here
+// (the kernel's existing 3rd param) is the CHUNK length used only to recover
+// which head `h` a flat row belongs to (r / L) % H — unrelated to Lq.
+// BOUNDED dispatch as in apa_blend_softmax_kernel2: BOUNDED=false must be
+// codegen-identical to the pre-3.1 kernel (lead's regression scan receipt).
+template <typename T, bool BOUNDED>
 __global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,
                                               const T* sinks, T* out,
                                               int H, int L, int S,
-                                              float zthr) {
+                                              float zthr,
+                                              int Lq, int64_t row0, int window) {
   int r = blockIdx.x;
   int tid = threadIdx.x, nt = blockDim.x;
   int h = (r / L) % H;
@@ -2719,15 +2816,34 @@ __global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,
   T* orow = out + (int64_t)r * S;
 
   const float MASK_LIM = -5e3f;
+  int lo = 0, hi = S;
+  if constexpr (BOUNDED) {
+    // r flattens as (b*H + h)*L + i_local (L = this launch's chunk length,
+    // the SAME L used for `h` above) — Lq (full query length) only enters
+    // the S-Lq cache-prefix offset. Using Lq here instead of L was Phase
+    // 3.1's first-draft bug (matches the non-sink kernel's fix above).
+    int i_local = r % L;
+    int64_t abs_i = row0 + i_local;
+    int64_t valid_hi = (int64_t)S - Lq + abs_i + 1;
+    hi = (int)(valid_hi < 0 ? 0 : (valid_hi > S ? S : valid_hi));
+    lo = (window > 0) ? (int)((hi - window) < 0 ? 0 : (hi - window)) : 0;
+  }
   __shared__ float red[256];
   float sum = 0.f, sumsq = 0.f, vcount = 0.f;
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    if (bk <= MASK_LIM) continue;
-    float a = fabsf(bk);
-    sum += a;
-    sumsq += a * a;
-    vcount += 1.f;
+  if constexpr (BOUNDED) {
+    for (int j = lo + tid; j < hi; j += nt) {
+      float a = fabsf(ld<T>(brow, j));
+      sum += a; sumsq += a * a; vcount += 1.f;
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      if (bk <= MASK_LIM) continue;
+      float a = fabsf(bk);
+      sum += a;
+      sumsq += a * a;
+      vcount += 1.f;
+    }
   }
   red[tid] = sum; __syncthreads();
   for (int o = nt / 2; o > 0; o >>= 1) {
@@ -2752,12 +2868,22 @@ __global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,
 
   float sink = ld<T>(sinks, h);
   float m = -1e30f, l = 0.f;
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
-    float m_new = fmaxf(m, sc);
-    l = l * __expf(m - m_new) + __expf(sc - m_new);
-    m = m_new;
+  if constexpr (BOUNDED) {
+    for (int j = lo + tid; j < hi; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk;
+      float m_new = fmaxf(m, sc);
+      l = l * __expf(m - m_new) + __expf(sc - m_new);
+      m = m_new;
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+      float m_new = fmaxf(m, sc);
+      l = l * __expf(m - m_new) + __expf(sc - m_new);
+      m = m_new;
+    }
   }
   if (tid == 0) {
     float m_new = fmaxf(m, sink);
@@ -2779,15 +2905,25 @@ __global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,
   float denom = red[0]; __syncthreads();
   float inv = denom > 0.f ? 1.f / denom : 0.f;
 
-  for (int j = tid; j < S; j += nt) {
-    float bk = ld<T>(brow, j);
-    float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
-    st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+  if constexpr (BOUNDED) {
+    for (int j = tid; j < S; j += nt) {
+      if (j < lo || j >= hi) { st<T>(orow, j, 0.0f); continue; }
+      float bk = ld<T>(brow, j);
+      float sc = (fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk;
+      st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+    }
+  } else {
+    for (int j = tid; j < S; j += nt) {
+      float bk = ld<T>(brow, j);
+      float sc = (bk <= MASK_LIM) ? bk : ((fabsf(bk) >= thr) ? ld<T>(rrow, j) : bk);
+      st<T>(orow, j, __expf(fmaxf(sc - gmax, -88.f)) * inv);
+    }
   }
 }
 
 NDArray apa_blend_softmax_sink(const NDArray& bulk, const NDArray& rank,
-                               const NDArray& sinks, float zthr) {
+                               const NDArray& sinks, float zthr,
+                               int Lq, int64_t row0, int window) {
   if (bulk.ndim() != 4 || rank.ndim() != 4)
     throw std::runtime_error("apa_blend_softmax_sink: bulk/rank must be rank-4");
   if (bulk.dtype != rank.dtype || bulk.dtype != sinks.dtype)
@@ -2800,11 +2936,20 @@ NDArray apa_blend_softmax_sink(const NDArray& bulk, const NDArray& rank,
   NDArray out(bulk.shape, bulk.dtype, bulk.device);
   int64_t rows = B * H * L;
   if (rows > 0) {
+    // Compile-time dispatch (A5 WCOOP pattern): legacy Lq<=0 runs the
+    // BOUNDED=false instantiation, codegen-identical to the pre-3.1 kernel.
     DISPATCH_FLOAT(bulk.dtype, T, {
-      apa_blend_softmax_sink_kernel<T><<<(int)rows, 256>>>(
-          static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
-          static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
-          (int)H, (int)L, (int)S, zthr);
+      if (Lq > 0) {
+        apa_blend_softmax_sink_kernel<T, true><<<(int)rows, 256>>>(
+            static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+            static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
+            (int)H, (int)L, (int)S, zthr, Lq, row0, window);
+      } else {
+        apa_blend_softmax_sink_kernel<T, false><<<(int)rows, 256>>>(
+            static_cast<T*>(bulk.data_ptr()), static_cast<T*>(rank.data_ptr()),
+            static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
+            (int)H, (int)L, (int)S, zthr, Lq, row0, window);
+      }
     });
     cuda_check_last("apa_blend_softmax_sink");
   }

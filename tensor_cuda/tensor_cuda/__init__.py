@@ -263,23 +263,40 @@ def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=Fals
     return _C.apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal)
 
 
-def apa_blend_softmax(bulk, rank, zthr):
+def apa_blend_softmax(bulk, rank, zthr, Lq=0, row0=0, window=0):
     """Fused APA blend+softmax over precomputed bulk/rank score matrices (..., S):
-    per row thr = mean(|rank|)+zthr*std(|rank|); score = |rank|>=thr ? rank : bulk;
-    returns softmax(score). Causal masking must be baked into bulk/rank as large
-    negative scores by the caller. Pairs with cuBLAS bulk/rank matmuls."""
-    return _C.apa_blend_softmax(bulk, rank, zthr)
+    per row thr = mean(|bulk|)+zthr*std(|bulk|); score = |bulk|>=thr ? rank : bulk;
+    returns softmax(score). Pairs with cuBLAS bulk/rank matmuls.
+
+    Two bounds conventions (Phase 3.1, board item 4a):
+      Lq=0 (default): legacy sentinel path. Causal/window masking must already
+        be baked into bulk/rank as large-negative scores by the caller.
+      Lq>0: index-arithmetic path — no mask tensor needed, masked keys are
+        never read. `row0` is the absolute query-chunk start (tiled callers
+        slice queries into blocks of `blk` rows); `Lq` is the FULL query
+        length `L` (not the chunk length); `window` is the sliding-window
+        width (0 = full causal from key 0). Bottom-right causal convention:
+        row i sees keys `0..(S-Lq)+row0+i` inclusive, matching
+        `functional._causal_mask`. Sliding window: keys
+        `(q_abs-window, q_abs]`, matching `gpt_oss20b_tc._gpt_oss_attention_mask`.
+    """
+    return _C.apa_blend_softmax(bulk, rank, zthr, Lq, row0, window)
 
 
-def apa_blend_softmax_sink(bulk, rank, sinks, zthr):
+def apa_blend_softmax_sink(bulk, rank, sinks, zthr, Lq=0, row0=0, window=0):
     """Sink-aware APA blend weights for GPT-OSS attention.
 
-    `bulk` and `rank` are `(B,H,L,S)` score tensors with masks already baked in.
-    `sinks` is `(H,)`. Selection stats are computed over valid key scores only;
-    the sink logit participates in the softmax denominator but no sink column is
-    returned, so the result remains `(B,H,L,S)` for `weights @ V`.
+    `bulk` and `rank` are `(B,H,L,S)` score tensors. `sinks` is `(H,)`.
+    Selection stats are computed over valid key scores only; the sink logit
+    participates in the softmax denominator but no sink column is returned,
+    so the result remains `(B,H,L,S)` for `weights @ V`.
+
+    Bounds conventions identical to `apa_blend_softmax` above: `Lq=0` is the
+    legacy sentinel path (masks baked into bulk/rank as large-negative bias);
+    `Lq>0` is index-arithmetic (no mask tensor needed; `row0`/`Lq`/`window` as
+    above).
     """
-    return _C.apa_blend_softmax_sink(bulk, rank, sinks, zthr)
+    return _C.apa_blend_softmax_sink(bulk, rank, sinks, zthr, Lq, row0, window)
 
 
 def mse_loss(pred, target):

@@ -443,19 +443,30 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                           Tensor::make(std::get<2>(r), false));
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"), py::arg("dO"),
      py::arg("lse"), py::arg("thr"), py::arg("scale"), py::arg("is_causal") = false);
-  // Fused APA blend+softmax over precomputed bulk/rank score matrices (causal
-  // masking baked into the inputs as large-negative scores).
-  m.def("apa_blend_softmax", [](Tensor& bulk, Tensor& rank, double zthr) {
+  // Fused APA blend+softmax over precomputed bulk/rank score matrices.
+  // Phase 3.1 (board item 4a): Lq<=0 (default) is the legacy sentinel path —
+  // causal/window masking must already be baked into bulk/rank as
+  // large-negative bias. Lq>0 is the index-arithmetic path — no mask tensor
+  // needed; row0 = absolute query-chunk start, Lq = full query length,
+  // window<=0 = full causal else sliding width. See tc/core.h for the exact
+  // convention.
+  m.def("apa_blend_softmax", [](Tensor& bulk, Tensor& rank, double zthr,
+                                int64_t Lq, int64_t row0, int64_t window) {
     return Tensor::make(tc::apa_blend_softmax(bulk.data(), rank.data(),
-                                              (float)zthr, nullptr), false);
-  }, py::arg("bulk"), py::arg("rank"), py::arg("zthr"));
+                                              (float)zthr, nullptr,
+                                              (int)Lq, row0, (int)window),
+                        false);
+  }, py::arg("bulk"), py::arg("rank"), py::arg("zthr"),
+     py::arg("Lq") = 0, py::arg("row0") = 0, py::arg("window") = 0);
   m.def("apa_blend_softmax_sink", [](Tensor& bulk, Tensor& rank, Tensor& sinks,
-                                     double zthr) {
+                                     double zthr, int64_t Lq, int64_t row0,
+                                     int64_t window) {
     return Tensor::make(
         tc::apa_blend_softmax_sink(bulk.data(), rank.data(), sinks.data(),
-                                   (float)zthr),
+                                   (float)zthr, (int)Lq, row0, (int)window),
         false);
-  }, py::arg("bulk"), py::arg("rank"), py::arg("sinks"), py::arg("zthr"));
+  }, py::arg("bulk"), py::arg("rank"), py::arg("sinks"), py::arg("zthr"),
+     py::arg("Lq") = 0, py::arg("row0") = 0, py::arg("window") = 0);
   m.def("im2col", &ops::im2col);
   m.def("col2im", &ops::col2im);
   m.def("avg_pool2d", &ops::avg_pool2d);
