@@ -264,3 +264,23 @@ Decision pending (David):
 Next action:
 - Await David on both; meanwhile no optimization work starts (Phase 0
   gate: receipts first, which is now satisfied except the re-run).
+
+## 2026-07-07 11:45 EDT
+
+Action: David authorized implementation (session goal, 2026-07-07):
+decisions to orchestrator's discernment; sole restriction = APA stays
+two-pass bulk-bits → selective precision. Addendum 1 registered and
+committed (immutable): workstreams A2 (mxfp4_gemv branchless decode),
+A3 (int4_gemv bank conflicts), A1 (apa_selective split-K grid fill,
+APA-invariant-bound), A4 (mxfp4_gemm coalescing), order A2→A3→A1→A4,
+interleaved with base-plan Phase 1.1 (device argmax).
+
+Repo state:
+- GPU occupied by Codex Graft Translation capture (PID 2346865,
+  gpt_oss20b_stream_forward_smoke.py, 96K capture, ~1h14m elapsed at
+  check). Gating Validity Rule invoked: implementation + parity tests
+  proceed under contention; ALL timing gates defer to an idle-GPU window.
+
+Next action:
+- Sonnet agents: A2+A3 (main tree), Phase 1.1 argmax (isolated worktree).
+  A1 after A2/A3 land.
