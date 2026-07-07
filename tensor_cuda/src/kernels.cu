@@ -1043,7 +1043,88 @@ constexpr int TC_APA_MAXD = 512;   // bumped 256->512 for Gemma 4 global
 // on the selective kernel's hot inner loop. The launcher dispatches the smallest
 // DMAX >= D. qsh/osh stay TC_APA_MAXD: they are __shared__, not per-thread, so
 // they cost shared memory (cheap, plentiful) not registers.
-template <typename T, int DMAX>
+// ----------------------------------------------------------------------------
+// Warp-cooperative key processing (kernel-opt Addendum 2, workstream A5).
+//
+// Problem (ncu receipt, docs/KERNEL_OPT_PLAN_ADDENDUM_2.md): the prior loop
+// (`for j = tid; j < s_max; j += nt`) gives each THREAD its own key row. At
+// any fixed dimension offset d, the 32 lanes of a warp are then reading 32
+// DIFFERENT key rows, D floats apart — one cache-line sector per lane instead
+// of one sector serving the whole warp (25.3 sectors/request measured,
+// ~4 optimal; 88.1% of warp stall cycles on L1TEX scoreboard waits).
+//
+// Fix: assign KEYS to WARPS, not threads. `for j = warp; j < s_max; j += nwarp`
+// — each of the block's `nwarp` warps (nt=128 -> nwarp=4) owns a disjoint
+// strided subset of keys, exactly mirroring the old per-thread strided
+// assignment one level up. Within one warp's key j, the 32 lanes split the D
+// dimension: lane `lane` reads elements `lane, lane+32, lane+64, ...` of the
+// SAME key row. At a fixed unrolled step every lane's address differs by one
+// element (4 bytes) — a single coalesced 128B-or-less transaction serves the
+// whole warp instead of 32. A `__shfl_down_sync` butterfly reduces the 32
+// partial products to the per-warp dot, then `__shfl_sync(mask, v, 0)`
+// broadcasts it back to all 32 lanes (every lane needs the scalar score to
+// keep its own online-softmax state in lockstep — cheap registers-only
+// broadcast, no shared memory, no extra syncthreads).
+//
+// Per-DMAX lane-to-element mapping (all D in {64,128,256,512} divide evenly
+// by warpSize=32, so no ragged last-lane case exists for the score dim):
+//   D=64  -> 2 elements/lane   D=128 -> 4/lane   D=256 -> 8/lane   D=512 -> 16/lane
+// Plain scalar `ld<T>` reads are kept (not float2/half2 vector loads): the
+// coalescing win already comes from 32 lanes hitting one contiguous 128B (f32)
+// or 64B (f16/bf16) span per step — vectorizing further would halve the
+// instruction count but the access is already fully coalesced, and a vector
+// path would need three more ld<T> specializations (half2/bfloat162 packed
+// loads through a currently scalar-only ld<T> abstraction) for a gain ncu
+// would show as "instruction count", not "sectors/request" (already ~1
+// optimal post-fix). Left as a documented follow-up, not required here.
+//
+// Value accumulation shares the exact same per-thread-per-key stall pattern
+// (`for d = 0..VD: acc[d] = ...; ld<T>(vj, d)` — same uncoalesced row-per-
+// thread read). Folded into the SAME warp-cooperative loop: since every lane
+// in the warp now holds an IDENTICAL (m, l, score) after the broadcast, lane
+// ownership of `acc` is split across the warp instead of replicated — lane
+// `lane` owns acc slots `d = lane, lane+32, ...` (register footprint per
+// thread drops from VD to ceil(VD/32), e.g. 512 -> 16 — a register WIN, not
+// just parity) and reads `v[d]` at exactly the offsets it owns (same
+// coalesced-across-lanes pattern as the score dot). No cross-lane reduction
+// needed for acc at all (each lane's slice is disjoint, not a partial sum),
+// which is a genuine simplification over the old per-thread-full-acc + final
+// warp-shfl-reduce path.
+//
+// APA invariant preserved exactly: same bulk dot per key (now warp-summed
+// instead of thread-summed — different FLOATING-POINT REDUCTION ORDER,
+// same mathematical sum), same sum/sumsq -> mean/var -> z-score thr, same
+// |bulk*scale| >= thr refine decision, same online-softmax recurrence
+// (m, l updates use the identical formulas, just computed redundantly on
+// all 32 lanes of the owning warp instead of once per thread). Only WHICH
+// lanes compute what changed; the algorithm is bit-for-bit the same modulo
+// float reassociation, exactly the class of change the sharpened invariant
+// (ledger 2026-07-07) explicitly allows.
+//
+// DISPATCH (A5 lead iteration, 2026-07-07): the warp-cooperative path is NOT
+// unconditional. Indicative measurement showed it wins big everywhere the
+// D-loop is long or the grid is full (all prefill; decode at D>=128:
+// +58%..+478%) but LOSES at D=64 decode (GPT-OSS geometry, -14%..-29%): with
+// only 2 elements/lane per key, the shuffle/broadcast overhead is not
+// amortized and warp-granularity key streaming (4 independent streams/block)
+// surrenders the ILP that per-thread streaming (128 streams/block) had —
+// and that shape was never memory-pattern-bound in the first place (Phase
+// 0.2 ncu: compute/launch-shape-bound at 3% SM throughput; A1 split-K was
+// its fix). So BOTH paths are compiled, selected by the WCOOP template
+// parameter, and the launchers choose per launch:
+//   - DMAX == 64 && decode-shaped (apa_selective_decode_shaped: L==1 and
+//     rows < 2*TC_APA_SM_COUNT, mirroring the split-K heuristic's notion of
+//     decode)                         -> WCOOP=false (per-thread, pre-A5 code)
+//   - DMAX == 64 otherwise (prefill)  -> WCOOP=true
+//   - DMAX >= 128 (all shapes)        -> WCOOP=true
+//   - split-K stats/split kernels at DMAX==64 -> WCOOP=false ALWAYS (that
+//     path is decode-only by construction, dispatch-gated on L==1)
+// The WCOOP=false branches below are the exact pre-A5 per-thread code,
+// restored verbatim so the regressed shapes return to their pre-A5 timings
+// and bit-identical outputs.
+// ----------------------------------------------------------------------------
+
+template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_kernel(
     const T* q, const T* k, const T* kq, const T* v, T* out,
     int B, int H, int L, int S, int D, int VD, float scale, float zthr,
@@ -1059,6 +1140,10 @@ __global__ void apa_selective_kernel(
   int kv_h = h / group;            // which of the KVH heads this query head uses
   int tid = threadIdx.x;
   int nt = blockDim.x;
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = nt >> 5;              // == 4 for nt=128
 
   const T* qrow = q + (int64_t)row * D;
   int64_t kvbh = (int64_t)b * KVH + kv_h;
@@ -1080,23 +1165,39 @@ __global__ void apa_selective_kernel(
   int s_max = is_causal ? ((S - L) + i + 1) : S;
   __shared__ float red[256];
 
-  // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold. Each
-  // thread also CACHES its bulk dots so pass 2 never recomputes them. We cache
-  // up to a fixed window in registers via re-derivation only when needed; since
-  // s_max can be large, we instead keep the bulk dot per strided key in a
-  // per-thread running form and recompute exact dots only for selected keys.
+  // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+  // WCOOP=true: each warp owns a strided subset of keys; within a key, lanes
+  // split D contiguously and shfl-reduce the dot (see block comment).
+  // WCOOP=false: pre-A5 per-thread strided keys (each thread's sum/sumsq is a
+  // genuine disjoint partial).
   float sum = 0.f, sumsq = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float dot = 0.f;
-    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
-    float a = fabsf(dot * scale);
-    sum += a; sumsq += a * a;
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) dot += __shfl_down_sync(FULL, dot, off);
+      dot = __shfl_sync(FULL, dot, 0);   // broadcast the warp's dot to all lanes
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
   }
-  red[tid] = sum; __syncthreads();
+  // WCOOP: sum/sumsq are per-WARP totals, identical across all 32 lanes of
+  // the owning warp (redundant, not partial) — only lane 0 contributes, else
+  // each warp's contribution is overcounted 32x. Per-thread: all contribute.
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sum; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float total = red[0]; __syncthreads();
-  red[tid] = sumsq; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float total_sq = red[0]; __syncthreads();
 
@@ -1105,74 +1206,120 @@ __global__ void apa_selective_kernel(
   float var = total_sq / cnt - mean * mean;
   float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
 
-  // Pass 2: SINGLE pass with a per-thread online softmax (FlashAttention-style).
-  // Each thread maintains its own running max m, denom l, and weighted-value
-  // accumulator acc[VD] over its strided keys — computing each key's final score
-  // exactly ONCE. The exact dot is taken only for selected keys. No atomics; the
-  // per-thread partial softmaxes are merged by a block reduction at the end.
+  // Pass 2: SINGLE pass with an online softmax (FlashAttention-style).
+  // WCOOP=true: per-WARP state, all 32 lanes carrying identical (m, l)
+  // (redundant scalar work, cheap) while VALUE accumulation is split across
+  // lanes: lane `lane` owns acc slots d = lane, lane+32, ... (ceil(VD/32)
+  // registers). WCOOP=false: pre-A5 per-thread state, full acc[VD] each.
   float m = -1e30f, l = 0.f;
-  float acc[DMAX];               // DMAX >= max(score_dim, value_dim)
-  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
-
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float bulk = 0.f;
-    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
-    bulk *= scale;
-    float score;
-    if (fabsf(bulk) >= thr) {
-      const T* kj = kbase + (int64_t)j * D;
-      float ex = 0.f;
-      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
-      score = ex * scale;
-    } else {
-      score = bulk;
-    }
-    // online softmax update
-    float m_new = fmaxf(m, score);
-    float corr = __expf(m - m_new);
-    float w = __expf(score - m_new);
-    l = l * corr + w;
-    const T* vj = vbase + (int64_t)j * VD;
-    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
-    m = m_new;
+  constexpr int ACCN = WCOOP ? ((DMAX + 31) / 32) : DMAX;
+  float acc[ACCN];
+  if constexpr (WCOOP) {
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+  } else {
+    for (int d = 0; d < VD; ++d) acc[d] = 0.f;
   }
 
-  // Merge the per-thread online-softmax states into a single result. Reduce the
-  // global max first, then rescale each thread's (l, acc) to that max and sum.
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = lane; d < D; d += 32) bulk += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) bulk += __shfl_down_sync(FULL, bulk, off);
+      bulk = __shfl_sync(FULL, bulk, 0);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+        #pragma unroll
+        for (int off = 16; off > 0; off >>= 1) ex += __shfl_down_sync(FULL, ex, off);
+        ex = __shfl_sync(FULL, ex, 0);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      // online softmax update — identical formula on every lane (redundant,
+      // not partitioned: m/l are scalars, not worth splitting across lanes).
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) {
+        int d = lane + dl * 32;
+        if (d < VD) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+      }
+      m = m_new;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      // online softmax update
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+      m = m_new;
+    }
+  }
+
+  // Merge the per-thread (WCOOP=false) or per-warp-replicated (WCOOP=true)
+  // online-softmax states. m's max-reduction is duplicate-safe either way;
+  // l is a SUM, so under WCOOP only lane 0 of each warp contributes (every
+  // lane holds the identical warp-total — 32x overcount otherwise).
   red[tid] = m; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
   float gmax = red[0]; __syncthreads();
 
   float rescale = __expf(m - gmax);
   // denom
-  red[tid] = l * rescale; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : (l * rescale); __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float denom = red[0]; __syncthreads();
   float inv = denom > 0.f ? 1.f / denom : 0.f;
 
-  // Sum rescaled acc[d] across threads. The previous merge had all nt threads
-  // atomicAdd into the same osh[d] addresses — nt-way same-address contention,
-  // fully serialized per dim. Instead: each warp reduces its lanes' acc[d] with
-  // warp shuffles (no atomics, no bank conflicts) and writes one per-warp partial
-  // per dim into shared; then a SINGLE __syncthreads precedes combining the (few)
-  // per-warp partials. nt is 128 (== 4 warps) by construction, so this is 2
-  // barriers total instead of ~D serialized atomic rounds.
-  const unsigned FULL = 0xffffffffu;
-  int lane = tid & 31;
-  int warp = tid >> 5;
-  int nwarp = (nt + 31) >> 5;     // == 4 for nt=128
+  // Combine per-warp partials per dim. WCOOP=true: acc is lane-DISJOINT
+  // (each lane owns distinct d's), so each lane just writes its owned slots
+  // into wpart[warp][d] — no shfl-reduce needed. WCOOP=false (pre-A5): each
+  // thread holds a full partial acc[d]; warp shfl-reduce then lane 0 writes.
+  // The cross-warp combine below is common to both.
   __shared__ float osh[DMAX];
   __shared__ float wpart[4][DMAX];   // [warp][dim] partials; nt=128 -> 4 warps
-  for (int d = 0; d < VD; ++d) {
-    float val = acc[d] * rescale;
+  if constexpr (WCOOP) {
     #pragma unroll
-    for (int off = 16; off > 0; off >>= 1)
-      val += __shfl_down_sync(FULL, val, off);
-    if (lane == 0) wpart[warp][d] = val;
+    for (int dl = 0; dl < ACCN; ++dl) {
+      int d = lane + dl * 32;
+      if (d < VD) wpart[warp][d] = acc[dl] * rescale;
+    }
+  } else {
+    for (int d = 0; d < VD; ++d) {
+      float val = acc[d] * rescale;
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        val += __shfl_down_sync(FULL, val, off);
+      if (lane == 0) wpart[warp][d] = val;
+    }
   }
   __syncthreads();
-  // Combine the nwarp per-warp partials per dim, distributed across threads.
   for (int d = tid; d < VD; d += nt) {
     float s = 0.f;
     for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
@@ -1257,7 +1404,7 @@ constexpr int TC_APA_SPLITK_PART_KEYS = 128 * 16;  // 2048 keys/partition
 // score threshold). One block per (b,h,query-row); writes thr[row] to a
 // small workspace instead of continuing on to pass 2 in the same block. This
 // is the "global stats over the full key range" stage the addendum requires.
-template <typename T, int DMAX>
+template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_stats_kernel(
     const T* q, const T* kq, float* thr_out,
     int B, int H, int L, int S, int D, float scale, float zthr,
@@ -1270,6 +1417,10 @@ __global__ void apa_selective_stats_kernel(
   int kv_h = h / group;
   int tid = threadIdx.x;
   int nt = blockDim.x;
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = nt >> 5;
 
   const T* qrow = q + (int64_t)row * D;
   int64_t kvbh = (int64_t)b * KVH + kv_h;
@@ -1282,18 +1433,37 @@ __global__ void apa_selective_stats_kernel(
   int s_max = is_causal ? ((S - L) + i + 1) : S;
   __shared__ float red[256];
 
+  // A5 dual-path (see apa_selective_kernel's DISPATCH comment): WCOOP=true
+  // is warp-cooperative key loads; WCOOP=false is the pre-A5 per-thread
+  // loop. Identical arithmetic either way, only the lane<->element
+  // assignment and float reduction order differ.
   float sum = 0.f, sumsq = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float dot = 0.f;
-    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
-    float a = fabsf(dot * scale);
-    sum += a; sumsq += a * a;
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) dot += __shfl_down_sync(FULL, dot, off);
+      dot = __shfl_sync(FULL, dot, 0);
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
   }
-  red[tid] = sum; __syncthreads();
+  // WCOOP: per-warp totals duplicated across the warp's 32 lanes — only
+  // lane 0 contributes (else 32x overcount). Per-thread: all contribute.
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sum; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float total = red[0]; __syncthreads();
-  red[tid] = sumsq; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float total_sq = red[0]; __syncthreads();
 
@@ -1314,7 +1484,7 @@ __global__ void apa_selective_stats_kernel(
 // same nt-strided inner loop as the fused kernel, just bounded to the
 // partition's slice. Writes one online-softmax partial (m, l, acc[VD]) to
 // workspace row (row*num_parts + p) — merged by apa_selective_merge_kernel.
-template <typename T, int DMAX>
+template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_split_kernel(
     const T* q, const T* k, const T* kq, const T* v, const float* thr_in,
     float* part_m, float* part_l, float* part_acc,
@@ -1329,6 +1499,10 @@ __global__ void apa_selective_split_kernel(
   int kv_h = h / group;
   int tid = threadIdx.x;
   int nt = blockDim.x;
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = nt >> 5;
 
   int s_max = is_causal ? ((S - L) + i + 1) : S;
   int j0 = part * part_keys;
@@ -1359,58 +1533,107 @@ __global__ void apa_selective_split_kernel(
   for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
   __syncthreads();
 
+  // A5 dual-path (see apa_selective_kernel's DISPATCH comment). WCOOP=true:
+  // keys assigned to warps within [j0, j1), value accumulation lane-split.
+  // WCOOP=false: pre-A5 per-thread strided keys, full acc[VD] per thread.
   float m = -1e30f, l = 0.f;
-  float acc[DMAX];
-  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
-
-  for (int j = j0 + tid; j < j1; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float bulk = 0.f;
-    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
-    bulk *= scale;
-    float score;
-    if (fabsf(bulk) >= thr) {
-      const T* kj = kbase + (int64_t)j * D;
-      float ex = 0.f;
-      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
-      score = ex * scale;
-    } else {
-      score = bulk;
-    }
-    float m_new = fmaxf(m, score);
-    float corr = __expf(m - m_new);
-    float w = __expf(score - m_new);
-    l = l * corr + w;
-    const T* vj = vbase + (int64_t)j * VD;
-    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
-    m = m_new;
+  constexpr int ACCN = WCOOP ? ((DMAX + 31) / 32) : DMAX;
+  float acc[ACCN];
+  if constexpr (WCOOP) {
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+  } else {
+    for (int d = 0; d < VD; ++d) acc[d] = 0.f;
   }
 
-  // Merge this block's threads into one (m, l, acc) partial for the
-  // partition — same warp-shuffle + shared-mem-partial reduction the fused
-  // kernel uses at the end of its pass 2 (kernels.cu apa_selective_kernel),
-  // just scoped to this partition's keys instead of the whole row.
+  if constexpr (WCOOP) {
+    for (int j = j0 + warp; j < j1; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = lane; d < D; d += 32) bulk += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) bulk += __shfl_down_sync(FULL, bulk, off);
+      bulk = __shfl_sync(FULL, bulk, 0);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+        #pragma unroll
+        for (int off = 16; off > 0; off >>= 1) ex += __shfl_down_sync(FULL, ex, off);
+        ex = __shfl_sync(FULL, ex, 0);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) {
+        int d = lane + dl * 32;
+        if (d < VD) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+      }
+      m = m_new;
+    }
+  } else {
+    for (int j = j0 + tid; j < j1; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+      m = m_new;
+    }
+  }
+
+  // Merge this block's threads/warps into one (m, l, acc) partial for the
+  // partition — same reduction tree as apa_selective_kernel's pass 2 merge,
+  // just scoped to this partition's keys instead of the whole row. Under
+  // WCOOP, l is a SUM duplicated across a warp's lanes, so only lane 0
+  // contributes (else 32x overcount); m's max is duplicate-safe either way.
   __shared__ float red[256];
   red[tid] = m; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
   float pmax = red[0]; __syncthreads();
 
   float rescale = __expf(m - pmax);
-  red[tid] = l * rescale; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : (l * rescale); __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
   float pl = red[0]; __syncthreads();
 
-  const unsigned FULL = 0xffffffffu;
-  int lane = tid & 31;
-  int warp = tid >> 5;
-  int nwarp = (nt + 31) >> 5;
   __shared__ float wpart[4][DMAX];
-  for (int d = 0; d < VD; ++d) {
-    float val = acc[d] * rescale;
+  if constexpr (WCOOP) {
     #pragma unroll
-    for (int off = 16; off > 0; off >>= 1)
-      val += __shfl_down_sync(FULL, val, off);
-    if (lane == 0) wpart[warp][d] = val;
+    for (int dl = 0; dl < ACCN; ++dl) {
+      int d = lane + dl * 32;
+      if (d < VD) wpart[warp][d] = acc[dl] * rescale;
+    }
+  } else {
+    for (int d = 0; d < VD; ++d) {
+      float val = acc[d] * rescale;
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        val += __shfl_down_sync(FULL, val, off);
+      if (lane == 0) wpart[warp][d] = val;
+    }
   }
   __syncthreads();
   for (int d = tid; d < VD; d += nt) {
@@ -1516,6 +1739,29 @@ inline bool apa_selective_use_splitk(int rows, int S, int L) {
   return L == 1 && rows < 2 * TC_APA_SM_COUNT && S >= 2 * TC_APA_SPLITK_PART_KEYS;
 }
 
+// ============================================================================
+// A5 WCOOP DISPATCH RULE (lead iteration on Addendum 2, 2026-07-07).
+//
+// The warp-cooperative key-load path (WCOOP=true) wins wherever the per-key
+// D-loop is long or the grid is full — all prefill shapes and all D>=128
+// decode (indicative: +58%..+478%) — but LOSES at D=64 decode (GPT-OSS
+// geometry, indicative −14%..−29%): at 2 elements/lane the shuffle overhead
+// is unamortized and warp-granularity key streaming surrenders the ILP of
+// per-thread streaming, on a shape that was launch-shape-bound, never
+// memory-pattern-bound (Phase 0.2 ncu). Both paths stay compiled; launchers
+// select per launch:
+//   - DMAX == 64 && decode-shaped        -> WCOOP=false (pre-A5 per-thread)
+//   - DMAX == 64 && not decode-shaped    -> WCOOP=true  (prefill: coalescing wins)
+//   - DMAX >= 128 (any shape)            -> WCOOP=true
+//   - split-K stats/split at DMAX == 64  -> WCOOP=false ALWAYS (that path is
+//     decode-only by construction, dispatch-gated on L==1)
+// "Decode-shaped" mirrors the split-K heuristic's notion of decode: a single
+// query row per (b,h) with a grid too small to fill the SMs.
+// ============================================================================
+inline bool apa_selective_decode_shaped(int rows, int L) {
+  return L == 1 && rows < 2 * TC_APA_SM_COUNT;
+}
+
 // Env override for testing both paths regardless of shape (validation only —
 // production dispatch uses apa_selective_use_splitk above). 0=auto (default),
 // 1=force fused, 2=force split-K.
@@ -1551,16 +1797,17 @@ static NDArray apa_selective_splitk_dispatch(
   NDArray part_acc({(int64_t)rows * num_parts * VD}, DType::Float32, q.device);
 
   int threads = 128;
-  auto launch = [&](auto dmax_tag) {
+  auto launch = [&](auto dmax_tag, auto wcoop_tag) {
     constexpr int DMAX = decltype(dmax_tag)::value;
-    apa_selective_stats_kernel<T, DMAX><<<rows, threads>>>(
+    constexpr bool WCOOP = decltype(wcoop_tag)::value;
+    apa_selective_stats_kernel<T, DMAX, WCOOP><<<rows, threads>>>(
         static_cast<T*>(q.data_ptr()), static_cast<T*>(kq.data_ptr()),
         static_cast<float*>(thr_ws.data_ptr()), B, H, L, S, D, scale, zthr,
         is_causal ? 1 : 0, KVH, group);
     cuda_check_last("apa_selective_splitk_stats");
 
     dim3 grid2((unsigned)rows, (unsigned)num_parts);
-    apa_selective_split_kernel<T, DMAX><<<grid2, threads>>>(
+    apa_selective_split_kernel<T, DMAX, WCOOP><<<grid2, threads>>>(
         static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
         static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
         static_cast<float*>(thr_ws.data_ptr()),
@@ -1576,10 +1823,13 @@ static NDArray apa_selective_splitk_dispatch(
         static_cast<T*>(out.data_ptr()), H, VD, num_parts, sinks ? 1 : 0);
     cuda_check_last("apa_selective_splitk_merge");
   };
-  if (cap <= 64)        launch(std::integral_constant<int, 64>{});
-  else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
-  else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
-  else                  launch(std::integral_constant<int, 512>{});
+  // A5 WCOOP dispatch (see apa_selective_decode_shaped's comment block):
+  // split-K is decode-only by construction (dispatch-gated on L==1), so at
+  // DMAX==64 the per-thread path applies unconditionally here.
+  if (cap <= 64)        launch(std::integral_constant<int, 64>{},  std::false_type{});
+  else if (cap <= 128)  launch(std::integral_constant<int, 128>{}, std::true_type{});
+  else if (cap <= 256)  launch(std::integral_constant<int, 256>{}, std::true_type{});
+  else                  launch(std::integral_constant<int, 512>{}, std::true_type{});
   return out;
 }
 
@@ -1629,26 +1879,34 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
     // Dispatch the smallest compile-time DMAX >= D so acc[] stays register/L1
     // resident. Real head_dims are 64 (TinyLlama) and 128 (Mistral/Qwen/OLMoE);
     // 256 is the safety fallback (== the old behaviour) for anything larger.
+    // WCOOP per the A5 dispatch rule (apa_selective_decode_shaped comment
+    // block): per-thread at DMAX==64 decode shapes, warp-cooperative else.
     DISPATCH_FLOAT(q.dtype, T, {
-      auto launch = [&](auto dmax_tag) {
+      auto launch = [&](auto dmax_tag, auto wcoop_tag) {
         constexpr int DMAX = decltype(dmax_tag)::value;
-        apa_selective_kernel<T, DMAX><<<rows, threads>>>(
+        constexpr bool WCOOP = decltype(wcoop_tag)::value;
+        apa_selective_kernel<T, DMAX, WCOOP><<<rows, threads>>>(
             static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
             static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
             static_cast<T*>(out.data_ptr()), B, H, L, S, D, VD, scale, zthr,
             is_causal ? 1 : 0, KVH, group);
       };
-      if (cap <= 64)        launch(std::integral_constant<int, 64>{});
-      else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
-      else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
-      else                  launch(std::integral_constant<int, 512>{});
+      if (cap <= 64) {
+        if (apa_selective_decode_shaped(rows, L))
+          launch(std::integral_constant<int, 64>{}, std::false_type{});
+        else
+          launch(std::integral_constant<int, 64>{}, std::true_type{});
+      }
+      else if (cap <= 128)  launch(std::integral_constant<int, 128>{}, std::true_type{});
+      else if (cap <= 256)  launch(std::integral_constant<int, 256>{}, std::true_type{});
+      else                  launch(std::integral_constant<int, 512>{}, std::true_type{});
     });
     cuda_check_last("apa_selective");
   }
   return out;
 }
 
-template <typename T, int DMAX>
+template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_sink_kernel(
     const T* q, const T* k, const T* kq, const T* v, const T* sinks, T* out,
     int B, int H, int L, int S, int D, int VD, float scale, float zthr,
@@ -1661,6 +1919,10 @@ __global__ void apa_selective_sink_kernel(
   int kv_h = h / group;
   int tid = threadIdx.x;
   int nt = blockDim.x;
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = nt >> 5;
 
   const T* qrow = q + (int64_t)row * D;
   int64_t kvbh = (int64_t)b * KVH + kv_h;
@@ -1675,22 +1937,41 @@ __global__ void apa_selective_sink_kernel(
   int s_max = is_causal ? ((S - L) + i + 1) : S;
   __shared__ float red[256];
 
+  // A5 dual-path (see apa_selective_kernel's DISPATCH comment): WCOOP=true
+  // is warp-cooperative key loads, WCOOP=false the pre-A5 per-thread loop;
+  // identical here modulo the sink fold below.
   float sum = 0.f, sumsq = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float dot = 0.f;
-    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
-    float a = fabsf(dot * scale);
-    sum += a;
-    sumsq += a * a;
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) dot += __shfl_down_sync(FULL, dot, off);
+      dot = __shfl_sync(FULL, dot, 0);
+      float a = fabsf(dot * scale);
+      sum += a;
+      sumsq += a * a;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+      float a = fabsf(dot * scale);
+      sum += a;
+      sumsq += a * a;
+    }
   }
-  red[tid] = sum; __syncthreads();
+  // WCOOP: per-warp totals duplicated across the warp's 32 lanes — only
+  // lane 0 contributes (else 32x overcount). Per-thread: all contribute.
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sum; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] += red[tid + off];
     __syncthreads();
   }
   float total = red[0]; __syncthreads();
-  red[tid] = sumsq; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq; __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] += red[tid + off];
     __syncthreads();
@@ -1703,40 +1984,110 @@ __global__ void apa_selective_sink_kernel(
   float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
 
   float m = -1e30f, l = 0.f;
-  float acc[DMAX];
-  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
-
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float bulk = 0.f;
-    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
-    bulk *= scale;
-    float score;
-    if (fabsf(bulk) >= thr) {
-      const T* kj = kbase + (int64_t)j * D;
-      float ex = 0.f;
-      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
-      score = ex * scale;
-    } else {
-      score = bulk;
-    }
-    float m_new = fmaxf(m, score);
-    float corr = __expf(m - m_new);
-    float w = __expf(score - m_new);
-    l = l * corr + w;
-    const T* vj = vbase + (int64_t)j * VD;
-    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
-    m = m_new;
+  constexpr int ACCN = WCOOP ? ((DMAX + 31) / 32) : DMAX;
+  float acc[ACCN];
+  if constexpr (WCOOP) {
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+  } else {
+    for (int d = 0; d < VD; ++d) acc[d] = 0.f;
   }
 
-  // GPT-OSS learned sink: denominator only, zero value contribution.
-  if (tid == 0) {
-    float sink = ld<T>(sinks, h);
-    float m_new = fmaxf(m, sink);
-    float corr = __expf(m - m_new);
-    l = l * corr + __expf(sink - m_new);
-    for (int d = 0; d < VD; ++d) acc[d] *= corr;
-    m = m_new;
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = lane; d < D; d += 32) bulk += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) bulk += __shfl_down_sync(FULL, bulk, off);
+      bulk = __shfl_sync(FULL, bulk, 0);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+        #pragma unroll
+        for (int off = 16; off > 0; off >>= 1) ex += __shfl_down_sync(FULL, ex, off);
+        ex = __shfl_sync(FULL, ex, 0);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) {
+        int d = lane + dl * 32;
+        if (d < VD) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+      }
+      m = m_new;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+        score = ex * scale;
+      } else {
+        score = bulk;
+      }
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+      m = m_new;
+    }
+  }
+
+  // GPT-OSS learned sink: denominator only, zero value contribution. Folded
+  // EXACTLY ONCE PER BLOCK (the sink logit must enter the row's softmax
+  // total a single time).
+  // WCOOP=true: folded into WARP 0's (m, l, acc) — warp 0's lane 0 computes
+  // the fold (sink depends only on h, same for every lane); the corrected
+  // (m, l, corr) are then broadcast to warp 0's other 31 lanes so the WHOLE
+  // warp's acc slice (not just lane 0's own d's) gets rescaled consistently
+  // — warp 0 collectively owns all VD dims across its lanes, same as tid==0
+  // owning the full acc[VD] in the pre-A5 kernel. Warps 1..nwarp-1 are
+  // untouched (their m/l/acc stay pre-fold).
+  // WCOOP=false: the exact pre-A5 fold — thread 0 owns a full acc[VD]
+  // partial, so it alone folds and rescales its own accumulator.
+  if constexpr (WCOOP) {
+    if (warp == 0) {
+      float m_for_fold = m, l_for_fold = l, corr = 1.f;
+      if (lane == 0) {
+        float sink = ld<T>(sinks, h);
+        float m_new = fmaxf(m, sink);
+        corr = __expf(m - m_new);
+        l_for_fold = l * corr + __expf(sink - m_new);
+        m_for_fold = m_new;
+      }
+      m = __shfl_sync(FULL, m_for_fold, 0);
+      l = __shfl_sync(FULL, l_for_fold, 0);
+      corr = __shfl_sync(FULL, corr, 0);
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) acc[dl] *= corr;
+    }
+  } else {
+    if (tid == 0) {
+      float sink = ld<T>(sinks, h);
+      float m_new = fmaxf(m, sink);
+      float corr = __expf(m - m_new);
+      l = l * corr + __expf(sink - m_new);
+      for (int d = 0; d < VD; ++d) acc[d] *= corr;
+      m = m_new;
+    }
   }
 
   red[tid] = m; __syncthreads();
@@ -1746,8 +2097,11 @@ __global__ void apa_selective_sink_kernel(
   }
   float gmax = red[0]; __syncthreads();
 
+  // WCOOP: l is a SUM, identical across a warp's 32 lanes (either pre-fold
+  // warp total, or warp 0's post-fold total) — only lane 0 of each warp
+  // contributes, else 32x overcount. Per-thread: all contribute.
   float rescale = __expf(m - gmax);
-  red[tid] = l * rescale; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : (l * rescale); __syncthreads();
   for (int off = nt / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] += red[tid + off];
     __syncthreads();
@@ -1755,18 +2109,22 @@ __global__ void apa_selective_sink_kernel(
   float denom = red[0]; __syncthreads();
   float inv = denom > 0.f ? 1.f / denom : 0.f;
 
-  const unsigned FULL = 0xffffffffu;
-  int lane = tid & 31;
-  int warp = tid >> 5;
-  int nwarp = (nt + 31) >> 5;
   __shared__ float osh[DMAX];
   __shared__ float wpart[4][DMAX];
-  for (int d = 0; d < VD; ++d) {
-    float val = acc[d] * rescale;
+  if constexpr (WCOOP) {
     #pragma unroll
-    for (int off = 16; off > 0; off >>= 1)
-      val += __shfl_down_sync(FULL, val, off);
-    if (lane == 0) wpart[warp][d] = val;
+    for (int dl = 0; dl < ACCN; ++dl) {
+      int d = lane + dl * 32;
+      if (d < VD) wpart[warp][d] = acc[dl] * rescale;
+    }
+  } else {
+    for (int d = 0; d < VD; ++d) {
+      float val = acc[d] * rescale;
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        val += __shfl_down_sync(FULL, val, off);
+      if (lane == 0) wpart[warp][d] = val;
+    }
   }
   __syncthreads();
   for (int d = tid; d < VD; d += nt) {
@@ -1826,19 +2184,27 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
   NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD},
               q.dtype, q.device);
   if (rows > 0) {
+    // WCOOP per the A5 dispatch rule (apa_selective_decode_shaped comment
+    // block): per-thread at DMAX==64 decode shapes, warp-cooperative else.
     DISPATCH_FLOAT(q.dtype, T, {
-      auto launch = [&](auto dmax_tag) {
+      auto launch = [&](auto dmax_tag, auto wcoop_tag) {
         constexpr int DMAX = decltype(dmax_tag)::value;
-        apa_selective_sink_kernel<T, DMAX><<<rows, threads>>>(
+        constexpr bool WCOOP = decltype(wcoop_tag)::value;
+        apa_selective_sink_kernel<T, DMAX, WCOOP><<<rows, threads>>>(
             static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
             static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
             static_cast<T*>(sinks.data_ptr()), static_cast<T*>(out.data_ptr()),
             B, H, L, S, D, VD, scale, zthr, is_causal ? 1 : 0, KVH, group);
       };
-      if (cap <= 64)        launch(std::integral_constant<int, 64>{});
-      else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
-      else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
-      else                  launch(std::integral_constant<int, 512>{});
+      if (cap <= 64) {
+        if (apa_selective_decode_shaped(rows, L))
+          launch(std::integral_constant<int, 64>{}, std::false_type{});
+        else
+          launch(std::integral_constant<int, 64>{}, std::true_type{});
+      }
+      else if (cap <= 128)  launch(std::integral_constant<int, 128>{}, std::true_type{});
+      else if (cap <= 256)  launch(std::integral_constant<int, 256>{}, std::true_type{});
+      else                  launch(std::integral_constant<int, 512>{}, std::true_type{});
     });
     cuda_check_last("apa_selective_sink");
   }
@@ -1861,7 +2227,7 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
 // every key's softmax weight exactly without storing the L x L matrix.
 // ============================================================================
 
-template <typename T, int DMAX>
+template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_fwd_train_kernel(
     const T* q, const T* k, const T* kq, const T* v, T* out,
     float* lse_out, float* thr_out,
@@ -1875,6 +2241,8 @@ __global__ void apa_selective_fwd_train_kernel(
   int kv_h = h / group;
   int tid = threadIdx.x;
   int nt = blockDim.x;
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31, warp = tid >> 5, nwarp = nt >> 5;
 
   const T* qrow = q + (int64_t)row * D;
   int64_t kvbh = (int64_t)b * KVH + kv_h;
@@ -1890,18 +2258,36 @@ __global__ void apa_selective_fwd_train_kernel(
   __shared__ float red[256];
 
   // Pass 1: |bulk| stats -> z-score threshold (identical to inference).
+  // A5 dual-path (surgical port from apa_selective_kernel — same design,
+  // see that kernel's DISPATCH comment; backward is untouched, out of scope
+  // per the addendum).
   float sum = 0.f, sumsq = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float dot = 0.f;
-    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
-    float a = fabsf(dot * scale);
-    sum += a; sumsq += a * a;
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) dot += __shfl_down_sync(FULL, dot, off);
+      dot = __shfl_sync(FULL, dot, 0);
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float dot = 0.f;
+      for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+      float a = fabsf(dot * scale);
+      sum += a; sumsq += a * a;
+    }
   }
-  red[tid] = sum; __syncthreads();
+  // WCOOP: per-warp totals duplicated across the warp's 32 lanes — only
+  // lane 0 contributes (else 32x overcount). Per-thread: all contribute.
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sum; __syncthreads();
   for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
   float total = red[0]; __syncthreads();
-  red[tid] = sumsq; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq; __syncthreads();
   for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
   float total_sq = red[0]; __syncthreads();
   float cnt = (float)s_max;
@@ -1911,47 +2297,94 @@ __global__ void apa_selective_fwd_train_kernel(
 
   // Pass 2: online softmax -> output, accumulating m and l (same as inference).
   float m = -1e30f, l = 0.f;
-  float acc[DMAX];
-  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
-  for (int j = tid; j < s_max; j += nt) {
-    const T* kqj = kqbase + (int64_t)j * D;
-    float bulk = 0.f;
-    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
-    bulk *= scale;
-    float score;
-    if (fabsf(bulk) >= thr) {
-      const T* kj = kbase + (int64_t)j * D;
-      float ex = 0.f;
-      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
-      score = ex * scale;
-    } else score = bulk;
-    float m_new = fmaxf(m, score);
-    float corr = __expf(m - m_new);
-    float w = __expf(score - m_new);
-    l = l * corr + w;
-    const T* vj = vbase + (int64_t)j * VD;
-    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
-    m = m_new;
+  constexpr int ACCN = WCOOP ? ((DMAX + 31) / 32) : DMAX;
+  float acc[ACCN];
+  if constexpr (WCOOP) {
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+  } else {
+    for (int d = 0; d < VD; ++d) acc[d] = 0.f;
   }
-  // merge per-thread (m,l,acc)
+  if constexpr (WCOOP) {
+    for (int j = warp; j < s_max; j += nwarp) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = lane; d < D; d += 32) bulk += qsh[d] * ld<T>(kqj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) bulk += __shfl_down_sync(FULL, bulk, off);
+      bulk = __shfl_sync(FULL, bulk, 0);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+        #pragma unroll
+        for (int off = 16; off > 0; off >>= 1) ex += __shfl_down_sync(FULL, ex, off);
+        ex = __shfl_sync(FULL, ex, 0);
+        score = ex * scale;
+      } else score = bulk;
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) {
+        int d = lane + dl * 32;
+        if (d < VD) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+      }
+      m = m_new;
+    }
+  } else {
+    for (int j = tid; j < s_max; j += nt) {
+      const T* kqj = kqbase + (int64_t)j * D;
+      float bulk = 0.f;
+      for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+      bulk *= scale;
+      float score;
+      if (fabsf(bulk) >= thr) {
+        const T* kj = kbase + (int64_t)j * D;
+        float ex = 0.f;
+        for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+        score = ex * scale;
+      } else score = bulk;
+      float m_new = fmaxf(m, score);
+      float corr = __expf(m - m_new);
+      float w = __expf(score - m_new);
+      l = l * corr + w;
+      const T* vj = vbase + (int64_t)j * VD;
+      for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+      m = m_new;
+    }
+  }
+  // merge (m,l,acc); under WCOOP l is a SUM duplicated identically across a
+  // warp's 32 lanes, so only lane 0 contributes (else 32x overcount) — m's
+  // max is duplicate-safe either way.
   red[tid] = m; __syncthreads();
   for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]=fmaxf(red[tid],red[tid+off]); __syncthreads(); }
   float gmax = red[0]; __syncthreads();
   float rescale = __expf(m - gmax);
-  red[tid] = l * rescale; __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : (l * rescale); __syncthreads();
   for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
   float denom = red[0]; __syncthreads();
   float inv = denom > 0.f ? 1.f / denom : 0.f;
 
-  const unsigned FULL = 0xffffffffu;
-  int lane = tid & 31, warp = tid >> 5, nwarp = (nt + 31) >> 5;
   __shared__ float osh[DMAX];
   __shared__ float wpart[4][DMAX];
-  for (int d = 0; d < VD; ++d) {
-    float val = acc[d] * rescale;
+  if constexpr (WCOOP) {
     #pragma unroll
-    for (int off = 16; off > 0; off >>= 1) val += __shfl_down_sync(FULL, val, off);
-    if (lane == 0) wpart[warp][d] = val;
+    for (int dl = 0; dl < ACCN; ++dl) {
+      int d = lane + dl * 32;
+      if (d < VD) wpart[warp][d] = acc[dl] * rescale;
+    }
+  } else {
+    for (int d = 0; d < VD; ++d) {
+      float val = acc[d] * rescale;
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1) val += __shfl_down_sync(FULL, val, off);
+      if (lane == 0) wpart[warp][d] = val;
+    }
   }
   __syncthreads();
   for (int d = tid; d < VD; d += nt) {
@@ -2098,18 +2531,28 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_fwd_train(
   if (rows>0) {
     int cap = D > VD ? D : VD;
     if (cap>TC_APA_MAXD) throw std::runtime_error("apa_selective_train: head_dim exceeds cap");
+    // WCOOP per the A5 dispatch rule (apa_selective_decode_shaped comment
+    // block). Training is virtually always L>1 (whole sequences), so this
+    // resolves to warp-cooperative in practice; the decode-shaped guard is
+    // kept for rule consistency with the inference launchers.
     DISPATCH_FLOAT(q.dtype, T, {
-      auto launch=[&](auto tag){ constexpr int DMAX=decltype(tag)::value;
-        apa_selective_fwd_train_kernel<T,DMAX><<<rows,threads>>>(
+      auto launch=[&](auto tag, auto wtag){ constexpr int DMAX=decltype(tag)::value;
+        constexpr bool WCOOP=decltype(wtag)::value;
+        apa_selective_fwd_train_kernel<T,DMAX,WCOOP><<<rows,threads>>>(
           static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
           static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
           static_cast<T*>(out.data_ptr()),
           static_cast<float*>(lse.data_ptr()),static_cast<float*>(thr.data_ptr()),
           B,H,L,S,D,VD,scale,zthr,is_causal?1:0,KVH,group); };
-      if (cap<=64) launch(std::integral_constant<int,64>{});
-      else if (cap<=128) launch(std::integral_constant<int,128>{});
-      else if (cap<=256) launch(std::integral_constant<int,256>{});
-      else launch(std::integral_constant<int,512>{});
+      if (cap<=64) {
+        if (apa_selective_decode_shaped(rows, L))
+          launch(std::integral_constant<int,64>{}, std::false_type{});
+        else
+          launch(std::integral_constant<int,64>{}, std::true_type{});
+      }
+      else if (cap<=128) launch(std::integral_constant<int,128>{}, std::true_type{});
+      else if (cap<=256) launch(std::integral_constant<int,256>{}, std::true_type{});
+      else launch(std::integral_constant<int,512>{}, std::true_type{});
     });
     cuda_check_last("apa_selective_fwd_train");
   }

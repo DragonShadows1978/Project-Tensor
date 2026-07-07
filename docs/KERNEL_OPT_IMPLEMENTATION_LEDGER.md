@@ -570,6 +570,71 @@ Program branch state: a777ad5 + this ledger entry. Adopted so far:
 A1 (+34.6% long-S attention), A2 (+61.1% mxfp4 GEMV). Reverted: A3, A4,
 Phase 1.1. Parked: Phase 2. Next: A5 (key-load coalescing, Addendum 2).
 
+## 2026-07-07 18:35 EDT
+
+Action: A5 v1 implemented (Sonnet, flat, no-delegation rule held) —
+mixed result, one design iteration ordered before formal gating.
+
+Findings (evidence class: kernel sweep, indicative, idle GPU; ncu
+counters):
+- ncu at decode S=8192 D=256: sectors/request 25.27 → 4.00 (the exact
+  optimum), excessive sectors 87% → 0%, L1TEX stall share 88.1% → 58.4%
+  (residual is A1's occupancy component at that shape, as scoped).
+- Indicative timings: prefill 3–5.5× faster (qwen 236→44ms, gemma
+  495→86ms, gpt_oss 192→60ms at L2048); qwen/gemma decode +58–194%.
+  BUT gpt_oss D=64 decode REGRESSED −14 to −29% (S=32768 split-K
+  −28.8%) — at D=64 decode, warp-cooperation trades away ILP (4 key
+  streams/block vs 128) for coalescing that shape didn't need; agent's
+  analysis matches Phase 0.2's own receipt (that shape was
+  launch/occupancy-bound, 3% SM throughput — A1's problem, not memory).
+- Parity: worst max|Δ| 9.77e-4 f32 across 49 cases (reduction
+  reassociation, inside existing tolerances); dual reference (pre-change
+  kernel outputs + NumPy). Tests 190/191 (same pre-existing failure).
+  Three real bugs found and fixed during the agent's own validation
+  (32× l-overcount, sink quadruple-fold, harness is_causal bug) — all
+  caught before reporting.
+- Registers UP at large DMAX (40→88 at D=512) — no occupancy effect on
+  this GPU/shape per ncu; flagged for other-GPU portability.
+- DESIGN ITERATION ORDERED (not a gate adjustment; gates unchanged):
+  dispatch — per-thread inner loop for D=64 decode-shaped launches,
+  warp-cooperative for all prefill and D≥128. Same agent resumed with
+  context. Formal Addendum-2 gate runs on the dispatched version.
+
+## 2026-07-07 19:15 EDT
+
+Action: A5 v2 (dual-path dispatch) — FORMAL GATE PASS. ADOPTED.
+
+Receipts: v2 sweep kernel_microbench_full_20260707_171850.json vs clean
+tip sweep _133343.json (same method, idle GPU both).
+
+- Gate shapes (decode S∈{2048,8192,32768} + prefill L∈{512,2048}, all
+  geometries): median +64.8%, min −0.5%. Threshold ≥15% median, no gate
+  shape regressing >5%: PASS.
+- Prefill: +69–83% (3.2–5.7×) — gemma global L2048 496→86 ms, gpt_oss
+  197→60 ms, qwen 237→44 ms. Decode: qwen/gemma +30–65%; gpt_oss D=64
+  decode flat (+0.2–0.8% — dispatch routes it to the verbatim per-thread
+  path, parity Δ=0.0 exact).
+- Full-matrix regression scan: one flag (untouched swiglu gemma
+  prefill −5.4%) — re-benched isolated: 4.21 ms, FASTER than baseline;
+  drift, cleared.
+- v2 design: WCOOP template param, both loop variants in-kernel under
+  if constexpr; dispatch = per-thread for DMAX==64 decode-shaped (and
+  split-K stats/split at 64), warp-cooperative for all prefill and
+  DMAX≥128. Zero spills in all 286 instantiations; per-thread D=64
+  registers identical to pre-A5 (40).
+- Recovery note: agent was killed mid-edit by an API server error
+  during v2; resumed from transcript with file-state-first procedure;
+  completed clean.
+
+The APA function is untouched throughout: same bulk-bits scores, same
+z-score statistics, same refine decision, same softmax result (worst
+reassociation delta 9.77e-4 f32, dual-referenced).
+
+Next action:
+- Commit A5. Then Phase 2 re-gate per the registered condition (merge
+  parked branch to a test branch off the A5 tip; interleaved eager vs
+  graph ×5; ≥5% → adopt, else close as negative result).
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that
