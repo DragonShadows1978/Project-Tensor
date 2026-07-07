@@ -2052,6 +2052,31 @@ __global__ void int4_gemm_fused_kernel(
 // group_size % 8 == 0 — guaranteed by the host guard), x staged in dynamic
 // shared memory as fp32, fp32 accumulate (same as the GEMM), warp-shuffle
 // reduce. Memory-bound at packed size: ~30x less traffic than the tile path.
+// Shared-mem bank-conflict pad for int4_gemv_kernel's x staging (A3, addendum
+// 1; ncu measured 47% excessive shared-mem wavefronts / 1,572,864 excessive
+// of 3,342,336 total). Diagnosis (code inspection + ncu source/SASS view,
+// `ncu --page source` on ncu_int4_gemv.ncu-rep shows the reduction loop
+// compiles to two `LDS.128` per lane, not the elementwise reads/reduction):
+// each lane owns a private, disjoint 8-element window of `xs` starting at
+// `k0 = (lane + it*32)*8` elements -> for a fixed access offset the 32 lanes'
+// addresses are `8*sizeof(T)` bytes apart, a stride that is a multiple of
+// the 32-bank/4-byte cycle, so groups of 8 lanes alias into the same 4-bank
+// quartet (8-way conflict per LDS.128, confirmed by hand-simulating the SASS
+// addressing: banks {0-3},{8-11},{16-19},{24-27} each hit by lanes
+// {l,l+8,l+16,l+24}). This is a pure address-pattern conflict, not a
+// dtype-width or reduction issue — int4_dequant/reduction stay unchanged.
+// Fix: insert 1 pad element after every 8-element chunk in the staged copy
+// of x (stride 9 instead of 8, coprime with the 32-bank cycle) so lane
+// windows no longer land in lockstep; this is the reachable floor for a
+// 128-bit-per-lane load into 32-bit banks (32 lanes / 4-bank quartet =
+// 4-way is the best any stride achieves — verified by sweeping stride
+// 9..15, all give 4-way, vs 8-way unpadded), i.e. this halves the
+// conflict factor from 8x to 4x replay per shared load.
+__device__ __forceinline__ int i4_gemv_pad_index(int k) {
+  // k -> padded shared-memory slot: one extra element every 8.
+  return k + (k >> 3);
+}
+
 template <typename T>
 __global__ void int4_gemv_kernel(
     const T* __restrict__ x, const uint8_t* __restrict__ packed,
@@ -2060,9 +2085,12 @@ __global__ void int4_gemv_kernel(
   // x staged in NATIVE dtype: fp32 staging of a bf16/fp16 input added
   // no information and doubled shared memory (K=15360 was 60KB —
   // 1 block/SM; native bf16 is 30KB). Accumulation stays fp32.
+  // Staged with 1 pad element per 8-element chunk (see i4_gemv_pad_index)
+  // to break the 8-lane shared-mem bank aliasing in the read loop below.
   extern __shared__ unsigned char xs_raw[];
   T* xs = reinterpret_cast<T*>(xs_raw);
-  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = x[k];
+  for (int k = threadIdx.x; k < K; k += blockDim.x)
+    xs[i4_gemv_pad_index(k)] = x[k];
   __syncthreads();
   const int warps = blockDim.x >> 5;
   const int wid = threadIdx.x >> 5, lane = threadIdx.x & 31;
@@ -2080,7 +2108,10 @@ __global__ void int4_gemv_kernel(
     int g = k0 / group_size;
     float sc = __half2float(srow[g]);
     float ze = zrow ? __half2float(zrow[g]) : -8.f * sc;  // symmetric-8
-    const T* xk = xs + k0;
+    // k0 is a multiple of 8 (one full pad chunk), so the padded window
+    // base is i4_gemv_pad_index(k0) == k0 + k0/8; the 8 weights inside one
+    // chunk stay contiguous (pad slot sits after them, not between).
+    const T* xk = xs + i4_gemv_pad_index(k0);
     acc += ((float)(v.x & 0x0F) * sc + ze) * ld<T>(xk, 0)
          + ((float)((v.x >> 4) & 0x0F) * sc + ze) * ld<T>(xk, 1)
          + ((float)(v.y & 0x0F) * sc + ze) * ld<T>(xk, 2)
@@ -2125,8 +2156,12 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
     dim3 ggrid((int)((N + warps - 1) / warps));
     bool launched = false;
     DISPATCH_FLOAT(x.dtype, T, {
-      // native-dtype staging: bf16/fp16 x needs K*2 bytes (fp32 K*4)
-      size_t shmem = (size_t)K * sizeof(T);
+      // native-dtype staging: bf16/fp16 x needs K*2 bytes (fp32 K*4).
+      // Padded element count for the bank-conflict fix above: 1 extra
+      // element per 8-wide chunk (K % 8 == 0 is guaranteed by the guard,
+      // so this divides evenly) -> K + K/8 elements, not K.
+      size_t padded_elems = (size_t)K + (size_t)K / 8;
+      size_t shmem = padded_elems * sizeof(T);
       if (shmem <= 96 * 1024) {
         if (shmem > 48 * 1024) {
           cudaFuncSetAttribute(int4_gemv_kernel<T>,
@@ -2416,7 +2451,43 @@ NDArray intn_linear_fused(const NDArray& x, const NDArray& packed,
 //   blocks [N, G, 16] uint8  -> 16 bytes = 32 FP4 values per K-group
 //   scales [N, G] uint8      -> E8M0 exponent, scale = 2^(scale - 127)
 // Dequant layout is conceptually W_kn [K, N], but this op never materializes it.
+// Branchless E2M1 decode. nibble = sign(1) | exp(2) | mant(1). ncu measured
+// 60.94% branch efficiency (~16k divergent branches/launch) on the 16-way
+// switch this replaces (Project-Tensor kernel-opt A2, addendum 1). Per-lane
+// nibbles differ across a warp, so a switch/table-index compiles to a
+// divergent branch chain; this builds the IEEE-754 fp32 bit pattern directly
+// with integer arithmetic + predicated (branchless) selects instead:
+//   - e2 = (q>>1)&3 is the E2M1 exponent field, m = q&1 the mantissa bit.
+//   - For e2!=0 (normal): value = (1+0.5*m) * 2^(e2-1)
+//     -> fp32 biased exponent = 126+e2, mantissa top bit = m.
+//   - For e2==0, m==1 (subnormal 0.5): equals normal encoding with e2=0
+//     -> fp32 exponent 126+e2 == 126, but mantissa bit must be forced 0
+//     (0.5 = 1.0 x 2^-1, not 1.5 x 2^-1), so mantissa is gated on e2!=0.
+//   - For q&0x7==0 (true zero): exponent field must be 0, gated by nz.
+// `nz`/`enz` are 0/1 ints from boolean predicates (SASS `setp` + select, not
+// a branch) — no per-lane divergent control flow. Verified bit-identical to
+// the old switch for all 16 nibble values (see test_mxfp4_branchless_decode
+// unit test / TC_MXFP4_REFERENCE_DECODE below).
 __device__ __forceinline__ float mxfp4_value(int q) {
+  q &= 0x0F;
+  int sign_bit = (q >> 3) & 1;
+  int e2 = (q >> 1) & 0x3;
+  int m = q & 1;
+  int nz = (q & 0x7) != 0;             // whole magnitude nibble nonzero
+  int enz = e2 != 0;                   // exponent field nonzero
+  unsigned exp_field = (unsigned)((126 + e2) * nz);
+  unsigned mant_field = (unsigned)((m << 22) * enz);
+  unsigned bits = ((unsigned)sign_bit << 31) | (exp_field << 23) | mant_field;
+  float out;
+  memcpy(&out, &bits, sizeof(out));
+  return out;
+}
+
+#ifdef TC_MXFP4_REFERENCE_DECODE
+// Reference implementation kept for the exhaustive parity unit test only
+// (the original 16-way switch, pre-A2). Not compiled into the shipped
+// kernels; enabled only when building the standalone parity-test TU.
+__device__ __forceinline__ float mxfp4_value_reference(int q) {
   switch (q & 0x0F) {
     case 0x0: return 0.0f;
     case 0x1: return 0.5f;
@@ -2436,6 +2507,7 @@ __device__ __forceinline__ float mxfp4_value(int q) {
     default: return -6.0f;
   }
 }
+#endif  // TC_MXFP4_REFERENCE_DECODE
 
 __device__ __forceinline__ float mxfp4_read_weight(
     const uint8_t* __restrict__ blocks, const uint8_t* __restrict__ scales,
@@ -2446,6 +2518,22 @@ __device__ __forceinline__ float mxfp4_read_weight(
   int q = (j & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
   int exp = (int)scales[(int64_t)n * G + g] - 127;
   return ldexpf(mxfp4_value(q), exp);
+}
+
+// Unscaled nibble decode for mxfp4_gemv_kernel: n and g are warp-uniform
+// there (32 lanes stride k by 32, so g=k>>5 is identical across the warp for
+// each loop iteration) — the plain mxfp4_read_weight above would issue the
+// same scales[n*G+g] global read redundantly from all 32 lanes every
+// iteration. Splitting the block-byte fetch (per-lane, genuinely divergent
+// addresses) from the scale fetch (warp-uniform) lets the gemv loop hoist
+// one scale read per group instead of one per element (A2, addendum 1).
+__device__ __forceinline__ float mxfp4_value_at(
+    const uint8_t* __restrict__ blocks, int n, int k, int G) {
+  int g = k >> 5;
+  int j = k & 31;
+  uint8_t byte = blocks[((int64_t)n * G + g) * 16 + (j >> 1)];
+  int q = (j & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+  return mxfp4_value(q);
 }
 
 template <typename T>
@@ -2491,7 +2579,12 @@ __global__ void mxfp4_gemv_kernel(
   if (n >= N) return;
   float acc = 0.f;
   for (int k = lane; k < K; k += 32) {
-    acc += mxfp4_read_weight(blocks, scales, n, k, G) * ld<T>(xs, k);
+    // g = k>>5 is identical across all 32 lanes this iteration (k spans
+    // exactly one group of 32 per iteration) -> one scale read per group,
+    // not one per lane/element.
+    int g = k >> 5;
+    int exp = (int)scales[(int64_t)n * G + g] - 127;
+    acc += ldexpf(mxfp4_value_at(blocks, n, k, G), exp) * ld<T>(xs, k);
   }
   for (int off = 16; off; off >>= 1) {
     acc += __shfl_down_sync(0xffffffffu, acc, off);
