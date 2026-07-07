@@ -3543,6 +3543,89 @@ std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest) {
   return {vals, idxs};
 }
 
+// --------------------------------------------------------- last-axis argmax
+// Phase 1.1 (KERNEL_OPT_IMPLEMENTATION_PLAN.md): decode-loop hygiene. The
+// generic `arg_kernel` above is one-thread-per-output-row with a serial scan
+// over the reduced axis — correct for the general axis-reduce case, but for
+// the decode hot shape (outer=1 row, N~152k vocab) that puts the ENTIRE
+// reduction on a single thread. This kernel is block-per-row instead: each
+// row is grid-stride-loaded across blockDim.x threads, reduced with
+// warp-shuffle (intra-warp) then a small shared-mem stage (inter-warp), so a
+// single-row call still lights up all of kT's warps. Two-stage reduction:
+//   1. each thread scans its strided slice of the row into a running
+//      (best_val, best_idx) with tie-break "lowest index wins" (matches
+//      numpy.argmax, which returns the FIRST occurrence of the max);
+//   2. warp-shuffle butterfly reduces the 32 per-thread pairs to one per
+//      warp, then warp 0 reduces the (kT/32) per-warp pairs from shared mem.
+// Ties are broken consistently at every stage by preferring the lower index
+// on equality, so the reduction tree order never changes the result.
+namespace {
+__device__ __forceinline__ void argmax_pair_reduce(float& val, int64_t& idx,
+                                                    float ov, int64_t oi) {
+  // keep `val,idx` if it already wins; otherwise take `ov,oi`. Lower index
+  // wins ties so the combine is associative/commutative under that rule.
+  if (ov > val || (ov == val && oi < idx)) { val = ov; idx = oi; }
+}
+template <typename T>
+__global__ void argmax_last_axis_kernel(const T* a, int64_t* out, int64_t N) {
+  int64_t row = blockIdx.x;
+  const T* arow = a + row * N;
+
+  float best_val = -3.4e38f;
+  int64_t best_idx = 0;
+  for (int64_t j = threadIdx.x; j < N; j += blockDim.x) {
+    float v = ld<T>(arow, j);
+    argmax_pair_reduce(best_val, best_idx, v, j);
+  }
+
+  // intra-warp butterfly (32 lanes -> 1)
+  const unsigned FULL = 0xffffffffu;
+  for (int off = 16; off > 0; off >>= 1) {
+    float ov = __shfl_down_sync(FULL, best_val, off);
+    int64_t oi = __shfl_down_sync(FULL, best_idx, off);
+    argmax_pair_reduce(best_val, best_idx, ov, oi);
+  }
+
+  // inter-warp: lane 0 of each warp stages to shared mem, warp 0 finishes.
+  __shared__ float sval[32];
+  __shared__ int64_t sidx[32];
+  int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  int nwarp = (blockDim.x + 31) >> 5;
+  if (lane == 0) { sval[warp] = best_val; sidx[warp] = best_idx; }
+  __syncthreads();
+  if (warp == 0) {
+    best_val = (lane < nwarp) ? sval[lane] : -3.4e38f;
+    best_idx = (lane < nwarp) ? sidx[lane] : 0;
+    for (int off = 16; off > 0; off >>= 1) {
+      float ov = __shfl_down_sync(FULL, best_val, off);
+      int64_t oi = __shfl_down_sync(FULL, best_idx, off);
+      if (lane + off < nwarp) argmax_pair_reduce(best_val, best_idx, ov, oi);
+    }
+    if (lane == 0) out[row] = best_idx;
+  }
+}
+}  // namespace
+
+NDArray argmax_last_axis(const NDArray& a) {
+  int nd = a.ndim();
+  if (nd < 1) throw std::runtime_error("argmax_last_axis needs >=1D input");
+  int64_t N = a.shape[nd - 1];
+  if (N <= 0) throw std::runtime_error("argmax_last_axis: empty last axis");
+  int64_t outer = a.numel() / N;
+  Shape os; for (int d = 0; d < nd - 1; ++d) os.push_back(a.shape[d]);
+  if (os.empty()) os.push_back(1);
+  NDArray out(os, DType::Int64, a.device);
+  if (outer > 0) {
+    // block-per-row; kT (256) threads/row grid-stride the vocab-sized axis.
+    DISPATCH_FLOAT(a.dtype, T, {
+      argmax_last_axis_kernel<T><<<(unsigned)outer, kT>>>(
+          static_cast<T*>(a.data_ptr()), static_cast<int64_t*>(out.data_ptr()), N);
+    });
+    cuda_check_last("argmax_last_axis");
+  }
+  return out;
+}
+
 NDArray flip_nd(const NDArray& a, const std::vector<int>& dims) {
   int nd = a.ndim();
   FlipSpec s{}; s.ndim = nd;
