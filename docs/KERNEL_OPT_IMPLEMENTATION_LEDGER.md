@@ -635,6 +635,34 @@ Next action:
   parked branch to a test branch off the A5 tip; interleaved eager vs
   graph ×5; ≥5% → adopt, else close as negative result).
 
+## 2026-07-07 19:50 EDT
+
+Action: Phase 2 re-gate run per registered condition — FAIL. Phase 2
+CLOSED as a negative result at the registered workload.
+
+Receipts: 5 interleaved rounds on the merged re-gate branch (A5 +
+graphs): eager median 57.0, graph median 58.4 = +2.5% (< 5% gate);
+parity PASS. The re-gate premise did not hold: at 48-token short
+context, qwen35 attention runs the BLEND fast path, not apa_selective —
+A5 never engages on this workload's eager arm (its 57.0 median,
+unchanged from pre-A5, is the receipt). The graph win stays bounded at
++2.4–3.3% by the eager attention/embed/lm_head remainder.
+
+Scope of the negative result (hold-the-middle): "graphs did not reach
++5% on the short-context hybrid-qwen35 gate workload" — NOT "graphs are
+worthless." The implementation is correct (parity identical across all
+runs, launches/token −47%) and is preserved on kernel-opt-phase2-parked
+(b7a1c6d) for future workloads (pure-attention models, capturable
+attention, longer sequences). No further re-gates in this program.
+GraftRepository graph-path driver code stays flag-gated inert
+(TC_DECODE_GRAPH default off; requires the parked engine build).
+Re-gate branch deleted; program branch rebuilt at 74e9475.
+
+Next action:
+- Phase 3.1 (O(S²) additive-mask elimination in the blend fast path —
+  the kernel GPT-OSS/qwen actually run at S ≤ 4096; board item 4a).
+  Entry per plan; gate: kernel-level accept at S ≥ 2048.
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that
