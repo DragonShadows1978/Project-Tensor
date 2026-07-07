@@ -1184,6 +1184,405 @@ __global__ void apa_selective_kernel(
   for (int d = tid; d < VD; d += nt) st<T>(orow, d, osh[d] * inv);
 }
 
+// ============================================================================
+// APA SELECTIVE — SPLIT-K DECODE PATH (kernel-opt Addendum 1, workstream A1).
+//
+// Problem (ncu receipt, Phase 0.2): apa_selective_kernel launches one block
+// per (b,h,query-row) = B*H*L blocks. At decode L=1, that is only B*H blocks
+// (16 on a real shape) against 56 SMs -> 8.33% achieved occupancy, "0.0 full
+// waves" — most of the chip sits idle while a handful of blocks stride over
+// a long S alone. Prefill (L large) already fills the grid; this path is
+// decode-only by construction (see the dispatch heuristic below).
+//
+// Fix: flash-decoding-style split-K. The APA invariant (docs/
+// KERNEL_OPT_PLAN_ADDENDUM_1.md) requires the SAME threshold as the existing
+// kernel — derived from full-key-range bulk-score statistics — and the SAME
+// per-key bulk-vs-refine decision and softmax math. Splitting the key range
+// across blocks would make each block see only a slice of the keys, which
+// cannot reproduce a global mean/var without a cross-block reduction. So the
+// threshold is computed in an separate, dedicated stage over the FULL key
+// range (mirroring apa_selective_kernel's pass 1 exactly, same recompute-not-
+// cache structure as the fused kernel), and only pass 2 (already a pure
+// per-key function of the precomputed threshold) is split across blocks:
+//
+//   [[stats kernel]]  1 block/row, all keys -> thr[row]   (== fused pass 1)
+//   [[split kernel]]  P blocks/row, keys strided within a partition -> one
+//                     online-softmax partial (m, l, acc[VD]) per (row, part)
+//                     (== fused pass 2, restricted to the partition's keys)
+//   [[merge kernel]]  1 block/row, reduce the P partials with the standard
+//                     online-softmax rescale (exp(m_i - m_max)) -> same
+//                     result as the fused kernel's own end-of-pass-2 merge,
+//                     just one extra reduction level (partitions instead of
+//                     threads-within-a-block).
+//
+// This is semantically identical to today's kernel: same bulk dots, same
+// z-score threshold, same |bulk|>=thr selection, same online-softmax math,
+// just computed by three smaller launches whose combined grid (rows *
+// (1 + P + 1) blocks, dominated by rows*P) fills the SM count instead of
+// leaving it at rows blocks total.
+//
+// Sink handling: apa_selective_sink_kernel folds the learned sink logit into
+// (m, l) via tid==0 AFTER pass 2's per-thread loop but BEFORE the block's own
+// merge reduction (kernels.cu, "GPT-OSS learned sink" comment above). Folding
+// it once per partition in the split kernel would double-count it P times;
+// per the addendum's constraint #4, it must fold exactly once, at the merge
+// stage — so the split-K sink variant folds the sink in apa_selective_
+// merge_sink_kernel, once, after all partitions are combined into (gmax, l).
+//
+// Only the decode grid-underfill case is addressed. Prefill and the training
+// fwd/bwd kernels above/below are untouched (out of scope, addendum #5/#6).
+// ============================================================================
+
+// Number of SMs on the target part (RTX 4070 SUPER / Ada, SM 8.9) this
+// codebase already documents as its baseline (see the TC_APA_MAXD comment
+// above and the ledger's 56-SM ncu receipts). Not read from device props:
+// the dispatch heuristic only needs a conservative order-of-magnitude
+// estimate of "is the grid small relative to the chip", and a compile-time
+// constant keeps the launcher branch-free and avoids a cudaGetDeviceProperties
+// round trip on every call. If this code is ported to a part with a very
+// different SM count, this constant (and the heuristic below) should move to
+// a runtime cudaGetDeviceProperties query — left as a follow-up, not required
+// for the Ada target this plan is scoped to.
+constexpr int TC_APA_SM_COUNT = 56;
+
+// Partition width: each split-K block strides over this many keys at most
+// per partition before the partition boundary — chosen as a multiple of the
+// warp-strided loop width (nt=128, so 128 keys/thread-iteration) so the
+// per-partition key count divides evenly into full strided passes with no
+// short final iteration doing wasted work across most threads.
+constexpr int TC_APA_SPLITK_PART_KEYS = 128 * 16;  // 2048 keys/partition
+
+// apa_selective_stats_kernel: identical arithmetic to apa_selective_kernel's
+// pass 1 (bulk dot over ALL keys in [0, s_max) -> mean/var of |bulk| -> z-
+// score threshold). One block per (b,h,query-row); writes thr[row] to a
+// small workspace instead of continuing on to pass 2 in the same block. This
+// is the "global stats over the full key range" stage the addendum requires.
+template <typename T, int DMAX>
+__global__ void apa_selective_stats_kernel(
+    const T* q, const T* kq, float* thr_out,
+    int B, int H, int L, int S, int D, float scale, float zthr,
+    int is_causal, int KVH, int group) {
+  int row = blockIdx.x;
+  int i = row % L;
+  int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+
+  const T* qrow = q + (int64_t)row * D;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kqbase = kq + kvbh * S * D;
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
+  __shared__ float red[256];
+
+  float sum = 0.f, sumsq = 0.f;
+  for (int j = tid; j < s_max; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float dot = 0.f;
+    for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+    float a = fabsf(dot * scale);
+    sum += a; sumsq += a * a;
+  }
+  red[tid] = sum; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float total = red[0]; __syncthreads();
+  red[tid] = sumsq; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float total_sq = red[0]; __syncthreads();
+
+  if (tid == 0) {
+    float cnt = (float)s_max;
+    float mean = total / cnt;
+    float var = total_sq / cnt - mean * mean;
+    thr_out[row] = mean + zthr * sqrtf(fmaxf(var, 0.f));
+  }
+}
+
+// apa_selective_split_kernel: pass 2 restricted to one partition of keys.
+// Identical per-key logic to apa_selective_kernel's pass 2 (bulk dot; if
+// |bulk*scale| >= thr, replace with the exact dot; online-softmax update),
+// using the PRECOMPUTED thr[row] from the stats kernel above (same value the
+// fused kernel would have derived itself). Grid is (rows, num_parts): block
+// (row, p) covers keys [p*part_keys, min(s_max, (p+1)*part_keys)) with the
+// same nt-strided inner loop as the fused kernel, just bounded to the
+// partition's slice. Writes one online-softmax partial (m, l, acc[VD]) to
+// workspace row (row*num_parts + p) — merged by apa_selective_merge_kernel.
+template <typename T, int DMAX>
+__global__ void apa_selective_split_kernel(
+    const T* q, const T* k, const T* kq, const T* v, const float* thr_in,
+    float* part_m, float* part_l, float* part_acc,
+    int B, int H, int L, int S, int D, int VD, float scale,
+    int is_causal, int KVH, int group, int num_parts, int part_keys) {
+  int row = blockIdx.x;
+  int part = blockIdx.y;
+  int i = row % L;
+  int bh = row / L;
+  int b = bh / H;
+  int h = bh % H;
+  int kv_h = h / group;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+
+  int s_max = is_causal ? ((S - L) + i + 1) : S;
+  int j0 = part * part_keys;
+  int j1 = j0 + part_keys;
+  if (j1 > s_max) j1 = s_max;
+
+  int64_t part_row = (int64_t)row * num_parts + part;
+  float* pacc = part_acc + part_row * VD;
+  if (j0 >= j1) {
+    // Empty partition (s_max shorter than the full split-K grid at small
+    // causal prefixes): contribute the online-softmax identity element so
+    // the merge kernel's reduction is a no-op for this partition, exactly
+    // as if this partition's stride of the fused kernel's loop had done
+    // zero iterations.
+    if (tid == 0) { part_m[part_row] = -1e30f; part_l[part_row] = 0.f; }
+    for (int d = tid; d < VD; d += nt) pacc[d] = 0.f;
+    return;
+  }
+
+  const T* qrow = q + (int64_t)row * D;
+  int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const T* kbase = k + kvbh * S * D;
+  const T* kqbase = kq + kvbh * S * D;
+  const T* vbase = v + kvbh * S * VD;
+  float thr = thr_in[row];
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  float m = -1e30f, l = 0.f;
+  float acc[DMAX];
+  for (int d = 0; d < VD; ++d) acc[d] = 0.f;
+
+  for (int j = j0 + tid; j < j1; j += nt) {
+    const T* kqj = kqbase + (int64_t)j * D;
+    float bulk = 0.f;
+    for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+    bulk *= scale;
+    float score;
+    if (fabsf(bulk) >= thr) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+      score = ex * scale;
+    } else {
+      score = bulk;
+    }
+    float m_new = fmaxf(m, score);
+    float corr = __expf(m - m_new);
+    float w = __expf(score - m_new);
+    l = l * corr + w;
+    const T* vj = vbase + (int64_t)j * VD;
+    for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+    m = m_new;
+  }
+
+  // Merge this block's threads into one (m, l, acc) partial for the
+  // partition — same warp-shuffle + shared-mem-partial reduction the fused
+  // kernel uses at the end of its pass 2 (kernels.cu apa_selective_kernel),
+  // just scoped to this partition's keys instead of the whole row.
+  __shared__ float red[256];
+  red[tid] = m; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
+  float pmax = red[0]; __syncthreads();
+
+  float rescale = __expf(m - pmax);
+  red[tid] = l * rescale; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float pl = red[0]; __syncthreads();
+
+  const unsigned FULL = 0xffffffffu;
+  int lane = tid & 31;
+  int warp = tid >> 5;
+  int nwarp = (nt + 31) >> 5;
+  __shared__ float wpart[4][DMAX];
+  for (int d = 0; d < VD; ++d) {
+    float val = acc[d] * rescale;
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1)
+      val += __shfl_down_sync(FULL, val, off);
+    if (lane == 0) wpart[warp][d] = val;
+  }
+  __syncthreads();
+  for (int d = tid; d < VD; d += nt) {
+    float s = 0.f;
+    for (int w = 0; w < nwarp; ++w) s += wpart[w][d];
+    pacc[d] = s;
+  }
+  if (tid == 0) { part_m[part_row] = pmax; part_l[part_row] = pl; }
+}
+
+// apa_selective_merge_kernel: one block per row, reduces num_parts partials
+// with the standard online-softmax merge (rescale by exp(m_i - m_max), sum).
+// Optional sink fold-in happens HERE, exactly once, after the partitions are
+// combined — per the addendum's constraint that in split-K the sink logit
+// must fold exactly once at the merge stage (mirrors apa_selective_sink_
+// kernel's tid==0 sink fold, which happens once per row there too).
+template <typename T, int VDMAX>
+__global__ void apa_selective_merge_kernel(
+    const float* part_m, const float* part_l, const float* part_acc,
+    const T* sinks, T* out, int H, int VD, int num_parts, int use_sink) {
+  int row = blockIdx.x;
+  int tid = threadIdx.x;
+  int nt = blockDim.x;
+  int h = row % H;   // row is flat (b,h,i); h = (row / L) % H in general, but
+                      // since L==1 on the split-K decode path (dispatch-gated
+                      // below), row % H == h exactly (b*H + h, i always 0).
+
+  const float* pm = part_m + (int64_t)row * num_parts;
+  const float* pl = part_l + (int64_t)row * num_parts;
+  const float* pacc = part_acc + (int64_t)row * num_parts * VD;
+
+  __shared__ float red[256];
+  float m = -1e30f;
+  for (int p = tid; p < num_parts; p += nt) m = fmaxf(m, pm[p]);
+  red[tid] = m; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
+  float gmax = red[0]; __syncthreads();
+
+  float lsum = 0.f;
+  for (int p = tid; p < num_parts; p += nt) lsum += pl[p] * __expf(pm[p] - gmax);
+  red[tid] = lsum; __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+  float l = red[0]; __syncthreads();
+
+  __shared__ float osh[VDMAX];
+  for (int d = tid; d < VD; d += nt) {
+    float s = 0.f;
+    for (int p = 0; p < num_parts; ++p) s += pacc[(int64_t)p * VD + d] * __expf(pm[p] - gmax);
+    osh[d] = s;
+  }
+  __syncthreads();
+
+  if (use_sink) {
+    // Exactly the fused apa_selective_sink_kernel's fold: sink logit joins
+    // (m, l) via the same online-softmax update, contributing zero value
+    // mass. Done once here (post-merge), not per-partition, so a sink never
+    // gets counted num_parts times.
+    if (tid == 0) {
+      float sink = ld<T>(sinks, h);
+      float m_new = fmaxf(gmax, sink);
+      float corr = __expf(gmax - m_new);
+      l = l * corr + __expf(sink - m_new);
+      red[0] = corr;   // stash the rescale for the value-accumulator below
+      red[1] = l;
+      red[2] = m_new;
+    }
+    __syncthreads();
+    float corr = red[0];
+    l = red[1];
+    for (int d = tid; d < VD; d += nt) osh[d] *= corr;
+    __syncthreads();
+  }
+
+  float inv = l > 0.f ? 1.f / l : 0.f;
+  T* orow = out + (int64_t)row * VD;
+  for (int d = tid; d < VD; d += nt) st<T>(orow, d, osh[d] * inv);
+}
+
+// Dispatch heuristic (addendum #5): split-K only helps when the fused
+// kernel's one-block-per-row grid underfills the SM count AND there is
+// enough key-range work per row to make three launches + a cross-block
+// reduction worth it. Conditions measured directly, not guessed:
+//   - L == 1: decode-only, by construction (addendum #5: "prefill and
+//     training paths untouched"). This also keeps the merge kernel's sink
+//     fold-in simple — it recovers the query head from `row % H`, which is
+//     only valid when L==1 (row == b*H + h exactly, no i term to fold in);
+//     generalizing to L>1 would need row's i/h decomposition threaded
+//     through the workspace layout too, which prefill does not need.
+//   - rows < 2*TC_APA_SM_COUNT: the underfill regime the ncu receipt found
+//     (16 blocks on 56 SMs, "0.0 full waves" — even 2x undersubscribed is
+//     comfortably inside the reported problem). At L=1, rows==B*H; real B*H
+//     (16..1024+) rarely exceeds 112 in single-request decode, so this is
+//     effectively redundant with L==1 but kept explicit for batched decode.
+//   - S >= TC_APA_SPLITK_PART_KEYS * 2: below this, a single partition would
+//     already cover most/all of s_max, so splitting into >=2 real partitions
+//     buys nothing over the fused kernel's own strided loop (128 threads
+//     already stride the same keys inside one block) while paying 2 extra
+//     kernel launches and a workspace round-trip. Only bother once there are
+//     at least 2 full partitions of headroom.
+// Prefill (L>1, rows large) and training fwd/bwd (separate kernels
+// entirely, untouched) fall outside this heuristic by construction.
+inline bool apa_selective_use_splitk(int rows, int S, int L) {
+  return L == 1 && rows < 2 * TC_APA_SM_COUNT && S >= 2 * TC_APA_SPLITK_PART_KEYS;
+}
+
+// Env override for testing both paths regardless of shape (validation only —
+// production dispatch uses apa_selective_use_splitk above). 0=auto (default),
+// 1=force fused, 2=force split-K.
+inline int apa_selective_path_override() {
+  const char* v = std::getenv("TC_APA_SELECTIVE_PATH");
+  if (!v) return 0;
+  if (v[0] == '1') return 1;
+  if (v[0] == '2') return 2;
+  return 0;
+}
+
+// Shared split-K launcher used by both the plain and sink entry points.
+// use_sink selects whether the merge kernel folds a learned sink logit.
+template <typename T>
+static NDArray apa_selective_splitk_dispatch(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    const NDArray* sinks, float scale, float zthr, bool is_causal,
+    int B, int H, int L, int S, int D, int VD, int KVH, int group, int cap) {
+  int rows = B * H * L;
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD}, q.dtype, q.device);
+  if (rows == 0) return out;
+
+  int part_keys = TC_APA_SPLITK_PART_KEYS;
+  int num_parts = (S + part_keys - 1) / part_keys;
+  if (num_parts < 1) num_parts = 1;
+
+  // Workspace: per-(row,part) online-softmax partials. m/l are one float
+  // each; acc is VD floats. Always fp32 regardless of q/k/v dtype — the
+  // fused kernel's own accumulators are fp32 too (ld<T> upconverts on read).
+  NDArray thr_ws({(int64_t)rows}, DType::Float32, q.device);
+  NDArray part_m({(int64_t)rows * num_parts}, DType::Float32, q.device);
+  NDArray part_l({(int64_t)rows * num_parts}, DType::Float32, q.device);
+  NDArray part_acc({(int64_t)rows * num_parts * VD}, DType::Float32, q.device);
+
+  int threads = 128;
+  auto launch = [&](auto dmax_tag) {
+    constexpr int DMAX = decltype(dmax_tag)::value;
+    apa_selective_stats_kernel<T, DMAX><<<rows, threads>>>(
+        static_cast<T*>(q.data_ptr()), static_cast<T*>(kq.data_ptr()),
+        static_cast<float*>(thr_ws.data_ptr()), B, H, L, S, D, scale, zthr,
+        is_causal ? 1 : 0, KVH, group);
+    cuda_check_last("apa_selective_splitk_stats");
+
+    dim3 grid2((unsigned)rows, (unsigned)num_parts);
+    apa_selective_split_kernel<T, DMAX><<<grid2, threads>>>(
+        static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+        static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+        static_cast<float*>(thr_ws.data_ptr()),
+        static_cast<float*>(part_m.data_ptr()), static_cast<float*>(part_l.data_ptr()),
+        static_cast<float*>(part_acc.data_ptr()), B, H, L, S, D, VD, scale,
+        is_causal ? 1 : 0, KVH, group, num_parts, part_keys);
+    cuda_check_last("apa_selective_splitk_split");
+
+    apa_selective_merge_kernel<T, DMAX><<<rows, threads>>>(
+        static_cast<float*>(part_m.data_ptr()), static_cast<float*>(part_l.data_ptr()),
+        static_cast<float*>(part_acc.data_ptr()),
+        sinks ? static_cast<T*>(sinks->data_ptr()) : nullptr,
+        static_cast<T*>(out.data_ptr()), H, VD, num_parts, sinks ? 1 : 0);
+    cuda_check_last("apa_selective_splitk_merge");
+  };
+  if (cap <= 64)        launch(std::integral_constant<int, 64>{});
+  else if (cap <= 128)  launch(std::integral_constant<int, 128>{});
+  else if (cap <= 256)  launch(std::integral_constant<int, 256>{});
+  else                  launch(std::integral_constant<int, 512>{});
+  return out;
+}
+
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 const NDArray& kq, const NDArray& v,
                                 float scale, float zthr, bool is_causal) {
@@ -1195,18 +1594,41 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
   int group = (KVH > 0) ? (H / KVH) : 1;
   if (k.shape[3] != D || kq.shape[3] != D) throw std::runtime_error("apa_selective: q/k/kq dim mismatch");
   if (v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S) throw std::runtime_error("apa_selective: v shape mismatch");
-  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD}, q.dtype, q.device);
   int rows = B * H * L;
   int threads = 128;
+  int cap = D > VD ? D : VD;
+  if (rows > 0 && cap > TC_APA_MAXD) {
+    throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD "
+                             "(512); raise the cap + add a dispatch arm");
+  }
+  // Dispatch: the split-K path (A1, addendum 1) only helps the decode grid-
+  // underfill case (small rows, long S) that the fused one-block-per-row
+  // kernel leaves idle on most SMs; the fused kernel stays default for
+  // well-filled grids (prefill, training — unaffected) per addendum #5.
+  // TC_APA_SELECTIVE_PATH env override (0=auto,1=fused,2=split-K) exists so
+  // tests can force either path independent of shape.
+  int override_path = apa_selective_path_override();
+  if (override_path == 2 && L != 1) {
+    throw std::runtime_error("apa_selective: TC_APA_SELECTIVE_PATH=2 (force "
+                             "split-K) requires L==1 (decode-shape only)");
+  }
+  bool use_splitk = (override_path == 2 && L == 1) ||
+      (override_path == 0 && rows > 0 && apa_selective_use_splitk(rows, S, L));
+  if (use_splitk && rows > 0) {
+    NDArray out;
+    DISPATCH_FLOAT(q.dtype, T, {
+      out = apa_selective_splitk_dispatch<T>(
+          q, k, kq, v, nullptr, scale, zthr, is_causal,
+          B, H, L, S, D, VD, KVH, group, cap);
+    });
+    cuda_check_last("apa_selective_splitk");
+    return out;
+  }
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD}, q.dtype, q.device);
   if (rows > 0) {
     // Dispatch the smallest compile-time DMAX >= D so acc[] stays register/L1
     // resident. Real head_dims are 64 (TinyLlama) and 128 (Mistral/Qwen/OLMoE);
     // 256 is the safety fallback (== the old behaviour) for anything larger.
-    int cap = D > VD ? D : VD;
-    if (cap > TC_APA_MAXD) {
-      throw std::runtime_error("apa_selective: head_dim exceeds TC_APA_MAXD "
-                               "(512); raise the cap + add a dispatch arm");
-    }
     DISPATCH_FLOAT(q.dtype, T, {
       auto launch = [&](auto dmax_tag) {
         constexpr int DMAX = decltype(dmax_tag)::value;
@@ -1375,15 +1797,35 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
     throw std::runtime_error("apa_selective_sink: sinks shape mismatch");
   if (sinks.dtype != q.dtype)
     throw std::runtime_error("apa_selective_sink: sinks dtype mismatch");
-  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD},
-              q.dtype, q.device);
   int rows = B * H * L;
   int threads = 128;
+  int cap = D > VD ? D : VD;
+  if (rows > 0 && cap > TC_APA_MAXD) {
+    throw std::runtime_error("apa_selective_sink: head_dim exceeds TC_APA_MAXD");
+  }
+  // Dispatch: same split-K heuristic as apa_selective_attention (see its
+  // comment) — decode-only, small rows, long S. The merge kernel folds the
+  // sink logit exactly once, post-merge (addendum #4), via use_sink=1.
+  int override_path = apa_selective_path_override();
+  if (override_path == 2 && L != 1) {
+    throw std::runtime_error("apa_selective_sink: TC_APA_SELECTIVE_PATH=2 "
+                             "(force split-K) requires L==1 (decode-shape only)");
+  }
+  bool use_splitk = (override_path == 2 && L == 1) ||
+      (override_path == 0 && rows > 0 && apa_selective_use_splitk(rows, S, L));
+  if (use_splitk && rows > 0) {
+    NDArray out;
+    DISPATCH_FLOAT(q.dtype, T, {
+      out = apa_selective_splitk_dispatch<T>(
+          q, k, kq, v, &sinks, scale, zthr, is_causal,
+          B, H, L, S, D, VD, KVH, group, cap);
+    });
+    cuda_check_last("apa_selective_sink_splitk");
+    return out;
+  }
+  NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD},
+              q.dtype, q.device);
   if (rows > 0) {
-    int cap = D > VD ? D : VD;
-    if (cap > TC_APA_MAXD) {
-      throw std::runtime_error("apa_selective_sink: head_dim exceeds TC_APA_MAXD");
-    }
     DISPATCH_FLOAT(q.dtype, T, {
       auto launch = [&](auto dmax_tag) {
         constexpr int DMAX = decltype(dmax_tag)::value;
@@ -1402,6 +1844,7 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
   }
   return out;
 }
+
 
 // ============================================================================
 // APA SELECTIVE — TRAINING forward + backward (O(L) memory, the graft-native
