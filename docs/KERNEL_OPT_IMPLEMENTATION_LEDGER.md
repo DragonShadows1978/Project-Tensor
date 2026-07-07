@@ -284,3 +284,160 @@ Repo state:
 Next action:
 - Sonnet agents: A2+A3 (main tree), Phase 1.1 argmax (isolated worktree).
   A1 after A2/A3 land.
+
+## 2026-07-07 12:40 EDT
+
+Action: A2+A3 implemented (Sonnet), lead-verified, committed d917d35.
+
+Findings (evidence class: unit test + code inspection; timing NOT gated):
+- A2: branchless E2M1 decode, 16/16 bit-identical to the reference switch
+  (exhaustive on-device test); reference kept under
+  TC_MXFP4_REFERENCE_DECODE; gemm gets it free via shared helper (tile
+  loads untouched — A4 still open). Warp-uniform scale read hoisted.
+- A3: diagnosis from ncu aggregate + SASS reconstruction — lanes' private
+  8-element windows collide 8-way on LDS.128; fix = 1-per-8 padding
+  (stride 9), reaching the 4-way floor inherent to 128-bit lane loads.
+  Shmem now K+K/8 (guard: K%8==0 launch condition — coupled, noted).
+- Parity: suite 90 pass / 1 pre-existing fail (verified pre-existing via
+  stash-rebuild-retest); int4 GEMV rel err 2.41e-07. ptxas: int4 regs
+  unchanged, mxfp4 21→23 (not occupancy-limiting).
+- Contended timing capture was uniformly ~90% off across UNTOUCHED kernels
+  too — conclusively contention noise; discarded, not evidence. Kernel
+  accept gates for A2/A3 remain OPEN pending idle GPU.
+
+Next action:
+- A1 (apa_selective split-K) agent on main tree; argmax worktree agent
+  still running.
+
+## 2026-07-07 13:20 EDT
+
+Action: Phase 1.1 device argmax implemented (Sonnet, worktree), committed
+d7f6d4a on branch `kernel-opt-argmax`. Merge into program branch DEFERRED
+until A1 lands (A1 agent holds uncommitted kernels.cu state in main tree).
+
+Findings (evidence class: unit test):
+- `argmax_last_axis`: block-per-row, 256 threads, grid-stride +
+  two-stage shuffle reduction, numpy first-occurrence tie-break enforced
+  at every combine. 69/69 unit cases incl. decode shape (1, 152064).
+- Token-parity receipt: 24-token greedy generation OLD (host argmax) vs
+  NEW (device) — sequences IDENTICAL, decoded text SHA256-identical.
+  Valid under contention.
+- Suite: 159 pass, same single pre-existing failure (stash-verified).
+- Indicative non-gating: isolated argmax 218.9µs vs 3325µs host path
+  (~15×) on contended GPU; e2e delta unresolved under contention.
+- GraftRepository `qwen35_generate.py` edited in place (uncommitted),
+  guarded by hasattr fallback — inert until the new extension installs.
+- Registered follow-up (not in any plan; execution detail): 4 other
+  GraftRepository call sites share the host-argmax pattern; the two
+  server scripts entangle host-side sampling — candidates for a later
+  device-sampling pass, listed in the agent report, not edited.
+
+Next action:
+- Await A1; then merge kernel-opt-argmax, rebuild+install extension,
+  re-run parity, commit.
+
+## 2026-07-07 13:05 EDT
+
+Action: Tip gating batch ran (sweep 146/146 idle-GPU, e2e ×5, nsys, ncu).
+GATE VERDICTS WITHHELD — comparison self-invalidated by the lead.
+
+Findings:
+- Discovered asymmetry: the 10:14 baseline sweep ran during the lead's own
+  0.3/0.4 agents' nvcc compiles (CPU saturation). Signature in the A/B:
+  untouched kernels (int4_two_stage cuBLAS path, intn GEMVs, fused
+  apa_selective at S=512 below the split-K heuristic) show +6–63% phantom
+  gains; two opposite-direction outliers (causal_softmax gemma sliding
+  prefill −52%). Sub-ms kernels are dispatch-overhead sensitive; CPU
+  contention during the baseline inflated it. Timing A/B is NOT gate-grade
+  in either direction. A failure is still a result: registered here.
+- Contention-immune receipts that DO stand (ncu counter ratios):
+  mxfp4_gemv branch efficiency 60.94% → 75.03% (A2 corroborated);
+  int4_gemv branch efficiency 100% unchanged. apa split-K ncu probe
+  errored (rc=2) — retry in clean session.
+- Directional (not gating): apa_selective decode S=8192 +30–50%,
+  S=32768 +34.7%, consistent with the split-K design prediction and the
+  A1 agent's independent indicative numbers (1.33–1.83×).
+- Tip e2e (56.5 median) vs baseline e2e (57.6 median): both batches had
+  possible CPU contention from concurrent builds — same invalidation.
+
+Next action:
+- After A4 lands: ONE clean measurement session, nothing else running —
+  baseline sweep + e2e (pt-baseline worktree, extension prebuilt), tip
+  sweep + e2e, ncu apa-split retry, nsys launch-share for the Phase 2
+  entry gate. All gates decided from that session only.
+
+## 2026-07-07 14:05 EDT
+
+Action: A4 CLOSED — NEGATIVE RESULT (gate failed, reverted unmerged).
+
+Findings (evidence class: kernel sweep, clean window — GPU idle verified
+before every timed run):
+- Design: group-half staging (uint64 vectorized block-half + scale byte
+  per tile column into shared, 16× fewer transactions, 16× fewer scale
+  reads). Parity bit-identical (0.0 diff all dtypes/shapes); regs
+  unchanged; 0 spills; occupancy unchanged.
+- Timing: ALL shapes regressed +1.7–2.2% (gate_up/down × L512/L2048).
+  The 16×16 tile's FMA loop dominates kernel time; weight-load
+  transaction count was not the binding bottleneck. Staging overhead >
+  redundancy saved. Full coalescing across cols is structurally
+  impossible in the (col,g)-major layout without a weight-layout change
+  (out of scope — layout changes alter the packed format contract).
+- Disposition: change discarded (lived only in the A4 worktree; program
+  branch never carried it). A failure is still a result.
+- Note: agent initially saw phantom parity failure from Python salted
+  hash() seeding in its own test script — root-caused as test bug, not
+  kernel defect; receipts in agent transcript.
+
+Next action:
+- Clean measurement session running (both sweeps, both e2e batches, both
+  nsys, ncu apa-split retry). All gates decided from it.
+
+## 2026-07-07 14:40 EDT
+
+Action: CORRECTION to the registered source triage (David's challenge:
+"look THROUGH the json from the web proxy"). Lead inspected the raw
+captures directly. The plan's Tier C label ("templated/fabricated") was
+WRONG as written; this entry is the correcting record (plan itself is
+immutable — corrections live here).
+
+Findings (evidence class: code inspection of raw captures):
+- artifacts/webproxy_json/ = 922 real proxy calls (815 WebSearch, 96
+  WebFetch, 11 PaperFetch) across 56 subagent dirs, with full provenance
+  (URLs, backends, cache keys, sha256). This is real research material,
+  not hallucination.
+- The failure mode is in the SYNTHESIS layer (Haiku subagent reports),
+  not the source layer. Traced examples: report's
+  `tensorrt_llm.functional.mlp` ← capture's REAL
+  `tensorrt_llm.functional.gpt_attention` (garbled symbol); "Zhou,
+  Greenfeld & Elhoushi (2016)" ← merge-mangle of real quantization
+  authors (Zhou/DoReFa 2016, Elhoushi/DeepShift); "6-16x" ←
+  synthesis-computed composite, not a fetched number.
+- The reader agent's "fabricated" verdict was itself an over-claim, and
+  the lead relayed it at full confidence without opening the captures —
+  a triage-of-the-triage failure. Corrected operational rule: Tier C =
+  UNRELIABLE SYNTHESIS OVER REAL SOURCES; load-bearing Tier-C claims are
+  traced into webproxy_json/ and used at capture provenance, not
+  discarded.
+- "FP8 research never executed" also wrong at the source layer: 155
+  captures contain FP8/E4M3 material incl. targeted Ada-FP8 spec
+  queries. Only the analysis scripts died. An FP8-on-Ada assessment can
+  be built from existing captures without new web work if wanted.
+
+Next action:
+- Board + memory corrected to match. Clean session still running; gate
+  verdicts unaffected by this entry (no Tier-C number ever gated
+  anything — that discipline held and stands).
+
+## 2026-07-07 (clarification, David, verbatim-faithful)
+
+APA invariant sharpened by David mid-program: "The concept is that
+Bulk-Bits scores the z-score, and the Second Pass applies Full precision
+to the refine percentile. THAT is the function... if that can be
+optimized that's fine. But changing THAT function moves away from the
+Hypothesis." Reading: the protected object is the FUNCTION (bulk-bits
+scoring → z-score threshold → full precision on the refine percentile),
+not any particular kernel structure; implementation rework for
+effectiveness is explicitly permitted. A1's three-stage structure
+complies (identical bulk dots, threshold, selection, refine; parity
+receipts 0-diff at f32). All future attention workstreams inherit this
+wording.
