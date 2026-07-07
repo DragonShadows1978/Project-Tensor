@@ -211,3 +211,56 @@ Findings (evidence class: kernel sweep):
 Next action:
 - Commit Phase 0.1/0.3/0.4 receipts; launch 0.2 (nsys decode trace +
   targeted ncu: GEMV dynamic-shmem residency, apa_selective at long S).
+
+## 2026-07-07 11:15 EDT
+
+Action: Phase 0.2 complete (Sonnet) — with a registered contamination caveat.
+
+CONTAMINATION CAVEAT: all 0.2 runs shared the GPU with a concurrent Graft
+Translation mission job (`gpt_oss20b_stream_forward_smoke.py`, 100% SM util,
+left running — not ours to kill). Wall-clock-derived numbers (e2e tok/s,
+gap share) are NOT valid registered baselines; ncu per-kernel
+hardware-counter ratios are considered valid (kernel-replay isolation).
+E2E + nsys must be re-run contention-free before gating Phase 1/2.
+
+Receipts: `artifacts/kernel_opt/phase02_trace_receipts.md` (+ nsys-rep,
+sqlite, ncu-rep/txt files, gitignored per repo policy). ncu needed sudo -E
+for counter access.
+
+Findings (evidence class: kernel sweep; ncu ratios trusted, wall-clock not):
+- E2E (contaminated, lower bound): qwen35 decode median 55.1 tok/s, N=5.
+- Launches/token ≈ 2,210 (int4_gemv exactly 201/token); gap/launch share
+  ≈19% (lower-bound estimate). Per-token D2H argmax = 33 sync round-trips
+  per 32-token run — Phase 1.1 target confirmed.
+- int4_gemv (K=4096): 76% achieved occupancy, 5 blocks/SM (dynamic-shmem
+  1-block fear REFUTED), 100% branch efficiency, 71.6% DRAM/peak, but 47%
+  excessive shared-mem wavefronts (bank-conflict signal). NEW, not
+  enumerated in plan Phase 4 items.
+- apa_selective (S=8192 decode): 8.33% achieved occupancy from GRID
+  UNDERFILL — decode launches only B·H·L=16 blocks on 56 SMs ("0.0 full
+  waves"); branch efficiency 99.02% — the 0.3-confirmed divergent refine
+  branch is NOT the measured bottleneck at decode. The high-leverage fix is
+  key-dimension split (flash-decoding-style split-K + reduce), which is NOT
+  among the enumerated 3.4 items. NEW.
+- mxfp4_gemv (K=2880): 60.94% branch efficiency, ~16k divergent branches
+  per launch — the mxfp4 nibble-decode path (16-way `mxfp4_value` switch,
+  flagged "possible" in 0.3) is CONFIRMED divergent in practice. On the
+  GPT-OSS decode path. NEW.
+
+Interpretation: Phase 0 receipts collectively redirect the program. The
+plan's enumerated kernel items (3.4 warp-vote divergence fix, 4.1 int4
+DP4A) now look lower-leverage than three measured, non-enumerated targets:
+apa_selective decode grid underfill, mxfp4_gemv branch divergence,
+int4_gemv shared-mem bank conflicts. Phases 1-2 (hygiene, graphs) remain
+valid as enumerated.
+
+Decision pending (David):
+1. Register a follow-up addendum plan (immutable once committed, own gates)
+   for the three new measured targets, OR fold under a broad reading of
+   Phase 3/4 intent. Lead recommends the addendum — keeps spec-is-law clean.
+2. Scheduling of the contention-free e2e/nsys re-run (needs the Codex
+   mission job finished or paused — coordination call, not ours).
+
+Next action:
+- Await David on both; meanwhile no optimization work starts (Phase 0
+  gate: receipts first, which is now satisfied except the re-run).
