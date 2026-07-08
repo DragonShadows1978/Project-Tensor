@@ -502,6 +502,10 @@ NDArray ew_unary(const NDArray& a, int op) {
   cuda_check_last("ew_unary");
   return out;
 }
+
+// NOTE: a fused SwiGLU kernel (silu(gate)·up, one launch — kernel-opt plan
+// Phase 5) was tried and REVERTED: kernel-level +38-40% but e2e +0.7% < the
+// registered 2% loop gate; KERNEL_OPT_IMPLEMENTATION_LEDGER 2026-07-07.
 NDArray ew_clamp(const NDArray& a, double lo, double hi) {
   NDArray out(a.shape, a.dtype, a.device);
   int64_t n = a.numel();
@@ -4256,6 +4260,8 @@ __global__ void rms_norm_kernel(const XT* x, const float* w, OT* o,
 // sum here accumulates UNROUNDED fp32 expf values in fp64 (eager serially
 // fp32-sums 16-bit-rounded exps) — strictly more accurate, single rounding
 // at the store. One kernel + one alloc, ~3 row passes vs eager's ~6.
+// NOTE: single-pass online softmax (Phase 3.2, incl. shape-dispatched) tried and
+// REVERTED — best +8-11% < 15% gate; KERNEL_OPT_IMPLEMENTATION_LEDGER 2026-07-07.
 namespace {
 template <typename T>
 __global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S) {

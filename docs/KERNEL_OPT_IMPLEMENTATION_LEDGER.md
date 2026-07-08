@@ -700,6 +700,63 @@ Findings:
     share ~27% stands, graphs closed). Final workstream, launched with
     its registered gate (kernel accept AND ≥2% e2e, else revert).
 
+## 2026-07-07 22:10 EDT
+
+Action: Final workstream verdicts — 3.2 and Phase 5 both CLOSED as
+negative results. PROGRAM COMPLETE.
+
+- 3.2 online causal softmax: v1 (blanket) median −4%, prefill −17-20%
+  (compute-bound, 2× expf/element); v2 (shape-dispatched, lead-
+  authorized iteration) clean — no regressions, long-S decode +8-10.6%
+  retained — but below the registered ≥15% kernel accept. REVERTED per
+  the same standard that reverted 1.1 (+4.8%) and parked Phase 2
+  (+3.3%). Standing knowledge (agent's boundary receipts): online
+  softmax on this hardware wins only in underoccupied single-wave
+  regimes (rows ≤ 448 = 8 blocks/SM × 56 SMs, S ≥ 4096, ~+10%), loses
+  compute-bound prefill; the rows cap matters because functional.py's
+  folded-prefill reshape produces high-row shapes that would regress.
+  Negative-result note at the kernel (A3 convention).
+- Phase 5a SwiGLU fusion: kernel-level gate PASS (+38-40% median, min
+  +16%, zero regressions, ncu clock-locked) — e2e gate FAIL (+0.70% vs
+  ≥2%, interleaved ×5: composed 56.9 / fused 57.3 median). The plan's
+  own anti-microbench clause ("fusion that only moves microbenches is
+  not adopted") fired as designed: 32 launches × ~3µs ≈ 90µs of a
+  17.5ms token. REVERTED — driver conversions rolled back (4 files,
+  GraftRepository uncommitted state restored to bbe74a0), op removed
+  (no consumer). Note at the ew_clamp site.
+- Phase 5b RMSNorm+residual: SKIPPED with receipt — the summed residual
+  is consumed twice downstream in all four SwiGLU-family drivers (norm
+  input AND final-add base); a single-output fused kernel would drop a
+  live value. Gemma4 is sandwich-norm (norm before add) — structurally
+  different pattern.
+- Measurement laws added by the final agent (now three): (1) ~9%
+  P-state bimodality across runs; (2) two concurrent CUDA-context
+  processes → spurious ~68% slowdown for the second context; (3)
+  large-single-alloc host wall-clock unstable 2-5× — gate-grade
+  instrument = isolated ncu gpu__time_duration.sum, clock locked
+  (sudo nvidia-smi -lgc), never-concurrent processes.
+
+FINAL SCOREBOARD (program branch kernel-opt-house-rules):
+- ADOPTED: A1 split-K apa_selective decode (+34.6% median, S≥8192);
+  A2 branchless mxfp4 E2M1 decode (+61.1% expert GEMV); A5
+  warp-cooperative APA key loads (+64.8% median; prefill 3.2-5.7×;
+  D=64-decode dispatch, parity 0.0); Phase 3.1 index-arithmetic blend
+  bounds (+43-87% composed op; O(S²) mask + 2 adds/layer eliminated).
+- NEGATIVE (reverted, receipts): A3 bank pad; A4 gemm staging; Phase
+  1.1 device argmax; Phase 2 CUDA graphs (parked, implementation
+  preserved at kernel-opt-phase2-parked b7a1c6d); 3.2 online softmax;
+  Phase 5a SwiGLU; 5b skipped-with-receipt.
+- DISPOSITIONED: 3.3 (own condition unmet), 3.4 (superseded by A5 —
+  refine branch now warp-uniform), 4.1 DP4A (deferred-with-cause,
+  model-PPL-gated), 4.2 launch sweep (nothing left to move).
+- The APA function — bulk-bits scores → z-score threshold → full
+  precision on the refine percentile — survived four kernel
+  restructurings bit-faithfully; the parity suites are the receipts.
+- Where it lands for the flagship workload (GPT-OSS-20B long-context):
+  decode attention +25-35% (A1), expert GEMVs +61% (A2), long-context
+  prefill 3.2× (A5), blend-path chunked prefill +67% composed (3.1) —
+  compounding, all APA-semantics-preserving.
+
 ## 2026-07-07 (clarification, David, verbatim-faithful)
 
 APA invariant sharpened by David mid-program: "The concept is that

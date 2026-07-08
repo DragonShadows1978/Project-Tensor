@@ -43,9 +43,30 @@ scores, z-score threshold, full precision on the refine percentile — went
 through three kernel restructurings without moving: the parity suite, not
 good intentions, is what guarantees that.
 
-Open: Phase 3.1 (O(S²) blend-mask elimination, in flight), Phase 3.2/5
-(online causal softmax, elementwise fusion — modest expected yield),
-Phase 4.1 DP4A (deferred with cause: needs int8 activations, attacks
-arithmetic in DRAM-bound kernels). The long-context GPT-OSS workload —
-the machine's flagship — is where the adopted set compounds: split-K ×
-coalesced keys × branchless expert decode, all on its decode path.
+The program closed the same evening with every avenue executed or
+dispositioned. Phase 3.1 joined the adopted set (+43–87% on the composed
+blend operation — the O(S²) mask and its two full elementwise adds per
+layer are simply gone). The tail died honestly: online causal softmax
+wins only ~10% in a narrow underoccupied regime (below the program's
+bar), and SwiGLU fusion — +40% at kernel level — moved e2e by 0.7%,
+which is precisely the microbench-only outcome the plan's 2% loop gate
+was written to reject.
+
+Final count: four adopted (A1 split-K, A2 branchless mxfp4, A5
+warp-cooperative key loads, 3.1 blend bounds), six closed negatives with
+receipts, four dispositioned with cause. The APA function — bulk-bits
+scores, z-score threshold, full precision on the refine percentile —
+survived four kernel restructurings unchanged; parity suites are the
+proof. The flagship GPT-OSS-20B long-context workload compounds all
+four adoptions: decode attention +25–35%, expert GEMVs +61%,
+long-context prefill 3.2×, chunked blend prefill +67%.
+
+What the program actually taught, beyond the speedups: measurement
+discipline is the product. Three instrument laws (P-state bimodality,
+concurrent-context poisoning, alloc-jitter) now govern any future gate
+on this machine; the noise floor killed as many plausible wins as it
+confirmed real ones; and every negative carries the receipt that stops
+it from being re-proposed. Deferred with cause, for future programs:
+DP4A behind a model-PPL bridge, CUDA graphs behind a workload whose
+attention is capturable, and FP8-on-Ada sitting unread in 155 real web
+captures.
