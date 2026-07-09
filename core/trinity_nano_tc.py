@@ -533,6 +533,12 @@ class TrinityAttentionTC:
         self._capture = False
         self._captured = None
         self.last_attention_backend = None
+        # APA dialect dials (Gemma/Qwen35 port pattern). Sliding layers remain
+        # STANDARD even if mode is set globally — engagement is full-only.
+        self.attention_mode = "standard"
+        self.refine_percentile = 0.15
+        self.bulk_bits = 4
+        self.apa_min_context = 2048
 
     def __call__(self, x, cos, sin, position_offset: int = 0, kv_cache=None):
         B, L, _ = x.shape
@@ -552,6 +558,14 @@ class TrinityAttentionTC:
             self._captured = (k.numpy(), v.numpy())
 
         if self.is_local_attention:
+            # Cast-compatibility seam: RoPE tables are built under
+            # BlockTC.COMPUTE_DTYPE at extend-time; activations may later run
+            # under a different compute dtype (e.g. INT4-resident load forces
+            # bf16 tables, then harness switches COMPUTE_DTYPE=float32).
+            # rope_apply requires table dtype == x dtype. Minimal cast only.
+            if str(cos.dtype) != str(q.dtype):
+                cos = _to_dtype(cos, q.dtype)
+                sin = _to_dtype(sin, q.dtype)
             cseg = cos.slice(0, int(position_offset), int(L))
             sseg = sin.slice(0, int(position_offset), int(L))
             if hasattr(tc, "rope_apply") and not tc.is_grad_enabled():
@@ -565,27 +579,53 @@ class TrinityAttentionTC:
             k = tc.cat([kv_cache[0], k], dim=2)
             v = tc.cat([kv_cache[1], v], dim=2)
         S = int(k.shape[2])
-        k_rep = _repeat_kv(k, self.num_key_value_groups)
-        v_rep = _repeat_kv(v, self.num_key_value_groups)
-        if self.is_local_attention and S > int(self.sliding_window):
-            attn_mask = _band_mask(
-                int(L), S, int(self.sliding_window), q.device.split(":")[0], q.dtype
+        is_causal = bool(L > 1 or kv_cache is not None)
+
+        # APA opt-in on full/NoPE layers only (kv=2, head_dim=128, unbounded).
+        # Function invariant: bulk-bits z-score -> full-precision refine percentile.
+        # Sliding layers always stay on STANDARD path.
+        apa_active = (
+            (not self.is_local_attention)
+            and self.attention_mode == "apa_selective"
+            and S > int(self.apa_min_context)
+            and hasattr(tc, "apa_selective_attention")
+        )
+        if apa_active:
+            from tensor_cuda.quant import _norm_ppf, _quantize_keys, _tables
+
+            dev = q.device.split(":")[0]
+            R_t, C_t, B_t = _tables(D, int(self.bulk_bits), KV, True, dev)
+            kq = _quantize_keys(k, R_t, C_t, B_t)
+            z_ = _norm_ppf(1.0 - max(0.0, min(1.0, float(self.refine_percentile))))
+            # Fused kernel handles GQA (q heads -> kv heads) natively.
+            attn = tc.apa_selective_attention(
+                q, k, kq, v, float(self.scaling), float(z_), is_causal
             )
-            attn = _trinity_scaled_attention(
-                q, k_rep, v_rep, attn_mask=attn_mask, is_causal=False, scale=self.scaling
-            )
-            self.last_attention_backend = "standard_sliding_band"
+            self.last_attention_backend = "apa_selective_full_nope"
         else:
-            attn = _trinity_scaled_attention(
-                q,
-                k_rep,
-                v_rep,
-                is_causal=(L > 1 or kv_cache is not None),
-                scale=self.scaling,
-            )
-            self.last_attention_backend = (
-                "standard_sliding_causal" if self.is_local_attention else "standard_full_nope"
-            )
+            k_rep = _repeat_kv(k, self.num_key_value_groups)
+            v_rep = _repeat_kv(v, self.num_key_value_groups)
+            if self.is_local_attention and S > int(self.sliding_window):
+                attn_mask = _band_mask(
+                    int(L), S, int(self.sliding_window), q.device.split(":")[0], q.dtype
+                )
+                attn = _trinity_scaled_attention(
+                    q, k_rep, v_rep, attn_mask=attn_mask, is_causal=False, scale=self.scaling
+                )
+                self.last_attention_backend = "standard_sliding_band"
+            else:
+                attn = _trinity_scaled_attention(
+                    q,
+                    k_rep,
+                    v_rep,
+                    is_causal=is_causal,
+                    scale=self.scaling,
+                )
+                self.last_attention_backend = (
+                    "standard_sliding_causal"
+                    if self.is_local_attention
+                    else "standard_full_nope"
+                )
 
         keep = S
         if self.is_local_attention:
@@ -723,6 +763,52 @@ class TrinityNano_TC:
 
     def extend_rope(self, seq_len: int) -> None:
         self.rope.extend(int(seq_len))
+
+    def set_attention_mode(
+        self,
+        mode: str = "standard",
+        *,
+        refine_percentile: float = 0.15,
+        bulk_bits: int = 4,
+        apa_min_context: int = 2048,
+        full_only: bool = True,
+    ) -> dict[str, Any]:
+        """Engage attention dialect per site.
+
+        Mirrors Gemma/Qwen35 `set_attention_mode`. APA never overwrites the
+        STANDARD path: bulk-bits z-score -> full-precision refine percentile is
+        the function; engagement is per-site opt-in. With full_only=True
+        (default / T2), only full-attention (NoPE, unbounded) layers opt in;
+        sliding layers stay STANDARD.
+        """
+        engaged = []
+        held_standard = []
+        for layer in self.layers:
+            att = layer.self_attn
+            if full_only and att.is_local_attention:
+                att.attention_mode = "standard"
+                held_standard.append(int(layer.layer_idx))
+                continue
+            att.attention_mode = str(mode)
+            att.refine_percentile = float(refine_percentile)
+            att.bulk_bits = int(bulk_bits)
+            att.apa_min_context = int(apa_min_context)
+            engaged.append(int(layer.layer_idx))
+        return {
+            "mode": str(mode),
+            "refine_percentile": float(refine_percentile),
+            "bulk_bits": int(bulk_bits),
+            "apa_min_context": int(apa_min_context),
+            "full_only": bool(full_only),
+            "engaged_layers": engaged,
+            "held_standard_layers": held_standard,
+        }
+
+    def configure_moe_empty_cache(self, interval: int = 0) -> None:
+        """Harness speed knob: MoE empty_cache_interval (0 = never)."""
+        for layer in self.layers:
+            if hasattr(layer.mlp, "empty_cache_interval"):
+                layer.mlp.empty_cache_interval = int(interval)
 
     def __call__(
         self,

@@ -272,3 +272,360 @@ Harness flags added (scripts only):
   + fp32 K/V npz writer.
 - `trinity_nano_tc_parity.py --compute-dtype {bfloat16,float32}`
   + dtype-matched K/V compare.
+
+## 2026-07-08/09 (P3 envelope — CACHE-PATH RED; T3/T2 not run)
+
+Order: P3 of Trinity Nano port (T3 residency + T2 APA + cache-path
+logic). Hard rails: no git commit; plan untouched; GPU ≤10 min/run;
+harness `scripts/trinity_nano_*`; product only for APA dialect hook.
+
+### Files added/changed
+
+- `scripts/trinity_nano_p3_envelope.py` (new): cache-path / T3 staged
+  residency / T2 APA zero-flip harness.
+- `core/trinity_nano_tc.py` (**PRODUCT — APA dialect hook, flagged**):
+  - `TrinityAttentionTC`: `attention_mode` / `refine_percentile` /
+    `bulk_bits` / `apa_min_context`; APA path via
+    `tc.apa_selective_attention` on full/NoPE layers only when
+    `S > apa_min_context` (sliding always STANDARD).
+  - `TrinityNano_TC.set_attention_mode(..., full_only=True)` selective
+    engagement of the 14 full-attention layers.
+  - `configure_moe_empty_cache` harness speed knob.
+- Plan `docs/TRINITY_NANO_PORT_PLAN.md` not edited.
+
+### Task 1 — CACHE-PATH LOGIC: RED (stop rail)
+
+Receipt: `artifacts/trinity_nano/p3_envelope/cache_path_20260708_222031.json`
+
+| step | cached_tok | refeed_tok | max_abs_logit_diff |
+|-----:|-----------:|-----------:|-------------------:|
+| 0 | 653 | 653 | 0.0 |
+| 1 | 114 | 55500 | 7.40625 |
+
+- `token_for_token_equal`: **false**
+- `first_mismatch_step`: **1**
+- `completed_steps`: 2 / 16 (broke on first mismatch)
+- prompt_len=16, weight_mode=int4 resident, wall 2.54s
+- GPU: before 3397 MiB, after 3417 MiB / 12282
+
+**Diagnosis receipt:**
+`artifacts/trinity_nano/p3_envelope/cache_path_diagnosis_20260708.json`
+
+Root cause class (not a mask/offset wiring bug):
+
+1. step-0 exact (prefill path deterministic).
+2. Layer-0 `k_proj` outputs for identical prefix rows differ when the
+   INT4 linear is invoked at L=16 vs L=17 (`k_proj` prefix maxabs
+   0.015625; after k_norm 0.25). Embed + LN prefix exact 0.0.
+3. QuantLinearTC INT4 row instability confirmed fused and unfused
+   (prefix maxabs ~0.0039 on a random probe).
+4. Divergence compounds across all 56 layers → final logits maxabs
+   7.40625, argmax 114 vs 55500.
+5. Wiring that still looks correct: `position_offset` decode, bottom-
+   right causal for L=1+S, RoPE only on sliding, NoPE full, window
+   keep, returned caches used.
+
+### Tasks 2–3 — NOT RUN (order stop after cache mismatch)
+
+- T3 staged residency (8k/32k/96k/131072): **not started**.
+- T2 APA zero-flip at 8k: **not started** (APA dialect hook is in
+  tree but ungated).
+
+### Timing micro-receipts (pre-gate, for rail projection only)
+
+With `empty_cache_interval=0` on INT4 resident:
+
+| L | prefill wall | ms/tok |
+|--:|-------------:|-------:|
+| 16 | 0.89s | ~56 |
+| 128 | 5.09s | ~40 |
+| 256 | 10.05s | ~39 |
+| 512 | 20.25s | ~40 |
+| chunked 1024 | 40.09s | ~39 |
+
+Projection (not a T3 receipt): 8k ≈ 5.5 min (under rail); 32k ≈ 22 min
+(over 10-min rail). Weight resident load ~3.4GB / 3398 MiB prior.
+
+### Verdicts vs plan predictions
+
+| pred | status |
+|------|--------|
+| T4 | GREEN (prior fp32 disposition; unchanged) |
+| cache-path (P2 gate residue) | **RED** under INT4-resident refeed |
+| T3 full-context residency | **not tested** this order |
+| T2 APA selective engagement | **not tested** this order (hook present) |
+
+### Residuals / successors
+
+- Not claimed fixed: cache-path. Numeric INT4 row instability across
+  seq lens is the load-bearing cause of the observed flip.
+- Successor options (operator decision): (a) kernel row-stable INT4
+  GEMM; (b) gate variant that compares cache-decode against a second
+  decode that reuses the same prefilled KV (same numeric path); (c)
+  length-stable compute path for the logic check.
+- T3/T2 remain queued after cache-path disposition.
+- fp32-compute cache recheck blocked mid-probe by
+  `rope_apply: table/x dtype mismatch` when COMPUTE_DTYPE=float32
+  against bf16 rope tables — separate harness fix if pursued.
+
+## 2026-07-08/09 (cache-path dtype seam + fp32-compute disposition)
+
+Order: fix rope table/x dtype seam; re-run cache-path under higher-
+precision compute; if MATCH, INT4 severity (per-step logit gaps).
+Hard rails: no git commit; plan untouched; GPU ≤10 min/run; product
+only for cast-compatibility.
+
+### Files changed
+
+- `core/trinity_nano_tc.py` (**PRODUCT — cast-compat, flagged**):
+  `TrinityAttentionTC`: cast `cos`/`sin` to `q.dtype` before
+  `rope_apply` / `apply_rotary` when table dtype ≠ activation dtype.
+- `scripts/trinity_nano_p3_envelope.py`:
+  - `--compute-dtype {bfloat16,float32}` → post-load
+    `fp32_compute_int4_dequant` (INT4 weights stay packed; activations/
+    KV/rope/router LinearTC cast to fp32).
+  - rope rebuild under new COMPUTE_DTYPE; LinearTC router_gate cast.
+  - `--task cache_severity`: full 16-step INT4 run, no early break,
+    per-step top1−top2 margins + cross-arm logit gaps.
+  - mismatch dump: position_offset, input lens, KV lengths both arms.
+
+Mode chosen: **fp32 COMPUTE + INT4-dequant resident** (not bf16 layer-
+stream). Weights ~3.4 GB INT4; fp32 full weights would be ~25.6 GB
+(over VRAM). Peak used ~3441 / 12282 MiB at 16-tok.
+
+### Gate A — fp32 compute cache-path: GREEN (logic PROVEN)
+
+Receipt: `artifacts/trinity_nano/p3_envelope/cache_path_fp32_20260708_223055.json`
+
+| metric | value |
+|--------|------:|
+| mode | fp32_compute_int4_dequant |
+| token_for_token_equal | **true** (16/16) |
+| max_abs_logit_diff (worst step) | **2.69e-4** |
+| first_mismatch_step | null |
+| wall_s | 16.15 |
+| min top1−top2 margin (cache) | 0.0233 |
+| median margin | 0.369 |
+
+Step-0 maxabs 0.0; residual cross-arm logit noise ≤ 2.7e-4 never
+flips argmax.
+
+**Disposition:** cache wiring PROVEN under higher-precision compute.
+Prior INT4 mismatch is **length-instability numerics**, not a cache
+logic bug.
+
+### Gate B — INT4 severity (same seed/prompt, bf16 compute): RED tokens
+
+Receipt: `artifacts/trinity_nano/p3_envelope/cache_severity_20260708_223141.json`
+
+| metric | value |
+|--------|------:|
+| token_for_token_equal | false |
+| completed_steps | 16 (no early break) |
+| n_flips | **12 / 16** |
+| first_mismatch_step | **1** (cached 114 vs refeed 55500) |
+| max_abs_logit_diff | **7.78** |
+| wall_s | 19.68 |
+
+Per-step severity (selected):
+
+| step | c_tok | r_tok | match | maxabs | c_margin | r_margin | cross_gap_c |
+|-----:|------:|------:|:-----:|-------:|---------:|---------:|------------:|
+| 0 | 653 | 653 | Y | 0.00 | 1.19 | 1.19 | 0.00 |
+| 1 | 114 | 55500 | N | 7.41 | 1.25 | 0.13 | **4.00** |
+| 4 | 25537 | 80040 | N | 5.73 | 0.06 | 0.88 | 2.00 |
+| 7 | 4064 | 4064 | Y | 6.19 | 1.56 | 0.06 | 0.00 |
+| 9 | 4064 | 39 | N | 4.94 | 0.06 | 0.31 | 0.63 |
+
+KV lengths both arms at mismatch: all layers S=17 (cache-length
+aligned; not an off-by-one wiring dump).
+
+**Severity read (evidence: receipt):** not knife-edge near-ties on a
+shared surface. Arms diverge by multi-logit maxabs (≈4–8) after step-0;
+individual-arm top1−top2 margins can be small (0.0625) *and* cross-arm
+preference gaps large (step-1 cross_gap=4.0). Class: **severe INT4
+seq-len GEMM instability**, not soft-tie noise.
+
+### Verdict table
+
+| claim | status | evidence class |
+|-------|--------|----------------|
+| rope dtype seam | fixed (product cast + harness rebuild) | unit-level: run completed past prior crash |
+| cache-path logic | **GREEN / PROVEN** | e2e gate, fp32 compute, 16-tok greedy |
+| INT4 cache vs refeed | RED tokens (expected under numerics) | e2e severity receipt |
+| T3 / T2 | still not run | out of this order |
+
+### Residuals
+
+- INT4 decode token identity still unstable across refeed lens; not
+  claimed fixed.
+- Kernel row-stable INT4 (or same-path refeed baseline) remains the
+  product successor for usable INT4 incremental decode.
+- T3 staged residency + T2 APA still queued.
+- Plan `docs/TRINITY_NANO_PORT_PLAN.md` not edited.
+
+## 2026-07-08/09 (T3 residency curve + T2 APA — INT4 + fp32 compute)
+
+Order: T3 staged residency + T2 APA receipts under the cache-path
+disposition mode (**INT4 weights + fp32 COMPUTE**; bf16-compute
+quarantined). Hard rails: no git commit; plan untouched; GPU ≤10 min
+per stage (project wall from prior stage before ascending); harness
+`scripts/trinity_nano_*` only.
+
+### Files changed (harness only)
+
+- `scripts/trinity_nano_p3_envelope.py`:
+  - T3 v2: `compute_dtype`/`mode_label` on receipt; projection math
+    ledgered before each stage; peak VRAM + single-point theoretical
+    KV-delta extrapolation to 131k; split verdict string
+    `VRAM-CONFIRMED-BY-EXTRAPOLATION at S=<last>, wall-blocked`.
+  - T2 v2: per-layer backend map after prefill; engagement assert
+    (exactly 14 full `apa_selective_full_nope`, 0 sliding leaks);
+    flip_details with per-step logit gaps (fp32 meaningful); no knob
+    tuning on flip.
+- Plan `docs/TRINITY_NANO_PORT_PLAN.md` **not edited**.
+
+### Mode (binding)
+
+| field | value |
+|-------|-------|
+| weight_mode | int4 resident (~3.14 GB quantized linear bytes) |
+| compute | float32 (`fp32_compute_int4_dequant`) |
+| KV storage | follows COMPUTE_DTYPE → **4-byte** under this mode |
+| plan T3 assumed | fp16/bf16 (2-byte) KV — both footprints ledgered |
+| GPU | RTX 4070 SUPER 12282 MiB |
+
+---
+
+### T3 — staged residency curve
+
+Receipt: `artifacts/trinity_nano/p3_envelope/t3_residency_20260708_225457.json`
+Summary: `artifacts/trinity_nano/p3_envelope/summary_20260708_225457.json`
+
+**Calibration** (L=512, used for first-stage projection only):
+
+| metric | value |
+|--------|------:|
+| wall_s | 16.55 |
+| ms/tok | 32.321 |
+| peak_used_mib | 3495 |
+
+**Projection math (rail = 600 s):**
+
+1. Before S=8192 (from calibration):
+   `projected = (32.321/1000)*8192 = 264.77 s` → under rail → **RUN**
+2. After S=8192 measured ms/tok=35.826; before S=32768:
+   `projected = (35.826/1000)*32768 = 1173.93 s` → **STOP** (over rail)
+3. Remaining stages inherit stop:
+   - S=98304: `(35.826/1000)*98304 = 3521.80 s` skipped_after_rail_stop
+   - S=131072: `(35.826/1000)*131072 = 4695.74 s` skipped_after_rail_stop
+
+**Curve table** (evidence: e2e staged prefill, INT4+fp32):
+
+| S | status | projected_wall_s | measured_wall_s | ms/tok | tok/s | peak_used_mib (nvidia-smi) |
+|--:|--------|-----------------:|----------------:|-------:|------:|---------------------------:|
+| 8192 | **ran** | 264.77 | **293.48** | 35.826 | 27.91 | **4044** |
+| 32768 | skipped_projected_over_rail | 1173.93 | — | — | — | — |
+| 98304 | skipped_after_rail_stop | 3521.80 | — | — | — | — |
+| 131072 | skipped_after_rail_stop | 4695.74 | — | — | — | — |
+
+**VRAM extrapolation to 131k** (single measured point + theoretical KV Δ):
+
+- Method: `peak(S) ≈ peak(8192) + (kv_theory_fp32(S) − kv_theory_fp32(8192))`
+- peak(8192)=4044; kv_fp32(8192)=392 MiB; residual_non_kv=3652 MiB
+- kv_fp32(131072)=3752 MiB → **peak_131k_extrap = 7404 MiB ≤ 12282** (fits)
+- fp16-equivalent: residual + kv_fp16(131072)=3652+1876 → **5528 MiB ≤ 12282** (fits)
+- wall_131k_extrap ≈ 4696 s (~78 min) — Python expert-loop wall; not claimed measured
+
+| claim | value |
+|-------|-------|
+| t3_full_131k_confirmed (measured prefill) | **false** |
+| ceiling_S_reached | **8192** |
+| **t3_verdict** | **VRAM-CONFIRMED-BY-EXTRAPOLATION at S=8192, wall-blocked** |
+| vs plan T3 | **SPLIT** — memory premise holds by extrapolation; full-context prefill wall not closed under 10-min rail |
+
+Successor for wall: grouped-GEMM / faster prefill path (out of this order).
+
+---
+
+### T2 — APA selective engagement @ S=8192
+
+Receipt: `artifacts/trinity_nano/p3_envelope/t2_apa_20260708_230041.json`
+Summary: `artifacts/trinity_nano/p3_envelope/summary_20260708_230041.json`
+
+Mode: same INT4+fp32; `full_only=True`; `apa_min_context=2048` (default);
+greedy 16 tokens; STANDARD then APA (same seed/prompt).
+
+**Engagement (per-layer after APA prefill):**
+
+| class | n | backend | indices |
+|-------|--:|---------|---------|
+| full / NoPE | **14/14** | `apa_selective_full_nope` | 3,7,11,15,19,23,27,31,35,39,43,47,51,55 |
+| sliding | **42/42** | `standard_sliding_band` | (held standard) |
+| APA leak on sliding | **0** | — | [] |
+| full non-APA | **0** | — | [] |
+
+`apa_fired_exactly_14_full_not_sliding`: **true**
+
+STANDARD histogram: `standard_full_nope`×14 + `standard_sliding_band`×42.
+
+**Zero-flip / walls:**
+
+| metric | STANDARD | APA | delta |
+|--------|---------:|----:|------:|
+| prefill_wall_s | 296.19 | 296.55 | +0.36 |
+| total_wall_s (prefill+16 decode) | 299.82 | 300.06 | **+0.23** |
+| prefill_peak_mib | 3985 | 3857 | — |
+| mean_nll (ppl proxy) | 3.2257 | 3.2187 | −0.0070 |
+| tokens equal 16/16 | — | — | **false** |
+| n_flips | — | — | **13 / 16** |
+| first_flip_step | — | — | **3** (steps 0–2 match) |
+
+**Token sequence:**
+
+- std: `[1473, 46, 1197, 434, 3809, 2615, 45133, 33378, 8785, 10378, 443, 352, 173501, 53479, 1280, 1184]`
+- apa: `[1473, 46, 1197, 1187, 1595, 2150, 55223, 320, 83177, 1280, 1432, 6414, 326, 6573, 50411, 40740]`
+
+**Flip logit gaps (fp32; selected — full table in receipt `flip_details`):**
+
+| step | std_tok | apa_tok | std_gap (pref−other) | apa_gap | cross maxabs | std top1−top2 |
+|-----:|--------:|--------:|---------------------:|--------:|-------------:|--------------:|
+| 3 | 434 | 1187 | 0.270 | 0.586 | 2.29 | **0.018** (near-tie on std) |
+| 4 | 3809 | 1595 | 1.46 | 5.62 | 6.64 | 0.219 |
+| 5 | 2615 | 2150 | 1.53 | 2.26 | 9.80 | 0.190 |
+| 7 | 33378 | 320 | 11.98 | 5.91 | 13.52 | 0.785 |
+| 8 | 8785 | 83177 | 9.12 | 14.51 | 19.50 | 0.487 |
+| 14 | 1280 | 50411 | 13.71 | 8.69 | 18.54 | 0.615 |
+
+Class (evidence: e2e fp32 arms): **not pure soft-tie noise**. Step-3 is near-tie on STANDARD (margin 0.018) with modest cross maxabs 2.29; later steps show multi-logit cross-arm divergence (maxabs 6–20) after the trajectories fork. **FINDING about APA-on-NoPE (kv=2, head_dim=128, full layers)** — not treated as automatic gate failure; knobs not tuned.
+
+| claim | status | evidence class |
+|-------|--------|----------------|
+| APA engages on exactly 14 full layers | **GREEN** | per-layer backend receipt |
+| sliding held STANDARD | **GREEN** | 0 APA leaks |
+| zero-flip STANDARD vs APA @ 8k/16 | **RED tokens** (13 flips) | e2e greedy; flip_details |
+| vs plan T2 | **SPLIT** — engagement premise holds; token-identity gate does not |
+
+status field on receipt: `token_flip_finding`
+
+---
+
+### Verdict table (this order)
+
+| pred | status | note |
+|------|--------|------|
+| T3 full-context residency | **SPLIT** | VRAM-CONFIRMED-BY-EXTRAPOLATION @ S=8192; wall-blocked above 8k |
+| T2 APA eligibility | **SPLIT** | engagement clean; zero-flip fails as APA-on-NoPE finding |
+| cache-path (prior) | GREEN under fp32 | unchanged |
+| plan file | untouched | immutable |
+
+### Residuals / successors
+
+- T3 32k/96k/131k **not measured** — wall rail; VRAM fit is extrapolation
+  (single-point + theoretical KV), not multi-stage linear fit.
+- T3 measured under **fp32 KV (4-byte)**; plan text said fp16 KV. Both
+  extrap peaks fit 12282; fp16-equivalent peak ~5528 MiB.
+- Grouped-GEMM / faster prefill owns the T3 wall residual.
+- T2 flip is a finding, not claimed fixed; no APA percentile/bits retune.
+- INT4 bf16-compute remains quarantined (not used).
+- P4 NoPE-graft (GraftRepository) still separate order.
