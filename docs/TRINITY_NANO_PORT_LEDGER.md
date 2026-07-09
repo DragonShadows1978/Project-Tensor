@@ -629,3 +629,41 @@ status field on receipt: `token_flip_finding`
 - T2 flip is a finding, not claimed fixed; no APA percentile/bits retune.
 - INT4 bf16-compute remains quarantined (not used).
 - P4 NoPE-graft (GraftRepository) still separate order.
+
+## 2026-07-09 (T1 NoPE-graft — RELATIVE result banked, absolute BLOCKED on gen floor)
+
+Action: T1 width sweep + template/compute-mode disambiguation
+(Grok, GraftRepository; scripts/trinity_nope_graft_width_sweep.py +
+trinity_t1_floor_reverb.py; artifacts/trinity_nope_graft/).
+
+RELATIVE FINDING (banked, robust): NO GPT-OSS-style width-triggered
+degradation transition on Trinity's NoPE full layers. Generation is
+BIT-IDENTICAL across live_shift 0 / 117 / 789 (bf16 stream) — where
+GPT-OSS collapsed clean→salad between shift 115 and 387. The arena's
+mixed NoPE/RoPE contract wired cleanly (route hit, mount seated,
+driver adapter absorbed inject_kv/live_shift/rope-skip-on-NoPE with
+NO product edits). Consistent with T1's direction: NoPE sites show no
+positional hole cliff.
+
+ABSOLUTE T1 NOT CONFIRMED — blocked below the finding, honestly:
+- The port has NO clean-English free-gen floor in either failing mode.
+  INT4+fp32 free-gen = bos_loop; bf16-stream chat = "1234" degraded.
+  Treatment proof it is a PORT residual not the arena: same NATURAL
+  prompt generates clean English under bf16 ("Paris. It is located
+  in the north-central...") — so the engine/adapter are sound; the
+  chat/free-gen path is the floor. HF REFERENCE ALSO loops on chat
+  free-gen (EOS loop) — Trinity's chat usability is thin upstream,
+  not just in our port.
+- Template ruled OUT as the cause (real captured template, still
+  looped) — the GPT-OSS "template ghost" did not recur here.
+- Value-recovery unclassable: 12GB forces layer-stream (no resident
+  graft seats), so the readout half of T1 can't be exercised in a
+  bounded run.
+
+VERDICT: T1 RELATIVE-CONFIRMED (no width cliff), T1 ABSOLUTE-BLOCKED.
+Successors required before absolute close: (a) row-stable INT4 GEMM
+(quarantine fix — unlocks resident clean free-gen); (b) a working
+Trinity chat/generation recipe (thin even in HF ref — investigate
+sampler/stop config, or use natural-continuation probes instead of
+chat-format probes for the graft readout). Both are Project-Tensor
+engine/recipe work, not GRM-arena work.
