@@ -182,3 +182,93 @@ Residuals / next concrete moves:
   argmax but did not reproduce the original full top5 ordering. The saved P1
   capture remains the T4 target, but HF CPU capture stability should be
   rechecked after the layer-level hook is made less invasive.
+
+## 2026-07-08/09 (T4 fp32 A/B disposition — SEMANTIC PARITY PROVEN)
+
+Order: one-run disambiguation. Question: is the remaining bf16 delta
+(cross-device accumulation) or a residual semantic miss?
+
+Hard rails held:
+
+- No git commit. `docs/TRINITY_NANO_PORT_PLAN.md` not edited.
+- Product/kernel code not touched. Harness-only edits in
+  `scripts/trinity_nano_reference_capture.py` (`--torch-dtype`) and
+  `scripts/trinity_nano_tc_parity.py` (`--compute-dtype` plumbs
+  `BlockTC.COMPUTE_DTYPE` + `LinearTC.DTYPE`; no product edits required —
+  class already exposed the knobs).
+- GPU wall for the load-bearing TC run: **331.57s** (<=10 min).
+
+### Method
+
+1. HF reference, CPU, `torch_dtype=float32`, probe 0, 8 greedy steps,
+   inv_freq reinject, eager attn. Artifact root:
+   `artifacts/trinity_nano/reference_capture_fp32/`.
+2. TrinityNano_TC layer-stream, `compute_dtype=float32` (weights cast to
+   fp32 via LinearTC.DTYPE), weight_mode plain, probe 0, 8 steps,
+   decode_check_steps=0. Receipt:
+   `artifacts/trinity_nano/tc_parity/fp32_probe0_steps8_vs_hf.json`.
+3. Disposition summary:
+   `artifacts/trinity_nano/tc_parity/fp32_t4_disposition.json`.
+
+### Verdict table (fp32 TC vs HF-CPU-fp32)
+
+| step | top5_exact | max_abs_diff | mean_abs_diff | argmax |
+|-----:|:----------:|-------------:|--------------:|-------:|
+| 0 | True | 2.8729e-05 | 4.2536e-06 | 8849 |
+| 1 | True | 2.5749e-05 | 3.3309e-06 | 45 |
+| 2 | True | 6.5804e-05 | 6.6244e-06 | 671 |
+| 3 | True | 2.2888e-05 | 3.2149e-06 | 351 |
+| 4 | True | 2.8610e-05 | 4.0378e-06 | 4999 |
+| 5 | True | 3.8147e-05 | 5.0702e-06 | 320 |
+| 6 | True | 3.0518e-05 | 4.8705e-06 | 296 |
+| 7 | True | 3.4809e-05 | 5.0008e-06 | 6766 |
+
+- **top-5 exact: 8/8**
+- **overall max_abs_diff: 6.5804e-05** (collapses toward ~1e-5)
+- generated text: `" Paris. It is located in the north"`
+- generated ids: `[8849, 45, 671, 351, 4999, 320, 296, 6766]`
+  (token-for-token equal to HF fp32 reference)
+
+### Pre-RoPE K/V max abs (step-0 prefill, 56 layers)
+
+- max_k_abs_diff: **1.3506e-04** (worst layer 2)
+- max_v_abs_diff: **1.7583e-05** (worst layer 3)
+- k median ~8.3e-06; v median ~5.9e-07
+- reference: `probe_00_prerope_kv_fp32.npz`
+
+### Wall / GPU
+
+- HF fp32 capture wall: 3.31s (CPU; model already page-cache warm)
+- TC fp32 8-step wall: **331.57s** (~5.5 min)
+- gpu_before: `193 / 12282 MiB`; gpu_after: `1179 / 12282 MiB`
+
+### Registered gate disposition (T4)
+
+**SEMANTIC PARITY PROVEN.** Under matching fp32, TrinityNano_TC
+reproduces HF top-5 exactly for all 8 steps and max_abs collapses from
+the bf16 residue (~1.375 vs fixed-bf16 ref) to ~6.6e-05. Per-layer
+pre-RoPE K/V also collapses (bf16 was max_k 0.45 / max_v 0.037; fp32 is
+1.4e-4 / 1.8e-5).
+
+**Honest read:** the remaining bf16 cross-device delta is **accumulation
+noise** (GPU bf16 vs CPU-HF bf16), not a residual semantic miss in the
+port map (NoPE/sliding RoPE, dual norms, Afmoe RMSNorm cast-before-
+weight, gated attention, MoE sigmoid+bias selection, route_norm×scale).
+T4 is therefore dispositioned GREEN for semantic correctness; bf16
+top-5 near-ties remain an expected numeric residue, not a logic bug.
+
+### Scope residuals (not claimed by this receipt)
+
+- Incremental-decode==refeed not re-run in fp32 (decode_check_steps=0
+  under GPU rail; layer-stream cost ~41s/step).
+- Only probe 0 (5-token plain short). Chat and long-sliding probes not
+  re-gated in fp32 this order.
+- INT4 path still expected-deviating (prior receipt); not re-tested.
+- Plan predictions T1–T3 remain out of this order.
+
+Harness flags added (scripts only):
+
+- `trinity_nano_reference_capture.py --torch-dtype {bfloat16,float32}`
+  + fp32 K/V npz writer.
+- `trinity_nano_tc_parity.py --compute-dtype {bfloat16,float32}`
+  + dtype-matched K/V compare.

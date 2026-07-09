@@ -206,18 +206,39 @@ class QuantLinearTC:
 
 
 class RMSNormTC:
-    USE_FUSED = True
+    """Afmoe-matching RMSNorm.
+
+    modeling_afmoe.AfmoeRMSNorm is NOT the fused Llama order. It does:
+      y = x.float(); y = y * rsqrt(mean(y^2)+eps); return weight * y.to(x.dtype)
+    i.e. cast the normalized vector back to the input dtype BEFORE the affine
+    multiply. The TensorCUDA fused rms_norm kernel multiplies weight in fp32
+    and rounds once at the store (Llama-style). That is a real first-divergence
+    against Trinity (layer-0 input_layernorm max_abs 0.125 on identical embeds).
+    USE_FUSED is therefore off by default for this port.
+    """
+
+    USE_FUSED = False
 
     def __init__(self, dim: int, eps: float):
         self.weight = tc.tensor(np.ones(int(dim), dtype=np.float32), dtype="float32")
         self.eps = float(eps)
 
     def __call__(self, x):
+        # Fused kernel is Llama-order (weight inside the fp32 chain). Only safe
+        # when the caller explicitly opts in AND accepts that mismatch.
         if self.USE_FUSED and hasattr(tc, "rms_norm") and not tc.is_grad_enabled():
             return tc.rms_norm(x, self.weight, self.eps)
         xf = x.float()
         ms = (xf * xf).mean([-1], True)
-        return xf * (ms + self.eps).pow(-0.5) * self.weight
+        normed = xf * (ms + self.eps).pow(-0.5)
+        # Afmoe: weight * normed.to(input_dtype)
+        in_dtype = x.dtype
+        if in_dtype != "float32":
+            normed = _to_dtype(normed, in_dtype)
+        w = self.weight
+        if str(w.dtype) != str(normed.dtype):
+            w = _to_dtype(w, normed.dtype)
+        return normed * w
 
 
 class HostEmbedding:
@@ -780,7 +801,7 @@ class TrinityNano_TC:
         BlockTC.COMPUTE_DTYPE = "bfloat16"
         LinearTC.DTYPE = "bfloat16"
         QuantLinearTC.FUSED_DECODE = True
-        RMSNormTC.USE_FUSED = True
+        RMSNormTC.USE_FUSED = False  # Afmoe cast-before-weight order
         cfg = TrinityNanoConfig.from_model_dir(model_dir)
         with tc.no_grad(), SafeTensorSource(model_dir) as source:
             model = cls(cfg, max_layers=max_layers)

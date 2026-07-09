@@ -53,6 +53,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-dir", default=DEFAULT_REF_DIR)
     parser.add_argument("--output", default=None)
     parser.add_argument("--weight-mode", choices=("bf16", "int4"), default="bf16")
+    parser.add_argument(
+        "--compute-dtype",
+        choices=("bfloat16", "float32"),
+        default="bfloat16",
+        help=(
+            "Harness-level engine compute dtype via BlockTC.COMPUTE_DTYPE and "
+            "LinearTC.DTYPE (no product edits). float32 is the T4 A/B path."
+        ),
+    )
     parser.add_argument("--probe-index", type=int, default=0)
     parser.add_argument("--steps", type=int, default=8)
     parser.add_argument("--decode-check-steps", type=int, default=16)
@@ -212,16 +221,39 @@ def compare_logits(tc_logits: np.ndarray, ref_logits: np.ndarray, ref_top5: np.n
     }
 
 
-def compare_prerope_kv(reference_dir: Path, captures: dict[int, tuple[np.ndarray, np.ndarray]]):
-    path = reference_dir / "probe_00_prerope_kv_bf16_bits.npz"
-    if not path.exists():
-        return {"status": "missing_reference_kv", "path": str(path)}
-    z = np.load(path)
+def compare_prerope_kv(
+    reference_dir: Path,
+    captures: dict[int, tuple[np.ndarray, np.ndarray]],
+    *,
+    compute_dtype: str = "bfloat16",
+):
+    """Compare TC pre-RoPE K/V against HF reference.
+
+    Prefer dtype-matched artifacts:
+      float32 -> probe_00_prerope_kv_fp32.npz
+      bfloat16 -> probe_00_prerope_kv_bf16_bits.npz
+    """
+    if compute_dtype == "float32":
+        path = reference_dir / "probe_00_prerope_kv_fp32.npz"
+        if not path.exists():
+            return {"status": "missing_reference_kv", "path": str(path)}
+        z = np.load(path)
+        load_k = lambda i: z[f"layer_{i:03d}_k_fp32"].astype(np.float32, copy=False)
+        load_v = lambda i: z[f"layer_{i:03d}_v_fp32"].astype(np.float32, copy=False)
+        ref_kind = "fp32"
+    else:
+        path = reference_dir / "probe_00_prerope_kv_bf16_bits.npz"
+        if not path.exists():
+            return {"status": "missing_reference_kv", "path": str(path)}
+        z = np.load(path)
+        load_k = lambda i: bf16_bits_to_fp32(z[f"layer_{i:03d}_k_bf16_u16"])
+        load_v = lambda i: bf16_bits_to_fp32(z[f"layer_{i:03d}_v_bf16_u16"])
+        ref_kind = "bf16_bits"
     rows = []
     for layer_idx in sorted(captures):
         k_tc, v_tc = captures[layer_idx]
-        k_ref = bf16_bits_to_fp32(z[f"layer_{layer_idx:03d}_k_bf16_u16"])
-        v_ref = bf16_bits_to_fp32(z[f"layer_{layer_idx:03d}_v_bf16_u16"])
+        k_ref = load_k(layer_idx)
+        v_ref = load_v(layer_idx)
         rows.append(
             {
                 "layer": int(layer_idx),
@@ -236,6 +268,7 @@ def compare_prerope_kv(reference_dir: Path, captures: dict[int, tuple[np.ndarray
     return {
         "status": "ok",
         "path": str(path),
+        "reference_kind": ref_kind,
         "layers_compared": len(rows),
         "max_k_abs_diff": max((r["k_max_abs_diff"] for r in rows), default=None),
         "max_v_abs_diff": max((r["v_max_abs_diff"] for r in rows), default=None),
@@ -344,6 +377,7 @@ def main() -> int:
     args = parse_args()
     model_dir = Path(args.model_dir).expanduser().resolve()
     reference_dir = Path(args.reference_dir).expanduser().resolve()
+    dtype_tag = "fp32" if args.compute_dtype == "float32" else args.weight_mode
     out = (
         Path(args.output).expanduser().resolve()
         if args.output
@@ -351,11 +385,13 @@ def main() -> int:
         / "artifacts"
         / "trinity_nano"
         / "tc_parity"
-        / f"{args.weight_mode}_{probe_name(args.probe_index)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        / f"{dtype_tag}_{probe_name(args.probe_index)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     )
-    BlockTC.COMPUTE_DTYPE = "bfloat16"
-    LinearTC.DTYPE = "bfloat16"
-    RMSNormTC.USE_FUSED = True
+    # Harness-level dtype plumb only — BlockTC/LinearTC already expose class knobs.
+    BlockTC.COMPUTE_DTYPE = args.compute_dtype
+    LinearTC.DTYPE = args.compute_dtype
+    # Afmoe RMSNorm is cast-before-weight; fused kernel is Llama-order. Keep off.
+    RMSNormTC.USE_FUSED = False
     QuantLinearTC.FUSED_DECODE = True
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -371,6 +407,7 @@ def main() -> int:
         "reference_probe": reference["path"],
         "probe_index": int(args.probe_index),
         "weight_mode": args.weight_mode,
+        "compute_dtype": args.compute_dtype,
         "steps": int(args.steps),
         "decode_check_steps": int(args.decode_check_steps),
         "gpu_before": nvidia_smi(),
@@ -396,7 +433,9 @@ def main() -> int:
                 runner, reference, min(int(args.steps), len(reference["generated_ids"]))
             )
         kv_compare = (
-            compare_prerope_kv(reference_dir, captures)
+            compare_prerope_kv(
+                reference_dir, captures, compute_dtype=args.compute_dtype
+            )
             if int(args.probe_index) == 0 and captures
             else {"status": "not_run"}
         )

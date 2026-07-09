@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--long-min-tokens", type=int, default=2056)
     parser.add_argument("--max-probes", type=int, default=3)
     parser.add_argument("--attn-implementation", default="eager")
+    parser.add_argument(
+        "--torch-dtype",
+        choices=("bfloat16", "float32"),
+        default="bfloat16",
+        help="HF load/compute dtype. float32 is the T4 accumulation-vs-semantic disambiguation path.",
+    )
     return parser.parse_args()
 
 
@@ -61,6 +67,18 @@ def bf16_bits(t: torch.Tensor) -> np.ndarray:
         .numpy()
         .copy()
     )
+
+
+def fp32_arr(t: torch.Tensor) -> np.ndarray:
+    return t.detach().float().contiguous().cpu().numpy().astype(np.float32, copy=False)
+
+
+def torch_dtype_from_name(name: str) -> torch.dtype:
+    if name == "float32":
+        return torch.float32
+    if name == "bfloat16":
+        return torch.bfloat16
+    raise ValueError(f"unsupported torch dtype {name!r}")
 
 
 def tokenizer_receipts(tokenizer, model_dir: Path) -> dict[str, Any]:
@@ -110,26 +128,55 @@ def tokenizer_receipts(tokenizer, model_dir: Path) -> dict[str, Any]:
 def install_default_rope_shim() -> str | None:
     from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 
-    if "default" in ROPE_INIT_FUNCTIONS:
-        return None
-
-    def trinity_default_rope(config, device=None, seq_len=None, layer_type=None):
-        del seq_len, layer_type
+    def trinity_default_rope(config, device=None, seq_len=None, layer_type=None, **kwargs):
+        del seq_len, layer_type, kwargs
         head_dim = getattr(config, "head_dim", None) or (
             config.hidden_size // config.num_attention_heads
         )
         base = float(getattr(config, "rope_theta", 10000.0))
+        # Force CPU concrete storage. from_pretrained constructs modules under
+        # a meta device first; building inv_freq on meta (or default-meta)
+        # leaves a non-materialized table that is later observed as garbage
+        # zeros/denorms after weight load (parity-killing for sliding RoPE).
         inv_freq = 1.0 / (
             base
             ** (
-                torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
+                torch.arange(0, head_dim, 2, dtype=torch.float32, device="cpu")
                 / float(head_dim)
             )
         )
         return inv_freq, 1.0
 
+    # Always install/overwrite: transformers v5 no longer ships a "default"
+    # entry, and a previously-registered broken one must not stick.
     ROPE_INIT_FUNCTIONS["default"] = trinity_default_rope
-    return "installed ROPE_INIT_FUNCTIONS['default'] standard theta/head_dim shim"
+    return (
+        "installed/overwrote ROPE_INIT_FUNCTIONS['default'] with CPU-concrete "
+        "theta/head_dim inv_freq (avoids meta-device corruption)"
+    )
+
+
+def reinject_rotary_inv_freq(model) -> str:
+    """Re-materialize AfmoeRotaryEmbedding.inv_freq after weight load.
+
+    Observed 2026-07-08/09: even with a correct ROPE_INIT_FUNCTIONS['default'],
+    after from_pretrained the buffer is zeros/denorms. Sliding-layer RoPE then
+    only rotates dim-0 pairs. Call this after load, before any forward.
+    """
+    from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+
+    rotary = model.model.rotary_emb
+    fn = ROPE_INIT_FUNCTIONS.get(getattr(rotary, "rope_type", "default")) or ROPE_INIT_FUNCTIONS["default"]
+    inv_freq, attention_scaling = fn(model.config, device="cpu")
+    with torch.no_grad():
+        rotary.inv_freq = inv_freq.to(dtype=torch.float32)
+        rotary.original_inv_freq = inv_freq.to(dtype=torch.float32).clone()
+        rotary.attention_scaling = float(attention_scaling)
+    return (
+        f"reinjected inv_freq len={int(inv_freq.numel())} "
+        f"first={float(inv_freq[0]):.6g} last={float(inv_freq[-1]):.6g} "
+        f"scale={float(attention_scaling)}"
+    )
 
 
 def install_missing_key_init_shim() -> str:
@@ -229,7 +276,9 @@ def build_probes(tokenizer, long_min_tokens: int) -> list[dict[str, Any]]:
     ]
 
 
-def register_kv_hooks(model) -> tuple[list[Any], dict[int, tuple[np.ndarray, np.ndarray]]]:
+def register_kv_hooks(
+    model, *, store_dtype: str = "bfloat16"
+) -> tuple[list[Any], dict[int, tuple[np.ndarray, np.ndarray]]]:
     captures: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     handles = []
 
@@ -246,7 +295,13 @@ def register_kv_hooks(model) -> tuple[list[Any], dict[int, tuple[np.ndarray, np.
                 key_states = module.k_norm(key_states)
                 key_states = key_states.transpose(1, 2).contiguous()
                 value_states = value_states.transpose(1, 2).contiguous()
-                captures[int(layer_idx)] = (bf16_bits(key_states), bf16_bits(value_states))
+                if store_dtype == "float32":
+                    captures[int(layer_idx)] = (fp32_arr(key_states), fp32_arr(value_states))
+                else:
+                    captures[int(layer_idx)] = (
+                        bf16_bits(key_states),
+                        bf16_bits(value_states),
+                    )
 
         return hook
 
@@ -255,7 +310,15 @@ def register_kv_hooks(model) -> tuple[list[Any], dict[int, tuple[np.ndarray, np.
     return handles, captures
 
 
-def run_probe(model, tokenizer, probe: dict[str, Any], steps: int, capture_kv: bool):
+def run_probe(
+    model,
+    tokenizer,
+    probe: dict[str, Any],
+    steps: int,
+    capture_kv: bool,
+    *,
+    kv_store_dtype: str = "bfloat16",
+):
     ids = tokenizer(
         probe["text"],
         add_special_tokens=bool(probe.get("add_special_tokens", False)),
@@ -266,7 +329,7 @@ def run_probe(model, tokenizer, probe: dict[str, Any], steps: int, capture_kv: b
     handles = []
     captures = {}
     if capture_kv:
-        handles, captures = register_kv_hooks(model)
+        handles, captures = register_kv_hooks(model, store_dtype=kv_store_dtype)
 
     logits_rows = []
     top5_ids = []
@@ -326,15 +389,26 @@ def save_probe_npz(out_dir: Path, probe: dict[str, Any], result: dict[str, Any])
     return path
 
 
-def save_kv_npz(out_dir: Path, captures: dict[int, tuple[np.ndarray, np.ndarray]]) -> Path:
-    path = out_dir / "probe_00_prerope_kv_bf16_bits.npz"
+def save_kv_npz(
+    out_dir: Path,
+    captures: dict[int, tuple[np.ndarray, np.ndarray]],
+    *,
+    store_dtype: str = "bfloat16",
+) -> Path:
+    if store_dtype == "float32":
+        path = out_dir / "probe_00_prerope_kv_fp32.npz"
+        k_key, v_key = "k_fp32", "v_fp32"
+    else:
+        path = out_dir / "probe_00_prerope_kv_bf16_bits.npz"
+        k_key, v_key = "k_bf16_u16", "v_bf16_u16"
     payload: dict[str, np.ndarray] = {
-        "layer_indices": np.asarray(sorted(captures), dtype=np.int64)
+        "layer_indices": np.asarray(sorted(captures), dtype=np.int64),
+        "store_dtype": np.asarray([store_dtype]),
     }
     for layer_idx in sorted(captures):
         k, v = captures[layer_idx]
-        payload[f"layer_{layer_idx:03d}_k_bf16_u16"] = k
-        payload[f"layer_{layer_idx:03d}_v_bf16_u16"] = v
+        payload[f"layer_{layer_idx:03d}_{k_key}"] = k
+        payload[f"layer_{layer_idx:03d}_{v_key}"] = v
         payload[f"layer_{layer_idx:03d}_k_shape"] = np.asarray(k.shape, dtype=np.int64)
         payload[f"layer_{layer_idx:03d}_v_shape"] = np.asarray(v.shape, dtype=np.int64)
     np.savez_compressed(path, **payload)
@@ -362,6 +436,7 @@ def main() -> int:
     config.eos_token_id = tokenizer.eos_token_id
     config.pad_token_id = tokenizer.pad_token_id
     probes = build_probes(tokenizer, args.long_min_tokens)[: int(args.max_probes)]
+    torch_dtype = torch_dtype_from_name(args.torch_dtype)
     meta: dict[str, Any] = {
         "schema": "trinity_nano_hf_reference_capture_v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -369,7 +444,7 @@ def main() -> int:
         "out_dir": str(out_dir),
         "steps": int(args.steps),
         "torch_version": torch.__version__,
-        "torch_dtype_requested": "bfloat16",
+        "torch_dtype_requested": args.torch_dtype,
         "device_map": "cpu",
         "attn_implementation": args.attn_implementation,
         "hf_modules_cache": os.environ["HF_MODULES_CACHE"],
@@ -388,24 +463,30 @@ def main() -> int:
     meta_path = out_dir / "metadata.json"
     write_json(meta_path, meta)
 
-    print(f"[trinity-capture] loading model from {model_dir}", flush=True)
+    print(
+        f"[trinity-capture] loading model from {model_dir} dtype={args.torch_dtype}",
+        flush=True,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         str(model_dir),
         config=config,
         trust_remote_code=True,
         local_files_only=True,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch_dtype,
         device_map="cpu",
         attn_implementation=args.attn_implementation,
         low_cpu_mem_usage=True,
     )
     model.eval()
     masking_shim = install_remote_masking_shim(model)
+    inv_freq_receipt = reinject_rotary_inv_freq(model)
     meta["status"] = "running_probes"
     meta["model_class"] = model.__class__.__name__
     meta["masking_api_shim"] = masking_shim
+    meta["rotary_inv_freq_reinject"] = inv_freq_receipt
     write_json(meta_path, meta)
-    print("[trinity-capture] model loaded; running probes", flush=True)
+    print(f"[trinity-capture] model loaded; {inv_freq_receipt}", flush=True)
+    print("[trinity-capture] running probes", flush=True)
 
     started = time.perf_counter()
     for i, probe in enumerate(probes):
@@ -434,7 +515,14 @@ def main() -> int:
             flush=True,
         )
 
-        result = run_probe(model, tokenizer, probe, args.steps, capture_kv=(i == 0))
+        result = run_probe(
+            model,
+            tokenizer,
+            probe,
+            args.steps,
+            capture_kv=(i == 0),
+            kv_store_dtype=args.torch_dtype,
+        )
         npz_path = save_probe_npz(out_dir, probe, result)
         decoded_generated = tokenizer.decode(
             [int(x) for x in result["generated_ids"].tolist()],
@@ -453,9 +541,12 @@ def main() -> int:
             }
         )
         if i == 0:
-            kv_path = save_kv_npz(out_dir, result["captures"])
+            kv_path = save_kv_npz(
+                out_dir, result["captures"], store_dtype=args.torch_dtype
+            )
             probe_meta["prerope_kv_artifact"] = str(kv_path)
             probe_meta["prerope_kv_layers"] = int(len(result["captures"]))
+            probe_meta["prerope_kv_store_dtype"] = args.torch_dtype
         write_json(meta_path, meta)
         print(
             f"[trinity-capture] finished {probe['name']} "
