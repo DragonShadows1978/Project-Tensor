@@ -667,3 +667,69 @@ Trinity chat/generation recipe (thin even in HF ref — investigate
 sampler/stop config, or use natural-continuation probes instead of
 chat-format probes for the graft readout). Both are Project-Tensor
 engine/recipe work, not GRM-arena work.
+
+## 2026-07-09 (INT4 weight floor CONFIRMED fatal; INT8-resident ordered)
+
+Action: T1-absolute natural-continuation order (Codex) stopped at its
+registered sanity rail: with the fact in PLAIN live context (no arena),
+INT4-resident generation BOS-loops — cannot complete a trivial
+continuation. Combined with P2's INT4 receipt (argmax flip step 0,
+max_abs 15) and the bf16-stream clean floor: INT4 PTQ on this
+bf16-trained fine-grained MoE is below the generation floor. The
+port's INT4 form is UNUSABLE for generation (not just quarantined for
+bf16-compute).
+
+Correction of sizing habit: Nano never needed INT4 — INT8 weights
+(~6.4GB) + full-context KV (~2GB) fit 12,282 MiB resident. INT8 mode
+ordered: quantize, sanity arm, then the T1 grid.
+
+## 2026-07-09 (INT8 drift rail fired — bit-width theory REFUTED; quant PATH defect)
+
+Action: INT8-resident order (Codex; INT8 loader added to the class,
+uncommitted pending proof). Registered drift rail fired: INT8
+teacher-forced vs P1 bf16 reference = max |Δlogit| 10.06, top5 0/8 —
+IMPOSSIBLE from 8-bit width. REINTERPRETATION OF RECORD: the INT4
+"generation floor" was never PTQ quality — the resident quant/dequant
+path shared by both bit-widths is defective for this port (native
+intn_linear rejects these configs; ports fall back to
+dequant+matmul). Signature (systematic compounding drift, partial
+top5 overlap) is consistent with a scale-axis/layout defect.
+Receipts: artifacts/trinity_nope_graft/natural_absolute_20260709_072319/
+(GraftRepo). VRAM bonus receipt: INT8 resident peak 6.03 GiB — the
+fit math confirmed. Three consecutive rails fired correctly
+(sanity → INT8 drift → here); the ladder is converging.
+
+Next action: single-op quant-path audit (one linear, bf16 vs quant
+path, per-axis error), fix, re-gate drift → sanity → T1 grid.
+
+## 2026-07-09 (T1 ABSOLUTE CONFIRMED — NoPE dissolves the arena hole law)
+
+Action: quant-path audit chain (Codex) resolved the drift and closed T1.
+
+- DEFECT: INT8 inherited INT4's group-128; INT8_GROUP_SIZE split to 32
+  (core/trinity_nano_tc.py:38) → registered drift rail PASSES (0.83 ≤
+  1.0; single-op rel errors ≤1.5%). ALSO: the 10.06 receipt was partly
+  the reference-mismatch ghost's THIRD appearance (fp32-compute gated
+  vs the old bf16 capture) — measurement law reaffirmed: gates compare
+  matched references.
+- SANITY: plain-context recall clean ("Vortex-3-Sierra. Keep it
+  safe..."), INT8-resident + fp32 compute.
+- T1 GRID: w96 mounted HIT / control MISS ("1234" invented);
+  **w768 (live_shift 789) mounted HIT / control MISS**. Controls prove
+  graft-carriage; recall survives shift depths that collapsed GPT-OSS
+  (salad at 387).
+- **T1 ABSOLUTE CONFIRMED (plan conf 0.7): the arena RoPE-hole law is
+  POSITIONAL — NoPE full-attention layers mount grafts at any
+  live_shift with clean recall.** Paired with the GPT-OSS receipt this
+  completes the law: position holes bound RoPE'd dialects; NoPE sites
+  are hole-free graft real estate.
+- Operating receipt: INT8-resident (group-32) + fp32 compute, VRAM
+  peak 8.81 GiB incl. arena at the T1 grid.
+- Wing T-scoreboard final: T1 CONFIRMED / T2 done + APA-on-NoPE law /
+  T3 split (VRAM confirmed, wall→grouped-GEMM successor) / T4 GREEN.
+
+Successor queue (registered): grouped-GEMM experts (throughput; owns
+T3 wall); row-stable INT4 (or retire INT4 for this port — INT8-32 is
+the mode); Trinity GRM session receipt (E2E-style, NoPE-mount
+production pattern); dialect hook productization (inject_kv/live_shift
+class-native instead of harness patch).

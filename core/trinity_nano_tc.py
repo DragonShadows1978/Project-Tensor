@@ -4,9 +4,10 @@ The adapter follows the existing Project-Tensor model-object contract:
 `__call__(input_ids_np, kv_caches=None, position_offset=0,
 last_token_only=False, max_layers=None)` returns `(logits, new_caches)`.
 
-Two weight modes are intentionally explicit:
+Three weight modes are intentionally explicit:
   - bf16/plain linears for streamed parity probes.
   - affine INT4 linears for the resident inference target.
+  - symmetric INT8 linears for resident stability probes.
 
 The MoE router implements Trinity's sigmoid + expert_bias selection semantics.
 Expert recombination follows the GPT-OSS diagnostic precedent: selected experts
@@ -35,6 +36,7 @@ from tensor_cuda.quantization import quantize_affine_per_group  # noqa: E402
 
 
 GROUP_SIZE = 128
+INT8_GROUP_SIZE = 32
 
 
 def _compute_dtype() -> str:
@@ -135,6 +137,28 @@ def _quantize_int4_affine(w_fp32: np.ndarray, group_size: int = GROUP_SIZE):
     return q.packed, q.scales, q.zeros
 
 
+def _quantize_int8_symmetric(w_fp32: np.ndarray, group_size: int = INT8_GROUP_SIZE):
+    w = np.asarray(w_fp32, dtype=np.float32)
+    if w.ndim != 2:
+        raise ValueError(f"linear weight must be rank-2, got {w.shape}")
+    out_features, in_features = w.shape
+    if in_features % int(group_size) != 0:
+        raise ValueError(
+            f"in_features={in_features} must be divisible by group_size={group_size}"
+        )
+    groups = in_features // int(group_size)
+    wg = w.reshape(out_features, groups, int(group_size))
+    max_abs = np.max(np.abs(wg), axis=2).astype(np.float32)
+    scales_f32 = np.where(max_abs == 0.0, 1.0, max_abs / 127.0).astype(np.float32)
+    q = np.clip(
+        np.round(wg / scales_f32[:, :, None]),
+        -128,
+        127,
+    )
+    codes = (q + 128.0).astype(np.uint8).reshape(out_features, in_features)
+    return codes, scales_f32.astype(np.float16)
+
+
 class BlockTC:
     """Global compute dtype knob used by the Trinity adapter."""
 
@@ -200,6 +224,44 @@ class QuantLinearTC:
                 x, self.packed, self.scales, self.zeros, self.group_size
             )
         return tc.int4_linear(x, self.packed, self.scales, self.zeros, self.group_size)
+
+    def vram_bytes(self) -> int:
+        return self._vram
+
+
+class QuantLinearInt8TC:
+    """Symmetric INT8 linear: uint8 codes + per-group fp16 scales."""
+
+    LOAD_CONTEXT: str | None = None
+
+    def __init__(self, weight_fp32: np.ndarray, group_size: int = INT8_GROUP_SIZE):
+        if weight_fp32.ndim != 2:
+            raise ValueError(f"linear weight must be rank-2, got {weight_fp32.shape}")
+        self.out_features, self.in_features = weight_fp32.shape
+        self.group_size = int(group_size)
+        try:
+            codes, scales = _quantize_int8_symmetric(weight_fp32, self.group_size)
+            self.codes = tc.tensor(np.ascontiguousarray(codes), dtype="uint8")
+            self.scales = tc.tensor(np.ascontiguousarray(scales), dtype="float16")
+            self._vram = int(codes.nbytes + scales.nbytes)
+        except Exception as exc:
+            ctx = self.LOAD_CONTEXT or QuantLinearTC.LOAD_CONTEXT
+            ctx_s = f" tensor={ctx}" if ctx else ""
+            raise RuntimeError(
+                f"QuantLinearInt8TC init failed{ctx_s} shape="
+                f"({self.out_features},{self.in_features})"
+            ) from exc
+
+    def __call__(self, x):
+        dtype = str(x.dtype)
+        if dtype not in ("float16", "bfloat16", "float32"):
+            dtype = _compute_dtype()
+        q = self.codes.astype(dtype).reshape(
+            [self.out_features, self.in_features // self.group_size, self.group_size]
+        )
+        scales = self.scales.astype(dtype).unsqueeze(2)
+        w = ((q - 128.0) * scales).reshape([self.out_features, self.in_features])
+        return tc.matmul(x, w.transpose(0, 1))
 
     def vram_bytes(self) -> int:
         return self._vram
@@ -411,6 +473,8 @@ def _linear_from_weight(weight: np.ndarray, weight_mode: str):
         return LinearTC(weight)
     if weight_mode == "int4":
         return QuantLinearTC(weight, GROUP_SIZE)
+    if weight_mode == "int8":
+        return QuantLinearInt8TC(weight, INT8_GROUP_SIZE)
     raise ValueError(f"unsupported weight_mode {weight_mode!r}")
 
 
@@ -882,8 +946,8 @@ class TrinityNano_TC:
         load_lm_head: bool = True,
         progress: bool = True,
     ) -> tuple["TrinityNano_TC", dict[str, Any]]:
-        if weight_mode not in {"int4", "bf16"}:
-            raise ValueError("weight_mode must be 'int4' or 'bf16'")
+        if weight_mode not in {"int4", "int8", "bf16"}:
+            raise ValueError("weight_mode must be 'int4', 'int8', or 'bf16'")
         BlockTC.COMPUTE_DTYPE = "bfloat16"
         LinearTC.DTYPE = "bfloat16"
         QuantLinearTC.FUSED_DECODE = True
@@ -900,12 +964,14 @@ class TrinityNano_TC:
             n_layers = len(model.layers)
             quant_bytes = 0
             plain_bytes = 0
+            source_bf16_bytes = 0
             for i in range(n_layers):
                 model.layers[i] = TrinityBlockTC.from_safetensors(
                     cfg, source, i, weight_mode=weight_mode
                 )
                 quant_bytes += _estimate_layer_linear_bytes(model.layers[i])
                 plain_bytes += _estimate_layer_plain_bytes(model.layers[i])
+                source_bf16_bytes += _estimate_layer_source_bf16_bytes(model.layers[i])
                 gc.collect()
                 if hasattr(tc, "empty_cache"):
                     tc.empty_cache()
@@ -919,6 +985,7 @@ class TrinityNano_TC:
                 model.lm_head = _linear_from_weight(lm_w, weight_mode)
                 if hasattr(model.lm_head, "vram_bytes"):
                     quant_bytes += model.lm_head.vram_bytes()
+                source_bf16_bytes += int(cfg.vocab_size * cfg.hidden_size * 2)
                 del lm_w
                 QuantLinearTC.LOAD_CONTEXT = None
         info = {
@@ -933,6 +1000,7 @@ class TrinityNano_TC:
             "sliding_attention_layers": cfg.sliding_attention_indices(),
             "quantized_linear_bytes": int(quant_bytes),
             "plain_linear_bytes": int(plain_bytes),
+            "source_bf16_linear_bytes": int(source_bf16_bytes),
             "embedding_host_bytes": int(model.embed_tokens.weight.nbytes),
             "lm_head_loaded": bool(load_lm_head),
         }
@@ -941,6 +1009,9 @@ class TrinityNano_TC:
 
 def _estimate_layer_linear_bytes(layer: TrinityBlockTC) -> int:
     total = 0
+    rg = getattr(layer.mlp, "router_gate", None)
+    if hasattr(rg, "vram_bytes"):
+        total += int(rg.vram_bytes())
     for lin in (
         layer.self_attn.q_proj,
         layer.self_attn.k_proj,
@@ -970,6 +1041,9 @@ def _estimate_layer_linear_bytes(layer: TrinityBlockTC) -> int:
 
 def _estimate_layer_plain_bytes(layer: TrinityBlockTC) -> int:
     total = 0
+    rg = getattr(layer.mlp, "router_gate", None)
+    if isinstance(rg, LinearTC):
+        total += int(rg.vram_bytes())
     for lin in (
         layer.self_attn.q_proj,
         layer.self_attn.k_proj,
@@ -994,4 +1068,37 @@ def _estimate_layer_plain_bytes(layer: TrinityBlockTC) -> int:
         for lin in (dense.gate_proj, dense.up_proj, dense.down_proj):
             if isinstance(lin, LinearTC):
                 total += int(lin.vram_bytes())
+    return total
+
+
+def _linear_source_bf16_bytes(lin) -> int:
+    if lin is None:
+        return 0
+    if hasattr(lin, "out_features") and hasattr(lin, "in_features"):
+        return int(lin.out_features) * int(lin.in_features) * 2
+    return 0
+
+
+def _estimate_layer_source_bf16_bytes(layer: TrinityBlockTC) -> int:
+    total = _linear_source_bf16_bytes(getattr(layer.mlp, "router_gate", None))
+    for lin in (
+        layer.self_attn.q_proj,
+        layer.self_attn.k_proj,
+        layer.self_attn.v_proj,
+        layer.self_attn.o_proj,
+        layer.self_attn.gate_proj,
+    ):
+        total += _linear_source_bf16_bytes(lin)
+    if layer.moe_enabled:
+        moe: TrinityMoETC = layer.mlp
+        if moe.shared_experts is not None:
+            for lin in (moe.shared_experts.gate_proj, moe.shared_experts.up_proj, moe.shared_experts.down_proj):
+                total += _linear_source_bf16_bytes(lin)
+        for ex in moe.experts:
+            for lin in (ex.gate_proj, ex.up_proj, ex.down_proj):
+                total += _linear_source_bf16_bytes(lin)
+    else:
+        dense: SwiGLUTC = layer.mlp
+        for lin in (dense.gate_proj, dense.up_proj, dense.down_proj):
+            total += _linear_source_bf16_bytes(lin)
     return total

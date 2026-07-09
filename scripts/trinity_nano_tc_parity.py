@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-dir", default=DEFAULT_MODEL_DIR)
     parser.add_argument("--reference-dir", default=DEFAULT_REF_DIR)
     parser.add_argument("--output", default=None)
-    parser.add_argument("--weight-mode", choices=("bf16", "int4"), default="bf16")
+    parser.add_argument("--weight-mode", choices=("bf16", "int4", "int8"), default="bf16")
     parser.add_argument(
         "--compute-dtype",
         choices=("bfloat16", "float32"),
