@@ -311,6 +311,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("tail_start"));
   m.def("evict_rows", &ops::evict_rows, py::arg("old_cache"),
         py::arg("dim"), py::arg("head_tokens"), py::arg("drop_tokens"));
+  m.def("dda_raycast",
+        [](Tensor& grid, Tensor& origins, Tensor& directions, int max_steps) {
+          auto out = ops::dda_raycast(grid, origins, directions, max_steps);
+          return py::make_tuple(
+              std::get<0>(out), std::get<1>(out), std::get<2>(out),
+              std::get<3>(out), std::get<4>(out), std::get<5>(out));
+        },
+        py::arg("grid_u8"), py::arg("origins_f32"),
+        py::arg("directions_f32"), py::arg("max_steps"));
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

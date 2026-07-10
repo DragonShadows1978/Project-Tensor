@@ -88,6 +88,12 @@ Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
 // Fused causal softmax (inference-only: backward throws).
 Tensor causal_softmax(const Tensor& scores);
 
+// Non-differentiable voxel traversal. Output dtypes are uint8, uint8, int64,
+// int64, int64, and float32, respectively.
+std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
+    const Tensor& grid, const Tensor& origins, const Tensor& directions,
+    int max_steps);
+
 // Fused RMSNorm over the last dim (inference-only: backward throws).
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,

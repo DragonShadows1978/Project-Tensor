@@ -175,6 +175,12 @@ void set_alloc_pooling(bool enabled);
 // -1e4-bias path. Inference-only at the Tensor level.
 NDArray causal_softmax(const NDArray& scores);
 
+// One-thread-per-ray Amanatides-Woo traversal over a resident uint8 voxel
+// grid. Outputs are detached hit/material/voxel/face/distance arrays.
+std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray> dda_raycast(
+    const NDArray& grid, const NDArray& origins, const NDArray& directions,
+    int max_steps);
+
 // Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
 // accumulate, single kernel + single output alloc (vs the 9-op chain).
 // w must be fp32; out_dtype is typically x's dtype.

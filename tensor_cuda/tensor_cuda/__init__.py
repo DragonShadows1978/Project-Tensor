@@ -80,6 +80,18 @@ def causal_softmax(scores):
     return _C.causal_softmax(scores)
 
 
+def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
+    """First-hit voxel DDA over a resident 3D uint8 grid.
+
+    Returns ``(hit_u8, material_u8, voxel_i64, face_axis_i64,
+    face_sign_i64, distance_f32)`` with one output row per input ray.
+    The operation is non-differentiable and all outputs are detached.
+    """
+    return _C.dda_raycast(
+        grid_u8, origins_f32, directions_f32, max_steps
+    )
+
+
 def argmax_last_axis(a):
     """Device-side argmax over the LAST axis only (returns int64, axis
     removed). Decode-loop fast path (KERNEL_OPT_IMPLEMENTATION_PLAN.md Phase
@@ -428,7 +440,7 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "rms_norm", "rope_apply", "write_rows", "export_rows",
+    "matmul", "dda_raycast", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
     "arena_row_pair_transaction", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",

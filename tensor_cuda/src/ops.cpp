@@ -248,6 +248,20 @@ Tensor slice(const Tensor& a, int dim, int64_t start, int64_t len) {
 }
 
 // ------------------------------------------------------------- linalg
+std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
+    const Tensor& grid, const Tensor& origins, const Tensor& directions,
+    int max_steps) {
+  auto out = tc::dda_raycast(grid.data(), origins.data(), directions.data(),
+                             max_steps);
+  return std::make_tuple(
+      Tensor::make(std::get<0>(out), false),
+      Tensor::make(std::get<1>(out), false),
+      Tensor::make(std::get<2>(out), false),
+      Tensor::make(std::get<3>(out), false),
+      Tensor::make(std::get<4>(out), false),
+      Tensor::make(std::get<5>(out), false));
+}
+
 Tensor causal_softmax(const Tensor& scores) {
   NDArray out = tc::causal_softmax(scores.data());
   return Tensor::from_op(out, {scores}, "causal_softmax", [](const NDArray&) -> void {
