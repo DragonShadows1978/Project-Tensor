@@ -1097,6 +1097,174 @@ __device__ __forceinline__ uint8_t terrain_to_u8(float value) {
   return static_cast<uint8_t>(floorf(value + 0.5f));
 }
 
+// WO-9E grounding is an opt-in post-pass over the established terrain
+// outputs.  The default path launches none of this code, preserving every
+// prior terrain kernel literally.  Reconstructing the frozen camera ray lets
+// the pass distinguish an exact AABB-entry hit from an interior crossing
+// without changing the traversal result contract.
+constexpr float kBedrockRed = 38.0f;
+constexpr float kBedrockGreen = 34.0f;
+constexpr float kBedrockBlue = 32.0f;
+constexpr float kBedrockDiffuseWeight = 0.5f;
+
+__device__ __forceinline__ void terrain_grounding_camera_ray(
+    TerrainRenderCamera camera, int64_t pixel, float direction[3]) {
+  const int pixel_x = static_cast<int>(pixel % camera.width);
+  const int pixel_y = static_cast<int>(pixel / camera.width);
+  const float x_center = static_cast<float>(pixel_x) + 0.5f;
+  const float y_center = static_cast<float>(pixel_y) + 0.5f;
+  const float screen_x = __fmul_rn(
+      __fadd_rn(__fmul_rn(__fdiv_rn(x_center,
+                                    static_cast<float>(camera.width)),
+                          2.0f),
+                 -1.0f),
+      camera.half_width);
+  const float screen_y = __fmul_rn(
+      __fadd_rn(1.0f,
+                 -__fmul_rn(__fdiv_rn(y_center,
+                                      static_cast<float>(camera.height)),
+                            2.0f)),
+      camera.half_height);
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    const float horizontal = __fmul_rn(screen_x, camera.right[axis]);
+    const float vertical = __fmul_rn(screen_y, camera.up[axis]);
+    direction[axis] =
+        __fadd_rn(__fadd_rn(camera.forward[axis], horizontal), vertical);
+  }
+  const float length = sqrtf(__fadd_rn(
+      __fadd_rn(__fmul_rn(direction[0], direction[0]),
+                __fmul_rn(direction[1], direction[1])),
+      __fmul_rn(direction[2], direction[2])));
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    direction[axis] = __fdiv_rn(direction[axis], length);
+  }
+}
+
+__device__ __forceinline__ bool terrain_grounding_boundary_entry(
+    const float origin[3], const float direction[3], float hit_distance,
+    int64_t dim_x, int64_t dim_y, int64_t dim_z, int* face_axis,
+    int* face_sign) {
+  const float dims[3] = {static_cast<float>(dim_x),
+                         static_cast<float>(dim_y),
+                         static_cast<float>(dim_z)};
+  const bool origin_inside =
+      origin[0] >= 0.0f && origin[0] < dims[0] && origin[1] >= 0.0f &&
+      origin[1] < dims[1] && origin[2] >= 0.0f && origin[2] < dims[2];
+  if (origin_inside) return false;
+
+  float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    if (direction[axis] > 0.0f) {
+      near_t[axis] = (0.0f - origin[axis]) / direction[axis];
+    } else if (direction[axis] < 0.0f) {
+      near_t[axis] = (dims[axis] - origin[axis]) / direction[axis];
+    }
+  }
+  int axis = 0;
+  float t_enter = near_t[0];
+  if (near_t[1] > t_enter) {
+    axis = 1;
+    t_enter = near_t[1];
+  }
+  if (near_t[2] > t_enter) {
+    axis = 2;
+    t_enter = near_t[2];
+  }
+  const float start_t = fmaxf(t_enter, 0.0f);
+  if (hit_distance != start_t) return false;
+
+  const int sign = -terrain_sign(direction[axis]);
+  // The registered cut faces are x=0/max, y=0/max, and only the z=0
+  // underside.  The natural top boundary z=max remains landscape.
+  if (axis == 2 && sign != -1) return false;
+  *face_axis = axis;
+  *face_sign = sign;
+  return true;
+}
+
+__device__ __forceinline__ void terrain_grounding_bedrock_color(
+    const float normal[3], TerrainRenderLight light, float fog,
+    uint8_t color[3]) {
+  const float lambert =
+      -(normal[0] * light.direction[0] + normal[1] * light.direction[1] +
+        normal[2] * light.direction[2]);
+  const float diffuse =
+      fminf(fmaxf(lambert, kAmbientFloor), 1.0f);
+  // Bedrock retains only the half-weight diffuse term.  There is no AO,
+  // palette/hash jitter, or procedural-detail term on a bedrock surface.
+  const float lighting = __fmul_rn(kBedrockDiffuseWeight, diffuse);
+  const float base[3] = {kBedrockRed, kBedrockGreen, kBedrockBlue};
+#pragma unroll
+  for (int channel = 0; channel < 3; ++channel) {
+    const float shaded = __fmul_rn(base[channel], lighting);
+    const float fogged = __fadd_rn(shaded, __fmul_rn(fog, -shaded));
+    color[channel] = terrain_to_u8(fogged);
+  }
+}
+
+__global__ void terrain_render_grounding_kernel(
+    int64_t dim_x, int64_t dim_y, int64_t dim_z,
+    TerrainRenderCamera camera, TerrainRenderLight light, float z_horizon,
+    float fog_start, float fog_full, uint8_t* __restrict__ rgb,
+    float* __restrict__ depth) {
+  const int64_t pixel =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const int64_t pixel_count =
+      static_cast<int64_t>(camera.width) * camera.height;
+  if (pixel >= pixel_count) return;
+
+  float direction[3];
+  terrain_grounding_camera_ray(camera, pixel, direction);
+  const float origin[3] = {camera.position[0], camera.position[1],
+                           camera.position[2]};
+  if (depth[pixel] >= 0.0f) {
+    int face_axis = -1;
+    int face_sign = 0;
+    if (!terrain_grounding_boundary_entry(
+            origin, direction, depth[pixel], dim_x, dim_y, dim_z, &face_axis,
+            &face_sign)) {
+      return;
+    }
+    float normal[3] = {0.0f, 0.0f, 0.0f};
+    normal[face_axis] = static_cast<float>(face_sign);
+    uint8_t bedrock[3];
+    terrain_grounding_bedrock_color(normal, light, 0.0f, bedrock);
+    rgb[pixel * 3 + 0] = bedrock[0];
+    rgb[pixel * 3 + 1] = bedrock[1];
+    rgb[pixel * 3 + 2] = bedrock[2];
+    return;
+  }
+
+  if (direction[2] == 0.0f) return;
+  const float plane_distance =
+      __fdiv_rn(z_horizon - origin[2], direction[2]);
+  if (!(plane_distance > 0.0f) || !isfinite(plane_distance)) return;
+  const float plane_x =
+      __fadd_rn(origin[0], __fmul_rn(direction[0], plane_distance));
+  const float plane_y =
+      __fadd_rn(origin[1], __fmul_rn(direction[1], plane_distance));
+  const bool outside_xy =
+      plane_x < 0.0f || plane_x >= static_cast<float>(dim_x) ||
+      plane_y < 0.0f || plane_y >= static_cast<float>(dim_y);
+  if (!outside_xy) return;
+
+  const float fog = fminf(
+      fmaxf((plane_distance - fog_start) / (fog_full - fog_start), 0.0f),
+      1.0f);
+  // The infinite plane is two-sided: its visible normal faces the ray origin.
+  const float normal[3] = {0.0f, 0.0f,
+                           direction[2] > 0.0f ? -1.0f : 1.0f};
+  uint8_t bedrock[3];
+  terrain_grounding_bedrock_color(normal, light, fog, bedrock);
+  rgb[pixel * 3 + 0] = bedrock[0];
+  rgb[pixel * 3 + 1] = bedrock[1];
+  rgb[pixel * 3 + 2] = bedrock[2];
+  depth[pixel] = plane_distance;
+}
+
 // WO-9B detail is deliberately fully procedural: the field is a function of
 // the world-space hit coordinate alone, never a pixel or camera coordinate.
 // Keep the lattice hash law identical to the frozen per-voxel palette law.
@@ -1994,6 +2162,19 @@ std::tuple<NDArray, NDArray> terrain_render(
   if (constants.detail != 0 && constants.detail != 1) {
     throw std::runtime_error("terrain_render: detail must be 0 or 1");
   }
+  if (constants.grounding != 0 && constants.grounding != 1) {
+    throw std::runtime_error("terrain_render: grounding must be 0 or 1");
+  }
+  if (!finite(constants.z_horizon) || !finite(constants.fog_start) ||
+      !finite(constants.fog_full)) {
+    throw std::runtime_error(
+        "terrain_render: grounding parameters must be finite");
+  }
+  if (constants.fog_start < 0.0f ||
+      constants.fog_full <= constants.fog_start) {
+    throw std::runtime_error(
+        "terrain_render: fog range must satisfy 0 <= fog_start < fog_full");
+  }
   if (constants.density_filter != 0) {
     if (filtered_density == nullptr || !filtered_density->defined()) {
       throw std::runtime_error(
@@ -2077,6 +2258,14 @@ std::tuple<NDArray, NDArray> terrain_render(
           static_cast<float*>(depth.data_ptr()));
     }
     cuda_check_last("terrain_render");
+    if (constants.grounding != 0) {
+      terrain_render_grounding_kernel<<<blocks, threads>>>(
+          materials.shape[0], materials.shape[1], materials.shape[2], camera,
+          light, constants.z_horizon, constants.fog_start, constants.fog_full,
+          static_cast<uint8_t*>(rgb.data_ptr()),
+          static_cast<float*>(depth.data_ptr()));
+      cuda_check_last("terrain_render(grounding)");
+    }
   }
   return std::make_tuple(rgb, depth);
 }

@@ -218,6 +218,12 @@ struct TerrainRenderConstants {
   // WO-9B procedural surface detail selector.  Zero retains the literal
   // WO-7B/8A/8C kernel paths; one selects a separate detail-only launch.
   int detail = 0;
+  // WO-9E bedrock cut-face and outside-domain horizon selector.  Zero keeps
+  // the established render launches untouched; one adds a grounding pass.
+  int grounding = 0;
+  float z_horizon = 0.0f;
+  float fog_start = 600.0f;
+  float fog_full = 2400.0f;
 };
 
 // One axis-aligned voxel object composited into a terrain render.  Grid and

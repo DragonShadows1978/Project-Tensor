@@ -271,6 +271,39 @@ def _terrain_detail(detail):
     return parsed
 
 
+def _terrain_grounding(grounding):
+    if isinstance(grounding, (bool, np.bool_)):
+        raise TypeError("terrain_render: grounding must be an integer 0 or 1")
+    try:
+        parsed = operator.index(grounding)
+    except TypeError as exc:
+        raise TypeError(
+            "terrain_render: grounding must be an integer 0 or 1"
+        ) from exc
+    if parsed not in (0, 1):
+        raise ValueError("terrain_render: grounding must be 0 or 1")
+    return parsed
+
+
+def _terrain_grounding_parameters(z_horizon, fog_start, fog_full):
+    try:
+        with np.errstate(over="ignore", invalid="ignore"):
+            values = np.asarray(
+                (z_horizon, fog_start, fog_full), dtype=np.float32
+            )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "terrain_render: grounding parameters must be numeric"
+        ) from exc
+    if values.shape != (3,) or not np.all(np.isfinite(values)):
+        raise ValueError("terrain_render: grounding parameters must be finite")
+    if values[1] < np.float32(0.0) or values[2] <= values[1]:
+        raise ValueError(
+            "terrain_render: fog range must satisfy 0 <= fog_start < fog_full"
+        )
+    return tuple(float(value) for value in values)
+
+
 def _terrain_objects(objects, materials_u8_device):
     """Validate and normalize the small host-side object descriptor list."""
     if objects is None:
@@ -320,6 +353,10 @@ def terrain_render(
     density_filter=0,
     detail=0,
     objects=None,
+    grounding=0,
+    z_horizon=0.0,
+    fog_start=600.0,
+    fog_full=2400.0,
 ):
     """Render a resident voxel terrain entirely on the GPU.
 
@@ -346,7 +383,12 @@ def terrain_render(
     ``(grid_u8_device[X,Y,Z], origin_f32x3, palette_u8_device[N,3])``
     descriptors.  Object grids are axis-aligned in world space and use blocky
     entry-face shading plus object-local AO; terrain surface/detail selectors do
-    not alter them.  This operation is non-differentiable.
+    not alter them.  ``grounding=1`` replaces terrain hits that enter solid
+    directly through an x/y domain wall or the z=0 underside with flat basalt,
+    and fills grid misses whose forward ray crosses ``z_horizon`` outside the
+    x/y domain.  Plane color linearly fogs to black from ``fog_start`` through
+    ``fog_full`` while retaining its true depth.  This operation is
+    non-differentiable.
     """
     if not isinstance(materials_u8_device, Tensor):
         raise TypeError("terrain_render: materials_u8_device must be a Tensor")
@@ -371,6 +413,10 @@ def terrain_render(
     surface_mode = _terrain_surface_mode(surface_mode)
     density_filter = _terrain_density_filter(density_filter)
     detail = _terrain_detail(detail)
+    grounding = _terrain_grounding(grounding)
+    z_horizon, fog_start, fog_full = _terrain_grounding_parameters(
+        z_horizon, fog_start, fog_full
+    )
     if surface_mode == "blocky" and density_filter:
         raise ValueError(
             "terrain_render: density_filter is only supported in smooth mode"
@@ -392,11 +438,17 @@ def terrain_render(
         density_filter,
         detail,
     )
-    # Omitted/None/empty objects deliberately call the pre-WO-9A-e binding
-    # arity, preserving the literal established no-object path.
+    # None/empty objects still select the established no-object C++ overload.
     if not objects:
-        return _C.terrain_render(*arguments)
-    return _C.terrain_render(*arguments, objects)
+        objects = None
+    return _C.terrain_render(
+        *arguments,
+        objects,
+        grounding,
+        z_horizon,
+        fog_start,
+        fog_full,
+    )
 
 
 def argmax_last_axis(a):

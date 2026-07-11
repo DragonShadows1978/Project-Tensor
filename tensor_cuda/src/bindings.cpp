@@ -371,7 +371,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            float half_width, float half_height, int width, int height,
            const std::vector<float>& light_direction, int max_steps,
            const std::string& surface_mode, int density_filter, int detail,
-           const py::object& objects) {
+           const py::object& objects, int grounding, float z_horizon,
+           float fog_start, float fog_full) {
           if (position.size() != 3 || forward.size() != 3 ||
               right.size() != 3 || up.size() != 3 ||
               light_direction.size() != 3) {
@@ -410,13 +411,27 @@ PYBIND11_MODULE(_tensor_cuda, m) {
             throw std::runtime_error(
                 "terrain_render: detail must be 0 or 1");
           }
+          if (grounding != 0 && grounding != 1) {
+            throw std::runtime_error(
+                "terrain_render: grounding must be 0 or 1");
+          }
+          if (!std::isfinite(z_horizon) || !std::isfinite(fog_start) ||
+              !std::isfinite(fog_full)) {
+            throw std::runtime_error(
+                "terrain_render: grounding parameters must be finite");
+          }
+          if (fog_start < 0.0f || fog_full <= fog_start) {
+            throw std::runtime_error(
+                "terrain_render: fog range must satisfy 0 <= fog_start < fog_full");
+          }
           // TerrainRenderConstants predates WO-8A and is used by the C++ op
           // ABI.  Reserve its otherwise-invalid negative range for the
           // pybind-only smooth selector; terrain.cu decodes it before launch.
           const int encoded_max_steps =
               surface_mode == "smooth" ? -max_steps : max_steps;
-          TerrainRenderConstants constants{encoded_max_steps, density_filter,
-                                           detail};
+          TerrainRenderConstants constants{
+              encoded_max_steps, density_filter, detail, grounding,
+              z_horizon, fog_start, fog_full};
           const auto render_objects = terrain_objects_from_python(objects);
           auto out = render_objects.empty()
                          ? ops::terrain_render(materials, camera, light,
@@ -432,7 +447,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("width"), py::arg("height"), py::arg("light_direction"),
         py::arg("max_steps"), py::arg("surface_mode") = "blocky",
         py::arg("density_filter") = 0, py::arg("detail") = 0,
-        py::arg("objects") = py::none());
+        py::arg("objects") = py::none(), py::arg("grounding") = 0,
+        py::arg("z_horizon") = 0.0f, py::arg("fog_start") = 600.0f,
+        py::arg("fog_full") = 2400.0f);
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

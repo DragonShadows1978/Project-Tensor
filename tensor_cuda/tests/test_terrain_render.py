@@ -45,6 +45,9 @@ DETAIL_PALETTE = np.array(
     dtype=np.uint8,
 )
 LIGHT_DIRECTION = np.array((0.46, -0.36, 0.81), dtype=np.float32)
+BEDROCK_RGB = np.array((38.0, 34.0, 32.0), dtype=np.float32)
+BEDROCK_DIFFUSE_WEIGHT = np.float32(0.5)
+WO9E_LIGHT_DIRECTION = np.array((0.45, 0.25, -0.75), dtype=np.float32)
 OBJECT_PALETTE_RED = np.array(
     (
         (0, 0, 0),
@@ -1544,6 +1547,198 @@ def reference_detail_terrain_render(
     }
 
 
+# WO-9E grounding reference -----------------------------------------------
+# This is deliberately an output-side oracle: the established reference
+# renderer owns terrain geometry/shading, then this independent pass applies
+# only the registered boundary classification and miss-plane rules.
+def _reference_bedrock_colors(normals, light_direction, fog=None):
+    normals = np.asarray(normals, dtype=np.float32)
+    light = _vec3(light_direction, "light").copy()
+    light /= np.float32(np.linalg.norm(light))
+    diffuse = np.clip(
+        -np.sum(normals * light[None, :], axis=1),
+        np.float32(0.35),
+        np.float32(1.0),
+    )
+    lighting = (BEDROCK_DIFFUSE_WEIGHT * diffuse).astype(np.float32)
+    shaded = BEDROCK_RGB[None, :] * lighting[:, None]
+    if fog is not None:
+        fog = np.asarray(fog, dtype=np.float32)
+        shaded = shaded + fog[:, None] * (-shaded)
+    return np.clip(
+        shaded + np.float32(0.5), np.float32(0.0), np.float32(255.0)
+    ).astype(np.uint8)
+
+
+def _reference_apply_grounding(
+    rgb,
+    depth,
+    grid_shape,
+    camera,
+    light_direction,
+    *,
+    z_horizon,
+    fog_start,
+    fog_full,
+):
+    """Apply exact domain-entry bedrock and outside-x/y horizon semantics."""
+    output_rgb = np.asarray(rgb, dtype=np.uint8).reshape(-1, 3).copy()
+    output_depth = np.asarray(depth, dtype=np.float32).reshape(-1).copy()
+    origins, directions = _reference_camera_rays(camera)
+    dims = np.asarray(grid_shape, dtype=np.float32)
+
+    origin_inside = np.all(
+        (origins >= np.float32(0.0)) & (origins < dims[None, :]), axis=1
+    )
+    near = np.full(origins.shape, -np.inf, dtype=np.float32)
+    for axis in range(3):
+        positive = directions[:, axis] > np.float32(0.0)
+        negative = directions[:, axis] < np.float32(0.0)
+        near[positive, axis] = (
+            np.float32(0.0) - origins[positive, axis]
+        ) / directions[positive, axis]
+        near[negative, axis] = (
+            dims[axis] - origins[negative, axis]
+        ) / directions[negative, axis]
+    entry_axis = np.argmax(near, axis=1).astype(np.int64)
+    rows = np.arange(output_depth.size)
+    entry_sign = -np.sign(directions[rows, entry_axis]).astype(np.int8)
+    start_t = np.maximum(np.max(near, axis=1), np.float32(0.0))
+    boundary = (
+        (output_depth >= np.float32(0.0))
+        & ~origin_inside
+        & (output_depth == start_t)
+        & (
+            (entry_axis < 2)
+            | ((entry_axis == 2) & (entry_sign == -1))
+        )
+    )
+    boundary_rows = np.flatnonzero(boundary)
+    if boundary_rows.size:
+        normals = np.zeros((boundary_rows.size, 3), dtype=np.float32)
+        normals[
+            np.arange(boundary_rows.size), entry_axis[boundary_rows]
+        ] = entry_sign[boundary_rows].astype(np.float32)
+        output_rgb[boundary_rows] = _reference_bedrock_colors(
+            normals, light_direction
+        )
+
+    z_horizon = np.float32(z_horizon)
+    fog_start = np.float32(fog_start)
+    fog_full = np.float32(fog_full)
+    plane_distance = np.full(output_depth.shape, np.inf, dtype=np.float32)
+    moving_z = directions[:, 2] != np.float32(0.0)
+    plane_distance[moving_z] = (
+        z_horizon - origins[moving_z, 2]
+    ) / directions[moving_z, 2]
+    finite_plane = moving_z & np.isfinite(plane_distance)
+    plane_x = np.zeros(output_depth.shape, dtype=np.float32)
+    plane_y = np.zeros(output_depth.shape, dtype=np.float32)
+    plane_x[finite_plane] = (
+        origins[finite_plane, 0]
+        + directions[finite_plane, 0] * plane_distance[finite_plane]
+    )
+    plane_y[finite_plane] = (
+        origins[finite_plane, 1]
+        + directions[finite_plane, 1] * plane_distance[finite_plane]
+    )
+    outside_xy = (
+        (plane_x < np.float32(0.0))
+        | (plane_x >= dims[0])
+        | (plane_y < np.float32(0.0))
+        | (plane_y >= dims[1])
+    )
+    plane = (
+        (output_depth < np.float32(0.0))
+        & moving_z
+        & finite_plane
+        & (plane_distance > np.float32(0.0))
+        & outside_xy
+    )
+    plane_rows = np.flatnonzero(plane)
+    if plane_rows.size:
+        fog = np.clip(
+            (plane_distance[plane_rows] - fog_start)
+            / (fog_full - fog_start),
+            np.float32(0.0),
+            np.float32(1.0),
+        )
+        normals = np.zeros((plane_rows.size, 3), dtype=np.float32)
+        normals[:, 2] = np.where(
+            directions[plane_rows, 2] > np.float32(0.0),
+            np.float32(-1.0),
+            np.float32(1.0),
+        )
+        output_rgb[plane_rows] = _reference_bedrock_colors(
+            normals, light_direction, fog
+        )
+        output_depth[plane_rows] = plane_distance[plane_rows]
+
+    shape = (camera["height"], camera["width"])
+    return (
+        output_rgb.reshape(shape + (3,)),
+        output_depth.reshape(shape),
+        {
+            "bedrock": boundary.reshape(shape),
+            "plane": plane.reshape(shape),
+        },
+    )
+
+
+def reference_grounded_terrain_render(
+    grid,
+    camera,
+    light_direction,
+    palette,
+    max_steps=None,
+    *,
+    surface_mode="blocky",
+    density_filter=0,
+    detail=0,
+    z_horizon=0.0,
+    fog_start=600.0,
+    fog_full=2400.0,
+    return_info=False,
+):
+    """Independent NumPy reference for ``terrain_render(..., grounding=1)``."""
+    if detail:
+        rgb, depth = reference_detail_terrain_render(
+            grid,
+            camera,
+            light_direction,
+            palette,
+            max_steps,
+            surface_mode=surface_mode,
+            density_filter=density_filter,
+        )
+    elif surface_mode == "smooth":
+        rgb, depth = reference_smooth_terrain_render(
+            grid,
+            camera,
+            light_direction,
+            palette,
+            max_steps,
+            density_filter=density_filter,
+        )
+    else:
+        rgb, depth = reference_terrain_render(
+            grid, camera, light_direction, palette, max_steps
+        )
+    grounded = _reference_apply_grounding(
+        rgb,
+        depth,
+        np.asarray(grid).shape,
+        camera,
+        light_direction,
+        z_horizon=z_horizon,
+        fog_start=fog_start,
+        fog_full=fog_full,
+    )
+    if return_info:
+        return grounded
+    return grounded[:2]
+
+
 def _camera_for_grid(grid_shape, *, width=WIDTH, height=HEIGHT):
     sx, sy, sz = grid_shape
     return {
@@ -1566,6 +1761,10 @@ def _call_cuda(
     density_filter=None,
     detail=None,
     objects=None,
+    grounding=None,
+    z_horizon=None,
+    fog_start=None,
+    fog_full=None,
 ):
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(np.ascontiguousarray(palette), dtype="uint8")
@@ -1584,6 +1783,10 @@ def _call_cuda(
         and density_filter is None
         and detail is None
         and objects is None
+        and grounding is None
+        and z_horizon is None
+        and fog_start is None
+        and fog_full is None
     ):
         # Preserve a literal no-surface-mode call for the default-path receipt.
         rgb, depth = tc.terrain_render(grid_device, camera, light, palette_device, consts)
@@ -1599,6 +1802,14 @@ def _call_cuda(
             kwargs["detail"] = detail
         if objects is not None:
             kwargs["objects"] = device_objects
+        if grounding is not None:
+            kwargs["grounding"] = grounding
+        if z_horizon is not None:
+            kwargs["z_horizon"] = z_horizon
+        if fog_start is not None:
+            kwargs["fog_start"] = fog_start
+        if fog_full is not None:
+            kwargs["fog_full"] = fog_full
         rgb, depth = tc.terrain_render(
             grid_device,
             camera,
@@ -1628,6 +1839,40 @@ def _assert_registered_parity(actual_rgb, actual_depth, expected_rgb, expected_d
     )
     assert channel_exact_fraction >= 0.999, label
     assert max_channel_delta <= 1, label
+    assert depth_relative_error <= 1.0e-5, label
+
+
+def _assert_grounding_parity(
+    actual_rgb, actual_depth, expected_rgb, expected_depth, label
+):
+    exact_fraction = float(np.mean(actual_rgb == expected_rgb))
+    max_delta = int(
+        np.max(
+            np.abs(
+                actual_rgb.astype(np.int16) - expected_rgb.astype(np.int16)
+            )
+        )
+    )
+    actual_hit = actual_depth >= np.float32(0.0)
+    expected_hit = expected_depth >= np.float32(0.0)
+    np.testing.assert_array_equal(actual_hit, expected_hit)
+    if np.any(expected_hit):
+        depth_relative_error = float(
+            np.max(
+                np.abs(actual_depth[expected_hit] - expected_depth[expected_hit])
+                / np.maximum(
+                    np.abs(expected_depth[expected_hit]), np.float32(1.0)
+                )
+            )
+        )
+    else:
+        depth_relative_error = 0.0
+    print(
+        f"WO-9E G2 {label}: exact_channel_fraction={exact_fraction:.9f} "
+        f"max_abs_delta={max_delta} depth_max_rel={depth_relative_error:.9g}"
+    )
+    assert exact_fraction >= 0.999, label
+    assert max_delta <= 1, label
     assert depth_relative_error <= 1.0e-5, label
 
 
@@ -1669,6 +1914,101 @@ def _noise_terrain(dims=(256, 256, 96)):
     solid = z < heights[:, :, None]
     material = 1 + ((x.astype(np.int32) // 23 + y.astype(np.int32) // 19) % 3)
     return np.where(solid, material[:, :, None], 0).astype(np.uint8)
+
+
+def _wo9e_grounding_scene(label, *, width=320, height=240):
+    """Same bounded mountain slab from below, edge-on, and overhead."""
+    grid = _noise_terrain((160, 160, 64))
+    if label == "below":
+        position = (-80.0, 80.0, -34.0)
+        look_at = (72.0, 80.0, 28.0)
+        world_up = (0.0, 0.0, 1.0)
+        fov = 58.0
+    elif label == "edge":
+        position = (-120.0, 80.0, 30.0)
+        look_at = (70.0, 80.0, 26.0)
+        world_up = (0.0, 0.0, 1.0)
+        fov = 52.0
+    elif label == "overhead":
+        position = (80.0, 80.0, 145.0)
+        look_at = (80.0, 80.0, 25.0)
+        world_up = (0.0, 1.0, 0.0)
+        fov = 34.0
+    else:
+        raise ValueError(f"unknown WO-9E receipt label: {label}")
+    camera = {
+        "position": np.asarray(position, dtype=np.float32),
+        "look_at": np.asarray(look_at, dtype=np.float32),
+        "world_up": np.asarray(world_up, dtype=np.float32),
+        "vertical_fov_degrees": fov,
+        "width": width,
+        "height": height,
+    }
+    return grid, camera, WO9E_LIGHT_DIRECTION, {
+        "z_horizon": 8.0,
+        "fog_start": 120.0,
+        "fog_full": 480.0,
+    }
+
+
+def _single_pixel_camera(position, look_at, world_up=(0.0, 0.0, 1.0)):
+    return {
+        "position": np.asarray(position, dtype=np.float32),
+        "look_at": np.asarray(look_at, dtype=np.float32),
+        "world_up": np.asarray(world_up, dtype=np.float32),
+        "vertical_fov_degrees": 20.0,
+        "width": 1,
+        "height": 1,
+    }
+
+
+def _wo9e_classification_cases():
+    def case(label, voxel, position, look_at, bedrock, world_up=(0.0, 0.0, 1.0)):
+        grid = np.zeros((6, 6, 6), dtype=np.uint8)
+        grid[voxel] = np.uint8(2)
+        return (
+            label,
+            grid,
+            _single_pixel_camera(position, look_at, world_up),
+            bedrock,
+        )
+
+    return (
+        case("x0", (0, 3, 3), (-2.0, 3.5, 3.5), (0.5, 3.5, 3.5), True),
+        case("xmax", (5, 3, 3), (8.0, 3.5, 3.5), (5.5, 3.5, 3.5), True),
+        case("y0", (3, 0, 3), (3.5, -2.0, 3.5), (3.5, 0.5, 3.5), True),
+        case("ymax", (3, 5, 3), (3.5, 8.0, 3.5), (3.5, 5.5, 3.5), True),
+        case(
+            "z0_underside",
+            (3, 3, 0),
+            (3.5, 3.5, -2.0),
+            (3.5, 3.5, 0.5),
+            True,
+            (0.0, 1.0, 0.0),
+        ),
+        case(
+            "zmax_top",
+            (3, 3, 5),
+            (3.5, 3.5, 8.0),
+            (3.5, 3.5, 5.5),
+            False,
+            (0.0, 1.0, 0.0),
+        ),
+        case(
+            "interior_from_outside",
+            (2, 3, 3),
+            (-2.0, 3.5, 3.5),
+            (2.5, 3.5, 3.5),
+            False,
+        ),
+        case(
+            "interior_from_inside",
+            (4, 3, 3),
+            (1.5, 3.5, 3.5),
+            (4.5, 3.5, 3.5),
+            False,
+        ),
+    )
 
 
 def _tank_object_grid(shape=(12, 8, 8)):
@@ -2863,6 +3203,269 @@ def test_terrain_render_detail_lod_continuity_dolly():
     assert max_step_change < 1.0
 
 
+def test_terrain_render_grounding_reference_face_classification():
+    """WO-9E G3 oracle: only exact side/domain entries and z=0 are bedrock."""
+    for label, grid, camera, expected_bedrock in _wo9e_classification_cases():
+        _, depth, info = reference_grounded_terrain_render(
+            grid,
+            camera,
+            WO9E_LIGHT_DIRECTION,
+            PALETTE,
+            z_horizon=-20.0,
+            fog_start=10.0,
+            fog_full=20.0,
+            return_info=True,
+        )
+        assert depth[0, 0] >= np.float32(0.0), label
+        assert bool(info["bedrock"][0, 0]) is expected_bedrock, label
+        assert not bool(info["plane"][0, 0]), label
+
+
+def test_terrain_render_grounding_reference_plane_semantics():
+    """WO-9E plane oracle: exact mid-fog lerp, outside-only, forward-only."""
+    grid = np.zeros((6, 6, 6), dtype=np.uint8)
+    cases = (
+        (
+            "outside_mid_fog",
+            _single_pixel_camera(
+                (8.0, 3.0, 10.0), (8.0, 3.0, 0.0), (0.0, 1.0, 0.0)
+            ),
+            True,
+        ),
+        (
+            "inside_xy",
+            _single_pixel_camera(
+                (3.0, 3.0, 10.0), (3.0, 3.0, 0.0), (0.0, 1.0, 0.0)
+            ),
+            False,
+        ),
+        (
+            "above_horizon_ray",
+            _single_pixel_camera(
+                (8.0, 3.0, 10.0), (8.0, 3.0, 20.0), (0.0, 1.0, 0.0)
+            ),
+            False,
+        ),
+    )
+    for label, camera, expected_plane in cases:
+        rgb, depth, info = reference_grounded_terrain_render(
+            grid,
+            camera,
+            WO9E_LIGHT_DIRECTION,
+            PALETTE,
+            z_horizon=0.0,
+            fog_start=5.0,
+            fog_full=15.0,
+            return_info=True,
+        )
+        assert bool(info["plane"][0, 0]) is expected_plane, label
+        if expected_plane:
+            expected_rgb = _reference_bedrock_colors(
+                np.array(((0.0, 0.0, 1.0),), dtype=np.float32),
+                WO9E_LIGHT_DIRECTION,
+                np.array((0.5,), dtype=np.float32),
+            )[0]
+            np.testing.assert_array_equal(rgb[0, 0], expected_rgb)
+            assert depth[0, 0] == pytest.approx(10.0)
+        else:
+            np.testing.assert_array_equal(rgb[0, 0], np.zeros(3, dtype=np.uint8))
+            assert depth[0, 0] == np.float32(-1.0)
+
+
+def test_terrain_render_grounding_parameter_validation():
+    assert tc._terrain_grounding(0) == 0
+    assert tc._terrain_grounding(np.int64(1)) == 1
+    for invalid in (True, np.bool_(False), 0.5, "1"):
+        with pytest.raises(TypeError):
+            tc._terrain_grounding(invalid)
+    for invalid in (-1, 2):
+        with pytest.raises(ValueError):
+            tc._terrain_grounding(invalid)
+    assert tc._terrain_grounding_parameters(8.0, 600.0, 2400.0) == (
+        8.0,
+        600.0,
+        2400.0,
+    )
+    for values in (
+        (np.inf, 600.0, 2400.0),
+        (8.0, -1.0, 2400.0),
+        (8.0, 600.0, 600.0),
+        (8.0, 2400.0, 600.0),
+    ):
+        with pytest.raises(ValueError):
+            tc._terrain_grounding_parameters(*values)
+
+
+@pytest.mark.parametrize(
+    "surface_mode,detail",
+    (("blocky", 0), ("smooth", 0), ("blocky", 1), ("smooth", 1)),
+)
+def test_terrain_render_grounding_exact_face_classification(
+    surface_mode, detail
+):
+    """WO-9E G3 CUDA: domain walls always bedrock; interiors never are."""
+    _require_cuda()
+    for label, grid, camera, expected_bedrock in _wo9e_classification_cases():
+        expected_rgb, expected_depth, info = reference_grounded_terrain_render(
+            grid,
+            camera,
+            WO9E_LIGHT_DIRECTION,
+            PALETTE,
+            surface_mode=surface_mode,
+            detail=detail,
+            z_horizon=-20.0,
+            fog_start=10.0,
+            fog_full=20.0,
+            return_info=True,
+        )
+        assert bool(info["bedrock"][0, 0]) is expected_bedrock, label
+        actual_rgb, actual_depth = _call_cuda(
+            grid,
+            camera,
+            light=WO9E_LIGHT_DIRECTION,
+            surface_mode=surface_mode,
+            detail=detail,
+            grounding=1,
+            z_horizon=-20.0,
+            fog_start=10.0,
+            fog_full=20.0,
+        )
+        _assert_grounding_parity(
+            actual_rgb,
+            actual_depth,
+            expected_rgb,
+            expected_depth,
+            f"classification_{surface_mode}_detail{detail}_{label}",
+        )
+        bedrock_color = expected_rgb[0, 0]
+        if expected_bedrock:
+            np.testing.assert_array_equal(actual_rgb[0, 0], bedrock_color)
+        else:
+            boundary_normal = np.array(((-1.0, 0.0, 0.0),), dtype=np.float32)
+            assert not np.array_equal(
+                actual_rgb[0, 0],
+                _reference_bedrock_colors(
+                    boundary_normal, WO9E_LIGHT_DIRECTION
+                )[0],
+            )
+
+
+@pytest.mark.parametrize("label", ("below", "overhead"))
+def test_terrain_render_grounding_numpy_parity(label):
+    """WO-9E G2: outside-below and ordinary overhead frames match NumPy."""
+    _require_cuda()
+    grid, camera, light, grounding = _wo9e_grounding_scene(
+        label, width=320, height=240
+    )
+    expected_rgb, expected_depth, info = reference_grounded_terrain_render(
+        grid,
+        camera,
+        light,
+        PALETTE,
+        return_info=True,
+        **grounding,
+    )
+    actual_rgb, actual_depth = _call_cuda(
+        grid, camera, light=light, grounding=1, **grounding
+    )
+    _assert_grounding_parity(
+        actual_rgb, actual_depth, expected_rgb, expected_depth, label
+    )
+    if label == "below":
+        assert np.count_nonzero(info["bedrock"]) > 0
+        assert np.count_nonzero(info["plane"]) > 0
+    else:
+        assert not np.any(info["bedrock"])
+        assert not np.any(info["plane"])
+
+
+def test_terrain_render_grounding_zero_regression():
+    """WO-9E G1: explicit grounding=0 is byte-identical in every mode."""
+    _require_cuda()
+    grid = _noise_terrain((96, 96, 48))
+    camera = _camera_for_grid(grid.shape, width=160, height=120)
+    for surface_mode, detail in (
+        ("blocky", 0),
+        ("smooth", 0),
+        ("blocky", 1),
+        ("smooth", 1),
+    ):
+        baseline_rgb, baseline_depth = _call_cuda(
+            grid,
+            camera,
+            surface_mode=surface_mode,
+            detail=detail,
+        )
+        off_rgb, off_depth = _call_cuda(
+            grid,
+            camera,
+            surface_mode=surface_mode,
+            detail=detail,
+            grounding=0,
+            z_horizon=8.0,
+            fog_start=60.0,
+            fog_full=240.0,
+        )
+        np.testing.assert_array_equal(off_rgb, baseline_rgb)
+        np.testing.assert_array_equal(off_depth, baseline_depth)
+
+
+def test_terrain_render_grounding_plane_semantics():
+    """WO-9E plane: outside-only, forward-only, fogged, with true depth."""
+    _require_cuda()
+    grid = np.zeros((6, 6, 6), dtype=np.uint8)
+    cases = (
+        (
+            "outside_mid_fog",
+            _single_pixel_camera(
+                (8.0, 3.0, 10.0), (8.0, 3.0, 0.0), (0.0, 1.0, 0.0)
+            ),
+            True,
+        ),
+        (
+            "inside_xy",
+            _single_pixel_camera(
+                (3.0, 3.0, 10.0), (3.0, 3.0, 0.0), (0.0, 1.0, 0.0)
+            ),
+            False,
+        ),
+        (
+            "above_horizon_ray",
+            _single_pixel_camera(
+                (8.0, 3.0, 10.0), (8.0, 3.0, 20.0), (0.0, 1.0, 0.0)
+            ),
+            False,
+        ),
+    )
+    for label, camera, expected_plane in cases:
+        expected_rgb, expected_depth, info = reference_grounded_terrain_render(
+            grid,
+            camera,
+            WO9E_LIGHT_DIRECTION,
+            PALETTE,
+            z_horizon=0.0,
+            fog_start=5.0,
+            fog_full=15.0,
+            return_info=True,
+        )
+        assert bool(info["plane"][0, 0]) is expected_plane, label
+        actual_rgb, actual_depth = _call_cuda(
+            grid,
+            camera,
+            light=WO9E_LIGHT_DIRECTION,
+            grounding=1,
+            z_horizon=0.0,
+            fog_start=5.0,
+            fog_full=15.0,
+        )
+        np.testing.assert_array_equal(actual_rgb, expected_rgb)
+        np.testing.assert_allclose(actual_depth, expected_depth, rtol=1.0e-6)
+        if expected_plane:
+            assert actual_depth[0, 0] == pytest.approx(10.0)
+        else:
+            assert actual_depth[0, 0] == np.float32(-1.0)
+
+
 def test_terrain_render_wo9br2_ppm_ladder():
     """WO-9B-r2: front-lit real-mountain smooth-detail receipt ladder."""
     _require_cuda()
@@ -2899,6 +3502,49 @@ def _write_ppm(path, rgb):
     with path.open("wb") as handle:
         handle.write(f"P6\n{width} {height}\n255\n".encode("ascii"))
         handle.write(np.ascontiguousarray(rgb, dtype=np.uint8).tobytes())
+
+
+def test_terrain_render_wo9e_ppm_receipts():
+    """WO-9E G6: below, edge-on, and unchanged-overhead P6 receipts."""
+    repo_root = Path(__file__).resolve().parents[2]
+    counts = {}
+    for label in ("below", "edge", "overhead"):
+        grid, camera, light, grounding = _wo9e_grounding_scene(label)
+        baseline_rgb, baseline_depth = reference_terrain_render(
+            grid, camera, light, PALETTE
+        )
+        rgb, depth, info = reference_grounded_terrain_render(
+            grid,
+            camera,
+            light,
+            PALETTE,
+            return_info=True,
+            **grounding,
+        )
+        bedrock_count = int(np.count_nonzero(info["bedrock"]))
+        plane_count = int(np.count_nonzero(info["plane"]))
+        sky_count = int(np.count_nonzero(depth < np.float32(0.0)))
+        counts[label] = (bedrock_count, plane_count, sky_count)
+        if label == "below":
+            assert bedrock_count >= 512
+            assert plane_count >= 512
+        elif label == "edge":
+            assert bedrock_count >= 512
+            assert plane_count >= 512
+            assert sky_count >= 512
+        else:
+            assert bedrock_count == 0
+            assert plane_count == 0
+            np.testing.assert_array_equal(rgb, baseline_rgb)
+            np.testing.assert_array_equal(depth, baseline_depth)
+        _write_ppm(repo_root / "artifacts" / f"wo9e_{label}.ppm", rgb)
+    print(
+        "WO-9E G6 pixels "
+        + " ".join(
+            f"{label}=bedrock:{value[0]},plane:{value[1]},sky:{value[2]}"
+            for label, value in counts.items()
+        )
+    )
 
 
 def test_terrain_render_wo9ae_ppm_receipts():
@@ -3029,6 +3675,10 @@ def terrain_render_timing_harness(
     density_filter=None,
     detail=0,
     objects=None,
+    grounding=0,
+    z_horizon=8.0,
+    fog_start=600.0,
+    fog_full=2400.0,
 ):
     """CUDA-event stages for blocky, smooth, or cached-filter rendering."""
     _require_cuda()
@@ -3054,6 +3704,13 @@ def terrain_render_timing_harness(
             kwargs["detail"] = detail
         if device_objects is not None:
             kwargs["objects"] = device_objects
+        if grounding:
+            kwargs.update(
+                grounding=grounding,
+                z_horizon=z_horizon,
+                fog_start=fog_start,
+                fog_full=fog_full,
+            )
         return tc.terrain_render(
             grid_device,
             camera,
@@ -3248,3 +3905,41 @@ def test_terrain_render_objects_stage_timing_100_frames():
         f"target_plus_1.5ms={'GREEN' if total_delta <= 1.5 else 'RED'}"
     )
     assert total_delta <= 1.5
+
+
+@pytest.mark.skipif(
+    os.environ.get("TC_RUN_TERRAIN_TIMING") != "1",
+    reason="set TC_RUN_TERRAIN_TIMING=1 to run the 100-frame WO-9E timing gate",
+)
+def test_terrain_render_grounding_stage_timing_100_frames():
+    """WO-9E G4: the grounding post-pass adds no more than 0.5ms @512."""
+    _require_cuda()
+    dims = (512, 512, 192)
+    grid = _noise_terrain(dims)
+    camera = _camera_for_grid(dims)
+    baseline = terrain_render_timing_harness(grid, camera, frames=100)
+    grounded = terrain_render_timing_harness(
+        grid,
+        camera,
+        frames=100,
+        grounding=1,
+        z_horizon=8.0,
+        fog_start=600.0,
+        fog_full=2400.0,
+    )
+    kernel_delta = grounded["kernel_ms_mean"] - baseline["kernel_ms_mean"]
+    total_delta = grounded["total_ms_mean"] - baseline["total_ms_mean"]
+    print(
+        "WO-9E G4 "
+        f"grid={dims} frames={baseline['frames']} "
+        f"baseline_kernel_ms_mean={baseline['kernel_ms_mean']:.4f} "
+        f"grounding_kernel_ms_mean={grounded['kernel_ms_mean']:.4f} "
+        f"kernel_delta_ms={kernel_delta:.4f} "
+        f"baseline_d2h_ms_mean={baseline['d2h_ms_mean']:.4f} "
+        f"grounding_d2h_ms_mean={grounded['d2h_ms_mean']:.4f} "
+        f"baseline_total_ms_mean={baseline['total_ms_mean']:.4f} "
+        f"grounding_total_ms_mean={grounded['total_ms_mean']:.4f} "
+        f"total_delta_ms={total_delta:.4f} "
+        f"target_plus_0.5ms={'GREEN' if total_delta <= 0.5 else 'RED'}"
+    )
+    assert total_delta <= 0.5
