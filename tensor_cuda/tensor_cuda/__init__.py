@@ -9,6 +9,7 @@ plumbing, no_grad). See ROADMAP.md for the layers still being ported.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -89,6 +90,188 @@ def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
     """
     return _C.dda_raycast(
         grid_u8, origins_f32, directions_f32, max_steps
+    )
+
+
+_TERRAIN_RENDER_FROZEN_CONSTANTS = {
+    "ambient_floor": np.float32(0.35),
+    "ao_strength": np.float32(0.60),
+    "ao_floor": np.float32(0.40),
+    "value_jitter": np.float32(0.08),
+    "channel_mix": np.float32(0.04),
+}
+
+
+def _terrain_lookup(source, names, label):
+    if isinstance(source, Mapping):
+        for name in names:
+            if name in source:
+                return source[name]
+    else:
+        for name in names:
+            if hasattr(source, name):
+                return getattr(source, name)
+    raise ValueError(f"terrain_render: {label} is required")
+
+
+def _terrain_vector(value, label):
+    vector = np.asarray(value, dtype=np.float32)
+    if vector.shape != (3,) or not np.all(np.isfinite(vector)):
+        raise ValueError(
+            f"terrain_render: {label} must be a finite three-vector"
+        )
+    return np.ascontiguousarray(vector)
+
+
+def _terrain_camera_terms(cam):
+    """Build frozen Scorch camera terms without constructing any ray array."""
+    if isinstance(cam, (tuple, list)) and len(cam) == 6:
+        position, look_at, world_up, fov, width, height = cam
+    else:
+        position = _terrain_lookup(cam, ("position",), "cam.position")
+        look_at = _terrain_lookup(cam, ("look_at", "target"), "cam.look_at")
+        world_up = _terrain_lookup(cam, ("world_up", "up"), "cam.world_up")
+        fov = _terrain_lookup(
+            cam,
+            ("vertical_fov_degrees", "fov_degrees", "fov"),
+            "cam.vertical_fov_degrees",
+        )
+        width = _terrain_lookup(cam, ("width",), "cam.width")
+        height = _terrain_lookup(cam, ("height",), "cam.height")
+
+    position = _terrain_vector(position, "cam.position")
+    look_at = _terrain_vector(look_at, "cam.look_at")
+    world_up = _terrain_vector(world_up, "cam.world_up")
+    try:
+        fov = float(fov)
+        width = int(width)
+        height = int(height)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "terrain_render: camera fov, width, and height must be numeric"
+        ) from exc
+    if not np.isfinite(fov) or not 0.0 < fov < 180.0:
+        raise ValueError(
+            "terrain_render: vertical_fov_degrees must lie between 0 and 180"
+        )
+    if width <= 0 or height <= 0:
+        raise ValueError("terrain_render: image dimensions must be positive")
+
+    # Keep the float32 operation order identical to Project-Scorch's
+    # render.camera.camera_rays.  This is O(1) camera setup, not CPU ray work.
+    forward = look_at - position
+    forward_length = float(np.linalg.norm(forward))
+    if forward_length == 0.0:
+        raise ValueError("terrain_render: cam.position and cam.look_at must differ")
+    forward /= np.float32(forward_length)
+    right = np.cross(forward, world_up)
+    right_length = float(np.linalg.norm(right))
+    if right_length < 1.0e-7:
+        raise ValueError(
+            "terrain_render: cam.world_up must not be parallel to view direction"
+        )
+    right /= np.float32(right_length)
+    camera_up = np.cross(right, forward).astype(np.float32)
+    half_height = np.float32(np.tan(np.deg2rad(fov) * 0.5))
+    half_width = half_height * np.float32(width / height)
+
+    return (
+        position,
+        np.ascontiguousarray(forward),
+        np.ascontiguousarray(right),
+        np.ascontiguousarray(camera_up),
+        float(half_width),
+        float(half_height),
+        width,
+        height,
+    )
+
+
+def _terrain_light_direction(light):
+    if isinstance(light, Mapping) or hasattr(light, "direction"):
+        direction = _terrain_lookup(
+            light,
+            ("direction", "light_dir", "light_direction"),
+            "light.direction",
+        )
+    else:
+        direction = light
+    direction = _terrain_vector(direction, "light.direction")
+    length = float(np.linalg.norm(direction))
+    if length < 1.0e-7:
+        raise ValueError("terrain_render: light.direction must be non-zero")
+    return np.ascontiguousarray(direction / np.float32(length))
+
+
+def _terrain_max_steps(consts, materials_shape):
+    default_steps = int(sum(materials_shape) + 3)
+    if consts is None:
+        return default_steps
+    if isinstance(consts, Mapping):
+        for name, frozen in _TERRAIN_RENDER_FROZEN_CONSTANTS.items():
+            if name in consts and not np.isclose(
+                np.float32(consts[name]), frozen, rtol=0.0, atol=1.0e-7
+            ):
+                raise ValueError(
+                    f"terrain_render: {name} is frozen at {float(frozen)}"
+                )
+        value = consts.get("max_steps", default_steps)
+    else:
+        value = consts
+    try:
+        max_steps = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("terrain_render: consts.max_steps must be an integer") from exc
+    if max_steps <= 0:
+        raise ValueError("terrain_render: consts.max_steps must be positive")
+    return max_steps
+
+
+def terrain_render(materials_u8_device, cam, light, palette, consts=None):
+    """Render a resident voxel terrain entirely on the GPU.
+
+    ``materials_u8_device`` is a CUDA ``uint8`` tensor shaped ``(X, Y, Z)``;
+    ``palette`` is a CUDA ``uint8`` tensor shaped ``(N, 3)``.  ``cam`` is a
+    mapping/object with ``position``, ``look_at``, ``world_up``,
+    ``vertical_fov_degrees`` (``fov_degrees`` is accepted), ``width``, and
+    ``height``; a six-item tuple in that order is also accepted.  ``light`` is
+    a 3-vector or has a ``direction`` field.  Its direction points from light
+    to terrain, so the shader uses ``dot(normal, -light_dir)``.
+
+    ``consts`` may be ``None``, a positive integer max-step count, or a mapping
+    containing ``max_steps`` plus any frozen constants at their specified
+    values.  The return is ``(rgb_uint8[H,W,3], depth_float32[H,W])`` with
+    black / ``-1`` for a miss.  This operation is non-differentiable.
+    """
+    if not isinstance(materials_u8_device, Tensor):
+        raise TypeError("terrain_render: materials_u8_device must be a Tensor")
+    if not isinstance(palette, Tensor):
+        raise TypeError("terrain_render: palette must be a device Tensor")
+    (
+        position,
+        forward,
+        right,
+        up,
+        half_width,
+        half_height,
+        width,
+        height,
+    ) = _terrain_camera_terms(cam)
+    light_direction = _terrain_light_direction(light)
+    max_steps = _terrain_max_steps(consts, materials_u8_device.shape)
+    return _C.terrain_render(
+        materials_u8_device,
+        palette,
+        position.tolist(),
+        forward.tolist(),
+        right.tolist(),
+        up.tolist(),
+        half_width,
+        half_height,
+        width,
+        height,
+        light_direction.tolist(),
+        max_steps,
     )
 
 
@@ -440,7 +623,7 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "dda_raycast", "rms_norm", "rope_apply", "write_rows", "export_rows",
+    "matmul", "dda_raycast", "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
     "arena_row_pair_transaction", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",

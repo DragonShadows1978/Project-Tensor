@@ -181,6 +181,39 @@ std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray> dda_raycast(
     const NDArray& grid, const NDArray& origins, const NDArray& directions,
     int max_steps);
 
+// Precomputed camera terms for the fused terrain renderer.  The Python
+// wrapper derives these from the frozen Project-Scorch camera convention;
+// this keeps the per-frame host work to a few scalar/vector calculations while
+// the kernel still generates every per-pixel ray itself.
+struct TerrainRenderCamera {
+  float position[3];
+  float forward[3];
+  float right[3];
+  float up[3];
+  float half_width;
+  float half_height;
+  int width;
+  int height;
+};
+
+// `direction` points in the light's travel direction.  Shading uses
+// dot(normal, -direction), matching the frozen WO-7B contract.
+struct TerrainRenderLight {
+  float direction[3];
+};
+
+struct TerrainRenderConstants {
+  int max_steps;
+};
+
+// One-thread-per-pixel terrain renderer.  Inputs are a resident uint8
+// materials grid and a resident uint8 palette shaped (N, 3).  The outputs are
+// detached RGB uint8 (H, W, 3) and depth float32 (H, W), with -1 on a miss.
+std::tuple<NDArray, NDArray> terrain_render(
+    const NDArray& materials, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light, const NDArray& palette,
+    const TerrainRenderConstants& constants);
+
 // Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
 // accumulate, single kernel + single output alloc (vs the 9-op chain).
 // w must be fp32; out_dtype is typically x's dtype.

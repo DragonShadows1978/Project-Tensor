@@ -41,6 +41,7 @@ FetchContent_MakeAvailable(pybind11)
 pybind11_add_module(_tensor_cuda
   src/kernels.cu
   src/dda.cu
+  src/terrain.cu
   src/matmul.cu
   src/conv.cu
   src/autograd.cpp

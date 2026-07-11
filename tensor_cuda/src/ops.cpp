@@ -262,6 +262,16 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
       Tensor::make(std::get<5>(out), false));
 }
 
+std::tuple<Tensor, Tensor> terrain_render(
+    const Tensor& materials, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light, const Tensor& palette,
+    const TerrainRenderConstants& constants) {
+  auto out = tc::terrain_render(materials.data(), camera, light,
+                                palette.data(), constants);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false));
+}
+
 Tensor causal_softmax(const Tensor& scores) {
   NDArray out = tc::causal_softmax(scores.data());
   return Tensor::from_op(out, {scores}, "causal_softmax", [](const NDArray&) -> void {

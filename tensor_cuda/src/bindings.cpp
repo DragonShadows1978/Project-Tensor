@@ -320,6 +320,42 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         },
         py::arg("grid_u8"), py::arg("origins_f32"),
         py::arg("directions_f32"), py::arg("max_steps"));
+  m.def("terrain_render",
+        [](Tensor& materials, Tensor& palette,
+           const std::vector<float>& position,
+           const std::vector<float>& forward,
+           const std::vector<float>& right, const std::vector<float>& up,
+           float half_width, float half_height, int width, int height,
+           const std::vector<float>& light_direction, int max_steps) {
+          if (position.size() != 3 || forward.size() != 3 ||
+              right.size() != 3 || up.size() != 3 ||
+              light_direction.size() != 3) {
+            throw std::runtime_error(
+                "terrain_render: camera vectors and light_direction must have length 3");
+          }
+          TerrainRenderCamera camera{};
+          TerrainRenderLight light{};
+          for (int axis = 0; axis < 3; ++axis) {
+            camera.position[axis] = position[axis];
+            camera.forward[axis] = forward[axis];
+            camera.right[axis] = right[axis];
+            camera.up[axis] = up[axis];
+            light.direction[axis] = light_direction[axis];
+          }
+          camera.half_width = half_width;
+          camera.half_height = half_height;
+          camera.width = width;
+          camera.height = height;
+          TerrainRenderConstants constants{max_steps};
+          auto out = ops::terrain_render(materials, camera, light, palette,
+                                         constants);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out));
+        },
+        py::arg("materials_u8"), py::arg("palette_u8"),
+        py::arg("position"), py::arg("forward"), py::arg("right"),
+        py::arg("up"), py::arg("half_width"), py::arg("half_height"),
+        py::arg("width"), py::arg("height"), py::arg("light_direction"),
+        py::arg("max_steps"));
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

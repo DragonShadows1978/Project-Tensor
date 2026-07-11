@@ -94,6 +94,13 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
     const Tensor& grid, const Tensor& origins, const Tensor& directions,
     int max_steps);
 
+// Non-differentiable fused terrain render.  All pixel work (ray generation,
+// DDA, normal/AO shading, and palette jitter) happens in one CUDA launch.
+std::tuple<Tensor, Tensor> terrain_render(
+    const Tensor& materials, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light, const Tensor& palette,
+    const TerrainRenderConstants& constants);
+
 // Fused RMSNorm over the last dim (inference-only: backward throws).
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,
