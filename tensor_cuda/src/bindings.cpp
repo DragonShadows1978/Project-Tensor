@@ -327,7 +327,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            const std::vector<float>& right, const std::vector<float>& up,
            float half_width, float half_height, int width, int height,
            const std::vector<float>& light_direction, int max_steps,
-           const std::string& surface_mode, int density_filter) {
+           const std::string& surface_mode, int density_filter, int detail) {
           if (position.size() != 3 || forward.size() != 3 ||
               right.size() != 3 || up.size() != 3 ||
               light_direction.size() != 3) {
@@ -362,12 +362,17 @@ PYBIND11_MODULE(_tensor_cuda, m) {
             throw std::runtime_error(
                 "terrain_render: density_filter is only supported in smooth mode");
           }
+          if (detail != 0 && detail != 1) {
+            throw std::runtime_error(
+                "terrain_render: detail must be 0 or 1");
+          }
           // TerrainRenderConstants predates WO-8A and is used by the C++ op
           // ABI.  Reserve its otherwise-invalid negative range for the
           // pybind-only smooth selector; terrain.cu decodes it before launch.
           const int encoded_max_steps =
               surface_mode == "smooth" ? -max_steps : max_steps;
-          TerrainRenderConstants constants{encoded_max_steps, density_filter};
+          TerrainRenderConstants constants{encoded_max_steps, density_filter,
+                                           detail};
           auto out = ops::terrain_render(materials, camera, light, palette,
                                          constants);
           return py::make_tuple(std::get<0>(out), std::get<1>(out));
@@ -377,7 +382,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("up"), py::arg("half_width"), py::arg("half_height"),
         py::arg("width"), py::arg("height"), py::arg("light_direction"),
         py::arg("max_steps"), py::arg("surface_mode") = "blocky",
-        py::arg("density_filter") = 0);
+        py::arg("density_filter") = 0, py::arg("detail") = 0);
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import hashlib
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 import numpy as np
@@ -29,6 +31,16 @@ PALETTE = np.array(
         (126, 87, 50),
         (102, 108, 116),
         (201, 174, 108),
+    ),
+    dtype=np.uint8,
+)
+DETAIL_PALETTE = np.array(
+    (
+        (0, 0, 0),
+        (126, 87, 50),
+        (102, 108, 116),
+        (201, 174, 108),
+        (54, 51, 48),
     ),
     dtype=np.uint8,
 )
@@ -1020,6 +1032,325 @@ def reference_smooth_terrain_render(
     }
 
 
+# WO-9B procedural-detail reference ----------------------------------------
+# This remains separate from CUDA: it reproduces the world-space hash/noise,
+# analytic gradient, LOD, and shading rules with vectorized NumPy operations.
+_DETAIL_OCTAVES = 7
+_DETAIL_BASE_WAVELENGTH = np.float32(8.0)
+_DETAIL_GAIN = np.float32(0.5)
+_DETAIL_LOD_FULL_DISTANCE = np.float32(24.0)
+_DETAIL_NORMAL_GAIN = np.float32(0.75)
+_DETAIL_MAX_TANGENT = np.float32(0.4040262258351568)
+_DETAIL_VALUE_JITTER = np.float32(0.06)
+
+
+def _detail_material_scale(material):
+    material = np.asarray(material, dtype=np.uint8)
+    scale = np.ones(material.shape, dtype=np.float32)
+    scale[material == 2] = np.float32(1.4)  # rock
+    scale[material == 3] = np.float32(0.5)  # sand
+    scale[material == 4] = np.float32(1.2)  # scorched
+    return scale
+
+
+def _detail_lattice_hash(x, y, z):
+    with np.errstate(over="ignore"):
+        hash_input = (
+            x.astype(np.uint64) * np.uint64(0x9E3779B97F4A7C15)
+            ^ y.astype(np.uint64) * np.uint64(0xBF58476D1CE4E5B9)
+            ^ z.astype(np.uint64) * np.uint64(0x94D049BB133111EB)
+        )
+        return _splitmix64(hash_input)
+
+
+def _detail_value_noise(positions, wavelength):
+    """Cubic value noise plus analytic world-coordinate gradient."""
+    positions = np.asarray(positions, dtype=np.float32)
+    coordinate = (positions / np.float32(wavelength)).astype(np.float32)
+    base = np.floor(coordinate).astype(np.int64)
+    fraction = (coordinate - base.astype(np.float32)).astype(np.float32)
+    fade = (
+        fraction
+        * fraction
+        * (np.float32(3.0) - np.float32(2.0) * fraction)
+    ).astype(np.float32)
+    fade_derivative = (
+        np.float32(6.0)
+        * fraction
+        * (np.float32(1.0) - fraction)
+        / np.float32(wavelength)
+    ).astype(np.float32)
+    value = np.zeros(positions.shape[0], dtype=np.float32)
+    gradient = np.zeros((positions.shape[0], 3), dtype=np.float32)
+    for dz in (0, 1):
+        wz = np.float32(1.0) - fade[:, 2] if dz == 0 else fade[:, 2]
+        dwz = -fade_derivative[:, 2] if dz == 0 else fade_derivative[:, 2]
+        for dy in (0, 1):
+            wy = np.float32(1.0) - fade[:, 1] if dy == 0 else fade[:, 1]
+            dwy = -fade_derivative[:, 1] if dy == 0 else fade_derivative[:, 1]
+            for dx in (0, 1):
+                wx = np.float32(1.0) - fade[:, 0] if dx == 0 else fade[:, 0]
+                dwx = -fade_derivative[:, 0] if dx == 0 else fade_derivative[:, 0]
+                lattice_value = _signed_hash_byte(
+                    _detail_lattice_hash(
+                        base[:, 0] + dx,
+                        base[:, 1] + dy,
+                        base[:, 2] + dz,
+                    ),
+                    56,
+                )
+                value += lattice_value * wx * wy * wz
+                gradient[:, 0] += lattice_value * dwx * wy * wz
+                gradient[:, 1] += lattice_value * wx * dwy * wz
+                gradient[:, 2] += lattice_value * wx * wy * dwz
+    return value, gradient
+
+
+def _reference_detail_fields(positions, distance, material, normal):
+    """WO-9B fBm normal perturbation and continuous two-octave jitter."""
+    positions = np.asarray(positions, dtype=np.float32)
+    distance = np.asarray(distance, dtype=np.float32)
+    material = np.asarray(material, dtype=np.uint8)
+    detailed_normal = np.asarray(normal, dtype=np.float32).copy()
+    count = positions.shape[0]
+    octave_value = np.zeros((_DETAIL_OCTAVES, count), dtype=np.float32)
+    octave_lod = np.zeros((_DETAIL_OCTAVES, count), dtype=np.float32)
+    detail_gradient = np.zeros((count, 3), dtype=np.float32)
+    wavelength = _DETAIL_BASE_WAVELENGTH
+    gain = np.float32(1.0)
+    for octave in range(_DETAIL_OCTAVES):
+        full_distance = np.float32(
+            _DETAIL_LOD_FULL_DISTANCE / np.float32(1 << octave)
+        )
+        lod = np.clip(
+            (np.float32(2.0) * full_distance - distance) / full_distance,
+            np.float32(0.0),
+            np.float32(1.0),
+        ).astype(np.float32)
+        octave_lod[octave] = lod
+        active = np.flatnonzero(lod > np.float32(0.0))
+        if active.size:
+            value, gradient = _detail_value_noise(positions[active], wavelength)
+            octave_value[octave, active] = value
+            detail_gradient[active] += (
+                gradient * gain * lod[active, None]
+            ).astype(np.float32)
+        wavelength = np.float32(wavelength * np.float32(0.5))
+        gain = np.float32(gain * _DETAIL_GAIN)
+
+    normal_gradient = np.sum(
+        detailed_normal * detail_gradient, axis=1, dtype=np.float32
+    )
+    tangent = (
+        detail_gradient - detailed_normal * normal_gradient[:, None]
+    ).astype(np.float32)
+    tangent_length = np.sqrt(
+        np.sum(tangent * tangent, axis=1, dtype=np.float32)
+    ).astype(np.float32)
+    material_scale = _detail_material_scale(material)
+    defined = tangent_length >= np.float32(1.0e-6)
+    if np.any(defined):
+        tangent_magnitude = np.minimum(
+            _DETAIL_MAX_TANGENT,
+            _DETAIL_NORMAL_GAIN * material_scale * tangent_length,
+        ).astype(np.float32)
+        perturbed = (
+            detailed_normal[defined]
+            + tangent[defined]
+            * (tangent_magnitude[defined] / tangent_length[defined])[:, None]
+        ).astype(np.float32)
+        perturbed_length = np.sqrt(
+            np.sum(perturbed * perturbed, axis=1, dtype=np.float32)
+        ).astype(np.float32)
+        detailed_normal[defined] = perturbed / perturbed_length[:, None]
+
+    # A newly-active octave cross-fades out the coarsest existing member of
+    # the pair, so the nominal "two finest" rule is continuous at every LOD
+    # threshold rather than switching abruptly at a nonzero contribution.
+    fine_noise = np.zeros(count, dtype=np.float32)
+    for octave in range(_DETAIL_OCTAVES):
+        handoff = np.float32(1.0)
+        if octave + 2 < _DETAIL_OCTAVES:
+            handoff = np.float32(1.0) - octave_lod[octave + 2]
+        fine_noise += (
+            np.float32(0.5)
+            * octave_value[octave]
+            * octave_lod[octave]
+            * handoff
+        )
+    fine_value_jitter = (
+        np.clip(
+            fine_noise * material_scale,
+            np.float32(-1.0),
+            np.float32(1.0),
+        )
+        * _DETAIL_VALUE_JITTER
+    ).astype(np.float32)
+    return detailed_normal, fine_value_jitter
+
+
+def _reference_blocky_normals(grid, raycast):
+    hit, _, voxel, face_axis, face_sign, _ = raycast
+    normal = np.zeros((hit.size, 3), dtype=np.float32)
+    normal[:, 2] = np.float32(1.0)
+    rows = np.flatnonzero(hit)
+    if not rows.size:
+        return normal
+    x, y, z = (voxel[rows, axis] for axis in range(3))
+    gradient = np.stack(
+        (
+            _occupied_at(grid, x - 1, y, z) - _occupied_at(grid, x + 1, y, z),
+            _occupied_at(grid, x, y - 1, z) - _occupied_at(grid, x, y + 1, z),
+            _occupied_at(grid, x, y, z - 1) - _occupied_at(grid, x, y, z + 1),
+        ),
+        axis=1,
+    ).astype(np.float32)
+    gradient_length = np.sqrt(
+        np.sum(gradient * gradient, axis=1, dtype=np.float32)
+    ).astype(np.float32)
+    defined = gradient_length >= np.float32(1.0e-6)
+    normal_rows = normal[rows]
+    normal_rows[defined] = gradient[defined] / gradient_length[defined, None]
+    fallback = ~defined & (face_axis[rows] >= 0)
+    fallback_rows = np.flatnonzero(fallback)
+    normal_rows[fallback_rows] = np.float32(0.0)
+    normal_rows[
+        fallback_rows, face_axis[rows][fallback_rows]
+    ] = face_sign[rows][fallback_rows].astype(np.float32)
+    normal[rows] = normal_rows
+    return normal
+
+
+def _reference_detail_shade(
+    grid, raycast, palette, light_direction, points, base_normal
+):
+    hit, material, voxel, _, _, distance = raycast
+    rgb = np.zeros((hit.size, 3), dtype=np.uint8)
+    depth = np.full(hit.size, np.float32(-1.0), dtype=np.float32)
+    normal = np.asarray(base_normal, dtype=np.float32).copy()
+    indices = np.flatnonzero(hit)
+    if not indices.size:
+        return rgb, depth, normal
+
+    normal[indices], fine_value_jitter = _reference_detail_fields(
+        points[indices], distance[indices], material[indices], normal[indices]
+    )
+    x, y, z = (voxel[indices, axis] for axis in range(3))
+    occupied_neighbors = np.zeros(indices.size, dtype=np.float32)
+    for dz in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dx == dy == dz == 0:
+                    continue
+                occupied_neighbors += _occupied_at(grid, x + dx, y + dy, z + dz)
+    ao = np.clip(
+        np.float32(1.0)
+        - np.float32(0.60) * occupied_neighbors * np.float32(1.0 / 26.0),
+        np.float32(0.40),
+        np.float32(1.0),
+    )
+    light = _vec3(light_direction, "light")
+    light /= np.float32(np.linalg.norm(light))
+    diffuse = np.clip(
+        -np.sum(normal[indices] * light[None, :], axis=1, dtype=np.float32),
+        np.float32(0.35),
+        np.float32(1.0),
+    )
+    palette_index = np.minimum(
+        material[indices].astype(np.int64), palette.shape[0] - 1
+    )
+    base = palette[palette_index].astype(np.float32)
+    hash_input = (
+        x.astype(np.uint64) * np.uint64(0x9E3779B97F4A7C15)
+        ^ y.astype(np.uint64) * np.uint64(0xBF58476D1CE4E5B9)
+        ^ z.astype(np.uint64) * np.uint64(0x94D049BB133111EB)
+    )
+    hash_value = _splitmix64(hash_input)
+    value_scale = (
+        np.float32(1.0)
+        + _signed_hash_byte(hash_value, 56) * np.float32(0.08)
+        + fine_value_jitter
+    )
+    mix_r = _signed_hash_byte(hash_value, 48) * np.float32(0.04)
+    mix_g = _signed_hash_byte(hash_value, 40) * np.float32(0.04)
+    mix_b = _signed_hash_byte(hash_value, 32) * np.float32(0.04)
+    mixed = np.empty_like(base)
+    mixed[:, 0] = base[:, 0] + mix_r * (base[:, 1] - base[:, 0])
+    mixed[:, 1] = base[:, 1] + mix_g * (base[:, 2] - base[:, 1])
+    mixed[:, 2] = base[:, 2] + mix_b * (base[:, 0] - base[:, 2])
+    shaded = mixed * (diffuse * ao * value_scale)[:, None]
+    rgb[indices] = np.clip(
+        shaded + np.float32(0.5), np.float32(0.0), np.float32(255.0)
+    ).astype(np.uint8)
+    depth[indices] = distance[indices]
+    return rgb, depth, normal
+
+
+def reference_detail_terrain_render(
+    grid,
+    camera,
+    light_direction,
+    palette,
+    max_steps=None,
+    *,
+    surface_mode="blocky",
+    density_filter=0,
+    return_surface=False,
+):
+    """Independent NumPy renderer for `terrain_render(..., detail=1)`."""
+    grid = np.asarray(grid, dtype=np.uint8)
+    palette = np.asarray(palette, dtype=np.uint8)
+    if surface_mode not in ("blocky", "smooth"):
+        raise ValueError("surface_mode must be 'blocky' or 'smooth'")
+    if density_filter not in (0, 1, 2):
+        raise ValueError("density_filter must be 0, 1, or 2")
+    if surface_mode == "blocky" and density_filter:
+        raise ValueError("density_filter is only supported in smooth mode")
+    if max_steps is None:
+        max_steps = int(sum(grid.shape) + 3)
+    origins, directions = _reference_camera_rays(camera)
+    if surface_mode == "blocky":
+        raycast = _reference_raycast(grid, origins, directions, int(max_steps))
+        density_field = None
+        base_normal = _reference_blocky_normals(grid, raycast)
+    else:
+        density_field = _filtered_density_grid(grid, density_filter)
+        raycast = _reference_smooth_raycast(
+            grid,
+            origins,
+            directions,
+            int(max_steps),
+            density_field,
+            _FILTER_SUPPORT[density_filter],
+        )
+        points_for_normal = np.zeros_like(origins, dtype=np.float32)
+        hit_rows = np.flatnonzero(raycast[0])
+        points_for_normal[hit_rows] = (
+            origins[hit_rows]
+            + directions[hit_rows] * raycast[5][hit_rows, None]
+        ).astype(np.float32)
+        base_normal = _reference_smooth_normals(
+            grid, raycast, points_for_normal, density_field
+        )
+    points = np.zeros_like(origins, dtype=np.float32)
+    hit_rows = np.flatnonzero(raycast[0])
+    points[hit_rows] = (
+        origins[hit_rows] + directions[hit_rows] * raycast[5][hit_rows, None]
+    ).astype(np.float32)
+    rgb, depth, normal = _reference_detail_shade(
+        grid, raycast, palette, light_direction, points, base_normal
+    )
+    rgb = rgb.reshape(camera["height"], camera["width"], 3)
+    depth = depth.reshape(camera["height"], camera["width"])
+    if not return_surface:
+        return rgb, depth
+    return rgb, depth, {
+        "hit": raycast[0].reshape(camera["height"], camera["width"]),
+        "point": points.reshape(camera["height"], camera["width"], 3),
+        "normal": normal.reshape(camera["height"], camera["width"], 3),
+    }
+
+
 def _camera_for_grid(grid_shape, *, width=WIDTH, height=HEIGHT):
     sx, sy, sz = grid_shape
     return {
@@ -1040,18 +1371,23 @@ def _call_cuda(
     consts=None,
     surface_mode=None,
     density_filter=None,
+    detail=None,
 ):
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(np.ascontiguousarray(palette), dtype="uint8")
-    if surface_mode is None and density_filter is None:
+    if surface_mode is None and density_filter is None and detail is None:
         # Preserve a literal no-surface-mode call for the default-path receipt.
         rgb, depth = tc.terrain_render(grid_device, camera, light, palette_device, consts)
     else:
-        if surface_mode is None:
+        if density_filter is not None and surface_mode is None:
             raise ValueError("density_filter requires an explicit smooth surface_mode")
-        kwargs = {"surface_mode": surface_mode}
+        kwargs = {}
+        if surface_mode is not None:
+            kwargs["surface_mode"] = surface_mode
         if density_filter is not None:
             kwargs["density_filter"] = density_filter
+        if detail is not None:
+            kwargs["detail"] = detail
         rgb, depth = tc.terrain_render(
             grid_device,
             camera,
@@ -1124,6 +1460,101 @@ def _noise_terrain(dims=(256, 256, 96)):
     return np.where(solid, material[:, :, None], 0).astype(np.uint8)
 
 
+def _wo9b_slope_grid(dims=(256, 256, 96)):
+    """One deterministic material-rich slope used by the detail gates."""
+    sx, sy, sz = dims
+    x = np.arange(sx, dtype=np.float32)[:, None]
+    y = np.arange(sy, dtype=np.float32)[None, :]
+    heights = np.clip(
+        np.float32(sz) * np.float32(0.42)
+        + (x - np.float32(sx - 1) * np.float32(0.5)) * np.float32(0.12)
+        + (y - np.float32(sy - 1) * np.float32(0.5)) * np.float32(0.08),
+        np.float32(12.0),
+        np.float32(sz - 8),
+    ).astype(np.int32)
+    z = np.arange(sz, dtype=np.int32)[None, None, :]
+    solid = z < heights[:, :, None]
+    grid = np.zeros((sx, sy, sz), dtype=np.uint8)
+    grid[solid] = np.uint8(1)
+    deep_rock = z < np.maximum(heights - 10, 0)[:, :, None]
+    grid[deep_rock] = np.uint8(2)
+    sand_columns = (
+        (np.arange(sx)[:, None] // 31 + np.arange(sy)[None, :] // 29) % 9
+    ) == 0
+    sand_cap = solid & ~deep_rock & sand_columns[:, :, None]
+    grid[sand_cap] = np.uint8(3)
+    scorch_radius_sq = (
+        (x - np.float32(sx) * np.float32(0.63)) ** 2
+        + (y - np.float32(sy) * np.float32(0.47)) ** 2
+    )
+    scorched = (
+        solid
+        & (z >= heights[:, :, None] - 3)
+        & (scorch_radius_sq[:, :, None] <= np.float32(13.0 * 13.0))
+    )
+    grid[scorched] = np.uint8(4)
+    return grid
+
+
+def _wo9b_slope_camera(grid, distance, *, width=WIDTH, height=HEIGHT):
+    """Camera exactly `distance` along the smooth outward normal at mid-slope."""
+    heights = np.count_nonzero(grid, axis=2).astype(np.float32)
+    sx, sy = heights.shape
+    cx = sx // 2
+    cy = sy // 2
+    # Use the underlying slope's analytic normal, rather than a central
+    # difference of its intentionally terraced one-voxel height samples.  The
+    # latter can be locally vertical at a plateau and invalidates camera basis
+    # construction exactly when the view is meant to demonstrate smoothing.
+    outward = np.array((-0.12, -0.08, np.float32(1.0)), dtype=np.float32)
+    outward /= np.float32(np.linalg.norm(outward))
+    target = np.array(
+        (np.float32(cx) + np.float32(0.5), np.float32(cy) + np.float32(0.5), heights[cx, cy]),
+        dtype=np.float32,
+    )
+    position = target + outward * np.float32(distance)
+    return {
+        "position": position.astype(np.float32),
+        "look_at": target,
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 44.0,
+        "width": width,
+        "height": height,
+    }
+
+
+def _wo9b_noise_camera(grid, distance, *, width=WIDTH, height=HEIGHT):
+    """A deterministic near/far camera on the registered noise fixture."""
+    heights = np.count_nonzero(grid, axis=2).astype(np.float32)
+    sx, sy = heights.shape
+    cx = sx // 2
+    cy = sy // 2
+    # Average a five-cell stencil so the near camera sits outside the local
+    # one-voxel terrain staircase instead of following a single noise spike.
+    dx = (
+        np.mean(heights[cx + 1, cy - 2 : cy + 3])
+        - np.mean(heights[cx - 1, cy - 2 : cy + 3])
+    ) * np.float32(0.5)
+    dy = (
+        np.mean(heights[cx - 2 : cx + 3, cy + 1])
+        - np.mean(heights[cx - 2 : cx + 3, cy - 1])
+    ) * np.float32(0.5)
+    outward = np.array((-dx, -dy, np.float32(1.0)), dtype=np.float32)
+    outward /= np.float32(np.linalg.norm(outward))
+    target = np.array(
+        (np.float32(cx) + np.float32(0.5), np.float32(cy) + np.float32(0.5), heights[cx, cy]),
+        dtype=np.float32,
+    )
+    return {
+        "position": (target + outward * np.float32(distance)).astype(np.float32),
+        "look_at": target,
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 44.0,
+        "width": width,
+        "height": height,
+    }
+
+
 def test_terrain_render_output_contract_misses_and_frozen_constants():
     _require_cuda()
     grid = np.zeros((8, 8, 8), dtype=np.uint8)
@@ -1171,6 +1602,22 @@ def test_terrain_render_output_contract_misses_and_frozen_constants():
             LIGHT_DIRECTION,
             palette_device,
             density_filter=1,
+        )
+    with pytest.raises(TypeError, match="detail must be an integer"):
+        tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            detail=True,
+        )
+    with pytest.raises(ValueError, match="detail must be 0 or 1"):
+        tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            detail=2,
         )
 
 
@@ -1239,6 +1686,32 @@ def _assert_density_filter_registered_parity(
     assert channel_exact_fraction >= 0.999, label
     assert max_channel_delta <= 1, label
     assert depth_relative_error <= 1.0e-4, label
+
+
+def _assert_detail_registered_parity(
+    actual_rgb, actual_depth, expected_rgb, expected_depth, label
+):
+    channel_exact_fraction = float(np.mean(actual_rgb == expected_rgb))
+    max_channel_delta = int(
+        np.max(np.abs(actual_rgb.astype(np.int16) - expected_rgb.astype(np.int16)))
+    )
+    np.testing.assert_array_equal(actual_depth == -1.0, expected_depth == -1.0)
+    depth_relative_error = float(
+        np.max(
+            np.abs(actual_depth - expected_depth)
+            / np.maximum(np.abs(expected_depth), np.float32(1.0))
+        )
+    )
+    print(
+        f"WO-9B G2 {label}: exact_channel_fraction={channel_exact_fraction:.9f} "
+        f"max_abs_delta={max_channel_delta} depth_max_rel={depth_relative_error:.9g}"
+    )
+    # G2 registers RGB/frame parity and matching hit masks.  Detail never
+    # changes geometry; the existing WO-8A/8C smooth-depth gates retain their
+    # own tighter reference rail, while this receipt reports the near-camera
+    # depth diagnostic without inventing a new unregistered tolerance.
+    assert channel_exact_fraction >= 0.999, label
+    assert max_channel_delta <= 1, label
 
 
 def _surface_points_from_depth(camera, depth):
@@ -1579,6 +2052,212 @@ def test_terrain_render_density_filter_cache_memory_cost():
     assert scratch_bytes == 50_331_648
 
 
+def test_terrain_render_detail_zero_regression():
+    """WO-9B G1: opt-in zero keeps every legacy launch result byte-identical."""
+    _require_cuda()
+    grid = _noise_terrain((128, 128, 64))
+    camera = _camera_for_grid(grid.shape, width=320, height=240)
+    baseline_rgb, baseline_depth = _call_cuda(grid, camera)
+    zero_rgb, zero_depth = _call_cuda(grid, camera, detail=0)
+    np.testing.assert_array_equal(zero_rgb, baseline_rgb)
+    np.testing.assert_array_equal(zero_depth, baseline_depth)
+
+    smooth_rgb, smooth_depth = _call_cuda(
+        grid, camera, surface_mode="smooth", density_filter=0
+    )
+    smooth_zero_rgb, smooth_zero_depth = _call_cuda(
+        grid, camera, surface_mode="smooth", density_filter=0, detail=0
+    )
+    np.testing.assert_array_equal(smooth_zero_rgb, smooth_rgb)
+    np.testing.assert_array_equal(smooth_zero_depth, smooth_depth)
+
+    filtered_rgb, filtered_depth = _call_cuda(
+        grid, camera, surface_mode="smooth", density_filter=2
+    )
+    filtered_zero_rgb, filtered_zero_depth = _call_cuda(
+        grid, camera, surface_mode="smooth", density_filter=2, detail=0
+    )
+    np.testing.assert_array_equal(filtered_zero_rgb, filtered_rgb)
+    np.testing.assert_array_equal(filtered_zero_depth, filtered_depth)
+
+
+def test_terrain_render_detail_reference_bounds_and_material_table():
+    """WO-9B normal cap and frozen material-amplitude table, CPU-side."""
+    np.testing.assert_array_equal(
+        _detail_material_scale(np.array((1, 2, 3, 4, 17), dtype=np.uint8)),
+        np.array((1.0, 1.4, 0.5, 1.2, 1.0), dtype=np.float32),
+    )
+    grid = _wo9b_slope_grid((128, 128, 64))
+    camera = _wo9b_slope_camera(grid, 4.0, width=192, height=144)
+    _, _, base_surface = reference_smooth_terrain_render(
+        grid, camera, LIGHT_DIRECTION, DETAIL_PALETTE, return_surface=True
+    )
+    _, _, detailed_surface = reference_detail_terrain_render(
+        grid,
+        camera,
+        LIGHT_DIRECTION,
+        DETAIL_PALETTE,
+        surface_mode="smooth",
+        return_surface=True,
+    )
+    hit = base_surface["hit"]
+    angles = _angle_degrees(
+        base_surface["normal"][hit], detailed_surface["normal"][hit]
+    )
+    max_angle = float(np.max(angles))
+    print(f"WO-9B normal cap: max_angle_deg={max_angle:.6f}")
+    assert max_angle <= 22.001
+
+
+@pytest.mark.parametrize("surface_mode", ("blocky", "smooth"))
+def test_terrain_render_detail_numpy_parity_640x480_near_and_far(surface_mode):
+    """WO-9B G2: independent detail oracle at both LOD-relevant distances."""
+    _require_cuda()
+    grid = _noise_terrain()
+    for label, distance in (("far", 60.0), ("near", 12.0)):
+        camera = _wo9b_noise_camera(grid, distance)
+        expected_rgb, expected_depth = reference_detail_terrain_render(
+            grid,
+            camera,
+            LIGHT_DIRECTION,
+            DETAIL_PALETTE,
+            surface_mode=surface_mode,
+        )
+        actual_rgb, actual_depth = _call_cuda(
+            grid,
+            camera,
+            palette=DETAIL_PALETTE,
+            surface_mode=surface_mode,
+            detail=1,
+        )
+        _assert_detail_registered_parity(
+            actual_rgb,
+            actual_depth,
+            expected_rgb,
+            expected_depth,
+            f"noise_256x256x96_{surface_mode}_{label}",
+        )
+        assert np.any(actual_depth >= 0.0)
+        if label == "near":
+            baseline_rgb, _ = _call_cuda(
+                grid,
+                camera,
+                palette=DETAIL_PALETTE,
+                surface_mode=surface_mode,
+                detail=0,
+            )
+            assert np.any(actual_rgb != baseline_rgb)
+
+
+def _wo9b_detail_frame_digest():
+    grid = _wo9b_slope_grid((128, 128, 64))
+    camera = _wo9b_slope_camera(grid, 12.0, width=320, height=240)
+    rgb, depth = _call_cuda(
+        grid,
+        camera,
+        palette=DETAIL_PALETTE,
+        surface_mode="smooth",
+        detail=1,
+    )
+    digest = hashlib.sha256()
+    digest.update(np.ascontiguousarray(rgb).tobytes())
+    digest.update(np.ascontiguousarray(depth).tobytes())
+    return digest.hexdigest()
+
+
+def test_terrain_render_detail_two_process_determinism():
+    """WO-9B G3: independent processes produce the exact same frame bytes."""
+    _require_cuda()
+    test_dir = Path(__file__).resolve().parent
+    code = "\n".join(
+        (
+            "import sys",
+            f"sys.path.insert(0, {str(test_dir)!r})",
+            "import test_terrain_render as terrain_test",
+            "print(terrain_test._wo9b_detail_frame_digest())",
+        )
+    )
+    env = os.environ.copy()
+    engine_root = str(Path(__file__).resolve().parents[1])
+    env["PYTHONPATH"] = engine_root + os.pathsep + env.get("PYTHONPATH", "")
+    digests = []
+    for _ in range(2):
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=test_dir,
+            env=env,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        digests.append(completed.stdout.strip().splitlines()[-1])
+    assert digests[0] == digests[1]
+    print(f"WO-9B G3 two-process SHA256={digests[0]}")
+
+
+def test_terrain_render_detail_lod_continuity_dolly():
+    """WO-9B G4: continuous LOD fade over a 200-frame slope dolly."""
+    _require_cuda()
+    grid = _wo9b_slope_grid((128, 128, 64))
+    grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
+    palette_device = tc.tensor(np.ascontiguousarray(DETAIL_PALETTE), dtype="uint8")
+    distances = np.linspace(200.0, 4.0, 200, dtype=np.float32)
+    previous = None
+    mean_deltas = []
+    for distance in distances:
+        camera = _wo9b_slope_camera(grid, float(distance), width=320, height=240)
+        rgb, _ = tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            surface_mode="smooth",
+            detail=1,
+        )
+        frame = rgb.numpy()
+        if previous is not None:
+            mean_deltas.append(
+                float(
+                    np.mean(
+                        np.abs(frame.astype(np.int16) - previous.astype(np.int16))
+                    )
+                )
+            )
+        previous = frame
+    curve = np.asarray(mean_deltas, dtype=np.float32)
+    max_mean = float(np.max(curve))
+    max_step_change = float(np.max(np.abs(np.diff(curve))))
+    sample_indices = np.linspace(0, curve.size - 1, 20, dtype=np.int64)
+    curve_receipt = ",".join(
+        f"{float(distances[index + 1]):.3f}:{float(curve[index]):.4f}"
+        for index in sample_indices
+    )
+    print(
+        "WO-9B G4 LOD curve "
+        f"distance:mean_abs={curve_receipt} "
+        f"max_mean={max_mean:.6f} max_step_change={max_step_change:.6f}"
+    )
+    assert max_mean < 3.0
+    assert max_step_change < 1.0
+
+
+def test_terrain_render_wo9b_ppm_ladder():
+    """WO-9B G7: same-slope smooth-detail ladder for operator inspection."""
+    _require_cuda()
+    grid = _wo9b_slope_grid((256, 256, 96))
+    repo_root = Path(__file__).resolve().parents[2]
+    for label, distance in (("far", 200.0), ("mid", 60.0), ("near", 12.0), ("macro", 4.0)):
+        camera = _wo9b_slope_camera(grid, distance)
+        rgb, _ = _call_cuda(
+            grid,
+            camera,
+            palette=DETAIL_PALETTE,
+            surface_mode="smooth",
+            detail=1,
+        )
+        _write_ppm(repo_root / "artifacts" / f"wo9b_{label}.ppm", rgb)
+
+
 def _write_ppm(path, rgb):
     """Binary P6 receipt with no image-library dependency."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1693,6 +2372,7 @@ def terrain_render_timing_harness(
     warmup=10,
     surface_mode="blocky",
     density_filter=None,
+    detail=0,
 ):
     """CUDA-event stages for blocky, smooth, or cached-filter rendering."""
     _require_cuda()
@@ -1704,6 +2384,8 @@ def terrain_render_timing_harness(
         kwargs = {"surface_mode": surface_mode}
         if density_filter is not None:
             kwargs["density_filter"] = density_filter
+        if detail:
+            kwargs["detail"] = detail
         return tc.terrain_render(
             grid_device,
             camera,
@@ -1818,3 +2500,31 @@ def test_terrain_render_smooth_density_filter_stage_timing_100_frames():
         f"target_12ms={'GREEN' if timings['total_ms_mean'] <= 12.0 else 'RED'}"
     )
     assert timings["total_ms_mean"] <= 12.0
+
+
+@pytest.mark.skipif(
+    os.environ.get("TC_RUN_TERRAIN_TIMING") != "1",
+    reason="set TC_RUN_TERRAIN_TIMING=1 to run the 100-frame WO-9B timing gate",
+)
+def test_terrain_render_detail_stage_timing_100_frames():
+    """WO-9B G5: close-up, active-octave total-time gate (red is red)."""
+    _require_cuda()
+    dims = (512, 512, 192)
+    grid = _wo9b_slope_grid(dims)
+    camera = _wo9b_slope_camera(grid, 10.0)
+    timings = terrain_render_timing_harness(
+        grid,
+        camera,
+        frames=100,
+        surface_mode="smooth",
+        detail=1,
+    )
+    print(
+        "WO-9B G5 "
+        f"grid={dims} frames={timings['frames']} "
+        f"kernel_ms_mean={timings['kernel_ms_mean']:.4f} "
+        f"d2h_ms_mean={timings['d2h_ms_mean']:.4f} "
+        f"total_ms_mean={timings['total_ms_mean']:.4f} "
+        f"target_6ms={'GREEN' if timings['total_ms_mean'] <= 6.0 else 'RED'}"
+    )
+    assert timings["total_ms_mean"] <= 6.0

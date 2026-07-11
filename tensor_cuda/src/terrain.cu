@@ -1097,6 +1097,219 @@ __device__ __forceinline__ uint8_t terrain_to_u8(float value) {
   return static_cast<uint8_t>(floorf(value + 0.5f));
 }
 
+// WO-9B detail is deliberately fully procedural: the field is a function of
+// the world-space hit coordinate alone, never a pixel or camera coordinate.
+// Keep the lattice hash law identical to the frozen per-voxel palette law.
+constexpr int kDetailOctaves = 7;
+constexpr float kDetailBaseWavelength = 8.0f;
+constexpr float kDetailGain = 0.5f;
+constexpr float kDetailLodFullDistance = 24.0f;
+constexpr float kDetailNormalGain = 0.75f;
+constexpr float kDetailMaxTangent = 0.4040262258351568f;  // tan(22 deg)
+constexpr float kDetailValueJitter = 0.06f;
+
+__device__ __forceinline__ float terrain_detail_material_scale(
+    uint8_t material) {
+  // Project-Scorch's read-only material ids: dirt=1, rock=2, sand=3,
+  // scorched=4.  Unknown palette rows retain the neutral dirt-scale detail.
+  switch (material) {
+    case 1:
+      return 1.0f;
+    case 2:
+      return 1.4f;
+    case 3:
+      return 0.5f;
+    case 4:
+      return 1.2f;
+    default:
+      return 1.0f;
+  }
+}
+
+__device__ __forceinline__ uint64_t terrain_detail_lattice_hash(
+    int64_t x, int64_t y, int64_t z) {
+  const uint64_t hash_input =
+      static_cast<uint64_t>(x) * UINT64_C(0x9E3779B97F4A7C15) ^
+      static_cast<uint64_t>(y) * UINT64_C(0xBF58476D1CE4E5B9) ^
+      static_cast<uint64_t>(z) * UINT64_C(0x94D049BB133111EB);
+  return terrain_splitmix64(hash_input);
+}
+
+// Cubic Hermite-interpolated 3D value noise and its analytic world-space
+// gradient.  Analytic differentiation avoids six extra noise probes per
+// octave and keeps the normal detail in the same deterministic arithmetic.
+__device__ __forceinline__ void terrain_detail_value_noise(
+    const float position[3], float wavelength, float* value,
+    float gradient[3]) {
+  int64_t base[3];
+  float fade[3];
+  float fade_derivative[3];
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    const float coordinate = __fdiv_rn(position[axis], wavelength);
+    const float lower = floorf(coordinate);
+    const float fraction = coordinate - lower;
+    base[axis] = static_cast<int64_t>(lower);
+    fade[axis] = fraction * fraction * (3.0f - 2.0f * fraction);
+    fade_derivative[axis] =
+        (6.0f * fraction * (1.0f - fraction)) / wavelength;
+  }
+
+  *value = 0.0f;
+  gradient[0] = 0.0f;
+  gradient[1] = 0.0f;
+  gradient[2] = 0.0f;
+#pragma unroll
+  for (int dz = 0; dz <= 1; ++dz) {
+    const float wz = dz == 0 ? 1.0f - fade[2] : fade[2];
+    const float dwz = dz == 0 ? -fade_derivative[2] : fade_derivative[2];
+#pragma unroll
+    for (int dy = 0; dy <= 1; ++dy) {
+      const float wy = dy == 0 ? 1.0f - fade[1] : fade[1];
+      const float dwy = dy == 0 ? -fade_derivative[1] : fade_derivative[1];
+#pragma unroll
+      for (int dx = 0; dx <= 1; ++dx) {
+        const float wx = dx == 0 ? 1.0f - fade[0] : fade[0];
+        const float dwx = dx == 0 ? -fade_derivative[0] : fade_derivative[0];
+        const float lattice_value = terrain_signed_hash_byte(
+            terrain_detail_lattice_hash(base[0] + dx, base[1] + dy,
+                                        base[2] + dz),
+            56);
+        *value += lattice_value * wx * wy * wz;
+        gradient[0] += lattice_value * dwx * wy * wz;
+        gradient[1] += lattice_value * wx * dwy * wz;
+        gradient[2] += lattice_value * wx * wy * dwz;
+      }
+    }
+  }
+}
+
+__device__ __forceinline__ float terrain_detail_lod_weight(float distance,
+                                                            int octave) {
+  const float full_distance =
+      kDetailLodFullDistance / static_cast<float>(1 << octave);
+  // Full through full_distance; a continuous linear fade reaches zero at
+  // 2*full_distance.  This is intentionally not a binary octave selector.
+  return fminf(fmaxf((2.0f * full_distance - distance) / full_distance,
+                     0.0f),
+               1.0f);
+}
+
+__device__ __forceinline__ void terrain_apply_detail(
+    const float position[3], float distance, uint8_t material, float normal[3],
+    float* fine_value_jitter) {
+  float octave_value[kDetailOctaves] = {};
+  float octave_lod[kDetailOctaves] = {};
+  float detail_gradient[3] = {0.0f, 0.0f, 0.0f};
+  float wavelength = kDetailBaseWavelength;
+  float gain = 1.0f;
+
+#pragma unroll
+  for (int octave = 0; octave < kDetailOctaves; ++octave) {
+    const float lod = terrain_detail_lod_weight(distance, octave);
+    octave_lod[octave] = lod;
+    if (lod > 0.0f) {
+      float octave_gradient[3];
+      terrain_detail_value_noise(position, wavelength, &octave_value[octave],
+                                 octave_gradient);
+#pragma unroll
+      for (int axis = 0; axis < 3; ++axis) {
+        detail_gradient[axis] += octave_gradient[axis] * gain * lod;
+      }
+    }
+    wavelength *= 0.5f;
+    gain *= kDetailGain;
+  }
+
+  // Rotate only in the tangent plane, then cap the tangent magnitude at
+  // tan(22 deg).  Therefore atan(|tangent|) cannot exceed the frozen angle.
+  const float normal_gradient =
+      normal[0] * detail_gradient[0] + normal[1] * detail_gradient[1] +
+      normal[2] * detail_gradient[2];
+  float tangent[3] = {
+      detail_gradient[0] - normal[0] * normal_gradient,
+      detail_gradient[1] - normal[1] * normal_gradient,
+      detail_gradient[2] - normal[2] * normal_gradient};
+  const float tangent_length = sqrtf(
+      tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+      tangent[2] * tangent[2]);
+  const float material_scale = terrain_detail_material_scale(material);
+  if (tangent_length >= kGradientEpsilon) {
+    const float tangent_magnitude = fminf(
+        kDetailMaxTangent,
+        kDetailNormalGain * material_scale * tangent_length);
+    float perturbed[3];
+#pragma unroll
+    for (int axis = 0; axis < 3; ++axis) {
+      perturbed[axis] =
+          normal[axis] + tangent[axis] * tangent_magnitude / tangent_length;
+    }
+    const float perturbed_length = sqrtf(
+        perturbed[0] * perturbed[0] + perturbed[1] * perturbed[1] +
+        perturbed[2] * perturbed[2]);
+    if (perturbed_length >= kGradientEpsilon) {
+#pragma unroll
+      for (int axis = 0; axis < 3; ++axis) {
+        normal[axis] = perturbed[axis] / perturbed_length;
+      }
+    }
+  }
+
+  // Exactly two finest octaves contribute at steady state.  When a finer
+  // octave starts to fade in, it continuously cross-fades the coarsest member
+  // of the prior pair; this avoids the hard pair-selection pop.
+  float fine_noise = 0.0f;
+#pragma unroll
+  for (int octave = 0; octave < kDetailOctaves; ++octave) {
+    float handoff = 1.0f;
+    if (octave + 2 < kDetailOctaves) {
+      handoff -= octave_lod[octave + 2];
+    }
+    fine_noise += 0.5f * octave_value[octave] * octave_lod[octave] * handoff;
+  }
+  fine_noise = fminf(fmaxf(fine_noise * material_scale, -1.0f), 1.0f);
+  *fine_value_jitter = fine_noise * kDetailValueJitter;
+}
+
+__device__ __forceinline__ void terrain_detail_blocky_normal(
+    const uint8_t* __restrict__ materials, int64_t dim_x, int64_t dim_y,
+    int64_t dim_z, const int64_t voxel[3], int face_axis, int face_sign,
+    float normal[3]) {
+  const int64_t x = voxel[0];
+  const int64_t y = voxel[1];
+  const int64_t z = voxel[2];
+  const float gradient[3] = {
+      static_cast<float>(terrain_grid_load_or_air(materials, dim_x, dim_y,
+                                                   dim_z, x - 1, y, z) != 0) -
+          static_cast<float>(terrain_grid_load_or_air(
+              materials, dim_x, dim_y, dim_z, x + 1, y, z) != 0),
+      static_cast<float>(terrain_grid_load_or_air(materials, dim_x, dim_y,
+                                                   dim_z, x, y - 1, z) != 0) -
+          static_cast<float>(terrain_grid_load_or_air(
+              materials, dim_x, dim_y, dim_z, x, y + 1, z) != 0),
+      static_cast<float>(terrain_grid_load_or_air(materials, dim_x, dim_y,
+                                                   dim_z, x, y, z - 1) != 0) -
+          static_cast<float>(terrain_grid_load_or_air(
+              materials, dim_x, dim_y, dim_z, x, y, z + 1) != 0)};
+  const float gradient_length = sqrtf(
+      gradient[0] * gradient[0] + gradient[1] * gradient[1] +
+      gradient[2] * gradient[2]);
+  normal[0] = 0.0f;
+  normal[1] = 0.0f;
+  normal[2] = 1.0f;
+  if (gradient_length >= kGradientEpsilon) {
+#pragma unroll
+    for (int axis = 0; axis < 3; ++axis) {
+      normal[axis] = gradient[axis] / gradient_length;
+    }
+  } else if (face_axis >= 0) {
+    normal[0] = 0.0f;
+    normal[1] = 0.0f;
+    normal[2] = 0.0f;
+    normal[face_axis] = static_cast<float>(face_sign);
+  }
+}
+
 // This kernel body is intentionally the original WO-7B blocky path.  Keep it
 // separate from smooth mode so the default instruction/data path stays intact.
 __global__ void terrain_render_blocky_kernel(
@@ -1457,6 +1670,178 @@ __global__ void terrain_render_cached_smooth_kernel(
   depth[pixel] = hit.distance;
 }
 
+// Detail is a separate specialization rather than a branch in the legacy
+// kernels.  detail=0 therefore retains their original instruction/data paths
+// exactly, while all new fBm work stays on this opt-in launch.
+template <bool kSmooth, bool kCached>
+__global__ void terrain_render_detail_kernel(
+    const uint8_t* __restrict__ materials,
+    const uint8_t* __restrict__ density_field, int64_t dim_x, int64_t dim_y,
+    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,
+    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,
+    int support_radius, uint8_t* __restrict__ rgb,
+    float* __restrict__ depth) {
+  const int64_t pixel =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const int64_t pixel_count =
+      static_cast<int64_t>(camera.width) * camera.height;
+  if (pixel >= pixel_count) return;
+
+  const int pixel_x = static_cast<int>(pixel % camera.width);
+  const int pixel_y = static_cast<int>(pixel / camera.width);
+  const float x_center = static_cast<float>(pixel_x) + 0.5f;
+  const float y_center = static_cast<float>(pixel_y) + 0.5f;
+  const float screen_x = __fmul_rn(
+      __fadd_rn(__fmul_rn(__fdiv_rn(x_center, static_cast<float>(camera.width)),
+                          2.0f),
+                 -1.0f),
+      camera.half_width);
+  const float screen_y = __fmul_rn(
+      __fadd_rn(1.0f,
+                 -__fmul_rn(__fdiv_rn(y_center,
+                                      static_cast<float>(camera.height)),
+                            2.0f)),
+      camera.half_height);
+
+  float direction[3];
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    const float horizontal = __fmul_rn(screen_x, camera.right[axis]);
+    const float vertical = __fmul_rn(screen_y, camera.up[axis]);
+    direction[axis] =
+        __fadd_rn(__fadd_rn(camera.forward[axis], horizontal), vertical);
+  }
+  const float direction_length = sqrtf(
+      __fadd_rn(__fadd_rn(__fmul_rn(direction[0], direction[0]),
+                          __fmul_rn(direction[1], direction[1])),
+                __fmul_rn(direction[2], direction[2])));
+#pragma unroll
+  for (int axis = 0; axis < 3; ++axis) {
+    direction[axis] = __fdiv_rn(direction[axis], direction_length);
+  }
+
+  const float origin[3] = {camera.position[0], camera.position[1],
+                           camera.position[2]};
+  uint8_t material = 0;
+  int64_t voxel[3] = {-1, -1, -1};
+  int face_axis = -1;
+  int face_sign = 0;
+  float hit_distance = INFINITY;
+  bool has_hit = false;
+  if constexpr (kSmooth) {
+    TerrainSmoothHit hit;
+    if constexpr (kCached) {
+      terrain_cached_smooth_first_hit(
+          materials, density_field, dim_x, dim_y, dim_z, origin, direction,
+          max_steps, support_radius, &hit);
+    } else {
+      terrain_smooth_first_hit(materials, dim_x, dim_y, dim_z, origin,
+                               direction, max_steps, &hit);
+    }
+    has_hit = hit.hit;
+    material = hit.material;
+    voxel[0] = hit.voxel[0];
+    voxel[1] = hit.voxel[1];
+    voxel[2] = hit.voxel[2];
+    face_axis = hit.face_axis;
+    face_sign = hit.face_sign;
+    hit_distance = hit.distance;
+  } else {
+    TerrainDdaHit hit;
+    terrain_dda_first_hit(materials, dim_x, dim_y, dim_z, origin, direction,
+                          max_steps, &hit);
+    has_hit = hit.hit;
+    material = hit.material;
+    voxel[0] = hit.voxel[0];
+    voxel[1] = hit.voxel[1];
+    voxel[2] = hit.voxel[2];
+    face_axis = hit.face_axis;
+    face_sign = hit.face_sign;
+    hit_distance = hit.distance;
+  }
+  if (!has_hit) {
+    rgb[pixel * 3 + 0] = 0;
+    rgb[pixel * 3 + 1] = 0;
+    rgb[pixel * 3 + 2] = 0;
+    depth[pixel] = -1.0f;
+    return;
+  }
+
+  float hit_position[3];
+  terrain_ray_position(origin, direction, hit_distance, hit_position);
+  float normal[3];
+  if constexpr (kSmooth) {
+    if constexpr (kCached) {
+      terrain_cached_smooth_normal(materials, density_field, dim_x, dim_y,
+                                   dim_z, hit_position, voxel, face_axis,
+                                   face_sign, normal);
+    } else {
+      terrain_smooth_normal(materials, dim_x, dim_y, dim_z, hit_position,
+                            voxel, face_axis, face_sign, normal);
+    }
+  } else {
+    terrain_detail_blocky_normal(materials, dim_x, dim_y, dim_z, voxel,
+                                 face_axis, face_sign, normal);
+  }
+  float fine_value_jitter = 0.0f;
+  terrain_apply_detail(hit_position, hit_distance, material, normal,
+                       &fine_value_jitter);
+
+  const int64_t x = voxel[0];
+  const int64_t y = voxel[1];
+  const int64_t z = voxel[2];
+  int occupied_neighbors = 0;
+#pragma unroll
+  for (int dz = -1; dz <= 1; ++dz) {
+#pragma unroll
+    for (int dy = -1; dy <= 1; ++dy) {
+#pragma unroll
+      for (int dx = -1; dx <= 1; ++dx) {
+        if (dx == 0 && dy == 0 && dz == 0) continue;
+        occupied_neighbors += terrain_grid_load_or_air(
+                                  materials, dim_x, dim_y, dim_z, x + dx,
+                                  y + dy, z + dz) != 0;
+      }
+    }
+  }
+  const float occlusion_fraction =
+      static_cast<float>(occupied_neighbors) * (1.0f / 26.0f);
+  const float ao = fminf(
+      fmaxf(1.0f - kAoStrength * occlusion_fraction, kAoFloor), 1.0f);
+  const float lambert =
+      -(normal[0] * light.direction[0] + normal[1] * light.direction[1] +
+        normal[2] * light.direction[2]);
+  const float diffuse =
+      fminf(fmaxf(lambert, kAmbientFloor), 1.0f);
+
+  const int64_t palette_index =
+      min(static_cast<int64_t>(material), palette_rows - 1);
+  const float color[3] = {
+      static_cast<float>(palette[palette_index * 3 + 0]),
+      static_cast<float>(palette[palette_index * 3 + 1]),
+      static_cast<float>(palette[palette_index * 3 + 2])};
+  const uint64_t hash_input =
+      static_cast<uint64_t>(x) * UINT64_C(0x9E3779B97F4A7C15) ^
+      static_cast<uint64_t>(y) * UINT64_C(0xBF58476D1CE4E5B9) ^
+      static_cast<uint64_t>(z) * UINT64_C(0x94D049BB133111EB);
+  const uint64_t hash = terrain_splitmix64(hash_input);
+  const float value_scale =
+      1.0f + terrain_signed_hash_byte(hash, 56) * kValueJitter +
+      fine_value_jitter;
+  const float mix_r = terrain_signed_hash_byte(hash, 48) * kChannelMix;
+  const float mix_g = terrain_signed_hash_byte(hash, 40) * kChannelMix;
+  const float mix_b = terrain_signed_hash_byte(hash, 32) * kChannelMix;
+  const float mixed_color[3] = {
+      color[0] + mix_r * (color[1] - color[0]),
+      color[1] + mix_g * (color[2] - color[1]),
+      color[2] + mix_b * (color[0] - color[2])};
+  const float shading = diffuse * ao * value_scale;
+  rgb[pixel * 3 + 0] = terrain_to_u8(mixed_color[0] * shading);
+  rgb[pixel * 3 + 1] = terrain_to_u8(mixed_color[1] * shading);
+  rgb[pixel * 3 + 2] = terrain_to_u8(mixed_color[2] * shading);
+  depth[pixel] = hit_distance;
+}
+
 __device__ __forceinline__ uint32_t terrain_filter_weight(int filter_level,
                                                            int offset) {
   if (filter_level == 1) return 1;
@@ -1598,6 +1983,9 @@ std::tuple<NDArray, NDArray> terrain_render(
     throw std::runtime_error(
         "terrain_render: density_filter is only supported in smooth mode");
   }
+  if (constants.detail != 0 && constants.detail != 1) {
+    throw std::runtime_error("terrain_render: detail must be 0 or 1");
+  }
   if (constants.density_filter != 0) {
     if (filtered_density == nullptr || !filtered_density->defined()) {
       throw std::runtime_error(
@@ -1628,7 +2016,34 @@ std::tuple<NDArray, NDArray> terrain_render(
   if (pixel_count > 0) {
     constexpr int threads = 256;
     const int blocks = static_cast<int>((pixel_count + threads - 1) / threads);
-    if (smooth_mode && constants.density_filter != 0) {
+    if (constants.detail != 0 && smooth_mode &&
+        constants.density_filter != 0) {
+      const int support_radius = constants.density_filter == 1 ? 1 : 4;
+      terrain_render_detail_kernel<true, true><<<blocks, threads>>>(
+          static_cast<const uint8_t*>(materials.data_ptr()),
+          static_cast<const uint8_t*>(filtered_density->data_ptr()),
+          materials.shape[0], materials.shape[1], materials.shape[2], camera,
+          light, static_cast<const uint8_t*>(palette.data_ptr()),
+          palette.shape[0], max_steps, support_radius,
+          static_cast<uint8_t*>(rgb.data_ptr()),
+          static_cast<float*>(depth.data_ptr()));
+    } else if (constants.detail != 0 && smooth_mode) {
+      terrain_render_detail_kernel<true, false><<<blocks, threads>>>(
+          static_cast<const uint8_t*>(materials.data_ptr()), nullptr,
+          materials.shape[0], materials.shape[1], materials.shape[2], camera,
+          light, static_cast<const uint8_t*>(palette.data_ptr()),
+          palette.shape[0], max_steps, 0,
+          static_cast<uint8_t*>(rgb.data_ptr()),
+          static_cast<float*>(depth.data_ptr()));
+    } else if (constants.detail != 0) {
+      terrain_render_detail_kernel<false, false><<<blocks, threads>>>(
+          static_cast<const uint8_t*>(materials.data_ptr()), nullptr,
+          materials.shape[0], materials.shape[1], materials.shape[2], camera,
+          light, static_cast<const uint8_t*>(palette.data_ptr()),
+          palette.shape[0], max_steps, 0,
+          static_cast<uint8_t*>(rgb.data_ptr()),
+          static_cast<float*>(depth.data_ptr()));
+    } else if (smooth_mode && constants.density_filter != 0) {
       const int support_radius = constants.density_filter == 1 ? 1 : 4;
       terrain_render_cached_smooth_kernel<<<blocks, threads>>>(
           static_cast<const uint8_t*>(materials.data_ptr()),

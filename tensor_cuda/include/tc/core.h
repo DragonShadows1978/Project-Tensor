@@ -215,6 +215,9 @@ struct TerrainRenderConstants {
   // Smooth-mode-only density prefilter selector.  Zero is the literal WO-8A
   // path; levels 1 and 2 consume a separately cached u8 density field.
   int density_filter = 0;
+  // WO-9B procedural surface detail selector.  Zero retains the literal
+  // WO-7B/8A/8C kernel paths; one selects a separate detail-only launch.
+  int detail = 0;
 };
 
 // Build the normalized u8 filtered-density cache for one source revision.
