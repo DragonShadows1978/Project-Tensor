@@ -421,26 +421,118 @@ def _trilinear_density(grid, positions):
     return density
 
 
-def _mixed_density_cells(grid, cells):
+_FILTER_WEIGHTS = {
+    1: np.array((1, 1, 1), dtype=np.uint32),
+    2: np.array((1, 8, 28, 56, 70, 56, 28, 8, 1), dtype=np.uint32),
+}
+_FILTER_DIVISORS = {1: np.uint32(3), 2: np.uint32(256)}
+_FILTER_SUPPORT = {0: 0, 1: 1, 2: 4}
+_INV_U8 = np.float32(1.0 / 255.0)
+
+
+def _integer_density_pass(source, weights, divisor, axis):
+    """One zero-padded integer pass with round-to-nearest quantization."""
+    source = np.ascontiguousarray(source, dtype=np.uint8)
+    accumulated = np.zeros(source.shape, dtype=np.uint32)
+    radius = weights.size // 2
+    axis_size = source.shape[axis]
+    for weight_index, weight in enumerate(weights):
+        offset = weight_index - radius
+        source_slice = [slice(None)] * 3
+        output_slice = [slice(None)] * 3
+        if offset < 0:
+            source_slice[axis] = slice(0, axis_size + offset)
+            output_slice[axis] = slice(-offset, axis_size)
+        elif offset > 0:
+            source_slice[axis] = slice(offset, axis_size)
+            output_slice[axis] = slice(0, axis_size - offset)
+        accumulated[tuple(output_slice)] += (
+            source[tuple(source_slice)].astype(np.uint32) * weight
+        )
+    return ((accumulated + divisor // np.uint32(2)) // divisor).astype(np.uint8)
+
+
+def _filtered_density_grid(grid, density_filter):
+    """Exact u8 x/y/z cache construction used by the CUDA implementation."""
+    if density_filter == 0:
+        return None
+    if density_filter not in (1, 2):
+        raise ValueError("density_filter must be 0, 1, or 2")
+    field = np.where(np.asarray(grid, dtype=np.uint8) != 0, 255, 0).astype(
+        np.uint8
+    )
+    weights = _FILTER_WEIGHTS[density_filter]
+    divisor = _FILTER_DIVISORS[density_filter]
+    for axis in range(3):
+        field = _integer_density_pass(field, weights, divisor, axis)
+    return field
+
+
+def _trilinear_cached_density(density_field, positions):
+    """Normalized-u8 trilinear sampling with CUDA-equivalent f32 grouping."""
+    positions = np.asarray(positions, dtype=np.float32)
+    shifted = positions - np.float32(0.5)
+    base = np.floor(shifted).astype(np.int64)
+    fraction = (shifted - base).astype(np.float32)
+    density = np.zeros(positions.shape[0], dtype=np.float32)
+    for dz in (0, 1):
+        wz = (np.float32(1.0) - fraction[:, 2]) if dz == 0 else fraction[:, 2]
+        for dy in (0, 1):
+            wy = (
+                (np.float32(1.0) - fraction[:, 1])
+                if dy == 0
+                else fraction[:, 1]
+            )
+            for dx in (0, 1):
+                wx = (
+                    (np.float32(1.0) - fraction[:, 0])
+                    if dx == 0
+                    else fraction[:, 0]
+                )
+                sample = _material_at(
+                    density_field,
+                    base[:, 0] + dx,
+                    base[:, 1] + dy,
+                    base[:, 2] + dz,
+                ).astype(np.float32) * _INV_U8
+                density = density + (wx * wy) * (wz * sample)
+    return density
+
+
+def _smooth_density(grid, positions, density_field=None):
+    if density_field is None:
+        return _trilinear_density(grid, positions)
+    return _trilinear_cached_density(density_field, positions)
+
+
+def _mixed_density_cells(grid, cells, density_field=None):
     """Whether each shifted trilinear cell's 2x2x2 corners contain both states."""
     has_solid = np.zeros(cells.shape[0], dtype=np.bool_)
     has_air = np.zeros(cells.shape[0], dtype=np.bool_)
     for dz in (0, 1):
         for dy in (0, 1):
             for dx in (0, 1):
-                occupied = _material_at(
-                    grid,
+                samples = _material_at(
+                    grid if density_field is None else density_field,
                     cells[:, 0] + dx,
                     cells[:, 1] + dy,
                     cells[:, 2] + dz,
-                ) != 0
+                )
+                occupied = samples != 0 if density_field is None else samples >= 128
                 has_solid |= occupied
                 has_air |= ~occupied
     return has_solid & has_air
 
 
 def _refine_smooth_crossings(
-    grid, origins, directions, lower_t, lower_density, upper_t, upper_density
+    grid,
+    origins,
+    directions,
+    lower_t,
+    lower_density,
+    upper_t,
+    upper_density,
+    density_field=None,
 ):
     """Six bracketed secant/bisection refinements of rho(t) == 0.5."""
     lower_t = lower_t.astype(np.float32, copy=True)
@@ -462,7 +554,9 @@ def _refine_smooth_crossings(
         )
         candidate_t = np.where(use_secant, secant_t, candidate_t).astype(np.float32)
         candidate_position = origins + directions * candidate_t[:, None]
-        candidate_density = _trilinear_density(grid, candidate_position)
+        candidate_density = _smooth_density(
+            grid, candidate_position, density_field
+        )
         above = candidate_density >= _SMOOTH_ISO
         upper_t[above] = candidate_t[above]
         upper_density[above] = candidate_density[above]
@@ -471,14 +565,21 @@ def _refine_smooth_crossings(
     return upper_t
 
 
-def _trace_mixed_density_segments(grid, origins, directions, segment_start, segment_end):
+def _trace_mixed_density_segments(
+    grid,
+    origins,
+    directions,
+    segment_start,
+    segment_end,
+    density_field=None,
+):
     """Sample each mixed cell at <=0.5 voxel increments, then refine first entry."""
     count = segment_start.size
     hit = np.zeros(count, dtype=np.bool_)
     hit_distance = np.full(count, np.inf, dtype=np.float32)
     previous_t = segment_start.astype(np.float32, copy=True)
-    previous_density = _trilinear_density(
-        grid, origins + directions * previous_t[:, None]
+    previous_density = _smooth_density(
+        grid, origins + directions * previous_t[:, None], density_field
     )
     already_inside = previous_density >= _SMOOTH_ISO
     hit[already_inside] = True
@@ -494,8 +595,10 @@ def _trace_mixed_density_segments(grid, origins, directions, segment_start, segm
         if not np.any(sample_mask):
             continue
         rows = np.flatnonzero(sample_mask)
-        current_density = _trilinear_density(
-            grid, origins[rows] + directions[rows] * current_t[rows, None]
+        current_density = _smooth_density(
+            grid,
+            origins[rows] + directions[rows] * current_t[rows, None],
+            density_field,
         )
         crossed = current_density >= _SMOOTH_ISO
         if np.any(crossed):
@@ -509,6 +612,7 @@ def _trace_mixed_density_segments(grid, origins, directions, segment_start, segm
                 previous_density[crossed_rows],
                 current_t[crossed_rows],
                 current_density[crossed],
+                density_field,
             )
         continuing_rows = rows[~crossed]
         previous_t[continuing_rows] = current_t[continuing_rows]
@@ -516,7 +620,7 @@ def _trace_mixed_density_segments(grid, origins, directions, segment_start, segm
     return hit, hit_distance
 
 
-def _nearest_solid_voxels(grid, positions):
+def _nearest_solid_voxels(grid, positions, support_radius=0):
     """Exact nearest solid center for crossed points, with lower xyz tie-breaks."""
     positions = np.asarray(positions, dtype=np.float32)
     count = positions.shape[0]
@@ -524,27 +628,91 @@ def _nearest_solid_voxels(grid, positions):
     voxel = np.full((count, 3), -1, dtype=np.int64)
     material = np.zeros(count, dtype=np.uint8)
     best_distance_sq = np.full(count, np.inf, dtype=np.float32)
-    for dx in (-1, 0, 1, 2):
-        x = base[:, 0] + dx
-        for dy in (-1, 0, 1, 2):
-            y = base[:, 1] + dy
-            for dz in (-1, 0, 1, 2):
-                z = base[:, 2] + dz
-                candidate = _material_at(grid, x, y, z)
-                delta_x = positions[:, 0] - (x.astype(np.float32) + np.float32(0.5))
-                delta_y = positions[:, 1] - (y.astype(np.float32) + np.float32(0.5))
-                delta_z = positions[:, 2] - (z.astype(np.float32) + np.float32(0.5))
-                distance_sq = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z
-                better = (candidate != 0) & (distance_sq < best_distance_sq)
-                best_distance_sq[better] = distance_sq[better]
-                material[better] = candidate[better]
-                voxel[better, 0] = x[better]
-                voxel[better, 1] = y[better]
-                voxel[better, 2] = z[better]
+    active = np.arange(count, dtype=np.int64)
+    for extent in range(1, int(support_radius) + 2):
+        if not active.size:
+            break
+        for dx in range(-extent, extent + 2):
+            for dy in range(-extent, extent + 2):
+                for dz in range(-extent, extent + 2):
+                    if (
+                        extent > 1
+                        and -(extent - 1) <= dx <= extent
+                        and -(extent - 1) <= dy <= extent
+                        and -(extent - 1) <= dz <= extent
+                    ):
+                        continue
+                    x = base[active, 0] + dx
+                    y = base[active, 1] + dy
+                    z = base[active, 2] + dz
+                    candidate = _material_at(grid, x, y, z)
+                    delta_x = positions[active, 0] - (
+                        x.astype(np.float32) + np.float32(0.5)
+                    )
+                    delta_y = positions[active, 1] - (
+                        y.astype(np.float32) + np.float32(0.5)
+                    )
+                    delta_z = positions[active, 2] - (
+                        z.astype(np.float32) + np.float32(0.5)
+                    )
+                    distance_sq = (
+                        delta_x * delta_x
+                        + delta_y * delta_y
+                        + delta_z * delta_z
+                    )
+                    current_voxel = voxel[active]
+                    lexicographically_lower = (x < current_voxel[:, 0]) | (
+                        (x == current_voxel[:, 0])
+                        & (
+                            (y < current_voxel[:, 1])
+                            | (
+                                (y == current_voxel[:, 1])
+                                & (z < current_voxel[:, 2])
+                            )
+                        )
+                    )
+                    better = (candidate != 0) & (
+                        (distance_sq < best_distance_sq[active])
+                        | (
+                            (distance_sq == best_distance_sq[active])
+                            & lexicographically_lower
+                        )
+                    )
+                    update = active[better]
+                    best_distance_sq[update] = distance_sq[better]
+                    material[update] = candidate[better]
+                    voxel[update, 0] = x[better]
+                    voxel[update, 1] = y[better]
+                    voxel[update, 2] = z[better]
+
+        lower_center = base[active].astype(np.float32) - np.float32(
+            extent + 0.5
+        )
+        upper_center = base[active].astype(np.float32) + np.float32(
+            extent + 2.5
+        )
+        outside_distance = np.min(
+            np.minimum(
+                positions[active] - lower_center,
+                upper_center - positions[active],
+            ),
+            axis=1,
+        )
+        resolved = (material[active] != 0) & (
+            best_distance_sq[active] < outside_distance * outside_distance
+        )
+        active = active[~resolved]
     return material, voxel
 
 
-def _reference_smooth_raycast(grid, origins, directions, max_steps):
+def _reference_smooth_raycast(
+    grid,
+    origins,
+    directions,
+    max_steps,
+    density_field=None,
+    support_radius=0,
+):
     """Independent shifted-cell DDA plus mixed-band smooth crossing search."""
     count = origins.shape[0]
     hit = np.zeros(count, dtype=np.bool_)
@@ -615,8 +783,8 @@ def _reference_smooth_raycast(grid, origins, directions, max_steps):
     start_density = np.zeros(count, dtype=np.float32)
     eligible_rows = np.flatnonzero(eligible)
     if eligible_rows.size:
-        start_density[eligible_rows] = _trilinear_density(
-            grid, exact_start[eligible_rows]
+        start_density[eligible_rows] = _smooth_density(
+            grid, exact_start[eligible_rows], density_field
         )
     initial_hit = eligible & (start_density >= _SMOOTH_ISO)
     hit[initial_hit] = True
@@ -649,7 +817,7 @@ def _reference_smooth_raycast(grid, origins, directions, max_steps):
         local = np.arange(rows.size)
         crossing_t = row_next[local, crossed_axis]
         segment_end = np.minimum(crossing_t, t_exit[rows]).astype(np.float32)
-        mixed = _mixed_density_cells(grid, cell[rows])
+        mixed = _mixed_density_cells(grid, cell[rows], density_field)
         if np.any(mixed):
             mixed_rows = rows[mixed]
             local_hit, local_distance = _trace_mixed_density_segments(
@@ -658,6 +826,7 @@ def _reference_smooth_raycast(grid, origins, directions, max_steps):
                 directions[mixed_rows],
                 segment_start[mixed_rows],
                 segment_end[mixed],
+                density_field,
             )
             hit_rows = mixed_rows[local_hit]
             hit[hit_rows] = True
@@ -690,7 +859,9 @@ def _reference_smooth_raycast(grid, origins, directions, max_steps):
     hit_rows = np.flatnonzero(hit)
     if hit_rows.size:
         hit_position = origins[hit_rows] + directions[hit_rows] * distance[hit_rows, None]
-        hit_material, hit_voxel = _nearest_solid_voxels(grid, hit_position)
+        hit_material, hit_voxel = _nearest_solid_voxels(
+            grid, hit_position, support_radius
+        )
         # A valid 0.5 crossing necessarily has a solid trilinear corner.
         assert np.all(hit_material != 0)
         material[hit_rows] = hit_material
@@ -698,7 +869,7 @@ def _reference_smooth_raycast(grid, origins, directions, max_steps):
     return hit, material, voxel_out, face_axis, face_sign, distance
 
 
-def _reference_smooth_normals(grid, raycast, points):
+def _reference_smooth_normals(grid, raycast, points, density_field=None):
     hit, _, voxel, face_axis, face_sign, _ = raycast
     normal = np.zeros((hit.size, 3), dtype=np.float32)
     normal[:, 2] = np.float32(1.0)
@@ -712,9 +883,9 @@ def _reference_smooth_normals(grid, raycast, points):
         upper = positions.copy()
         lower[:, axis] -= np.float32(0.5)
         upper[:, axis] += np.float32(0.5)
-        outward_gradient[:, axis] = _trilinear_density(
-            grid, lower
-        ) - _trilinear_density(grid, upper)
+        outward_gradient[:, axis] = _smooth_density(
+            grid, lower, density_field
+        ) - _smooth_density(grid, upper, density_field)
     gradient_length = np.sqrt(np.sum(outward_gradient * outward_gradient, axis=1))
     defined = gradient_length >= np.float32(1.0e-6)
     normal_rows = normal[rows]
@@ -750,12 +921,14 @@ def _reference_smooth_normals(grid, raycast, points):
     return normal
 
 
-def _reference_smooth_shade(grid, raycast, palette, light_direction, points):
+def _reference_smooth_shade(
+    grid, raycast, palette, light_direction, points, density_field=None
+):
     """Frozen WO-7B shade constants using the smooth-mode surface normal."""
     hit, material, voxel, _, _, distance = raycast
     rgb = np.zeros((hit.size, 3), dtype=np.uint8)
     depth = np.full(hit.size, np.float32(-1.0), dtype=np.float32)
-    normal = _reference_smooth_normals(grid, raycast, points)
+    normal = _reference_smooth_normals(grid, raycast, points, density_field)
     indices = np.flatnonzero(hit)
     if not indices.size:
         return rgb, depth, normal
@@ -806,18 +979,35 @@ def _reference_smooth_shade(grid, raycast, palette, light_direction, points):
 
 
 def reference_smooth_terrain_render(
-    grid, camera, light_direction, palette, max_steps=None, *, return_surface=False
+    grid,
+    camera,
+    light_direction,
+    palette,
+    max_steps=None,
+    *,
+    density_filter=0,
+    return_surface=False,
 ):
     """Independent NumPy reference for terrain_render(..., surface_mode="smooth")."""
     grid = np.asarray(grid, dtype=np.uint8)
     palette = np.asarray(palette, dtype=np.uint8)
+    if density_filter not in (0, 1, 2):
+        raise ValueError("density_filter must be 0, 1, or 2")
     if max_steps is None:
         max_steps = int(sum(grid.shape) + 3)
+    density_field = _filtered_density_grid(grid, density_filter)
     origins, directions = _reference_camera_rays(camera)
-    raycast = _reference_smooth_raycast(grid, origins, directions, int(max_steps))
+    raycast = _reference_smooth_raycast(
+        grid,
+        origins,
+        directions,
+        int(max_steps),
+        density_field,
+        _FILTER_SUPPORT[density_filter],
+    )
     points = origins + directions * raycast[5][:, None]
     rgb, depth, normal = _reference_smooth_shade(
-        grid, raycast, palette, light_direction, points
+        grid, raycast, palette, light_direction, points, density_field
     )
     rgb = rgb.reshape(camera["height"], camera["width"], 3)
     depth = depth.reshape(camera["height"], camera["width"])
@@ -849,20 +1039,26 @@ def _call_cuda(
     light=LIGHT_DIRECTION,
     consts=None,
     surface_mode=None,
+    density_filter=None,
 ):
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(np.ascontiguousarray(palette), dtype="uint8")
-    if surface_mode is None:
+    if surface_mode is None and density_filter is None:
         # Preserve a literal no-surface-mode call for the default-path receipt.
         rgb, depth = tc.terrain_render(grid_device, camera, light, palette_device, consts)
     else:
+        if surface_mode is None:
+            raise ValueError("density_filter requires an explicit smooth surface_mode")
+        kwargs = {"surface_mode": surface_mode}
+        if density_filter is not None:
+            kwargs["density_filter"] = density_filter
         rgb, depth = tc.terrain_render(
             grid_device,
             camera,
             light,
             palette_device,
             consts,
-            surface_mode=surface_mode,
+            **kwargs,
         )
     return rgb.numpy(), depth.numpy()
 
@@ -950,6 +1146,32 @@ def test_terrain_render_output_contract_misses_and_frozen_constants():
             palette_device,
             {"ambient_floor": 0.30},
         )
+    with pytest.raises(TypeError, match="must be an integer"):
+        tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            surface_mode="smooth",
+            density_filter=True,
+        )
+    with pytest.raises(ValueError, match="must be 0, 1, or 2"):
+        tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            surface_mode="smooth",
+            density_filter=3,
+        )
+    with pytest.raises(ValueError, match="only supported in smooth mode"):
+        tc.terrain_render(
+            grid_device,
+            camera,
+            LIGHT_DIRECTION,
+            palette_device,
+            density_filter=1,
+        )
 
 
 def test_terrain_render_full_spec_numpy_parity_640x480():
@@ -996,6 +1218,29 @@ def _assert_smooth_registered_parity(
     assert depth_relative_error <= 1.0e-4, label
 
 
+def _assert_density_filter_registered_parity(
+    actual_rgb, actual_depth, expected_rgb, expected_depth, label
+):
+    channel_exact_fraction = float(np.mean(actual_rgb == expected_rgb))
+    max_channel_delta = int(
+        np.max(np.abs(actual_rgb.astype(np.int16) - expected_rgb.astype(np.int16)))
+    )
+    np.testing.assert_array_equal(actual_depth == -1.0, expected_depth == -1.0)
+    depth_relative_error = float(
+        np.max(
+            np.abs(actual_depth - expected_depth)
+            / np.maximum(np.abs(expected_depth), np.float32(1.0))
+        )
+    )
+    print(
+        f"WO-8C G2 {label}: exact_channel_fraction={channel_exact_fraction:.9f} "
+        f"max_abs_delta={max_channel_delta} depth_max_rel={depth_relative_error:.9g}"
+    )
+    assert channel_exact_fraction >= 0.999, label
+    assert max_channel_delta <= 1, label
+    assert depth_relative_error <= 1.0e-4, label
+
+
 def _surface_points_from_depth(camera, depth):
     origins, directions = _reference_camera_rays(camera)
     points = origins + directions * depth.reshape(-1, 1)
@@ -1022,6 +1267,44 @@ def _flat_plane_camera():
         "width": 160,
         "height": 120,
     }
+
+
+def _ramp_grid(side=96):
+    """A center-clear 45-degree binary staircase with ideal plane z == x."""
+    x, _, z = np.indices((side, side, side), dtype=np.int32)
+    return np.where(z < x, 1, 0).astype(np.uint8)
+
+
+def _ramp_max_plane_deviation(grid, density_filter):
+    """Sample the interior 0.5 surface and measure max distance from z == x."""
+    side = grid.shape[0]
+    density_field = _filtered_density_grid(grid, density_filter)
+    x_values = np.linspace(12.0, float(side - 13), 289, dtype=np.float32)
+    z_values = np.linspace(4.0, float(side - 5), 1841, dtype=np.float32)
+    x, z = np.meshgrid(x_values, z_values, indexing="ij")
+    positions = np.stack(
+        (
+            x.reshape(-1),
+            np.full(x.size, np.float32(side * 0.5), dtype=np.float32),
+            z.reshape(-1),
+        ),
+        axis=1,
+    )
+    density = _smooth_density(grid, positions, density_field).reshape(x.shape)
+    downward = (density[:, :-1] >= _SMOOTH_ISO) & (
+        density[:, 1:] < _SMOOTH_ISO
+    )
+    assert np.all(np.any(downward, axis=1))
+    indices = np.argmax(downward, axis=1)
+    rows = np.arange(x_values.size)
+    lower_density = density[rows, indices]
+    upper_density = density[rows, indices + 1]
+    lower_z = z_values[indices]
+    upper_z = z_values[indices + 1]
+    crossing_z = lower_z + (lower_density - _SMOOTH_ISO) * (
+        upper_z - lower_z
+    ) / (lower_density - upper_density)
+    return float(np.max(np.abs(crossing_z - x_values)))
 
 
 def _sphere_grid(radius=96.0):
@@ -1180,6 +1463,122 @@ def test_terrain_render_smooth_numpy_parity_640x480():
     )
 
 
+def test_terrain_render_smooth_density_filter_zero_regression():
+    """WO-8C G1: explicit zero is byte-identical to the WO-8A smooth call."""
+    _require_cuda()
+    grid = _noise_terrain((128, 128, 64))
+    camera = _camera_for_grid(grid.shape, width=320, height=240)
+    baseline_rgb, baseline_depth = _call_cuda(
+        grid, camera, surface_mode="smooth"
+    )
+    zero_rgb, zero_depth = _call_cuda(
+        grid, camera, surface_mode="smooth", density_filter=0
+    )
+    np.testing.assert_array_equal(zero_rgb, baseline_rgb)
+    np.testing.assert_array_equal(zero_depth, baseline_depth)
+
+
+@pytest.mark.parametrize("density_filter", (1, 2))
+def test_terrain_render_smooth_density_filter_numpy_parity_640x480(
+    density_filter,
+):
+    """WO-8C G2: filtered 640x480 kernel output against the exact-u8 oracle."""
+    _require_cuda()
+    grid = _noise_terrain()
+    camera = _camera_for_grid(grid.shape)
+    expected_rgb, expected_depth = reference_smooth_terrain_render(
+        grid,
+        camera,
+        LIGHT_DIRECTION,
+        PALETTE,
+        density_filter=density_filter,
+    )
+    actual_rgb, actual_depth = _call_cuda(
+        grid,
+        camera,
+        surface_mode="smooth",
+        density_filter=density_filter,
+    )
+    _assert_density_filter_registered_parity(
+        actual_rgb,
+        actual_depth,
+        expected_rgb,
+        expected_depth,
+        f"noise_256x256x96_filter{density_filter}",
+    )
+
+
+def test_terrain_render_smooth_density_filter_ramp_geometry():
+    """WO-8C G3/r2: recorded-finding regression pin for the closed approach."""
+    # RECORDED-FINDING REGRESSION PIN (WO-8C-r2): the registered 0.35-voxel
+    # target was NOT met.  Density pre-filtering is CLOSED for terrace-melting;
+    # see docs/briefs/WO-8C_r2_ledger.md for the RED finding and its receipt.
+    grid = _ramp_grid()
+    deviations = tuple(
+        _ramp_max_plane_deviation(grid, density_filter)
+        for density_filter in (0, 1, 2)
+    )
+    print(
+        "WO-8C G3 ramp45: "
+        f"filter0_max_deviation={deviations[0]:.10f} "
+        f"filter1_max_deviation={deviations[1]:.10f} "
+        f"filter2_max_deviation={deviations[2]:.10f} "
+        f"target_0.35={'GREEN' if deviations[2] <= 0.35 else 'RED'}"
+    )
+    assert deviations[0] > deviations[1] > deviations[2]
+    assert abs(deviations[0] - 0.5857849121) <= 0.01
+    assert abs(deviations[1] - 0.5224800110) <= 0.01
+    assert abs(deviations[2] - 0.4974231720) <= 0.01
+
+
+def test_terrain_render_smooth_density_filter_cache_invalidation():
+    """WO-8C-r2: a source carve invalidates and rebuilds the next frame."""
+    _require_cuda()
+    grid = _flat_plane_grid()
+    camera = _flat_plane_camera()
+    grid_device = tc.tensor(grid, dtype="uint8")
+    palette_device = tc.tensor(PALETTE, dtype="uint8")
+    _, before_depth = tc.terrain_render(
+        grid_device,
+        camera,
+        LIGHT_DIRECTION,
+        palette_device,
+        surface_mode="smooth",
+        density_filter=2,
+    )
+    assert np.any(before_depth.numpy() >= 0.0)
+
+    empty_device = tc.tensor(np.zeros_like(grid), dtype="uint8")
+    with tc.no_grad():
+        tc.write_rows(grid_device, empty_device, 0)
+
+    after_rgb, after_depth = tc.terrain_render(
+        grid_device,
+        camera,
+        LIGHT_DIRECTION,
+        palette_device,
+        surface_mode="smooth",
+        density_filter=2,
+    )
+    assert not np.any(after_rgb.numpy())
+    np.testing.assert_array_equal(
+        after_depth.numpy(),
+        np.full((camera["height"], camera["width"]), -1.0, dtype=np.float32),
+    )
+
+
+def test_terrain_render_density_filter_cache_memory_cost():
+    """WO-8C-r2: exact normalized-u8 persistent and transient byte costs."""
+    shape = (512, 512, 192)
+    field_bytes = int(np.prod(shape, dtype=np.int64)) * np.dtype(np.uint8).itemsize
+    assert field_bytes == 50_331_648
+    assert field_bytes / (1024**2) == 48.0
+    assert 2 * field_bytes == 100_663_296
+    assert 2 * field_bytes / (1024**2) == 96.0
+    scratch_bytes = field_bytes
+    assert scratch_bytes == 50_331_648
+
+
 def _write_ppm(path, rgb):
     """Binary P6 receipt with no image-library dependency."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1208,6 +1607,25 @@ def test_terrain_render_wo8a_ppm_pair():
     repo_root = Path(__file__).resolve().parents[2]
     _write_ppm(repo_root / "artifacts" / "wo8a_blocky.ppm", blocky_rgb)
     _write_ppm(repo_root / "artifacts" / "wo8a_smooth.ppm", smooth_rgb)
+
+
+def test_terrain_render_wo8c_ppm_triplet():
+    """WO-8C G5: same mountain-like terrain and camera at filter 0/1/2."""
+    grid = _noise_terrain((256, 256, 96))
+    camera = _camera_for_grid(grid.shape)
+    repo_root = Path(__file__).resolve().parents[2]
+    for density_filter in (0, 1, 2):
+        rgb, _ = reference_smooth_terrain_render(
+            grid,
+            camera,
+            LIGHT_DIRECTION,
+            PALETTE,
+            density_filter=density_filter,
+        )
+        _write_ppm(
+            repo_root / "artifacts" / f"wo8c_filter{density_filter}.ppm",
+            rgb,
+        )
 
 
 class _CudaEvents:
@@ -1268,22 +1686,31 @@ class _CudaEvents:
 
 
 def terrain_render_timing_harness(
-    grid, camera, *, frames=100, warmup=10, surface_mode="blocky"
+    grid,
+    camera,
+    *,
+    frames=100,
+    warmup=10,
+    surface_mode="blocky",
+    density_filter=None,
 ):
-    """CUDA-event stages for the requested blocky or smooth terrain mode."""
+    """CUDA-event stages for blocky, smooth, or cached-filter rendering."""
     _require_cuda()
     events = _CudaEvents()
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(PALETTE, dtype="uint8")
 
     def render():
+        kwargs = {"surface_mode": surface_mode}
+        if density_filter is not None:
+            kwargs["density_filter"] = density_filter
         return tc.terrain_render(
             grid_device,
             camera,
             LIGHT_DIRECTION,
             palette_device,
             None,
-            surface_mode=surface_mode,
+            **kwargs,
         )
 
     for _ in range(warmup):
@@ -1363,3 +1790,31 @@ def test_terrain_render_smooth_stage_timing_100_frames():
     assert timings["kernel_ms_mean"] >= 0.0
     assert timings["d2h_ms_mean"] >= 0.0
     assert timings["total_ms_mean"] >= 0.0
+
+
+@pytest.mark.skipif(
+    os.environ.get("TC_RUN_TERRAIN_TIMING") != "1",
+    reason="set TC_RUN_TERRAIN_TIMING=1 to run the 100-frame WO-8C timing gate",
+)
+def test_terrain_render_smooth_density_filter_stage_timing_100_frames():
+    """WO-8C G4: warm-cache filter=2 stays within the frozen 12ms budget."""
+    _require_cuda()
+    dims = (512, 512, 192)
+    grid = _noise_terrain(dims)
+    camera = _camera_for_grid(dims)
+    timings = terrain_render_timing_harness(
+        grid,
+        camera,
+        frames=100,
+        surface_mode="smooth",
+        density_filter=2,
+    )
+    print(
+        "WO-8C G4 "
+        f"grid={dims} frames={timings['frames']} "
+        f"kernel_ms_mean={timings['kernel_ms_mean']:.4f} "
+        f"d2h_ms_mean={timings['d2h_ms_mean']:.4f} "
+        f"total_ms_mean={timings['total_ms_mean']:.4f} "
+        f"target_12ms={'GREEN' if timings['total_ms_mean'] <= 12.0 else 'RED'}"
+    )
+    assert timings["total_ms_mean"] <= 12.0

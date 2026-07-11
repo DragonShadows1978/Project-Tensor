@@ -13,6 +13,7 @@
 #pragma once
 
 #include <functional>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -27,12 +28,22 @@ using VarPtr = std::shared_ptr<Variable>;
 using GradFn = std::function<void(const NDArray& grad_out)>;
 
 struct Variable {
+  struct TerrainDensityCacheEntry {
+    NDArray field;
+    uint64_t source_revision = std::numeric_limits<uint64_t>::max();
+  };
+
   NDArray data;
   NDArray grad;                 // accumulated; undefined until first contribution
   bool requires_grad = false;
   GradFn grad_fn;               // null for leaves
   std::vector<VarPtr> parents;  // inputs that this node depends on
   const char* op = "leaf";
+  // Render-only derived state.  Entries are level-specific so an A/B switch
+  // does not rebuild either field; Storage::revision invalidates both after a
+  // source mutation.  Mutable because terrain_render is logically const with
+  // respect to the material tensor's public value.
+  mutable TerrainDensityCacheEntry terrain_density_cache[2];
 
   void accumulate_grad(const NDArray& g);  // grad += unbroadcast(g, data.shape)
 };

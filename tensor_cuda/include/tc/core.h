@@ -55,6 +55,10 @@ struct Storage {
   size_t nbytes = 0;
   Device device;
   bool pooled = false;  // allocated via cudaMallocAsync (small) vs raw cudaMalloc (large)
+  // Monotonic host-side generation shared by every view of this allocation.
+  // In-place engine operations bump it after enqueueing their write, allowing
+  // persistent derived tensors to invalidate without hashing device bytes.
+  uint64_t revision = 0;
 
   Storage(size_t nbytes, Device device);
   ~Storage();
@@ -84,6 +88,10 @@ class NDArray {
   int ndim() const { return static_cast<int>(shape.size()); }
   bool defined() const { return storage != nullptr; }
   void* data_ptr() const;
+  uint64_t revision() const { return storage ? storage->revision : 0; }
+  void mark_modified() const {
+    if (storage) ++storage->revision;
+  }
 
   // Host<->device transfer (host buffer is contiguous, matching `dtype`).
   static NDArray from_host(const void* src, const Shape& shape, DType dtype, Device device);
@@ -204,7 +212,15 @@ struct TerrainRenderLight {
 
 struct TerrainRenderConstants {
   int max_steps;
+  // Smooth-mode-only density prefilter selector.  Zero is the literal WO-8A
+  // path; levels 1 and 2 consume a separately cached u8 density field.
+  int density_filter = 0;
 };
+
+// Build the normalized u8 filtered-density cache for one source revision.
+// Level 1 is a separable centered 3-tap box; level 2 is the best measured
+// centered candidate from the r2 design rail, a 9-tap binomial/Gaussian.
+NDArray terrain_filter_density(const NDArray& materials, int density_filter);
 
 // One-thread-per-pixel terrain renderer.  Inputs are a resident uint8
 // materials grid and a resident uint8 palette shaped (N, 3).  The outputs are
@@ -212,7 +228,8 @@ struct TerrainRenderConstants {
 std::tuple<NDArray, NDArray> terrain_render(
     const NDArray& materials, const TerrainRenderCamera& camera,
     const TerrainRenderLight& light, const NDArray& palette,
-    const TerrainRenderConstants& constants);
+    const TerrainRenderConstants& constants,
+    const NDArray* filtered_density = nullptr);
 
 // Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
 // accumulate, single kernel + single output alloc (vs the 9-op chain).

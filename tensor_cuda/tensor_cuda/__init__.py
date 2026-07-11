@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Mapping
+import operator
 
 import numpy as np
 
@@ -235,6 +236,22 @@ def _terrain_surface_mode(surface_mode):
     return surface_mode
 
 
+def _terrain_density_filter(density_filter):
+    if isinstance(density_filter, (bool, np.bool_)):
+        raise TypeError(
+            "terrain_render: density_filter must be an integer 0, 1, or 2"
+        )
+    try:
+        parsed = operator.index(density_filter)
+    except TypeError as exc:
+        raise TypeError(
+            "terrain_render: density_filter must be an integer 0, 1, or 2"
+        ) from exc
+    if parsed not in (0, 1, 2):
+        raise ValueError("terrain_render: density_filter must be 0, 1, or 2")
+    return parsed
+
+
 def terrain_render(
     materials_u8_device,
     cam,
@@ -242,6 +259,7 @@ def terrain_render(
     palette,
     consts=None,
     surface_mode="blocky",
+    density_filter=0,
 ):
     """Render a resident voxel terrain entirely on the GPU.
 
@@ -258,7 +276,11 @@ def terrain_render(
     values.  The return is ``(rgb_uint8[H,W,3], depth_float32[H,W])`` with
     black / ``-1`` for a miss.  ``surface_mode="blocky"`` is the unchanged
     WO-7B DDA path; ``surface_mode="smooth"`` uses a render-only trilinear
-    occupancy isosurface.  This operation is non-differentiable.
+    occupancy isosurface.  Smooth ``density_filter=1`` samples a cached
+    centered 3-tap box density and level 2 samples a cached centered 9-tap
+    binomial/Gaussian density; zero preserves WO-8A byte-for-byte.  Cached
+    fields are normalized u8 and are invalidated by source-storage revision.
+    This operation is non-differentiable.
     """
     if not isinstance(materials_u8_device, Tensor):
         raise TypeError("terrain_render: materials_u8_device must be a Tensor")
@@ -277,6 +299,11 @@ def terrain_render(
     light_direction = _terrain_light_direction(light)
     max_steps = _terrain_max_steps(consts, materials_u8_device.shape)
     surface_mode = _terrain_surface_mode(surface_mode)
+    density_filter = _terrain_density_filter(density_filter)
+    if surface_mode == "blocky" and density_filter:
+        raise ValueError(
+            "terrain_render: density_filter is only supported in smooth mode"
+        )
     return _C.terrain_render(
         materials_u8_device,
         palette,
@@ -291,6 +318,7 @@ def terrain_render(
         light_direction.tolist(),
         max_steps,
         surface_mode,
+        density_filter,
     )
 
 

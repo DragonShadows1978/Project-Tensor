@@ -8,6 +8,7 @@
 #include "tc/ops.h"
 
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace tc {
@@ -266,8 +267,25 @@ std::tuple<Tensor, Tensor> terrain_render(
     const Tensor& materials, const TerrainRenderCamera& camera,
     const TerrainRenderLight& light, const Tensor& palette,
     const TerrainRenderConstants& constants) {
+  const NDArray* filtered_density = nullptr;
+  if (constants.density_filter != 0) {
+    if (constants.density_filter < 1 || constants.density_filter > 2) {
+      throw std::runtime_error(
+          "terrain_render: density_filter must be 0, 1, or 2");
+    }
+    auto& cache =
+        materials.v->terrain_density_cache[constants.density_filter - 1];
+    const uint64_t source_revision = materials.data().revision();
+    if (!cache.field.defined() || cache.source_revision != source_revision) {
+      NDArray rebuilt =
+          tc::terrain_filter_density(materials.data(), constants.density_filter);
+      cache.field = std::move(rebuilt);
+      cache.source_revision = source_revision;
+    }
+    filtered_density = &cache.field;
+  }
   auto out = tc::terrain_render(materials.data(), camera, light,
-                                palette.data(), constants);
+                                palette.data(), constants, filtered_density);
   return std::make_tuple(Tensor::make(std::get<0>(out), false),
                          Tensor::make(std::get<1>(out), false));
 }

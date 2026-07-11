@@ -947,6 +947,8 @@ void lion_step(NDArray& param, const NDArray& grad, NDArray& m, double lr,
         (float)lr, (float)b1, (float)b2, (float)wd);
   });
   cuda_check_last("lion_step");
+  param.mark_modified();
+  m.mark_modified();
 }
 void radam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
                 double lr, double b1, double b2, double eps, double bc1, double bc2,
@@ -960,6 +962,9 @@ void radam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
         (float)bc1, (float)bc2, (float)rect, rectified ? 1 : 0, (float)wd, decoupled ? 1 : 0);
   });
   cuda_check_last("radam_step");
+  param.mark_modified();
+  m.mark_modified();
+  v.mark_modified();
 }
 void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq, double lr,
                   double alpha, double eps, double wd) {
@@ -971,6 +976,8 @@ void rmsprop_step(NDArray& param, const NDArray& grad, NDArray& sq, double lr,
         (float)lr, (float)alpha, (float)eps, (float)wd);
   });
   cuda_check_last("rmsprop_step");
+  param.mark_modified();
+  sq.mark_modified();
 }
 void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc, double lr,
                   double eps, double wd) {
@@ -982,6 +989,8 @@ void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc, double lr,
         (float)lr, (float)eps, (float)wd);
   });
   cuda_check_last("adagrad_step");
+  param.mark_modified();
+  acc.mark_modified();
 }
 void scale_(NDArray& param, double s) {
   int64_t n = param.numel();
@@ -990,6 +999,7 @@ void scale_(NDArray& param, double s) {
     scale_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(param.data_ptr()), n, (float)s);
   });
   cuda_check_last("scale_");
+  param.mark_modified();
 }
 
 namespace {
@@ -3901,6 +3911,7 @@ void axpy_(NDArray& param, const NDArray& other, double alpha) {
   NDArray upd = ew_binary(param, ew_scalar(other, alpha, 2, false), 0);
   size_t bytes = param.numel() * dtype_size(param.dtype);
   cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+  if (bytes) param.mark_modified();
 }
 void sgd_step(NDArray& param, const NDArray& grad, NDArray& buf, double lr,
               double momentum, double wd) {
@@ -3912,6 +3923,8 @@ void sgd_step(NDArray& param, const NDArray& grad, NDArray& buf, double lr,
         (float)lr, (float)momentum, (float)wd);
   });
   cuda_check_last("sgd_step");
+  param.mark_modified();
+  buf.mark_modified();
 }
 void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
                double lr, double b1, double b2, double eps, int64_t t,
@@ -3927,6 +3940,9 @@ void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
         (float)eps, bc1, bc2, (float)wd, decoupled ? 1 : 0);
   });
   cuda_check_last("adam_step");
+  param.mark_modified();
+  m.mark_modified();
+  v.mark_modified();
 }
 
 NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
@@ -4395,6 +4411,7 @@ void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
       });
       cuda_check_last("write_rows");
     }
+    buf.mark_modified();
   }
 }
 
