@@ -326,7 +326,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            const std::vector<float>& forward,
            const std::vector<float>& right, const std::vector<float>& up,
            float half_width, float half_height, int width, int height,
-           const std::vector<float>& light_direction, int max_steps) {
+           const std::vector<float>& light_direction, int max_steps,
+           const std::string& surface_mode) {
           if (position.size() != 3 || forward.size() != 3 ||
               right.size() != 3 || up.size() != 3 ||
               light_direction.size() != 3) {
@@ -346,7 +347,19 @@ PYBIND11_MODULE(_tensor_cuda, m) {
           camera.half_height = half_height;
           camera.width = width;
           camera.height = height;
-          TerrainRenderConstants constants{max_steps};
+          if (max_steps <= 0) {
+            throw std::runtime_error("terrain_render: max_steps must be positive");
+          }
+          if (surface_mode != "blocky" && surface_mode != "smooth") {
+            throw std::runtime_error(
+                "terrain_render: surface_mode must be 'blocky' or 'smooth'");
+          }
+          // TerrainRenderConstants predates WO-8A and is used by the C++ op
+          // ABI.  Reserve its otherwise-invalid negative range for the
+          // pybind-only smooth selector; terrain.cu decodes it before launch.
+          const int encoded_max_steps =
+              surface_mode == "smooth" ? -max_steps : max_steps;
+          TerrainRenderConstants constants{encoded_max_steps};
           auto out = ops::terrain_render(materials, camera, light, palette,
                                          constants);
           return py::make_tuple(std::get<0>(out), std::get<1>(out));
@@ -355,7 +368,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("position"), py::arg("forward"), py::arg("right"),
         py::arg("up"), py::arg("half_width"), py::arg("half_height"),
         py::arg("width"), py::arg("height"), py::arg("light_direction"),
-        py::arg("max_steps"));
+        py::arg("max_steps"), py::arg("surface_mode") = "blocky");
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

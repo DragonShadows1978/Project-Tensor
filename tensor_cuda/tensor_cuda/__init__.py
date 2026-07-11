@@ -227,7 +227,22 @@ def _terrain_max_steps(consts, materials_shape):
     return max_steps
 
 
-def terrain_render(materials_u8_device, cam, light, palette, consts=None):
+def _terrain_surface_mode(surface_mode):
+    if not isinstance(surface_mode, str):
+        raise TypeError("terrain_render: surface_mode must be 'blocky' or 'smooth'")
+    if surface_mode not in ("blocky", "smooth"):
+        raise ValueError("terrain_render: surface_mode must be 'blocky' or 'smooth'")
+    return surface_mode
+
+
+def terrain_render(
+    materials_u8_device,
+    cam,
+    light,
+    palette,
+    consts=None,
+    surface_mode="blocky",
+):
     """Render a resident voxel terrain entirely on the GPU.
 
     ``materials_u8_device`` is a CUDA ``uint8`` tensor shaped ``(X, Y, Z)``;
@@ -241,7 +256,9 @@ def terrain_render(materials_u8_device, cam, light, palette, consts=None):
     ``consts`` may be ``None``, a positive integer max-step count, or a mapping
     containing ``max_steps`` plus any frozen constants at their specified
     values.  The return is ``(rgb_uint8[H,W,3], depth_float32[H,W])`` with
-    black / ``-1`` for a miss.  This operation is non-differentiable.
+    black / ``-1`` for a miss.  ``surface_mode="blocky"`` is the unchanged
+    WO-7B DDA path; ``surface_mode="smooth"`` uses a render-only trilinear
+    occupancy isosurface.  This operation is non-differentiable.
     """
     if not isinstance(materials_u8_device, Tensor):
         raise TypeError("terrain_render: materials_u8_device must be a Tensor")
@@ -259,6 +276,7 @@ def terrain_render(materials_u8_device, cam, light, palette, consts=None):
     ) = _terrain_camera_terms(cam)
     light_direction = _terrain_light_direction(light)
     max_steps = _terrain_max_steps(consts, materials_u8_device.shape)
+    surface_mode = _terrain_surface_mode(surface_mode)
     return _C.terrain_render(
         materials_u8_device,
         palette,
@@ -272,6 +290,7 @@ def terrain_render(materials_u8_device, cam, light, palette, consts=None):
         height,
         light_direction.tolist(),
         max_steps,
+        surface_mode,
     )
 
 
