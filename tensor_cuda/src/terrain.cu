@@ -1103,10 +1103,10 @@ __device__ __forceinline__ uint8_t terrain_to_u8(float value) {
 constexpr int kDetailOctaves = 7;
 constexpr float kDetailBaseWavelength = 8.0f;
 constexpr float kDetailGain = 0.5f;
-constexpr float kDetailLodFullDistance = 24.0f;
 constexpr float kDetailNormalGain = 0.75f;
-constexpr float kDetailMaxTangent = 0.4040262258351568f;  // tan(22 deg)
+constexpr float kDetailMaxTangent = 0.3249196962329063f;  // tan(18 deg)
 constexpr float kDetailValueJitter = 0.06f;
+constexpr float kDetailCoarsestMinLod = 0.35f;
 
 __device__ __forceinline__ float terrain_detail_material_scale(
     uint8_t material) {
@@ -1184,20 +1184,25 @@ __device__ __forceinline__ void terrain_detail_value_noise(
   }
 }
 
-__device__ __forceinline__ float terrain_detail_lod_weight(float distance,
-                                                            int octave) {
-  const float full_distance =
-      kDetailLodFullDistance / static_cast<float>(1 << octave);
-  // Full through full_distance; a continuous linear fade reaches zero at
-  // 2*full_distance.  This is intentionally not a binary octave selector.
-  return fminf(fmaxf((2.0f * full_distance - distance) / full_distance,
-                     0.0f),
-               1.0f);
+__device__ __forceinline__ float terrain_detail_lod_weight(
+    float depth, float vertical_projection_pixels, int octave) {
+  const float wavelength =
+      kDetailBaseWavelength / static_cast<float>(1 << octave);
+  // Screen-subtense LOD: lambda projects to lambda * focal_pixels / depth.
+  // The linear ramp is zero at 2 pixels and full at 4 pixels, so it is
+  // continuous through every depth transition rather than popping octaves.
+  const float projected_pixels =
+      wavelength * vertical_projection_pixels / fmaxf(depth, 1.0e-6f);
+  float weight = fminf(fmaxf(projected_pixels * 0.5f - 1.0f, 0.0f), 1.0f);
+  // Retain a readable coarse world-anchored structure even when it becomes
+  // smaller than the nominal two-pixel threshold at extreme range.
+  if (octave == 0) weight = fmaxf(weight, kDetailCoarsestMinLod);
+  return weight;
 }
 
 __device__ __forceinline__ void terrain_apply_detail(
-    const float position[3], float distance, uint8_t material, float normal[3],
-    float* fine_value_jitter) {
+    const float position[3], float depth, float vertical_projection_pixels,
+    uint8_t material, float normal[3], float* fine_value_jitter) {
   float octave_value[kDetailOctaves] = {};
   float octave_lod[kDetailOctaves] = {};
   float detail_gradient[3] = {0.0f, 0.0f, 0.0f};
@@ -1206,7 +1211,8 @@ __device__ __forceinline__ void terrain_apply_detail(
 
 #pragma unroll
   for (int octave = 0; octave < kDetailOctaves; ++octave) {
-    const float lod = terrain_detail_lod_weight(distance, octave);
+    const float lod = terrain_detail_lod_weight(
+        depth, vertical_projection_pixels, octave);
     octave_lod[octave] = lod;
     if (lod > 0.0f) {
       float octave_gradient[3];
@@ -1222,7 +1228,7 @@ __device__ __forceinline__ void terrain_apply_detail(
   }
 
   // Rotate only in the tangent plane, then cap the tangent magnitude at
-  // tan(22 deg).  Therefore atan(|tangent|) cannot exceed the frozen angle.
+  // tan(18 deg).  Therefore atan(|tangent|) cannot exceed the frozen angle.
   const float normal_gradient =
       normal[0] * detail_gradient[0] + normal[1] * detail_gradient[1] +
       normal[2] * detail_gradient[2];
@@ -1784,8 +1790,10 @@ __global__ void terrain_render_detail_kernel(
                                  face_axis, face_sign, normal);
   }
   float fine_value_jitter = 0.0f;
-  terrain_apply_detail(hit_position, hit_distance, material, normal,
-                       &fine_value_jitter);
+  const float vertical_projection_pixels =
+      static_cast<float>(camera.height) / (2.0f * camera.half_height);
+  terrain_apply_detail(hit_position, hit_distance, vertical_projection_pixels,
+                       material, normal, &fine_value_jitter);
 
   const int64_t x = voxel[0];
   const int64_t y = voxel[1];

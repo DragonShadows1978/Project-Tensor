@@ -1038,10 +1038,10 @@ def reference_smooth_terrain_render(
 _DETAIL_OCTAVES = 7
 _DETAIL_BASE_WAVELENGTH = np.float32(8.0)
 _DETAIL_GAIN = np.float32(0.5)
-_DETAIL_LOD_FULL_DISTANCE = np.float32(24.0)
 _DETAIL_NORMAL_GAIN = np.float32(0.75)
-_DETAIL_MAX_TANGENT = np.float32(0.4040262258351568)
+_DETAIL_MAX_TANGENT = np.float32(0.3249196962329063)
 _DETAIL_VALUE_JITTER = np.float32(0.06)
+_DETAIL_COARSEST_MIN_LOD = np.float32(0.35)
 
 
 def _detail_material_scale(material):
@@ -1051,6 +1051,38 @@ def _detail_material_scale(material):
     scale[material == 3] = np.float32(0.5)  # sand
     scale[material == 4] = np.float32(1.2)  # scorched
     return scale
+
+
+def _detail_vertical_projection_pixels(camera):
+    """Vertical focal length in pixels for the frozen camera convention."""
+    _, _, _, _, _, half_height = _camera_terms(camera)
+    return np.float32(
+        np.float32(camera["height"]) / (np.float32(2.0) * half_height)
+    )
+
+
+def _detail_subtense_lod_weights(depth, vertical_projection_pixels):
+    """WO-9B-r2 continuous screen-subtense weights for octaves 0..6."""
+    depth = np.asarray(depth, dtype=np.float32)
+    safe_depth = np.maximum(depth, np.float32(1.0e-6))
+    projection = np.float32(vertical_projection_pixels)
+    weights = np.empty((_DETAIL_OCTAVES,) + depth.shape, dtype=np.float32)
+    for octave in range(_DETAIL_OCTAVES):
+        wavelength = np.float32(
+            _DETAIL_BASE_WAVELENGTH / np.float32(1 << octave)
+        )
+        projected_pixels = (
+            wavelength * projection / safe_depth
+        ).astype(np.float32)
+        weight = np.clip(
+            projected_pixels * np.float32(0.5) - np.float32(1.0),
+            np.float32(0.0),
+            np.float32(1.0),
+        ).astype(np.float32)
+        if octave == 0:
+            weight = np.maximum(weight, _DETAIL_COARSEST_MIN_LOD)
+        weights[octave] = weight
+    return weights
 
 
 def _detail_lattice_hash(x, y, z):
@@ -1106,8 +1138,10 @@ def _detail_value_noise(positions, wavelength):
     return value, gradient
 
 
-def _reference_detail_fields(positions, distance, material, normal):
-    """WO-9B fBm normal perturbation and continuous two-octave jitter."""
+def _reference_detail_fields(
+    positions, distance, vertical_projection_pixels, material, normal
+):
+    """WO-9B-r2 fBm normal perturbation and continuous two-octave jitter."""
     positions = np.asarray(positions, dtype=np.float32)
     distance = np.asarray(distance, dtype=np.float32)
     material = np.asarray(material, dtype=np.uint8)
@@ -1118,16 +1152,11 @@ def _reference_detail_fields(positions, distance, material, normal):
     detail_gradient = np.zeros((count, 3), dtype=np.float32)
     wavelength = _DETAIL_BASE_WAVELENGTH
     gain = np.float32(1.0)
+    octave_lod[:] = _detail_subtense_lod_weights(
+        distance, vertical_projection_pixels
+    )
     for octave in range(_DETAIL_OCTAVES):
-        full_distance = np.float32(
-            _DETAIL_LOD_FULL_DISTANCE / np.float32(1 << octave)
-        )
-        lod = np.clip(
-            (np.float32(2.0) * full_distance - distance) / full_distance,
-            np.float32(0.0),
-            np.float32(1.0),
-        ).astype(np.float32)
-        octave_lod[octave] = lod
+        lod = octave_lod[octave]
         active = np.flatnonzero(lod > np.float32(0.0))
         if active.size:
             value, gradient = _detail_value_noise(positions[active], wavelength)
@@ -1222,7 +1251,13 @@ def _reference_blocky_normals(grid, raycast):
 
 
 def _reference_detail_shade(
-    grid, raycast, palette, light_direction, points, base_normal
+    grid,
+    raycast,
+    palette,
+    light_direction,
+    points,
+    base_normal,
+    vertical_projection_pixels,
 ):
     hit, material, voxel, _, _, distance = raycast
     rgb = np.zeros((hit.size, 3), dtype=np.uint8)
@@ -1233,7 +1268,11 @@ def _reference_detail_shade(
         return rgb, depth, normal
 
     normal[indices], fine_value_jitter = _reference_detail_fields(
-        points[indices], distance[indices], material[indices], normal[indices]
+        points[indices],
+        distance[indices],
+        vertical_projection_pixels,
+        material[indices],
+        normal[indices],
     )
     x, y, z = (voxel[indices, axis] for axis in range(3))
     occupied_neighbors = np.zeros(indices.size, dtype=np.float32)
@@ -1338,7 +1377,13 @@ def reference_detail_terrain_render(
         origins[hit_rows] + directions[hit_rows] * raycast[5][hit_rows, None]
     ).astype(np.float32)
     rgb, depth, normal = _reference_detail_shade(
-        grid, raycast, palette, light_direction, points, base_normal
+        grid,
+        raycast,
+        palette,
+        light_direction,
+        points,
+        base_normal,
+        _detail_vertical_projection_pixels(camera),
     )
     rgb = rgb.reshape(camera["height"], camera["width"], 3)
     depth = depth.reshape(camera["height"], camera["width"])
@@ -1549,6 +1594,40 @@ def _wo9b_noise_camera(grid, distance, *, width=WIDTH, height=HEIGHT):
         "position": (target + outward * np.float32(distance)).astype(np.float32),
         "look_at": target,
         "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 44.0,
+        "width": width,
+        "height": height,
+    }
+
+
+def _wo9br2_front_light(camera):
+    """Front-hemisphere key light, offset enough to expose surface relief."""
+    _, forward, right, camera_up, _, _ = _camera_terms(camera)
+    light = (
+        forward
+        + np.float32(0.35) * right
+        + np.float32(0.20) * camera_up
+    ).astype(np.float32)
+    return light / np.float32(np.linalg.norm(light))
+
+
+def _wo9br2_mountain_camera(grid, distance, *, width=WIDTH, height=HEIGHT):
+    """A clearance-safe view of a deterministic high-relief mountains patch."""
+    heights = np.count_nonzero(grid, axis=2).astype(np.float32)
+    sx, sy = heights.shape
+    # This is a rough, interior patch of the committed WO-8A fixture rather
+    # than its unusually flat center.  Scale the coordinates so the view stays
+    # stable if the standard fixture dimensions are varied in a future test.
+    cx = sx * 74 // 256
+    cy = sy * 88 // 256
+    target = np.array(
+        (np.float32(cx) + np.float32(0.5), np.float32(cy) + np.float32(0.5), heights[cx, cy]),
+        dtype=np.float32,
+    )
+    return {
+        "position": target + np.array((0.0, 0.0, distance), dtype=np.float32),
+        "look_at": target,
+        "world_up": np.array((0.0, 1.0, 0.0), dtype=np.float32),
         "vertical_fov_degrees": 44.0,
         "width": width,
         "height": height,
@@ -2082,7 +2161,7 @@ def test_terrain_render_detail_zero_regression():
 
 
 def test_terrain_render_detail_reference_bounds_and_material_table():
-    """WO-9B normal cap and frozen material-amplitude table, CPU-side."""
+    """WO-9B-r2 normal cap and frozen material-amplitude table, CPU-side."""
     np.testing.assert_array_equal(
         _detail_material_scale(np.array((1, 2, 3, 4, 17), dtype=np.uint8)),
         np.array((1.0, 1.4, 0.5, 1.2, 1.0), dtype=np.float32),
@@ -2105,8 +2184,49 @@ def test_terrain_render_detail_reference_bounds_and_material_table():
         base_surface["normal"][hit], detailed_surface["normal"][hit]
     )
     max_angle = float(np.max(angles))
-    print(f"WO-9B normal cap: max_angle_deg={max_angle:.6f}")
-    assert max_angle <= 22.001
+    print(f"WO-9B-r2 normal cap: max_angle_deg={max_angle:.6f}")
+    assert max_angle <= 18.001
+
+
+def test_terrain_render_detail_screen_subtense_law():
+    """WO-9B-r2 G6: fixed-camera active octaves follow the frozen law."""
+    grid = _wo9b_slope_grid((128, 128, 64))
+    camera = _wo9b_slope_camera(grid, 4.0)
+    projection = _detail_vertical_projection_pixels(camera)
+    expected_active = {
+        4.0: (0, 1, 2, 3, 4, 5, 6),
+        12.0: (0, 1, 2, 3, 4, 5, 6),
+        60.0: (0, 1, 2, 3, 4, 5),
+        200.0: (0, 1, 2, 3),
+    }
+    receipt = []
+    for depth, expected in expected_active.items():
+        weights = _detail_subtense_lod_weights(
+            np.array((depth,), dtype=np.float32), projection
+        )
+        active = tuple(int(octave) for octave in np.flatnonzero(weights[:, 0] > 0.0))
+        assert active == expected
+        for octave in range(_DETAIL_OCTAVES):
+            wavelength = np.float32(
+                _DETAIL_BASE_WAVELENGTH / np.float32(1 << octave)
+            )
+            projected_pixels = wavelength * projection / np.float32(depth)
+            expected_weight = np.clip(
+                projected_pixels * np.float32(0.5) - np.float32(1.0),
+                np.float32(0.0),
+                np.float32(1.0),
+            )
+            if octave == 0:
+                expected_weight = np.maximum(
+                    expected_weight, _DETAIL_COARSEST_MIN_LOD
+                )
+            assert weights[octave, 0] == expected_weight
+        receipt.append(f"{depth:g}:" + ",".join(str(octave) for octave in active))
+    print(
+        "WO-9B-r2 G6 subtense "
+        f"fov_deg={camera['vertical_fov_degrees']:.1f} height={camera['height']} "
+        f"depth:active={';'.join(receipt)}"
+    )
 
 
 @pytest.mark.parametrize("surface_mode", ("blocky", "smooth"))
@@ -2241,21 +2361,32 @@ def test_terrain_render_detail_lod_continuity_dolly():
     assert max_step_change < 1.0
 
 
-def test_terrain_render_wo9b_ppm_ladder():
-    """WO-9B G7: same-slope smooth-detail ladder for operator inspection."""
+def test_terrain_render_wo9br2_ppm_ladder():
+    """WO-9B-r2: front-lit real-mountain smooth-detail receipt ladder."""
     _require_cuda()
-    grid = _wo9b_slope_grid((256, 256, 96))
+    # Keep this on the committed WO-8A mountain-fixture generation path rather
+    # than inventing a receipt-only terrain.  The vertical clearance keeps the
+    # 4-voxel camera outside the noisy voxel surface; the key light travels
+    # toward that slope from the front hemisphere, fixing r1's back-lighting.
+    grid = _noise_terrain((256, 256, 96))
     repo_root = Path(__file__).resolve().parents[2]
-    for label, distance in (("far", 200.0), ("mid", 60.0), ("near", 12.0), ("macro", 4.0)):
-        camera = _wo9b_slope_camera(grid, distance)
+    for label, distance in (
+        ("far", 200.0),
+        ("mid", 60.0),
+        ("near", 12.0),
+        ("macro", 4.0),
+    ):
+        camera = _wo9br2_mountain_camera(grid, distance)
         rgb, _ = _call_cuda(
             grid,
             camera,
             palette=DETAIL_PALETTE,
+            light=_wo9br2_front_light(camera),
             surface_mode="smooth",
             detail=1,
         )
-        _write_ppm(repo_root / "artifacts" / f"wo9b_{label}.ppm", rgb)
+        assert np.unique(rgb.reshape(-1, 3), axis=0).shape[0] >= 128
+        _write_ppm(repo_root / "artifacts" / f"wo9br2_{label}.ppm", rgb)
 
 
 def _write_ppm(path, rgb):
