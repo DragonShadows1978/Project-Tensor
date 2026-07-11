@@ -204,8 +204,13 @@ def _terrain_light_direction(light):
     return np.ascontiguousarray(direction / np.float32(length))
 
 
-def _terrain_max_steps(consts, materials_shape):
-    default_steps = int(sum(materials_shape) + 3)
+def _terrain_max_steps(consts, materials_shape, object_shapes=()):
+    default_steps = int(
+        max(
+            (sum(materials_shape), *(sum(shape) for shape in object_shapes))
+        )
+        + 3
+    )
     if consts is None:
         return default_steps
     if isinstance(consts, Mapping):
@@ -266,6 +271,45 @@ def _terrain_detail(detail):
     return parsed
 
 
+def _terrain_objects(objects, materials_u8_device):
+    """Validate and normalize the small host-side object descriptor list."""
+    if objects is None:
+        return None
+    if not isinstance(objects, list):
+        raise TypeError("terrain_render: objects must be a list or None")
+    if len(objects) > 16:
+        raise ValueError("terrain_render: objects supports at most 16 entries")
+
+    normalized = []
+    for index, descriptor in enumerate(objects):
+        label = f"terrain_render: objects[{index}]"
+        if not isinstance(descriptor, (tuple, list)) or len(descriptor) != 3:
+            raise TypeError(f"{label} must be (grid, origin, palette)")
+        grid, origin, palette = descriptor
+        if not isinstance(grid, Tensor):
+            raise TypeError(f"{label} grid must be a Tensor")
+        if grid.dtype != "uint8" or grid.ndim != 3 or any(
+            extent <= 0 for extent in grid.shape
+        ):
+            raise ValueError(f"{label} grid must be non-empty uint8 [X,Y,Z]")
+        if grid.device != materials_u8_device.device:
+            raise ValueError(f"{label} grid must share the terrain device")
+        origin = _terrain_vector(origin, f"objects[{index}].origin")
+        if not isinstance(palette, Tensor):
+            raise TypeError(f"{label} palette must be a Tensor")
+        if (
+            palette.dtype != "uint8"
+            or palette.ndim != 2
+            or palette.shape[0] <= 0
+            or palette.shape[1] != 3
+        ):
+            raise ValueError(f"{label} palette must be non-empty uint8 [N,3]")
+        if palette.device != materials_u8_device.device:
+            raise ValueError(f"{label} palette must share the terrain device")
+        normalized.append((grid, origin.tolist(), palette))
+    return normalized
+
+
 def terrain_render(
     materials_u8_device,
     cam,
@@ -275,6 +319,7 @@ def terrain_render(
     surface_mode="blocky",
     density_filter=0,
     detail=0,
+    objects=None,
 ):
     """Render a resident voxel terrain entirely on the GPU.
 
@@ -297,7 +342,11 @@ def terrain_render(
     fields are normalized u8 and are invalidated by source-storage revision.
     ``detail=1`` adds deterministic world-anchored procedural surface detail;
     the default `detail=0` retains the literal pre-WO-9B kernel paths.
-    This operation is non-differentiable.
+    ``objects`` is ``None`` or a list of at most 16
+    ``(grid_u8_device[X,Y,Z], origin_f32x3, palette_u8_device[N,3])``
+    descriptors.  Object grids are axis-aligned in world space and use blocky
+    entry-face shading plus object-local AO; terrain surface/detail selectors do
+    not alter them.  This operation is non-differentiable.
     """
     if not isinstance(materials_u8_device, Tensor):
         raise TypeError("terrain_render: materials_u8_device must be a Tensor")
@@ -314,7 +363,11 @@ def terrain_render(
         height,
     ) = _terrain_camera_terms(cam)
     light_direction = _terrain_light_direction(light)
-    max_steps = _terrain_max_steps(consts, materials_u8_device.shape)
+    objects = _terrain_objects(objects, materials_u8_device)
+    object_shapes = () if not objects else tuple(obj[0].shape for obj in objects)
+    max_steps = _terrain_max_steps(
+        consts, materials_u8_device.shape, object_shapes
+    )
     surface_mode = _terrain_surface_mode(surface_mode)
     density_filter = _terrain_density_filter(density_filter)
     detail = _terrain_detail(detail)
@@ -322,7 +375,7 @@ def terrain_render(
         raise ValueError(
             "terrain_render: density_filter is only supported in smooth mode"
         )
-    return _C.terrain_render(
+    arguments = (
         materials_u8_device,
         palette,
         position.tolist(),
@@ -339,6 +392,11 @@ def terrain_render(
         density_filter,
         detail,
     )
+    # Omitted/None/empty objects deliberately call the pre-WO-9A-e binding
+    # arity, preserving the literal established no-object path.
+    if not objects:
+        return _C.terrain_render(*arguments)
+    return _C.terrain_render(*arguments, objects)
 
 
 def argmax_last_axis(a):

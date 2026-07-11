@@ -101,6 +101,14 @@ std::tuple<Tensor, Tensor> terrain_render(
     const TerrainRenderLight& light, const Tensor& palette,
     const TerrainRenderConstants& constants);
 
+// Object-enabled overload.  The five-argument overload above remains the
+// literal no-object path and therefore retains its established launch stream.
+std::tuple<Tensor, Tensor> terrain_render(
+    const Tensor& materials, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light, const Tensor& palette,
+    const TerrainRenderConstants& constants,
+    const std::vector<TerrainRenderObject>& objects);
+
 // Fused RMSNorm over the last dim (inference-only: backward throws).
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps);
 Tensor rope_apply(const Tensor& x, const Tensor& cs, const Tensor& sn,

@@ -4,6 +4,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
+#include <cmath>
+#include <utility>
 #include <vector>
 
 #include "tc/autograd.h"
@@ -142,6 +144,47 @@ Tensor getitem(Tensor& t, py::object key) {
     }
   }
   return cur;
+}
+
+std::vector<TerrainRenderObject> terrain_objects_from_python(
+    const py::object& objects) {
+  std::vector<TerrainRenderObject> parsed;
+  if (objects.is_none()) return parsed;
+  if (!py::isinstance<py::list>(objects)) {
+    throw std::runtime_error("terrain_render: objects must be a list or None");
+  }
+  const py::list entries = py::reinterpret_borrow<py::list>(objects);
+  if (entries.size() > 16) {
+    throw std::runtime_error("terrain_render: objects supports at most 16 entries");
+  }
+  parsed.reserve(entries.size());
+  for (py::ssize_t index = 0; index < entries.size(); ++index) {
+    const py::handle entry = entries[index];
+    if ((!py::isinstance<py::tuple>(entry) &&
+         !py::isinstance<py::list>(entry)) ||
+        py::len(entry) != 3) {
+      throw std::runtime_error(
+          "terrain_render: each object must be (grid, origin, palette)");
+    }
+    const py::sequence terms = py::reinterpret_borrow<py::sequence>(entry);
+    Tensor grid = py::cast<Tensor>(terms[0]);
+    const std::vector<float> origin =
+        py::cast<std::vector<float>>(terms[1]);
+    Tensor palette = py::cast<Tensor>(terms[2]);
+    if (origin.size() != 3 || !std::isfinite(origin[0]) ||
+        !std::isfinite(origin[1]) || !std::isfinite(origin[2])) {
+      throw std::runtime_error(
+          "terrain_render: object origin must be a finite three-vector");
+    }
+    TerrainRenderObject object{};
+    object.grid = grid.data();
+    object.origin[0] = origin[0];
+    object.origin[1] = origin[1];
+    object.origin[2] = origin[2];
+    object.palette = palette.data();
+    parsed.push_back(std::move(object));
+  }
+  return parsed;
 }
 
 }  // namespace
@@ -327,7 +370,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            const std::vector<float>& right, const std::vector<float>& up,
            float half_width, float half_height, int width, int height,
            const std::vector<float>& light_direction, int max_steps,
-           const std::string& surface_mode, int density_filter, int detail) {
+           const std::string& surface_mode, int density_filter, int detail,
+           const py::object& objects) {
           if (position.size() != 3 || forward.size() != 3 ||
               right.size() != 3 || up.size() != 3 ||
               light_direction.size() != 3) {
@@ -373,8 +417,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
               surface_mode == "smooth" ? -max_steps : max_steps;
           TerrainRenderConstants constants{encoded_max_steps, density_filter,
                                            detail};
-          auto out = ops::terrain_render(materials, camera, light, palette,
-                                         constants);
+          const auto render_objects = terrain_objects_from_python(objects);
+          auto out = render_objects.empty()
+                         ? ops::terrain_render(materials, camera, light,
+                                               palette, constants)
+                         : ops::terrain_render(materials, camera, light,
+                                               palette, constants,
+                                               render_objects);
           return py::make_tuple(std::get<0>(out), std::get<1>(out));
         },
         py::arg("materials_u8"), py::arg("palette_u8"),
@@ -382,7 +431,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("up"), py::arg("half_width"), py::arg("half_height"),
         py::arg("width"), py::arg("height"), py::arg("light_direction"),
         py::arg("max_steps"), py::arg("surface_mode") = "blocky",
-        py::arg("density_filter") = 0, py::arg("detail") = 0);
+        py::arg("density_filter") = 0, py::arg("detail") = 0,
+        py::arg("objects") = py::none());
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);

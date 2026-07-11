@@ -290,6 +290,24 @@ std::tuple<Tensor, Tensor> terrain_render(
                          Tensor::make(std::get<1>(out), false));
 }
 
+std::tuple<Tensor, Tensor> terrain_render(
+    const Tensor& materials, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light, const Tensor& palette,
+    const TerrainRenderConstants& constants,
+    const std::vector<TerrainRenderObject>& objects) {
+  // Keep terrain selection/cache behavior centralized in the established
+  // overload.  A non-empty object list adds exactly one overlay launch.
+  auto out = terrain_render(materials, camera, light, palette, constants);
+  if (!objects.empty()) {
+    const int max_steps = constants.max_steps < 0 ? -constants.max_steps
+                                                   : constants.max_steps;
+    tc::terrain_render_objects_overlay(
+        std::get<0>(out).data(), std::get<1>(out).data(), camera, light,
+        objects, max_steps);
+  }
+  return out;
+}
+
 Tensor causal_softmax(const Tensor& scores) {
   NDArray out = tc::causal_softmax(scores.data());
   return Tensor::from_op(out, {scores}, "causal_softmax", [](const NDArray&) -> void {

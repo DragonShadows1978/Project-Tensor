@@ -45,6 +45,24 @@ DETAIL_PALETTE = np.array(
     dtype=np.uint8,
 )
 LIGHT_DIRECTION = np.array((0.46, -0.36, 0.81), dtype=np.float32)
+OBJECT_PALETTE_RED = np.array(
+    (
+        (0, 0, 0),
+        (222, 58, 42),
+        (128, 29, 24),
+        (44, 48, 54),
+    ),
+    dtype=np.uint8,
+)
+OBJECT_PALETTE_BLUE = np.array(
+    (
+        (0, 0, 0),
+        (48, 126, 224),
+        (25, 66, 138),
+        (48, 52, 60),
+    ),
+    dtype=np.uint8,
+)
 
 
 def _require_cuda():
@@ -382,6 +400,136 @@ def reference_terrain_render(grid, camera, light_direction, palette, max_steps=N
     rgb, depth = _reference_shade(grid, raycast, palette, light_direction)
     return rgb.reshape(camera["height"], camera["width"], 3), depth.reshape(
         camera["height"], camera["width"]
+    )
+
+
+def _reference_object_shade(grid, raycast, palette, light_direction):
+    """Blocky entry-face diffuse + object-local 3^3 AO; no terrain jitter."""
+    hit, material, voxel, face_axis, face_sign, distance = raycast
+    rgb = np.zeros((hit.size, 3), dtype=np.uint8)
+    depth = np.full(hit.size, np.float32(-1.0), dtype=np.float32)
+    indices = np.flatnonzero(hit)
+    if not indices.size:
+        return rgb, depth
+
+    normal = np.zeros((indices.size, 3), dtype=np.float32)
+    normal[:, 2] = np.float32(1.0)
+    entered = face_axis[indices] >= 0
+    entered_rows = np.flatnonzero(entered)
+    normal[entered_rows] = np.float32(0.0)
+    normal[
+        entered_rows, face_axis[indices][entered_rows]
+    ] = face_sign[indices][entered_rows].astype(np.float32)
+
+    x, y, z = (voxel[indices, axis] for axis in range(3))
+    occupied_neighbors = np.zeros(indices.size, dtype=np.float32)
+    for dz in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dx == dy == dz == 0:
+                    continue
+                occupied_neighbors += _occupied_at(
+                    grid, x + dx, y + dy, z + dz
+                )
+    ao = np.clip(
+        np.float32(1.0)
+        - np.float32(0.60)
+        * occupied_neighbors
+        * np.float32(1.0 / 26.0),
+        np.float32(0.40),
+        np.float32(1.0),
+    )
+    light = _vec3(light_direction, "light")
+    light /= np.float32(np.linalg.norm(light))
+    diffuse = np.clip(
+        -np.sum(normal * light[None, :], axis=1),
+        np.float32(0.35),
+        np.float32(1.0),
+    )
+    palette_index = np.minimum(
+        material[indices].astype(np.int64), palette.shape[0] - 1
+    )
+    shaded = (
+        palette[palette_index].astype(np.float32)
+        * (diffuse * ao)[:, None]
+    )
+    rgb[indices] = np.clip(
+        shaded + np.float32(0.5), np.float32(0.0), np.float32(255.0)
+    ).astype(np.uint8)
+    depth[indices] = distance[indices]
+    return rgb, depth
+
+
+def reference_terrain_render_objects(
+    grid,
+    camera,
+    light_direction,
+    palette,
+    objects,
+    *,
+    max_steps=None,
+    return_winners=False,
+):
+    """Independent terrain + translated object-DDA depth compositor."""
+    normalized_objects = [
+        (
+            np.asarray(object_grid, dtype=np.uint8),
+            _vec3(origin, "object origin"),
+            np.asarray(object_palette, dtype=np.uint8),
+        )
+        for object_grid, origin, object_palette in objects
+    ]
+    if max_steps is None:
+        max_steps = max(
+            (sum(grid.shape), *(sum(obj[0].shape) for obj in normalized_objects))
+        ) + 3
+    rgb, depth = reference_terrain_render(
+        grid, camera, light_direction, palette, max_steps=max_steps
+    )
+    origins, directions = _reference_camera_rays(camera)
+    flat_rgb = rgb.reshape(-1, 3).copy()
+    flat_depth = depth.reshape(-1).copy()
+    winners = np.where(flat_depth >= np.float32(0.0), 0, -1).astype(np.int16)
+    object_hits = []
+    object_distances = []
+
+    for object_index, (object_grid, origin, object_palette) in enumerate(
+        normalized_objects
+    ):
+        local_origins = np.ascontiguousarray(
+            origins - origin[None, :], dtype=np.float32
+        )
+        raycast = _reference_raycast(
+            object_grid, local_origins, directions, int(max_steps)
+        )
+        object_rgb, object_depth = _reference_object_shade(
+            object_grid, raycast, object_palette, light_direction
+        )
+        hit = raycast[0]
+        nearer = hit & (
+            (flat_depth < np.float32(0.0))
+            | (object_depth < flat_depth)
+        )
+        flat_rgb[nearer] = object_rgb[nearer]
+        flat_depth[nearer] = object_depth[nearer]
+        winners[nearer] = object_index + 1
+        object_hits.append(hit)
+        object_distances.append(object_depth)
+
+    shape = (camera["height"], camera["width"])
+    rendered = (flat_rgb.reshape(shape + (3,)), flat_depth.reshape(shape))
+    if not return_winners:
+        return rendered
+    return rendered + (
+        {
+            "winner": winners.reshape(shape),
+            "object_hit": np.asarray(object_hits, dtype=np.bool_).reshape(
+                (len(normalized_objects),) + shape
+            ),
+            "object_depth": np.asarray(object_distances, dtype=np.float32).reshape(
+                (len(normalized_objects),) + shape
+            ),
+        },
     )
 
 
@@ -1417,10 +1565,26 @@ def _call_cuda(
     surface_mode=None,
     density_filter=None,
     detail=None,
+    objects=None,
 ):
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(np.ascontiguousarray(palette), dtype="uint8")
-    if surface_mode is None and density_filter is None and detail is None:
+    device_objects = None
+    if objects is not None:
+        device_objects = [
+            (
+                tc.tensor(np.ascontiguousarray(object_grid), dtype="uint8"),
+                np.asarray(origin, dtype=np.float32),
+                tc.tensor(np.ascontiguousarray(object_palette), dtype="uint8"),
+            )
+            for object_grid, origin, object_palette in objects
+        ]
+    if (
+        surface_mode is None
+        and density_filter is None
+        and detail is None
+        and objects is None
+    ):
         # Preserve a literal no-surface-mode call for the default-path receipt.
         rgb, depth = tc.terrain_render(grid_device, camera, light, palette_device, consts)
     else:
@@ -1433,6 +1597,8 @@ def _call_cuda(
             kwargs["density_filter"] = density_filter
         if detail is not None:
             kwargs["detail"] = detail
+        if objects is not None:
+            kwargs["objects"] = device_objects
         rgb, depth = tc.terrain_render(
             grid_device,
             camera,
@@ -1503,6 +1669,136 @@ def _noise_terrain(dims=(256, 256, 96)):
     solid = z < heights[:, :, None]
     material = 1 + ((x.astype(np.int32) // 23 + y.astype(np.int32) // 19) % 3)
     return np.where(solid, material[:, :, None], 0).astype(np.uint8)
+
+
+def _tank_object_grid(shape=(12, 8, 8)):
+    """Small axis-aligned hull + turret + barrel receipt object."""
+    sx, sy, sz = shape
+    assert sx >= 12 and sy >= 8 and sz >= 8
+    grid = np.zeros(shape, dtype=np.uint8)
+    x0 = (sx - 12) // 2
+    y0 = (sy - 8) // 2
+    # Track/contact band and hull mass.
+    grid[x0 + 1 : x0 + 11, y0 : y0 + 2, 0:2] = 3
+    grid[x0 + 1 : x0 + 11, y0 + 6 : y0 + 8, 0:2] = 3
+    grid[x0 + 1 : x0 + 11, y0 + 1 : y0 + 7, 1:4] = 1
+    # Turret and a short +x barrel, already baked at its quantized aim.
+    grid[x0 + 3 : x0 + 9, y0 + 2 : y0 + 6, 4:7] = 2
+    grid[x0 + 8 : x0 + 12, y0 + 3 : y0 + 5, 5:6] = 3
+    return grid
+
+
+def _wo9ae_two_object_scene(*, width=192, height=144):
+    terrain = np.zeros((96, 96, 40), dtype=np.uint8)
+    terrain[:, :, :3] = 1
+    # This pedestal deliberately occupies part of object 2's world AABB.
+    terrain[58:70, 43:52, 3:5] = 2
+    camera = {
+        "position": np.array((48.0, -24.0, 17.0), dtype=np.float32),
+        "look_at": np.array((48.0, 46.0, 6.0), dtype=np.float32),
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 43.0,
+        "width": width,
+        "height": height,
+    }
+    objects = [
+        (
+            _tank_object_grid(),
+            np.array((25.0, 32.0, 3.0), dtype=np.float32),
+            OBJECT_PALETTE_RED,
+        ),
+        (
+            _tank_object_grid(),
+            np.array((58.0, 43.0, 2.0), dtype=np.float32),
+            OBJECT_PALETTE_BLUE,
+        ),
+    ]
+    return terrain, camera, objects
+
+
+def _wo9ae_occlusion_scene(case, *, width=192, height=144):
+    """Single-object front / split-ridge / fully-hidden winner fixture."""
+    if case not in ("front", "ridge", "occluded"):
+        raise ValueError(case)
+    terrain = np.zeros((96, 96, 40), dtype=np.uint8)
+    terrain[:, :, :2] = 1
+    ridge_height = {"front": 15, "ridge": 6, "occluded": 17}[case]
+    terrain[34:64, 42:46, 2:ridge_height] = 2
+    object_y = 28.0 if case == "front" else 49.0
+    object_descriptor = (
+        _tank_object_grid(),
+        np.array((42.0, object_y, 2.0), dtype=np.float32),
+        OBJECT_PALETTE_RED,
+    )
+    camera = {
+        "position": np.array((48.0, -22.0, 16.0), dtype=np.float32),
+        "look_at": np.array((48.0, 50.0, 6.0), dtype=np.float32),
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 40.0,
+        "width": width,
+        "height": height,
+    }
+    return terrain, camera, [object_descriptor]
+
+
+def _wo9ae_receipt_scene(label, *, width=320, height=240):
+    """Judgeable 12-voxel, ridge-split, and 200-voxel object views."""
+    if label == "ridge":
+        terrain, camera, objects = _wo9ae_occlusion_scene(
+            "ridge", width=width, height=height
+        )
+    elif label == "front":
+        terrain = np.zeros((96, 96, 40), dtype=np.uint8)
+        terrain[:, :, :2] = 1
+        objects = [
+            (
+                _tank_object_grid(),
+                np.array((42.0, 30.0, 2.0), dtype=np.float32),
+                OBJECT_PALETTE_RED,
+            )
+        ]
+        camera = {
+            "position": np.array((48.0, 18.0, 10.0), dtype=np.float32),
+            "look_at": np.array((48.0, 34.0, 5.0), dtype=np.float32),
+            "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+            "vertical_fov_degrees": 54.0,
+            "width": width,
+            "height": height,
+        }
+        assert objects[0][1][1] - camera["position"][1] == np.float32(12.0)
+    elif label == "far":
+        terrain = np.zeros((96, 256, 40), dtype=np.uint8)
+        terrain[:, :, :2] = 1
+        # Sparse material patches give the telephoto ground plane scale cues.
+        terrain[8:30, 120:145, 2:3] = 3
+        terrain[66:88, 160:188, 2:4] = 2
+        objects = [
+            (
+                _tank_object_grid(),
+                np.array((42.0, 208.0, 2.0), dtype=np.float32),
+                OBJECT_PALETTE_BLUE,
+            )
+        ]
+        camera = {
+            "position": np.array((48.0, 8.0, 16.0), dtype=np.float32),
+            "look_at": np.array((48.0, 212.0, 5.0), dtype=np.float32),
+            "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+            "vertical_fov_degrees": 10.0,
+            "width": width,
+            "height": height,
+        }
+        assert objects[0][1][1] - camera["position"][1] == np.float32(200.0)
+    else:
+        raise ValueError(label)
+
+    _, forward, right, camera_up, _, _ = _camera_terms(camera)
+    light = (
+        forward
+        + np.float32(0.30) * right
+        - np.float32(0.12) * camera_up
+    ).astype(np.float32)
+    light /= np.float32(np.linalg.norm(light))
+    return terrain, camera, light, objects
 
 
 def _wo9b_slope_grid(dims=(256, 256, 96)):
@@ -1718,6 +2014,212 @@ def test_terrain_render_full_spec_numpy_parity_640x480():
         _assert_registered_parity(
             actual_rgb, actual_depth, expected_rgb, expected_depth, label
         )
+
+
+def _assert_object_registered_parity(
+    actual_rgb, actual_depth, expected_rgb, expected_depth, label
+):
+    exact_fraction = float(np.mean(actual_rgb == expected_rgb))
+    max_delta = int(
+        np.max(np.abs(actual_rgb.astype(np.int16) - expected_rgb.astype(np.int16)))
+    )
+    np.testing.assert_array_equal(actual_depth == -1.0, expected_depth == -1.0)
+    depth_relative_error = float(
+        np.max(
+            np.abs(actual_depth - expected_depth)
+            / np.maximum(np.abs(expected_depth), np.float32(1.0))
+        )
+    )
+    print(
+        f"WO-9A-e {label}: exact_channel_fraction={exact_fraction:.9f} "
+        f"max_abs_delta={max_delta} depth_max_rel={depth_relative_error:.9g}"
+    )
+    assert exact_fraction >= 0.999, label
+    assert max_delta <= 1, label
+    assert depth_relative_error <= 1.0e-5, label
+
+
+def test_terrain_render_objects_none_and_empty_regression():
+    """G1: omitted, explicit None, and [] take the literal HEAD path."""
+    _require_cuda()
+    grid = _noise_terrain((128, 128, 64))
+    camera = _camera_for_grid(grid.shape, width=320, height=240)
+    grid_device = tc.tensor(grid, dtype="uint8")
+    palette_device = tc.tensor(PALETTE, dtype="uint8")
+    baseline = tc.terrain_render(
+        grid_device, camera, LIGHT_DIRECTION, palette_device
+    )
+    explicit_none = tc.terrain_render(
+        grid_device,
+        camera,
+        LIGHT_DIRECTION,
+        palette_device,
+        objects=None,
+    )
+    empty = tc.terrain_render(
+        grid_device,
+        camera,
+        LIGHT_DIRECTION,
+        palette_device,
+        objects=[],
+    )
+    baseline_arrays = tuple(output.numpy() for output in baseline)
+    for candidate in (explicit_none, empty):
+        candidate_arrays = tuple(output.numpy() for output in candidate)
+        np.testing.assert_array_equal(candidate_arrays[0], baseline_arrays[0])
+        np.testing.assert_array_equal(candidate_arrays[1], baseline_arrays[1])
+
+
+def test_terrain_render_object_descriptor_validation():
+    """The frozen list/count/device-grid/palette/origin contract is strict."""
+    _require_cuda()
+    terrain = tc.tensor(np.zeros((8, 8, 8), dtype=np.uint8), dtype="uint8")
+    palette = tc.tensor(PALETTE, dtype="uint8")
+    object_grid = tc.tensor(_tank_object_grid(), dtype="uint8")
+    object_palette = tc.tensor(OBJECT_PALETTE_RED, dtype="uint8")
+    camera = _camera_for_grid((8, 8, 8), width=12, height=8)
+    descriptor = (object_grid, (0.0, 0.0, 0.0), object_palette)
+
+    with pytest.raises(TypeError, match="objects must be a list"):
+        tc.terrain_render(
+            terrain, camera, LIGHT_DIRECTION, palette, objects=(descriptor,)
+        )
+    with pytest.raises(ValueError, match="at most 16"):
+        tc.terrain_render(
+            terrain,
+            camera,
+            LIGHT_DIRECTION,
+            palette,
+            objects=[descriptor] * 17,
+        )
+    with pytest.raises(ValueError, match="finite three-vector"):
+        tc.terrain_render(
+            terrain,
+            camera,
+            LIGHT_DIRECTION,
+            palette,
+            objects=[(object_grid, (0.0, np.nan, 0.0), object_palette)],
+        )
+    with pytest.raises(ValueError, match=r"palette must be non-empty uint8 \[N,3\]"):
+        tc.terrain_render(
+            terrain,
+            camera,
+            LIGHT_DIRECTION,
+            palette,
+            objects=[(object_grid, (0.0, 0.0, 0.0), terrain)],
+        )
+
+
+def test_terrain_render_objects_numpy_parity_two_objects():
+    """G2: two palettes and one terrain-overlapping AABB match NumPy."""
+    _require_cuda()
+    terrain, camera, objects = _wo9ae_two_object_scene()
+    expected_rgb, expected_depth, info = reference_terrain_render_objects(
+        terrain,
+        camera,
+        LIGHT_DIRECTION,
+        PALETTE,
+        objects,
+        return_winners=True,
+    )
+    baseline_rgb, baseline_depth = _call_cuda(terrain, camera)
+    actual_rgb, actual_depth = _call_cuda(
+        terrain, camera, objects=objects
+    )
+    _assert_object_registered_parity(
+        actual_rgb, actual_depth, expected_rgb, expected_depth, "G2_two_objects"
+    )
+
+    # Depth-change class is an engine-independent object/terrain winner bit.
+    actual_object_winner = actual_depth != baseline_depth
+    np.testing.assert_array_equal(actual_object_winner, info["winner"] > 0)
+    assert np.count_nonzero(info["winner"] == 1) > 0
+    assert np.count_nonzero(info["winner"] == 2) > 0
+
+    # Register that object 2 really intersects occupied terrain in world space.
+    object_grid, origin, _ = objects[1]
+    local_solid = np.argwhere(object_grid != 0)
+    world_solid = local_solid + np.asarray(origin, dtype=np.int64)[None, :]
+    assert np.any(
+        terrain[
+            world_solid[:, 0], world_solid[:, 1], world_solid[:, 2]
+        ]
+        != 0
+    )
+
+
+@pytest.mark.parametrize("case", ("front", "ridge", "occluded"))
+def test_terrain_render_objects_occlusion_winners(case):
+    """G3: front, split-ridge, and hidden object winner masks are exact."""
+    _require_cuda()
+    terrain, camera, objects = _wo9ae_occlusion_scene(case)
+    expected_rgb, expected_depth, info = reference_terrain_render_objects(
+        terrain,
+        camera,
+        LIGHT_DIRECTION,
+        PALETTE,
+        objects,
+        return_winners=True,
+    )
+    _, baseline_depth = _call_cuda(terrain, camera)
+    actual_rgb, actual_depth = _call_cuda(
+        terrain, camera, objects=objects
+    )
+    _assert_object_registered_parity(
+        actual_rgb, actual_depth, expected_rgb, expected_depth, f"G3_{case}"
+    )
+    actual_object_winner = actual_depth != baseline_depth
+    expected_object_winner = info["winner"] == 1
+    np.testing.assert_array_equal(actual_object_winner, expected_object_winner)
+
+    candidate = info["object_hit"][0]
+    assert np.count_nonzero(candidate) > 0
+    hidden_by_terrain = candidate & ~expected_object_winner
+    if case == "front":
+        assert np.all(expected_object_winner[candidate])
+    elif case == "ridge":
+        assert np.count_nonzero(expected_object_winner) > 0
+        assert np.count_nonzero(hidden_by_terrain) > 0
+    else:
+        assert not np.any(expected_object_winner)
+        assert np.all(hidden_by_terrain[candidate])
+
+
+def test_terrain_render_object_shading_ignores_terrain_selectors():
+    """Surface/filter/detail selectors affect terrain only, never objects."""
+    _require_cuda()
+    terrain = np.zeros((64, 64, 32), dtype=np.uint8)
+    camera = {
+        "position": np.array((32.0, 0.0, 17.0), dtype=np.float32),
+        "look_at": np.array((32.0, 34.0, 14.0), dtype=np.float32),
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 36.0,
+        "width": 160,
+        "height": 120,
+    }
+    objects = [
+        (
+            _tank_object_grid(),
+            np.array((26.0, 28.0, 10.0), dtype=np.float32),
+            OBJECT_PALETTE_BLUE,
+        )
+    ]
+    blocky = _call_cuda(terrain, camera, objects=objects)
+    smooth = _call_cuda(
+        terrain, camera, surface_mode="smooth", objects=objects
+    )
+    filtered_detail = _call_cuda(
+        terrain,
+        camera,
+        surface_mode="smooth",
+        density_filter=2,
+        detail=1,
+        objects=objects,
+    )
+    assert np.count_nonzero(blocky[1] >= 0.0) > 0
+    for candidate in (smooth, filtered_detail):
+        np.testing.assert_array_equal(candidate[0], blocky[0])
+        np.testing.assert_array_equal(candidate[1], blocky[1])
 
 
 def _assert_smooth_registered_parity(
@@ -2399,6 +2901,28 @@ def _write_ppm(path, rgb):
         handle.write(np.ascontiguousarray(rgb, dtype=np.uint8).tobytes())
 
 
+def test_terrain_render_wo9ae_ppm_receipts():
+    """G6: tank-ish front, half-ridge, and 200-voxel engine receipts."""
+    repo_root = Path(__file__).resolve().parents[2]
+    for label in ("front", "ridge", "far"):
+        terrain, camera, light, objects = _wo9ae_receipt_scene(label)
+        rgb, _, info = reference_terrain_render_objects(
+            terrain,
+            camera,
+            light,
+            PALETTE,
+            objects,
+            return_winners=True,
+        )
+        object_winner = info["winner"] == 1
+        assert np.count_nonzero(object_winner) >= 64
+        if label == "ridge":
+            candidate = info["object_hit"][0]
+            assert np.count_nonzero(candidate & object_winner) > 0
+            assert np.count_nonzero(candidate & ~object_winner) > 0
+        _write_ppm(repo_root / "artifacts" / f"wo9ae_{label}.ppm", rgb)
+
+
 def test_terrain_render_wo8a_ppm_pair():
     """G5: operator-facing same-camera noise-terrain blocky/smooth PPM pair.
 
@@ -2504,12 +3028,23 @@ def terrain_render_timing_harness(
     surface_mode="blocky",
     density_filter=None,
     detail=0,
+    objects=None,
 ):
     """CUDA-event stages for blocky, smooth, or cached-filter rendering."""
     _require_cuda()
     events = _CudaEvents()
     grid_device = tc.tensor(np.ascontiguousarray(grid), dtype="uint8")
     palette_device = tc.tensor(PALETTE, dtype="uint8")
+    device_objects = None
+    if objects is not None:
+        device_objects = [
+            (
+                tc.tensor(np.ascontiguousarray(object_grid), dtype="uint8"),
+                np.asarray(origin, dtype=np.float32),
+                tc.tensor(np.ascontiguousarray(object_palette), dtype="uint8"),
+            )
+            for object_grid, origin, object_palette in objects
+        ]
 
     def render():
         kwargs = {"surface_mode": surface_mode}
@@ -2517,6 +3052,8 @@ def terrain_render_timing_harness(
             kwargs["density_filter"] = density_filter
         if detail:
             kwargs["detail"] = detail
+        if device_objects is not None:
+            kwargs["objects"] = device_objects
         return tc.terrain_render(
             grid_device,
             camera,
@@ -2659,3 +3196,55 @@ def test_terrain_render_detail_stage_timing_100_frames():
         f"target_6ms={'GREEN' if timings['total_ms_mean'] <= 6.0 else 'RED'}"
     )
     assert timings["total_ms_mean"] <= 6.0
+
+
+@pytest.mark.skipif(
+    os.environ.get("TC_RUN_TERRAIN_TIMING") != "1",
+    reason="set TC_RUN_TERRAIN_TIMING=1 to run the 100-frame WO-9A-e timing gate",
+)
+def test_terrain_render_objects_stage_timing_100_frames():
+    """G4: four 24^3 objects add at most 1.5ms to the smooth total."""
+    _require_cuda()
+    dims = (512, 512, 192)
+    grid = _noise_terrain(dims)
+    camera = _camera_for_grid(dims)
+    object_origins = (
+        (188.0, 190.0, 52.0),
+        (232.0, 218.0, 48.0),
+        (278.0, 250.0, 54.0),
+        (320.0, 282.0, 50.0),
+    )
+    objects = [
+        (
+            _tank_object_grid((24, 24, 24)),
+            np.asarray(origin, dtype=np.float32),
+            OBJECT_PALETTE_RED if index % 2 == 0 else OBJECT_PALETTE_BLUE,
+        )
+        for index, origin in enumerate(object_origins)
+    ]
+    assert all(object_grid.shape == (24, 24, 24) for object_grid, _, _ in objects)
+
+    baseline = terrain_render_timing_harness(
+        grid, camera, frames=100, surface_mode="smooth"
+    )
+    with_objects = terrain_render_timing_harness(
+        grid,
+        camera,
+        frames=100,
+        surface_mode="smooth",
+        objects=objects,
+    )
+    total_delta = with_objects["total_ms_mean"] - baseline["total_ms_mean"]
+    kernel_delta = with_objects["kernel_ms_mean"] - baseline["kernel_ms_mean"]
+    print(
+        "WO-9A-e G4 "
+        f"grid={dims} objects=4 object_shape=(24, 24, 24) frames=100 "
+        f"no_objects_kernel_ms_mean={baseline['kernel_ms_mean']:.4f} "
+        f"objects_kernel_ms_mean={with_objects['kernel_ms_mean']:.4f} "
+        f"kernel_delta_ms={kernel_delta:.4f} "
+        f"no_objects_total_ms_mean={baseline['total_ms_mean']:.4f} "
+        f"objects_total_ms_mean={with_objects['total_ms_mean']:.4f} "
+        f"total_delta_ms={total_delta:.4f} "
+        f"target_plus_1.5ms={'GREEN' if total_delta <= 1.5 else 'RED'}"
+    )
+    assert total_delta <= 1.5

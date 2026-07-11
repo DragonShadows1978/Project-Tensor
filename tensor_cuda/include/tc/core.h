@@ -220,6 +220,16 @@ struct TerrainRenderConstants {
   int detail = 0;
 };
 
+// One axis-aligned voxel object composited into a terrain render.  Grid and
+// palette storage stay GPU-resident; only this small descriptor is assembled
+// on the host.  `origin` is the world-space minimum corner of local voxel
+// (0, 0, 0).
+struct TerrainRenderObject {
+  NDArray grid;
+  float origin[3];
+  NDArray palette;
+};
+
 // Build the normalized u8 filtered-density cache for one source revision.
 // Level 1 is a separable centered 3-tap box; level 2 is the best measured
 // centered candidate from the r2 design rail, a 9-tap binomial/Gaussian.
@@ -233,6 +243,13 @@ std::tuple<NDArray, NDArray> terrain_render(
     const TerrainRenderLight& light, const NDArray& palette,
     const TerrainRenderConstants& constants,
     const NDArray* filtered_density = nullptr);
+
+// Overlay non-empty axis-aligned object grids onto an already-rendered terrain
+// image.  Per-pixel depth comparison preserves the nearer terrain/object hit.
+void terrain_render_objects_overlay(
+    NDArray& rgb, NDArray& depth, const TerrainRenderCamera& camera,
+    const TerrainRenderLight& light,
+    const std::vector<TerrainRenderObject>& objects, int max_steps);
 
 // Fused RMSNorm over the last dim: out = x * rsqrt(mean(x^2) + eps) * w, fp32
 // accumulate, single kernel + single output alloc (vs the 9-op chain).
