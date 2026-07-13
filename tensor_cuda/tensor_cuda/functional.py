@@ -1,8 +1,8 @@
 """Functional ops composed from the C++ engine (attention, etc.).
 
 Most heavy compute (matmul, softmax) runs in C++ kernels; this module is the
-thin orchestration layer. HY3D-sized unmasked non-causal inference additionally
-uses the native streaming SDPA primitive when it is safe to do so.
+thin orchestration layer. HY3D-sized unmasked non-causal inference can opt into
+the native streaming SDPA primitive when it is safe to do so.
 """
 
 from __future__ import annotations
@@ -49,14 +49,14 @@ USE_FUSED_SOFTMAX = False
 
 
 def _fused_noncausal_sdpa_enabled():
-    """Runtime opt-out for the inference-only streaming SDPA path.
+    """Runtime opt-in for the inference-only streaming SDPA path.
 
     The environment is intentionally read for every call so a test or an
     operator can compare fused and composed paths in one process. Only the
-    literal ``0`` disables it; the default is enabled once the native symbol is
-    present.
+    literal ``1`` enables it; absent or ``0`` retains the composed path.
     """
-    return os.environ.get("TC_FUSED_SDPA_NONCAUSAL", "1") != "0"
+    # K4 receipt: composed is default (14.0 ms vs fused 77.4 ms at DiT); fused remains the 12 MiB vs 1236 MiB memory-lean opt-in.
+    return os.environ.get("TC_FUSED_SDPA_NONCAUSAL", "0") == "1"
 
 
 def scaled_dot_product_attention(query, key, value, attn_mask=None,

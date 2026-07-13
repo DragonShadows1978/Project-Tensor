@@ -159,6 +159,22 @@ def test_fused_vs_composed_noncausal_fp32(monkeypatch):
     assert err <= 1e-5
 
 
+def test_noncausal_sdpa_default_is_composed(monkeypatch):
+    """K3: an absent opt-in must retain the pre-WO-1A composed route."""
+    monkeypatch.delenv("TC_FUSED_SDPA_NONCAUSAL", raising=False)
+
+    def _unexpected_fused(*args, **kwargs):
+        pytest.fail("default non-causal SDPA route invoked fused kernel")
+
+    monkeypatch.setattr(F.tc, "fused_sdpa_noncausal", _unexpected_fused)
+    q, k, v = _case_arrays((1, 2, 17, 64), np.float32, 74)
+    with tc.no_grad():
+        got = F.scaled_dot_product_attention(tc.tensor(q), tc.tensor(k), tc.tensor(v))
+    tc.synchronize()
+    expected = _np_sdpa_fp32(q, k, v, block_q=17)
+    np.testing.assert_allclose(got.numpy(), expected, atol=1e-6, rtol=1e-6)
+
+
 def _gelu_exact_reference(x):
     x = np.asarray(x, dtype=np.float32)
     erf = np.fromiter((math.erf(float(v) / math.sqrt(2.0)) for v in x.ravel()),
