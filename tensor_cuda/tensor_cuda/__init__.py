@@ -82,6 +82,16 @@ def causal_softmax(scores):
     return _C.causal_softmax(scores)
 
 
+def fused_sdpa_noncausal(q, k, v, scale):
+    """Streaming non-causal SDPA for matching ``[B,H,L,D]`` tensors.
+
+    Inference-only primitive used by ``functional.scaled_dot_product_attention``
+    for HY3D-sized unmasked attention. It keeps only per-row online-softmax
+    state and never materializes an ``Lq x Lk`` score matrix.
+    """
+    return _C.fused_sdpa_noncausal(q, k, v, float(scale))
+
+
 def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
     """First-hit voxel DDA over a resident 3D uint8 grid.
 
@@ -802,7 +812,7 @@ __all__ = [
     "matmul", "dda_raycast", "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
-    "arena_row_pair_transaction", "causal_softmax", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

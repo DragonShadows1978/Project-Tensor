@@ -115,6 +115,21 @@ Tensor gelu(const Tensor& a) {
     a.v->accumulate_grad(nmul(g, nadd(left, right)));
   });
 }
+Tensor gelu_exact(const Tensor& a) {
+  NDArray out = ew_unary(a.data(), U_GELU_EXACT);
+  return Tensor::from_op(out, {a}, "gelu_exact", [a](const NDArray& g) {
+    // d/dx [x * Phi(x)] = Phi(x) + x * phi(x). Keep the backward in the
+    // engine's normal differentiable-op style; U_ERF is internal plumbing
+    // for the exact GELU derivative and is intentionally not a public op.
+    const double inv_sqrt_2 = 0.70710678118654752440;
+    const double inv_sqrt_2pi = 0.39894228040143267794;
+    NDArray x = a.data();
+    NDArray cdf = nmuls(nadds(ew_unary(nmuls(x, inv_sqrt_2), U_ERF), 1.0), 0.5);
+    NDArray density = nmuls(
+        ew_unary(nmuls(nmul(x, x), -0.5), U_EXP), inv_sqrt_2pi);
+    a.v->accumulate_grad(nmul(g, nadd(cdf, nmul(x, density))));
+  });
+}
 Tensor silu(const Tensor& a) {
   NDArray out = ew_unary(a.data(), U_SILU);
   return Tensor::from_op(out, {a}, "silu", [a](const NDArray& g) {
@@ -312,6 +327,16 @@ Tensor causal_softmax(const Tensor& scores) {
   NDArray out = tc::causal_softmax(scores.data());
   return Tensor::from_op(out, {scores}, "causal_softmax", [](const NDArray&) -> void {
     throw std::runtime_error("causal_softmax: no backward — use the eager chain for training");
+  });
+}
+
+Tensor fused_sdpa_noncausal(const Tensor& q, const Tensor& k,
+                            const Tensor& v, float scale) {
+  NDArray out = tc::fused_sdpa_noncausal(q.data(), k.data(), v.data(), scale);
+  return Tensor::from_op(out, {q, k, v}, "fused_sdpa_noncausal",
+                         [](const NDArray&) -> void {
+    throw std::runtime_error(
+        "fused_sdpa_noncausal: no backward — use the composed path for training");
   });
 }
 

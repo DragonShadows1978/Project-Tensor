@@ -28,6 +28,7 @@ Tensor relu(const Tensor& a);
 Tensor sigmoid(const Tensor& a);
 Tensor tanh(const Tensor& a);
 Tensor gelu(const Tensor& a);
+Tensor gelu_exact(const Tensor& a);
 Tensor silu(const Tensor& a);
 Tensor abs(const Tensor& a);
 Tensor sin(const Tensor& a);
@@ -87,6 +88,11 @@ Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
 
 // Fused causal softmax (inference-only: backward throws).
 Tensor causal_softmax(const Tensor& scores);
+
+// Flash-style non-causal SDPA (inference-only: backward throws). q/k/v are
+// [B,H,L,D] with matching B/H/D and k/v sequence length.
+Tensor fused_sdpa_noncausal(const Tensor& q, const Tensor& k,
+                            const Tensor& v, float scale);
 
 // Non-differentiable voxel traversal. Output dtypes are uint8, uint8, int64,
 // int64, int64, and float32, respectively.

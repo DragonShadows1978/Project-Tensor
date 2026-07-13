@@ -1,13 +1,14 @@
 """Functional ops composed from the C++ engine (attention, etc.).
 
-All heavy compute (matmul, softmax) runs in C++ kernels; this module is the thin
-orchestration layer. A single fused attention CUDA kernel is a later
-optimization (see ROADMAP Phase 5b).
+Most heavy compute (matmul, softmax) runs in C++ kernels; this module is the
+thin orchestration layer. HY3D-sized unmasked non-causal inference can opt into
+the native streaming SDPA primitive when it is safe to do so.
 """
 
 from __future__ import annotations
 
 import math
+import os
 
 import numpy as np
 
@@ -47,12 +48,34 @@ def _causal_mask(L, S, device, dtype):
 USE_FUSED_SOFTMAX = False
 
 
+def _fused_noncausal_sdpa_enabled():
+    """Runtime opt-in for the inference-only streaming SDPA path.
+
+    The environment is intentionally read for every call so a test or an
+    operator can compare fused and composed paths in one process. Only the
+    literal ``1`` enables it; absent or ``0`` retains the composed path.
+    """
+    # K4 receipt: composed is default (14.0 ms vs fused 77.4 ms at DiT); fused remains the 12 MiB vs 1236 MiB memory-lean opt-in.
+    return os.environ.get("TC_FUSED_SDPA_NONCAUSAL", "0") == "1"
+
+
 def scaled_dot_product_attention(query, key, value, attn_mask=None,
                                  is_causal=False, scale=None):
     """query/key/value: (B, H, L, D). Returns (B, H, L, D)."""
     D = query.shape[-1]
     L, S = query.shape[-2], key.shape[-2]
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
+    # HY3D DiT / VAE attention is non-causal, mask-free inference with D=64
+    # or 128. Route it before the composed GEMM path so a [B,H,Lq,Lk] score
+    # tensor is never allocated. Leave every training, masked, causal, bf16,
+    # and larger-head case on the established composition for compatibility.
+    if (not is_causal and attn_mask is None and not tc.is_grad_enabled()
+            and _fused_noncausal_sdpa_enabled()
+            and hasattr(tc, "fused_sdpa_noncausal")
+            and query.dtype in ("float16", "float32")
+            and key.dtype == query.dtype and value.dtype == query.dtype
+            and 0 < D <= 128 and L >= 0 and S > 0):
+        return tc.fused_sdpa_noncausal(query, key, value, scale)
     # OP_T GEMM: no materialized K^T copy; scale folded into the fp32
     # accumulator (one fewer 16-bit rounding + one fewer full pass over scores).
     scores = tc.matmul(query, key, alpha=scale, trans_b=True)

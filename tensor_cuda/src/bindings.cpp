@@ -214,6 +214,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            py::arg("axes") = std::vector<int>{}, py::arg("keepdim") = false)
       .def("relu", [](Tensor& t) { return ops::relu(t); })
       .def("gelu", [](Tensor& t) { return ops::gelu(t); })
+      .def("gelu_exact", [](Tensor& t) { return ops::gelu_exact(t); })
       .def("silu", [](Tensor& t) { return ops::silu(t); })
       .def("abs", [](Tensor& t) { return ops::abs(t); })
       .def("detach", [](Tensor& t) { return ops::detach(t); })
@@ -451,6 +452,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("z_horizon") = 0.0f, py::arg("fog_start") = 600.0f,
         py::arg("fog_full") = 2400.0f);
   m.def("causal_softmax", &ops::causal_softmax, py::arg("scores"));
+  m.def("fused_sdpa_noncausal", &ops::fused_sdpa_noncausal,
+        py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"));
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);
