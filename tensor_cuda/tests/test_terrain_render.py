@@ -66,6 +66,7 @@ OBJECT_PALETTE_BLUE = np.array(
     ),
     dtype=np.uint8,
 )
+_OBJECT_DDA_ENTRY_EPSILON = np.float32(1.0e-4)
 
 
 def _require_cuda():
@@ -144,7 +145,32 @@ def _reference_camera_rays(camera):
 
 
 def _reference_raycast(grid, origins, directions, max_steps):
-    """Vectorized float32 Amanatides-Woo reference with dda_raycast ties."""
+    """Unchanged standalone/terrain DDA oracle (no object entry epsilon)."""
+    return _reference_voxel_raycast(
+        grid, origins, directions, max_steps, object_entry_epsilon=None
+    )
+
+
+def _reference_object_raycast(grid, origins, directions, max_steps):
+    """Object-only DDA oracle with the registered robust AABB entry nudge."""
+    return _reference_voxel_raycast(
+        grid,
+        origins,
+        directions,
+        max_steps,
+        object_entry_epsilon=_OBJECT_DDA_ENTRY_EPSILON,
+    )
+
+
+def _reference_voxel_raycast(
+    grid, origins, directions, max_steps, *, object_entry_epsilon
+):
+    """Vectorized float32 Amanatides-Woo with an optional object entry nudge.
+
+    ``None`` preserves the frozen `dda_raycast`/terrain reference exactly.
+    The object-only branch samples a bounded distance inside an external AABB
+    before flooring the first cell, while retaining the true entry distance.
+    """
     count = origins.shape[0]
     hit = np.zeros(count, dtype=np.bool_)
     material = np.zeros(count, dtype=np.uint8)
@@ -195,11 +221,35 @@ def _reference_raycast(grid, origins, directions, max_steps):
         & (t_exit >= np.float32(0.0))
     )
     step = np.sign(directions).astype(np.int64)
-    start_position = (origins + directions * start_t[:, None]).astype(np.float32)
     external = valid & ~origin_inside
-    start_position[external] = np.nextafter(
-        start_position[external], start_position[external] + directions[external]
-    )
+    sample_t = start_t
+    if object_entry_epsilon is None:
+        start_position = (origins + directions * start_t[:, None]).astype(
+            np.float32
+        )
+        start_position[external] = np.nextafter(
+            start_position[external],
+            start_position[external] + directions[external],
+        )
+    else:
+        # The exact entry lies on the closed AABB.  A separate f32 multiply
+        # and add can land several coordinate ULPs outside it; one coordinate
+        # nextafter is therefore not a sufficient interior sample.  Advance a
+        # bounded, voxel-subscale parametric epsilon, never past the AABB exit.
+        entry_span = t_exit - start_t
+        external_with_span = external & (entry_span > np.float32(0.0))
+        valid &= ~external | external_with_span
+        sample_t = start_t.copy()
+        sample_t[external_with_span] = (
+            start_t[external_with_span]
+            + np.minimum(
+                object_entry_epsilon,
+                entry_span[external_with_span] * np.float32(0.5),
+            )
+        )
+        start_position = (origins + directions * sample_t[:, None]).astype(
+            np.float32
+        )
     voxel = np.floor(start_position).astype(np.int64)
     in_bounds = np.all(
         (voxel >= 0) & (voxel < integer_dims[None, :]), axis=1
@@ -238,7 +288,7 @@ def _reference_raycast(grid, origins, directions, max_steps):
         crossing = (boundary[moving] - origins[moving, axis]) / directions[
             moving, axis
         ]
-        next_t[moving, axis] = np.maximum(crossing, start_t[moving])
+        next_t[moving, axis] = np.maximum(crossing, sample_t[moving])
 
     active = eligible & ~initial_hit
     for _ in range(max_steps):
@@ -463,7 +513,7 @@ def _reference_object_shade(grid, raycast, palette, light_direction):
     return rgb, depth
 
 
-def reference_terrain_render_objects(
+def _reference_terrain_render_objects_impl(
     grid,
     camera,
     light_direction,
@@ -472,6 +522,7 @@ def reference_terrain_render_objects(
     *,
     max_steps=None,
     return_winners=False,
+    object_raycast,
 ):
     """Independent terrain + translated object-DDA depth compositor."""
     normalized_objects = [
@@ -502,7 +553,7 @@ def reference_terrain_render_objects(
         local_origins = np.ascontiguousarray(
             origins - origin[None, :], dtype=np.float32
         )
-        raycast = _reference_raycast(
+        raycast = object_raycast(
             object_grid, local_origins, directions, int(max_steps)
         )
         object_rgb, object_depth = _reference_object_shade(
@@ -533,6 +584,52 @@ def reference_terrain_render_objects(
                 (len(normalized_objects),) + shape
             ),
         },
+    )
+
+
+def reference_terrain_render_objects(
+    grid,
+    camera,
+    light_direction,
+    palette,
+    objects,
+    *,
+    max_steps=None,
+    return_winners=False,
+):
+    """Independent terrain compositor with the robust object-only DDA oracle."""
+    return _reference_terrain_render_objects_impl(
+        grid,
+        camera,
+        light_direction,
+        palette,
+        objects,
+        max_steps=max_steps,
+        return_winners=return_winners,
+        object_raycast=_reference_object_raycast,
+    )
+
+
+def _reference_terrain_render_objects_legacy(
+    grid,
+    camera,
+    light_direction,
+    palette,
+    objects,
+    *,
+    max_steps=None,
+    return_winners=False,
+):
+    """Frozen pre-WO-12G compositor, retained only for receipt comparison."""
+    return _reference_terrain_render_objects_impl(
+        grid,
+        camera,
+        light_direction,
+        palette,
+        objects,
+        max_steps=max_steps,
+        return_winners=return_winners,
+        object_raycast=_reference_raycast,
     )
 
 
@@ -2141,6 +2238,169 @@ def _wo9ae_receipt_scene(label, *, width=320, height=240):
     return terrain, camera, light, objects
 
 
+# WO-12G object-DDA grazing leak fixture ------------------------------------
+# A 32x32x8 fully solid object keeps every strict AABB-interior ray an
+# unambiguous hit.  The silhouette below is analytical ray-box geometry, not
+# a voxel traversal, so a background sample inside it is necessarily a leak.
+_WO12G_SLAB_SHAPE = (32, 32, 8)
+_WO12G_OBJECT_ORIGIN = np.array((64.0, -48.0, 12.0), dtype=np.float32)
+_WO12G_TARGET = _WO12G_OBJECT_ORIGIN + np.array(
+    (16.0, 16.0, 4.0), dtype=np.float32
+)
+_WO12G_RADIUS = np.float32(160.0)
+_WO12G_CASES = (
+    (0, 2),
+    (0, 4),
+    (0, 8),
+    (0, 15),
+    (15, 2),
+    (15, 4),
+    (15, 8),
+    (15, 15),
+    (30, 2),
+    (30, 4),
+    (30, 8),
+    (30, 15),
+    (45, 2),
+    (45, 4),
+    (45, 8),
+    (45, 15),
+    (60, 2),
+    (60, 4),
+    (60, 8),
+    (60, 15),
+    (75, 2),
+    (75, 4),
+    (75, 8),
+    (75, 15),
+)
+# (strict silhouette pixels, legacy background leaks), captured before the
+# source correction.  Retaining it makes the historical failure executable.
+_WO12G_PRE_FIX_COUNTS = {
+    (0, 2): (23500, 0),
+    (0, 4): (26224, 0),
+    (0, 8): (31212, 4),
+    (0, 15): (39698, 36),
+    (15, 2): (25715, 0),
+    (15, 4): (28356, 0),
+    (15, 8): (33405, 8),
+    (15, 15): (41800, 31),
+    (30, 2): (28247, 5491),
+    (30, 4): (30826, 5590),
+    (30, 8): (35863, 5424),
+    (30, 15): (44206, 4992),
+    (45, 2): (29068, 3468),
+    (45, 4): (31652, 3406),
+    (45, 8): (36690, 3208),
+    (45, 15): (45012, 2834),
+    (60, 2): (28247, 5627),
+    (60, 4): (30826, 5523),
+    (60, 8): (35863, 5348),
+    (60, 15): (44206, 5024),
+    (75, 2): (25715, 0),
+    (75, 4): (28356, 0),
+    (75, 8): (33405, 8),
+    (75, 15): (41800, 33),
+}
+_WO12G_WORST_CASE = (60, 2)
+
+
+def _wo12g_slab_camera(azimuth_degrees, pitch_degrees):
+    azimuth = np.deg2rad(np.float32(azimuth_degrees))
+    pitch = np.deg2rad(np.float32(pitch_degrees))
+    position = _WO12G_TARGET + np.array(
+        (
+            _WO12G_RADIUS * np.cos(pitch) * np.cos(azimuth),
+            _WO12G_RADIUS * np.cos(pitch) * np.sin(azimuth),
+            _WO12G_RADIUS * np.sin(pitch),
+        ),
+        dtype=np.float32,
+    )
+    return {
+        "position": position,
+        "look_at": _WO12G_TARGET.copy(),
+        "world_up": np.array((0.0, 0.0, 1.0), dtype=np.float32),
+        "vertical_fov_degrees": 20.0,
+        "width": 640,
+        "height": 480,
+    }
+
+
+def _wo12g_slab_fixture(azimuth_degrees, pitch_degrees):
+    return (
+        np.zeros((1, 1, 1), dtype=np.uint8),
+        np.ones(_WO12G_SLAB_SHAPE, dtype=np.uint8),
+        _WO12G_OBJECT_ORIGIN.copy(),
+        _wo12g_slab_camera(azimuth_degrees, pitch_degrees),
+    )
+
+
+def _wo12g_strict_silhouette(camera, object_shape, object_origin):
+    """Strict-volume box projection evaluated independently in float64."""
+    origins, directions = _reference_camera_rays(camera)
+    local_origins = origins.astype(np.float64) - np.asarray(
+        object_origin, dtype=np.float64
+    )[None, :]
+    directions64 = directions.astype(np.float64)
+    dims = np.asarray(object_shape, dtype=np.float64)
+    count = local_origins.shape[0]
+    near = np.full((count, 3), -np.inf, dtype=np.float64)
+    far = np.full((count, 3), np.inf, dtype=np.float64)
+    parallel_outside = np.zeros(count, dtype=np.bool_)
+    for axis in range(3):
+        component = directions64[:, axis]
+        positive = component > 0.0
+        negative = component < 0.0
+        stationary = ~(positive | negative)
+        near[positive, axis] = (
+            -local_origins[positive, axis] / component[positive]
+        )
+        far[positive, axis] = (
+            (dims[axis] - local_origins[positive, axis])
+            / component[positive]
+        )
+        near[negative, axis] = (
+            (dims[axis] - local_origins[negative, axis])
+            / component[negative]
+        )
+        far[negative, axis] = (
+            -local_origins[negative, axis] / component[negative]
+        )
+        # A stationary ray on either boundary has no strict box interior.
+        parallel_outside |= stationary & (
+            (local_origins[:, axis] <= 0.0)
+            | (local_origins[:, axis] >= dims[axis])
+        )
+    entry = np.max(near, axis=1)
+    exit = np.min(far, axis=1)
+    strict_interior = (
+        np.any(directions64 != 0.0, axis=1)
+        & ~parallel_outside
+        & (exit > np.maximum(entry, 0.0))
+        & (exit > 0.0)
+    )
+    return strict_interior.reshape((camera["height"], camera["width"]))
+
+
+def _wo12g_cpu_object_render(camera, *, legacy):
+    """Object-only CPU receipt renderer; terrain is intentionally all air."""
+    object_grid = np.ones(_WO12G_SLAB_SHAPE, dtype=np.uint8)
+    object_origin = _WO12G_OBJECT_ORIGIN
+    origins, directions = _reference_camera_rays(camera)
+    local_origins = np.ascontiguousarray(origins - object_origin[None, :])
+    raycast = (_reference_raycast if legacy else _reference_object_raycast)(
+        object_grid,
+        local_origins,
+        directions,
+        sum(_WO12G_SLAB_SHAPE) + 3,
+    )
+    rgb, depth = _reference_object_shade(
+        object_grid, raycast, OBJECT_PALETTE_RED, LIGHT_DIRECTION
+    )
+    shape = (camera["height"], camera["width"])
+    return rgb.reshape(shape + (3,)), depth.reshape(shape)
+
+
 def _wo9b_slope_grid(dims=(256, 256, 96)):
     """One deterministic material-rich slope used by the detail gates."""
     sx, sy, sz = dims
@@ -2560,6 +2820,118 @@ def test_terrain_render_object_shading_ignores_terrain_selectors():
     for candidate in (smooth, filtered_detail):
         np.testing.assert_array_equal(candidate[0], blocky[0])
         np.testing.assert_array_equal(candidate[1], blocky[1])
+
+
+def test_terrain_render_wo12g_existing_object_reference_regression():
+    """The corrected oracle leaves all pre-existing object fixtures byte-equal."""
+    scenes = [("G2_two_objects", *_wo9ae_two_object_scene())]
+    scenes.extend(
+        (f"G3_{case}", *_wo9ae_occlusion_scene(case))
+        for case in ("front", "ridge", "occluded")
+    )
+    for label, terrain, camera, objects in scenes:
+        robust = reference_terrain_render_objects(
+            terrain,
+            camera,
+            LIGHT_DIRECTION,
+            PALETTE,
+            objects,
+            return_winners=True,
+        )
+        legacy = _reference_terrain_render_objects_legacy(
+            terrain,
+            camera,
+            LIGHT_DIRECTION,
+            PALETTE,
+            objects,
+            return_winners=True,
+        )
+        np.testing.assert_array_equal(robust[0], legacy[0], err_msg=label)
+        np.testing.assert_array_equal(robust[1], legacy[1], err_msg=label)
+        # The raw candidate map may gain a formerly leaked ray behind terrain;
+        # the registered observable object winner map must not change.
+        np.testing.assert_array_equal(
+            robust[2]["winner"], legacy[2]["winner"], err_msg=f"{label}:winner"
+        )
+
+
+def test_terrain_render_wo12g_cpu_repro_and_receipts():
+    """G-LEAK CPU receipt: historical leak table and corrected zero-leak sweep."""
+    after_counts = {}
+    receipts = {}
+    for azimuth, pitch in _WO12G_CASES:
+        _, object_grid, object_origin, camera = _wo12g_slab_fixture(azimuth, pitch)
+        strict_silhouette = _wo12g_strict_silhouette(
+            camera, object_grid.shape, object_origin
+        )
+        before_rgb, before_depth = _wo12g_cpu_object_render(camera, legacy=True)
+        after_rgb, after_depth = _wo12g_cpu_object_render(camera, legacy=False)
+        strict_pixels, expected_leaks = _WO12G_PRE_FIX_COUNTS[(azimuth, pitch)]
+        before_leaks = int(
+            np.count_nonzero(strict_silhouette & (before_depth < np.float32(0.0)))
+        )
+        after_leaks = int(
+            np.count_nonzero(strict_silhouette & (after_depth < np.float32(0.0)))
+        )
+        assert int(np.count_nonzero(strict_silhouette)) == strict_pixels
+        assert before_leaks == expected_leaks
+        assert after_leaks == 0
+        after_counts[(azimuth, pitch)] = after_leaks
+        if (azimuth, pitch) == _WO12G_WORST_CASE:
+            receipts["before"] = before_rgb
+            receipts["after"] = after_rgb
+
+    repo_root = Path(__file__).resolve().parents[2]
+    _write_ppm(repo_root / "artifacts" / "wo12g_before.ppm", receipts["before"])
+    _write_ppm(repo_root / "artifacts" / "wo12g_after.ppm", receipts["after"])
+    print(
+        "WO-12G CPU G-LEAK "
+        f"cases={len(_WO12G_CASES)} worst_pre_fix="
+        f"{_WO12G_PRE_FIX_COUNTS[_WO12G_WORST_CASE][1]} "
+        f"post_fix_max={max(after_counts.values())}"
+    )
+
+
+def test_terrain_render_wo12g_g_leak():
+    """G-LEAK: the CUDA object overlay has zero interior background pixels."""
+    _require_cuda()
+    rows = []
+    for azimuth, pitch in _WO12G_CASES:
+        terrain, object_grid, object_origin, camera = _wo12g_slab_fixture(
+            azimuth, pitch
+        )
+        strict_silhouette = _wo12g_strict_silhouette(
+            camera, object_grid.shape, object_origin
+        )
+        expected_rgb, expected_depth = _wo12g_cpu_object_render(
+            camera, legacy=False
+        )
+        actual_rgb, actual_depth = _call_cuda(
+            terrain,
+            camera,
+            objects=[(object_grid, object_origin, OBJECT_PALETTE_RED)],
+        )
+        np.testing.assert_array_equal(
+            actual_depth >= np.float32(0.0),
+            expected_depth >= np.float32(0.0),
+            err_msg=f"azimuth={azimuth} pitch={pitch}",
+        )
+        _assert_object_registered_parity(
+            actual_rgb,
+            actual_depth,
+            expected_rgb,
+            expected_depth,
+            f"WO-12G_az{azimuth}_pitch{pitch}",
+        )
+        leaks = int(
+            np.count_nonzero(strict_silhouette & (actual_depth < np.float32(0.0)))
+        )
+        assert leaks == 0, f"azimuth={azimuth} pitch={pitch} leaks={leaks}"
+        rows.append((azimuth, pitch, leaks))
+    print(
+        "WO-12G G-LEAK "
+        + " ".join(f"az{az}/pitch{pitch}={leaks}" for az, pitch, leaks in rows)
+    )
 
 
 def _assert_smooth_registered_parity(
@@ -3905,6 +4277,53 @@ def test_terrain_render_objects_stage_timing_100_frames():
         f"target_plus_1.5ms={'GREEN' if total_delta <= 1.5 else 'RED'}"
     )
     assert total_delta <= 1.5
+
+
+@pytest.mark.skipif(
+    os.environ.get("TC_RUN_TERRAIN_TIMING") != "1",
+    reason="set TC_RUN_TERRAIN_TIMING=1 to run the 100-frame WO-12G timing gate",
+)
+def test_terrain_render_objects_wo12g_stage_timing_100_frames():
+    """WO-12G perf: four objects remain within +0.1ms of the 0.09ms receipt."""
+    _require_cuda()
+    dims = (512, 512, 192)
+    grid = _noise_terrain(dims)
+    camera = _camera_for_grid(dims)
+    object_origins = (
+        (188.0, 190.0, 52.0),
+        (232.0, 218.0, 48.0),
+        (278.0, 250.0, 54.0),
+        (320.0, 282.0, 50.0),
+    )
+    objects = [
+        (
+            _tank_object_grid((24, 24, 24)),
+            np.asarray(origin, dtype=np.float32),
+            OBJECT_PALETTE_RED if index % 2 == 0 else OBJECT_PALETTE_BLUE,
+        )
+        for index, origin in enumerate(object_origins)
+    ]
+    baseline = terrain_render_timing_harness(
+        grid, camera, frames=100, surface_mode="smooth"
+    )
+    with_objects = terrain_render_timing_harness(
+        grid,
+        camera,
+        frames=100,
+        surface_mode="smooth",
+        objects=objects,
+    )
+    total_delta = with_objects["total_ms_mean"] - baseline["total_ms_mean"]
+    print(
+        "WO-12G PERF "
+        f"grid={dims} objects=4 object_shape=(24, 24, 24) frames=100 "
+        f"no_objects_total_ms_mean={baseline['total_ms_mean']:.4f} "
+        f"objects_total_ms_mean={with_objects['total_ms_mean']:.4f} "
+        f"object_delta_ms={total_delta:.4f} "
+        f"cap_ms=0.1900 "
+        f"target_plus_0.1ms_from_0.09ms={'GREEN' if total_delta <= 0.19 else 'RED'}"
+    )
+    assert total_delta <= 0.19
 
 
 @pytest.mark.skipif(

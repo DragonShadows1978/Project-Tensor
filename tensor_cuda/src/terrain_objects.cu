@@ -19,6 +19,10 @@ constexpr int kMaxTerrainObjects = 16;
 constexpr float kAmbientFloor = 0.35f;
 constexpr float kAoStrength = 0.60f;
 constexpr float kAoFloor = 0.40f;
+// Object grids have unit voxels.  This is deliberately sub-voxel and is used
+// only to choose a robust initial cell after an external AABB intersection;
+// reported hit distance remains the exact slab-entry t.
+constexpr float kObjectEntryEpsilon = 1.0e-4f;
 
 struct TerrainObjectKernelView {
   const uint8_t* grid;
@@ -63,9 +67,10 @@ __device__ __forceinline__ uint8_t object_grid_load_or_air(
   return object_grid_load(grid, dim_y, dim_z, x, y, z);
 }
 
-// Literal WO-7B half-open AABB/Amanatides-Woo policy, translated into the
-// object's local frame.  Pure translation leaves returned ray distance in
-// world units.
+// Object-local half-open AABB/Amanatides-Woo policy.  This is intentionally
+// separate from terrain/dda_raycast: object entry uses a bounded interior
+// sample to make translated grazing intersections robust.  Pure translation
+// leaves returned ray distance in world units.
 __device__ __forceinline__ void object_dda_first_hit(
     const TerrainObjectKernelView& object, const float origin[3],
     const float direction[3], int max_steps, float distance_limit,
@@ -122,17 +127,25 @@ __device__ __forceinline__ void object_dda_first_hit(
 
   const int step[3] = {object_sign(direction[0]), object_sign(direction[1]),
                        object_sign(direction[2])};
-  float start_position[3] = {
-      __fadd_rn(origin[0], __fmul_rn(direction[0], start_t)),
-      __fadd_rn(origin[1], __fmul_rn(direction[1], start_t)),
-      __fadd_rn(origin[2], __fmul_rn(direction[2], start_t))};
+  // A separately rounded f32 origin + direction * t_enter can land a few
+  // coordinate ULPs outside the AABB.  The former one-coordinate-ULP nudge
+  // was insufficient at grazing angles and floored to -1/dim, creating a
+  // background leak.  Sample a bounded distance along the ray instead.  The
+  // true geometric entry distance stays `start_t` for depth comparison.
+  float sample_t = start_t;
   if (!origin_inside) {
-#pragma unroll
-    for (int axis = 0; axis < 3; ++axis) {
-      start_position[axis] =
-          nextafterf(start_position[axis], start_position[axis] + direction[axis]);
-    }
+    const float entry_span = __fadd_rn(t_exit, -start_t);
+    // A zero-width external slab contact is a tangent, not a pixel with
+    // strict volume interior.
+    if (!(entry_span > 0.0f)) return;
+    const float entry_advance = fminf(
+        kObjectEntryEpsilon, __fmul_rn(entry_span, 0.5f));
+    sample_t = __fadd_rn(start_t, entry_advance);
   }
+  float start_position[3] = {
+      __fadd_rn(origin[0], __fmul_rn(direction[0], sample_t)),
+      __fadd_rn(origin[1], __fmul_rn(direction[1], sample_t)),
+      __fadd_rn(origin[2], __fmul_rn(direction[2], sample_t))};
 
   int64_t current[3] = {static_cast<int64_t>(floorf(start_position[0])),
                         static_cast<int64_t>(floorf(start_position[1])),
@@ -143,6 +156,7 @@ __device__ __forceinline__ void object_dda_first_hit(
     return;
   }
 
+  // Exact face/edge/corner ties retain the established lowest-axis policy.
   int entry_axis = 0;
   float entry_near = near_t[0];
   if (near_t[1] > entry_near) {
@@ -178,12 +192,13 @@ __device__ __forceinline__ void object_dda_first_hit(
                                  ? static_cast<float>(current[axis] + 1)
                                  : static_cast<float>(current[axis]);
       float crossing = (boundary - origin[axis]) / direction[axis];
-      if (crossing < start_t) crossing = start_t;
+      if (crossing < sample_t) crossing = sample_t;
       next_t[axis] = crossing;
     }
   }
 
   for (int traversal_step = 0; traversal_step < max_steps; ++traversal_step) {
+    // Deterministic Amanatides-Woo tMax tie-break: lowest axis wins.
     int axis = 0;
     float crossing_t = next_t[0];
     if (next_t[1] < crossing_t) {
