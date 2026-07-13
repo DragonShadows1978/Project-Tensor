@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 #include <mutex>
@@ -411,6 +412,8 @@ __global__ void unary_kernel(const T* a, T* out, int64_t n, int op) {
     case U_SIGMOID: r = 1.f / (1.f + expf(-x)); break;
     case U_TANH: r = tanhf(x); break;
     case U_GELU: r = 0.5f * x * (1.f + tanhf(0.7978845608028654f * (x + 0.044715f * x * x * x))); break;
+    case U_GELU_EXACT: r = 0.5f * x * (1.f + erff(0.7071067811865475f * x)); break;
+    case U_ERF: r = erff(x); break;
     case U_SILU: r = x / (1.f + expf(-x)); break;
     case U_RECIP: r = 1.f / x; break;
     case U_ABS: r = fabsf(x); break;
@@ -4229,6 +4232,158 @@ NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t 
   if (n) { DISPATCH_FLOAT(small.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(small.data_ptr()), nullptr, nullptr, static_cast<T*>(big.data_ptr()), s, n); }); }
   cuda_check_last("pad_into");
   return big;
+}
+
+// ------------------------------------------------ fused non-causal SDPA
+// One CUDA block owns one (batch, head, query) row. Four warps stream
+// disjoint key subsequences and keep independent online-softmax states; the
+// block then merges those states with the usual exp(m_i - m_global) rule.
+// Lanes cooperate on the D-wide dot product and each lane owns a disjoint
+// slice of the value accumulator, so the only shared state is q plus four
+// partial output vectors. No Lq x Lk score or weight tensor is allocated.
+namespace {
+template <typename T, int DMAX>
+__global__ void fused_sdpa_noncausal_kernel(
+    const T* q, const T* k, const T* v, T* out,
+    int Lq, int Lk, int D, float scale) {
+  const int row = blockIdx.x;  // flattened (B,H,Lq) query row
+  const int tid = threadIdx.x;
+  const int lane = tid & 31;
+  const int warp = tid >> 5;
+  const int nwarp = blockDim.x >> 5;  // fixed at four for the launcher
+  constexpr unsigned FULL = 0xffffffffu;
+
+  const T* qrow = q + (int64_t)row * D;
+  const int64_t bh = row / Lq;
+  const T* kbase = k + bh * (int64_t)Lk * D;
+  const T* vbase = v + bh * (int64_t)Lk * D;
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += blockDim.x) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  // Each warp walks every nwarp-th key and maintains its own online-softmax
+  // numerator/denominator. m and l are intentionally replicated across a
+  // warp; each lane owns only values d=lane, lane+32, ... .
+  float m = -3.0e38f;
+  float l = 0.f;
+  constexpr int ACCN = (DMAX + 31) / 32;
+  float acc[ACCN];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+
+  for (int j = warp; j < Lk; j += nwarp) {
+    const T* kj = kbase + (int64_t)j * D;
+    float dot = 0.f;
+    for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kj, d);
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1)
+      dot += __shfl_down_sync(FULL, dot, off);
+    const float score = __shfl_sync(FULL, dot, 0) * scale;
+
+    const float m_new = fmaxf(m, score);
+    const float corr = expf(m - m_new);
+    const float w = expf(score - m_new);
+    l = l * corr + w;
+    const T* vj = vbase + (int64_t)j * D;
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) {
+      const int d = lane + dl * 32;
+      if (d < D) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+    }
+    m = m_new;
+  }
+
+  // Merge the four warp-local online-softmax partials. Only lane zero owns
+  // each warp's m/l state; output accumulators are already lane-disjoint.
+  __shared__ float red[128];
+  red[tid] = lane == 0 ? m : -3.0e38f;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+    __syncthreads();
+  }
+  const float gmax = red[0];
+  // red[] is immediately reused for the denominator reduction.  Every warp
+  // must finish loading the max before thread 0 can overwrite red[0]; without
+  // this barrier, later warps can use warp 0's scaled denominator as gmax.
+  __syncthreads();
+  const float rescale = expf(m - gmax);
+
+  red[tid] = lane == 0 ? l * rescale : 0.f;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  const float inv_denom = red[0] > 0.f ? 1.f / red[0] : 0.f;
+
+  __shared__ float partial[4][DMAX];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) {
+    const int d = lane + dl * 32;
+    if (d < D) partial[warp][d] = acc[dl] * rescale;
+  }
+  __syncthreads();
+
+  T* outrow = out + (int64_t)row * D;
+  for (int d = tid; d < D; d += blockDim.x) {
+    float total = 0.f;
+    #pragma unroll
+    for (int w = 0; w < 4; ++w) total += partial[w][d];
+    st<T>(outrow, d, total * inv_denom);
+  }
+}
+}  // namespace
+
+NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
+                             const NDArray& v, float scale) {
+  if (q.ndim() != 4 || k.ndim() != 4 || v.ndim() != 4)
+    throw std::runtime_error("fused_sdpa_noncausal expects q/k/v rank 4");
+  if (q.dtype != k.dtype || q.dtype != v.dtype)
+    throw std::runtime_error("fused_sdpa_noncausal dtype mismatch");
+  if (q.device.type != k.device.type || q.device.index != k.device.index ||
+      q.device.type != v.device.type || q.device.index != v.device.index)
+    throw std::runtime_error("fused_sdpa_noncausal device mismatch");
+  if (q.dtype != DType::Float16 && q.dtype != DType::Float32)
+    throw std::runtime_error("fused_sdpa_noncausal supports float16/float32 only");
+
+  const int64_t B = q.shape[0], H = q.shape[1];
+  const int64_t Lq64 = q.shape[2], D64 = q.shape[3], Lk64 = k.shape[2];
+  if (k.shape[0] != B || v.shape[0] != B || k.shape[1] != H || v.shape[1] != H ||
+      k.shape[3] != D64 || v.shape[2] != Lk64 || v.shape[3] != D64)
+    throw std::runtime_error("fused_sdpa_noncausal shape mismatch");
+  if (D64 <= 0 || D64 > 128)
+    throw std::runtime_error("fused_sdpa_noncausal requires 1 <= head_dim <= 128");
+  if (Lq64 < 0 || Lk64 <= 0)
+    throw std::runtime_error("fused_sdpa_noncausal requires non-empty key sequence");
+  const int64_t rows64 = B * H * Lq64;
+  if (rows64 > std::numeric_limits<int>::max() || Lq64 > std::numeric_limits<int>::max() ||
+      Lk64 > std::numeric_limits<int>::max())
+    throw std::runtime_error("fused_sdpa_noncausal shape exceeds CUDA launch range");
+
+  NDArray out(q.shape, q.dtype, q.device);
+  if (rows64 == 0) return out;
+  const int rows = (int)rows64;
+  const int Lq = (int)Lq64;
+  const int Lk = (int)Lk64;
+  const int D = (int)D64;
+  constexpr int threads = 128;
+  DISPATCH_FLOAT(q.dtype, T, {
+    if (D <= 64) {
+      fused_sdpa_noncausal_kernel<T, 64><<<rows, threads>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(v.data_ptr()), static_cast<T*>(out.data_ptr()),
+          Lq, Lk, D, scale);
+    } else {
+      fused_sdpa_noncausal_kernel<T, 128><<<rows, threads>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(v.data_ptr()), static_cast<T*>(out.data_ptr()),
+          Lq, Lk, D, scale);
+    }
+  });
+  cuda_check_last("fused_sdpa_noncausal");
+  return out;
 }
 
 // ------------------------------------------------------------ fused RMSNorm

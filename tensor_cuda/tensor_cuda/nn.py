@@ -157,6 +157,11 @@ class GELU(Module):
     def forward(self, x): return x.gelu()
 
 
+class GELUExact(Module):
+    """PyTorch-default erf GELU, kept distinct from the legacy tanh GELU."""
+    def forward(self, x): return x.gelu_exact()
+
+
 class SiLU(Module):
     def forward(self, x): return x.silu()
 

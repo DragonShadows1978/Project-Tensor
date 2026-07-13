@@ -114,7 +114,8 @@ NDArray ew_scalar(const NDArray& a, double scalar, int op, bool scalar_lhs);
 
 // Elementwise unary. op enum mirrors UnaryOp below.
 enum UnaryOp {
-  U_NEG, U_EXP, U_LOG, U_SQRT, U_RELU, U_SIGMOID, U_TANH, U_GELU, U_SILU,
+  U_NEG, U_EXP, U_LOG, U_SQRT, U_RELU, U_SIGMOID, U_TANH, U_GELU,
+  U_GELU_EXACT, U_ERF, U_SILU,
   U_RECIP, U_ABS, U_SIGN, U_SIN, U_COS,
   U_TAN, U_ASIN, U_ACOS, U_ATAN, U_SINH, U_COSH,
   U_LOG2, U_LOG10, U_FLOOR, U_CEIL, U_ROUND, U_ISNAN, U_ISINF, U_ISFINITE,
@@ -388,6 +389,13 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
                                      const NDArray& kq, const NDArray& v,
                                      const NDArray& sinks, float scale,
                                      float zthr, bool is_causal);
+
+// Flash-style non-causal scaled dot-product attention. q/k/v are contiguous
+// (B,H,L,D), share dtype/device/head geometry, and D is at most 128. The
+// implementation streams keys through an online softmax and never allocates
+// a score matrix. Inference-only through the Tensor-level wrapper.
+NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
+                             const NDArray& v, float scale);
 
 // APA selective TRAINING forward: O(L)-memory (never materializes the L x L
 // score matrix), additionally saves per-row logsumexp + threshold for the
