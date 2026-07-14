@@ -108,6 +108,19 @@ def apa_int4_sdpa_noncausal(q, k, v, scale, zthr, refine_all=False):
                                       bool(refine_all))
 
 
+def apa_refine_stats(reset=False):
+    """EXP-APA-4 (K2) realized-refine-fraction counters.
+
+    Returns ``(refined_pairs, total_pairs)`` accumulated by the Q-tile APA
+    kernel (r < 1) across calls since the last reset, when ``TC_APA_FRAC=1``
+    was set for those calls; both are 0 if the instrumentation never engaged.
+    ``reset=True`` clears both counters after reading. Realized refine
+    fraction = refined / total. The legacy streaming path (TC_ATTN_QTILE=0)
+    is the frozen EXP-APA-2 instrument and is not instrumented.
+    """
+    return _C.apa_refine_stats(bool(reset))
+
+
 def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
     """First-hit voxel DDA over a resident 3D uint8 grid.
 
@@ -828,7 +841,7 @@ __all__ = [
     "matmul", "dda_raycast", "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
-    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "apa_refine_stats", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

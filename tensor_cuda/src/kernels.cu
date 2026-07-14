@@ -4861,15 +4861,37 @@ __device__ __forceinline__ void mma_scores(const __half* __restrict__ Qs,
   __syncwarp();
 }
 
-// kAPA=true : EXP-APA-2 semantics at r<1 — INT4 bulk + fp16 threshold ladder
-//             (overflow included) + mix_scores blend + fp16 score rounding.
+// kAPA=true : APA at r<1 — INT4 bulk + per-row selection statistics +
+//             mix_scores blend + fp16 score rounding. kLadder picks the
+//             statistics (EXP-APA-4/K2):
+//   kLadder=false (v2 DEFAULT): fp32 Welford running mean/M2 over |bulk16|
+//             [Welford 1962, "Note on a method for calculating corrected
+//             sums of squares and products"; lane-pair combination via the
+//             parallel merge of Chan/Golub/LeVeque 1983]. ONE stats walk
+//             (Welford needs no pre-computed mean, so the ladder's second
+//             walk is reclaimed). The bulk16 VALUES keep EXP-APA-2's
+//             registered semantics (f2h(fp32-MMA x scale)); only the
+//             selection statistics leave the fp16 lattice. Chosen over the
+//             naive fp32 sumsq - mean^2 shortcut because EXP-APA-2 measured
+//             that form catastrophically cancelled at DiT magnitudes
+//             (|bulk| ~ 361 +/- 0.6 -> 4,862 negative variances); Welford's
+//             update keeps the running M2 a sum of non-negative terms, so
+//             variance stays finite and non-negative and r means r at every
+//             block (the fp16 ladder saturated sum16 to +inf on up to 76%
+//             of rows at the last single-stream block and refined NOTHING).
+//   kLadder=true (TC_APA_THR=ladder16): the EXP-APA-2/3 fp16 overflow
+//             ladder, byte-for-byte (walks 1-2 below untouched) — the
+//             preserved forensic instrument.
 // kAPA=false: exact streaming SDPA math (fused_sdpa_noncausal semantics and
-//             the APA refine_all case) — scores stay fp32, no bulk walks.
+//             the APA refine_all case) — scores stay fp32, no bulk walks,
+//             kLadder unused.
+// refine_count (nullable): TC_APA_FRAC=1 instrumentation — refined (row,key)
+//             pairs accumulated with one warp-reduced atomicAdd per warp.
 // Row ownership: warp w owns rows 16w..16w+15; a LANE PAIR owns one row
 // (sub = lane&1 -> score columns [16*sub,16*sub+16) of each K tile and
 // output columns [32*sub, 32*sub+32)); per-row softmax state (m, l) and the
-// threshold ladder live in registers, pair-combined with shfl_xor.
-template <bool kAPA>
+// threshold statistics live in registers, pair-combined with shfl_xor.
+template <bool kAPA, bool kLadder>
 __global__ void __launch_bounds__(kThreads)
 attn_noncausal_f16_kernel(const __half* __restrict__ q,
                           const __half* __restrict__ k,
@@ -4878,7 +4900,8 @@ attn_noncausal_f16_kernel(const __half* __restrict__ q,
                           const __half* __restrict__ v,
                           __half* __restrict__ out, int Lq, int Lk, int D,
                           int num_qtiles, float scale, float zthr,
-                          float inv_cnt) {
+                          float inv_cnt,
+                          unsigned long long* __restrict__ refine_count) {
   const int tile = blockIdx.x % num_qtiles;
   const int64_t bh = blockIdx.x / num_qtiles;
   const int q0 = tile * kTQ;
@@ -4909,7 +4932,61 @@ attn_noncausal_f16_kernel(const __half* __restrict__ q,
   const int ntiles = (Lk + kTK - 1) / kTK;
 
   float thr = -3.0e38f;  // refine-everything unless the APA stats say else
-  if constexpr (kAPA) {
+  if constexpr (kAPA && !kLadder) {
+    // Stats walk (v2 DEFAULT, EXP-APA-4): SHIFTED fp32 Welford running
+    // mean/M2 over the |bulk16| row, one walk. Formulation (cited):
+    // Welford 1962 one-pass updates applied to x_j = |bulk16_j| - shift
+    // with shift = the row's FIRST |bulk16| value (the shifted one-pass
+    // form Chan/Golub/LeVeque 1983 recommend); each lane of the row's lane
+    // pair runs its own sequential Welford over its key columns
+    // (16*sub..16*sub+15 of each tile, ascending tiles), the two lane
+    // states merge with the Chan parallel formula (both lanes share the
+    // row shift), variance is shift-invariant, and mean = shift + mean_x.
+    // WHY shifted (K2-STATS receipt): unshifted one-pass error grows with
+    // the row's conditioning kappa = mean/std — at the DiT single-stream
+    // near-constant rows (|bulk| ~ 361 +/- 0.6, kappa ~ 600) measured std
+    // rel err vs fp64 was 5.4e-3-class; shifting re-centers kappa to O(1)
+    // and lands mean/std/thr in the registered 1e-6 class. The naive fp32
+    // sumsq - mean^2 shortcut stays banned (EXP-APA-2: 4,862 negative
+    // variances on those same rows). Bulk16 values ride the identical
+    // deterministic dequant+MMA+f2h(x*scale) path as the blend walk.
+    float wn = 0.f, wmean = 0.f, wm2 = 0.f, wshift = 0.f;
+    for (int t = 0; t < ntiles; ++t) {
+      const int64_t j0 = (int64_t)t * kTK;
+      const int jrows = min(kTK, Lk - (int)j0);
+      stage_bulk_dq(cbase, sbase, j0, jrows, D, DQs);
+      __syncthreads();
+      mma_scores(Qs, DQs, Ss, warp);
+      if (t == 0)  // row's first |bulk16|; column 0 valid (Lk >= 1), both
+                   // pair lanes read the same smem slot -> identical shift
+        wshift = fabsf(__half2float(__float2half(Ss[rloc * kLdS] * scale)));
+      #pragma unroll
+      for (int c = 0; c < 16; ++c) {
+        const int j = 16 * sub + c;
+        if (j < jrows) {
+          const float a =
+              fabsf(__half2float(__float2half(Ss[rloc * kLdS + j] * scale)));
+          const float x = a - wshift;
+          wn += 1.f;                       // exact: wn <= Lk < 2^24
+          const float d = x - wmean;
+          wmean += d / wn;
+          wm2 += d * (x - wmean);          // non-negative increment class
+        }
+      }
+      __syncthreads();
+    }
+    // Pair merge (Chan et al. 1983); empty-side states carry zero weight.
+    const float on = __shfl_xor_sync(FULL, wn, 1);
+    const float om = __shfl_xor_sync(FULL, wmean, 1);
+    const float o2 = __shfl_xor_sync(FULL, wm2, 1);
+    const float nab = wn + on;             // = Lk >= 1 (launcher-enforced)
+    const float dm = om - wmean;
+    const float meanx = wmean + dm * (on / nab);
+    const float m2 = wm2 + o2 + dm * dm * (wn * (on / nab));
+    const float var = fmaxf(m2 / nab, 0.f);  // population (ddof=0), ops::var
+    thr = (wshift + meanx) + sqrtf(var) * zthr;
+  }
+  if constexpr (kAPA && kLadder) {
     // Walk 1: bulk INT4 scores -> fp32 sum of |bulk16| per row, then the
     // engine reduce_sum/mul_scalar fp16 ladder (saturation to +inf INCLUDED
     // — the EXP-APA-2 finding; those rows refine nothing).
@@ -4973,6 +5050,7 @@ attn_noncausal_f16_kernel(const __half* __restrict__ q,
   // Walk 3 (the only walk for SDPA/refine_all): blend + online softmax + PV.
   float m = -3.0e38f;
   float l = 0.f;
+  unsigned int nref = 0;  // TC_APA_FRAC: refined pairs this lane (kAPA only)
   float o[32];
   #pragma unroll
   for (int i = 0; i < 32; ++i) o[i] = 0.f;
@@ -5012,7 +5090,10 @@ attn_noncausal_f16_kernel(const __half* __restrict__ q,
           const float e16 = __half2float(
               __float2half(Ss[rloc * kLdS + j] * scale));
           const float bk = __half2float(Sb[rloc * kLdB + j]);
-          s = (fabsf(bk) >= thr) ? e16 : bk;
+          const bool refine = fabsf(bk) >= thr;
+          if (refine_count != nullptr && rloc < qrows)
+            nref += refine ? 1u : 0u;      // padding rows excluded
+          s = refine ? e16 : bk;
         } else {
           s = Ss[rloc * kLdS + j] * scale;  // fp32, unrounded (SDPA class)
         }
@@ -5066,6 +5147,17 @@ attn_noncausal_f16_kernel(const __half* __restrict__ q,
       if (c < D) orow[c] = __float2half(o[i] * inv);
     }
   }
+
+  if constexpr (kAPA) {
+    // TC_APA_FRAC flush: warp-reduce the lane counts, one atomic per warp.
+    if (refine_count != nullptr) {
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        nref += __shfl_down_sync(FULL, nref, off);
+      if (lane == 0 && nref > 0)
+        atomicAdd(refine_count, (unsigned long long)nref);
+    }
+  }
 }
 
 // TC_ATTN_QTILE=0 forces the legacy streaming skeleton (bit-identical
@@ -5076,6 +5168,30 @@ inline bool enabled() {
   return !(e && std::strcmp(e, "0") == 0);
 }
 
+// EXP-APA-4 (K2): threshold-statistics mode for the Q-tile APA kernel.
+// Default (unset / "welford") = fp32 Welford selection statistics (v2);
+// TC_APA_THR=ladder16 = the EXP-APA-2/3 fp16 overflow ladder, preserved
+// bit-faithfully (forensics + A/B lever). Read per call. The legacy
+// streaming kernels (TC_ATTN_QTILE=0) are the frozen EXP-APA-2 instrument
+// and always run the ladder regardless of TC_APA_THR.
+inline bool thr_ladder16() {
+  const char* e = std::getenv("TC_APA_THR");
+  if (!e || !*e || std::strcmp(e, "welford") == 0) return false;
+  if (std::strcmp(e, "ladder16") == 0) return true;
+  throw std::runtime_error("TC_APA_THR must be 'welford' or 'ladder16'");
+}
+
+// EXP-APA-4 realized-refine-fraction instrumentation (TC_APA_FRAC=1): a
+// process-global device counter of refined (row,key) pairs plus a host-side
+// denominator, accumulated across calls until tc::apa_refine_stats(reset)
+// reads them. Null counter pointer = instrumentation off (no atomics).
+inline bool frac_enabled() {
+  const char* e = std::getenv("TC_APA_FRAC");
+  return e && std::strcmp(e, "1") == 0;
+}
+unsigned long long* g_refine_dev = nullptr;
+unsigned long long g_refine_total = 0;
+
 }  // namespace qtile
 
 bool qtile_launch_sdpa(const NDArray& q, const NDArray& k, const NDArray& v,
@@ -5084,16 +5200,32 @@ bool qtile_launch_sdpa(const NDArray& q, const NDArray& k, const NDArray& v,
   const int num_qtiles = (Lq + qtile::kTQ - 1) / qtile::kTQ;
   const int64_t blocks =
       (int64_t)q.shape[0] * q.shape[1] * num_qtiles;  // <= rows64 <= INT_MAX
-  qtile::attn_noncausal_f16_kernel<false>
+  qtile::attn_noncausal_f16_kernel<false, false>
       <<<(unsigned)blocks, qtile::kThreads>>>(
           static_cast<__half*>(q.data_ptr()), static_cast<__half*>(k.data_ptr()),
           nullptr, nullptr, static_cast<__half*>(v.data_ptr()),
           static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles, scale,
-          0.f, 0.f);
+          0.f, 0.f, nullptr);
   cuda_check_last("fused_sdpa_noncausal[qtile]");
   return true;
 }
 }  // namespace
+
+// EXP-APA-4 (K2): read (and optionally reset) the TC_APA_FRAC counters.
+std::pair<unsigned long long, unsigned long long> apa_refine_stats(bool reset) {
+  unsigned long long refined = 0;
+  if (qtile::g_refine_dev != nullptr) {
+    if (cudaMemcpy(&refined, qtile::g_refine_dev, sizeof(refined),
+                   cudaMemcpyDeviceToHost) != cudaSuccess)
+      throw std::runtime_error("apa_refine_stats: counter copy failed");
+    if (reset &&
+        cudaMemset(qtile::g_refine_dev, 0, sizeof(refined)) != cudaSuccess)
+      throw std::runtime_error("apa_refine_stats: counter reset failed");
+  }
+  const unsigned long long total = qtile::g_refine_total;
+  if (reset) qtile::g_refine_total = 0;
+  return {refined, total};
+}
 
 NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
                                 const NDArray& v, float scale, float zthr,
@@ -5165,23 +5297,52 @@ NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
     if (refine_all) {
       // r >= 1: no bulk pass; the kernel is exact streaming SDPA (fp32
       // scores, no fp16 rounding) — same as the legacy refine_all contract.
-      qtile::attn_noncausal_f16_kernel<false>
+      // TC_APA_THR is deliberately not consulted (threshold-free path).
+      qtile::attn_noncausal_f16_kernel<false, false>
           <<<(unsigned)blocks, qtile::kThreads>>>(
               static_cast<__half*>(q.data_ptr()),
               static_cast<__half*>(k.data_ptr()), nullptr, nullptr,
               static_cast<__half*>(v.data_ptr()),
               static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
-              scale, 0.f, 0.f);
+              scale, 0.f, 0.f, nullptr);
     } else {
-      qtile::attn_noncausal_f16_kernel<true>
-          <<<(unsigned)blocks, qtile::kThreads>>>(
-              static_cast<__half*>(q.data_ptr()),
-              static_cast<__half*>(k.data_ptr()),
-              static_cast<uint8_t*>(codes.data_ptr()),
-              static_cast<float*>(kscales.data_ptr()),
-              static_cast<__half*>(v.data_ptr()),
-              static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
-              scale, zthr, inv_cnt);
+      // TC_APA_FRAC=1: lazily allocate the process-global refined-pair
+      // counter and accumulate the denominator (padding rows never count).
+      unsigned long long* frac_ptr = nullptr;
+      if (qtile::frac_enabled()) {
+        if (qtile::g_refine_dev == nullptr) {
+          if (cudaMalloc(&qtile::g_refine_dev, sizeof(unsigned long long)) !=
+                  cudaSuccess ||
+              cudaMemset(qtile::g_refine_dev, 0, sizeof(unsigned long long)) !=
+                  cudaSuccess)
+            throw std::runtime_error(
+                "apa_int4_sdpa_noncausal: TC_APA_FRAC counter alloc failed");
+        }
+        frac_ptr = qtile::g_refine_dev;
+        qtile::g_refine_total +=
+            (unsigned long long)rows64 * (unsigned long long)Lk;
+      }
+      if (qtile::thr_ladder16()) {
+        qtile::attn_noncausal_f16_kernel<true, true>
+            <<<(unsigned)blocks, qtile::kThreads>>>(
+                static_cast<__half*>(q.data_ptr()),
+                static_cast<__half*>(k.data_ptr()),
+                static_cast<uint8_t*>(codes.data_ptr()),
+                static_cast<float*>(kscales.data_ptr()),
+                static_cast<__half*>(v.data_ptr()),
+                static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
+                scale, zthr, inv_cnt, frac_ptr);
+      } else {
+        qtile::attn_noncausal_f16_kernel<true, false>
+            <<<(unsigned)blocks, qtile::kThreads>>>(
+                static_cast<__half*>(q.data_ptr()),
+                static_cast<__half*>(k.data_ptr()),
+                static_cast<uint8_t*>(codes.data_ptr()),
+                static_cast<float*>(kscales.data_ptr()),
+                static_cast<__half*>(v.data_ptr()),
+                static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
+                scale, zthr, inv_cnt, frac_ptr);
+      }
     }
     cuda_check_last("apa_int4_sdpa_noncausal[qtile]");
     return out;

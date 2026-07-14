@@ -41,14 +41,20 @@ def _np_quant_dq(k, dtype):
     return dq.astype(dtype)
 
 
-def _np_apa_composed(q, k, v, z):
+def _np_apa_composed(q, k, v, z, thr_mode="ladder16"):
     """fp32 mirror of the composed APA chain, with the fused kernel's fp16
     score-boundary rounding when inputs are fp16.
 
-    For fp16 the threshold is the ENGINE-OP LADDER, overflow included:
+    thr_mode="ladder16" (EXP-APA-2/3, preserved behind TC_APA_THR=ladder16):
+    for fp16 the threshold is the ENGINE-OP LADDER, overflow included:
     reduce_sum stores the raw fp16 row sum BEFORE mul_scalar's 1/cnt, so
     sum(|bulk|) > 65504 saturates to inf and the row refines nothing —
-    exactly what the composed chain does at the DiT single-stream sites."""
+    exactly what the composed chain did at the DiT single-stream sites.
+
+    thr_mode="welford" (EXP-APA-4 v2 DEFAULT): selection statistics in
+    float64 here — the reference class the kernel's in-register fp32 Welford
+    (and the app's composed fp32 chain) are gated against. Bulk16 values are
+    identical in both modes; only the statistics move."""
     is_half = q.dtype == np.float16
     scale = np.float32(1.0 / math.sqrt(q.shape[-1]))
     kdq = _np_quant_dq(k, q.dtype).astype(np.float32)
@@ -60,7 +66,12 @@ def _np_apa_composed(q, k, v, z):
     bulk = _round_scores(qf @ kdq.transpose(0, 1, 3, 2) * scale)
     a = np.abs(bulk)
     inv_cnt = np.float32(1.0 / float(a.shape[-1]))
-    if is_half:
+    if is_half and thr_mode == "welford":
+        a64 = a.astype(np.float64)
+        mean64 = a64.mean(-1, keepdims=True)
+        var64 = ((a64 - mean64) ** 2).mean(-1, keepdims=True)  # ddof=0
+        thr = mean64 + np.sqrt(var64) * float(z)
+    elif is_half:
         with np.errstate(over="ignore", invalid="ignore"):
             sum16 = a.sum(-1, keepdims=True, dtype=np.float32).astype(np.float16)
             mean16 = (sum16.astype(np.float32) * inv_cnt).astype(np.float16)
@@ -102,18 +113,28 @@ def _case_arrays(shape, dtype, seed):
     )
 
 
-def _run_fused(q, k, v, r):
+def _run_fused(q, k, v, r, thr=None):
+    """thr: TC_APA_THR for the call (None = unset -> the v2 Welford default
+    on the Q-tile path; fp32/D>64 always ride the ladder-era streaming
+    kernels, whose fp32 statistics were never a ladder)."""
     _require_cuda()
     dts = "float16" if q.dtype == np.float16 else "float32"
     refine_all = r >= 1.0
     z = 0.0 if refine_all else NormalDist().inv_cdf(1.0 - r)
     scale = 1.0 / math.sqrt(q.shape[-1])
-    with tc.no_grad():
-        out = tc.apa_int4_sdpa_noncausal(
-            tc.tensor(q, dtype=dts), tc.tensor(k, dtype=dts), tc.tensor(v, dtype=dts),
-            scale, z, refine_all=refine_all)
-    tc.synchronize()
-    return out.numpy()
+    if thr is None:
+        os.environ.pop("TC_APA_THR", None)
+    else:
+        os.environ["TC_APA_THR"] = thr
+    try:
+        with tc.no_grad():
+            out = tc.apa_int4_sdpa_noncausal(
+                tc.tensor(q, dtype=dts), tc.tensor(k, dtype=dts), tc.tensor(v, dtype=dts),
+                scale, z, refine_all=refine_all)
+        tc.synchronize()
+        return out.numpy()
+    finally:
+        os.environ.pop("TC_APA_THR", None)
 
 
 def _relfro(a, b):
@@ -135,15 +156,21 @@ def test_apa_int4_refine_all_is_exact_sdpa(dtype, atol):
     assert np.all(np.isfinite(got))
 
 
+@pytest.mark.parametrize("thr_mode", ["ladder16", "welford"])
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 @pytest.mark.parametrize("shape", [(1, 3, 33, 64), (2, 4, 257, 64), (1, 2, 129, 128)])
-def test_apa_int4_matches_composed_mirror(dtype, shape):
-    """r=0.15 vs the composed-chain numpy mirror (K-EQ gate class: 1e-3)."""
+def test_apa_int4_matches_composed_mirror(dtype, shape, thr_mode):
+    """r=0.15 vs the composed-chain numpy mirror (K-EQ gate class: 1e-3),
+    under both EXP-APA-4 threshold modes (welford = the v2 default env
+    unset; ladder16 = the preserved EXP-APA-2/3 instrument)."""
+    if thr_mode == "welford" and dtype == np.float16 and shape[-1] > 64:
+        pytest.skip("fp16 D>64 rides the streaming kernel (always ladder)")
     q, k, v = _case_arrays(shape, dtype, sum(shape))
-    got = _run_fused(q, k, v, 0.15)
-    ref = _np_apa_composed(q, k, v, NormalDist().inv_cdf(0.85))
+    got = _run_fused(q, k, v, 0.15, thr=None if thr_mode == "welford" else thr_mode)
+    ref = _np_apa_composed(q, k, v, NormalDist().inv_cdf(0.85), thr_mode=thr_mode)
     rf = _relfro(got, ref)
-    print(f"APA2 composed-mirror shape={shape} dtype={dtype.__name__} relfro={rf:.4e}")
+    print(f"APA2 composed-mirror shape={shape} dtype={dtype.__name__} "
+          f"thr={thr_mode} relfro={rf:.4e}")
     assert rf <= 1e-3
     assert np.all(np.isfinite(got))
 
@@ -159,11 +186,15 @@ def test_apa_int4_dit_full_shape(dtype, atol):
     err = float(np.max(np.abs(got - _np_sdpa_fp32(q, k, v))))
     print(f"APA2 DiT refine_all dtype={dtype.__name__} max_abs={err:.9g}")
     assert err <= atol
-    got = _run_fused(q, k, v, 0.15)
-    ref = _np_apa_composed(q, k, v, NormalDist().inv_cdf(0.85))
-    rf = _relfro(got, ref)
-    print(f"APA2 DiT composed-mirror dtype={dtype.__name__} relfro={rf:.4e}")
-    assert rf <= 1e-3
+    for thr_mode in ("ladder16", "welford"):
+        got = _run_fused(q, k, v, 0.15,
+                         thr=None if thr_mode == "welford" else thr_mode)
+        ref = _np_apa_composed(q, k, v, NormalDist().inv_cdf(0.85),
+                               thr_mode=thr_mode)
+        rf = _relfro(got, ref)
+        print(f"APA2 DiT composed-mirror dtype={dtype.__name__} "
+              f"thr={thr_mode} relfro={rf:.4e}")
+        assert rf <= 1e-3
 
 
 def test_apa_int4_rejects_bad_geometry():

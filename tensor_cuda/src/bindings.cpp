@@ -457,6 +457,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("apa_int4_sdpa_noncausal", &ops::apa_int4_sdpa_noncausal,
         py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
         py::arg("zthr"), py::arg("refine_all") = false);
+  m.def("apa_refine_stats",
+        [](bool reset) {
+          const auto stats = tc::apa_refine_stats(reset);
+          return py::make_tuple(stats.first, stats.second);
+        },
+        py::arg("reset") = false);
   m.def("argmax_last_axis", &ops::argmax_last_axis, py::arg("a"));
   m.def("mse_loss", &ops::mse_loss);
   m.def("cross_entropy", &ops::cross_entropy);

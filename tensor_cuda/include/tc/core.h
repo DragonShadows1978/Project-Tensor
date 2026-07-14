@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace tc {
@@ -406,6 +407,15 @@ NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
 NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
                                 const NDArray& v, float scale, float zthr,
                                 bool refine_all);
+
+// EXP-APA-4 (K2) realized-refine-fraction instrumentation. When TC_APA_FRAC=1
+// the Q-tile APA kernel (r < 1) accumulates the number of refined (row,key)
+// pairs into a process-global device counter and the launcher accumulates the
+// total (row,key) pairs host-side. Returns {refined, total} since the last
+// reset (both 0 when the instrumentation never engaged); reset=true clears
+// both after reading. The legacy streaming path (TC_ATTN_QTILE=0) is the
+// frozen EXP-APA-2 instrument and is deliberately NOT instrumented.
+std::pair<unsigned long long, unsigned long long> apa_refine_stats(bool reset);
 
 // APA selective TRAINING forward: O(L)-memory (never materializes the L x L
 // score matrix), additionally saves per-row logsumexp + threshold for the
