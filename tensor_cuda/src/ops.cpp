@@ -340,6 +340,18 @@ Tensor fused_sdpa_noncausal(const Tensor& q, const Tensor& k,
   });
 }
 
+Tensor apa_int4_sdpa_noncausal(const Tensor& q, const Tensor& k,
+                               const Tensor& v, float scale, float zthr,
+                               bool refine_all) {
+  NDArray out = tc::apa_int4_sdpa_noncausal(q.data(), k.data(), v.data(),
+                                            scale, zthr, refine_all);
+  return Tensor::from_op(out, {q, k, v}, "apa_int4_sdpa_noncausal",
+                         [](const NDArray&) -> void {
+    throw std::runtime_error(
+        "apa_int4_sdpa_noncausal: no backward — use the composed path for training");
+  });
+}
+
 Tensor rms_norm(const Tensor& x, const Tensor& w, double eps) {
   NDArray out = tc::rms_norm(x.data(), w.data(), eps, x.data().dtype);
   return Tensor::from_op(out, {x, w}, "rms_norm", [](const NDArray&) -> void {

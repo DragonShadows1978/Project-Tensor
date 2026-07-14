@@ -92,6 +92,22 @@ def fused_sdpa_noncausal(q, k, v, scale):
     return _C.fused_sdpa_noncausal(q, k, v, float(scale))
 
 
+def apa_int4_sdpa_noncausal(q, k, v, scale, zthr, refine_all=False):
+    """Fused non-causal APA attention with packed symmetric INT4 bulk K.
+
+    Inference-only, opt-in (EXP-APA-2). ``[B,H,L,D]`` q/k/v, same fp16/fp32
+    dtype, even ``D <= 128``. Bulk scores come from an in-kernel packed-INT4
+    K (symmetric-7 grid, one group per key vector — the EXP-APA-1
+    convention); keys with ``|bulk| >= mean + zthr*std`` are rescored at
+    full precision; the rest keep their bulk score (nothing is dropped) and
+    the softmax denominator is exact over all keys, V full precision.
+    ``refine_all=True`` (the r >= 1.0 case) skips the bulk pass entirely and
+    is exact streaming SDPA. No ``Lq x Lk`` tensor is ever materialized.
+    """
+    return _C.apa_int4_sdpa_noncausal(q, k, v, float(scale), float(zthr),
+                                      bool(refine_all))
+
+
 def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
     """First-hit voxel DDA over a resident 3D uint8 grid.
 
@@ -812,7 +828,7 @@ __all__ = [
     "matmul", "dda_raycast", "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
-    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",

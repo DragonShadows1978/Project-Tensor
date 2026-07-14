@@ -397,6 +397,16 @@ NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
 NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
                              const NDArray& v, float scale);
 
+// Fused non-causal APA attention with packed symmetric INT4 bulk K
+// (EXP-APA-2). q/k/v are contiguous (B,H,L,D), same dtype (fp16/fp32),
+// even D <= 128. Streams keys twice inside one kernel (bulk stats -> blend
+// + online softmax); never allocates an Lq x Lk score tensor. zthr is the
+// Gaussian-quantile z = Phi^-1(1-r); refine_all short-circuits to exact
+// streaming SDPA (the r >= 1 case). Inference-only via the Tensor wrapper.
+NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
+                                const NDArray& v, float scale, float zthr,
+                                bool refine_all);
+
 // APA selective TRAINING forward: O(L)-memory (never materializes the L x L
 // score matrix), additionally saves per-row logsumexp + threshold for the
 // backward. Returns (out, lse, thr). Selection is a stop-gradient.

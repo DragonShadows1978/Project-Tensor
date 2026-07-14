@@ -94,6 +94,12 @@ Tensor causal_softmax(const Tensor& scores);
 Tensor fused_sdpa_noncausal(const Tensor& q, const Tensor& k,
                             const Tensor& v, float scale);
 
+// Fused non-causal APA attention, packed INT4 bulk K (inference-only:
+// backward throws). zthr = Phi^-1(1-r); refine_all covers r >= 1.
+Tensor apa_int4_sdpa_noncausal(const Tensor& q, const Tensor& k,
+                               const Tensor& v, float scale, float zthr,
+                               bool refine_all);
+
 // Non-differentiable voxel traversal. Output dtypes are uint8, uint8, int64,
 // int64, int64, and float32, respectively.
 std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(

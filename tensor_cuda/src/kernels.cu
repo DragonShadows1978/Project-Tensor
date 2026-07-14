@@ -4386,6 +4386,406 @@ NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
   return out;
 }
 
+// ------------------------------------------- fused non-causal INT4-bulk APA
+// EXP-APA-2 (HY3D DiT). Fuses the app-level "composed" APA chain
+// (ColdCast hy3d_tc/apa.py, EXP-APA-1) into two kernels:
+//
+//   1. apa_int4_pack_kernel — per-key symmetric INT4 quantization of K,
+//      ONE group per D<=128 key vector (EXP-APA-1's convention: D=64 < the
+//      engine affine group_size 128 -> a single group). The grid mirrors the
+//      composed instrument BIT FOR BIT: amax over |k| in fp32, scale =
+//      amax * (float)(1.0/7.0), zero-guarded to 1.0, codes =
+//      clamp(roundf(x * (1.f/scale)), -7, 7)  — roundf (U_ROUND) and
+//      reciprocal-MULTIPLY, exactly like the app's
+//      (kf * safe_scale.reciprocal()).round().clamp(-qmax, qmax).
+//      NOTE: this is intentionally NOT kv_int4_pack's symmetric-8 grid
+//      (scale=amax/8, lrintf, divide, +8 offset) — EXP-APA-1 registered the
+//      symmetric-7 grid and its semantics are settled; do not re-litigate.
+//      Codes are stored biased (+7 -> [0,14]) two per byte (even element ->
+//      low nibble), per-key scale in fp32.
+//
+//   2. apa_int4_sdpa_noncausal_kernel — one block per (b,h,query) row, four
+//      warps, warp-cooperative key streaming (the apa_selective_kernel A5
+//      pattern) with the fused_sdpa_noncausal online-softmax merge:
+//        pass 1: bulk scores from the PACKED INT4 K (in-register dequant,
+//                dq rounded to T so values equal the composed fp16 kq
+//                tensor), accumulating sum/sumsq of |bulk| for the engine's
+//                registered Gaussian-quantile threshold
+//                thr = mean + z * std (APA paper 2.1 step 2, population
+//                variance / ddof=0 like ops::var).
+//        pass 2: re-walk keys (recompute-not-store, the apa_selective
+//                choice: ~2.3 KB shared/block instead of a 17.8 KB bulk-
+//                score cache, keeping occupancy), refine keys with
+//                |bulk| >= thr by an exact full-precision K dot
+//                (mix_scores_kernel semantics: out = refine ? exact : bulk,
+//                nothing dropped), stream the blended score through the
+//                online softmax and accumulate V (full precision) —
+//                denominator exact over ALL keys.
+//      No Lq x Lk score/weight/mask tensor ever exists in global memory.
+//
+// fp16 parity with the composed path (the K-EQ gate class): when T is
+// __half and r < 1, bulk and refined scores are rounded to fp16 before the
+// threshold test / blend / softmax, mirroring the fp16 GEMM-output tensors
+// the composed chain feeds to where()/softmax(). With refine_all (r >= 1)
+// there is no bulk pass and scores stay fp32 — the kernel then IS the
+// fused_sdpa_noncausal math (the K-SDPA gate class, 3643efe: fp32 <=1.3e-8,
+// fp16 <=3.8e-6 vs blocked fp32 reference at DiT shapes). expf (not __expf)
+// keeps softmax parity with U_EXP.
+//
+// THE THRESHOLD IS AN fp16 LADDER, OVERFLOW INCLUDED (EXP-APA-2 finding).
+// The composed chain computes thr = mean + z*std through ENGINE OPS on fp16
+// tensors: reduce_sum stores the RAW ROW SUM as fp16 BEFORE mul_scalar's
+// 1/cnt — at the DiT single-stream sites sum(|bulk|) exceeds 65504 for many
+// rows (measured: 207/142144 rows at the first single block, 108129/142144
+// at the last), the fp16 sum saturates to +inf, thr becomes +inf and those
+// rows refine NOTHING (pure bulk INT4 attention). A "better" fp32 threshold
+// is NOT parity: a 1-ulp thr16 shift alone moves the output rel-fro by up
+// to 1.6e-1 at the last single block (scores ~361 +/- 0.6 live on a 0.25-
+// step fp16 lattice, so the mask is lattice-tie dominated), and the naive
+// fp32 sumsq - mean^2 form is catastrophically cancelled there (4862 rows
+// with negative variance; realized refine 0.22 vs composed 0.16). So for
+// __half inputs pass 1 replicates the composed value ladder exactly:
+//   sum16   = f2h(fp32-tree-sum of |bulk16|)         (reduce_sum output)
+//   mean16  = f2h(h2f(sum16) * (float)(1.0/cnt))     (mul_scalar)
+//   d16_j   = f2h(|bulk16_j| - h2f(mean16))          (sub)
+//   dd16_j  = f2h(h2f(d16_j)^2)                      (mul)
+//   var16   = f2h(h2f(f2h(fp32-tree-sum dd)) * inv)  (reduce_sum+mul_scalar)
+//   std16   = f2h(sqrtf(h2f(var16)))                 (sqrt)
+//   sz16    = f2h(h2f(std16) * zthr)                 (mul_scalar z)
+//   thr     = h2f(f2h(h2f(mean16) + h2f(sz16)))      (add)
+// The only remaining nondeterminism vs the engine is fp32 SUM ORDER (tree
+// here vs sequential-per-row there), which flips an f2h rounding with
+// probability ~3e-4/row and costs ~1e-4 rel-fro (measured estimate) — the
+// gate's reduction-order slack. float32 inputs keep the pure fp32 two-sweep
+// (composed fp32 has no rounding ladder and fp32 sums cannot overflow here).
+// Bulk scores are cached in dynamic shared memory ((Lk)*sizeof(T), capped in
+// the launcher), so keys are packed-INT4-read ONCE and pass 2 re-reads only
+// the cache plus full-precision K rows for refined keys.
+namespace {
+
+constexpr float kApaInt4InvQmax = (float)(1.0 / 7.0);  // matches ew_scalar's (float) cast
+
+template <typename T>
+__global__ void apa_int4_pack_kernel(const T* __restrict__ k,
+                                     uint8_t* __restrict__ codes,
+                                     float* __restrict__ kscale,
+                                     int64_t nkeys, int D) {
+  // One warp per key vector; lanes stride the packed bytes (element pairs).
+  const int lane = threadIdx.x & 31;
+  const int warp = threadIdx.x >> 5;
+  const int64_t key = (int64_t)blockIdx.x * (blockDim.x >> 5) + warp;
+  constexpr unsigned FULL = 0xffffffffu;
+  if (key >= nkeys) return;
+  const T* krow = k + key * D;
+
+  float amax = 0.f;
+  for (int d = lane; d < D; d += 32) amax = fmaxf(amax, fabsf(ld<T>(krow, d)));
+  #pragma unroll
+  for (int off = 16; off > 0; off >>= 1)
+    amax = fmaxf(amax, __shfl_down_sync(FULL, amax, off));
+  amax = __shfl_sync(FULL, amax, 0);
+
+  const float scale = amax * kApaInt4InvQmax;
+  const float safe = scale > 0.f ? scale : 1.f;   // composed: where(scale>0, scale, 1)
+  const float recip = 1.f / safe;                 // composed: safe_scale.reciprocal()
+  const int half_d = D >> 1;
+  for (int b = lane; b < half_d; b += 32) {
+    const float x0 = ld<T>(krow, 2 * b);
+    const float x1 = ld<T>(krow, 2 * b + 1);
+    float c0 = roundf(x0 * recip);                // U_ROUND == roundf
+    float c1 = roundf(x1 * recip);
+    c0 = c0 < -7.f ? -7.f : (c0 > 7.f ? 7.f : c0);
+    c1 = c1 < -7.f ? -7.f : (c1 > 7.f ? 7.f : c1);
+    const int q0 = (int)c0 + 7;                   // biased nibble [0,14]
+    const int q1 = (int)c1 + 7;
+    codes[key * half_d + b] = (uint8_t)((q1 << 4) | q0);
+  }
+  if (lane == 0) kscale[key] = safe;
+}
+
+// In-register dequant of one packed byte -> two bulk-K values. For __half
+// inputs the composed instrument materializes dq K as an fp16 tensor
+// (dq.astype(input_dtype)); rounding through __float2half reproduces those
+// exact values so the bulk dot walks the same numbers.
+template <typename T>
+__device__ __forceinline__ void apa_int4_dequant2(uint8_t byte, float safe,
+                                                  float& dq0, float& dq1) {
+  const float c0 = (float)((int)(byte & 0xF) - 7);
+  const float c1 = (float)((int)(byte >> 4) - 7);
+  dq0 = c0 * safe;
+  dq1 = c1 * safe;
+  if constexpr (std::is_same<T, __half>::value) {
+    dq0 = __half2float(__float2half(dq0));
+    dq1 = __half2float(__float2half(dq1));
+  }
+}
+
+template <typename T, int DMAX>
+__global__ void apa_int4_sdpa_noncausal_kernel(
+    const T* __restrict__ q, const T* __restrict__ k,
+    const uint8_t* __restrict__ codes, const float* __restrict__ kscale,
+    const T* __restrict__ v, T* __restrict__ out,
+    int Lq, int Lk, int D, float scale, float zthr, float inv_cnt,
+    int refine_all) {
+  const int row = blockIdx.x;  // flattened (B,H,Lq) query row
+  const int tid = threadIdx.x;
+  const int lane = tid & 31;
+  const int warp = tid >> 5;
+  const int nwarp = blockDim.x >> 5;  // fixed at four for the launcher
+  constexpr unsigned FULL = 0xffffffffu;
+  // Round scores to fp16 on the fp16 path (composed-path value parity); the
+  // all-refine path stays fp32 like fused_sdpa_noncausal.
+  constexpr bool kIsHalf = std::is_same<T, __half>::value;
+
+  const T* qrow = q + (int64_t)row * D;
+  const int64_t bh = row / Lq;
+  const T* kbase = k + bh * (int64_t)Lk * D;
+  const int half_d = D >> 1;
+  const uint8_t* cbase = codes + bh * (int64_t)Lk * half_d;
+  const float* sbase = kscale + bh * (int64_t)Lk;
+  const T* vbase = v + bh * (int64_t)Lk * D;
+
+  __shared__ float qsh[DMAX];
+  for (int d = tid; d < D; d += blockDim.x) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  __shared__ float red[128];
+  // Per-row bulk-score cache (dynamic; launcher passes Lk * sizeof(T)).
+  extern __shared__ unsigned char apa_smem_raw[];
+  T* sbulk = reinterpret_cast<T*>(apa_smem_raw);
+
+  // Pass 1: bulk INT4 scores -> shared cache + the composed-parity quantile
+  // threshold ladder. Skipped entirely under refine_all (r >= 1).
+  float thr = -3.0e38f;
+  if (!refine_all) {
+    for (int j = warp; j < Lk; j += nwarp) {
+      const uint8_t* cj = cbase + (int64_t)j * half_d;
+      const float safe = sbase[j];
+      float dot = 0.f;
+      for (int b = lane; b < half_d; b += 32) {
+        float dq0, dq1;
+        apa_int4_dequant2<T>(cj[b], safe, dq0, dq1);
+        dot += qsh[2 * b] * dq0 + qsh[2 * b + 1] * dq1;
+      }
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        dot += __shfl_down_sync(FULL, dot, off);
+      if (lane == 0) st<T>(sbulk, j, dot * scale);  // fp16 rounding via st<half>
+    }
+    __syncthreads();
+
+    // Sweep A: fp32 tree-sum of |bulk| -> engine reduce_sum + mul_scalar
+    // ladder (fp16 sum saturation INCLUDED for __half).
+    float part = 0.f;
+    for (int j = tid; j < Lk; j += blockDim.x) part += fabsf(ld<T>(sbulk, j));
+    red[tid] = part;
+    __syncthreads();
+    for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+      if (tid < off) red[tid] += red[tid + off];
+      __syncthreads();
+    }
+    const float total = red[0];
+    __syncthreads();
+    float meanv;
+    if constexpr (kIsHalf) {
+      const __half sum16 = __float2half(total);            // reduce_sum output (may be +inf)
+      const __half mean16 = __float2half(__half2float(sum16) * inv_cnt);  // mul_scalar
+      meanv = __half2float(mean16);
+    } else {
+      meanv = total * inv_cnt;
+    }
+
+    // Sweep B: fp32 tree-sum of the composed (a - mean)^2 chain.
+    float part2 = 0.f;
+    for (int j = tid; j < Lk; j += blockDim.x) {
+      const float a = fabsf(ld<T>(sbulk, j));
+      if constexpr (kIsHalf) {
+        const __half d16 = __float2half(a - meanv);        // sub
+        const float df = __half2float(d16);
+        part2 += __half2float(__float2half(df * df));      // mul
+      } else {
+        const float d = a - meanv;
+        part2 += d * d;
+      }
+    }
+    red[tid] = part2;
+    __syncthreads();
+    for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+      if (tid < off) red[tid] += red[tid + off];
+      __syncthreads();
+    }
+    const float total_dd = red[0];
+    __syncthreads();
+    if constexpr (kIsHalf) {
+      const __half ddsum16 = __float2half(total_dd);       // reduce_sum output
+      const __half var16 = __float2half(__half2float(ddsum16) * inv_cnt);  // mul_scalar
+      const __half std16 = __float2half(sqrtf(__half2float(var16)));       // sqrt
+      const __half sz16 = __float2half(__half2float(std16) * zthr);        // mul_scalar z
+      thr = __half2float(__float2half(meanv + __half2float(sz16)));        // add
+    } else {
+      const float var = total_dd * inv_cnt;                // population (ddof=0), ops::var
+      thr = meanv + sqrtf(var) * zthr;
+    }
+  }
+
+  // Pass 2: blend + online softmax + V accumulation (fused_sdpa_noncausal
+  // streaming state); bulk scores come from the shared cache.
+  float m = -3.0e38f;
+  float l = 0.f;
+  constexpr int ACCN = (DMAX + 31) / 32;
+  float acc[ACCN];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+
+  for (int j = warp; j < Lk; j += nwarp) {
+    float score = 0.f;
+    bool refine = true;
+    if (!refine_all) {
+      const float bulk = ld<T>(sbulk, j);
+      score = bulk;
+      refine = fabsf(bulk) >= thr;  // mix_scores: refine = |ranking| >= thr
+    }
+    if (refine) {
+      const T* kj = kbase + (int64_t)j * D;
+      float ex = 0.f;
+      for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        ex += __shfl_down_sync(FULL, ex, off);
+      float exact = __shfl_sync(FULL, ex, 0) * scale;
+      if (kIsHalf && !refine_all) exact = __half2float(__float2half(exact));
+      score = exact;
+    }
+
+    const float m_new = fmaxf(m, score);
+    const float corr = expf(m - m_new);
+    const float w = expf(score - m_new);
+    l = l * corr + w;
+    const T* vj = vbase + (int64_t)j * D;
+    #pragma unroll
+    for (int dl = 0; dl < ACCN; ++dl) {
+      const int d = lane + dl * 32;
+      if (d < D) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+    }
+    m = m_new;
+  }
+
+  // Merge the four warp-local online-softmax partials (fused_sdpa_noncausal
+  // merge, including the r2 barrier between the max and denom reductions).
+  red[tid] = lane == 0 ? m : -3.0e38f;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+    __syncthreads();
+  }
+  const float gmax = red[0];
+  __syncthreads();
+  const float rescale = expf(m - gmax);
+
+  red[tid] = lane == 0 ? l * rescale : 0.f;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  const float inv_denom = red[0] > 0.f ? 1.f / red[0] : 0.f;
+
+  __shared__ float partial[4][DMAX];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) {
+    const int d = lane + dl * 32;
+    if (d < D) partial[warp][d] = acc[dl] * rescale;
+  }
+  __syncthreads();
+
+  T* outrow = out + (int64_t)row * D;
+  for (int d = tid; d < D; d += blockDim.x) {
+    float total = 0.f;
+    #pragma unroll
+    for (int w = 0; w < 4; ++w) total += partial[w][d];
+    st<T>(outrow, d, total * inv_denom);
+  }
+}
+}  // namespace
+
+NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
+                                const NDArray& v, float scale, float zthr,
+                                bool refine_all) {
+  if (q.ndim() != 4 || k.ndim() != 4 || v.ndim() != 4)
+    throw std::runtime_error("apa_int4_sdpa_noncausal expects q/k/v rank 4");
+  if (q.dtype != k.dtype || q.dtype != v.dtype)
+    throw std::runtime_error("apa_int4_sdpa_noncausal dtype mismatch");
+  if (q.device.type != k.device.type || q.device.index != k.device.index ||
+      q.device.type != v.device.type || q.device.index != v.device.index)
+    throw std::runtime_error("apa_int4_sdpa_noncausal device mismatch");
+  if (q.dtype != DType::Float16 && q.dtype != DType::Float32)
+    throw std::runtime_error("apa_int4_sdpa_noncausal supports float16/float32 only");
+
+  const int64_t B = q.shape[0], H = q.shape[1];
+  const int64_t Lq64 = q.shape[2], D64 = q.shape[3], Lk64 = k.shape[2];
+  if (k.shape[0] != B || v.shape[0] != B || k.shape[1] != H || v.shape[1] != H ||
+      k.shape[3] != D64 || v.shape[2] != Lk64 || v.shape[3] != D64)
+    throw std::runtime_error("apa_int4_sdpa_noncausal shape mismatch");
+  if (D64 <= 0 || D64 > 128 || (D64 & 1))
+    throw std::runtime_error("apa_int4_sdpa_noncausal requires even head_dim in [2,128]");
+  if (Lq64 < 0 || Lk64 <= 0)
+    throw std::runtime_error("apa_int4_sdpa_noncausal requires non-empty key sequence");
+  const int64_t rows64 = B * H * Lq64;
+  const int64_t nkeys64 = B * H * Lk64;
+  if (rows64 > std::numeric_limits<int>::max() || Lq64 > std::numeric_limits<int>::max() ||
+      Lk64 > std::numeric_limits<int>::max())
+    throw std::runtime_error("apa_int4_sdpa_noncausal shape exceeds CUDA launch range");
+
+  NDArray out(q.shape, q.dtype, q.device);
+  if (rows64 == 0) return out;
+  const int Lq = (int)Lq64;
+  const int Lk = (int)Lk64;
+  const int D = (int)D64;
+  constexpr int threads = 128;
+  // engine mean = mul_scalar(sum, 1.0/cnt): double reciprocal cast to float.
+  const float inv_cnt = (float)(1.0 / (double)Lk64);
+  // Per-row bulk cache in dynamic shared memory; stay under the 48 KB
+  // default static+dynamic budget (DiT joint is 4442 keys = 8.9 KB fp16).
+  const size_t smem = refine_all ? 0 : (size_t)Lk * dtype_size(q.dtype);
+  if (smem > 44 * 1024)
+    throw std::runtime_error(
+        "apa_int4_sdpa_noncausal: key sequence too long for the shared bulk "
+        "cache (S*sizeof(dtype) must be <= 44KB); use the composed path");
+
+  // Bulk-K INT4 codes (2/byte) + per-key fp32 scale. Query-independent,
+  // packed once per call; skipped entirely under refine_all.
+  NDArray codes({B, H, Lk64, D64 / 2}, DType::Uint8, q.device);
+  NDArray kscales({B, H, Lk64}, DType::Float32, q.device);
+  DISPATCH_FLOAT(q.dtype, T, {
+    if (!refine_all) {
+      const int warps_per_block = threads / 32;
+      const int64_t pack_blocks = (nkeys64 + warps_per_block - 1) / warps_per_block;
+      apa_int4_pack_kernel<T><<<(unsigned)pack_blocks, threads>>>(
+          static_cast<T*>(k.data_ptr()),
+          static_cast<uint8_t*>(codes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()), nkeys64, D);
+      cuda_check_last("apa_int4_pack");
+    }
+    if (D <= 64) {
+      apa_int4_sdpa_noncausal_kernel<T, 64><<<(unsigned)rows64, threads, smem>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<uint8_t*>(codes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()),
+          static_cast<T*>(v.data_ptr()), static_cast<T*>(out.data_ptr()),
+          Lq, Lk, D, scale, zthr, inv_cnt, refine_all ? 1 : 0);
+    } else {
+      apa_int4_sdpa_noncausal_kernel<T, 128><<<(unsigned)rows64, threads, smem>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<uint8_t*>(codes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()),
+          static_cast<T*>(v.data_ptr()), static_cast<T*>(out.data_ptr()),
+          Lq, Lk, D, scale, zthr, inv_cnt, refine_all ? 1 : 0);
+    }
+  });
+  cuda_check_last("apa_int4_sdpa_noncausal");
+  return out;
+}
+
 // ------------------------------------------------------------ fused RMSNorm
 // One block per row; replaces the 9-launch / 9-alloc unfused chain
 // (cast-up, mul, reduce, mul_scalar, add_scalar, pow, mul, mul-weight,
