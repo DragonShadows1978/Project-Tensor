@@ -8,6 +8,7 @@
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <mma.h>  // EXP-APA-3: WMMA HMMA for the Q-tiled attention skeleton
 
 #include <cmath>
 #include <cstdio>
@@ -4334,6 +4335,12 @@ __global__ void fused_sdpa_noncausal_kernel(
     st<T>(outrow, d, total * inv_denom);
   }
 }
+
+// EXP-APA-3 Q-tile dispatch hook; defined after the qtile kernels below
+// (same anonymous namespace). Returns true when the Q-tiled path handled
+// the call (fp16, D <= 64, TC_ATTN_QTILE != 0).
+bool qtile_launch_sdpa(const NDArray& q, const NDArray& k, const NDArray& v,
+                       NDArray& out, int Lq, int Lk, int D, float scale);
 }  // namespace
 
 NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
@@ -4368,6 +4375,9 @@ NDArray fused_sdpa_noncausal(const NDArray& q, const NDArray& k,
   const int Lq = (int)Lq64;
   const int Lk = (int)Lk64;
   const int D = (int)D64;
+  // EXP-APA-3: Q-tiled K/V-reuse skeleton for the fp16 production shapes;
+  // fp32 keeps the streaming skeleton (registered 1.3e-8 fp32 class).
+  if (qtile_launch_sdpa(q, k, v, out, Lq, Lk, D, scale)) return out;
   constexpr int threads = 128;
   DISPATCH_FLOAT(q.dtype, T, {
     if (D <= 64) {
@@ -4706,6 +4716,383 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
     st<T>(outrow, d, total * inv_denom);
   }
 }
+
+// --------------------------------------------- EXP-APA-3: Q-tiled skeleton
+// The EXP-APA-2 kernels above are ONE-QUERY-ROW-PER-BLOCK: every query row
+// re-streams all of K and V from global memory, so at the DiT joint shape
+// (2,16,4442,64) the pure streaming skeleton costs 152 ms/call against the
+// cuBLAS-composed 37 ms (EXP-APA-2 K-PERF receipt) — a data-reuse deficit,
+// not an APA cost (the APA machinery adds only ~45 ms on top).
+//
+// This Q-tiled rewrite is flash-attention-shaped:
+//   * a TILE of kQtTQ=64 query rows is resident per CTA (Q staged once into
+//     shared memory, held for the whole call),
+//   * K/V (and, for APA, the packed-INT4 bulk K) are staged through shared
+//     memory in kQtTK=32-key tiles and REUSED by all 64 resident queries, so
+//     K/V global traffic drops by ~64x vs the streaming skeleton,
+//   * QK^T (exact and INT4-dequant bulk) runs on tensor cores: WMMA
+//     m16n16k16 HMMA, fp16 operands, fp32 accumulators — products of fp16
+//     values are exact in fp32, so this is the same value class as the
+//     streaming kernel's fp32 shfl-tree dot, differing only in summation
+//     ORDER (the gates' allowed reduction-order slack),
+//   * softmax weights and the PV accumulation stay fp32 on CUDA cores
+//     (fp16 P-fragments through HMMA would put ~2^-11 relative rounding on
+//     every softmax weight and break the registered K-SDPA gate class of
+//     fp32-weight streaming; PV is ~80 GFLOP at the DiT shape — cheap).
+//
+// dp4a/IMMA for the INT4 bulk pass was evaluated and REJECTED on semantics,
+// not speed: the registered bulk score is full-precision-fp16 Q dotted with
+// PER-ELEMENT fp16-ROUNDED dequantized K (f2h(code*scale)); an integer dot
+// would require quantizing Q and would abandon the per-element dq rounding —
+// both change bulk values on the lattice-tie-dominated threshold mask
+// (EXP-APA-2 measured up to 1.6e-1 rel-fro per fp16 ulp of threshold
+// motion). The bit-faithful bulk pass is dequant-HMMA by construction.
+//
+// APA two-pass structure on this skeleton: the fp16 threshold ladder needs
+// mean16 BEFORE the per-element (a-mean16)^2 terms, and the blend needs thr
+// before any weight, so the key axis is walked three times (sum, dd-sum,
+// blend). A 64-query bulk-score cache would be Tq*Lk*2B = 568 KB — far past
+// shared memory — so instead of caching, walks 2 and 3 RECOMPUTE the bulk
+// scores from the packed codes (32 B/key vs 128 B/key fp16 K) through the
+// exact same dequant+MMA+f2h(x*scale) path; the recomputation is
+// deterministic, so all three walks see bit-identical bulk16 values, which
+// is what the EXP-APA-2 shared-cache achieved. No Lq x Lk tensor and no
+// global workspace of any kind is materialized.
+//
+// fp32 inputs KEEP the streaming skeleton: TF32/HMMA tensor-core paths
+// cannot hold the registered fp32 K-SDPA class (1.3e-8), and fp32 CUDA-core
+// tiles would be a separate kernel for a dtype the DiT never runs at
+// attention (EXP-APA-2 dtype table: attention compute is fp16). Dispatch is
+// internal only — same ops, same signatures; TC_ATTN_QTILE=0 forces the
+// legacy streaming path (A/B receipts + the EXP-APA-2 reference outputs).
+//
+// Shared-memory budget per CTA (all static, no dynamic smem):
+//   Qs 64x72 fp16 = 9216 B, Ks 32x72 fp16 = 4608 B, Vs 32x72 fp16 = 4608 B,
+//   Ss 64x36 fp32 = 9216 B (scores, then reused as the fp32 weight tile),
+//   APA only: DQs 32x72 fp16 = 4608 B, Sb 64x40 fp16 = 5120 B.
+//   APA total ~36.5 KB (2 CTAs/SM on sm_89), SDPA ~27.6 KB (3 CTAs/SM).
+namespace qtile {
+
+constexpr int kTQ = 64;        // query rows resident per CTA
+constexpr int kTK = 32;        // K/V tile depth staged through shared memory
+constexpr int kD = 64;         // padded head_dim (actual D <= 64 zero-filled)
+constexpr int kLdH = kD + 8;   // fp16 tile leading dim (bank skew, mult of 8)
+constexpr int kLdS = kTK + 4;  // fp32 score tile leading dim (mult of 4)
+constexpr int kLdB = kTK + 8;  // fp16 bulk tile leading dim (mult of 8)
+constexpr int kThreads = 128;  // 4 warps x 16 query rows each
+
+// Stage a (rows_valid x D) fp16 global tile into zero-padded smem
+// [tile_rows][kLdH]. 16-byte vector path when rows are 16B-aligned (D%8==0).
+__device__ __forceinline__ void stage_half(const __half* __restrict__ g,
+                                           int rows_valid, int D,
+                                           int tile_rows,
+                                           __half* __restrict__ sh) {
+  const int tid = threadIdx.x;
+  if ((D & 7) == 0) {
+    constexpr int vpr = kD / 8;  // uint4 slots per padded row
+    const int dv = D / 8;
+    for (int i = tid; i < tile_rows * vpr; i += blockDim.x) {
+      const int r = i / vpr, c8 = i - r * vpr;
+      uint4 val = make_uint4(0u, 0u, 0u, 0u);
+      if (r < rows_valid && c8 < dv)
+        val = *reinterpret_cast<const uint4*>(g + (int64_t)r * D + c8 * 8);
+      *reinterpret_cast<uint4*>(sh + r * kLdH + c8 * 8) = val;
+    }
+  } else {
+    for (int i = tid; i < tile_rows * kD; i += blockDim.x) {
+      const int r = i / kD, c = i - r * kD;
+      __half val = __float2half(0.f);
+      if (r < rows_valid && c < D) val = g[(int64_t)r * D + c];
+      sh[r * kLdH + c] = val;
+    }
+  }
+}
+
+// Dequantize a packed-INT4 key tile into zero-padded fp16 smem. The fp16
+// values are the SAME __float2half(code * safe) the composed instrument
+// materializes and apa_int4_dequant2 reproduces — the dq rounding is
+// load-bearing for the threshold mask.
+__device__ __forceinline__ void stage_bulk_dq(const uint8_t* __restrict__ cbase,
+                                              const float* __restrict__ sbase,
+                                              int64_t j0, int rows_valid, int D,
+                                              __half* __restrict__ sh) {
+  const int tid = threadIdx.x;
+  const int half_d = D >> 1;
+  constexpr int pairs = kD / 2;
+  for (int i = tid; i < kTK * pairs; i += blockDim.x) {
+    const int r = i / pairs, b = i - r * pairs;
+    float d0 = 0.f, d1 = 0.f;
+    if (r < rows_valid && b < half_d) {
+      const uint8_t byte = cbase[(j0 + r) * half_d + b];
+      const float safe = sbase[j0 + r];
+      d0 = (float)((int)(byte & 0xF) - 7) * safe;
+      d1 = (float)((int)(byte >> 4) - 7) * safe;
+    }
+    sh[r * kLdH + 2 * b] = __float2half(d0);
+    sh[r * kLdH + 2 * b + 1] = __float2half(d1);
+  }
+}
+
+// One warp computes its 16-row band of the (kTQ x kTK) score tile:
+// C = A_band(16 x kD) * B^T(kD x kTK) via m16n16k16 HMMA, fp32 accumulate.
+// Bt is the K-layout (kTK x kLdH) smem tile; loading it col_major with
+// ldm=kLdH reads it as K^T. Ends with __syncwarp so the band is readable
+// across the lanes of this warp (no CTA-wide sync required: bands are
+// warp-disjoint).
+__device__ __forceinline__ void mma_scores(const __half* __restrict__ Qs,
+                                           const __half* __restrict__ Bt,
+                                           float* __restrict__ Ss, int warp) {
+  using namespace nvcuda;
+  #pragma unroll
+  for (int n = 0; n < kTK / 16; ++n) {
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> c;
+    wmma::fill_fragment(c, 0.f);
+    #pragma unroll
+    for (int kk = 0; kk < kD / 16; ++kk) {
+      wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> a;
+      wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> b;
+      wmma::load_matrix_sync(a, Qs + (16 * warp) * kLdH + kk * 16, kLdH);
+      wmma::load_matrix_sync(b, Bt + (16 * n) * kLdH + kk * 16, kLdH);
+      wmma::mma_sync(c, a, b, c);
+    }
+    wmma::store_matrix_sync(Ss + (16 * warp) * kLdS + 16 * n, c, kLdS,
+                            wmma::mem_row_major);
+  }
+  __syncwarp();
+}
+
+// kAPA=true : EXP-APA-2 semantics at r<1 — INT4 bulk + fp16 threshold ladder
+//             (overflow included) + mix_scores blend + fp16 score rounding.
+// kAPA=false: exact streaming SDPA math (fused_sdpa_noncausal semantics and
+//             the APA refine_all case) — scores stay fp32, no bulk walks.
+// Row ownership: warp w owns rows 16w..16w+15; a LANE PAIR owns one row
+// (sub = lane&1 -> score columns [16*sub,16*sub+16) of each K tile and
+// output columns [32*sub, 32*sub+32)); per-row softmax state (m, l) and the
+// threshold ladder live in registers, pair-combined with shfl_xor.
+template <bool kAPA>
+__global__ void __launch_bounds__(kThreads)
+attn_noncausal_f16_kernel(const __half* __restrict__ q,
+                          const __half* __restrict__ k,
+                          const uint8_t* __restrict__ codes,
+                          const float* __restrict__ kscale,
+                          const __half* __restrict__ v,
+                          __half* __restrict__ out, int Lq, int Lk, int D,
+                          int num_qtiles, float scale, float zthr,
+                          float inv_cnt) {
+  const int tile = blockIdx.x % num_qtiles;
+  const int64_t bh = blockIdx.x / num_qtiles;
+  const int q0 = tile * kTQ;
+  const int qrows = min(kTQ, Lq - q0);
+  const int lane = threadIdx.x & 31;
+  const int warp = threadIdx.x >> 5;
+  const int half_d = D >> 1;
+  constexpr unsigned FULL = 0xffffffffu;
+
+  const __half* qbase = q + (bh * Lq + q0) * (int64_t)D;
+  const __half* kbase = k + bh * (int64_t)Lk * D;
+  const __half* vbase = v + bh * (int64_t)Lk * D;
+  const uint8_t* cbase = kAPA ? codes + bh * (int64_t)Lk * half_d : nullptr;
+  const float* sbase = kAPA ? kscale + bh * (int64_t)Lk : nullptr;
+
+  __shared__ __half Qs[kTQ * kLdH];
+  __shared__ __half Ks[kTK * kLdH];
+  __shared__ __half Vs[kTK * kLdH];
+  __shared__ float Ss[kTQ * kLdS];
+  __shared__ __half DQs[kAPA ? kTK * kLdH : 2];
+  __shared__ __half Sb[kAPA ? kTQ * kLdB : 2];
+
+  stage_half(qbase, qrows, D, kTQ, Qs);
+  __syncthreads();
+
+  const int rloc = 16 * warp + (lane >> 1);  // CTA-local query row
+  const int sub = lane & 1;
+  const int ntiles = (Lk + kTK - 1) / kTK;
+
+  float thr = -3.0e38f;  // refine-everything unless the APA stats say else
+  if constexpr (kAPA) {
+    // Walk 1: bulk INT4 scores -> fp32 sum of |bulk16| per row, then the
+    // engine reduce_sum/mul_scalar fp16 ladder (saturation to +inf INCLUDED
+    // — the EXP-APA-2 finding; those rows refine nothing).
+    float psum = 0.f;
+    for (int t = 0; t < ntiles; ++t) {
+      const int64_t j0 = (int64_t)t * kTK;
+      const int jrows = min(kTK, Lk - (int)j0);
+      stage_bulk_dq(cbase, sbase, j0, jrows, D, DQs);
+      __syncthreads();
+      mma_scores(Qs, DQs, Ss, warp);
+      float part = 0.f;
+      #pragma unroll
+      for (int c = 0; c < 16; ++c) {
+        const int j = 16 * sub + c;
+        if (j < jrows)
+          part += fabsf(__half2float(__float2half(Ss[rloc * kLdS + j] * scale)));
+      }
+      psum += part;
+      __syncthreads();
+    }
+    psum += __shfl_xor_sync(FULL, psum, 1);
+    const __half sum16 = __float2half(psum);              // reduce_sum output
+    const __half mean16 =
+        __float2half(__half2float(sum16) * inv_cnt);      // mul_scalar
+    const float meanv = __half2float(mean16);
+
+    // Walk 2: composed (a - mean)^2 fp16 chain -> variance/threshold ladder.
+    // Bulk scores are recomputed through the identical deterministic path,
+    // so the a values are bit-identical to walk 1's.
+    float psum2 = 0.f;
+    for (int t = 0; t < ntiles; ++t) {
+      const int64_t j0 = (int64_t)t * kTK;
+      const int jrows = min(kTK, Lk - (int)j0);
+      stage_bulk_dq(cbase, sbase, j0, jrows, D, DQs);
+      __syncthreads();
+      mma_scores(Qs, DQs, Ss, warp);
+      float part = 0.f;
+      #pragma unroll
+      for (int c = 0; c < 16; ++c) {
+        const int j = 16 * sub + c;
+        if (j < jrows) {
+          const float a =
+              fabsf(__half2float(__float2half(Ss[rloc * kLdS + j] * scale)));
+          const __half d16 = __float2half(a - meanv);     // sub
+          const float df = __half2float(d16);
+          part += __half2float(__float2half(df * df));    // mul
+        }
+      }
+      psum2 += part;
+      __syncthreads();
+    }
+    psum2 += __shfl_xor_sync(FULL, psum2, 1);
+    const __half ddsum16 = __float2half(psum2);           // reduce_sum output
+    const __half var16 =
+        __float2half(__half2float(ddsum16) * inv_cnt);    // mul_scalar
+    const __half std16 = __float2half(sqrtf(__half2float(var16)));  // sqrt
+    const __half sz16 = __float2half(__half2float(std16) * zthr);   // mul z
+    thr = __half2float(__float2half(meanv + __half2float(sz16)));   // add
+  }
+
+  // Walk 3 (the only walk for SDPA/refine_all): blend + online softmax + PV.
+  float m = -3.0e38f;
+  float l = 0.f;
+  float o[32];
+  #pragma unroll
+  for (int i = 0; i < 32; ++i) o[i] = 0.f;
+
+  for (int t = 0; t < ntiles; ++t) {
+    const int64_t j0 = (int64_t)t * kTK;
+    const int jrows = min(kTK, Lk - (int)j0);
+    stage_half(kbase + j0 * D, jrows, D, kTK, Ks);
+    stage_half(vbase + j0 * D, jrows, D, kTK, Vs);
+    if constexpr (kAPA) stage_bulk_dq(cbase, sbase, j0, jrows, D, DQs);
+    __syncthreads();
+
+    if constexpr (kAPA) {
+      // Bulk tile first (same f2h(x*scale) as walks 1-2), frozen into Sb,
+      // then the exact tile overwrites the same warp-owned Ss band.
+      mma_scores(Qs, DQs, Ss, warp);
+      #pragma unroll
+      for (int c = 0; c < 16; ++c) {
+        const int j = 16 * sub + c;
+        Sb[rloc * kLdB + j] = __float2half(Ss[rloc * kLdS + j] * scale);
+      }
+      __syncwarp();
+    }
+    mma_scores(Qs, Ks, Ss, warp);
+
+    // Score finalize + tile max (2 lanes per row; pair-combined).
+    float sv[16];
+    float tmax = -3.0e38f;
+    #pragma unroll
+    for (int c = 0; c < 16; ++c) {
+      const int j = 16 * sub + c;
+      float s = -3.0e38f;
+      if (j < jrows) {
+        if constexpr (kAPA) {
+          // mix_scores: refine = |bulk| >= thr -> exact (fp16-rounded), else
+          // the bulk score is KEPT (nothing dropped).
+          const float e16 = __half2float(
+              __float2half(Ss[rloc * kLdS + j] * scale));
+          const float bk = __half2float(Sb[rloc * kLdB + j]);
+          s = (fabsf(bk) >= thr) ? e16 : bk;
+        } else {
+          s = Ss[rloc * kLdS + j] * scale;  // fp32, unrounded (SDPA class)
+        }
+        tmax = fmaxf(tmax, s);
+      }
+      sv[c] = s;
+    }
+    tmax = fmaxf(tmax, __shfl_xor_sync(FULL, tmax, 1));
+    const float m_new = fmaxf(m, tmax);
+    const float corr = expf(m - m_new);
+
+    float wsum = 0.f;
+    #pragma unroll
+    for (int c = 0; c < 16; ++c) {
+      const int j = 16 * sub + c;
+      float w = 0.f;
+      if (j < jrows) {
+        w = expf(sv[c] - m_new);  // expf: U_EXP parity, as the legacy kernel
+        wsum += w;
+      }
+      Ss[rloc * kLdS + j] = w;  // Ss band becomes the fp32 weight tile
+    }
+    l = l * corr + (wsum + __shfl_xor_sync(FULL, wsum, 1));
+    m = m_new;
+    __syncwarp();  // pair lane's weight columns must be visible below
+
+    // PV on CUDA cores: fp32 weights x fp16 V, fp32 accumulate (the
+    // streaming kernel's precision class). Lane owns 32 output columns.
+    #pragma unroll
+    for (int i = 0; i < 32; ++i) o[i] *= corr;
+    for (int j = 0; j < jrows; ++j) {
+      const float w = Ss[rloc * kLdS + j];
+      const __half2* vrow =
+          reinterpret_cast<const __half2*>(Vs + j * kLdH + 32 * sub);
+      #pragma unroll
+      for (int i2 = 0; i2 < 16; ++i2) {
+        const float2 vv = __half22float2(vrow[i2]);
+        o[2 * i2] += w * vv.x;
+        o[2 * i2 + 1] += w * vv.y;
+      }
+    }
+    __syncthreads();  // Ks/Vs/DQs/Ss are re-staged next tile
+  }
+
+  const float inv = l > 0.f ? 1.f / l : 0.f;
+  if (rloc < qrows) {
+    __half* orow = out + (bh * Lq + q0 + rloc) * (int64_t)D;
+    #pragma unroll
+    for (int i = 0; i < 32; ++i) {
+      const int c = 32 * sub + i;
+      if (c < D) orow[c] = __float2half(o[i] * inv);
+    }
+  }
+}
+
+// TC_ATTN_QTILE=0 forces the legacy streaming skeleton (bit-identical
+// EXP-APA-2 reference outputs + A/B perf receipts). Read per call so one
+// process can compare both paths.
+inline bool enabled() {
+  const char* e = std::getenv("TC_ATTN_QTILE");
+  return !(e && std::strcmp(e, "0") == 0);
+}
+
+}  // namespace qtile
+
+bool qtile_launch_sdpa(const NDArray& q, const NDArray& k, const NDArray& v,
+                       NDArray& out, int Lq, int Lk, int D, float scale) {
+  if (q.dtype != DType::Float16 || D > 64 || !qtile::enabled()) return false;
+  const int num_qtiles = (Lq + qtile::kTQ - 1) / qtile::kTQ;
+  const int64_t blocks =
+      (int64_t)q.shape[0] * q.shape[1] * num_qtiles;  // <= rows64 <= INT_MAX
+  qtile::attn_noncausal_f16_kernel<false>
+      <<<(unsigned)blocks, qtile::kThreads>>>(
+          static_cast<__half*>(q.data_ptr()), static_cast<__half*>(k.data_ptr()),
+          nullptr, nullptr, static_cast<__half*>(v.data_ptr()),
+          static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles, scale,
+          0.f, 0.f);
+  cuda_check_last("fused_sdpa_noncausal[qtile]");
+  return true;
+}
 }  // namespace
 
 NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
@@ -4744,10 +5131,16 @@ NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
   constexpr int threads = 128;
   // engine mean = mul_scalar(sum, 1.0/cnt): double reciprocal cast to float.
   const float inv_cnt = (float)(1.0 / (double)Lk64);
-  // Per-row bulk cache in dynamic shared memory; stay under the 48 KB
-  // default static+dynamic budget (DiT joint is 4442 keys = 8.9 KB fp16).
+  // EXP-APA-3: Q-tiled skeleton for fp16 D<=64 (no Lk-dependent shared
+  // memory, so no key-length cap); fp32 and D>64 keep the streaming
+  // skeleton. TC_ATTN_QTILE=0 forces legacy (the EXP-APA-2 reference).
+  const bool use_qtile =
+      (q.dtype == DType::Float16 && D <= 64 && qtile::enabled());
+  // Per-row bulk cache in dynamic shared memory (legacy path only); stay
+  // under the 48 KB default static+dynamic budget (DiT joint is 4442 keys =
+  // 8.9 KB fp16).
   const size_t smem = refine_all ? 0 : (size_t)Lk * dtype_size(q.dtype);
-  if (smem > 44 * 1024)
+  if (!use_qtile && smem > 44 * 1024)
     throw std::runtime_error(
         "apa_int4_sdpa_noncausal: key sequence too long for the shared bulk "
         "cache (S*sizeof(dtype) must be <= 44KB); use the composed path");
@@ -4756,6 +5149,43 @@ NDArray apa_int4_sdpa_noncausal(const NDArray& q, const NDArray& k,
   // packed once per call; skipped entirely under refine_all.
   NDArray codes({B, H, Lk64, D64 / 2}, DType::Uint8, q.device);
   NDArray kscales({B, H, Lk64}, DType::Float32, q.device);
+  if (use_qtile) {
+    if (!refine_all) {
+      const int warps_per_block = threads / 32;
+      const int64_t pack_blocks =
+          (nkeys64 + warps_per_block - 1) / warps_per_block;
+      apa_int4_pack_kernel<__half><<<(unsigned)pack_blocks, threads>>>(
+          static_cast<__half*>(k.data_ptr()),
+          static_cast<uint8_t*>(codes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()), nkeys64, D);
+      cuda_check_last("apa_int4_pack");
+    }
+    const int num_qtiles = (Lq + qtile::kTQ - 1) / qtile::kTQ;
+    const int64_t blocks = (int64_t)B * H * num_qtiles;  // <= rows64
+    if (refine_all) {
+      // r >= 1: no bulk pass; the kernel is exact streaming SDPA (fp32
+      // scores, no fp16 rounding) — same as the legacy refine_all contract.
+      qtile::attn_noncausal_f16_kernel<false>
+          <<<(unsigned)blocks, qtile::kThreads>>>(
+              static_cast<__half*>(q.data_ptr()),
+              static_cast<__half*>(k.data_ptr()), nullptr, nullptr,
+              static_cast<__half*>(v.data_ptr()),
+              static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
+              scale, 0.f, 0.f);
+    } else {
+      qtile::attn_noncausal_f16_kernel<true>
+          <<<(unsigned)blocks, qtile::kThreads>>>(
+              static_cast<__half*>(q.data_ptr()),
+              static_cast<__half*>(k.data_ptr()),
+              static_cast<uint8_t*>(codes.data_ptr()),
+              static_cast<float*>(kscales.data_ptr()),
+              static_cast<__half*>(v.data_ptr()),
+              static_cast<__half*>(out.data_ptr()), Lq, Lk, D, num_qtiles,
+              scale, zthr, inv_cnt);
+    }
+    cuda_check_last("apa_int4_sdpa_noncausal[qtile]");
+    return out;
+  }
   DISPATCH_FLOAT(q.dtype, T, {
     if (!refine_all) {
       const int warps_per_block = threads / 32;
