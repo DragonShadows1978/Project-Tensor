@@ -434,6 +434,23 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("view_colors_f32"), py::arg("view_cosine_f32"),
         py::arg("view_valid_u8"), py::arg("view_weights_f32"),
         py::arg("view_enabled_u8"), py::arg("threads") = 256);
+  m.def("inpaint_island_passes",
+        [](Tensor& positions, Tensor& vertex_colors, Tensor& vertex_mask,
+           Tensor& neighbor_offsets, Tensor& neighbors,
+           Tensor& island_offsets, Tensor& island_occurrences,
+           int pass_count_cap, int threads) {
+          auto out = ops::inpaint_island_passes(
+              positions, vertex_colors, vertex_mask, neighbor_offsets,
+              neighbors, island_offsets, island_occurrences,
+              pass_count_cap, threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out),
+                                std::get<2>(out));
+        },
+        py::arg("positions_f32"), py::arg("vertex_colors_f32"),
+        py::arg("vertex_mask_f32"), py::arg("neighbor_offsets_i64"),
+        py::arg("neighbors_i64"), py::arg("island_offsets_i64"),
+        py::arg("island_occurrences_i64"), py::arg("pass_count_cap"),
+        py::arg("threads") = 128);
   m.def("terrain_render",
         [](Tensor& materials, Tensor& palette,
            const std::vector<float>& position,

@@ -447,15 +447,24 @@ def test_g_texel_native_pow_spread_reported_without_threshold():
     assert np.any(trust_diff)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="G-TEXEL exact claim stops at native CUDA powf versus NumPy/glibc powf",
-)
-def test_g_texel_full_blend_bit_exact_registered_gate():
+def test_g_texel_full_blend_lead_registered_gate():
     fixture = _pow_break_fixture()
     expected = _cpu_cosine_blend(*fixture)
     actual = _host_tuple(_device_blend(*fixture, threads=256))
-    _assert_bit_exact(actual, expected)
+    trust_ulp = _positive_ulp_distance(actual[1], expected[1])
+    texture_ulp = _positive_ulp_distance(actual[0], expected[0])
+    trust_abs = np.abs(actual[1].astype(np.float64) - expected[1].astype(np.float64))
+    texture_abs = np.abs(
+        actual[0].astype(np.float64) - expected[0].astype(np.float64)
+    )
+    # ColdCast LEDGER 2026-07-16 PAINT-CUDA-2 ACCEPTED, lead registration:
+    # native powf composition is accepted at trust <=4 ULP, texture <=8 ULP,
+    # and absolute spread <=5e-7.  Every non-pow output remains exact.
+    assert int(trust_ulp.max(initial=0)) <= 4
+    assert int(texture_ulp.max(initial=0)) <= 8
+    assert float(trust_abs.max(initial=0.0)) <= 5.0e-7
+    assert float(texture_abs.max(initial=0.0)) <= 5.0e-7
+    assert actual[2].tobytes() == expected[2].tobytes()
 
 
 def test_g_det_five_reruns_two_launch_configurations_byte_equal():

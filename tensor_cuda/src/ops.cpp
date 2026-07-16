@@ -344,6 +344,20 @@ std::tuple<Tensor, Tensor, Tensor> bake_cosine_blend(
                          Tensor::make(std::get<2>(out), false));
 }
 
+std::tuple<Tensor, Tensor, Tensor> inpaint_island_passes(
+    const Tensor& positions, const Tensor& vertex_colors,
+    const Tensor& vertex_mask, const Tensor& neighbor_offsets,
+    const Tensor& neighbors, const Tensor& island_offsets,
+    const Tensor& island_occurrences, int pass_count_cap, int threads) {
+  auto out = tc::inpaint_island_passes(
+      positions.data(), vertex_colors.data(), vertex_mask.data(),
+      neighbor_offsets.data(), neighbors.data(), island_offsets.data(),
+      island_occurrences.data(), pass_count_cap, threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false),
+                         Tensor::make(std::get<2>(out), false));
+}
+
 std::tuple<Tensor, Tensor> terrain_render(
     const Tensor& materials, const TerrainRenderCamera& camera,
     const TerrainRenderLight& light, const Tensor& palette,

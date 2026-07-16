@@ -138,6 +138,15 @@ std::tuple<Tensor, Tensor, Tensor> bake_cosine_blend(
     const Tensor& view_valid, const Tensor& view_weights,
     const Tensor& view_enabled, int threads = 256);
 
+// Non-differentiable PAINT-CUDA-3 ordered CSR island passes. Returns cloned
+// updated (vertex colors, vertex mask, final uncolored occurrences/island).
+std::tuple<Tensor, Tensor, Tensor> inpaint_island_passes(
+    const Tensor& positions, const Tensor& vertex_colors,
+    const Tensor& vertex_mask, const Tensor& neighbor_offsets,
+    const Tensor& neighbors, const Tensor& island_offsets,
+    const Tensor& island_occurrences, int pass_count_cap,
+    int threads = 128);
+
 // Non-differentiable fused terrain render.  All pixel work (ray generation,
 // DDA, normal/AO shading, and palette jitter) happens in one CUDA launch.
 std::tuple<Tensor, Tensor> terrain_render(

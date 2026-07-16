@@ -276,6 +276,116 @@ def bake_cosine_blend(
     )
 
 
+def build_inpaint_island_csr(
+    faces_i64,
+    vertex_islands_i64,
+    uncolored_occurrences_i64,
+):
+    """Build the PAINT-CUDA-3 stable CSR and segmented-island metadata on CPU.
+
+    Returns ``(neighbor_offsets_i64, neighbors_i64, active_island_ids_i64,
+    island_offsets_i64, island_occurrences_i64)`` as contiguous NumPy arrays.
+    Face/corner neighbor order and occurrence order within each island are
+    stable, matching the frozen mesh-inpaint oracle.
+    """
+    faces = np.ascontiguousarray(np.asarray(faces_i64, dtype=np.int64))
+    vertex_islands = np.ascontiguousarray(
+        np.asarray(vertex_islands_i64, dtype=np.int64)
+    )
+    occurrences = np.ascontiguousarray(
+        np.asarray(uncolored_occurrences_i64, dtype=np.int64)
+    )
+    if faces.ndim != 2 or faces.shape[1] != 3:
+        raise ValueError("faces_i64 must have shape (F, 3)")
+    if vertex_islands.ndim != 1:
+        raise ValueError("vertex_islands_i64 must have shape (V,)")
+    if occurrences.ndim != 1:
+        raise ValueError("uncolored_occurrences_i64 must have shape (O,)")
+    vertex_count = len(vertex_islands)
+    if np.any(vertex_islands < 0):
+        raise ValueError("vertex_islands_i64 must contain non-negative labels")
+    if np.any(faces < 0) or np.any(faces >= vertex_count):
+        raise ValueError("faces_i64 contains a vertex outside vertex_islands_i64")
+    if np.any(occurrences < 0) or np.any(occurrences >= vertex_count):
+        raise ValueError(
+            "uncolored_occurrences_i64 contains a vertex outside vertex_islands_i64"
+        )
+
+    sources = np.ascontiguousarray(faces.reshape(-1), dtype=np.int64)
+    targets = np.ascontiguousarray(
+        np.roll(faces, -1, axis=1).reshape(-1), dtype=np.int64
+    )
+    if len(sources) and np.any(vertex_islands[sources] != vertex_islands[targets]):
+        raise ValueError("vertex_islands_i64 splits an edge across island labels")
+    source_order = np.argsort(sources, kind="stable")
+    counts = np.bincount(sources, minlength=vertex_count).astype(
+        np.int64, copy=False
+    )
+    neighbor_offsets = np.empty(vertex_count + 1, dtype=np.int64)
+    neighbor_offsets[0] = 0
+    np.cumsum(counts, out=neighbor_offsets[1:])
+    neighbors = np.ascontiguousarray(targets[source_order], dtype=np.int64)
+
+    if len(occurrences):
+        occurrence_islands = vertex_islands[occurrences]
+        active_islands, inverse = np.unique(occurrence_islands, return_inverse=True)
+        island_order = np.argsort(inverse, kind="stable")
+        island_occurrences = np.ascontiguousarray(
+            occurrences[island_order], dtype=np.int64
+        )
+        island_counts = np.bincount(
+            inverse, minlength=len(active_islands)
+        ).astype(np.int64, copy=False)
+    else:
+        active_islands = np.empty(0, dtype=np.int64)
+        island_occurrences = np.empty(0, dtype=np.int64)
+        island_counts = np.empty(0, dtype=np.int64)
+    island_offsets = np.empty(len(active_islands) + 1, dtype=np.int64)
+    island_offsets[0] = 0
+    np.cumsum(island_counts, out=island_offsets[1:])
+    return (
+        np.ascontiguousarray(neighbor_offsets),
+        neighbors,
+        np.ascontiguousarray(active_islands, dtype=np.int64),
+        np.ascontiguousarray(island_offsets),
+        island_occurrences,
+    )
+
+
+def inpaint_island_passes(
+    positions_f32,
+    vertex_colors_f32,
+    vertex_mask_f32,
+    neighbor_offsets_i64,
+    neighbors_i64,
+    island_offsets_i64,
+    island_occurrences_i64,
+    pass_count_cap,
+    *,
+    threads=128,
+):
+    """Execute bounded reference-order mesh smoothing on segmented islands.
+
+    One warp owns one island and only lane zero visits its occurrences, so
+    disconnected islands run concurrently without reordering work inside an
+    island.  The call executes exactly ``pass_count_cap`` complete passes and
+    returns cloned updated colors/mask plus final uncolored counts by active
+    island.  Exact convergence/deadline policy remains host-side and normally
+    drives this primitive one pass per launch.
+    """
+    return _C.inpaint_island_passes(
+        positions_f32,
+        vertex_colors_f32,
+        vertex_mask_f32,
+        neighbor_offsets_i64,
+        neighbors_i64,
+        island_offsets_i64,
+        island_occurrences_i64,
+        operator.index(pass_count_cap),
+        operator.index(threads),
+    )
+
+
 _TERRAIN_RENDER_FROZEN_CONSTANTS = {
     "ambient_floor": np.float32(0.35),
     "ao_strength": np.float32(0.60),
@@ -983,7 +1093,8 @@ __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
     "matmul", "dda_raycast", "raster_winner_scatter_min",
     "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",
-    "bake_back_project", "bake_cosine_blend",
+    "bake_back_project", "bake_cosine_blend", "build_inpaint_island_csr",
+    "inpaint_island_passes",
     "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",

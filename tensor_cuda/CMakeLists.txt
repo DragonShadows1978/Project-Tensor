@@ -42,6 +42,7 @@ pybind11_add_module(_tensor_cuda
   src/kernels.cu
   src/paint_raster.cu
   src/paint_bake.cu
+  src/paint_inpaint.cu
   src/dda.cu
   src/terrain.cu
   src/terrain_objects.cu

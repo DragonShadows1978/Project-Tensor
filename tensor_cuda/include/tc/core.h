@@ -223,6 +223,17 @@ std::tuple<NDArray, NDArray, NDArray> bake_cosine_blend(
     const NDArray& view_valid, const NDArray& view_weights,
     const NDArray& view_enabled, int threads = 256);
 
+// PAINT-CUDA-3 bounded ordered island executor. CSR construction, component
+// labels, convergence/deadline checks, fallback, and receipts remain host-side.
+// One island maps to one warp and lane zero preserves in-island occurrence and
+// neighbor order. Returns cloned (colors, mask, final uncolored per island).
+std::tuple<NDArray, NDArray, NDArray> inpaint_island_passes(
+    const NDArray& positions, const NDArray& vertex_colors,
+    const NDArray& vertex_mask, const NDArray& neighbor_offsets,
+    const NDArray& neighbors, const NDArray& island_offsets,
+    const NDArray& island_occurrences, int pass_count_cap,
+    int threads = 128);
+
 // Precomputed camera terms for the fused terrain renderer.  The Python
 // wrapper derives these from the frozen Project-Scorch camera convention;
 // this keeps the per-frame host work to a few scalar/vector calculations while

@@ -1,0 +1,62 @@
+{
+  "schema": "project-tensor-paint-cuda-3-combined-perf-v1",
+  "mapping": "one island per warp; lane zero ordered serial executor",
+  "timing_scope": "resident device inputs; wrapper plus output clone/allocation plus ordered kernel plus explicit synchronization; host build/upload excluded",
+  "fixture": {
+    "active_islands": 228,
+    "uncolored_occurrences": 2487,
+    "oracle_passes": 8,
+    "vertices": 1140,
+    "neighbor_entries": 4560,
+    "one_pass_launch_median_ms": 0.02857899926311802,
+    "fixed_8_pass_one_launch_median_ms": 0.08834250002109911,
+    "oracle_driver_8_one_pass_launches_median_ms": 0.31639850203646347,
+    "repeats": 20,
+    "peak_gpu_mib_over_baseline": 36
+  },
+  "production_synthetic": {
+    "distribution": "tensor_cuda/tests/paint_inpaint_dragon_distribution.json.txt",
+    "distribution_mode": "exact 55193-island dragon histogram duplicated for two material instances and deterministically shuffled",
+    "active_islands": 110386,
+    "uncolored_occurrences": 2895698,
+    "oracle_passes": 11,
+    "vertices": 1092370,
+    "neighbor_entries": 4369480,
+    "stable_neighbors_per_vertex": 4,
+    "theoretical_resident_input_mib": 93.77465057373047,
+    "one_pass_launch": {
+      "median_ms": 65.27959799859673,
+      "mean_ms": 65.34299433284711,
+      "min_ms": 63.7576609988173,
+      "max_ms": 66.9917240011273,
+      "repeats": 3
+    },
+    "fixed_11_pass_one_launch": {
+      "median_ms": 642.9475129989441,
+      "mean_ms": 641.399146332939,
+      "min_ms": 637.2833470013575,
+      "max_ms": 643.9665789985156,
+      "repeats": 3
+    },
+    "oracle_driver_11_one_pass_launches": {
+      "median_ms": 715.1900570024736,
+      "mean_ms": 714.9847166680653,
+      "min_ms": 713.3884130016668,
+      "max_ms": 716.3756800000556,
+      "repeats": 3,
+      "host_count_and_deadline_boundary_each_launch": true
+    }
+  },
+  "vram": {
+    "production_baseline_process_mib": 182,
+    "production_resident_inputs_process_mib": 286,
+    "production_one_pass_peak_process_mib": 320,
+    "production_oracle_driver_peak_process_mib": 352,
+    "peak_gpu_mib_over_baseline": 170,
+    "registered_rail_mib": 3072,
+    "rail_pass": true,
+    "post_benchmark_process_mib": 184,
+    "post_all_gpu_runs_whole_gpu_mib": 197,
+    "post_all_gpu_runs_utilization_percent": 0
+  }
+}
