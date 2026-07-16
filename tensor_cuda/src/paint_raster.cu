@@ -212,48 +212,6 @@ __global__ void triangle_winner_kernel(
   const float area = signed_area2(a, b, c);
   if (area == 0.0f) return;
 
-  // Coverage alone uses a vertex-ID canonical order.  Exact arithmetic makes
-  // barycentric inclusion permutation-invariant, but the frozen fp32/double
-  // sequence can otherwise open/close lattice-edge pixels when winding is
-  // reversed.  Canonical coverage gives both windings the same final support.
-  // Depth and resolve still use the caller's original order below, preserving
-  // the oracle's fp32 FMA association on every interior pixel.
-  int64_t canonical_indices[3] = {
-      triangle[0], triangle[1], triangle[2]};
-  if (canonical_indices[1] < canonical_indices[0]) {
-    const int64_t swap = canonical_indices[0];
-    canonical_indices[0] = canonical_indices[1];
-    canonical_indices[1] = swap;
-  }
-  if (canonical_indices[2] < canonical_indices[1]) {
-    const int64_t swap = canonical_indices[1];
-    canonical_indices[1] = canonical_indices[2];
-    canonical_indices[2] = swap;
-  }
-  if (canonical_indices[1] < canonical_indices[0]) {
-    const int64_t swap = canonical_indices[0];
-    canonical_indices[0] = canonical_indices[1];
-    canonical_indices[1] = swap;
-  }
-  const bool coverage_is_original =
-      canonical_indices[0] == triangle[0] &&
-      canonical_indices[1] == triangle[1] &&
-      canonical_indices[2] == triangle[2];
-  ScreenVertex coverage_a = a;
-  ScreenVertex coverage_b = b;
-  ScreenVertex coverage_c = c;
-  float coverage_area = area;
-  if (!coverage_is_original) {
-    coverage_a = project_vertex(
-        clip_positions, canonical_indices[0], height, width);
-    coverage_b = project_vertex(
-        clip_positions, canonical_indices[1], height, width);
-    coverage_c = project_vertex(
-        clip_positions, canonical_indices[2], height, width);
-    coverage_area = signed_area2(coverage_a, coverage_b, coverage_c);
-    if (coverage_area == 0.0f) return;
-  }
-
   float x_min = a.x;
   if (b.x < x_min) x_min = b.x;
   if (c.x < x_min) x_min = c.x;
@@ -286,14 +244,10 @@ __global__ void triangle_winner_kernel(
       const float py = __fadd_rn(static_cast<float>(py_index), 0.5f);
       Barycentric barycentric{};
       barycentric_at(a, b, c, px, py, area, &barycentric);
-      if (coverage_is_original) {
-        if (!covered(barycentric)) continue;
-      } else {
-        Barycentric coverage_barycentric{};
-        barycentric_at(coverage_a, coverage_b, coverage_c, px, py,
-                       coverage_area, &coverage_barycentric);
-        if (!covered(coverage_barycentric)) continue;
-      }
+      // Keep candidate membership on the caller's input vertex order, exactly
+      // like raster.py:470-522.  In particular, reuse these input-order
+      // barycentrics for both the inclusive coverage test and depth below.
+      if (!covered(barycentric)) continue;
       const int32_t depth =
           quantize_depth(interpolate_depth(barycentric, a, b, c));
       const uint64_t key = pack_winner(depth, one_based_face);

@@ -421,8 +421,14 @@ def test_g1_winding_and_shared_edge_final_ownership():
         np.testing.assert_array_equal(actual_buffer, expected_buffer)
 
     reversed_faces = np.ascontiguousarray(faces[:, ::-1])
+    reversed_expected = _numpy_rasterize_clip(
+        clip, reversed_faces, height, width
+    )
     reversed_result = _cuda_raster(clip, reversed_faces, height, width)
-    np.testing.assert_array_equal(reversed_result[0] > 0, actual[0] > 0)
+    for actual_buffer, expected_buffer in zip(
+        reversed_result, reversed_expected, strict=True
+    ):
+        np.testing.assert_array_equal(actual_buffer, expected_buffer)
 
     first_only = _numpy_rasterize_clip(clip, faces[:1], height, width)[0] > 0
     second_only = _numpy_rasterize_clip(clip, faces[1:], height, width)[0] > 0
@@ -511,7 +517,7 @@ def test_g4_five_reruns_and_two_launch_configurations_are_byte_equal():
 
 
 @pytest.mark.parametrize("fixture_name", tuple(PARITY_FIXTURES))
-def test_g5_cpu_parity_interior_bit_exact_boundary_reported(fixture_name):
+def test_g5_cpu_parity_is_bit_exact(fixture_name):
     clip, faces, height, width = PARITY_FIXTURES[fixture_name]()
     expected = _numpy_rasterize_clip(clip, faces, height, width)
     actual = _cuda_raster(clip, faces, height, width, face_threads=128, pixel_threads=256)
@@ -533,5 +539,7 @@ def test_g5_cpu_parity_interior_bit_exact_boundary_reported(fixture_name):
         f"percent={boundary_percent:.9f}%",
         flush=True,
     )
-    # Boundary divergence is measurement-only in this leg: deliberately no
-    # threshold or zero-divergence assertion here.
+    assert boundary_divergence == 0, (
+        f"{fixture_name}: input-order CUDA coverage must match the frozen "
+        "CPU oracle at every boundary pixel"
+    )
