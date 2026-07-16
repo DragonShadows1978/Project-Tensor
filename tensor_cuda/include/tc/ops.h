@@ -69,6 +69,10 @@ Tensor int4_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
 Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                          const Tensor& scales, const Tensor& zeros,
                          int group_size);
+// Frozen-weight inference primitive. Backward is intentionally unsupported:
+// rebuilding a full FP16 weight there would violate the no-transient contract.
+Tensor w8a16_matmul(const Tensor& x, const Tensor& codes,
+                    const Tensor& scales, int launch_config = 0);
 Tensor intn_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
                    const Tensor& zeros, int bits, int64_t in_features,
                    int group_size);

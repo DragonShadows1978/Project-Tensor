@@ -571,6 +571,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("int4_linear_fused", &ops::int4_linear_fused,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("group_size") = 128);
+  m.def("w8a16_matmul", &ops::w8a16_matmul,
+        py::arg("x"), py::arg("codes"), py::arg("scales"),
+        py::arg("launch_config") = 0);
   m.def("intn_linear", &ops::intn_linear,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("bits"), py::arg("in_features"),

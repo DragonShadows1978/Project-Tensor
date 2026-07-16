@@ -370,6 +370,17 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros, int group_size);
 
+// Trinity-compatible symmetric INT8 weight / FP16 activation GEMM.
+//   x      : (..., K) fp16; leading dimensions are flattened then restored
+//   codes  : (N, K) uint8 with signed q represented as code = q + 128
+//   scales : (N, K/32) fp16; w[n,k] = fp16((code-128) * scale[n,k/32])
+// K must be positive and divisible by 32. The fixed [N,K] weight broadcasts
+// over every leading activation dimension. launch_config 0 is an m64n16 CTA;
+// launch_config 1 is m16n64. Both stage dequantized FP16 weight tiles in
+// shared memory and accumulate in FP32 without a full-weight transient.
+NDArray w8a16_matmul(const NDArray& x, const NDArray& codes,
+                     const NDArray& scales, int launch_config);
+
 // Packed low-bit weight path for experimental INT2/INT3 loaders.
 //   packed : (N, ceil(K*bits/8)) uint8, little-endian bit stream per row
 //   bits   : 2 or 3 for this first native path
