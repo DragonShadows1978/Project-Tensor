@@ -191,6 +191,23 @@ std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray> dda_raycast(
     const NDArray& grid, const NDArray& origins, const NDArray& directions,
     int max_steps);
 
+// PAINT-CUDA-1 deterministic raster primitives.  Packed uint64 winner keys
+// stay internal; public components use detached int64 NDArrays because uint64
+// is not a public engine dtype.  Winner order is signed int32 depth, then lower
+// positive one-based face ID.  Background is (INT32_MAX, 0).
+std::tuple<NDArray, NDArray> raster_winner_scatter_min(
+    const NDArray& pixel_indices, const NDArray& depth_keys,
+    const NDArray& face_ids, int64_t pixel_count, int threads = 256);
+std::tuple<NDArray, NDArray> raster_triangle_winners(
+    const NDArray& clip_positions, const NDArray& faces, int height, int width,
+    int face_threads = 256);
+std::tuple<NDArray, NDArray> raster_winner_resolve(
+    const NDArray& clip_positions, const NDArray& faces,
+    const NDArray& winner_face_ids, int pixel_threads = 256);
+std::tuple<NDArray, NDArray, NDArray> rasterize_clip(
+    const NDArray& clip_positions, const NDArray& faces, int height, int width,
+    int face_threads = 256, int pixel_threads = 256);
+
 // Precomputed camera terms for the fused terrain renderer.  The Python
 // wrapper derives these from the frozen Project-Scorch camera convention;
 // this keeps the per-frame host work to a few scalar/vector calculations while

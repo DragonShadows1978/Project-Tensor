@@ -278,6 +278,45 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
       Tensor::make(std::get<5>(out), false));
 }
 
+std::tuple<Tensor, Tensor> raster_winner_scatter_min(
+    const Tensor& pixel_indices, const Tensor& depth_keys,
+    const Tensor& face_ids, int64_t pixel_count, int threads) {
+  auto out = tc::raster_winner_scatter_min(
+      pixel_indices.data(), depth_keys.data(), face_ids.data(), pixel_count,
+      threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false));
+}
+
+std::tuple<Tensor, Tensor> raster_triangle_winners(
+    const Tensor& clip_positions, const Tensor& faces, int height, int width,
+    int face_threads) {
+  auto out = tc::raster_triangle_winners(
+      clip_positions.data(), faces.data(), height, width, face_threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false));
+}
+
+std::tuple<Tensor, Tensor> raster_winner_resolve(
+    const Tensor& clip_positions, const Tensor& faces,
+    const Tensor& winner_face_ids, int pixel_threads) {
+  auto out = tc::raster_winner_resolve(
+      clip_positions.data(), faces.data(), winner_face_ids.data(),
+      pixel_threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false));
+}
+
+std::tuple<Tensor, Tensor, Tensor> rasterize_clip(
+    const Tensor& clip_positions, const Tensor& faces, int height, int width,
+    int face_threads, int pixel_threads) {
+  auto out = tc::rasterize_clip(clip_positions.data(), faces.data(), height,
+                                width, face_threads, pixel_threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false),
+                         Tensor::make(std::get<2>(out), false));
+}
+
 std::tuple<Tensor, Tensor> terrain_render(
     const Tensor& materials, const TerrainRenderCamera& camera,
     const TerrainRenderLight& light, const Tensor& palette,

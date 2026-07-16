@@ -364,6 +364,47 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         },
         py::arg("grid_u8"), py::arg("origins_f32"),
         py::arg("directions_f32"), py::arg("max_steps"));
+  m.def("raster_winner_scatter_min",
+        [](Tensor& pixel_indices, Tensor& depth_keys, Tensor& face_ids,
+           int64_t pixel_count, int threads) {
+          auto out = ops::raster_winner_scatter_min(
+              pixel_indices, depth_keys, face_ids, pixel_count, threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out));
+        },
+        py::arg("pixel_indices_i64"), py::arg("depth_keys_i64"),
+        py::arg("face_ids_i64"), py::arg("pixel_count"),
+        py::arg("threads") = 256);
+  m.def("raster_triangle_winners",
+        [](Tensor& clip_positions, Tensor& faces, int height, int width,
+           int face_threads) {
+          auto out = ops::raster_triangle_winners(
+              clip_positions, faces, height, width, face_threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out));
+        },
+        py::arg("clip_positions_f32"), py::arg("faces_i64"),
+        py::arg("height"), py::arg("width"),
+        py::arg("face_threads") = 256);
+  m.def("raster_winner_resolve",
+        [](Tensor& clip_positions, Tensor& faces, Tensor& winner_face_ids,
+           int pixel_threads) {
+          auto out = ops::raster_winner_resolve(
+              clip_positions, faces, winner_face_ids, pixel_threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out));
+        },
+        py::arg("clip_positions_f32"), py::arg("faces_i64"),
+        py::arg("winner_face_i64"), py::arg("pixel_threads") = 256);
+  m.def("rasterize_clip",
+        [](Tensor& clip_positions, Tensor& faces, int height, int width,
+           int face_threads, int pixel_threads) {
+          auto out = ops::rasterize_clip(
+              clip_positions, faces, height, width, face_threads,
+              pixel_threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out),
+                                std::get<2>(out));
+        },
+        py::arg("clip_positions_f32"), py::arg("faces_i64"),
+        py::arg("height"), py::arg("width"),
+        py::arg("face_threads") = 256, py::arg("pixel_threads") = 256);
   m.def("terrain_render",
         [](Tensor& materials, Tensor& palette,
            const std::vector<float>& position,

@@ -106,6 +106,23 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> dda_raycast(
     const Tensor& grid, const Tensor& origins, const Tensor& directions,
     int max_steps);
 
+// Non-differentiable PAINT-CUDA-1 raster primitives.  Scatter/producer return
+// (signed depth, one-based face); resolve returns (depth, barycentric); the
+// convenience rasterizer mirrors the paint oracle as (face, barycentric,
+// depth).  All outputs are detached.
+std::tuple<Tensor, Tensor> raster_winner_scatter_min(
+    const Tensor& pixel_indices, const Tensor& depth_keys,
+    const Tensor& face_ids, int64_t pixel_count, int threads = 256);
+std::tuple<Tensor, Tensor> raster_triangle_winners(
+    const Tensor& clip_positions, const Tensor& faces, int height, int width,
+    int face_threads = 256);
+std::tuple<Tensor, Tensor> raster_winner_resolve(
+    const Tensor& clip_positions, const Tensor& faces,
+    const Tensor& winner_face_ids, int pixel_threads = 256);
+std::tuple<Tensor, Tensor, Tensor> rasterize_clip(
+    const Tensor& clip_positions, const Tensor& faces, int height, int width,
+    int face_threads = 256, int pixel_threads = 256);
+
 // Non-differentiable fused terrain render.  All pixel work (ray generation,
 // DDA, normal/AO shading, and palette jitter) happens in one CUDA launch.
 std::tuple<Tensor, Tensor> terrain_render(

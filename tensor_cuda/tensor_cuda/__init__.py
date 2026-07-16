@@ -133,6 +133,91 @@ def dda_raycast(grid_u8, origins_f32, directions_f32, max_steps):
     )
 
 
+def raster_winner_scatter_min(
+    pixel_indices_i64,
+    depth_keys_i64,
+    face_ids_i64,
+    pixel_count,
+    *,
+    threads=256,
+):
+    """Deterministic duplicate-aware winner scatter-min.
+
+    Returns ``(winner_depth_i64, winner_face_i64)`` of length ``pixel_count``.
+    Winner order is signed-int32 depth followed by lower positive one-based
+    face ID.  Packed uint64 keys stay internal; background is
+    ``(INT32_MAX, 0)``.  Detached, CUDA-only, and order-independent.
+    """
+    return _C.raster_winner_scatter_min(
+        pixel_indices_i64,
+        depth_keys_i64,
+        face_ids_i64,
+        pixel_count,
+        threads,
+    )
+
+
+def raster_triangle_winners(
+    clip_positions_f32,
+    faces_i64,
+    height,
+    width,
+    *,
+    face_threads=256,
+):
+    """Raster-produce deterministic depth/face winners from clip triangles.
+
+    Returns ``(winner_depth_i64[H,W], winner_face_i64[H,W])``.  Coverage is
+    the frozen exact barycentric conjunction for both windings, without an
+    epsilon or culling.  ``face_threads`` changes launch shape only.
+    """
+    return _C.raster_triangle_winners(
+        clip_positions_f32, faces_i64, height, width, face_threads
+    )
+
+
+def raster_winner_resolve(
+    clip_positions_f32,
+    faces_i64,
+    winner_face_i64,
+    *,
+    pixel_threads=256,
+):
+    """Resolve one won pixel per thread from the frozen fp32 operation order.
+
+    Returns ``(resolved_depth_i64[H,W], barycentric_f32[H,W,3])`` and writes
+    ``(INT32_MAX, [0,0,0])`` for background pixels.
+    """
+    return _C.raster_winner_resolve(
+        clip_positions_f32, faces_i64, winner_face_i64, pixel_threads
+    )
+
+
+def rasterize_clip(
+    clip_positions_f32,
+    faces_i64,
+    height,
+    width,
+    *,
+    face_threads=256,
+    pixel_threads=256,
+):
+    """Two-pass deterministic clip rasterizer.
+
+    Returns ``(face_ids_i64, barycentric_f32, depth_keys_i64)`` in the same
+    field order as the frozen paint oracle.  Winner selection uses internal
+    packed-key atomic minimum; attributes are recomputed after selection.
+    """
+    return _C.rasterize_clip(
+        clip_positions_f32,
+        faces_i64,
+        height,
+        width,
+        face_threads,
+        pixel_threads,
+    )
+
+
 _TERRAIN_RENDER_FROZEN_CONSTANTS = {
     "ambient_floor": np.float32(0.35),
     "ao_strength": np.float32(0.60),
@@ -838,7 +923,9 @@ apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
-    "matmul", "dda_raycast", "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
+    "matmul", "dda_raycast", "raster_winner_scatter_min",
+    "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",
+    "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",
     "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "apa_refine_stats", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
