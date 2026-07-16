@@ -207,10 +207,11 @@ def collect_vram_report() -> dict:
     activation_bytes = m * k * 2
     output_bytes = m * o * 2
     full_weight_fp16_bytes = o * k * 2
-    # Largest registered CTA: 16x32 half activations + 32x64 half weights +
-    # 64 half scales + four 16x16 FP32 spill tiles = 9,344 bytes. It is on-chip,
-    # not a CUDA-pool allocation.
-    tile_shared_bytes = 9344
+    # K0b's operand stage is 64x72 half activations + 64x72 half weights.
+    # Its lifetime does not overlap the 8x16x36 FP32 output spill, so both
+    # alias in one 18,432-byte static-shared union. It is on-chip, not a
+    # CUDA-pool allocation.
+    tile_shared_bytes = 18432
     allocator_slack = 64 * 1024
     fused_call_peak_delta = fused_peak - baseline
     assert fused_call_peak_delta <= output_bytes + allocator_slack
@@ -323,6 +324,20 @@ def test_w8a16_trinity_layout_and_batched_shape():
         assert got.shape == (2, 3, 96)
         assert got.dtype == np.float16
         assert np.array_equal(got, np.zeros_like(got))
+
+
+def test_w8a16_single_group_tail_matches_two_stage():
+    """K is contracted at group-32, not tile-64: exercise the zero-padded
+    final half-stage plus M/N tails with nonzero values."""
+    case = {"family": "k32_tail", "shape": (7, 96), "O": 70}
+    x_t, codes_t, scales_t, _x, codes, scales = _device_inputs(case, 20260716)
+    w_nk = _dequant_fp16(codes, scales)
+    ref = tc.matmul(
+        x_t, tc.tensor(np.ascontiguousarray(w_nk.T), dtype="float16")
+    ).numpy()
+    for launch_config in LAUNCH_CONFIGS:
+        got = tc.w8a16_matmul(x_t, codes_t, scales_t, launch_config).numpy()
+        assert np.array_equal(got, ref)
 
 
 def test_w8a16_contract_errors():

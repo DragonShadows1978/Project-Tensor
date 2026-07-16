@@ -1,0 +1,442 @@
+{
+  "gate_registration": {
+    "Q-K0-ORACLE": "measurement only; no threshold registered by this seat",
+    "Q-K0-DET": "byte-equal reruns x5 for ['m64n16', 'm16n64']",
+    "Q-K0-VRAM": "pool high-water bounded by resident tensors plus output; positive-control full dequant",
+    "Q-K0-SUITE": "before/after recorded by the implementation run",
+    "performance": "report only; no threshold"
+  },
+  "oracle": [
+    {
+      "family": "conv_im2col_large_k8640",
+      "activation_shape": [
+        512,
+        8640
+      ],
+      "weight_shape": [
+        1280,
+        8640
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.00390625,
+      "rel_fro": 0.0004648498249177435,
+      "cosine": 0.9999998920103738
+    },
+    {
+      "family": "conv_im2col_large_k8640",
+      "activation_shape": [
+        512,
+        8640
+      ],
+      "weight_shape": [
+        1280,
+        8640
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.00390625,
+      "rel_fro": 0.0004648498249177435,
+      "cosine": 0.9999998920103738
+    },
+    {
+      "family": "conv_im2col_mid_k2880",
+      "activation_shape": [
+        512,
+        2880
+      ],
+      "weight_shape": [
+        640,
+        2880
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "conv_im2col_mid_k2880",
+      "activation_shape": [
+        512,
+        2880
+      ],
+      "weight_shape": [
+        640,
+        2880
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "attention_proj_320_batched",
+      "activation_shape": [
+        2,
+        128,
+        320
+      ],
+      "weight_shape": [
+        320,
+        320
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "attention_proj_320_batched",
+      "activation_shape": [
+        2,
+        128,
+        320
+      ],
+      "weight_shape": [
+        320,
+        320
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "attention_proj_1280",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        1280,
+        1280
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "attention_proj_1280",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        1280,
+        1280
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "ff_expand_1280_to_5120",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        5120,
+        1280
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "ff_expand_1280_to_5120",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        5120,
+        1280
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.0,
+      "rel_fro": 0.0,
+      "cosine": 1.0
+    },
+    {
+      "family": "ff_contract_5120_to_1280",
+      "activation_shape": [
+        512,
+        5120
+      ],
+      "weight_shape": [
+        1280,
+        5120
+      ],
+      "launch_config": "m64n16",
+      "max_abs": 0.00390625,
+      "rel_fro": 0.0004661591837317683,
+      "cosine": 0.9999998913722087
+    },
+    {
+      "family": "ff_contract_5120_to_1280",
+      "activation_shape": [
+        512,
+        5120
+      ],
+      "weight_shape": [
+        1280,
+        5120
+      ],
+      "launch_config": "m16n64",
+      "max_abs": 0.00390625,
+      "rel_fro": 0.0004661591837317683,
+      "cosine": 0.9999998913722087
+    }
+  ],
+  "determinism": [
+    {
+      "family": "attention_batched_det",
+      "launch_config": "m64n16",
+      "runs": 5,
+      "byte_equal": true,
+      "bytes_per_output": 87040
+    },
+    {
+      "family": "attention_batched_det",
+      "launch_config": "m16n64",
+      "runs": 5,
+      "byte_equal": true,
+      "bytes_per_output": 87040
+    }
+  ],
+  "vram": {
+    "family": "conv_im2col_large_k8640",
+    "activation_shape": [
+      512,
+      8640
+    ],
+    "weight_shape": [
+      1280,
+      8640
+    ],
+    "codes_bytes": 11059200,
+    "scales_bytes": 691200,
+    "activations_bytes": 8847360,
+    "output_bytes": 1310720,
+    "resident_bound_bytes": 21908480,
+    "max_static_shared_tile_bytes_per_cta": 9344,
+    "full_weight_fp16_transient_bytes": 22118400,
+    "allocator_used_before_call_bytes": 20597760,
+    "allocator_peak_during_call_bytes": 21908480,
+    "allocator_used_after_call_bytes": 21908480,
+    "fused_call_peak_delta_bytes": 1310720,
+    "reference_control_peak_delta_bytes": 23429120,
+    "allocator_slack_bound_bytes": 65536,
+    "full_weight_transient_observed": false
+  },
+  "performance": [
+    {
+      "family": "conv_im2col_large_k8640",
+      "activation_shape": [
+        512,
+        8640
+      ],
+      "weight_shape": [
+        1280,
+        8640
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.18675299361348152,
+      "w8a16_fused_median_ms": 1.8988789961440489,
+      "speedup_vs_fp16": 0.09834907542434813,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "conv_im2col_large_k8640",
+      "activation_shape": [
+        512,
+        8640
+      ],
+      "weight_shape": [
+        1280,
+        8640
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.18675299361348152,
+      "w8a16_fused_median_ms": 6.92670900025405,
+      "speedup_vs_fp16": 0.02696128761965199,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "conv_im2col_mid_k2880",
+      "activation_shape": [
+        512,
+        2880
+      ],
+      "weight_shape": [
+        640,
+        2880
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.04993399488739669,
+      "w8a16_fused_median_ms": 0.33932099177036434,
+      "speedup_vs_fp16": 0.14715857874537144,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "conv_im2col_mid_k2880",
+      "activation_shape": [
+        512,
+        2880
+      ],
+      "weight_shape": [
+        640,
+        2880
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.04993399488739669,
+      "w8a16_fused_median_ms": 0.7293980015674606,
+      "speedup_vs_fp16": 0.06845918796060534,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "attention_proj_320_batched",
+      "activation_shape": [
+        2,
+        128,
+        320
+      ],
+      "weight_shape": [
+        320,
+        320
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.013836004654876888,
+      "w8a16_fused_median_ms": 0.03993599966634065,
+      "speedup_vs_fp16": 0.34645444637606804,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "attention_proj_320_batched",
+      "activation_shape": [
+        2,
+        128,
+        320
+      ],
+      "weight_shape": [
+        320,
+        320
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.013836004654876888,
+      "w8a16_fused_median_ms": 0.04462400102056563,
+      "speedup_vs_fp16": 0.31005746545452884,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "attention_proj_1280",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        1280,
+        1280
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.04629700561054051,
+      "w8a16_fused_median_ms": 0.3082719922531396,
+      "speedup_vs_fp16": 0.15018232850853155,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "attention_proj_1280",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        1280,
+        1280
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.04629700561054051,
+      "w8a16_fused_median_ms": 1.1501429980853572,
+      "speedup_vs_fp16": 0.040253260409889136,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "ff_expand_1280_to_5120",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        5120,
+        1280
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.10349600051995367,
+      "w8a16_fused_median_ms": 0.8255599968833849,
+      "speedup_vs_fp16": 0.12536460210120026,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "ff_expand_1280_to_5120",
+      "activation_shape": [
+        512,
+        1280
+      ],
+      "weight_shape": [
+        5120,
+        1280
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.10349600051995367,
+      "w8a16_fused_median_ms": 3.374246007297188,
+      "speedup_vs_fp16": 0.030672333995841405,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "ff_contract_5120_to_1280",
+      "activation_shape": [
+        512,
+        5120
+      ],
+      "weight_shape": [
+        1280,
+        5120
+      ],
+      "launch_config": "m64n16",
+      "fp16_matmul_median_ms": 0.10911599383689463,
+      "w8a16_fused_median_ms": 1.085000010789372,
+      "speedup_vs_fp16": 0.10056773525514463,
+      "warmup": 2,
+      "iterations": 7
+    },
+    {
+      "family": "ff_contract_5120_to_1280",
+      "activation_shape": [
+        512,
+        5120
+      ],
+      "weight_shape": [
+        1280,
+        5120
+      ],
+      "launch_config": "m16n64",
+      "fp16_matmul_median_ms": 0.10911599383689463,
+      "w8a16_fused_median_ms": 3.878959993016906,
+      "speedup_vs_fp16": 0.02813021893325288,
+      "warmup": 2,
+      "iterations": 7
+    }
+  ]
+}

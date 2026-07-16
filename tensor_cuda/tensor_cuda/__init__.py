@@ -848,13 +848,16 @@ def w8a16_matmul(x, codes, scales, launch_config="m64n16"):
         x: Contiguous FP16 activation with shape ``(..., K)`` and rank >= 2.
         codes: UINT8 codes with shape ``(O, K)``; signed q is ``code - 128``.
         scales: FP16 scales with shape ``(O, K // 32)``.
-        launch_config: ``"m64n16"`` (default) or ``"m16n64"``.
+        launch_config: ``"m64n16"`` (default) or ``"m16n64"``. The K0 names
+            are retained as compatibility/determinism selectors; K0b routes
+            both to the production 64x64 reuse tile.
 
     Returns FP16 ``(..., O)`` with FP32 accumulation. K must be positive and
     divisible by 32. The fixed ``(O,K)`` weight broadcasts across every leading
     activation dimension, covering batched linears and im2col conv matrices.
-    Weight tiles are dequantized to FP16 shared memory; no full FP16 weight is
-    materialized. Frozen-weight inference only; backward is unsupported.
+    Four codes load together, weights are dequantized to FP16 shared memory,
+    and HMMA accumulates in FP32; no full FP16 weight is materialized. Frozen-
+    weight inference only; backward is unsupported.
     """
     configs = {"m64n16": 0, "m16n64": 1}
     try:
