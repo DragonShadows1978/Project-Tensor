@@ -317,6 +317,33 @@ std::tuple<Tensor, Tensor, Tensor> rasterize_clip(
                          Tensor::make(std::get<2>(out), false));
 }
 
+std::tuple<Tensor, Tensor, Tensor, Tensor> bake_back_project(
+    const Tensor& atlas_positions_h, const Tensor& view,
+    const Tensor& view_depth, const Tensor& view_reliable,
+    const Tensor& view_cosine, const Tensor& world_to_camera,
+    const Tensor& image_projection, float depth_threshold, int threads) {
+  auto out = tc::bake_back_project(
+      atlas_positions_h.data(), view.data(), view_depth.data(),
+      view_reliable.data(), view_cosine.data(), world_to_camera.data(),
+      image_projection.data(), depth_threshold, threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false),
+                         Tensor::make(std::get<2>(out), false),
+                         Tensor::make(std::get<3>(out), false));
+}
+
+std::tuple<Tensor, Tensor, Tensor> bake_cosine_blend(
+    const Tensor& view_colors, const Tensor& view_cosine,
+    const Tensor& view_valid, const Tensor& view_weights,
+    const Tensor& view_enabled, int threads) {
+  auto out = tc::bake_cosine_blend(
+      view_colors.data(), view_cosine.data(), view_valid.data(),
+      view_weights.data(), view_enabled.data(), threads);
+  return std::make_tuple(Tensor::make(std::get<0>(out), false),
+                         Tensor::make(std::get<1>(out), false),
+                         Tensor::make(std::get<2>(out), false));
+}
+
 std::tuple<Tensor, Tensor> terrain_render(
     const Tensor& materials, const TerrainRenderCamera& camera,
     const TerrainRenderLight& light, const Tensor& palette,

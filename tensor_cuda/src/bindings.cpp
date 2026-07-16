@@ -405,6 +405,35 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         py::arg("clip_positions_f32"), py::arg("faces_i64"),
         py::arg("height"), py::arg("width"),
         py::arg("face_threads") = 256, py::arg("pixel_threads") = 256);
+  m.def("bake_back_project",
+        [](Tensor& atlas_positions_h, Tensor& view, Tensor& view_depth,
+           Tensor& view_reliable, Tensor& view_cosine,
+           Tensor& world_to_camera, Tensor& image_projection,
+           float depth_threshold, int threads) {
+          auto out = ops::bake_back_project(
+              atlas_positions_h, view, view_depth, view_reliable,
+              view_cosine, world_to_camera, image_projection,
+              depth_threshold, threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out),
+                                std::get<2>(out), std::get<3>(out));
+        },
+        py::arg("atlas_positions_h_f32"), py::arg("view_f32"),
+        py::arg("view_depth_f32"), py::arg("view_reliable_u8"),
+        py::arg("view_cosine_f32"), py::arg("world_to_camera_f32"),
+        py::arg("image_projection_f32"), py::arg("depth_threshold"),
+        py::arg("threads") = 256);
+  m.def("bake_cosine_blend",
+        [](Tensor& view_colors, Tensor& view_cosine, Tensor& view_valid,
+           Tensor& view_weights, Tensor& view_enabled, int threads) {
+          auto out = ops::bake_cosine_blend(
+              view_colors, view_cosine, view_valid, view_weights,
+              view_enabled, threads);
+          return py::make_tuple(std::get<0>(out), std::get<1>(out),
+                                std::get<2>(out));
+        },
+        py::arg("view_colors_f32"), py::arg("view_cosine_f32"),
+        py::arg("view_valid_u8"), py::arg("view_weights_f32"),
+        py::arg("view_enabled_u8"), py::arg("threads") = 256);
   m.def("terrain_render",
         [](Tensor& materials, Tensor& palette,
            const std::vector<float>& position,

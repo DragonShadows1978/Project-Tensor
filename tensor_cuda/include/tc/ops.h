@@ -123,6 +123,21 @@ std::tuple<Tensor, Tensor, Tensor> rasterize_clip(
     const Tensor& clip_positions, const Tensor& faces, int height, int width,
     int face_threads = 256, int pixel_threads = 256);
 
+// Non-differentiable PAINT-CUDA-2 bake primitives.  Back-project returns
+// (valid, sampled color, sampled cosine, absolute depth delta), all aligned to
+// atlas_positions_h.  Blend returns (normalized texture, trust, valid) and
+// visits views in increasing dimension-0 order without atomics.
+std::tuple<Tensor, Tensor, Tensor, Tensor> bake_back_project(
+    const Tensor& atlas_positions_h, const Tensor& view,
+    const Tensor& view_depth, const Tensor& view_reliable,
+    const Tensor& view_cosine, const Tensor& world_to_camera,
+    const Tensor& image_projection, float depth_threshold,
+    int threads = 256);
+std::tuple<Tensor, Tensor, Tensor> bake_cosine_blend(
+    const Tensor& view_colors, const Tensor& view_cosine,
+    const Tensor& view_valid, const Tensor& view_weights,
+    const Tensor& view_enabled, int threads = 256);
+
 // Non-differentiable fused terrain render.  All pixel work (ray generation,
 // DDA, normal/AO shading, and palette jitter) happens in one CUDA launch.
 std::tuple<Tensor, Tensor> terrain_render(

@@ -218,6 +218,64 @@ def rasterize_clip(
     )
 
 
+def bake_back_project(
+    atlas_positions_h_f32,
+    view_f32,
+    view_depth_f32,
+    view_reliable_u8,
+    view_cosine_f32,
+    world_to_camera_f32,
+    image_projection_f32,
+    depth_threshold,
+    *,
+    threads=256,
+):
+    """Project atlas samples into one square view and bilinearly gather it.
+
+    Returns ``(valid_u8[N], colors_f32[N,C], cosine_f32[N],
+    depth_delta_f32[N])``.  Projection and four-tap interpolation preserve the
+    frozen paint oracle's fp32 operation order.  Invalid color/cosine rows are
+    zero; depth deltas remain reported for visibility diagnostics.
+    """
+    return _C.bake_back_project(
+        atlas_positions_h_f32,
+        view_f32,
+        view_depth_f32,
+        view_reliable_u8,
+        view_cosine_f32,
+        world_to_camera_f32,
+        image_projection_f32,
+        float(depth_threshold),
+        threads,
+    )
+
+
+def bake_cosine_blend(
+    view_colors_f32,
+    view_cosine_f32,
+    view_valid_u8,
+    view_weights_f32,
+    view_enabled_u8,
+    *,
+    threads=256,
+):
+    """Blend per-view atlas samples in frozen dimension-0 order.
+
+    Returns ``(texture_f32[N,C], trust_f32[N], valid_u8[N])``.  Cosine power,
+    positive-weight comparison, accumulation, and normalization are fused; no
+    view-sized weight tensor or cross-view atomic is created.  ``view_enabled``
+    carries the caller's deterministic overlap/skip decisions.
+    """
+    return _C.bake_cosine_blend(
+        view_colors_f32,
+        view_cosine_f32,
+        view_valid_u8,
+        view_weights_f32,
+        view_enabled_u8,
+        threads,
+    )
+
+
 _TERRAIN_RENDER_FROZEN_CONSTANTS = {
     "ambient_floor": np.float32(0.35),
     "ao_strength": np.float32(0.60),
@@ -925,6 +983,7 @@ __all__ = [
     "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
     "matmul", "dda_raycast", "raster_winner_scatter_min",
     "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",
+    "bake_back_project", "bake_cosine_blend",
     "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
     "export_rope_rows", "export_row_pair", "export_row_pairs",
     "swap_row_pairs_with_rope", "evict_row_pairs",

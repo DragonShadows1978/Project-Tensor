@@ -208,6 +208,21 @@ std::tuple<NDArray, NDArray, NDArray> rasterize_clip(
     const NDArray& clip_positions, const NDArray& faces, int height, int width,
     int face_threads = 256, int pixel_threads = 256);
 
+// PAINT-CUDA-2 bake primitives.  Back-project keeps one output row per input
+// atlas sample; cosine blend consumes views in dimension-0 order.  Indexed
+// atlas scatter remains outside this engine leg, so neither operation uses
+// floating atomics or has a duplicate-index policy.
+std::tuple<NDArray, NDArray, NDArray, NDArray> bake_back_project(
+    const NDArray& atlas_positions_h, const NDArray& view,
+    const NDArray& view_depth, const NDArray& view_reliable,
+    const NDArray& view_cosine, const NDArray& world_to_camera,
+    const NDArray& image_projection, float depth_threshold,
+    int threads = 256);
+std::tuple<NDArray, NDArray, NDArray> bake_cosine_blend(
+    const NDArray& view_colors, const NDArray& view_cosine,
+    const NDArray& view_valid, const NDArray& view_weights,
+    const NDArray& view_enabled, int threads = 256);
+
 // Precomputed camera terms for the fused terrain renderer.  The Python
 // wrapper derives these from the frozen Project-Scorch camera convention;
 // this keeps the per-frame host work to a few scalar/vector calculations while
