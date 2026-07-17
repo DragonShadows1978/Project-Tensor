@@ -662,6 +662,18 @@ Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                          int4_grad(x, packed, scales, zeros, group_size));
 }
 
+Tensor w8a16_matmul(const Tensor& x, const Tensor& codes,
+                    const Tensor& scales, int launch_config) {
+  NDArray out = tc::w8a16_matmul(x.data(), codes.data(), scales.data(),
+                                 launch_config);
+  return Tensor::from_op(out, {x}, "w8a16_matmul",
+                         [](const NDArray&) -> void {
+                           throw std::runtime_error(
+                               "w8a16_matmul backward is not implemented; "
+                               "the fused primitive is frozen-weight inference only");
+                         });
+}
+
 static GradFn intn_grad(const Tensor& x, const Tensor& packed,
                         const Tensor& scales, const Tensor& zeros, int bits,
                         int64_t in_features, int group_size) {

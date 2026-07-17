@@ -841,6 +841,34 @@ def int4_linear_fused(x, packed, scales, zeros, group_size=128):
     return _C.int4_linear_fused(x, packed, scales, zeros, group_size)
 
 
+def w8a16_matmul(x, codes, scales, launch_config="m64n16"):
+    """FP16 activations times Trinity-compatible group-32 symmetric-INT8 weights.
+
+    Args:
+        x: Contiguous FP16 activation with shape ``(..., K)`` and rank >= 2.
+        codes: UINT8 codes with shape ``(O, K)``; signed q is ``code - 128``.
+        scales: FP16 scales with shape ``(O, K // 32)``.
+        launch_config: ``"m64n16"`` (default) or ``"m16n64"``. The K0 names
+            are retained as compatibility/determinism selectors; K0b routes
+            both to the production 64x64 reuse tile.
+
+    Returns FP16 ``(..., O)`` with FP32 accumulation. K must be positive and
+    divisible by 32. The fixed ``(O,K)`` weight broadcasts across every leading
+    activation dimension, covering batched linears and im2col conv matrices.
+    Four codes load together, weights are dequantized to FP16 shared memory,
+    and HMMA accumulates in FP32; no full FP16 weight is materialized. Frozen-
+    weight inference only; backward is unsupported.
+    """
+    configs = {"m64n16": 0, "m16n64": 1}
+    try:
+        config_id = configs[launch_config]
+    except (KeyError, TypeError):
+        raise ValueError(
+            f"launch_config must be one of {tuple(configs)}, got {launch_config!r}"
+        ) from None
+    return _C.w8a16_matmul(x, codes, scales, config_id)
+
+
 def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     """Dequantize packed INT4 weight to a (K, N) transposed fp16/fp32 matrix."""
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
@@ -1102,6 +1130,7 @@ __all__ = [
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
+    "w8a16_matmul",
     "intn_linear", "intn_linear_fused",
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",

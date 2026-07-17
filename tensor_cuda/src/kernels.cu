@@ -3217,6 +3217,197 @@ NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
   return out;
 }
 
+// -------------------------------------- fused group-32 W8A16 tile GEMM (Q2-K0b)
+// y[M,N] = x[M,K] @ dequant(codes)[N,K]^T. Trinity stores one uint8 code per
+// weight with signed q represented by code=q+128, plus one fp16 scale per
+// [output, 32-K] group. Weight values are dequantized and ROUNDED to fp16 in
+// shared memory before HMMA consumes them, matching the explicit full-dequant-
+// to-fp16 reference. Accumulators remain fp32 until the final fp16 output store.
+// No global (N,K) dequant buffer exists.
+//
+// K0b replaces K0's four-warp 64x16 / 16x64, K=32 skeleton with the same
+// reuse discipline that closed EXP-APA-3/K1:
+//   * one eight-warp CTA owns a 64x64 output tile;
+//   * a 64-wide K slice is staged once and reused by every resident output
+//     fragment (64-way reuse of both activation and weight values);
+//   * activations load as aligned 16-byte vectors; codes load four-wide, with
+//     one scale load warp-broadcast to the eight code vectors in each group;
+//   * weights stay in their native [N,K] orientation in shared memory and feed
+//     WMMA B as col-major, avoiding K0's scalar shared-memory transpose;
+//   * +8 half bank skew mirrors K1's K/V staging layout;
+//   * the operand stage and fp32 output spill alias in a union because their
+//     lifetimes do not overlap (18,432 bytes total static shared memory).
+//
+// The two K0 launch-config names remain API/DET compatibility selectors and
+// intentionally dispatch this one production tile. K is still only required
+// to be divisible by 32: the final half-full K=64 stage is zero padded.
+constexpr int kW8Group = 32;
+constexpr int kW8TileM = 64;
+constexpr int kW8TileN = 64;
+constexpr int kW8TileK = 64;
+constexpr int kW8LdK = kW8TileK + 8;
+constexpr int kW8Warps = 8;
+constexpr int kW8WarpN = 32;
+constexpr int kW8CLd = kW8WarpN + 4;
+
+struct __align__(16) W8A16Operands {
+  __half x[kW8TileM][kW8LdK];
+  // Native code orientation [output_n][k] == col-major GEMM B[K,N].
+  __half w[kW8TileN][kW8LdK];
+};
+
+union __align__(16) W8A16Shared {
+  W8A16Operands op;
+  float c[kW8Warps][16][kW8CLd];
+};
+
+__global__ __launch_bounds__(256) void w8a16_gemm_kernel(
+    const __half* __restrict__ x, const uint8_t* __restrict__ codes,
+    const __half* __restrict__ scales, __half* __restrict__ y,
+    int M, int N, int K, int G) {
+  __shared__ W8A16Shared sh;
+
+  using namespace nvcuda;
+  const int tid = threadIdx.x;
+  const int warp = tid >> 5;
+  const int lane = tid & 31;
+  const int warp_m = warp >> 1;  // four 16-row warp bands
+  const int warp_n = warp & 1;   // each warp owns one 32-column band
+  const int block_m0 = (int)blockIdx.y * kW8TileM;
+  const int block_n0 = (int)blockIdx.x * kW8TileN;
+
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc0;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc1;
+  wmma::fill_fragment(acc0, 0.f);
+  wmma::fill_fragment(acc1, 0.f);
+
+  for (int k0 = 0; k0 < K; k0 += kW8TileK) {
+    // Two aligned 16-byte activation vectors per thread cover 64x64 halves.
+    #pragma unroll
+    for (int it = 0; it < 2; ++it) {
+      const int vi = tid + it * 256;
+      const int lm = vi >> 3;
+      const int lk = (vi & 7) << 3;
+      const int m = block_m0 + lm;
+      uint4 value = make_uint4(0u, 0u, 0u, 0u);
+      if (m < M && k0 + lk < K) {
+        value = *reinterpret_cast<const uint4*>(x + (int64_t)m * K + k0 + lk);
+      }
+      *reinterpret_cast<uint4*>(&sh.op.x[lm][lk]) = value;
+    }
+
+    // Four code vectors per thread cover 64x64 bytes. A half-warp owns one
+    // output row, so every uchar4 load is coalesced along the native K axis.
+    // Lanes 0/8 in each half-warp load the two group scales and broadcast.
+    #pragma unroll
+    for (int it = 0; it < 4; ++it) {
+      const int vi = tid + it * 256;
+      const int ln = vi >> 4;
+      const int kvec = vi & 15;
+      const int lk = kvec << 2;
+      const int n = block_n0 + ln;
+      const bool valid = n < N && k0 + lk < K;
+      float scale = 0.f;
+      if ((lane & 7) == 0 && valid) {
+        scale = __half2float(scales[(int64_t)n * G + ((k0 + lk) >> 5)]);
+      }
+      const int scale_lane = (lane & 16) + ((kvec >> 3) << 3);
+      scale = __shfl_sync(0xffffffffu, scale, scale_lane);
+
+      uchar4 cv = make_uchar4(128, 128, 128, 128);
+      if (valid) {
+        cv = *reinterpret_cast<const uchar4*>(codes + (int64_t)n * K + k0 + lk);
+      }
+      __half* dst = &sh.op.w[ln][lk];
+      dst[0] = __float2half_rn(((int)cv.x - 128) * scale);
+      dst[1] = __float2half_rn(((int)cv.y - 128) * scale);
+      dst[2] = __float2half_rn(((int)cv.z - 128) * scale);
+      dst[3] = __float2half_rn(((int)cv.w - 128) * scale);
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (int kk = 0; kk < kW8TileK; kk += 16) {
+      wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> a;
+      wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> b0;
+      wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> b1;
+      wmma::load_matrix_sync(a, &sh.op.x[warp_m * 16][kk], kW8LdK);
+      wmma::load_matrix_sync(b0, &sh.op.w[warp_n * kW8WarpN][kk], kW8LdK);
+      wmma::load_matrix_sync(b1, &sh.op.w[warp_n * kW8WarpN + 16][kk], kW8LdK);
+      wmma::mma_sync(acc0, a, b0, acc0);
+      wmma::mma_sync(acc1, a, b1, acc1);
+    }
+    // All warps must finish consuming the operand half of the union before
+    // any thread overwrites it with the next K stage (or final fp32 spill).
+    __syncthreads();
+  }
+
+  wmma::store_matrix_sync(&sh.c[warp][0][0], acc0, kW8CLd,
+                          wmma::mem_row_major);
+  wmma::store_matrix_sync(&sh.c[warp][0][16], acc1, kW8CLd,
+                          wmma::mem_row_major);
+  __syncwarp();
+  for (int i = lane; i < 16 * kW8WarpN; i += 32) {
+    const int lm = i >> 5;
+    const int ln = i & 31;
+    const int m = block_m0 + warp_m * 16 + lm;
+    const int n = block_n0 + warp_n * kW8WarpN + ln;
+    if (m < M && n < N)
+      y[(int64_t)m * N + n] = __float2half_rn(sh.c[warp][lm][ln]);
+  }
+}
+
+NDArray w8a16_matmul(const NDArray& x, const NDArray& codes,
+                     const NDArray& scales, int launch_config) {
+  const char* where = "w8a16_matmul";
+  if (x.dtype != DType::Float16)
+    throw std::runtime_error(std::string(where) + ": activations must be float16");
+  if (codes.dtype != DType::Uint8)
+    throw std::runtime_error(std::string(where) + ": codes must be uint8");
+  if (scales.dtype != DType::Float16)
+    throw std::runtime_error(std::string(where) + ": scales must be float16");
+  if (!x.device.is_cuda() || !codes.device.is_cuda() || !scales.device.is_cuda() ||
+      x.device.index != codes.device.index || x.device.index != scales.device.index)
+    throw std::runtime_error(std::string(where) + ": all inputs must share one CUDA device");
+  if (x.ndim() < 2)
+    throw std::runtime_error(std::string(where) + ": activations must have rank >= 2");
+  if (codes.ndim() != 2 || scales.ndim() != 2)
+    throw std::runtime_error(std::string(where) + ": codes and scales must be rank-2");
+  const int64_t K = x.shape.back();
+  if (K <= 0 || (K % kW8Group) != 0)
+    throw std::runtime_error(std::string(where) +
+                             ": activation K must be positive and divisible by 32");
+  const int64_t N = codes.shape[0];
+  if (codes.shape[1] != K)
+    throw std::runtime_error(std::string(where) + ": codes K mismatch");
+  if (scales.shape[0] != N || scales.shape[1] != K / kW8Group)
+    throw std::runtime_error(std::string(where) +
+                             ": scales shape must be (out_features, K/32)");
+  if (launch_config != 0 && launch_config != 1)
+    throw std::runtime_error(std::string(where) + ": launch_config must be 0 or 1");
+  const int64_t M = x.numel() / K;
+  if (M > std::numeric_limits<int>::max() || N > std::numeric_limits<int>::max() ||
+      K > std::numeric_limits<int>::max())
+    throw std::runtime_error(std::string(where) + ": dimensions exceed CUDA int limits");
+
+  Shape out_shape = x.shape;
+  out_shape.back() = N;
+  NDArray out(out_shape, DType::Float16, x.device);
+  if (M == 0 || N == 0) return out;
+
+  constexpr int threads = kW8Warps * 32;
+  dim3 grid((unsigned)((N + kW8TileN - 1) / kW8TileN),
+            (unsigned)((M + kW8TileM - 1) / kW8TileM));
+  w8a16_gemm_kernel<<<grid, threads>>>(
+      static_cast<__half*>(x.data_ptr()),
+      static_cast<uint8_t*>(codes.data_ptr()),
+      static_cast<__half*>(scales.data_ptr()),
+      static_cast<__half*>(out.data_ptr()), (int)M, (int)N, (int)K,
+      (int)(K / kW8Group));
+  cuda_check_last(where);
+  return out;
+}
+
 // ------------------------------------------------ packed INT2/INT3 quant linear
 // General low-bit weight path. Rows are bit-packed little-endian:
 // q[k]'s bit b is stored at bit offset k*bits+b within packed[row].
