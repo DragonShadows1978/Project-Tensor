@@ -1,16 +1,72 @@
 # Project Tensor
 
-A GPU-accelerated autograd tensor library built on CuPy. No PyTorch, no TensorFlow - just raw CUDA operations with automatic differentiation.
+A from-scratch GPU tensor engine: a native CUDA C++ extension
+(`tensor_cuda/`, CMake + nvcc, Release by default) with a full autograd
+Python layer. No PyTorch, no TensorFlow in any runtime path. It serves
+2B–20B-parameter LLMs interactively on consumer cards (RTX 3070 8GB /
+4070 SUPER 12GB) and is the substrate for the
+[GraftRepository](https://github.com/DragonShadows1978/GraftRepository)
+memory system, APA selective attention, the HY3D image→3D pipeline, and
+the ColdCast/Scorch rendering stack.
 
-## What is this?
+Discipline: every program in `docs/` is a plan (immutable) + ledger
+(receipts); claims below name their receipt. What failed is listed next
+to what worked.
 
-A from-scratch implementation of a deep learning tensor library with:
-- Automatic differentiation (autograd)
-- GPU acceleration via CuPy
-- Modern transformer optimizations
-- Production-ready features
+## WHAT RUNS ON IT (receipts in docs/ here and in GraftRepository/docs/)
 
-Built across 4 development cycles, evolving from 826 lines (v1) to 3,835 lines (v2).
+| Result | Number |
+|---|---|
+| MiniCPM3-4B (MLA, INT4) | decode 675 → **21.6 ms/token** (31×, fast stack: no_grad + pool + absorbed decode + fused GEMV/norm), parity-gated |
+| Qwen3-4B / Qwen3.5-9B (GQA) | 9B at **25 tok/s**; port gates: logit parity, bit-identical state restore, APA zero-flip |
+| Gemma-QAT 12B | exact q4_0 via symmetric-8 kernels, 31 tok/s; full 32K both phases on 12GB |
+| GPT-OSS-20B (MoE) | resident MXFP4 experts + sink-APA; **96k context PASSES on a 12GB card** (128k OOMs — measured ceiling); four-way stack: MXFP4 + iSWA + INT8 KV + APA-selective |
+| Trinity Nano (NoPE) | INT8 group-32 resident + fp32 compute, 8.8GiB with arena; NoPE dissolves the graft position-hole law |
+| APA (selective attention) | r0.15 engaged; GQA selection rule externally validated (26B kv=2 on a collaborator's 32GB card: 64K alive where Flash OOMs); first non-causal site (DiT) E2E-equivalent at INT4/r0.15 (docs/APA_PAPER_DRAFT.md) |
+| Quantized linears | native INT2/INT3/INT4/INT6/INT8 + MXFP4 experts + W8A16 group-32 fused tile-dequant (paint: 0.98–1.34× fp16, VRAM contract intact) |
+| INT4 backprop | int4_linear VJP + backward grad-wave freeing — a 62-layer INT4 reader trains its gradient path on 8GB |
+| GRM support ops | arena cache surgery, splice/inject hooks, CUDA route banks (GQA bridge 1.26–1.44× direct; MLA 1M-node route 2.22 ms — receipts in GraftRepository) |
+| HY3D-TC (image→3D) | E2E functional: 14/14 watertight; UniPC bit-exact vs diffusers; software rasterizer pixel-exact vs the CUDA oracle; texture paint (F2) complete |
+| Scorch/ColdCast ops | kernel renderer, dda_raycast, voxel pipeline primitives |
+| Kernel-opt program | closed with receipts: fused GEMV decode path + wins ledgered in docs/KERNEL_OPT_* (Phase 5 negative — see below) |
+
+## WHAT DOESN'T WORK / CLOSED NEGATIVE (same receipt discipline)
+
+- **APA is a multi-KV-head thing** — MQA fails it structurally (coherent
+  noise; KV slack pre-spent; D=512 blocks the fused kernel). Measured on
+  the Gemma port; scope law: "saving memory on storage is not APA."
+- **APA net cost where it doesn't select well**: on the 12B, +peak
+  memory, 3.5× prefill, ppl +1.5–1.9% engaged — the selection rule
+  (kv_heads≥2, bounded head_dim, long context) decides where it pays.
+- **Adaptive Ladder Attention (ALA): works, doesn't pay** — six-version
+  arc, correct per-site ladder policy; Amdahl ceiling 1.357× because the
+  skeleton, not attention, is the wall. Closed.
+- **CUDA-graph decode capture: parked** — +3% at gate; not worth the
+  complexity (branch `kernel-opt-phase2-parked`).
+- **fp16 threshold-ladder overflow law** — 76% of rows refine nothing in
+  fp16; fp32 is NOT parity with fp16 and must re-gate separately.
+- **Trinity INT4: dead** — group-size defect was fixed and INT4 stayed
+  dead; INT8 group-32 is the operating mode.
+- **128k on 12GB: OOM** — the GPT-OSS context ceiling sits in the
+  96k–128k band; receipts bracket it.
+- Engine gotchas with receipts: forgetting `no_grad` costs the 31×
+  decode win; `_NP_DTYPE` silent-downcast bug class; Tensor compare ops
+  take tensors, not scalars; a production `.so` shipped `-O0` for weeks
+  (CMake now defaults Release — check your build flags).
+
+## ENGINE MEASUREMENT LAWS (enforced by every gate here and downstream)
+
+- **First-run effect**: the first forward of a process differs ≤0.5
+  logit from all subsequent runs; warm runs are bit-identical — every
+  same-process A/B warms up before capturing side A.
+- **Matched-reference law**: compare against a reference produced under
+  the same numerics (fp16 goldens are noise draws — gate by
+  torch-own-spread vs an fp32 reference).
+- **Teacher-force any equivalence comparison** past the first greedy
+  divergence.
+- **E2E-is-arbiter** for generative pipelines (DiT/HY3D): kernel-level
+  deviation is judged by end-to-end output equivalence, not tensor
+  diffs alone.
 
 ## Installation
 
