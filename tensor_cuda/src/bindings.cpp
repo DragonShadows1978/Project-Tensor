@@ -571,6 +571,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("int4_linear_fused", &ops::int4_linear_fused,
         py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
         py::arg("group_size") = 128);
+  m.def("int6_linear", &ops::int6_linear,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("group_size") = 128);
+  m.def("int6_linear_fused", &ops::int6_linear_fused,
+        py::arg("x"), py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+        py::arg("group_size") = 128);
   m.def("w8a16_matmul", &ops::w8a16_matmul,
         py::arg("x"), py::arg("codes"), py::arg("scales"),
         py::arg("launch_config") = 0);
@@ -609,6 +615,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                            int group_size, const std::string& out_dtype) {
     return Tensor::make(
         tc::int4_dequant(packed.data(), scales.data(), zeros.data(), group_size,
+                         dtype_from_string(out_dtype)),
+        false);
+  }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),
+     py::arg("group_size") = 128, py::arg("out_dtype") = "float16");
+  m.def("int6_dequant", [](Tensor& packed, Tensor& scales, Tensor& zeros,
+                           int group_size, const std::string& out_dtype) {
+    return Tensor::make(
+        tc::int6_dequant(packed.data(), scales.data(), zeros.data(), group_size,
                          dtype_from_string(out_dtype)),
         false);
   }, py::arg("packed"), py::arg("scales"), py::arg("zeros"),

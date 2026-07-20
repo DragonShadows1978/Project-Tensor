@@ -9,6 +9,7 @@ from tensor_cuda.quantization import (
     packed_width,
     qmax,
     quantize_affine_per_group,
+    quantize_symmetric_per_group,
     symmetric_offset,
     unpack_lowbit,
 )
@@ -50,3 +51,37 @@ def test_symmetric_grid_math_is_explicit():
     np.testing.assert_allclose(deq, expected)
     assert qmax(2) == 3
     assert qmax(3) == 7
+
+
+def test_int6_four_values_per_three_bytes_layout():
+    codes = np.array([[1, 2, 3, 4]], dtype=np.uint8)
+    packed = pack_lowbit(codes, bits=6)
+
+    np.testing.assert_array_equal(
+        packed, np.array([[0x81, 0x30, 0x10]], dtype=np.uint8)
+    )
+    np.testing.assert_array_equal(unpack_lowbit(packed, 6, 4), codes)
+
+
+def test_int6_pack_roundtrip_covers_all_codes_and_group_boundaries():
+    codes = np.tile(np.arange(64, dtype=np.uint8), (3, 4))
+    packed = pack_lowbit(codes, bits=6)
+
+    assert packed.shape == (3, 192)
+    np.testing.assert_array_equal(unpack_lowbit(packed, 6, 256), codes)
+
+
+def test_int6_symmetric_quantizer_returns_empty_zeros():
+    rng = np.random.default_rng(106)
+    weights = rng.standard_normal((13, 256)).astype(np.float32)
+    q = quantize_symmetric_per_group(weights, bits=6, group_size=128)
+    deq = dequantize_symmetric_per_group(
+        q.packed, q.scales, q.bits, q.in_features, q.group_size
+    )
+
+    assert q.packed.shape == (13, 192)
+    assert q.scales.shape == (13, 2)
+    assert q.scales.dtype == np.float16
+    assert q.zeros.shape == (0,)
+    rel_fro = np.linalg.norm(deq - weights) / np.linalg.norm(weights)
+    assert rel_fro < 0.04

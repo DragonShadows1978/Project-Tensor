@@ -841,6 +841,25 @@ def int4_linear_fused(x, packed, scales, zeros, group_size=128):
     return _C.int4_linear_fused(x, packed, scales, zeros, group_size)
 
 
+def int6_linear(x, packed, scales, zeros, group_size=128):
+    """INT6 group-128 linear via full dequantization followed by matmul.
+
+    ``packed`` has shape ``(N, 3*K//4)``. An empty FP16 ``zeros`` tensor
+    selects the primary symmetric grid ``w = (q - 32) * scale``.
+    """
+    return _C.int6_linear(x, packed, scales, zeros, group_size)
+
+
+def int6_linear_fused(x, packed, scales, zeros, group_size=128):
+    """INT6 linear consuming packed weights directly.
+
+    Decode-shaped ``M == 1`` calls use the packed GEMV; larger activation
+    batches use the fused shared-memory tile path. No full FP16 weight is
+    materialized in either dispatch.
+    """
+    return _C.int6_linear_fused(x, packed, scales, zeros, group_size)
+
+
 def w8a16_matmul(x, codes, scales, launch_config="m64n16"):
     """FP16 activations times Trinity-compatible group-32 symmetric-INT8 weights.
 
@@ -872,6 +891,11 @@ def w8a16_matmul(x, codes, scales, launch_config="m64n16"):
 def int4_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
     """Dequantize packed INT4 weight to a (K, N) transposed fp16/fp32 matrix."""
     return _C.int4_dequant(packed, scales, zeros, group_size, out_dtype)
+
+
+def int6_dequant(packed, scales, zeros, group_size=128, out_dtype="float16"):
+    """Dequantize 4-values/3-bytes INT6 weights to a transposed ``(K, N)`` matrix."""
+    return _C.int6_dequant(packed, scales, zeros, group_size, out_dtype)
 
 
 def intn_linear(x, packed, scales, zeros, bits, in_features, group_size=128):
@@ -1130,11 +1154,12 @@ __all__ = [
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
+    "int6_linear", "int6_linear_fused",
     "w8a16_matmul",
     "intn_linear", "intn_linear_fused",
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
-    "int4_dequant", "intn_dequant", "apa_selective_attention",
+    "int4_dequant", "int6_dequant", "intn_dequant", "apa_selective_attention",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink", "argmax_last_axis",

@@ -13,6 +13,7 @@ from .affine import (
     packed_width,
     qmax,
     quantize_affine_per_group,
+    quantize_symmetric_per_group,
     symmetric_offset,
     unpack_lowbit,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "packed_width",
     "qmax",
     "quantize_affine_per_group",
+    "quantize_symmetric_per_group",
     "symmetric_offset",
     "unpack_lowbit",
 ]

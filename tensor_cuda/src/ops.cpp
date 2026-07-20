@@ -662,6 +662,33 @@ Tensor int4_linear_fused(const Tensor& x, const Tensor& packed,
                          int4_grad(x, packed, scales, zeros, group_size));
 }
 
+// INT6 mirrors the frozen-weight INT4 autograd contract: only activations have
+// a VJP, and the transposed dequantized weight exists only during backward.
+static GradFn int6_grad(const Tensor& x, const Tensor& packed,
+                        const Tensor& scales, const Tensor& zeros,
+                        int group_size) {
+  return [x, packed, scales, zeros, group_size](const NDArray& g) {
+    NDArray w_kn = tc::int6_dequant(packed.data(), scales.data(),
+                                    zeros.data(), group_size, g.dtype);
+    x.v->accumulate_grad(tc::matmul(g, w_kn, 1.f, /*trans_b=*/true));
+  };
+}
+Tensor int6_linear(const Tensor& x, const Tensor& packed, const Tensor& scales,
+                   const Tensor& zeros, int group_size) {
+  NDArray out = tc::int6_linear(x.data(), packed.data(), scales.data(),
+                                zeros.data(), group_size);
+  return Tensor::from_op(out, {x}, "int6_linear",
+                         int6_grad(x, packed, scales, zeros, group_size));
+}
+Tensor int6_linear_fused(const Tensor& x, const Tensor& packed,
+                         const Tensor& scales, const Tensor& zeros,
+                         int group_size) {
+  NDArray out = tc::int6_linear_fused(x.data(), packed.data(), scales.data(),
+                                      zeros.data(), group_size);
+  return Tensor::from_op(out, {x}, "int6_linear_fused",
+                         int6_grad(x, packed, scales, zeros, group_size));
+}
+
 Tensor w8a16_matmul(const Tensor& x, const Tensor& codes,
                     const Tensor& scales, int launch_config) {
   NDArray out = tc::w8a16_matmul(x.data(), codes.data(), scales.data(),

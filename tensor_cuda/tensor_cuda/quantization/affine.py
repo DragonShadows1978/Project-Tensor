@@ -61,6 +61,8 @@ def pack_lowbit(codes: np.ndarray, bits: int) -> np.ndarray:
         return _pack_even_lowbit(q.astype(np.uint8, copy=False), bits, rows, cols)
     if bits == 3:
         return _pack_int3(q.astype(np.uint8, copy=False), rows, cols)
+    if bits == 6 and cols % 4 == 0:
+        return _pack_int6(q.astype(np.uint8, copy=False), rows, cols)
     return _pack_lowbit_slow(q, bits, rows, cols)
 
 
@@ -76,6 +78,8 @@ def unpack_lowbit(packed: np.ndarray, bits: int, in_features: int) -> np.ndarray
             f"packed byte width mismatch: got {p.shape[1]}, expected {expected}"
         )
     rows = p.shape[0]
+    if bits == 6 and int(in_features) % 4 == 0:
+        return _unpack_int6(p, rows, int(in_features))
     codes = np.zeros((rows, int(in_features)), dtype=np.uint8)
     for row in range(rows):
         for col in range(int(in_features)):
@@ -125,6 +129,35 @@ def _pack_int3(q: np.ndarray, rows: int, cols: int) -> np.ndarray:
     return packed
 
 
+def _pack_int6(q: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    """Pack four 6-bit codes into three little-endian bytes."""
+    quads = q.reshape(rows, cols // 4, 4).astype(np.uint16, copy=False)
+    packed = np.empty((rows, cols // 4, 3), dtype=np.uint8)
+    packed[:, :, 0] = quads[:, :, 0] | ((quads[:, :, 1] & 0x03) << 6)
+    packed[:, :, 1] = ((quads[:, :, 1] >> 2) & 0x0F) | (
+        (quads[:, :, 2] & 0x0F) << 4
+    )
+    packed[:, :, 2] = ((quads[:, :, 2] >> 4) & 0x03) | (
+        quads[:, :, 3] << 2
+    )
+    return packed.reshape(rows, cols * 3 // 4)
+
+
+def _unpack_int6(packed: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    """Inverse of `_pack_int6`; `cols` is a multiple of four."""
+    triples = packed.reshape(rows, cols // 4, 3).astype(np.uint16, copy=False)
+    codes = np.empty((rows, cols // 4, 4), dtype=np.uint8)
+    codes[:, :, 0] = triples[:, :, 0] & 0x3F
+    codes[:, :, 1] = (triples[:, :, 0] >> 6) | (
+        (triples[:, :, 1] & 0x0F) << 2
+    )
+    codes[:, :, 2] = (triples[:, :, 1] >> 4) | (
+        (triples[:, :, 2] & 0x03) << 4
+    )
+    codes[:, :, 3] = triples[:, :, 2] >> 2
+    return codes.reshape(rows, cols)
+
+
 def _pack_lowbit_slow(q: np.ndarray, bits: int, rows: int, cols: int) -> np.ndarray:
     packed = np.zeros((rows, packed_width(cols, bits)), dtype=np.uint8)
     q64 = q.astype(np.uint64, copy=False)
@@ -169,6 +202,51 @@ def quantize_affine_per_group(
         packed=packed,
         scales=scales.astype(scale_dtype),
         zeros=zeros.astype(scale_dtype),
+        bits=bits,
+        in_features=in_features,
+        group_size=int(group_size),
+    )
+
+
+def quantize_symmetric_per_group(
+    weights: np.ndarray,
+    bits: int,
+    group_size: int = 128,
+    *,
+    scale_dtype=np.float16,
+) -> AffineQuantizedWeights:
+    """Quantize `(N, K)` weights onto the implicit-zero symmetric grid.
+
+    Codes dequantize as ``(q - 2**(bits-1)) * scale``. The one-scale grid has
+    a negative endpoint one step wider than its positive endpoint, so each
+    group uses ``max(max(w)/q_pos, -min(w)/q_neg)`` to avoid clipping either
+    side. ``zeros`` is an empty array, matching the CUDA empty-tensor selector.
+    """
+    bits = _validate_bits(bits)
+    if bits < 2:
+        raise ValueError("symmetric per-group quantization requires bits >= 2")
+    w = np.asarray(weights, dtype=np.float32)
+    if w.ndim != 2:
+        raise ValueError(f"weights must be rank-2, got shape {w.shape}")
+    out_features, in_features = w.shape
+    groups = _num_groups(in_features, group_size)
+    grouped = w.reshape(out_features, groups, int(group_size))
+    q_neg = 1 << (bits - 1)
+    q_pos = q_neg - 1
+    scales = np.maximum(
+        grouped.max(axis=2) / float(q_pos),
+        -grouped.min(axis=2) / float(q_neg),
+    )
+    scales = np.where(scales == 0, np.ones_like(scales), scales)
+    signed = np.clip(
+        np.round(grouped / scales[:, :, None]), -q_neg, q_pos
+    ).astype(np.int16)
+    codes = (signed + q_neg).astype(np.uint8)
+    packed = pack_lowbit(codes.reshape(out_features, in_features), bits)
+    return AffineQuantizedWeights(
+        packed=packed,
+        scales=scales.astype(scale_dtype),
+        zeros=np.empty((0,), dtype=scale_dtype),
         bits=bits,
         in_features=in_features,
         group_size=int(group_size),

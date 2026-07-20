@@ -370,6 +370,24 @@ NDArray int4_linear(const NDArray& x, const NDArray& packed,
 NDArray int4_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros, int group_size);
 
+// INT6 group-128 weight format. Four unsigned codes occupy three bytes in a
+// little-endian 24-bit word:
+//   word = q0 | (q1 << 6) | (q2 << 12) | (q3 << 18), q[i] in [0,63].
+// Equivalently b0 owns q0[5:0],q1[1:0]; b1 owns q1[5:2],q2[3:0]; and b2 owns
+// q2[5:4],q3[5:0]. Worked example: [1,2,3,4] -> [0x81,0x30,0x10].
+//   packed : (N, 3*K/4) uint8; K must be divisible by group_size == 128
+//   scales : (N, K/128) fp16
+//   zeros  : (N, K/128) fp16, or empty for z = -32*scale (primary path)
+// Dequant returns (K,N). `int6_linear_fused` consumes the packed rows directly:
+// M==1 dispatches GEMV; M>1 dispatches the shared-memory tile kernel.
+NDArray int6_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int group_size, DType out_dtype);
+NDArray int6_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int group_size);
+NDArray int6_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int group_size);
+
 // Trinity-compatible symmetric INT8 weight / FP16 activation GEMM.
 //   x      : (..., K) fp16; leading dimensions are flattened then restored
 //   codes  : (N, K) uint8 with signed q represented as code = q + 128
