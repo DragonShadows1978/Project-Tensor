@@ -55,5 +55,8 @@ columns.
   earlier scoring protocol failed that requirement.
 - “GRM certified” is intentionally absent from the rows above: no in-repo
   Project-Tensor document establishes the complete lifecycle gate.
-- Hunyuan3D-2.0 owns the APA-positive visual E2E receipt. Hunyuan3D-2.1 remains
-  `unconfirmed` for both its public TensorCUDA receipt and APA evaluation here.
+- ColdCast, a personal project (not publicly available), tests APA on
+  Project-Tensor outside text LLMs by replacing Hunyuan3D's shape transformer
+  with a torch-free TensorCUDA implementation. Its Hunyuan3D-2.0 target owns
+  the APA-positive visual E2E receipt. Hunyuan3D-2.1 remains `unconfirmed` for
+  both its public TensorCUDA receipt and APA evaluation here.

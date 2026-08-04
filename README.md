@@ -55,7 +55,7 @@ historical reports and `unconfirmed` cells.
 |---|---|---|
 | Adaptive Precision Attention (APA) | Allocates score precision at the attention score/softmax boundary; it is neither sparse attention nor KV compression | [APA overview](docs/APA.md) |
 | Graft Runtime Memory (GRM) | Captures, stores, routes, and mounts model-native attention state through model-specific dialects | [Matrix](docs/SUPPORT_MATRIX.md) |
-| Hunyuan3D transformer replacement (torch-free) | Replaces the Hunyuan3D-2.0 shape-generation runtime with TensorCUDA and supplies the non-causal visual APA E2E gate | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
+| ColdCast (personal project; not publicly available) | Tests APA on Project-Tensor outside text LLMs by replacing Hunyuan3D's shape transformer with a torch-free TensorCUDA implementation; supplies the Hunyuan3D-2.0 non-causal visual APA E2E gate | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
 
 ## Research and evaluation targets
 

@@ -55,6 +55,8 @@ mean.
 
 ## 3. The modality jump: Hunyuan3D transformer replacement (2026-07-13/14)
 
+ColdCast is a personal project (not publicly available) that tests APA on Project-Tensor outside text LLMs by replacing Hunyuan3D's shape transformer with a torch-free TensorCUDA implementation.
+
 **EXP-APA-1 — first bidirectional APA site ever.** Hunyuan3D-2.0 shape DiT
 (3072 latent tokens, joint attention with conditioner tokens; fully
 non-causal), INT4 bulk + r=0.15 exact refine (evidence: gate receipts
