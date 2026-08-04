@@ -3,8 +3,8 @@
 **Project-Tensor is a from-scratch CUDA tensor and inference engine for local
 AI workloads.** Its current native runtime is a C++/CUDA extension with a
 Python tensor/autograd layer and no PyTorch or TensorFlow dependency in the
-inference path. It runs quantized LLMs and the complete ColdCast Hunyuan3D
-image-to-3D pipeline on consumer NVIDIA GPUs.
+inference path. It runs quantized LLMs and the complete Hunyuan3D image-to-3D
+pipeline (its transformer replaced by TensorCUDA) on consumer NVIDIA GPUs.
 
 **The named models below are validation points, not a compatibility
 whitelist.** Support status is reported separately for TensorCUDA execution,
@@ -46,7 +46,7 @@ historical reports and `unconfirmed` cells.
 | [Gemma-4 12B / MQA](docs/GEMMA4_MQA_ADJUDICATION.md) | **Engine port**, **Parity-gated**; **APA negative** | [Adjudication](docs/GEMMA4_MQA_ADJUDICATION.md) |
 | GPT-OSS-20B | **Engine port** workload; later **APA positive** report | [Matrix](docs/SUPPORT_MATRIX.md) |
 | Trinity Nano | **Engine port**, **Parity-gated** | [Port ledger](docs/TRINITY_NANO_PORT_LEDGER.md) |
-| Hunyuan3D-2.0 shape DiT | Complete ColdCast **Engine port**; **APA positive** E2E visual receipt | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
+| Hunyuan3D-2.0 shape DiT | Complete **Engine port**; **APA positive** E2E visual receipt | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
 | Hunyuan3D-2.1 visual DiT + MoE | **Planned / unconfirmed** in local public receipts | [Matrix](docs/SUPPORT_MATRIX.md) |
 
 ## Research systems built on it
@@ -55,7 +55,7 @@ historical reports and `unconfirmed` cells.
 |---|---|---|
 | Adaptive Precision Attention (APA) | Allocates score precision at the attention score/softmax boundary; it is neither sparse attention nor KV compression | [APA overview](docs/APA.md) |
 | Graft Runtime Memory (GRM) | Captures, stores, routes, and mounts model-native attention state through model-specific dialects | [Matrix](docs/SUPPORT_MATRIX.md) |
-| ColdCast | Replaces the Hunyuan3D-2.0 shape-generation runtime with TensorCUDA and supplies the non-causal visual APA E2E gate | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
+| Hunyuan3D transformer replacement (torch-free) | Replaces the Hunyuan3D-2.0 shape-generation runtime with TensorCUDA and supplies the non-causal visual APA E2E gate | [Visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md) |
 
 ## Research and evaluation targets
 
@@ -84,7 +84,7 @@ NoPE/hybrid text, and bidirectional visual attention.
   [Trinity ledger](docs/TRINITY_NANO_PORT_LEDGER.md#2026-07-0809-t4-fp32-ab-disposition--semantic-parity-proven).
 - Hunyuan3D-2.0's APA E2E gate reported 199.9 s versus 242.8 s for the standard
   path, with 14/14 meshes watertight; see the
-  [visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-coldcast-2026-07-1314).
+  [visual receipt summary](docs/APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-hunyuan3d-transformer-replacement-2026-07-1314).
 
 ## Honest limits
 

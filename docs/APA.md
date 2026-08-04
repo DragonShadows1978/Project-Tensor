@@ -42,7 +42,7 @@ and MLA organization; it does not count models.
 | MLA, causal text | MiniCPM3-4B; GRAPA-232M | **APA positive** historical evaluations, including native training; see [paper](APA_PAPER_DRAFT.md#41-the-agnosticism-table) |
 | MoE text | OLMoE-1B-7B; GPT-OSS-20B; Trinity Nano | **APA boundary**, later **APA positive**, and **APA evaluated** / split results; see [matrix](SUPPORT_MATRIX.md) |
 | NoPE/hybrid text | Trinity Nano | **APA evaluated** / **APA boundary**: engaged on 14/14 eligible full layers, but token identity failed in the [ledger](TRINITY_NANO_PORT_LEDGER.md#t2--apa-selective-engagement--s8192) |
-| Bidirectional visual DiT | Hunyuan3D-2.0 shape transformer | **APA positive** E2E receipt in the [visual summary](APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-coldcast-2026-07-1314) |
+| Bidirectional visual DiT | Hunyuan3D-2.0 shape transformer | **APA positive** E2E receipt in the [visual summary](APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-hunyuan3d-transformer-replacement-2026-07-1314) |
 | Bidirectional visual DiT + MoE | Hunyuan3D-2.1 | **Planned / unconfirmed**; the 2.0 result does not transfer |
 
 ## 4. Positive results
@@ -56,7 +56,7 @@ and MLA organization; it does not count models.
   index](APA_PAPER_DRAFT.md#appendix-a--evidence-index-paths-for-the-authors-strip-before-submission).
 - Hunyuan3D-2.0 is the non-causal, non-text E2E result: 14/14 meshes were
   watertight, and the promoted fused path measured 199.9 seconds versus 242.8
-  seconds for the standard path. The [visual receipt summary](APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-coldcast-2026-07-1314)
+  seconds for the standard path. The [visual receipt summary](APA_VISUAL_TOKENS_PRIMER.md#3-the-modality-jump-hunyuan3d-transformer-replacement-2026-07-1314)
   records the quality and operating-point details.
 - GPT-OSS-20B is reported as a later long-context positive in the
   [visual/text receipt summary](APA_VISUAL_TOKENS_PRIMER.md#2-what-the-text-era-established-evidence-kernel-gates--perplexity--live-session-receipts).

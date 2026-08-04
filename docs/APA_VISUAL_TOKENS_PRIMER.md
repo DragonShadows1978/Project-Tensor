@@ -5,7 +5,7 @@ is a distributional claim about attention score vectors — nothing in it
 references language, causality, or positional scheme. As of 2026-07,
 that claim has receipts on both sides of the modality line: causal text
 attention (GPT-OSS, MiniCPM3, Qwen3.5, Trinity) and bidirectional
-visual attention (the Hunyuan3D-2.0 shape DiT inside ColdCast).
+visual attention (the Hunyuan3D-2.0 shape DiT in the torch-free TensorCUDA transformer replacement).
 
 David's formulation, verbatim (2026-07-15, before the visual receipts
 existed): *"It's an ATTENTION mechanism regardless of WHAT kind of
@@ -53,7 +53,7 @@ mean.
 - Scope law: "saving memory on storage is not APA." APA is a *compute/
   precision* asymmetry on live attention, not a KV-compression scheme.
 
-## 3. The modality jump (ColdCast, 2026-07-13/14)
+## 3. The modality jump: Hunyuan3D transformer replacement (2026-07-13/14)
 
 **EXP-APA-1 — first bidirectional APA site ever.** Hunyuan3D-2.0 shape DiT
 (3072 latent tokens, joint attention with conditioner tokens; fully
@@ -145,7 +145,7 @@ INT4-bulk / exact-tail primitive works, with domain-specific
 instrument calibration.** Two modalities down; the paint UNet is next.
 
 ---
-*Receipts: ColdCast LEDGER (EXP-APA-1/2, K1–K3), engine main
-(Q-tile/Welford kernels, 2026-07-14), [Gemma-4 12B adjudication](GEMMA4_MQA_ADJUDICATION.md)
+*Receipts: EXP-APA-1/2 and K1–K3 in the runtime-replacement project's
+internal ledger (not publicly available); engine main (Q-tile/Welford kernels, 2026-07-14), [Gemma-4 12B adjudication](GEMMA4_MQA_ADJUDICATION.md)
 (multi-KV law), Trinity T1 (NoPE), GPT-OSS 96k receipts. Evidence classes named
 inline per house rules.*
