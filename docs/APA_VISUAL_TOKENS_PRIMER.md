@@ -5,7 +5,7 @@ is a distributional claim about attention score vectors — nothing in it
 references language, causality, or positional scheme. As of 2026-07,
 that claim has receipts on both sides of the modality line: causal text
 attention (GPT-OSS, MiniCPM3, Qwen3.5, Trinity) and bidirectional
-visual attention (the Hunyuan3D shape DiT inside ColdCast).
+visual attention (the Hunyuan3D-2.0 shape DiT inside ColdCast).
 
 David's formulation, verbatim (2026-07-15, before the visual receipts
 existed): *"It's an ATTENTION mechanism regardless of WHAT kind of
@@ -43,18 +43,19 @@ mean.
 - Works across causal LLM families: GPT-OSS-20B (four-way stack, 96k
   context on a 12GB card), MiniCPM3, Qwen3.5-9B (zero-flip port gate),
   Trinity/NoPE (21% teacher-forcing flips, NLL-neutral).
-- **Structural law, not modality law (Gemma, negative result):** APA is
-  a multi-KV-head thing. MQA fails it structurally — one KV head means
+- **Structural law, not modality law — [Gemma-4 12B / MQA](GEMMA4_MQA_ADJUDICATION.md)
+  negative result:** APA is a multi-KV-head thing. [MQA on this target](GEMMA4_MQA_ADJUDICATION.md)
+  fails it structurally — one KV head means
   the "bulk" has no slack to spend; the failure is coherent noise, not
   degradation. Selection rule: kv_heads ≥ 2, plus geometry conditions
-  (head_dim bound, unbounded context, sufficient S). Externally
+  (head_dim bound, sufficiently long context, sufficient S). Externally
   boundary-validated (26B, kv=2, collaborator-reported).
 - Scope law: "saving memory on storage is not APA." APA is a *compute/
   precision* asymmetry on live attention, not a KV-compression scheme.
 
 ## 3. The modality jump (ColdCast, 2026-07-13/14)
 
-**EXP-APA-1 — first bidirectional APA site ever.** Hunyuan3D shape DiT
+**EXP-APA-1 — first bidirectional APA site ever.** Hunyuan3D-2.0 shape DiT
 (3072 latent tokens, joint attention with conditioner tokens; fully
 non-causal), INT4 bulk + r=0.15 exact refine (evidence: gate receipts
 + E2E generations):
@@ -64,6 +65,9 @@ non-causal), INT4 bulk + r=0.15 exact refine (evidence: gate receipts
   mid-trajectory.
 - 50-step full generation: **visually equivalent mesh** (+0.26% faces,
   watertight).
+
+This receipt belongs to Hunyuan3D-2.0. It does not establish APA evaluation on
+Hunyuan3D-2.1, whose APA status remains `unconfirmed`.
 
 The compounding-then-converging shape produced a law: **the full
 sampling trajectory is an attractor.** Short-trajectory fixtures are a
@@ -130,8 +134,9 @@ without modification.
 ## 6. Honest boundary of the claim
 
 APA is *not* free and *not* universal: it costs peak memory on some
-ports, it fails MQA structurally, prefill-heavy regimes can pay 3.5×
-(Gemma A0 receipts), and engaged-mode perplexity deltas of +1.5–1.9%
+ports, it fails [Gemma-4 12B's MQA geometry](GEMMA4_MQA_ADJUDICATION.md),
+prefill-heavy regimes can pay 3.5×, and engaged-mode perplexity deltas of
++1.5–1.9%
 exist on text ports that chose it for memory reasons. The claim this
 primer makes is narrower and better: **wherever attention has a
 multi-KV-head bulk-tail score geometry — text, mesh latents, and by
@@ -141,6 +146,6 @@ instrument calibration.** Two modalities down; the paint UNet is next.
 
 ---
 *Receipts: ColdCast LEDGER (EXP-APA-1/2, K1–K3), engine main
-(Q-tile/Welford kernels, 2026-07-14), Gemma mission close (multi-KV
-law), Trinity T1 (NoPE), GPT-OSS 96k receipts. Evidence classes named
+(Q-tile/Welford kernels, 2026-07-14), [Gemma-4 12B adjudication](GEMMA4_MQA_ADJUDICATION.md)
+(multi-KV law), Trinity T1 (NoPE), GPT-OSS 96k receipts. Evidence classes named
 inline per house rules.*
