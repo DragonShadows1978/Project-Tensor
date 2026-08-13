@@ -45,3 +45,31 @@ decisions, as they happen. Plan: `docs/APA_MQA_ROOTCAUSE_PLAN.md`
   by giving up tensor cores. kv=1 is the FASTEST geometry for both
   paths at decode (smallest KV stream) — consistent with "MQA is the
   kernel's best case," refuting any kv=1 speed penalty.
+
+## 2026-08-13 — E3 seat report (audit complete; GPU cells lead-run)
+
+- E3 Sol seat: same sandbox-no-GPU wall (5th ledgered instance).
+  Audit + harness delivered clean; protected-source SHA receipts
+  clean; zero fabrication (all GPU rows marked NOT MEASURED).
+- **T3 / H-D: CONFIRMED (static).** D=512 fused is kernel-legal
+  (kernels.cu:1847-1850 dispatch arm; rejection only >512 at
+  :1868-1869) but Gemma APA decode unconditionally dispatches
+  _cublas_blend_attention (gemma4_tc.py:562-579). Fused decode is
+  legal-but-unwired — June's "kernel-forbidden" clause is stale as a
+  mechanism claim; parity was measured against this wiring.
+- Branch census (audit): S=16K APA prefill = 4 standard + 7 blend +
+  161 fused chunks; decode = blend always.
+- kqb ring (static, bf16 mirror): 144 MiB as-built at S=16K
+  (128 exact + 16 capacity), 272 MiB at 32K.
+- 110MB item: strongest static suspect = blend live set, 3
+  score-shaped bf16 tensors = exactly 90 MiB at (L,S)=(320,3072).
+- **Static bound arithmetic (seat, cross-check pending live run):**
+  at S=16K eliminable global score/softmax transients ≈ 64 MiB
+  (adaptive chunking already caps standard-path chunks) vs exact-S
+  kqb 128 MiB → net −65 MiB; at 32K net −129 MiB. If live numbers
+  confirm: APA-as-designed is memory-NEGATIVE on this port because
+  the port's adaptive chunking already bounds the very transients
+  the fused path eliminates, while the bf16 kq ring mirrors the
+  whole MQA cache.
+- Lead-running the 6 GPU cells (4K/8K/16K × both modes) under flock;
+  logs/apamq_e3_leadrun.log (GraftRepository).
