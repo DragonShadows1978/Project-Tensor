@@ -1791,6 +1791,101 @@ inline int apa_selective_path_override() {
   return 0;
 }
 
+inline bool apa_df_env_enabled(const char* name) {
+  const char* value = std::getenv(name);
+  return value && value[0] != '\0' && value[0] != '0';
+}
+
+inline void apa_int4_fixed_partition_layout(int S, int& num_parts,
+                                            int& part_keys) {
+  part_keys = TC_APA_SPLITK_PART_KEYS;
+  num_parts = (S + part_keys - 1) / part_keys;
+  if (num_parts < 1) num_parts = 1;
+}
+
+inline void apa_int4_wave_partition_layout(int rows, int S, int& num_parts,
+                                           int& part_keys) {
+  // Enough partitions for one full target-SM wave. At rows=16 this is P=4
+  // on the registered 56-SM target.
+  const int wanted = rows > 0 ? (TC_APA_SM_COUNT + rows - 1) / rows : 1;
+  num_parts = wanted > 0 ? wanted : 1;
+  if (num_parts > S) num_parts = S;
+  // Align partition boundaries to a full 128-key thread sweep.
+  const int raw = (S + num_parts - 1) / num_parts;
+  part_keys = ((raw + 127) / 128) * 128;
+  num_parts = (S + part_keys - 1) / part_keys;
+  if (num_parts < 1) num_parts = 1;
+}
+
+inline void apa_int4_at_least_wave_partition_layout(
+    int rows, int S, int& num_parts, int& part_keys) {
+  int fixed_parts = 0, fixed_keys = 0;
+  int wave_parts = 0, wave_keys = 0;
+  apa_int4_fixed_partition_layout(S, fixed_parts, fixed_keys);
+  apa_int4_wave_partition_layout(rows, S, wave_parts, wave_keys);
+  if (fixed_parts >= wave_parts) {
+    num_parts = fixed_parts;
+    part_keys = fixed_keys;
+  } else {
+    num_parts = wave_parts;
+    part_keys = wave_keys;
+  }
+}
+
+inline int apa_int4_stats_partition_keys_override(int S) {
+  const char* value = std::getenv("TC_APA_STATS_PART_KEYS");
+  if (!value || !value[0]) return 0;
+  char* end = nullptr;
+  const long long parsed = std::strtoll(value, &end, 10);
+  if (end == value || end[0] != '\0' || parsed <= 0) return 0;
+  if (parsed < 128) return S < 128 ? S : 128;
+  if (parsed > S) return S;
+  return (int)parsed;
+}
+
+struct ApaInt4StageLayout {
+  int stats_parts = 1;
+  int stats_part_keys = 0;
+  int split_parts = 1;
+  int split_part_keys = 0;
+};
+
+inline ApaInt4StageLayout apa_int4_stage_layout(int rows, int S,
+                                                bool grid_fill,
+                                                bool cache_bulk,
+                                                bool split_stats) {
+  ApaInt4StageLayout layout;
+  if (split_stats) {
+    // V4 uses at least the fixed 2K-key oversubscription, while retaining a
+    // full SM wave for short sequences. The env override is a sweep lever.
+    apa_int4_at_least_wave_partition_layout(
+        rows, S, layout.stats_parts, layout.stats_part_keys);
+    const int override_keys = apa_int4_stats_partition_keys_override(S);
+    if (override_keys > 0) {
+      layout.stats_part_keys = override_keys;
+      layout.stats_parts = 1 + (S - 1) / override_keys;
+    }
+  } else {
+    layout.stats_part_keys = S;
+  }
+
+  // V3's one-wave layout remains useful while split rereads/dequantizes K.
+  // With V2, the cached-bulk split is much lighter per key; the measured
+  // 64K result needs the established 2K width (P=32), not V3's P=4.
+  if (grid_fill) {
+    if (cache_bulk)
+      apa_int4_at_least_wave_partition_layout(
+          rows, S, layout.split_parts, layout.split_part_keys);
+    else
+      apa_int4_wave_partition_layout(
+          rows, S, layout.split_parts, layout.split_part_keys);
+  } else {
+    apa_int4_fixed_partition_layout(
+        S, layout.split_parts, layout.split_part_keys);
+  }
+  return layout;
+}
+
 // Shared split-K launcher used by both the plain and sink entry points.
 // use_sink selects whether the merge kernel folds a learned sink logit.
 template <typename T>
@@ -4666,6 +4761,39 @@ namespace {
 
 constexpr float kApaInt4InvQmax = (float)(1.0 / 7.0);  // matches ew_scalar's (float) cast
 
+class ApaDfStageTimer {
+ public:
+  explicit ApaDfStageTimer(float* accumulator) : accumulator_(accumulator) {
+    if (!accumulator_) return;
+    if (cudaEventCreate(&start_) != cudaSuccess ||
+        cudaEventCreate(&stop_) != cudaSuccess)
+      throw std::runtime_error("APAMQ-DF1 cudaEventCreate failed");
+    if (cudaEventRecord(start_) != cudaSuccess)
+      throw std::runtime_error("APAMQ-DF1 cudaEventRecord(start) failed");
+  }
+  void finish() {
+    if (!accumulator_ || finished_) return;
+    if (cudaEventRecord(stop_) != cudaSuccess ||
+        cudaEventSynchronize(stop_) != cudaSuccess)
+      throw std::runtime_error("APAMQ-DF1 CUDA event completion failed");
+    float value = 0.f;
+    if (cudaEventElapsedTime(&value, start_, stop_) != cudaSuccess)
+      throw std::runtime_error("APAMQ-DF1 cudaEventElapsedTime failed");
+    *accumulator_ += value;
+    finished_ = true;
+  }
+  ~ApaDfStageTimer() {
+    if (start_) cudaEventDestroy(start_);
+    if (stop_) cudaEventDestroy(stop_);
+  }
+
+ private:
+  float* accumulator_ = nullptr;
+  cudaEvent_t start_ = nullptr;
+  cudaEvent_t stop_ = nullptr;
+  bool finished_ = false;
+};
+
 template <typename T>
 __global__ void apa_int4_pack_kernel(const T* __restrict__ k,
                                      uint8_t* __restrict__ codes,
@@ -4702,6 +4830,51 @@ __global__ void apa_int4_pack_kernel(const T* __restrict__ k,
     codes[key * half_d + b] = (uint8_t)((q1 << 4) | q0);
   }
   if (lane == 0) kscale[key] = safe;
+}
+
+// V1 append packer.  Source K may be a growing [B,KV,S,D] view while the
+// destination is capacity-strided persistent storage.  Every launch touches
+// only [row0,row0+nrows) for every batch/KV-head pair.
+template <typename T>
+__global__ void apa_int4_pack_rows_kernel(
+    const T* __restrict__ k, uint8_t* __restrict__ codes,
+    float* __restrict__ kscale, int64_t batch_kv, int src_s, int dst_s,
+    int row0, int nrows, int D) {
+  const int lane = threadIdx.x & 31;
+  const int warp = threadIdx.x >> 5;
+  const int64_t logical = (int64_t)blockIdx.x * (blockDim.x >> 5) + warp;
+  const int64_t total = batch_kv * nrows;
+  constexpr unsigned FULL = 0xffffffffu;
+  if (logical >= total) return;
+  const int64_t kvbh = logical / nrows;
+  const int row = row0 + (int)(logical - kvbh * nrows);
+  const T* krow = k + (kvbh * src_s + row) * D;
+  const int half_d = (D + 1) >> 1;
+  uint8_t* crow = codes + (kvbh * dst_s + row) * half_d;
+
+  float amax = 0.f;
+  for (int d = lane; d < D; d += 32)
+    amax = fmaxf(amax, fabsf(ld<T>(krow, d)));
+  #pragma unroll
+  for (int off = 16; off > 0; off >>= 1)
+    amax = fmaxf(amax, __shfl_down_sync(FULL, amax, off));
+  amax = __shfl_sync(FULL, amax, 0);
+  const float scale = amax * kApaInt4InvQmax;
+  const float safe = scale > 0.f ? scale : 1.f;
+  const float recip = 1.f / safe;
+  for (int b = lane; b < half_d; b += 32) {
+    const float x0 = ld<T>(krow, 2 * b);
+    const float x1 = 2 * b + 1 < D ? ld<T>(krow, 2 * b + 1) : 0.f;
+    // Keep F-A1's round-away-from-zero `roundf` convention.  The F-A2 int8-Q
+    // lesson is that changing this tie rule silently changes the integer bulk
+    // operating point; V1 is storage-only and must not do that.
+    float c0 = roundf(x0 * recip);
+    float c1 = roundf(x1 * recip);
+    c0 = c0 < -7.f ? -7.f : (c0 > 7.f ? 7.f : c0);
+    c1 = c1 < -7.f ? -7.f : (c1 > 7.f ? 7.f : c1);
+    crow[b] = (uint8_t)((((int)c1 + 7) << 4) | ((int)c0 + 7));
+  }
+  if (lane == 0) kscale[kvbh * dst_s + row] = safe;
 }
 
 // In-register dequant of one packed byte -> two bulk-K values. For __half
@@ -4793,7 +4966,7 @@ __global__ void apa_selective_int4_kernel(
     const T* q, const T* k, const uint8_t* codes, const float* kscale,
     const T* v, T* out, int B, int H, int L, int S, int D, int VD,
     float scale, float zthr, int is_causal, int KVH, int group,
-    int packed_d) {
+    int packed_d, int code_s) {
   const int row = blockIdx.x;
   const int i = row % L;
   const int bh = row / L;
@@ -4810,8 +4983,8 @@ __global__ void apa_selective_int4_kernel(
   const T* qrow = q + (int64_t)row * D;
   const int64_t kvbh = (int64_t)b * KVH + kv_h;
   const T* kbase = k + kvbh * S * D;
-  const uint8_t* cbase = codes + kvbh * S * packed_d;
-  const float* sbase = kscale + kvbh * S;
+  const uint8_t* cbase = codes + kvbh * code_s * packed_d;
+  const float* sbase = kscale + kvbh * code_s;
   const T* vbase = v + kvbh * S * VD;
   const int s_max = is_causal ? ((S - L) + i + 1) : S;
 
@@ -4951,13 +5124,125 @@ __global__ void apa_selective_int4_kernel(
   }
 }
 
-// Split-K stage 1: same full-range population statistics as the monolithic
-// kernel.  The packed workspace is shared with all split partitions.
+// DF2 V4 stats stage 1a: one exact sum/sumsq partial per (query row, key
+// partition). V2 optionally writes each fp32 bulk score while the packed K
+// bytes are resident, so the later split stage never rereads packed K.
+template <typename T, int DMAX, bool WCOOP>
+__global__ void apa_selective_int4_stats_splitk_kernel(
+    const T* q, const uint8_t* codes, const float* kscale,
+    float* partial_sum, float* partial_sumsq, float* bulk_cache,
+    int B, int H, int L, int S, int D, float scale, int is_causal, int KVH,
+    int group, int packed_d, int code_s, int stats_parts,
+    int stats_part_keys) {
+  const int row = blockIdx.x;
+  const int part = blockIdx.y;
+  const int i = row % L;
+  const int bh = row / L;
+  const int b = bh / H;
+  const int h = bh % H;
+  const int kv_h = h / group;
+  const int tid = threadIdx.x;
+  const int nt = blockDim.x;
+  const int lane = tid & 31;
+  const int warp = tid >> 5;
+  const int nwarp = nt >> 5;
+  const int s_max = is_causal ? ((S - L) + i + 1) : S;
+  const int j0 = part * stats_part_keys;
+  const int j1 = min(s_max, j0 + stats_part_keys);
+  const int64_t partial_idx = (int64_t)row * stats_parts + part;
+  const T* qrow = q + (int64_t)row * D;
+  const int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const uint8_t* cbase = codes + kvbh * code_s * packed_d;
+  const float* sbase = kscale + kvbh * code_s;
+  __shared__ float qsh[DMAX];
+  __shared__ float red[256];
+  for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+  __syncthreads();
+
+  float sum = 0.f, sumsq = 0.f;
+  if constexpr (WCOOP) {
+    for (int j = j0 + warp; j < j1; j += nwarp) {
+      const float bulk = apa_selective_int4_dot_warp<T>(
+          qsh, cbase + (int64_t)j * packed_d, sbase[j], D) * scale;
+      if (bulk_cache && lane == 0)
+        bulk_cache[(int64_t)row * S + j] = bulk;
+      const float a = fabsf(bulk);
+      sum += a;
+      sumsq += a * a;
+    }
+  } else {
+    for (int j = j0 + tid; j < j1; j += nt) {
+      const float bulk = apa_selective_int4_dot_serial<T>(
+          qsh, cbase + (int64_t)j * packed_d, sbase[j], D) * scale;
+      if (bulk_cache) bulk_cache[(int64_t)row * S + j] = bulk;
+      const float a = fabsf(bulk);
+      sum += a;
+      sumsq += a * a;
+    }
+  }
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sum;
+  __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  if (tid == 0) partial_sum[partial_idx] = red[0];
+  __syncthreads();
+  red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq;
+  __syncthreads();
+  for (int off = nt / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  if (tid == 0) partial_sumsq[partial_idx] = red[0];
+}
+
+// DF2 V4 stats stage 1b: tiny per-row reduction of the partition partials.
+// This is the only new fp32 association boundary versus monolithic stats.
+__global__ void apa_selective_int4_stats_reduce_kernel(
+    const float* partial_sum, const float* partial_sumsq, float* thr_out,
+    int L, int S, float zthr, int is_causal, int stats_parts) {
+  const int row = blockIdx.x;
+  const int tid = threadIdx.x;
+  const int i = row % L;
+  const int s_max = is_causal ? ((S - L) + i + 1) : S;
+  const int64_t base = (int64_t)row * stats_parts;
+  __shared__ float red[256];
+  float sum = 0.f;
+  for (int p = tid; p < stats_parts; p += blockDim.x)
+    sum += partial_sum[base + p];
+  red[tid] = sum;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  const float total = red[0];
+  __syncthreads();
+  sum = 0.f;
+  for (int p = tid; p < stats_parts; p += blockDim.x)
+    sum += partial_sumsq[base + p];
+  red[tid] = sum;
+  __syncthreads();
+  for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  if (tid == 0) {
+    const float mean = total / (float)s_max;
+    const float var = red[0] / (float)s_max - mean * mean;
+    thr_out[row] = mean + zthr * sqrtf(fmaxf(var, 0.f));
+  }
+}
+
+// DF1 monolithic stats stage: same full-range population statistics as the
+// original one-block-per-query kernel. Retained as the V4-off oracle.
 template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_int4_stats_kernel(
     const T* q, const uint8_t* codes, const float* kscale, float* thr_out,
+    float* bulk_cache,
     int B, int H, int L, int S, int D, float scale, float zthr,
-    int is_causal, int KVH, int group, int packed_d) {
+    int is_causal, int KVH, int group, int packed_d, int code_s) {
   const int row = blockIdx.x;
   const int i = row % L;
   const int bh = row / L;
@@ -4971,8 +5256,8 @@ __global__ void apa_selective_int4_stats_kernel(
   const int nwarp = nt >> 5;
   const T* qrow = q + (int64_t)row * D;
   const int64_t kvbh = (int64_t)b * KVH + kv_h;
-  const uint8_t* cbase = codes + kvbh * S * packed_d;
-  const float* sbase = kscale + kvbh * S;
+  const uint8_t* cbase = codes + kvbh * code_s * packed_d;
+  const float* sbase = kscale + kvbh * code_s;
   const int s_max = is_causal ? ((S - L) + i + 1) : S;
   __shared__ float qsh[DMAX];
   __shared__ float red[256];
@@ -4984,7 +5269,9 @@ __global__ void apa_selective_int4_stats_kernel(
     for (int j = warp; j < s_max; j += nwarp) {
       const float dot = apa_selective_int4_dot_warp<T>(
           qsh, cbase + (int64_t)j * packed_d, sbase[j], D);
-      const float a = fabsf(dot * scale);
+      const float bulk = dot * scale;
+      if (bulk_cache && lane == 0) bulk_cache[(int64_t)row * S + j] = bulk;
+      const float a = fabsf(bulk);
       sum += a;
       sumsq += a * a;
     }
@@ -4992,7 +5279,9 @@ __global__ void apa_selective_int4_stats_kernel(
     for (int j = tid; j < s_max; j += nt) {
       const float dot = apa_selective_int4_dot_serial<T>(
           qsh, cbase + (int64_t)j * packed_d, sbase[j], D);
-      const float a = fabsf(dot * scale);
+      const float bulk = dot * scale;
+      if (bulk_cache) bulk_cache[(int64_t)row * S + j] = bulk;
+      const float a = fabsf(bulk);
       sum += a;
       sumsq += a * a;
     }
@@ -5024,10 +5313,11 @@ __global__ void apa_selective_int4_stats_kernel(
 template <typename T, int DMAX, bool WCOOP>
 __global__ void apa_selective_int4_split_kernel(
     const T* q, const T* k, const uint8_t* codes, const float* kscale,
-    const T* v, const float* thr_in, float* part_m, float* part_l,
+    const T* v, const float* thr_in, const float* bulk_cache,
+    float* part_m, float* part_l,
     float* part_acc, int B, int H, int L, int S, int D, int VD, float scale,
-    int is_causal, int KVH, int group, int packed_d, int num_parts,
-    int part_keys) {
+    int is_causal, int KVH, int group, int packed_d, int code_s,
+    int num_parts, int part_keys) {
   const int row = blockIdx.x;
   const int part = blockIdx.y;
   const int i = row % L;
@@ -5058,8 +5348,8 @@ __global__ void apa_selective_int4_split_kernel(
   const T* qrow = q + (int64_t)row * D;
   const int64_t kvbh = (int64_t)b * KVH + kv_h;
   const T* kbase = k + kvbh * S * D;
-  const uint8_t* cbase = codes + kvbh * S * packed_d;
-  const float* sbase = kscale + kvbh * S;
+  const uint8_t* cbase = codes + kvbh * code_s * packed_d;
+  const float* sbase = kscale + kvbh * code_s;
   const T* vbase = v + kvbh * S * VD;
   const float thr = thr_in[row];
   __shared__ float qsh[DMAX];
@@ -5078,8 +5368,10 @@ __global__ void apa_selective_int4_split_kernel(
 
   if constexpr (WCOOP) {
     for (int j = j0 + warp; j < j1; j += nwarp) {
-      float bulk = apa_selective_int4_dot_warp<T>(
-          qsh, cbase + (int64_t)j * packed_d, sbase[j], D) * scale;
+      float bulk = bulk_cache ? bulk_cache[(int64_t)row * S + j]
+                              : apa_selective_int4_dot_warp<T>(
+                                    qsh, cbase + (int64_t)j * packed_d,
+                                    sbase[j], D) * scale;
       float score = bulk;
       if (fabsf(bulk) >= thr)
         score = apa_selective_exact_dot_warp<T>(
@@ -5098,8 +5390,10 @@ __global__ void apa_selective_int4_split_kernel(
     }
   } else {
     for (int j = j0 + tid; j < j1; j += nt) {
-      float bulk = apa_selective_int4_dot_serial<T>(
-          qsh, cbase + (int64_t)j * packed_d, sbase[j], D) * scale;
+      float bulk = bulk_cache ? bulk_cache[(int64_t)row * S + j]
+                              : apa_selective_int4_dot_serial<T>(
+                                    qsh, cbase + (int64_t)j * packed_d,
+                                    sbase[j], D) * scale;
       float score = bulk;
       if (fabsf(bulk) >= thr)
         score = apa_selective_exact_dot_serial<T>(
@@ -5166,45 +5460,91 @@ static NDArray apa_selective_int4_splitk_dispatch(
     const NDArray& q, const NDArray& k, const NDArray& codes,
     const NDArray& kscales, const NDArray& v, float scale, float zthr,
     bool is_causal, int B, int H, int L, int S, int D, int VD, int KVH,
-    int group, int cap, int packed_d) {
+    int group, int cap, int packed_d, int code_s, float* stage_ms) {
   const int rows = B * H * L;
-  const int part_keys = TC_APA_SPLITK_PART_KEYS;
-  int num_parts = (S + part_keys - 1) / part_keys;
-  if (num_parts < 1) num_parts = 1;
+  const bool cache_bulk = apa_df_env_enabled("TC_APAMQ_DF_V2");
+  const bool split_stats = apa_df_env_enabled("TC_APAMQ_DF_V4");
+  const ApaInt4StageLayout layout = apa_int4_stage_layout(
+      rows, S, apa_df_env_enabled("TC_APAMQ_DF_V3"), cache_bulk,
+      split_stats);
   NDArray out({(int64_t)B, (int64_t)H, (int64_t)L, (int64_t)VD},
               q.dtype, q.device);
   NDArray thr_ws({(int64_t)rows}, DType::Float32, q.device);
-  NDArray part_m({(int64_t)rows * num_parts}, DType::Float32, q.device);
-  NDArray part_l({(int64_t)rows * num_parts}, DType::Float32, q.device);
-  NDArray part_acc({(int64_t)rows * num_parts * VD}, DType::Float32, q.device);
+  NDArray part_m({(int64_t)rows * layout.split_parts},
+                 DType::Float32, q.device);
+  NDArray part_l({(int64_t)rows * layout.split_parts},
+                 DType::Float32, q.device);
+  NDArray part_acc({(int64_t)rows * layout.split_parts * VD},
+                   DType::Float32, q.device);
+  NDArray stats_sum_ws, stats_sumsq_ws;
+  if (split_stats) {
+    stats_sum_ws = NDArray({(int64_t)rows * layout.stats_parts},
+                           DType::Float32, q.device);
+    stats_sumsq_ws = NDArray({(int64_t)rows * layout.stats_parts},
+                             DType::Float32, q.device);
+  }
+  NDArray bulk_ws;
+  if (cache_bulk)
+    bulk_ws = NDArray({(int64_t)rows * S}, DType::Float32, q.device);
   constexpr int threads = 128;
   auto launch = [&](auto dmax_tag, auto wcoop_tag) {
     constexpr int DMAX = decltype(dmax_tag)::value;
     constexpr bool WCOOP = decltype(wcoop_tag)::value;
-    apa_selective_int4_stats_kernel<T, DMAX, WCOOP><<<rows, threads>>>(
-        static_cast<T*>(q.data_ptr()),
-        static_cast<uint8_t*>(codes.data_ptr()),
-        static_cast<float*>(kscales.data_ptr()),
-        static_cast<float*>(thr_ws.data_ptr()), B, H, L, S, D, scale, zthr,
-        is_causal ? 1 : 0, KVH, group, packed_d);
-    cuda_check_last("apa_selective_int4_splitk_stats");
-    dim3 grid((unsigned)rows, (unsigned)num_parts);
+    ApaDfStageTimer stats_timer(stage_ms ? &stage_ms[1] : nullptr);
+    if (split_stats) {
+      dim3 stats_grid((unsigned)rows, (unsigned)layout.stats_parts);
+      apa_selective_int4_stats_splitk_kernel<T, DMAX, WCOOP>
+          <<<stats_grid, threads>>>(
+              static_cast<T*>(q.data_ptr()),
+              static_cast<uint8_t*>(codes.data_ptr()),
+              static_cast<float*>(kscales.data_ptr()),
+              static_cast<float*>(stats_sum_ws.data_ptr()),
+              static_cast<float*>(stats_sumsq_ws.data_ptr()),
+              cache_bulk ? static_cast<float*>(bulk_ws.data_ptr()) : nullptr,
+              B, H, L, S, D, scale, is_causal ? 1 : 0, KVH, group, packed_d,
+              code_s, layout.stats_parts, layout.stats_part_keys);
+      cuda_check_last("apa_selective_int4_splitk_stats_partials");
+      apa_selective_int4_stats_reduce_kernel<<<rows, threads>>>(
+          static_cast<float*>(stats_sum_ws.data_ptr()),
+          static_cast<float*>(stats_sumsq_ws.data_ptr()),
+          static_cast<float*>(thr_ws.data_ptr()), L, S, zthr,
+          is_causal ? 1 : 0, layout.stats_parts);
+      cuda_check_last("apa_selective_int4_splitk_stats_reduce");
+    } else {
+      apa_selective_int4_stats_kernel<T, DMAX, WCOOP><<<rows, threads>>>(
+          static_cast<T*>(q.data_ptr()),
+          static_cast<uint8_t*>(codes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()),
+          static_cast<float*>(thr_ws.data_ptr()),
+          cache_bulk ? static_cast<float*>(bulk_ws.data_ptr()) : nullptr,
+          B, H, L, S, D, scale, zthr, is_causal ? 1 : 0, KVH, group,
+          packed_d, code_s);
+      cuda_check_last("apa_selective_int4_monolithic_stats");
+    }
+    stats_timer.finish();
+    dim3 grid((unsigned)rows, (unsigned)layout.split_parts);
+    ApaDfStageTimer split_timer(stage_ms ? &stage_ms[2] : nullptr);
     apa_selective_int4_split_kernel<T, DMAX, WCOOP><<<grid, threads>>>(
         static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
         static_cast<uint8_t*>(codes.data_ptr()),
         static_cast<float*>(kscales.data_ptr()), static_cast<T*>(v.data_ptr()),
         static_cast<float*>(thr_ws.data_ptr()),
+        cache_bulk ? static_cast<float*>(bulk_ws.data_ptr()) : nullptr,
         static_cast<float*>(part_m.data_ptr()),
         static_cast<float*>(part_l.data_ptr()),
         static_cast<float*>(part_acc.data_ptr()), B, H, L, S, D, VD, scale,
-        is_causal ? 1 : 0, KVH, group, packed_d, num_parts, part_keys);
+        is_causal ? 1 : 0, KVH, group, packed_d, code_s,
+        layout.split_parts, layout.split_part_keys);
     cuda_check_last("apa_selective_int4_splitk_split");
+    split_timer.finish();
+    ApaDfStageTimer merge_timer(stage_ms ? &stage_ms[3] : nullptr);
     apa_selective_merge_kernel<T, DMAX><<<rows, threads>>>(
         static_cast<float*>(part_m.data_ptr()),
         static_cast<float*>(part_l.data_ptr()),
         static_cast<float*>(part_acc.data_ptr()), nullptr,
-        static_cast<T*>(out.data_ptr()), H, VD, num_parts, 0);
+        static_cast<T*>(out.data_ptr()), H, VD, layout.split_parts, 0);
     cuda_check_last("apa_selective_int4_splitk_merge");
+    merge_timer.finish();
   };
   if (cap <= 64)
     launch(std::integral_constant<int, 64>{}, std::false_type{});
@@ -5898,9 +6238,36 @@ bool qtile_launch_sdpa(const NDArray& q, const NDArray& k, const NDArray& v,
 }
 }  // namespace
 
-NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
-                                     const NDArray& v, float scale,
-                                     float zthr, bool is_causal) {
+static void apa_int4_append_workspace(const NDArray& k,
+                                      ApaInt4Workspace& workspace,
+                                      float* pack_ms) {
+  const int64_t S64 = k.shape[2];
+  if (S64 <= workspace.valid_rows) return;
+  const int64_t nrows64 = S64 - workspace.valid_rows;
+  const int64_t batch_kv = workspace.batch * workspace.kv_heads;
+  const int64_t vectors = batch_kv * nrows64;
+  const int64_t blocks64 = (vectors + 3) / 4;
+  if (blocks64 > std::numeric_limits<unsigned>::max())
+    throw std::runtime_error("apa_int4_workspace append grid exceeds CUDA range");
+  constexpr int threads = 128;
+  ApaDfStageTimer timer(pack_ms);
+  DISPATCH_FLOAT(k.dtype, T, {
+    apa_int4_pack_rows_kernel<T><<<(unsigned)blocks64, threads>>>(
+        static_cast<T*>(k.data_ptr()),
+        static_cast<uint8_t*>(workspace.codes.data_ptr()),
+        static_cast<float*>(workspace.scales.data_ptr()), batch_kv,
+        (int)S64, (int)workspace.capacity, (int)workspace.valid_rows,
+        (int)nrows64, (int)workspace.head_dim);
+  });
+  cuda_check_last("apa_int4_workspace_append_pack");
+  timer.finish();
+  workspace.valid_rows = S64;
+}
+
+static NDArray apa_selective_attention_int4_impl(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    ApaInt4Workspace* workspace, float scale, float zthr, bool is_causal,
+    float* stage_ms) {
   if (q.ndim() != 4 || k.ndim() != 4 || v.ndim() != 4)
     throw std::runtime_error("apa_selective_int4 expects q/k/v rank 4");
   if (q.dtype != k.dtype || q.dtype != v.dtype)
@@ -5953,21 +6320,46 @@ NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
   const int packed_d = (D + 1) >> 1;
   constexpr int threads = 128;
 
-  // Transient call-owned workspace: exactly ceil(D/2) bytes plus one fp32
-  // scale per (batch, KV head, key).  It is stream-ordered and freed when
-  // this call's local NDArrays leave scope; no persistent kq ring exists.
-  NDArray codes({B64, KVH64, S64, (int64_t)packed_d}, DType::Uint8, q.device);
-  NDArray kscales({B64, KVH64, S64}, DType::Float32, q.device);
-  const int64_t pack_blocks64 = (nkeys64 + 3) / 4;  // four warps/block
-  if (pack_blocks64 > std::numeric_limits<unsigned>::max())
-    throw std::runtime_error("apa_selective_int4 pack grid exceeds CUDA range");
+  NDArray local_codes, local_scales;
+  NDArray* codes = nullptr;
+  NDArray* kscales = nullptr;
+  int code_s = S;
+  if (workspace) {
+    if (workspace->batch != B64 || workspace->kv_heads != KVH64 ||
+        workspace->head_dim != D64 || workspace->source_dtype != k.dtype ||
+        workspace->device.type != k.device.type ||
+        workspace->device.index != k.device.index)
+      throw std::runtime_error("apa_int4_workspace geometry/dtype/device mismatch");
+    if (S64 > workspace->capacity)
+      throw std::runtime_error("apa_int4_workspace capacity exceeded");
+    apa_int4_append_workspace(k, *workspace, stage_ms ? &stage_ms[0] : nullptr);
+    codes = &workspace->codes;
+    kscales = &workspace->scales;
+    code_s = (int)workspace->capacity;
+  } else {
+    // V-off contract: retain the original call-local allocation and exact
+    // whole-cache pack launch.  This block is intentionally unchanged apart
+    // from the event hooks used only by the profiler.
+    local_codes = NDArray({B64, KVH64, S64, (int64_t)packed_d},
+                          DType::Uint8, q.device);
+    local_scales = NDArray({B64, KVH64, S64}, DType::Float32, q.device);
+    codes = &local_codes;
+    kscales = &local_scales;
+    const int64_t pack_blocks64 = (nkeys64 + 3) / 4;
+    if (pack_blocks64 > std::numeric_limits<unsigned>::max())
+      throw std::runtime_error("apa_selective_int4 pack grid exceeds CUDA range");
+    ApaDfStageTimer pack_timer(stage_ms ? &stage_ms[0] : nullptr);
+    DISPATCH_FLOAT(q.dtype, T, {
+      apa_int4_pack_kernel<T><<<(unsigned)pack_blocks64, threads>>>(
+          static_cast<T*>(k.data_ptr()),
+          static_cast<uint8_t*>(codes->data_ptr()),
+          static_cast<float*>(kscales->data_ptr()), nkeys64, D);
+    });
+    cuda_check_last("apa_selective_int4_pack");
+    pack_timer.finish();
+  }
 
   DISPATCH_FLOAT(q.dtype, T, {
-    apa_int4_pack_kernel<T><<<(unsigned)pack_blocks64, threads>>>(
-        static_cast<T*>(k.data_ptr()), static_cast<uint8_t*>(codes.data_ptr()),
-        static_cast<float*>(kscales.data_ptr()), nkeys64, D);
-    cuda_check_last("apa_selective_int4_pack");
-
     const int override_path = apa_selective_path_override();
     if (override_path == 2 && L != 1)
       throw std::runtime_error(
@@ -5976,19 +6368,19 @@ NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
         (override_path == 0 && apa_selective_use_splitk((int)rows64, S, L));
     if (use_splitk) {
       out = apa_selective_int4_splitk_dispatch<T>(
-          q, k, codes, kscales, v, scale, zthr, is_causal, B, H, L, S, D,
-          VD, KVH, group, cap, packed_d);
+          q, k, *codes, *kscales, v, scale, zthr, is_causal, B, H, L, S, D,
+          VD, KVH, group, cap, packed_d, code_s, stage_ms);
     } else {
       auto launch = [&](auto dmax_tag, auto wcoop_tag) {
         constexpr int DMAX = decltype(dmax_tag)::value;
         constexpr bool WCOOP = decltype(wcoop_tag)::value;
         apa_selective_int4_kernel<T, DMAX, WCOOP><<<(unsigned)rows64, threads>>>(
             static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
-            static_cast<uint8_t*>(codes.data_ptr()),
-            static_cast<float*>(kscales.data_ptr()),
+            static_cast<uint8_t*>(codes->data_ptr()),
+            static_cast<float*>(kscales->data_ptr()),
             static_cast<T*>(v.data_ptr()), static_cast<T*>(out.data_ptr()),
             B, H, L, S, D, VD, scale, zthr, is_causal ? 1 : 0, KVH, group,
-            packed_d);
+            packed_d, code_s);
       };
       if (cap <= 64) {
         if (apa_selective_decode_shaped((int)rows64, L))
@@ -6006,6 +6398,98 @@ NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
     }
   });
   return out;
+}
+
+NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
+                                     const NDArray& v, float scale,
+                                     float zthr, bool is_causal) {
+  return apa_selective_attention_int4_impl(q, k, v, nullptr, scale, zthr,
+                                           is_causal, nullptr);
+}
+
+std::shared_ptr<ApaInt4Workspace> apa_int4_workspace_create(
+    const NDArray& k, int64_t capacity) {
+  if (k.ndim() != 4)
+    throw std::runtime_error("apa_int4_workspace expects K rank 4");
+  if (k.dtype != DType::Float32 && k.dtype != DType::Float16 &&
+      k.dtype != DType::BFloat16)
+    throw std::runtime_error("apa_int4_workspace dtype unsupported");
+  if (!k.device.is_cuda())
+    throw std::runtime_error("apa_int4_workspace requires CUDA K");
+  const int64_t B = k.shape[0], KVH = k.shape[1], S = k.shape[2], D = k.shape[3];
+  if (B <= 0 || KVH <= 0 || S < 0 || D <= 0 || D > TC_APA_MAXD)
+    throw std::runtime_error("apa_int4_workspace invalid geometry");
+  if (capacity == 0) capacity = S;
+  if (capacity < S || capacity > std::numeric_limits<int>::max())
+    throw std::runtime_error("apa_int4_workspace invalid capacity");
+  auto workspace = std::make_shared<ApaInt4Workspace>();
+  workspace->batch = B;
+  workspace->kv_heads = KVH;
+  workspace->capacity = capacity;
+  workspace->head_dim = D;
+  workspace->source_dtype = k.dtype;
+  workspace->device = k.device;
+  workspace->codes = NDArray({B, KVH, capacity, (D + 1) / 2},
+                             DType::Uint8, k.device);
+  workspace->scales = NDArray({B, KVH, capacity}, DType::Float32, k.device);
+  apa_int4_append_workspace(k, *workspace, nullptr);
+  return workspace;
+}
+
+void apa_int4_workspace_reset(ApaInt4Workspace& workspace) {
+  workspace.valid_rows = 0;
+}
+
+NDArray apa_selective_attention_int4_workspace(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    ApaInt4Workspace& workspace, float scale, float zthr, bool is_causal) {
+  return apa_selective_attention_int4_impl(q, k, v, &workspace, scale, zthr,
+                                           is_causal, nullptr);
+}
+
+std::vector<float> apa_selective_attention_int4_profile(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    ApaInt4Workspace* workspace, float scale, float zthr, bool is_causal,
+    int warmup, int repeats, int profile_append_rows) {
+  if (warmup < 0 || repeats <= 0 || profile_append_rows < 0 ||
+      profile_append_rows >= k.shape[2])
+    throw std::runtime_error(
+        "apa_int4_profile requires warmup>=0, repeats>0, 0<=append_rows<S");
+  auto rewind_append = [&]() {
+    if (workspace && profile_append_rows > 0)
+      workspace->valid_rows = k.shape[2] - profile_append_rows;
+  };
+  for (int i = 0; i < warmup; ++i) {
+    rewind_append();
+    (void)apa_selective_attention_int4_impl(q, k, v, workspace, scale, zthr,
+                                            is_causal, nullptr);
+  }
+  std::vector<float> stage_ms(4, 0.f);
+  for (int i = 0; i < repeats; ++i) {
+    rewind_append();
+    (void)apa_selective_attention_int4_impl(q, k, v, workspace, scale, zthr,
+                                            is_causal, stage_ms.data());
+  }
+  for (float& value : stage_ms) value /= (float)repeats;
+  return stage_ms;
+}
+
+std::vector<int64_t> apa_int4_decode_plan(int64_t rows, int64_t sequence,
+                                         bool grid_fill, bool cache_bulk,
+                                         bool split_stats) {
+  if (rows <= 0 || rows > std::numeric_limits<int>::max() || sequence <= 0 ||
+      sequence > std::numeric_limits<int>::max())
+    throw std::runtime_error("apa_int4_decode_plan requires positive int geometry");
+  const ApaInt4StageLayout layout = apa_int4_stage_layout(
+      (int)rows, (int)sequence, grid_fill, cache_bulk, split_stats);
+  return {layout.stats_parts,
+          layout.stats_part_keys,
+          layout.split_parts,
+          layout.split_part_keys,
+          rows * (int64_t)layout.stats_parts,
+          split_stats ? rows : 0,
+          rows * (int64_t)layout.split_parts,
+          rows};
 }
 
 // EXP-APA-4 (K2): read (and optionally reset) the TC_APA_FRAC counters.

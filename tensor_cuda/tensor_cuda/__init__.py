@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
     import _tensor_cuda as _C  # fallback when the .so sits on PYTHONPATH
 
 Tensor = _C.Tensor
+ApaInt4Workspace = _C.ApaInt4Workspace
 
 _NP_DTYPE = {
     "float32": np.float32,
@@ -944,18 +945,60 @@ def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
     return _C.apa_selective_attention(q, k, kq, v, scale, zthr, is_causal)
 
 
-def apa_selective_attention_int4(q, k, v, scale, zthr, is_causal=False):
+def apa_int4_workspace(k, capacity=0):
+    """Create DF1 V1's opaque persistent symmetric-7 packed-K workspace.
+
+    ``capacity`` is the maximum S rows per batch/KV head. The current rows of
+    ``k`` are packed immediately; later attention calls pack only newly
+    appended rows. Call ``workspace.reset()`` after any non-append K mutation.
+    """
+    return _C.apa_int4_workspace(k, int(capacity))
+
+
+def apa_selective_attention_int4(
+    q, k, v, scale, zthr, is_causal=False, *, workspace=None
+):
     """Selective APA with transient symmetric-7 INT4 packing of ``k``.
 
     ``q`` is ``[B,H,L,D]`` while ``k``/``v`` are GQA-aware
     ``[B,KVH,S,D]``/``[B,KVH,S,VD]`` tensors. The call owns its packed
-    workspace; callers retain no quantized-key ring. Bulk dots dequantize in
-    fp32 registers, selected keys use exact ``k``, and non-selected keys keep
-    their bulk score. Causality is bottom-right when ``S > L``. Inference
-    only (no autograd).
+    workspace by default; callers retain no quantized-key ring. Passing an
+    ``ApaInt4Workspace`` opts into DF1 V1 persistent derived state. Bulk dots
+    dequantize in fp32 registers, selected keys use exact ``k``, and
+    non-selected keys keep their bulk score. Causality is bottom-right when
+    ``S > L``. Inference only (no autograd).
     """
+    if workspace is not None:
+        return _C.apa_selective_attention_int4_workspace(
+            q, k, v, workspace, float(scale), float(zthr), bool(is_causal)
+        )
     return _C.apa_selective_attention_int4(
         q, k, v, float(scale), float(zthr), bool(is_causal))
+
+
+def _apa_int4_profile_stages(
+    q, k, v, scale, zthr, is_causal=True, *, warmup=2, repeats=10,
+    workspace=None, profile_append_rows=0,
+):
+    values = _C._apa_int4_profile_stages(
+        q, k, v, float(scale), float(zthr), bool(is_causal), int(warmup),
+        int(repeats), int(profile_append_rows), workspace,
+    )
+    return dict(zip(("pack", "stats", "split", "merge"), values))
+
+
+def _apa_int4_decode_plan(
+    rows, sequence, *, grid_fill=False, cache_bulk=False, split_stats=False
+):
+    values = _C._apa_int4_decode_plan(
+        int(rows), int(sequence), bool(grid_fill), bool(cache_bulk),
+        bool(split_stats),
+    )
+    return dict(zip(
+        ("stats_partitions", "stats_partition_keys", "split_partitions",
+         "split_partition_keys", "stats_partial_blocks",
+         "stats_reduce_blocks", "split_blocks", "merge_blocks"), values
+    ))
 
 
 def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=False):
@@ -1149,7 +1192,7 @@ __all__ = [
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
-    "apa_selective_attention_int4",
+    "apa_selective_attention_int4", "apa_int4_workspace", "ApaInt4Workspace",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink", "argmax_last_axis",

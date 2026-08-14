@@ -306,6 +306,23 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def("__matmul__", [](Tensor& a, Tensor& b) { return ops::matmul(a, b); })
       .def("__neg__", [](Tensor& a) { return ops::neg(a); });
 
+  py::class_<ApaInt4Workspace, std::shared_ptr<ApaInt4Workspace>>(
+      m, "ApaInt4Workspace")
+      .def_property_readonly("capacity",
+          [](const ApaInt4Workspace& w) { return w.capacity; })
+      .def_property_readonly("valid_rows",
+          [](const ApaInt4Workspace& w) { return w.valid_rows; })
+      .def_property_readonly("nbytes", [](const ApaInt4Workspace& w) {
+        return (int64_t)(w.codes.storage->nbytes + w.scales.storage->nbytes);
+      })
+      .def("reset", &apa_int4_workspace_reset,
+           "Invalidate all derived rows after a non-append K mutation.")
+      .def("_rewind", [](ApaInt4Workspace& w, int64_t valid_rows) {
+        if (valid_rows < 0 || valid_rows > w.valid_rows)
+          throw std::runtime_error("workspace rewind must decrease valid_rows");
+        w.valid_rows = valid_rows;
+      }, py::arg("valid_rows"));
+
   // factory
   m.def("tensor", &tensor_from_numpy, py::arg("array"), py::arg("device") = "cuda",
         py::arg("requires_grad") = false);
@@ -660,6 +677,34 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
      py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_int4_workspace", [](Tensor& k, int64_t capacity) {
+    return tc::apa_int4_workspace_create(k.data(), capacity);
+  }, py::arg("k"), py::arg("capacity") = 0);
+  m.def("apa_selective_attention_int4_workspace",
+      [](Tensor& q, Tensor& k, Tensor& v,
+         std::shared_ptr<ApaInt4Workspace> workspace, double scale,
+         double zthr, bool is_causal) {
+    if (!workspace) throw std::runtime_error("workspace must not be None");
+    return Tensor::make(tc::apa_selective_attention_int4_workspace(
+        q.data(), k.data(), v.data(), *workspace, (float)scale, (float)zthr,
+        is_causal), false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("workspace"),
+     py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("_apa_int4_profile_stages",
+      [](Tensor& q, Tensor& k, Tensor& v,
+         double scale, double zthr, bool is_causal, int warmup, int repeats,
+         int profile_append_rows,
+         std::shared_ptr<ApaInt4Workspace> workspace) {
+    return tc::apa_selective_attention_int4_profile(
+        q.data(), k.data(), v.data(), workspace.get(), (float)scale,
+        (float)zthr, is_causal, warmup, repeats, profile_append_rows);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"), py::arg("zthr"),
+     py::arg("is_causal") = false, py::arg("warmup") = 2,
+     py::arg("repeats") = 10, py::arg("profile_append_rows") = 0,
+     py::arg("workspace") = nullptr);
+  m.def("_apa_int4_decode_plan", &tc::apa_int4_decode_plan,
+        py::arg("rows"), py::arg("sequence"), py::arg("grid_fill") = false,
+        py::arg("cache_bulk") = false, py::arg("split_stats") = false);
   m.def("apa_selective_attention_sink",
       [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v, Tensor& sinks,
          double scale, double zthr, bool is_causal) {
