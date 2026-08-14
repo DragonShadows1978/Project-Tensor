@@ -447,6 +447,44 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
 NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
                                      const NDArray& v, float scale,
                                      float zthr, bool is_causal);
+
+// APAMQ-DF1 default-off persistent derived state.  The caller owns this
+// opaque handle and must reset it after any non-append mutation of K.  Codes
+// use F-A1's symmetric-7 convention; one fp32 scale is retained per key row.
+struct ApaInt4Workspace {
+  NDArray codes;
+  NDArray scales;
+  int64_t batch = 0;
+  int64_t kv_heads = 0;
+  int64_t capacity = 0;
+  int64_t head_dim = 0;
+  int64_t valid_rows = 0;
+  DType source_dtype = DType::Float32;
+  Device device;
+};
+
+std::shared_ptr<ApaInt4Workspace> apa_int4_workspace_create(
+    const NDArray& k, int64_t capacity);
+void apa_int4_workspace_reset(ApaInt4Workspace& workspace);
+NDArray apa_selective_attention_int4_workspace(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    ApaInt4Workspace& workspace, float scale, float zthr, bool is_causal);
+
+// Stage-resolved CUDA-event profiler.  Returns mean milliseconds in
+// pack/stats/split/merge order.  Profiling synchronizes at each stage by
+// design and is never used by the serving entry points.
+std::vector<float> apa_selective_attention_int4_profile(
+    const NDArray& q, const NDArray& k, const NDArray& v,
+    ApaInt4Workspace* workspace, float scale, float zthr, bool is_causal,
+    int warmup, int repeats, int profile_append_rows);
+
+// CPU-only launch-plan receipt:
+// {stats_parts, stats_part_keys, split_parts, split_part_keys,
+//  stats_partial_blocks, stats_reduce_blocks, split_blocks, merge_blocks}.
+// `grid_fill`, `cache_bulk`, and `split_stats` select DF1 V3/V2/V4.
+std::vector<int64_t> apa_int4_decode_plan(int64_t rows, int64_t sequence,
+                                         bool grid_fill, bool cache_bulk,
+                                         bool split_stats);
 NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
                                      const NDArray& kq, const NDArray& v,
                                      const NDArray& sinks, float scale,
