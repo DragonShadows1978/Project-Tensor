@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 project(tensor_cuda LANGUAGES CXX CUDA)
 
+option(TC_APA_GEMM_DEBUG_ASSERTS
+  "Enable device-side bounds assertions in the APAMQ GEMM path" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
@@ -47,6 +50,7 @@ pybind11_add_module(_tensor_cuda
   src/terrain.cu
   src/terrain_objects.cu
   src/matmul.cu
+  src/gemm_apa.cu
   src/conv.cu
   src/autograd.cpp
   src/ops.cpp
@@ -54,7 +58,10 @@ pybind11_add_module(_tensor_cuda
 )
 
 target_include_directories(_tensor_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(_tensor_cuda PRIVATE CUDA::cudart CUDA::cublas)
+target_link_libraries(_tensor_cuda PRIVATE CUDA::cudart CUDA::cublas CUDA::cublasLt)
+if(TC_APA_GEMM_DEBUG_ASSERTS)
+  target_compile_definitions(_tensor_cuda PRIVATE TC_APA_GEMM_DEBUG_ASSERTS=1)
+endif()
 set_target_properties(_tensor_cuda PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
   # Drop the built module straight into the Python package directory.

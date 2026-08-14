@@ -485,6 +485,31 @@ std::vector<float> apa_selective_attention_int4_profile(
 std::vector<int64_t> apa_int4_decode_plan(int64_t rows, int64_t sequence,
                                          bool grid_fill, bool cache_bulk,
                                          bool split_stats);
+// APAMQ-SB1 speed path. Q/K are quantized per vector to signed INT8 with
+// scale=amax/127 and CUDA roundf (nearest, halfway away from zero). The bulk
+// QK^T is one strided-batched cuBLASLt INT8->INT32 matmul. Integer sums are
+// scaled into an fp32 score matrix; only selected (row,key) pairs are gathered
+// into bounded BF16 workspaces and refined by skinny BF16 GEMM batches. Scores
+// remain fp32 through selection/scatter/softmax; only probabilities become
+// BF16 for the final P@V matmul. Cached K codes are optional and use signed
+// bytes stored bitwise in a public uint8 tensor.
+NDArray apa_gemm_selective_attention(
+    const NDArray& q, const NDArray& k, const NDArray& v, float scale,
+    float zthr, bool is_causal, int Lq = 0, int64_t row0 = 0,
+    int window = 0, const NDArray* k_codes = nullptr,
+    const NDArray* k_scales = nullptr);
+std::pair<NDArray, NDArray> apa_gemm_selective_quantize_k(const NDArray& k);
+// Returns (selected_pairs, valid_pairs, overflow_calls, dropped_pairs).
+std::tuple<unsigned long long, unsigned long long,
+           unsigned long long, unsigned long long>
+apa_gemm_selective_stats(bool reset);
+
+// Gate-only visibility: (qcodes, qscales, kcodes, kscales, integer sums,
+// scaled fp32 bulk, selected mask). Integer sums are widened to public int64.
+std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray>
+apa_gemm_selective_debug(const NDArray& q, const NDArray& k, float scale,
+                         float zthr, bool is_causal, int Lq = 0,
+                         int64_t row0 = 0, int window = 0);
 NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
                                      const NDArray& kq, const NDArray& v,
                                      const NDArray& sinks, float scale,
