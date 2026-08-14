@@ -47,6 +47,7 @@ pybind11_add_module(_tensor_cuda
   src/terrain.cu
   src/terrain_objects.cu
   src/matmul.cu
+  src/gemm_apa.cu
   src/conv.cu
   src/autograd.cpp
   src/ops.cpp
@@ -54,7 +55,7 @@ pybind11_add_module(_tensor_cuda
 )
 
 target_include_directories(_tensor_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(_tensor_cuda PRIVATE CUDA::cudart CUDA::cublas)
+target_link_libraries(_tensor_cuda PRIVATE CUDA::cudart CUDA::cublas CUDA::cublasLt)
 set_target_properties(_tensor_cuda PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
   # Drop the built module straight into the Python package directory.

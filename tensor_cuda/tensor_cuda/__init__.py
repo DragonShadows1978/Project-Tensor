@@ -958,6 +958,65 @@ def apa_selective_attention_int4(q, k, v, scale, zthr, is_causal=False):
         q, k, v, float(scale), float(zthr), bool(is_causal))
 
 
+def apa_gemm_selective_attention(
+    q, k, v, scale, zthr, is_causal=False, *, Lq=0, row0=0, window=0,
+    k_codes=None, k_scales=None,
+):
+    """SB1 cuBLASLt INT8-bulk selective attention (inference only).
+
+    ``q`` is ``[B,H,L,D]`` and ``k``/``v`` are GQA-aware
+    ``[B,KVH,S,D]``/``[B,KVH,S,VD]`` BF16 tensors. Q and K use independent
+    per-vector symmetric INT8 quantizers: ``scale=amax/127`` and CUDA
+    ``roundf`` (nearest, halfway away from zero), clamped to ``[-127,127]``.
+    The integer bulk is exact INT32; scores remain FP32 through scale,
+    selection, selected-score scatter, and softmax. Only BF16 probabilities
+    are materialized for P@V.
+
+    With ``is_causal=True``, ``Lq`` is the full unsliced query length,
+    ``row0`` is this chunk's absolute query start, and ``window=0`` means full
+    bottom-right causal attention. ``Lq=0`` defaults to this chunk's ``L``.
+    Optional ``k_codes``/``k_scales`` come from
+    :func:`apa_gemm_selective_quantize_k`; pass both or neither.
+    """
+    args = (
+        q, k, v, float(scale), float(zthr), bool(is_causal),
+        int(Lq), int(row0), int(window),
+    )
+    if (k_codes is None and k_scales is None):
+        return _C.apa_gemm_selective_attention(*args)
+    if k_codes is None or k_scales is None:
+        raise ValueError("pass both k_codes and k_scales, or neither")
+    return _C.apa_gemm_selective_attention_cached(
+        q, k, v, k_codes, k_scales, float(scale), float(zthr),
+        bool(is_causal), int(Lq), int(row0), int(window),
+    )
+
+
+def apa_gemm_selective_quantize_k(k):
+    """Return cacheable SB1 signed-INT8 bytes and FP32 per-key scales.
+
+    Signed codes are stored bitwise in the returned public uint8 tensor.
+    Quantization is per ``[D]`` key row, uses ``amax/127`` and CUDA ``roundf``
+    (nearest, halfway away from zero), then clamps to ``[-127,127]``.
+    """
+    return _C.apa_gemm_selective_quantize_k(k)
+
+
+def apa_gemm_selective_stats(reset=False):
+    """Return cumulative ``(selected_pairs, valid_pairs)`` for SB1 calls."""
+    return _C.apa_gemm_selective_stats(bool(reset))
+
+
+def apa_gemm_selective_debug(
+    q, k, scale, zthr, is_causal=False, *, Lq=0, row0=0, window=0,
+):
+    """Gate-only SB1 bulk visibility; not an inference hot-path API."""
+    return _C.apa_gemm_selective_debug(
+        q, k, float(scale), float(zthr), bool(is_causal),
+        int(Lq), int(row0), int(window),
+    )
+
+
 def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=False):
     """Sink-aware fused sparse selective APA attention for GPT-OSS.
 
@@ -1149,7 +1208,9 @@ __all__ = [
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
-    "apa_selective_attention_int4",
+    "apa_selective_attention_int4", "apa_gemm_selective_attention",
+    "apa_gemm_selective_quantize_k", "apa_gemm_selective_stats",
+    "apa_gemm_selective_debug",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink", "argmax_last_axis",

@@ -37,7 +37,7 @@ GEOMETRIES = ((1, 16), (4, 16), (8, 16), (16, 16))
 DIMS = (128, 512)
 CONTEXTS = (4096, 8192, 16384, 32768, 65536)
 SHAPES = (("prefill", 512), ("decode", 1))
-PATHS = ("standard", "fused_apa", "int4_apa")
+PATHS = ("standard", "fused_apa", "int4_apa", "gemm_apa")
 DTYPE = "bfloat16"
 BULK_BITS = 4
 REFINE = 0.10
@@ -269,6 +269,13 @@ def _int4_call(tc, q, k, v, d: int, zthr: float):
     )
 
 
+def _gemm_apa_call(tc, q, k, v, d: int, zthr: float):
+    """SB1 call-local INT8 Q/K + cuBLASLt bulk + selected BF16 refine."""
+    return tc.apa_gemm_selective_attention(
+        q, k, v, 1.0 / math.sqrt(d), float(zthr), True
+    )
+
+
 def _release_call_output(tc, out) -> None:
     del out
     gc.collect()
@@ -351,12 +358,21 @@ def _base_config(path: str, kv: int, d: int, shape: str, l: int, s: int) -> dict
         "S": s,
         "causal_alignment": "bottom-right",
         "dtype": DTYPE,
-        "bulk_bits": BULK_BITS if path in ("fused_apa", "int4_apa") else None,
-        "refine_percentile": REFINE if path in ("fused_apa", "int4_apa") else None,
+        "bulk_bits": (8 if path == "gemm_apa" else BULK_BITS)
+        if path in ("fused_apa", "int4_apa", "gemm_apa") else None,
+        "refine_percentile": REFINE
+        if path in ("fused_apa", "int4_apa", "gemm_apa") else None,
     }
 
 
-def worker(path: str, kv: int, d: int) -> int:
+def worker(
+    path: str,
+    kv: int,
+    d: int,
+    *,
+    only_shape: str | None = None,
+    only_s: int | None = None,
+) -> int:
     sys.path.insert(0, str(ROOT / "tensor_cuda"))
     import tensor_cuda as tc
     from tensor_cuda.quant import _norm_ppf
@@ -372,6 +388,11 @@ def worker(path: str, kv: int, d: int) -> int:
             "missing required engine entry point: "
             "tensor_cuda.apa_selective_attention_int4"
         )
+    if path == "gemm_apa" and not hasattr(tc, "apa_gemm_selective_attention"):
+        raise RuntimeError(
+            "missing required engine entry point: "
+            "tensor_cuda.apa_gemm_selective_attention"
+        )
 
     tc.set_alloc_pooling(False)
     tc.empty_cache()
@@ -381,8 +402,12 @@ def worker(path: str, kv: int, d: int) -> int:
     zthr = _norm_ppf(1.0 - REFINE)
     try:
         for s_index, s in enumerate(CONTEXTS):
+            if only_s is not None and s != only_s:
+                continue
             k = kq = v = None
             for shape_index, (shape, l) in enumerate(SHAPES):
+                if only_shape is not None and shape != only_shape:
+                    continue
                 config = _base_config(path, kv, d, shape, l, s)
                 _emit({"event": "cell_start", "config": config})
                 try:
@@ -413,8 +438,10 @@ def worker(path: str, kv: int, d: int) -> int:
                         call = lambda: _standard_call(tc, q, k, v, kv, 16, l, s, d)
                     elif path == "fused_apa":
                         call = lambda: _fused_call(tc, q, k, kq, v, d, zthr)
-                    else:
+                    elif path == "int4_apa":
                         call = lambda: _int4_call(tc, q, k, v, d, zthr)
+                    else:
+                        call = lambda: _gemm_apa_call(tc, q, k, v, d, zthr)
                     measurement = _measure_cell(tc, pool, nvml, call)
                     measurement["config"] = config
                     _emit({"event": "cell_result", "result": measurement})
@@ -511,9 +538,11 @@ def _document(results: list[dict], commands: list[str], started: str) -> dict:
             ],
             "fused_apa": ["tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)"],
             "int4_apa": ["tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)"],
+            "gemm_apa": ["tensor_cuda.apa_gemm_selective_attention(q, k, v, scale, zthr, True)"],
             "bulk_key_preparation": {
                 "fused_apa": "host per-key-vector signed INT4 (-7..7) quantize/dequantize; excluded from call timing and pool delta",
                 "int4_apa": "call-local per-key-vector signed INT4 (-7..7) pack; included in call timing and pool delta; no persistent kq ring",
+                "gemm_apa": "call-local per-row Q and per-key K signed INT8 (-127..127) quantization; included in call timing and pool delta; optional cached K codes are deliberately not used",
             },
         },
         "commands": commands,
@@ -584,6 +613,7 @@ def _write_markdown(results: list[dict]) -> None:
             "- STANDARD is configured to invoke `tensor_cuda.matmul(q_grouped, k, trans_b=True)`, `tensor_cuda.causal_softmax(scores)`, then `tensor_cuda.matmul(weights_grouped, v)`. Q and weights are grouped as `(B, kv_heads, (q_heads/kv_heads)*L, ...)`; K/V are not expanded.",
             "- FUSED APA is configured to invoke `tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry.",
             "- INT4 APA is configured to invoke `tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Its call-local pack workspace and pack launch are included in both wall and pool measurements; it has no persistent kq operand.",
+            "- GEMM APA is configured to invoke `tensor_cuda.apa_gemm_selective_attention(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Call-local Q/K INT8 quantization, the INT32 bulk matrix, fp32 scores, selected-pair compaction/readback, bounded BF16 gather/GEMM refinement, and final P@V are all included in wall and pool measurements.",
             "- Pool values are call-local high-water deltas. NVML before/during/after absolute samples are retained per timed repetition in `results.json`.",
         ]
     )
@@ -765,7 +795,22 @@ def coordinator() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--row", nargs=3, metavar=("PATH", "KV", "D"))
+    parser.add_argument(
+        "--cell", nargs=5, metavar=("PATH", "KV", "D", "SHAPE", "S"),
+        help="run exactly one registered sweep cell (worker JSON to stdout)",
+    )
     args = parser.parse_args()
+    if args.cell:
+        path, kv, d, shape, s = args.cell
+        if path not in PATHS:
+            parser.error(f"PATH must be one of {PATHS}")
+        if shape not in dict(SHAPES):
+            parser.error(f"SHAPE must be one of {tuple(dict(SHAPES))}")
+        if int(s) not in CONTEXTS:
+            parser.error(f"S must be one of {CONTEXTS}")
+        return worker(
+            path, int(kv), int(d), only_shape=shape, only_s=int(s)
+        )
     if args.row:
         path, kv, d = args.row
         return worker(path, int(kv), int(d))

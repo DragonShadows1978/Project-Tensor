@@ -660,6 +660,57 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
      py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_gemm_selective_attention",
+      [](Tensor& q, Tensor& k, Tensor& v, double scale, double zthr,
+         bool is_causal, int64_t Lq, int64_t row0, int64_t window) {
+    return Tensor::make(
+        tc::apa_gemm_selective_attention(
+            q.data(), k.data(), v.data(), (float)scale, (float)zthr,
+            is_causal, (int)Lq, row0, (int)window),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
+     py::arg("zthr"), py::arg("is_causal") = false,
+     py::arg("Lq") = 0, py::arg("row0") = 0, py::arg("window") = 0);
+  m.def("apa_gemm_selective_attention_cached",
+      [](Tensor& q, Tensor& k, Tensor& v, Tensor& k_codes,
+         Tensor& k_scales, double scale, double zthr, bool is_causal,
+         int64_t Lq, int64_t row0, int64_t window) {
+    return Tensor::make(
+        tc::apa_gemm_selective_attention(
+            q.data(), k.data(), v.data(), (float)scale, (float)zthr,
+            is_causal, (int)Lq, row0, (int)window,
+            &k_codes.data(), &k_scales.data()),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("k_codes"),
+     py::arg("k_scales"), py::arg("scale"), py::arg("zthr"),
+     py::arg("is_causal") = false, py::arg("Lq") = 0,
+     py::arg("row0") = 0, py::arg("window") = 0);
+  m.def("apa_gemm_selective_quantize_k", [](Tensor& k) {
+    auto r = tc::apa_gemm_selective_quantize_k(k.data());
+    return py::make_tuple(Tensor::make(r.first, false),
+                          Tensor::make(r.second, false));
+  }, py::arg("k"));
+  m.def("apa_gemm_selective_stats", [](bool reset) {
+    auto r = tc::apa_gemm_selective_stats(reset);
+    return py::make_tuple(r.first, r.second);
+  }, py::arg("reset") = false);
+  m.def("apa_gemm_selective_debug",
+      [](Tensor& q, Tensor& k, double scale, double zthr,
+         bool is_causal, int64_t Lq, int64_t row0, int64_t window) {
+    auto r = tc::apa_gemm_selective_debug(
+        q.data(), k.data(), (float)scale, (float)zthr, is_causal,
+        (int)Lq, row0, (int)window);
+    return py::make_tuple(
+        Tensor::make(std::get<0>(r), false),
+        Tensor::make(std::get<1>(r), false),
+        Tensor::make(std::get<2>(r), false),
+        Tensor::make(std::get<3>(r), false),
+        Tensor::make(std::get<4>(r), false),
+        Tensor::make(std::get<5>(r), false),
+        Tensor::make(std::get<6>(r), false));
+  }, py::arg("q"), py::arg("k"), py::arg("scale"), py::arg("zthr"),
+     py::arg("is_causal") = false, py::arg("Lq") = 0,
+     py::arg("row0") = 0, py::arg("window") = 0);
   m.def("apa_selective_attention_sink",
       [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v, Tensor& sinks,
          double scale, double zthr, bool is_causal) {
