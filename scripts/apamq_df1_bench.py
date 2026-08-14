@@ -146,9 +146,10 @@ def benchmark_cell(name, d, sequence, warmup, repeats):
 
 
 def print_design() -> None:
-    print("# APAMQ-DF1/DF2 stage timing design")
+    print("# APAMQ-DF1/DF2/DF3 stage timing design")
     print("# CUDA-event means around individual launches; pipeline is median whole-call event time.")
     print("# shape: B=1 H=16 KVH=1 L=1 BF16 causal; target D=512 S=65536 <=1.000 ms.")
+    print("# TC_APA_STATS_PART_KEYS: integer keys/stats partition; unset/0 uses planner default; clamped to [min(128,S),S].")
     print("variant,D,S,stats_P,stats_part_keys,split_P,split_part_keys,stats_partial_blocks,stats_reduce_blocks,split_blocks,merge_blocks,pack_ms,stats_ms,split_ms,merge_ms,stage_sum_ms,pipeline_ms,target")
 
 

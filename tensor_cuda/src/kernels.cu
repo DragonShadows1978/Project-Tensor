@@ -1832,6 +1832,17 @@ inline void apa_int4_at_least_wave_partition_layout(
   }
 }
 
+inline int apa_int4_stats_partition_keys_override(int S) {
+  const char* value = std::getenv("TC_APA_STATS_PART_KEYS");
+  if (!value || !value[0]) return 0;
+  char* end = nullptr;
+  const long long parsed = std::strtoll(value, &end, 10);
+  if (end == value || end[0] != '\0' || parsed <= 0) return 0;
+  if (parsed < 128) return S < 128 ? S : 128;
+  if (parsed > S) return S;
+  return (int)parsed;
+}
+
 struct ApaInt4StageLayout {
   int stats_parts = 1;
   int stats_part_keys = 0;
@@ -1845,9 +1856,15 @@ inline ApaInt4StageLayout apa_int4_stage_layout(int rows, int S,
                                                 bool split_stats) {
   ApaInt4StageLayout layout;
   if (split_stats) {
-    // V4 targets one full SM wave independently of the split-stage policy.
-    apa_int4_wave_partition_layout(
+    // V4 uses at least the fixed 2K-key oversubscription, while retaining a
+    // full SM wave for short sequences. The env override is a sweep lever.
+    apa_int4_at_least_wave_partition_layout(
         rows, S, layout.stats_parts, layout.stats_part_keys);
+    const int override_keys = apa_int4_stats_partition_keys_override(S);
+    if (override_keys > 0) {
+      layout.stats_part_keys = override_keys;
+      layout.stats_parts = 1 + (S - 1) / override_keys;
+    }
   } else {
     layout.stats_part_keys = S;
   }

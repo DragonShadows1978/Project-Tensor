@@ -21,7 +21,7 @@ from tensor_cuda.quant import _norm_ppf
 TOL = dict(rtol=3e-3, atol=3e-3)
 DF_ENV = (
     "TC_APAMQ_DF_V2", "TC_APAMQ_DF_V3", "TC_APAMQ_DF_V4",
-    "TC_APA_SELECTIVE_PATH",
+    "TC_APA_SELECTIVE_PATH", "TC_APA_STATS_PART_KEYS",
 )
 
 
@@ -99,15 +99,30 @@ def test_df2_per_stage_partition_policy_cpu():
     assert v2_v3["split_partitions"] == 32
     assert v2_v3["split_blocks"] == 512
     assert v4 == {
-        "stats_partitions": 4, "stats_partition_keys": 16384,
+        "stats_partitions": 32, "stats_partition_keys": 2048,
         "split_partitions": 32, "split_partition_keys": 2048,
-        "stats_partial_blocks": 64, "stats_reduce_blocks": 16,
+        "stats_partial_blocks": 512, "stats_reduce_blocks": 16,
         "split_blocks": 512, "merge_blocks": 16,
     }
     assert short_v4["stats_partitions"] == 4
     assert short_v4["stats_partial_blocks"] == 64
     assert short_v2_v3["split_partitions"] == 4
     assert short_v2_v3["split_blocks"] == 64
+
+    os.environ["TC_APA_STATS_PART_KEYS"] = "0"
+    assert tc._apa_int4_decode_plan(16, 65536, split_stats=True) == v4
+
+    os.environ["TC_APA_STATS_PART_KEYS"] = "4096"
+    swept_v4 = tc._apa_int4_decode_plan(16, 65536, split_stats=True)
+    assert swept_v4["stats_partitions"] == 16
+    assert swept_v4["stats_partition_keys"] == 4096
+    assert swept_v4["stats_partial_blocks"] == 256
+    assert swept_v4["stats_reduce_blocks"] == 16
+
+    os.environ["TC_APA_STATS_PART_KEYS"] = "1"
+    clamped_v4 = tc._apa_int4_decode_plan(16, 65536, split_stats=True)
+    assert clamped_v4["stats_partitions"] == 512
+    assert clamped_v4["stats_partition_keys"] == 128
 
 
 @pytest.mark.parametrize("v2,v3", [(True, False), (False, True), (True, True)])
