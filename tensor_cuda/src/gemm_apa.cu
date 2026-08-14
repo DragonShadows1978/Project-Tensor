@@ -1,4 +1,4 @@
-// APAMQ-SB1: cuBLASLt INT8 bulk + compact gather/BF16 refine.
+// APAMQ-SB2: cuBLASLt INT8 bulk + bounded compact refinement.
 //
 // The public tensor dtype surface intentionally stays unchanged. Signed INT8
 // codes use the bit pattern of uint8 NDArrays; INT32 cuBLASLt accumulators use
@@ -12,10 +12,8 @@
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
 
-#include <thrust/device_ptr.h>
-#include <thrust/scan.h>
-
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -29,6 +27,19 @@ namespace {
 constexpr int kThreads = 256;
 constexpr size_t kLtWorkspaceBytes = 32ull * 1024 * 1024;
 constexpr int kRefinePairChunk = 262144;
+// Chunk-owned score/index/probability storage. Call-global K codes/scales,
+// output, and the cuBLASLt workspace leave headroom below the 384 MiB rail.
+constexpr size_t kChunkTransientBudget = 288ull * 1024 * 1024;
+// Above this gather footprint, a chunk uses the dense exact BF16->FP32 GEMM
+// fallback. It has identical selected-vs-bulk score semantics and avoids an
+// unbounded duplicated-Q/K gather workspace.
+constexpr size_t kSparseGatherBudget = 128ull * 1024 * 1024;
+
+#if defined(TC_APA_GEMM_DEBUG_ASSERTS)
+#define SB2_DASSERT(expr) assert(expr)
+#else
+#define SB2_DASSERT(expr) ((void)0)
+#endif
 
 struct SbShape {
   int B, H, KVH, group, L, S, D, VD, rows, M, Spad, batches;
@@ -242,6 +253,14 @@ __device__ __forceinline__ void valid_range(int row, const SbShape s,
   int64_t valid_hi = (int64_t)s.S - s.full_lq + row0 + i + 1;
   hi = (int)(valid_hi < 0 ? 0 : (valid_hi > s.S ? s.S : valid_hi));
   lo = window > 0 ? max(0, hi - window) : 0;
+  SB2_DASSERT(lo >= 0 && lo <= hi && hi <= s.S);
+}
+
+__device__ __forceinline__ bool select_score(float score, float threshold) {
+  // Deliberately positive-form. The SB1 appender used !(abs < threshold),
+  // which differs from abs >= threshold for NaNs and could append a pair that
+  // the count pass did not reserve.
+  return isfinite(score) && isfinite(threshold) && fabsf(score) >= threshold;
 }
 
 __global__ void scale_stats_count(const int32_t* accum,
@@ -298,7 +317,7 @@ __global__ void scale_stats_count(const int32_t* accum,
   __syncthreads();
   int local_count = 0;
   for (int j = lo + tid; j < hi; j += blockDim.x)
-    local_count += fabsf(out[j]) >= thr;
+    local_count += select_score(out[j], thr);
   __shared__ int ired[kThreads];
   ired[tid] = local_count;
   __syncthreads();
@@ -324,10 +343,13 @@ unsigned long long valid_pairs(const SbShape& s, bool causal, int64_t row0,
   return total;
 }
 
-__global__ void compact_pairs(const float* scores, const float* thresholds,
-                              int* cursors, int* pair_rows, int* pair_keys,
-                              SbShape s, int is_causal, int64_t row0,
-                              int window) {
+// counters = {chunk_attempted, call_selected, call_dropped, call_overflow}.
+// The index buffers are capacity-sized before launch. Selection beyond cap is
+// deliberately clamped, counted, and surfaced through the public stats API.
+__global__ void compact_pairs_bounded(
+    const float* scores, const float* thresholds,
+    int* pair_rows, int* pair_keys, unsigned long long* counters, int capacity,
+    int clamp_overflow, SbShape s, int is_causal, int64_t row0, int window) {
   int64_t linear = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   int64_t total = (int64_t)s.rows * s.S;
   if (linear >= total) return;
@@ -335,8 +357,17 @@ __global__ void compact_pairs(const float* scores, const float* thresholds,
   int key = (int)(linear - (int64_t)row * s.S);
   int lo, hi;
   valid_range(row, s, row0, is_causal, window, lo, hi);
-  if (key < lo || key >= hi || fabsf(scores[linear]) < thresholds[row]) return;
-  int dst = atomicAdd(cursors + row, 1);
+  if (key < lo || key >= hi ||
+      !select_score(scores[linear], thresholds[row])) return;
+  unsigned long long dst64 = atomicAdd(counters, 1ull);
+  atomicAdd(counters + 1, 1ull);
+  if (dst64 >= (unsigned long long)capacity) {
+    if (clamp_overflow) atomicAdd(counters + 2, 1ull);
+    atomicExch(counters + 3, 1ull);
+    return;
+  }
+  int dst = (int)dst64;
+  SB2_DASSERT(dst >= 0 && dst < capacity);
   pair_rows[dst] = row;
   pair_keys[dst] = key;
 }
@@ -344,14 +375,27 @@ __global__ void compact_pairs(const float* scores, const float* thresholds,
 __global__ void gather_selected_bf16(
     const __nv_bfloat16* q, const __nv_bfloat16* k,
     const int* pair_rows, const int* pair_keys, int pair0, int pairs,
+    const unsigned long long* chunk_attempted,
     __nv_bfloat16* qg, __nv_bfloat16* kg, SbShape s) {
   int64_t linear = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   int64_t total = (int64_t)pairs * s.D;
   if (linear >= total) return;
   int p = (int)(linear / s.D);
   int d = (int)(linear - (int64_t)p * s.D);
+  unsigned long long attempted = *chunk_attempted;
+  int live = attempted > (unsigned long long)pair0
+                 ? (int)min(attempted - (unsigned long long)pair0,
+                            (unsigned long long)pairs)
+                 : 0;
+  if (p >= live) {
+    qg[linear] = __float2bfloat16(0.f);
+    kg[linear] = __float2bfloat16(0.f);
+    return;
+  }
   int row = pair_rows[pair0 + p];
   int key = pair_keys[pair0 + p];
+  SB2_DASSERT(row >= 0 && row < s.rows);
+  SB2_DASSERT(key >= 0 && key < s.S);
   int bh = row / s.L;
   int b = bh / s.H;
   int h = bh % s.H;
@@ -362,23 +406,34 @@ __global__ void gather_selected_bf16(
 
 __global__ void scatter_refined(float* scores, const float* exact,
                                 const int* pair_rows, const int* pair_keys,
-                                int pair0, int pairs, int S) {
+                                int pair0, int pairs,
+                                const unsigned long long* chunk_attempted,
+                                int rows, int S) {
   int p = (int)((int64_t)blockIdx.x * blockDim.x + threadIdx.x);
   if (p >= pairs) return;
+  unsigned long long attempted = *chunk_attempted;
+  int live = attempted > (unsigned long long)pair0
+                 ? (int)min(attempted - (unsigned long long)pair0,
+                            (unsigned long long)pairs)
+                 : 0;
+  if (p >= live) return;
   int src = pair0 + p;
+  SB2_DASSERT(pair_rows[src] >= 0 && pair_rows[src] < rows);
+  SB2_DASSERT(pair_keys[src] >= 0 && pair_keys[src] < S);
   scores[(int64_t)pair_rows[src] * S + pair_keys[src]] = exact[p];
 }
 
 void refine_pairs(const NDArray& q, const NDArray& k, NDArray& scores,
                   const NDArray& pair_rows, const NDArray& pair_keys,
-                  int total_pairs, float scale, const SbShape& s) {
-  if (total_pairs == 0) return;
-  const int cap = std::min(total_pairs, kRefinePairChunk);
+                  const NDArray& counters, int capacity, float scale,
+                  const SbShape& s) {
+  if (capacity == 0) return;
+  const int cap = std::min(capacity, kRefinePairChunk);
   NDArray qg({cap, (int64_t)s.D}, DType::BFloat16, q.device);
   NDArray kg({cap, (int64_t)s.D}, DType::BFloat16, q.device);
   NDArray exact({cap}, DType::Float32, q.device);
-  for (int base = 0; base < total_pairs; base += cap) {
-    int n = std::min(cap, total_pairs - base);
+  for (int base = 0; base < capacity; base += cap) {
+    int n = std::min(cap, capacity - base);
     int64_t elems = (int64_t)n * s.D;
     gather_selected_bf16<<<(unsigned)((elems + kThreads - 1) / kThreads),
                             kThreads>>>(
@@ -386,6 +441,7 @@ void refine_pairs(const NDArray& q, const NDArray& k, NDArray& scores,
         static_cast<const __nv_bfloat16*>(k.data_ptr()),
         static_cast<const int*>(pair_rows.data_ptr()),
         static_cast<const int*>(pair_keys.data_ptr()), base, n,
+        static_cast<const unsigned long long*>(counters.data_ptr()),
         static_cast<__nv_bfloat16*>(qg.data_ptr()),
         static_cast<__nv_bfloat16*>(kg.data_ptr()), s);
     cuda_check_last("SB1 gather selected Q/K");
@@ -402,9 +458,74 @@ void refine_pairs(const NDArray& q, const NDArray& k, NDArray& scores,
         static_cast<float*>(scores.data_ptr()),
         static_cast<const float*>(exact.data_ptr()),
         static_cast<const int*>(pair_rows.data_ptr()),
-        static_cast<const int*>(pair_keys.data_ptr()), base, n, s.S);
+        static_cast<const int*>(pair_keys.data_ptr()), base, n,
+        static_cast<const unsigned long long*>(counters.data_ptr()),
+        s.rows, s.S);
     cuda_check_last("SB1 scatter refined scores");
   }
+}
+
+__global__ void copy_query_chunk(const __nv_bfloat16* q,
+                                 __nv_bfloat16* qchunk, int B, int H,
+                                 int full_L, int chunk_L, int D, int q0) {
+  int64_t linear = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t total = (int64_t)B * H * chunk_L * D;
+  if (linear >= total) return;
+  int d = (int)(linear % D);
+  int64_t t = linear / D;
+  int i = (int)(t % chunk_L);
+  int h = (int)((t / chunk_L) % H);
+  int b = (int)(t / ((int64_t)chunk_L * H));
+  SB2_DASSERT(q0 + i >= 0 && q0 + i < full_L);
+  qchunk[linear] = q[(((int64_t)b * H + h) * full_L + q0 + i) * D + d];
+}
+
+__global__ void copy_output_chunk(const __nv_bfloat16* chunk,
+                                  __nv_bfloat16* out, int B, int H,
+                                  int full_L, int chunk_L, int VD, int q0) {
+  int64_t linear = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t total = (int64_t)B * H * chunk_L * VD;
+  if (linear >= total) return;
+  int d = (int)(linear % VD);
+  int64_t t = linear / VD;
+  int i = (int)(t % chunk_L);
+  int h = (int)((t / chunk_L) % H);
+  int b = (int)(t / ((int64_t)chunk_L * H));
+  SB2_DASSERT(q0 + i >= 0 && q0 + i < full_L);
+  out[(((int64_t)b * H + h) * full_L + q0 + i) * VD + d] = chunk[linear];
+}
+
+void bf16_exact_scores(const NDArray& q, const NDArray& k, NDArray& exact,
+                       float scale, const SbShape& s) {
+  const float beta = 0.f;
+  const int64_t stride_q = (int64_t)s.M * s.D;
+  const int64_t stride_k = (int64_t)s.S * s.D;
+  const int64_t stride_c = (int64_t)s.M * s.S;
+  // Row-major [M,D]@[S,D]^T is column-major [S,M] = K * Q^T.
+  check_blas(cublasGemmStridedBatchedEx(
+                 blas_handle(), CUBLAS_OP_T, CUBLAS_OP_N,
+                 s.S, s.M, s.D, &scale,
+                 k.data_ptr(), CUDA_R_16BF, s.D, stride_k,
+                 q.data_ptr(), CUDA_R_16BF, s.D, stride_q,
+                 &beta, exact.data_ptr(), CUDA_R_32F, s.S, stride_c,
+                 s.batches, CUBLAS_COMPUTE_32F,
+                 CUBLAS_GEMM_DEFAULT_TENSOR_OP),
+             "SB2 dense exact BF16->FP32 GEMM");
+}
+
+__global__ void blend_dense_exact(float* scores, const float* exact,
+                                  const float* thresholds, SbShape s,
+                                  int is_causal, int64_t row0, int window) {
+  int64_t linear = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  int64_t total = (int64_t)s.rows * s.S;
+  if (linear >= total) return;
+  int row = (int)(linear / s.S);
+  int key = (int)(linear - (int64_t)row * s.S);
+  int lo, hi;
+  valid_range(row, s, row0, is_causal, window, lo, hi);
+  if (key >= lo && key < hi &&
+      select_score(scores[linear], thresholds[row]))
+    scores[linear] = exact[linear];
 }
 
 __global__ void fp32_score_softmax_bf16(const float* scores,
@@ -468,7 +589,7 @@ __global__ void widen_accum_and_mask(const int32_t* accum,
   int lo, hi;
   valid_range(row, s, row0, is_causal, window, lo, hi);
   selected[linear] = (j >= lo && j < hi &&
-                      fabsf(scores[linear]) >= thresholds[row]) ? 1 : 0;
+                      select_score(scores[linear], thresholds[row])) ? 1 : 0;
 }
 
 struct BulkState {
@@ -514,7 +635,37 @@ BulkState make_bulk(const NDArray& q, const NDArray& k, float scale,
 
 unsigned long long g_selected = 0;
 unsigned long long g_valid = 0;
+unsigned long long g_overflow_calls = 0;
+unsigned long long g_dropped = 0;
 std::mutex g_stats_mutex;
+
+double nominal_refine_fraction(float zthr) {
+  if (!std::isfinite(zthr)) return zthr < 0.f ? 1.0 : 0.0;
+  return std::max(0.0, std::min(1.0,
+      0.5 * std::erfc((double)zthr * 0.70710678118654752440)));
+}
+
+int choose_query_chunk(const SbShape& full, float zthr) {
+  const double cap_fraction = std::min(1.0, 2.0 * nominal_refine_fraction(zthr));
+  // accum + bulk scores + optional dense exact + BF16 probabilities + compact
+  // row/key indices. This deliberately assumes the dense fallback so changing
+  // route cannot violate the budget.
+  const double bytes_per_score = 4.0 + 4.0 + 4.0 + 2.0 + 8.0 * cap_fraction;
+  const double bytes_per_query_position =
+      (double)full.B * full.H * full.S * bytes_per_score;
+  int chunk = bytes_per_query_position > 0.0
+                  ? (int)(kChunkTransientBudget / bytes_per_query_position)
+                  : full.L;
+  return std::max(1, std::min(full.L, chunk));
+}
+
+int compact_capacity(unsigned long long valid, float zthr) {
+  const double fraction = std::min(1.0, 2.0 * nominal_refine_fraction(zthr));
+  const double raw = std::ceil(fraction * (double)valid);
+  if (raw >= (double)std::numeric_limits<int>::max())
+    return std::numeric_limits<int>::max();
+  return (int)raw;
+}
 
 }  // namespace
 
@@ -539,67 +690,125 @@ NDArray apa_gemm_selective_attention(
     throw std::runtime_error("apa_gemm_selective requires both cached K codes and scales");
   SbShape s = validate(q, k, &v, is_causal, Lq, row0, window,
                        "apa_gemm_selective_attention");
-  BulkState x = make_bulk(q, k, scale, zthr, is_causal, row0, window, s,
-                          cached_codes, cached_scales);
-
-  NDArray offsets({(int64_t)s.rows + 1}, DType::Float32, q.device);
-  thrust::device_ptr<int> countp(static_cast<int*>(x.counts.data_ptr()));
-  thrust::device_ptr<int> offsetp(static_cast<int*>(offsets.data_ptr()));
-  thrust::exclusive_scan(countp, countp + s.rows, offsetp);
-  int last_offset = 0, last_count = 0;
-  check_cuda(cudaMemcpy(&last_offset, offsetp.get() + s.rows - 1, sizeof(int),
-                        cudaMemcpyDeviceToHost), "SB1 selected offset readback");
-  check_cuda(cudaMemcpy(&last_count, countp.get() + s.rows - 1, sizeof(int),
-                        cudaMemcpyDeviceToHost), "SB1 selected count readback");
-  if (last_count > std::numeric_limits<int>::max() - last_offset)
-    throw std::runtime_error("SB1 compact selected count overflow");
-  int total = last_offset + last_count;
-  check_cuda(cudaMemcpy(offsetp.get() + s.rows, &total, sizeof(int),
-                        cudaMemcpyHostToDevice), "SB1 write final offset");
-  {
-    std::lock_guard<std::mutex> lock(g_stats_mutex);
-    g_selected += (unsigned)total;
-    g_valid += valid_pairs(s, is_causal, row0, window);
+  NDArray owned_kcodes, owned_kscales;
+  const NDArray* use_kcodes = cached_codes;
+  const NDArray* use_kscales = cached_scales;
+  if (cached_codes) {
+    validate_cached_k(k, *cached_codes, *cached_scales);
+  } else {
+    owned_kcodes = NDArray(k.shape, DType::Uint8, k.device);
+    owned_kscales = NDArray({k.shape[0], k.shape[1], k.shape[2]},
+                            DType::Float32, k.device);
+    quantize(k, owned_kcodes, owned_kscales);
+    use_kcodes = &owned_kcodes;
+    use_kscales = &owned_kscales;
   }
 
-  NDArray pair_rows({total}, DType::Float32, q.device);
-  NDArray pair_keys({total}, DType::Float32, q.device);
-  NDArray cursors({s.rows}, DType::Float32, q.device);
-  check_cuda(cudaMemcpyAsync(cursors.data_ptr(), offsets.data_ptr(),
-                             (size_t)s.rows * sizeof(int),
-                             cudaMemcpyDeviceToDevice, 0),
-             "SB1 initialize compact cursors");
-  int64_t matrix_elems = (int64_t)s.rows * s.S;
-  compact_pairs<<<(unsigned)((matrix_elems + kThreads - 1) / kThreads),
-                   kThreads>>>(
-      static_cast<const float*>(x.scores.data_ptr()),
-      static_cast<const float*>(x.thresholds.data_ptr()),
-      static_cast<int*>(cursors.data_ptr()),
-      static_cast<int*>(pair_rows.data_ptr()),
-      static_cast<int*>(pair_keys.data_ptr()), s, is_causal ? 1 : 0,
-      row0, window);
-  cuda_check_last("SB1 compact selected pairs");
-  // The INT32 matrix is dead before the potentially large gather/refine leg.
-  x.accum = NDArray();
-  refine_pairs(q, k, x.scores, pair_rows, pair_keys, total, scale, s);
+  NDArray out({q.shape[0], q.shape[1], q.shape[2], v.shape[3]},
+              DType::BFloat16, q.device);
+  NDArray counters({4}, DType::Int64, q.device);
+  check_cuda(cudaMemsetAsync(counters.data_ptr(), 0, 4 * sizeof(uint64_t), 0),
+             "SB2 initialize call counters");
 
-  NDArray probs({q.shape[0], q.shape[1], q.shape[2], k.shape[2]},
-                DType::BFloat16, q.device);
-  fp32_score_softmax_bf16<<<s.rows, kThreads>>>(
-      static_cast<const float*>(x.scores.data_ptr()),
-      static_cast<__nv_bfloat16*>(probs.data_ptr()), s,
-      is_causal ? 1 : 0, row0, window);
-  cuda_check_last("SB1 fp32-score softmax");
-  NDArray pg = probs.reshape({s.B, s.KVH, s.M, s.S});
-  NDArray outg = matmul(pg, v, 1.f, false);
-  return outg.reshape({s.B, s.H, s.L, s.VD});
+  const int query_chunk = choose_query_chunk(s, zthr);
+  unsigned long long valid_total = 0;
+  for (int q0 = 0; q0 < s.L; q0 += query_chunk) {
+    const int lc = std::min(query_chunk, s.L - q0);
+    NDArray qchunk({s.B, s.H, lc, s.D}, DType::BFloat16, q.device);
+    int64_t qelems = qchunk.numel();
+    copy_query_chunk<<<(unsigned)((qelems + kThreads - 1) / kThreads),
+                       kThreads>>>(
+        static_cast<const __nv_bfloat16*>(q.data_ptr()),
+        static_cast<__nv_bfloat16*>(qchunk.data_ptr()), s.B, s.H, s.L,
+        lc, s.D, q0);
+    cuda_check_last("SB2 copy query sub-chunk");
+
+    SbShape cs = s;
+    cs.L = lc;
+    cs.rows = s.B * s.H * lc;
+    cs.M = s.group * lc;
+    const int64_t chunk_row0 = row0 + q0;
+    BulkState x = make_bulk(qchunk, k, scale, zthr, is_causal, chunk_row0,
+                            window, cs, use_kcodes, use_kscales);
+    const unsigned long long chunk_valid =
+        valid_pairs(cs, is_causal, chunk_row0, window);
+    valid_total += chunk_valid;
+    const int capacity = compact_capacity(chunk_valid, zthr);
+    NDArray pair_rows({capacity}, DType::Float32, q.device);
+    NDArray pair_keys({capacity}, DType::Float32, q.device);
+    const size_t gather_bytes = (size_t)capacity *
+        ((size_t)2 * cs.D * sizeof(__nv_bfloat16) + sizeof(float));
+    const bool sparse_refine = gather_bytes <= kSparseGatherBudget;
+    check_cuda(cudaMemsetAsync(counters.data_ptr(), 0, sizeof(uint64_t), 0),
+               "SB2 reset chunk append cursor");
+    int64_t matrix_elems = (int64_t)cs.rows * cs.S;
+    compact_pairs_bounded<<<
+        (unsigned)((matrix_elems + kThreads - 1) / kThreads), kThreads>>>(
+        static_cast<const float*>(x.scores.data_ptr()),
+        static_cast<const float*>(x.thresholds.data_ptr()),
+        static_cast<int*>(pair_rows.data_ptr()),
+        static_cast<int*>(pair_keys.data_ptr()),
+        static_cast<unsigned long long*>(counters.data_ptr()), capacity,
+        sparse_refine ? 1 : 0, cs, is_causal ? 1 : 0, chunk_row0, window);
+    cuda_check_last("SB2 bounded compact selected pairs");
+
+    if (sparse_refine) {
+      x.accum = NDArray();
+      refine_pairs(qchunk, k, x.scores, pair_rows, pair_keys, counters,
+                   capacity, scale, cs);
+    } else {
+      NDArray exact({cs.batches, cs.M, cs.S}, DType::Float32, q.device);
+      bf16_exact_scores(qchunk, k, exact, scale, cs);
+      blend_dense_exact<<<
+          (unsigned)((matrix_elems + kThreads - 1) / kThreads), kThreads>>>(
+          static_cast<float*>(x.scores.data_ptr()),
+          static_cast<const float*>(exact.data_ptr()),
+          static_cast<const float*>(x.thresholds.data_ptr()), cs,
+          is_causal ? 1 : 0, chunk_row0, window);
+      cuda_check_last("SB2 blend dense exact selected scores");
+      x.accum = NDArray();
+    }
+
+    NDArray probs({cs.B, cs.H, cs.L, cs.S}, DType::BFloat16, q.device);
+    fp32_score_softmax_bf16<<<cs.rows, kThreads>>>(
+        static_cast<const float*>(x.scores.data_ptr()),
+        static_cast<__nv_bfloat16*>(probs.data_ptr()), cs,
+        is_causal ? 1 : 0, chunk_row0, window);
+    cuda_check_last("SB2 fp32-score softmax");
+    NDArray pg = probs.reshape({cs.B, cs.KVH, cs.M, cs.S});
+    NDArray outg = matmul(pg, v, 1.f, false);
+    NDArray outchunk = outg.reshape({cs.B, cs.H, cs.L, cs.VD});
+    int64_t oelems = outchunk.numel();
+    copy_output_chunk<<<(unsigned)((oelems + kThreads - 1) / kThreads),
+                        kThreads>>>(
+        static_cast<const __nv_bfloat16*>(outchunk.data_ptr()),
+        static_cast<__nv_bfloat16*>(out.data_ptr()), s.B, s.H, s.L,
+        lc, s.VD, q0);
+    cuda_check_last("SB2 copy output sub-chunk");
+  }
+
+  // The only device-to-host synchronization in an attention call. No compact
+  // count is read before or between refine launches.
+  unsigned long long host_counters[4] = {};
+  check_cuda(cudaMemcpy(host_counters, counters.data_ptr(),
+                        sizeof(host_counters), cudaMemcpyDeviceToHost),
+             "SB2 call stats readback");
+  {
+    std::lock_guard<std::mutex> lock(g_stats_mutex);
+    g_selected += host_counters[1];
+    g_valid += valid_total;
+    g_dropped += host_counters[2];
+    g_overflow_calls += host_counters[3] ? 1ull : 0ull;
+  }
+  return out;
 }
 
-std::pair<unsigned long long, unsigned long long>
+std::tuple<unsigned long long, unsigned long long,
+           unsigned long long, unsigned long long>
 apa_gemm_selective_stats(bool reset) {
   std::lock_guard<std::mutex> lock(g_stats_mutex);
-  auto out = std::make_pair(g_selected, g_valid);
-  if (reset) g_selected = g_valid = 0;
+  auto out = std::make_tuple(g_selected, g_valid, g_overflow_calls, g_dropped);
+  if (reset) g_selected = g_valid = g_overflow_calls = g_dropped = 0;
   return out;
 }
 

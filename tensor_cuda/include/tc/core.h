@@ -462,7 +462,9 @@ NDArray apa_gemm_selective_attention(
     int window = 0, const NDArray* k_codes = nullptr,
     const NDArray* k_scales = nullptr);
 std::pair<NDArray, NDArray> apa_gemm_selective_quantize_k(const NDArray& k);
-std::pair<unsigned long long, unsigned long long>
+// Returns (selected_pairs, valid_pairs, overflow_calls, dropped_pairs).
+std::tuple<unsigned long long, unsigned long long,
+           unsigned long long, unsigned long long>
 apa_gemm_selective_stats(bool reset);
 
 // Gate-only visibility: (qcodes, qscales, kcodes, kscales, integer sums,

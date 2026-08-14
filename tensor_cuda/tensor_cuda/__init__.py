@@ -1003,7 +1003,12 @@ def apa_gemm_selective_quantize_k(k):
 
 
 def apa_gemm_selective_stats(reset=False):
-    """Return cumulative ``(selected_pairs, valid_pairs)`` for SB1 calls."""
+    """Return ``(selected, valid, overflow_calls, dropped)`` for GEMM APA.
+
+    ``overflow_calls`` and ``dropped`` make bounded-compaction clamping
+    observable. A dense exact sub-chunk may flag compact telemetry overflow
+    while keeping ``dropped == 0`` because it does not consume that list.
+    """
     return _C.apa_gemm_selective_stats(bool(reset))
 
 

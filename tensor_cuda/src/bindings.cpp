@@ -692,7 +692,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   }, py::arg("k"));
   m.def("apa_gemm_selective_stats", [](bool reset) {
     auto r = tc::apa_gemm_selective_stats(reset);
-    return py::make_tuple(r.first, r.second);
+    return py::make_tuple(std::get<0>(r), std::get<1>(r),
+                          std::get<2>(r), std::get<3>(r));
   }, py::arg("reset") = false);
   m.def("apa_gemm_selective_debug",
       [](Tensor& q, Tensor& k, double scale, double zthr,

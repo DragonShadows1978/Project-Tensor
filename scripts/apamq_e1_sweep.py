@@ -270,7 +270,7 @@ def _int4_call(tc, q, k, v, d: int, zthr: float):
 
 
 def _gemm_apa_call(tc, q, k, v, d: int, zthr: float):
-    """SB1 call-local INT8 Q/K + cuBLASLt bulk + selected BF16 refine."""
+    """SB2 bounded/chunked INT8-bulk selective attention."""
     return tc.apa_gemm_selective_attention(
         q, k, v, 1.0 / math.sqrt(d), float(zthr), True
     )
@@ -613,7 +613,7 @@ def _write_markdown(results: list[dict]) -> None:
             "- STANDARD is configured to invoke `tensor_cuda.matmul(q_grouped, k, trans_b=True)`, `tensor_cuda.causal_softmax(scores)`, then `tensor_cuda.matmul(weights_grouped, v)`. Q and weights are grouped as `(B, kv_heads, (q_heads/kv_heads)*L, ...)`; K/V are not expanded.",
             "- FUSED APA is configured to invoke `tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry.",
             "- INT4 APA is configured to invoke `tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Its call-local pack workspace and pack launch are included in both wall and pool measurements; it has no persistent kq operand.",
-            "- GEMM APA is configured to invoke `tensor_cuda.apa_gemm_selective_attention(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Call-local Q/K INT8 quantization, the INT32 bulk matrix, fp32 scores, selected-pair compaction/readback, bounded BF16 gather/GEMM refinement, and final P@V are all included in wall and pool measurements.",
+            "- GEMM APA invokes `tensor_cuda.apa_gemm_selective_attention(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Call-local Q/K INT8 quantization, bounded atomic compaction, internal query-row sub-chunks, the selected skinny-GEMM route or dense exact FP32-output fallback, softmax, final P@V, and the single call-stats readback are included in wall and pool measurements.",
             "- Pool values are call-local high-water deltas. NVML before/during/after absolute samples are retained per timed repetition in `results.json`.",
         ]
     )

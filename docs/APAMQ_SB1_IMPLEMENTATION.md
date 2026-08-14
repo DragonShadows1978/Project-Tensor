@@ -1,5 +1,8 @@
 # APAMQ-SB1 Implementation Receipt
 
+> Historical SB1 receipt. The compaction, synchronization, and transient
+> policy below was superseded by `APAMQ_SB2_IMPLEMENTATION.md`.
+
 Evidence state: **IMPLEMENTED / CPU-CHECKED / GPU GATES PENDING LEAD**.
 No GPU timing or parity result is claimed from the sandbox.
 
@@ -89,7 +92,7 @@ flock -w 7200 /tmp/forge-gpu.lock \
 The port-level FC perplexity arm is pre-registered but not implemented or run
 in SB1; its later bar remains `gemm_apa <= apa_blend +0.25% relative`.
 
-## Known transient and deviation receipt
+## Historical SB1 transient and deviation receipt
 
 - The speed mode intentionally materializes INT32 bulk and FP32 score matrices.
 - Prefix compaction performs one device-to-host selected-count readback, which

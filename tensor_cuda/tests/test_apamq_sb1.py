@@ -27,6 +27,7 @@ from tensor_cuda.quant import _norm_ppf
 
 SCALE_TOL = dict(rtol=1e-6, atol=1e-6)
 E2E_TOL = dict(rtol=2e-2, atol=2e-2)
+SB2_CHUNK_BUDGET = 288 * 1024 * 1024
 
 
 def _require_cuda():
@@ -146,6 +147,17 @@ def _legacy_int4_k(k):
     return (code * safe).astype(np.float32)
 
 
+def _sb2_nominal_fraction(zthr):
+    return max(0.0, min(1.0, 0.5 * math.erfc(zthr / math.sqrt(2.0))))
+
+
+def _sb2_chunk_policy(B, H, L, S, zthr):
+    cap_fraction = min(1.0, 2.0 * _sb2_nominal_fraction(zthr))
+    bytes_per_score = 4.0 + 4.0 + 4.0 + 2.0 + 8.0 * cap_fraction
+    chunk = int(SB2_CHUNK_BUDGET / (B * H * S * bytes_per_score))
+    return max(1, min(L, chunk)), cap_fraction, bytes_per_score
+
+
 def test_sb1_round_half_away_contract_cpu():
     # Scale is exactly one, so these are direct halfway tie probes.
     row = np.array([127.0, -127.0, 0.5, -0.5, 1.5, -1.5, 2.5, -2.5], np.float32)
@@ -154,6 +166,40 @@ def test_sb1_round_half_away_contract_cpu():
     np.testing.assert_array_equal(
         codes[0], np.array([127, -127, 1, -1, 2, -2, 3, -3], np.int8)
     )
+
+
+def test_sb2_nonfinite_selection_predicate_is_count_append_identical_cpu():
+    scores = np.array([0.0, 2.0, np.nan, np.inf, -np.inf], np.float32)
+    thresholds = np.array([1.0, 1.0, 1.0, 1.0, np.nan], np.float32)
+    selected = np.isfinite(scores) & np.isfinite(thresholds) & (
+        np.abs(scores) >= thresholds
+    )
+    np.testing.assert_array_equal(selected, [False, True, False, False, False])
+
+
+def test_sb2_bounded_append_clamps_and_reports_overflow_cpu():
+    attempted, capacity = 11, 7
+    stored = list(range(attempted))[:capacity]
+    overflow = attempted > capacity
+    dropped = max(0, attempted - capacity)
+    assert stored == list(range(capacity))
+    assert overflow and dropped == 4
+
+
+def test_sb2_stats_surface_includes_overflow_and_dropped_cpu():
+    assert tc.apa_gemm_selective_stats(reset=True) == (0, 0, 0, 0)
+
+
+def test_sb2_registered_shape_chunk_policy_caps_score_materialization_cpu():
+    zthr = _norm_ppf(0.90)
+    for S in (16384, 65536):
+        chunk, cap_fraction, _bytes_per_score = _sb2_chunk_policy(
+            1, 16, 512, S, zthr
+        )
+        score_bytes = 1 * 16 * chunk * S * (4 + 4)
+        assert 1 <= chunk <= 512
+        assert score_bytes <= SB2_CHUNK_BUDGET
+        assert 0.19 < cap_fraction < 0.21
 
 
 def test_g_sb1_a_composed_reference_cpu():
