@@ -944,6 +944,20 @@ def apa_selective_attention(q, k, kq, v, scale, zthr, is_causal=False):
     return _C.apa_selective_attention(q, k, kq, v, scale, zthr, is_causal)
 
 
+def apa_selective_attention_int4(q, k, v, scale, zthr, is_causal=False):
+    """Selective APA with transient symmetric-7 INT4 packing of ``k``.
+
+    ``q`` is ``[B,H,L,D]`` while ``k``/``v`` are GQA-aware
+    ``[B,KVH,S,D]``/``[B,KVH,S,VD]`` tensors. The call owns its packed
+    workspace; callers retain no quantized-key ring. Bulk dots dequantize in
+    fp32 registers, selected keys use exact ``k``, and non-selected keys keep
+    their bulk score. Causality is bottom-right when ``S > L``. Inference
+    only (no autograd).
+    """
+    return _C.apa_selective_attention_int4(
+        q, k, v, float(scale), float(zthr), bool(is_causal))
+
+
 def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=False):
     """Sink-aware fused sparse selective APA attention for GPT-OSS.
 
@@ -1135,6 +1149,7 @@ __all__ = [
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
+    "apa_selective_attention_int4",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink", "argmax_last_axis",
