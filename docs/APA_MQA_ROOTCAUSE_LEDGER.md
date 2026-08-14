@@ -276,3 +276,65 @@ decisions, as they happen. Plan: `docs/APA_MQA_ROOTCAUSE_PLAN.md`
   order the multi-query-tile F-A2c redesign or park the speed
   program; (4) quantizer-parity round for the int4 mode (would
   re-arm G-C int4 re-run); (5) synthesis + docs law rewrite timing.
+
+## 2026-08-14 ~02:00 — Speed round 2 dispatched (David: "might as
+## well try it out. worst case, it fails.")
+
+- Two new disposable worktrees off apamq-fa @ a3336aa:
+  - **DF1** (wt/apamq-df, branch apamq-df): decode-floor diagnosis —
+    decode int4 D=512 kv=1 S=64K measures 10.83 ms vs ~0.07 ms
+    bandwidth floor (~300× off; standard 0.53 ms). Pre-registered
+    suspects: per-call whole-cache repack (S1), stats rescan (S2),
+    grid underfill / 3-launch serialization at rows=16 (S3 — only
+    one big enough for 300×). Deliverables: stage-resolved
+    micro-bench + ncu list + fix variants V1 (persistent packed-K
+    workspace, incremental append — purity-vs-bandwidth now a
+    measured decision), V2 (fused/incremental stats), V3 (grid
+    fill). Registered target: decode ≤1.0 ms at that cell.
+    SHIM-RUN 20260814T055756Z-866145.
+  - **SB1** (wt/apamq-sb, branch apamq-sb): "blend done right" —
+    cublasLt INT8→INT32 bulk GEMM (exact integer sums, fp32-scaled;
+    NO bf16 scores anywhere) + threshold/select + gather-only skinny
+    bf16 refine GEMM + fp32-score softmax + P·V. Library does the
+    tiling; custom code is elementwise only. Registered perf gate:
+    ≤1.5× cuBLAS standard at D=512 kv=1 prefill 16K (≤17.6 ms).
+    Honest framing: SPEED mode for wall-less regimes (materializes
+    chunk-capped fp32 scores); fused stays the memory mode. Quality
+    bar pre-registered: future FC arm ≤ blend +0.25%. SHIM-RUN
+    20260814T055758Z-866862.
+- Both Sol-max, sentinels armed, GPU legs lead-run on landing.
+
+## 2026-08-14 02:30–03:30 — Speed round 2 CLOSED (DF1→DF3, SB1→SB2)
+
+- **DF lane (decode floor), branch apamq-df @ 542666b:** DF1
+  stage-resolved bench isolated the true culprit — the STATS kernel
+  at one-block-per-row (~90% of pipeline; none of the 3 registered
+  suspects exactly). DF2 split-K'd the stats reduction (19/19 gates;
+  10.26→4.21 ms). DF3 micro-round fixed partition sizing
+  (at-least-wave + TC_APA_STATS_PART_KEYS knob; best part_keys=1024).
+  **FINAL: decisive decode cell (D=512 kv=1 S=64K) 10.83 → 1.89 ms
+  (5.7×), 19/19 gates green. Rail ≤1.0 ms stands MISSED** — residual
+  is scalar inner-loop cost split evenly (stats 0.61 + split 0.99);
+  vectorization-class successor registered, not dispatched.
+- **SB lane (speed blend), branch apamq-sb @ 10e7f86:** SB1 built
+  apa_gemm_selective_attention (cublasLt INT8→INT32 strided-batched
+  bulk, gather-only bounded refine, fp32 scores, rounding convention
+  declared with half-tie probes). First GPU contact: illegal access
+  at the 16K target cell + ~200-sync refine storm (1074 ms @64K) +
+  4.9 GB transient. SB2 fixed all three (device-side atomic
+  compaction, ONE stats readback/call, 288 MiB sub-chunk budget,
+  debug-assert build). **FINAL: 15/15 gates; 16K prefill 19.7 ms =
+  1.65× standard (rail ≤1.5× NEAR-MISS, recorded as MISS, David
+  adjudicates); 64K prefill 83.8 ms = 1.30× (PASS); decode 64K
+  1.41 ms (best APA decode measured on this machine); transients
+  279–299 MB (rail PASS).** Sanitizer leg inconclusive (host missing
+  libsanitizer-collection.so — tool issue, not a finding); the
+  formerly-crashing cell runs clean ×3 with asserts available.
+- **Two-mode picture established:** gemm_apa = SPEED mode (1.3–1.65×
+  standard, ~300 MB budget, best decode); int4 fused = MEMORY mode
+  (8–24 MiB flat transients, 1.89 ms decode). Night totals: APA
+  decode 10.83→1.41 ms (7.7×); APA prefill @16K 202→19.7 ms (10×).
+- Remaining before default flips: FC ppl arm for gemm_apa (int8 bulk
+  operating point) + a small port-wiring round; then David's merge
+  adjudication across apamq-fa / apamq-fb / apamq-df / apamq-sb
+  (apamq-fa2 stays stashed).
