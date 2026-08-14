@@ -650,6 +650,16 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
      py::arg("scale"), py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_selective_attention_int4",
+      [](Tensor& q, Tensor& k, Tensor& v, double scale, double zthr,
+         bool is_causal) {
+    return Tensor::make(
+        tc::apa_selective_attention_int4(q.data(), k.data(), v.data(),
+                                         (float)scale, (float)zthr,
+                                         is_causal),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
+     py::arg("zthr"), py::arg("is_causal") = false);
   m.def("apa_selective_attention_sink",
       [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v, Tensor& sinks,
          double scale, double zthr, bool is_causal) {

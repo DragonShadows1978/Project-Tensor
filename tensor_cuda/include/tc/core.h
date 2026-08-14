@@ -440,6 +440,13 @@ std::pair<NDArray, NDArray> gated_delta_step(
 NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
                                 const NDArray& kq, const NDArray& v,
                                 float scale, float zthr, bool is_causal);
+// Causal/selective APA with transient per-key symmetric-7 INT4 packing.
+// Unlike apa_selective_attention, callers do not provide or retain a kq
+// tensor: K is packed once per call, bulk dots dequantize in fp32 registers,
+// selected keys are rescored from exact K, and all keys remain in softmax.
+NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
+                                     const NDArray& v, float scale,
+                                     float zthr, bool is_causal);
 NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
                                      const NDArray& kq, const NDArray& v,
                                      const NDArray& sinks, float scale,

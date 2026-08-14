@@ -37,7 +37,7 @@ GEOMETRIES = ((1, 16), (4, 16), (8, 16), (16, 16))
 DIMS = (128, 512)
 CONTEXTS = (4096, 8192, 16384, 32768, 65536)
 SHAPES = (("prefill", 512), ("decode", 1))
-PATHS = ("standard", "fused_apa")
+PATHS = ("standard", "fused_apa", "int4_apa")
 DTYPE = "bfloat16"
 BULK_BITS = 4
 REFINE = 0.10
@@ -262,6 +262,13 @@ def _fused_call(tc, q, k, kq, v, d: int, zthr: float):
     )
 
 
+def _int4_call(tc, q, k, v, d: int, zthr: float):
+    """F-A1 call-local INT4 pack + causal selective attention."""
+    return tc.apa_selective_attention_int4(
+        q, k, v, 1.0 / math.sqrt(d), float(zthr), True
+    )
+
+
 def _release_call_output(tc, out) -> None:
     del out
     gc.collect()
@@ -344,8 +351,8 @@ def _base_config(path: str, kv: int, d: int, shape: str, l: int, s: int) -> dict
         "S": s,
         "causal_alignment": "bottom-right",
         "dtype": DTYPE,
-        "bulk_bits": BULK_BITS if path == "fused_apa" else None,
-        "refine_percentile": REFINE if path == "fused_apa" else None,
+        "bulk_bits": BULK_BITS if path in ("fused_apa", "int4_apa") else None,
+        "refine_percentile": REFINE if path in ("fused_apa", "int4_apa") else None,
     }
 
 
@@ -359,6 +366,11 @@ def worker(path: str, kv: int, d: int) -> int:
     if path == "fused_apa" and not hasattr(tc, "apa_selective_attention"):
         raise RuntimeError(
             "missing required engine entry point: tensor_cuda.apa_selective_attention"
+        )
+    if path == "int4_apa" and not hasattr(tc, "apa_selective_attention_int4"):
+        raise RuntimeError(
+            "missing required engine entry point: "
+            "tensor_cuda.apa_selective_attention_int4"
         )
 
     tc.set_alloc_pooling(False)
@@ -399,8 +411,10 @@ def worker(path: str, kv: int, d: int) -> int:
                     tc.set_alloc_pooling(True)
                     if path == "standard":
                         call = lambda: _standard_call(tc, q, k, v, kv, 16, l, s, d)
-                    else:
+                    elif path == "fused_apa":
                         call = lambda: _fused_call(tc, q, k, kq, v, d, zthr)
+                    else:
+                        call = lambda: _int4_call(tc, q, k, v, d, zthr)
                     measurement = _measure_cell(tc, pool, nvml, call)
                     measurement["config"] = config
                     _emit({"event": "cell_result", "result": measurement})
@@ -496,7 +510,11 @@ def _document(results: list[dict], commands: list[str], started: str) -> dict:
                 "tensor_cuda.matmul(weights_grouped, v)",
             ],
             "fused_apa": ["tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)"],
-            "bulk_key_preparation": "host per-key-vector signed INT4 (-7..7) quantize/dequantize; excluded from call timing and pool delta",
+            "int4_apa": ["tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)"],
+            "bulk_key_preparation": {
+                "fused_apa": "host per-key-vector signed INT4 (-7..7) quantize/dequantize; excluded from call timing and pool delta",
+                "int4_apa": "call-local per-key-vector signed INT4 (-7..7) pack; included in call timing and pool delta; no persistent kq ring",
+            },
         },
         "commands": commands,
         "results": results,
@@ -565,6 +583,7 @@ def _write_markdown(results: list[dict]) -> None:
             "- Inputs were configured as BF16. Fused APA was configured with a signed per-key-vector 4-bit bulk quantize/dequantize and `refine_percentile=0.10` (`z = NormalPPF(0.90)`). Bulk-key preparation was outside the measured attention call.",
             "- STANDARD is configured to invoke `tensor_cuda.matmul(q_grouped, k, trans_b=True)`, `tensor_cuda.causal_softmax(scores)`, then `tensor_cuda.matmul(weights_grouped, v)`. Q and weights are grouped as `(B, kv_heads, (q_heads/kv_heads)*L, ...)`; K/V are not expanded.",
             "- FUSED APA is configured to invoke `tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry.",
+            "- INT4 APA is configured to invoke `tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Its call-local pack workspace and pack launch are included in both wall and pool measurements; it has no persistent kq operand.",
             "- Pool values are call-local high-water deltas. NVML before/during/after absolute samples are retained per timed repetition in `results.json`.",
         ]
     )
