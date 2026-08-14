@@ -362,3 +362,30 @@ decisions, as they happen. Plan: `docs/APA_MQA_ROOTCAUSE_PLAN.md`
   successors (not dispatched): FC ppl arm + port wiring for gemm_apa,
   int4 quantizer parity, decode vectorization rung, docs law rewrite
   (APA.md / adjudication successor / SUPPORT_MATRIX / public docs).
+
+## 2026-08-14 afternoon — GC2: gemm arm ppl gate FAIL; wiring merged
+## default-OFF; bookkeeping fix
+
+- BOOKKEEPING FIX (GC2 seat's verification catch): the 71abd15
+  "merge" of apamq-fb had brought only ORDER FILES — the real
+  FB/FBD1/FC code was uncommitted in the worktree. Fixed: committed
+  bc0abcb on apamq-fb, re-merged (GraftRepository e68724f). Lead
+  error, seat catch, credited.
+- GC2 wiring (GEMMA4_APA_GEMM, default OFF, both call sites, ring
+  bypass, fingerprint preserved) merged to GraftRepository main.
+- **FC 5-arm summary (fingerprint 2b8f4d2d…, legacy receipts valid):
+  apa_gemm ppl 33.529 = +0.24% vs standard, +3.20% ± 0.80 vs
+  apa_blend → registered ≤ +0.25% gate FAIL (~4σ).** Engagement
+  clean (409,600 gemm decode calls, ring absent). Decode 31.3 ms/tok
+  (vs blend 29.9, fused 38.1).
+- **Mechanism hypothesis (named, consistent across BOTH failed
+  arms):** per-vector symmetric quantizers (int4 symmetric-7, int8
+  amax/127) lose effective precision to Gemma's 220:1
+  massive-activation dims — the same amplifier that collapsed
+  bf16-origin INT4-g128 in June. The port's table-based bulk4
+  quantizer handles it; the engine's naive vector scales don't.
+  Successor sharpened: QUANTIZER PARITY (table/grouped quantization
+  inside the engine paths) is the single fix covering int4 AND gemm
+  modes; both G-C arms re-arm on it. Note: gemm sits at STANDARD
+  quality — the gate bar embeds blend's unreconciled ~2.9%
+  better-than-standard bonus.
