@@ -338,3 +338,27 @@ decisions, as they happen. Plan: `docs/APA_MQA_ROOTCAUSE_PLAN.md`
   operating point) + a small port-wiring round; then David's merge
   adjudication across apamq-fa / apamq-fb / apamq-df / apamq-sb
   (apamq-fa2 stays stashed).
+
+## 2026-08-14 morning — DAVID'S ADJUDICATION + MERGE (program closes)
+
+- David: "Merge it all, 1.65 is fine." The 16K prefill rail overage
+  (1.65× vs registered 1.5×) is ACCEPTED by the operator — recorded
+  as an operator acceptance of a near-miss, not a threshold rewrite.
+- **Project-Tensor main @ e1e52ba**: merged apamq-fa (399edda) +
+  apamq-df (1b80616) + apamq-sb. Conflicts in core.h / bindings.cpp /
+  __init__.py were pure additive-additive (DF workspace/profile/plan
+  API vs SB gemm API at the same insertion points); resolved keep-both
+  by the lead. Canonical engine REBUILT; **merged gate battery 45/45
+  PASS** (int4 + DF + SB + legacy selective suites, lead-run).
+- **GraftRepository main @ 71abd15**: merged apamq-fb clean. LIVE
+  BEHAVIOR CHANGE: Gemma APA decode now defaults to the FUSED path
+  (G-C quality PASS; GEMMA4_APA_DECODE_FUSED=0 reverts);
+  GEMMA4_APA_INT4 stays default-OFF (quality gate RED pending
+  quantizer parity). Known-red note: tests/gemma4_apa_decode_fused.py
+  logit-parity leg is mis-specified per FBD1 (it measures blend bf16
+  rounding) — retained as-is with this adjudication as the record.
+- apamq-fa2 remains STASHED (unmerged, receipts preserved).
+- Board updated (AI_Research_Board.md 2026-08-14 entry). Registered
+  successors (not dispatched): FC ppl arm + port wiring for gemm_apa,
+  int4 quantizer parity, decode vectorization rung, docs law rewrite
+  (APA.md / adjudication successor / SUPPORT_MATRIX / public docs).
