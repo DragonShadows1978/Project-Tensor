@@ -37,7 +37,13 @@ GEOMETRIES = ((1, 16), (4, 16), (8, 16), (16, 16))
 DIMS = (128, 512)
 CONTEXTS = (4096, 8192, 16384, 32768, 65536)
 SHAPES = (("prefill", 512), ("decode", 1))
-PATHS = ("standard", "fused_apa", "int4_apa")
+PATHS = (
+    "standard",
+    "fused_apa",
+    "int4_apa",
+    "int4_bf16_mma_apa",
+    "int8q_int4_apa",
+)
 DTYPE = "bfloat16"
 BULK_BITS = 4
 REFINE = 0.10
@@ -269,6 +275,20 @@ def _int4_call(tc, q, k, v, d: int, zthr: float):
     )
 
 
+def _int4_bf16_mma_call(tc, q, k, v, d: int, zthr: float):
+    """F-A2 lane 1: F-A1 bulk/selection plus BF16-MMA exact refine."""
+    return tc.apa_selective_attention_int4_bf16_mma(
+        q, k, v, 1.0 / math.sqrt(d), float(zthr), True
+    )
+
+
+def _int8q_int4_call(tc, q, k, v, d: int, zthr: float):
+    """F-A2 lane 2: per-row INT8 Q x packed INT4 K dp4a bulk."""
+    return tc.apa_selective_attention_int8q_int4(
+        q, k, v, 1.0 / math.sqrt(d), float(zthr), True
+    )
+
+
 def _release_call_output(tc, out) -> None:
     del out
     gc.collect()
@@ -351,8 +371,9 @@ def _base_config(path: str, kv: int, d: int, shape: str, l: int, s: int) -> dict
         "S": s,
         "causal_alignment": "bottom-right",
         "dtype": DTYPE,
-        "bulk_bits": BULK_BITS if path in ("fused_apa", "int4_apa") else None,
-        "refine_percentile": REFINE if path in ("fused_apa", "int4_apa") else None,
+        "bulk_bits": BULK_BITS if path != "standard" else None,
+        "q_bulk_bits": 8 if path == "int8q_int4_apa" else None,
+        "refine_percentile": REFINE if path != "standard" else None,
     }
 
 
@@ -371,6 +392,20 @@ def worker(path: str, kv: int, d: int) -> int:
         raise RuntimeError(
             "missing required engine entry point: "
             "tensor_cuda.apa_selective_attention_int4"
+        )
+    if path == "int4_bf16_mma_apa" and not hasattr(
+        tc, "apa_selective_attention_int4_bf16_mma"
+    ):
+        raise RuntimeError(
+            "missing required engine entry point: "
+            "tensor_cuda.apa_selective_attention_int4_bf16_mma"
+        )
+    if path == "int8q_int4_apa" and not hasattr(
+        tc, "apa_selective_attention_int8q_int4"
+    ):
+        raise RuntimeError(
+            "missing required engine entry point: "
+            "tensor_cuda.apa_selective_attention_int8q_int4"
         )
 
     tc.set_alloc_pooling(False)
@@ -413,8 +448,12 @@ def worker(path: str, kv: int, d: int) -> int:
                         call = lambda: _standard_call(tc, q, k, v, kv, 16, l, s, d)
                     elif path == "fused_apa":
                         call = lambda: _fused_call(tc, q, k, kq, v, d, zthr)
-                    else:
+                    elif path == "int4_apa":
                         call = lambda: _int4_call(tc, q, k, v, d, zthr)
+                    elif path == "int4_bf16_mma_apa":
+                        call = lambda: _int4_bf16_mma_call(tc, q, k, v, d, zthr)
+                    else:
+                        call = lambda: _int8q_int4_call(tc, q, k, v, d, zthr)
                     measurement = _measure_cell(tc, pool, nvml, call)
                     measurement["config"] = config
                     _emit({"event": "cell_result", "result": measurement})
@@ -511,9 +550,13 @@ def _document(results: list[dict], commands: list[str], started: str) -> dict:
             ],
             "fused_apa": ["tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)"],
             "int4_apa": ["tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)"],
+            "int4_bf16_mma_apa": ["tensor_cuda.apa_selective_attention_int4_bf16_mma(q, k, v, scale, zthr, True)"],
+            "int8q_int4_apa": ["tensor_cuda.apa_selective_attention_int8q_int4(q, k, v, scale, zthr, True)"],
             "bulk_key_preparation": {
                 "fused_apa": "host per-key-vector signed INT4 (-7..7) quantize/dequantize; excluded from call timing and pool delta",
                 "int4_apa": "call-local per-key-vector signed INT4 (-7..7) pack; included in call timing and pool delta; no persistent kq ring",
+                "int4_bf16_mma_apa": "same call-local INT4 pack and fp32 bulk as int4_apa; selected exact BF16 dots use WMMA/fp32 accumulation",
+                "int8q_int4_apa": "call-local per-query INT8 (-127..127) Q plus per-key INT4 (-7..7) K; exact dp4a integer bulk and BF16-WMMA refine",
             },
         },
         "commands": commands,
@@ -584,6 +627,8 @@ def _write_markdown(results: list[dict]) -> None:
             "- STANDARD is configured to invoke `tensor_cuda.matmul(q_grouped, k, trans_b=True)`, `tensor_cuda.causal_softmax(scores)`, then `tensor_cuda.matmul(weights_grouped, v)`. Q and weights are grouped as `(B, kv_heads, (q_heads/kv_heads)*L, ...)`; K/V are not expanded.",
             "- FUSED APA is configured to invoke `tensor_cuda.apa_selective_attention(q, k, kq, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry.",
             "- INT4 APA is configured to invoke `tensor_cuda.apa_selective_attention_int4(q, k, v, scale, zthr, True)` with native `(q_heads, kv_heads)` geometry. Its call-local pack workspace and pack launch are included in both wall and pool measurements; it has no persistent kq operand.",
+            "- INT4 BF16-MMA APA invokes `tensor_cuda.apa_selective_attention_int4_bf16_mma(...)`: F-A1 bulk/statistics/selection with selected exact dots reassociated through BF16 WMMA/fp32 accumulation.",
+            "- INT8Q INT4 APA invokes `tensor_cuda.apa_selective_attention_int8q_int4(...)`: per-query symmetric INT8 Q and per-key symmetric-7 INT4 K are packed inside the measured call; exact dp4a int32 sums feed fp32 threshold statistics and non-selected softmax scores.",
             "- Pool values are call-local high-water deltas. NVML before/during/after absolute samples are retained per timed repetition in `results.json`.",
         ]
     )

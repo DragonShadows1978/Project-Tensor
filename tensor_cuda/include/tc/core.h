@@ -447,6 +447,20 @@ NDArray apa_selective_attention(const NDArray& q, const NDArray& k,
 NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
                                      const NDArray& v, float scale,
                                      float zthr, bool is_causal);
+// F-A2 lane 1: F-A1 bulk/statistics/selection with selected exact BF16 QK
+// dots reassociated onto WMMA (fp32 accumulation). BF16, D%16==0 only.
+NDArray apa_selective_attention_int4_bf16_mma(
+    const NDArray& q, const NDArray& k, const NDArray& v, float scale,
+    float zthr, bool is_causal);
+// F-A2 lane 2 (new operating point): per-query symmetric int8 Q x packed
+// symmetric int4 K exact integer bulk via dp4a, then BF16-WMMA refinement.
+NDArray apa_selective_attention_int8q_int4(
+    const NDArray& q, const NDArray& k, const NDArray& v, float scale,
+    float zthr, bool is_causal);
+// GPU-test diagnostic. Returns qcodes(uint8 two's-complement), qscales,
+// packed kcodes, kscales, integer sums(int64), and unscaled fp32 bulk dots.
+std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray>
+apa_int8q_int4_bulk_debug(const NDArray& q, const NDArray& k);
 NDArray apa_selective_attention_sink(const NDArray& q, const NDArray& k,
                                      const NDArray& kq, const NDArray& v,
                                      const NDArray& sinks, float scale,

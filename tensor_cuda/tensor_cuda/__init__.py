@@ -958,6 +958,43 @@ def apa_selective_attention_int4(q, k, v, scale, zthr, is_causal=False):
         q, k, v, float(scale), float(zthr), bool(is_causal))
 
 
+def apa_selective_attention_int4_bf16_mma(
+    q, k, v, scale, zthr, is_causal=False
+):
+    """F-A1-compatible bulk/selection with BF16 tensor-core refinement.
+
+    This lane accepts BF16 tensors with ``D % 16 == 0``. Its INT4 K bulk
+    scores, fp32 threshold statistics, and selection predicate are the same
+    as :func:`apa_selective_attention_int4`; selected exact dots use BF16
+    WMMA with fp32 accumulation and therefore differ only by reassociation.
+    """
+    return _C.apa_selective_attention_int4_bf16_mma(
+        q, k, v, float(scale), float(zthr), bool(is_causal))
+
+
+def apa_selective_attention_int8q_int4(q, k, v, scale, zthr, is_causal=False):
+    """New F-A2 operating point: symmetric INT8 Q x symmetric INT4 K bulk.
+
+    Per-query-row Q codes use ``round(q / (amax/127))`` clamped to
+    ``[-127, 127]``. K retains EXP-APA-2's per-key symmetric-7 convention.
+    Bulk integer sums are exact dp4a int32; fp32 qscale*kscale and attention
+    scaling follows the integer sum. Selected exact dots use BF16 WMMA/fp32.
+    BF16 inputs and ``D % 16 == 0`` are required.
+    """
+    return _C.apa_selective_attention_int8q_int4(
+        q, k, v, float(scale), float(zthr), bool(is_causal))
+
+
+def apa_int8q_int4_bulk_debug(q, k):
+    """Return codes/scales/exact integer sums for F-A2 GPU correctness gates.
+
+    The tuple is ``(qcodes_u8, qscales_f32, packed_kcodes_u8, kscales_f32,
+    integer_sums_i64, unscaled_bulk_f32)``. Q bytes are signed int8 in
+    two's-complement representation. This diagnostic is not the hot path.
+    """
+    return _C.apa_int8q_int4_bulk_debug(q, k)
+
+
 def apa_selective_attention_sink(q, k, kq, v, sinks, scale, zthr, is_causal=False):
     """Sink-aware fused sparse selective APA attention for GPT-OSS.
 
@@ -1149,7 +1186,8 @@ __all__ = [
     "mxfp4_linear", "mxfp4_linear_expert",
     "gated_delta_step",
     "int4_dequant", "intn_dequant", "apa_selective_attention",
-    "apa_selective_attention_int4",
+    "apa_selective_attention_int4", "apa_selective_attention_int4_bf16_mma",
+    "apa_selective_attention_int8q_int4", "apa_int8q_int4_bulk_debug",
     "apa_selective_attention_sink",
     "kv_int4_pack", "kv_int4_unpack",
     "apa_blend_softmax_sink", "argmax_last_axis",

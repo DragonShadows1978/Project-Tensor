@@ -660,6 +660,36 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         false);
   }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
      py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_selective_attention_int4_bf16_mma",
+      [](Tensor& q, Tensor& k, Tensor& v, double scale, double zthr,
+         bool is_causal) {
+    return Tensor::make(
+        tc::apa_selective_attention_int4_bf16_mma(
+            q.data(), k.data(), v.data(), (float)scale, (float)zthr,
+            is_causal),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
+     py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_selective_attention_int8q_int4",
+      [](Tensor& q, Tensor& k, Tensor& v, double scale, double zthr,
+         bool is_causal) {
+    return Tensor::make(
+        tc::apa_selective_attention_int8q_int4(
+            q.data(), k.data(), v.data(), (float)scale, (float)zthr,
+            is_causal),
+        false);
+  }, py::arg("q"), py::arg("k"), py::arg("v"), py::arg("scale"),
+     py::arg("zthr"), py::arg("is_causal") = false);
+  m.def("apa_int8q_int4_bulk_debug", [](Tensor& q, Tensor& k) {
+    auto r = tc::apa_int8q_int4_bulk_debug(q.data(), k.data());
+    return py::make_tuple(
+        Tensor::make(std::get<0>(r), false),
+        Tensor::make(std::get<1>(r), false),
+        Tensor::make(std::get<2>(r), false),
+        Tensor::make(std::get<3>(r), false),
+        Tensor::make(std::get<4>(r), false),
+        Tensor::make(std::get<5>(r), false));
+  }, py::arg("q"), py::arg("k"));
   m.def("apa_selective_attention_sink",
       [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v, Tensor& sinks,
          double scale, double zthr, bool is_causal) {

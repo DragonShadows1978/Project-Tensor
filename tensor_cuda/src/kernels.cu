@@ -5217,6 +5217,371 @@ static NDArray apa_selective_int4_splitk_dispatch(
   return out;
 }
 
+// ------------------------------------------------ APAMQ-F-A2 integer/BF16 TC
+// Two deliberately separate operating points share this kernel family:
+//
+//   * apa_selective_attention_int4_bf16_mma keeps F-A1's symmetric-7 K
+//     packing, fp32-dequantized bulk scores, threshold statistics, and mask.
+//     Only selected exact QK dots move to BF16 WMMA with fp32 accumulation.
+//
+//   * apa_selective_attention_int8q_int4 additionally quantizes each BF16 Q
+//     row to symmetric int8 (-127..127).  Its bulk dot is an exact int32
+//     sum of int8 Q codes times signed int4 K codes, evaluated with __dp4a;
+//     fp32 scaling happens only after the integer sum.  It is a new operating
+//     point and never changes the F-A1 entry point above.
+//
+// Four warps own interleaved 16-key batches.  A warp first establishes the
+// 16 bulk scores.  If any are selected, one m16n16k16 BF16 WMMA sequence
+// computes all 16 exact dots at once (only matrix row zero is live).  This
+// amortizes the otherwise wasteful single-query MMA shape across selected
+// keys while keeping scores fused: no LxS score/mask tensor is materialized.
+constexpr float kApaInt8InvQmax = (float)(1.0 / 127.0);
+
+template <typename T>
+__global__ void apa_int8q_pack_kernel(const T* __restrict__ q,
+                                      uint8_t* __restrict__ qcodes,
+                                      float* __restrict__ qscale,
+                                      int64_t rows, int D) {
+  const int lane = threadIdx.x & 31;
+  const int warp = threadIdx.x >> 5;
+  const int64_t row = (int64_t)blockIdx.x * (blockDim.x >> 5) + warp;
+  constexpr unsigned FULL = 0xffffffffu;
+  if (row >= rows) return;
+  const T* qrow = q + row * D;
+  float amax = 0.f;
+  for (int d = lane; d < D; d += 32)
+    amax = fmaxf(amax, fabsf(ld<T>(qrow, d)));
+  #pragma unroll
+  for (int off = 16; off > 0; off >>= 1)
+    amax = fmaxf(amax, __shfl_down_sync(FULL, amax, off));
+  amax = __shfl_sync(FULL, amax, 0);
+  const float scale = amax * kApaInt8InvQmax;
+  const float safe = scale > 0.f ? scale : 1.f;
+  const float recip = 1.f / safe;
+  for (int d = lane; d < D; d += 32) {
+    float c = roundf(ld<T>(qrow, d) * recip);
+    c = c < -127.f ? -127.f : (c > 127.f ? 127.f : c);
+    qcodes[row * D + d] = (uint8_t)(int8_t)(int)c;
+  }
+  if (lane == 0) qscale[row] = safe;
+}
+
+__device__ __forceinline__ int apa_dp4a_dot_serial(
+    const uint8_t* __restrict__ qcodes, const uint8_t* __restrict__ kcodes,
+    int D) {
+  int acc = 0;
+  #pragma unroll 4
+  for (int d = 0; d < D; d += 4) {
+    const uint32_t qword = (uint32_t)qcodes[d]
+        | ((uint32_t)qcodes[d + 1] << 8)
+        | ((uint32_t)qcodes[d + 2] << 16)
+        | ((uint32_t)qcodes[d + 3] << 24);
+    const uint8_t b0 = kcodes[d >> 1];
+    const uint8_t b1 = kcodes[(d >> 1) + 1];
+    const uint32_t kword = (uint32_t)(uint8_t)(int8_t)((int)(b0 & 0xF) - 7)
+        | ((uint32_t)(uint8_t)(int8_t)((int)(b0 >> 4) - 7) << 8)
+        | ((uint32_t)(uint8_t)(int8_t)((int)(b1 & 0xF) - 7) << 16)
+        | ((uint32_t)(uint8_t)(int8_t)((int)(b1 >> 4) - 7) << 24);
+    acc = __dp4a((int)qword, (int)kword, acc);
+  }
+  return acc;
+}
+
+template <int DMAX>
+__global__ void apa_int8q_stats_kernel(
+    const uint8_t* __restrict__ qcodes, const float* __restrict__ qscale,
+    const uint8_t* __restrict__ kcodes, const float* __restrict__ kscale,
+    float* __restrict__ thr_out, int H, int L, int S, int D, float attn_scale,
+    float zthr, int is_causal, int KVH, int group, int packed_d) {
+  const int row = blockIdx.x;
+  const int i = row % L;
+  const int bh = row / L;
+  const int b = bh / H;
+  const int h = bh % H;
+  const int kv_h = h / group;
+  const int tid = threadIdx.x;
+  const int lane = tid & 31;
+  const int warp = tid >> 5;
+  constexpr int nwarp = 4;
+  const int s_max = is_causal ? ((S - L) + i + 1) : S;
+  const int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const uint8_t* cbase = kcodes + kvbh * S * packed_d;
+  const float* sbase = kscale + kvbh * S;
+  __shared__ uint8_t qsh[DMAX];
+  __shared__ float red[128];
+  for (int d = tid; d < D; d += blockDim.x) qsh[d] = qcodes[(int64_t)row * D + d];
+  __syncthreads();
+
+  float sum = 0.f, sumsq = 0.f;
+  for (int base = 0; base < s_max; base += nwarp * 16) {
+    const int j = base + warp + lane * nwarp;
+    float a = 0.f;
+    if (lane < 16 && j < s_max) {
+      const int isum = apa_dp4a_dot_serial(qsh, cbase + (int64_t)j * packed_d, D);
+      const float bulk = (float)isum * (qscale[row] * sbase[j]) * attn_scale;
+      a = fabsf(bulk);
+    }
+    sum += a;
+    sumsq += a * a;
+  }
+  red[tid] = sum;
+  __syncthreads();
+  for (int off = 64; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  const float total = red[0];
+  __syncthreads();
+  red[tid] = sumsq;
+  __syncthreads();
+  for (int off = 64; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  if (tid == 0) {
+    const float mean = total / (float)s_max;
+    const float var = red[0] / (float)s_max - mean * mean;
+    thr_out[row] = mean + zthr * sqrtf(fmaxf(var, 0.f));
+  }
+}
+
+// One query row x 16 arbitrary key rows.  On sm_80+ the exact dots are BF16
+// WMMA/fp32-accumulate. Older compile targets retain a scalar correctness
+// fallback, but the public launchers require BF16 and the registered Ada leg.
+__device__ __forceinline__ void apa_bf16_mma_exact16(
+    const __nv_bfloat16* __restrict__ qrow,
+    const __nv_bfloat16* __restrict__ kbase, int D, int S, int s_max,
+    int base, int warp, __nv_bfloat16* __restrict__ ash,
+    __nv_bfloat16* __restrict__ bsh, float* __restrict__ csh) {
+  const int lane = threadIdx.x & 31;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+  using namespace nvcuda;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> c;
+  wmma::fill_fragment(c, 0.f);
+  for (int d0 = 0; d0 < D; d0 += 16) {
+    for (int x = lane; x < 256; x += 32) {
+      const int r = x >> 4;
+      const int d = x & 15;
+      ash[x] = r == 0 ? qrow[d0 + d] : __float2bfloat16(0.f);
+      const int j = base + warp + r * 4;
+      bsh[x] = j < s_max ? kbase[(int64_t)j * D + d0 + d]
+                         : __float2bfloat16(0.f);
+    }
+    __syncwarp();
+    wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16,
+                   wmma::row_major> a;
+    wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16,
+                   wmma::col_major> b;
+    wmma::load_matrix_sync(a, ash, 16);
+    wmma::load_matrix_sync(b, bsh, 16);
+    wmma::mma_sync(c, a, b, c);
+    __syncwarp();
+  }
+  wmma::store_matrix_sync(csh, c, 16, wmma::mem_row_major);
+  __syncwarp();
+#else
+  if (lane < 16) {
+    const int j = base + warp + lane * 4;
+    float dot = 0.f;
+    if (j < s_max)
+      for (int d = 0; d < D; ++d)
+        dot += __bfloat162float(qrow[d]) * __bfloat162float(kbase[(int64_t)j * D + d]);
+    csh[lane] = dot;
+  }
+  __syncwarp();
+#endif
+}
+
+template <int DMAX, bool INT_BULK>
+__global__ void apa_selective_bf16_mma_kernel(
+    const __nv_bfloat16* __restrict__ q,
+    const uint8_t* __restrict__ qcodes, const float* __restrict__ qscale,
+    const __nv_bfloat16* __restrict__ k,
+    const uint8_t* __restrict__ kcodes, const float* __restrict__ kscale,
+    const __nv_bfloat16* __restrict__ v, const float* __restrict__ thr_in,
+    __nv_bfloat16* __restrict__ out, float* __restrict__ part_m,
+    float* __restrict__ part_l, float* __restrict__ part_acc,
+    int H, int L, int S, int D, int VD, float attn_scale, int is_causal,
+    int KVH, int group, int packed_d, int num_parts, int part_keys) {
+  const int row = blockIdx.x;
+  const int part = blockIdx.y;
+  const int i = row % L;
+  const int bh = row / L;
+  const int b = bh / H;
+  const int h = bh % H;
+  const int kv_h = h / group;
+  const int tid = threadIdx.x;
+  const int lane = tid & 31;
+  const int warp = tid >> 5;
+  constexpr int nwarp = 4;
+  const int s_max = is_causal ? ((S - L) + i + 1) : S;
+  const int j_begin = part_m ? part * part_keys : 0;
+  const int j_end = part_m ? min(s_max, j_begin + part_keys) : s_max;
+  const int64_t part_row = (int64_t)row * num_parts + part;
+  if (j_begin >= j_end) {
+    if (tid == 0 && part_m) {
+      part_m[part_row] = -1e30f;
+      part_l[part_row] = 0.f;
+    }
+    if (part_acc)
+      for (int d = tid; d < VD; d += blockDim.x)
+        part_acc[part_row * VD + d] = 0.f;
+    return;
+  }
+  const int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const __nv_bfloat16* qrow = q + (int64_t)row * D;
+  const __nv_bfloat16* kbase = k + kvbh * S * D;
+  const uint8_t* cbase = kcodes + kvbh * S * packed_d;
+  const float* sbase = kscale + kvbh * S;
+  const __nv_bfloat16* vbase = v + kvbh * S * VD;
+  const float threshold = thr_in[row];
+
+  __shared__ float qf[DMAX];
+  __shared__ uint8_t qc[DMAX];
+  __shared__ float bulk_sh[4][16];
+  __shared__ uint16_t select_sh[4];
+  __shared__ __nv_bfloat16 mma_a[4][256];
+  __shared__ __nv_bfloat16 mma_b[4][256];
+  __shared__ float mma_c[4][256];
+  __shared__ float red[128];
+  __shared__ float wpart[4][DMAX];
+  for (int d = tid; d < D; d += blockDim.x) {
+    if constexpr (INT_BULK) qc[d] = qcodes[(int64_t)row * D + d];
+    else qf[d] = __bfloat162float(qrow[d]);
+  }
+  __syncthreads();
+
+  float m = -1e30f, l = 0.f;
+  constexpr int ACCN = (DMAX + 31) / 32;
+  float acc[ACCN];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+
+  for (int base = j_begin; base < j_end; base += nwarp * 16) {
+    if constexpr (INT_BULK) {
+      if (lane < 16) {
+        const int j = base + warp + lane * nwarp;
+        float bulk = 0.f;
+        if (j < j_end) {
+          const int isum = apa_dp4a_dot_serial(qc, cbase + (int64_t)j * packed_d, D);
+          bulk = (float)isum * (qscale[row] * sbase[j]) * attn_scale;
+        }
+        bulk_sh[warp][lane] = bulk;
+      }
+    } else {
+      for (int t = 0; t < 16; ++t) {
+        const int j = base + warp + t * nwarp;
+        float bulk = 0.f;
+        if (j < j_end)
+          bulk = apa_selective_int4_dot_warp<__nv_bfloat16>(
+              qf, cbase + (int64_t)j * packed_d, sbase[j], D) * attn_scale;
+        if (lane == 0) bulk_sh[warp][t] = bulk;
+      }
+    }
+    __syncwarp();
+    if (lane == 0) {
+      uint16_t mask = 0;
+      #pragma unroll
+      for (int t = 0; t < 16; ++t) {
+        const int j = base + warp + t * nwarp;
+        if (j < j_end && fabsf(bulk_sh[warp][t]) >= threshold)
+          mask |= (uint16_t)(1u << t);
+      }
+      select_sh[warp] = mask;
+    }
+    __syncwarp();
+    const uint16_t selected = select_sh[warp];
+    if (selected) {
+      apa_bf16_mma_exact16(qrow, kbase, D, S, j_end, base, warp,
+                           mma_a[warp], mma_b[warp], mma_c[warp]);
+    }
+    #pragma unroll
+    for (int t = 0; t < 16; ++t) {
+      const int j = base + warp + t * nwarp;
+      if (j >= j_end) continue;
+      const float score = (selected & (uint16_t)(1u << t))
+          ? mma_c[warp][t] * attn_scale : bulk_sh[warp][t];
+      const float m_new = fmaxf(m, score);
+      const float corr = __expf(m - m_new);
+      const float weight = __expf(score - m_new);
+      l = l * corr + weight;
+      const __nv_bfloat16* vj = vbase + (int64_t)j * VD;
+      #pragma unroll
+      for (int dl = 0; dl < ACCN; ++dl) {
+        const int d = lane + dl * 32;
+        if (d < VD)
+          acc[dl] = acc[dl] * corr + weight * __bfloat162float(vj[d]);
+      }
+      m = m_new;
+    }
+  }
+
+  red[tid] = m;
+  __syncthreads();
+  for (int off = 64; off > 0; off >>= 1) {
+    if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+    __syncthreads();
+  }
+  const float gmax = red[0];
+  __syncthreads();
+  const float rescale = __expf(m - gmax);
+  red[tid] = lane == 0 ? l * rescale : 0.f;
+  __syncthreads();
+  for (int off = 64; off > 0; off >>= 1) {
+    if (tid < off) red[tid] += red[tid + off];
+    __syncthreads();
+  }
+  const float denom = red[0];
+  #pragma unroll
+  for (int dl = 0; dl < ACCN; ++dl) {
+    const int d = lane + dl * 32;
+    if (d < VD) wpart[warp][d] = acc[dl] * rescale;
+  }
+  __syncthreads();
+  if (part_acc) {
+    for (int d = tid; d < VD; d += blockDim.x) {
+      float value = 0.f;
+      #pragma unroll
+      for (int w = 0; w < 4; ++w) value += wpart[w][d];
+      part_acc[part_row * VD + d] = value;
+    }
+    if (tid == 0) {
+      part_m[part_row] = gmax;
+      part_l[part_row] = denom;
+    }
+  } else {
+    __nv_bfloat16* orow = out + (int64_t)row * VD;
+    const float inv = denom > 0.f ? 1.f / denom : 0.f;
+    for (int d = tid; d < VD; d += blockDim.x) {
+      float value = 0.f;
+      #pragma unroll
+      for (int w = 0; w < 4; ++w) value += wpart[w][d];
+      orow[d] = __float2bfloat16(value * inv);
+    }
+  }
+}
+
+__global__ void apa_int8q_bulk_debug_kernel(
+    const uint8_t* __restrict__ qcodes, const float* __restrict__ qscale,
+    const uint8_t* __restrict__ kcodes, const float* __restrict__ kscale,
+    int64_t* __restrict__ isum_out, float* __restrict__ bulk_out,
+    int H, int L, int S, int D, int KVH, int group, int packed_d) {
+  const int row = blockIdx.x;
+  const int j = blockIdx.y * blockDim.x + threadIdx.x;
+  if (j >= S) return;
+  const int bh = row / L;
+  const int b = bh / H;
+  const int h = bh % H;
+  const int kv_h = h / group;
+  const int64_t kvbh = (int64_t)b * KVH + kv_h;
+  const int isum = apa_dp4a_dot_serial(
+      qcodes + (int64_t)row * D,
+      kcodes + (kvbh * S + j) * packed_d, D);
+  const int64_t out_idx = (int64_t)row * S + j;
+  isum_out[out_idx] = (int64_t)isum;
+  bulk_out[out_idx] = (float)isum * (qscale[row] * kscale[kvbh * S + j]);
+}
+
 template <typename T, int DMAX>
 __global__ void apa_int4_sdpa_noncausal_kernel(
     const T* __restrict__ q, const T* __restrict__ k,
@@ -6006,6 +6371,220 @@ NDArray apa_selective_attention_int4(const NDArray& q, const NDArray& k,
     }
   });
   return out;
+}
+
+namespace {
+struct ApaFa2Shape {
+  int B, H, L, S, D, VD, KVH, group, cap, packed_d, rows;
+  int64_t nkeys;
+};
+
+ApaFa2Shape validate_apa_fa2(const NDArray& q, const NDArray& k,
+                             const NDArray& v, bool is_causal,
+                             const char* opname) {
+  const std::string op(opname);
+  if (q.ndim() != 4 || k.ndim() != 4 || v.ndim() != 4)
+    throw std::runtime_error(op + " expects q/k/v rank 4");
+  if (q.dtype != DType::BFloat16 || k.dtype != DType::BFloat16 ||
+      v.dtype != DType::BFloat16)
+    throw std::runtime_error(op + " requires bfloat16 q/k/v");
+  if (q.device.type != k.device.type || q.device.index != k.device.index ||
+      q.device.type != v.device.type || q.device.index != v.device.index)
+    throw std::runtime_error(op + " device mismatch");
+  const int64_t B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
+  const int64_t KVH = k.shape[1], S = k.shape[2], VD = v.shape[3];
+  if (B < 0 || H <= 0 || L < 0 || D <= 0 || KVH <= 0 || S <= 0 || VD <= 0)
+    throw std::runtime_error(op + " requires positive geometry");
+  if (k.shape[0] != B || k.shape[3] != D || v.shape[0] != B ||
+      v.shape[1] != KVH || v.shape[2] != S)
+    throw std::runtime_error(op + " shape mismatch");
+  if (H % KVH != 0)
+    throw std::runtime_error(op + " requires query_heads divisible by kv_heads");
+  if (is_causal && S < L)
+    throw std::runtime_error(op + " bottom-right causal requires S >= L");
+  if ((D & 15) != 0)
+    throw std::runtime_error(op + " requires head_dim divisible by 16");
+  const int64_t cap = D > VD ? D : VD;
+  const int64_t rows = B * H * L;
+  if (cap > TC_APA_MAXD)
+    throw std::runtime_error(op + " head/value dim exceeds TC_APA_MAXD (512)");
+  if (B > std::numeric_limits<int>::max() || H > std::numeric_limits<int>::max() ||
+      L > std::numeric_limits<int>::max() || S > std::numeric_limits<int>::max() ||
+      D > std::numeric_limits<int>::max() || VD > std::numeric_limits<int>::max() ||
+      KVH > std::numeric_limits<int>::max() || rows > std::numeric_limits<int>::max())
+    throw std::runtime_error(op + " shape exceeds CUDA launch range");
+  return {(int)B, (int)H, (int)L, (int)S, (int)D, (int)VD, (int)KVH,
+          (int)(H / KVH), (int)cap, (int)((D + 1) >> 1), (int)rows,
+          B * KVH * S};
+}
+
+template <bool INT_BULK>
+NDArray launch_apa_fa2(const NDArray& q, const NDArray& k, const NDArray& v,
+                       float scale, float zthr, bool is_causal,
+                       const ApaFa2Shape& s) {
+  NDArray out({(int64_t)s.B, (int64_t)s.H, (int64_t)s.L, (int64_t)s.VD},
+              DType::BFloat16, q.device);
+  if (s.rows == 0) return out;
+  NDArray kcodes({(int64_t)s.B, (int64_t)s.KVH, (int64_t)s.S,
+                  (int64_t)s.packed_d}, DType::Uint8, q.device);
+  NDArray kscales({(int64_t)s.B, (int64_t)s.KVH, (int64_t)s.S},
+                  DType::Float32, q.device);
+  NDArray thresholds({(int64_t)s.rows}, DType::Float32, q.device);
+  NDArray qcodes, qscales;
+  constexpr int threads = 128;
+  const int override_path = apa_selective_path_override();
+  if (override_path == 2 && s.L != 1)
+    throw std::runtime_error(
+        "F-A2 TC APA: TC_APA_SELECTIVE_PATH=2 requires L==1");
+  const bool use_splitk = (override_path == 2 && s.L == 1) ||
+      (override_path == 0 && apa_selective_use_splitk(s.rows, s.S, s.L));
+  const int64_t pack_blocks = (s.nkeys + 3) / 4;
+  apa_int4_pack_kernel<__nv_bfloat16><<<(unsigned)pack_blocks, threads>>>(
+      static_cast<__nv_bfloat16*>(k.data_ptr()),
+      static_cast<uint8_t*>(kcodes.data_ptr()),
+      static_cast<float*>(kscales.data_ptr()), s.nkeys, s.D);
+  cuda_check_last(INT_BULK ? "apa_int8q_int4_pack_k" : "apa_int4_bf16_mma_pack_k");
+  if constexpr (INT_BULK) {
+    qcodes = NDArray({(int64_t)s.rows, (int64_t)s.D}, DType::Uint8, q.device);
+    qscales = NDArray({(int64_t)s.rows}, DType::Float32, q.device);
+    const int qblocks = (s.rows + 3) / 4;
+    apa_int8q_pack_kernel<__nv_bfloat16><<<qblocks, threads>>>(
+        static_cast<__nv_bfloat16*>(q.data_ptr()),
+        static_cast<uint8_t*>(qcodes.data_ptr()),
+        static_cast<float*>(qscales.data_ptr()), s.rows, s.D);
+    cuda_check_last("apa_int8q_int4_pack_q");
+  }
+  auto launch = [&](auto dmax_tag) {
+    constexpr int DMAX = decltype(dmax_tag)::value;
+    if constexpr (INT_BULK) {
+      apa_int8q_stats_kernel<DMAX><<<s.rows, threads>>>(
+          static_cast<uint8_t*>(qcodes.data_ptr()),
+          static_cast<float*>(qscales.data_ptr()),
+          static_cast<uint8_t*>(kcodes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()),
+          static_cast<float*>(thresholds.data_ptr()), s.H, s.L, s.S, s.D,
+          scale, zthr, is_causal ? 1 : 0, s.KVH, s.group, s.packed_d);
+      cuda_check_last("apa_int8q_int4_stats");
+    } else {
+      apa_selective_int4_stats_kernel<__nv_bfloat16, DMAX, true>
+          <<<s.rows, threads>>>(
+              static_cast<__nv_bfloat16*>(q.data_ptr()),
+              static_cast<uint8_t*>(kcodes.data_ptr()),
+              static_cast<float*>(kscales.data_ptr()),
+              static_cast<float*>(thresholds.data_ptr()), s.B, s.H, s.L,
+              s.S, s.D, scale, zthr, is_causal ? 1 : 0, s.KVH, s.group,
+              s.packed_d);
+      cuda_check_last("apa_int4_bf16_mma_stats");
+    }
+    auto launch_final = [&](dim3 grid, float* part_m, float* part_l,
+                            float* part_acc, int num_parts, int part_keys) {
+      apa_selective_bf16_mma_kernel<DMAX, INT_BULK><<<grid, threads>>>(
+          static_cast<__nv_bfloat16*>(q.data_ptr()),
+          INT_BULK ? static_cast<uint8_t*>(qcodes.data_ptr()) : nullptr,
+          INT_BULK ? static_cast<float*>(qscales.data_ptr()) : nullptr,
+          static_cast<__nv_bfloat16*>(k.data_ptr()),
+          static_cast<uint8_t*>(kcodes.data_ptr()),
+          static_cast<float*>(kscales.data_ptr()),
+          static_cast<__nv_bfloat16*>(v.data_ptr()),
+          static_cast<float*>(thresholds.data_ptr()),
+          static_cast<__nv_bfloat16*>(out.data_ptr()), part_m, part_l,
+          part_acc, s.H, s.L, s.S, s.D, s.VD, scale,
+          is_causal ? 1 : 0, s.KVH, s.group, s.packed_d, num_parts,
+          part_keys);
+    };
+    if (use_splitk) {
+      const int part_keys = TC_APA_SPLITK_PART_KEYS;
+      int num_parts = (s.S + part_keys - 1) / part_keys;
+      if (num_parts < 1) num_parts = 1;
+      NDArray part_m({(int64_t)s.rows * num_parts}, DType::Float32, q.device);
+      NDArray part_l({(int64_t)s.rows * num_parts}, DType::Float32, q.device);
+      NDArray part_acc({(int64_t)s.rows * num_parts * s.VD},
+                       DType::Float32, q.device);
+      launch_final(dim3((unsigned)s.rows, (unsigned)num_parts),
+                   static_cast<float*>(part_m.data_ptr()),
+                   static_cast<float*>(part_l.data_ptr()),
+                   static_cast<float*>(part_acc.data_ptr()), num_parts,
+                   part_keys);
+      cuda_check_last(INT_BULK ? "apa_int8q_int4_split" :
+                                 "apa_int4_bf16_mma_split");
+      apa_selective_merge_kernel<__nv_bfloat16, DMAX><<<s.rows, threads>>>(
+          static_cast<float*>(part_m.data_ptr()),
+          static_cast<float*>(part_l.data_ptr()),
+          static_cast<float*>(part_acc.data_ptr()), nullptr,
+          static_cast<__nv_bfloat16*>(out.data_ptr()), s.H, s.VD,
+          num_parts, 0);
+      cuda_check_last(INT_BULK ? "apa_int8q_int4_merge" :
+                                 "apa_int4_bf16_mma_merge");
+    } else {
+      launch_final(dim3((unsigned)s.rows), nullptr, nullptr, nullptr, 1, s.S);
+      cuda_check_last(INT_BULK ? "apa_int8q_int4" : "apa_int4_bf16_mma");
+    }
+  };
+  if (s.cap <= 64) launch(std::integral_constant<int, 64>{});
+  else if (s.cap <= 128) launch(std::integral_constant<int, 128>{});
+  else if (s.cap <= 256) launch(std::integral_constant<int, 256>{});
+  else launch(std::integral_constant<int, 512>{});
+  return out;
+}
+}  // namespace
+
+NDArray apa_selective_attention_int4_bf16_mma(
+    const NDArray& q, const NDArray& k, const NDArray& v, float scale,
+    float zthr, bool is_causal) {
+  const auto s = validate_apa_fa2(q, k, v, is_causal,
+                                  "apa_selective_int4_bf16_mma");
+  return launch_apa_fa2<false>(q, k, v, scale, zthr, is_causal, s);
+}
+
+NDArray apa_selective_attention_int8q_int4(
+    const NDArray& q, const NDArray& k, const NDArray& v, float scale,
+    float zthr, bool is_causal) {
+  const auto s = validate_apa_fa2(q, k, v, is_causal,
+                                  "apa_selective_int8q_int4");
+  return launch_apa_fa2<true>(q, k, v, scale, zthr, is_causal, s);
+}
+
+std::tuple<NDArray, NDArray, NDArray, NDArray, NDArray, NDArray>
+apa_int8q_int4_bulk_debug(const NDArray& q, const NDArray& k) {
+  if (q.ndim() != 4 || k.ndim() != 4 || q.dtype != DType::BFloat16 ||
+      k.dtype != DType::BFloat16 || q.device.type != k.device.type ||
+      q.device.index != k.device.index)
+    throw std::runtime_error("apa_int8q_int4_bulk_debug requires BF16 rank-4 q/k on one device");
+  const int64_t B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
+  const int64_t KVH = k.shape[1], S = k.shape[2];
+  if (B <= 0 || H <= 0 || L <= 0 || D <= 0 || KVH <= 0 || S <= 0 ||
+      k.shape[0] != B || k.shape[3] != D || H % KVH != 0 || (D & 15) != 0 ||
+      D > TC_APA_MAXD)
+    throw std::runtime_error("apa_int8q_int4_bulk_debug invalid geometry");
+  const int rows = (int)(B * H * L);
+  const int packed_d = (int)((D + 1) >> 1);
+  const int64_t nkeys = B * KVH * S;
+  NDArray qcodes({B, H, L, D}, DType::Uint8, q.device);
+  NDArray qscales({B, H, L}, DType::Float32, q.device);
+  NDArray kcodes({B, KVH, S, packed_d}, DType::Uint8, q.device);
+  NDArray kscales({B, KVH, S}, DType::Float32, q.device);
+  NDArray isums({B, H, L, S}, DType::Int64, q.device);
+  NDArray bulk({B, H, L, S}, DType::Float32, q.device);
+  constexpr int threads = 128;
+  apa_int8q_pack_kernel<__nv_bfloat16><<<(rows + 3) / 4, threads>>>(
+      static_cast<__nv_bfloat16*>(q.data_ptr()),
+      static_cast<uint8_t*>(qcodes.data_ptr()),
+      static_cast<float*>(qscales.data_ptr()), rows, (int)D);
+  apa_int4_pack_kernel<__nv_bfloat16><<<(unsigned)((nkeys + 3) / 4), threads>>>(
+      static_cast<__nv_bfloat16*>(k.data_ptr()),
+      static_cast<uint8_t*>(kcodes.data_ptr()),
+      static_cast<float*>(kscales.data_ptr()), nkeys, (int)D);
+  dim3 grid((unsigned)rows, (unsigned)((S + threads - 1) / threads));
+  apa_int8q_bulk_debug_kernel<<<grid, threads>>>(
+      static_cast<uint8_t*>(qcodes.data_ptr()),
+      static_cast<float*>(qscales.data_ptr()),
+      static_cast<uint8_t*>(kcodes.data_ptr()),
+      static_cast<float*>(kscales.data_ptr()),
+      static_cast<int64_t*>(isums.data_ptr()),
+      static_cast<float*>(bulk.data_ptr()), (int)H, (int)L, (int)S, (int)D,
+      (int)KVH, (int)(H / KVH), packed_d);
+  cuda_check_last("apa_int8q_int4_bulk_debug");
+  return {qcodes, qscales, kcodes, kscales, isums, bulk};
 }
 
 // EXP-APA-4 (K2): read (and optionally reset) the TC_APA_FRAC counters.
