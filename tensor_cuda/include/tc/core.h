@@ -388,6 +388,26 @@ NDArray int6_linear_fused(const NDArray& x, const NDArray& packed,
                           const NDArray& scales, const NDArray& zeros,
                           int group_size);
 
+// INT3 group-128 weight format. Eight unsigned codes occupy three bytes in a
+// little-endian 24-bit word:
+//   word = q0 | (q1 << 3) | (q2 << 6) | (q3 << 9) | (q4 << 12) |
+//          (q5 << 15) | (q6 << 18) | (q7 << 21), q[i] in [0,7].
+// This is affine.py's bit-offset-3k stream. Worked byte example:
+//   [0,1,2,3,4,5,6,7] -> [0x88,0xC6,0xFA].
+//   packed : (N, 3*K/8) uint8; K must be divisible by group_size == 128
+//   scales : (N, K/128) fp16
+//   zeros  : (N, K/128) fp16, or empty for z = -4*scale (primary path)
+// Dequant returns (K,N). Activations and linear outputs remain fp16.
+// `int3_linear` is the direct packed GEMV path; `int3_linear_fused` dispatches
+// M==1 to that GEMV and M>1 to the shared-memory tile kernel.
+NDArray int3_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int group_size, DType out_dtype);
+NDArray int3_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros, int group_size);
+NDArray int3_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int group_size);
+
 // Trinity-compatible symmetric INT8 weight / FP16 activation GEMM.
 //   x      : (..., K) fp16; leading dimensions are flattened then restored
 //   codes  : (N, K) uint8 with signed q represented as code = q + 128

@@ -53,6 +53,40 @@ def test_symmetric_grid_math_is_explicit():
     assert qmax(3) == 7
 
 
+def test_int3_eight_values_per_three_bytes_layout():
+    codes = np.arange(8, dtype=np.uint8).reshape(1, 8)
+    packed = pack_lowbit(codes, bits=3)
+
+    np.testing.assert_array_equal(
+        packed, np.array([[0x88, 0xC6, 0xFA]], dtype=np.uint8)
+    )
+    np.testing.assert_array_equal(unpack_lowbit(packed, 3, 8), codes)
+
+
+def test_int3_pack_roundtrip_covers_all_codes_and_group_boundaries():
+    codes = np.tile(np.arange(8, dtype=np.uint8), (3, 32))
+    packed = pack_lowbit(codes, bits=3)
+
+    assert packed.shape == (3, 96)
+    np.testing.assert_array_equal(unpack_lowbit(packed, 3, 256), codes)
+
+
+def test_int3_symmetric_quantizer_returns_empty_zeros():
+    rng = np.random.default_rng(103)
+    weights = rng.standard_normal((13, 256)).astype(np.float32)
+    q = quantize_symmetric_per_group(weights, bits=3, group_size=128)
+    deq = dequantize_symmetric_per_group(
+        q.packed, q.scales, q.bits, q.in_features, q.group_size
+    )
+
+    assert q.packed.shape == (13, 96)
+    assert q.scales.shape == (13, 2)
+    assert q.scales.dtype == np.float16
+    assert q.zeros.shape == (0,)
+    rel_fro = np.linalg.norm(deq - weights) / np.linalg.norm(weights)
+    assert rel_fro < 0.27
+
+
 def test_int6_four_values_per_three_bytes_layout():
     codes = np.array([[1, 2, 3, 4]], dtype=np.uint8)
     packed = pack_lowbit(codes, bits=6)

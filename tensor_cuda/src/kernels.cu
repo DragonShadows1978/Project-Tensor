@@ -3485,6 +3485,317 @@ NDArray int6_linear_fused(const NDArray& x, const NDArray& packed,
   return out;
 }
 
+// ------------------------------------------------------------- int3 quant linear
+// Native group-128 INT3 rows use the core.h/affine.py layout: every eight
+// logical codes q0..q7 form the little-endian 24-bit word
+// q0|(q1<<3)|...|(q7<<21). Empty zeros selects w = scale * (q - 4).
+constexpr int kInt3Group = 128;
+
+static inline int64_t int3_in_features(const NDArray& packed,
+                                       const char* where) {
+  if (packed.ndim() != 2)
+    throw std::runtime_error(std::string(where) + ": packed must be rank-2");
+  const int64_t bytes = packed.shape[1];
+  if (bytes <= 0 || (bytes % 3) != 0)
+    throw std::runtime_error(std::string(where) +
+                             ": packed byte width must be a positive multiple of 3");
+  return (bytes / 3) * 8;
+}
+
+static inline int64_t validate_int3_weight(const NDArray& packed,
+                                           const NDArray& scales,
+                                           const NDArray& zeros,
+                                           int group_size,
+                                           const char* where) {
+  if (group_size != kInt3Group)
+    throw std::runtime_error(std::string(where) +
+                             ": group_size must be 128 for the INT3 format");
+  if (packed.dtype != DType::Uint8)
+    throw std::runtime_error(std::string(where) + ": packed must be uint8");
+  if (scales.dtype != DType::Float16 ||
+      (zeros.numel() > 0 && zeros.dtype != DType::Float16))
+    throw std::runtime_error(std::string(where) +
+                             ": scales/zeros must be float16");
+  if (!packed.device.is_cuda() || !scales.device.is_cuda() ||
+      !zeros.device.is_cuda() || packed.device.index != scales.device.index ||
+      packed.device.index != zeros.device.index)
+    throw std::runtime_error(std::string(where) +
+                             ": packed/scales/zeros must share one CUDA device");
+  if (scales.ndim() != 2)
+    throw std::runtime_error(std::string(where) + ": scales must be rank-2");
+  const int64_t K = int3_in_features(packed, where);
+  if ((K % kInt3Group) != 0)
+    throw std::runtime_error(std::string(where) +
+                             ": inferred K must be divisible by 128");
+  const int64_t N = packed.shape[0];
+  const int64_t G = K / kInt3Group;
+  if (scales.shape[0] != N || scales.shape[1] != G)
+    throw std::runtime_error(std::string(where) +
+                             ": scales shape must be (out_features, K/128)");
+  if (zeros.numel() > 0 &&
+      (zeros.ndim() != 2 || zeros.shape[0] != N || zeros.shape[1] != G))
+    throw std::runtime_error(std::string(where) +
+                             ": zeros shape must be (out_features, K/128) or empty");
+  return K;
+}
+
+static inline int64_t validate_int3_linear_inputs(const NDArray& x,
+                                                  const NDArray& packed,
+                                                  const NDArray& scales,
+                                                  const NDArray& zeros,
+                                                  int group_size,
+                                                  const char* where) {
+  if (x.ndim() < 1)
+    throw std::runtime_error(std::string(where) +
+                             ": x must have at least one dimension");
+  if (x.dtype != DType::Float16)
+    throw std::runtime_error(std::string(where) +
+                             ": x must be float16 (INT3 is weight-only W3A16)");
+  const int64_t K = validate_int3_weight(packed, scales, zeros, group_size,
+                                         where);
+  if (x.shape[x.ndim() - 1] != K)
+    throw std::runtime_error(std::string(where) +
+                             ": x last dimension mismatches K");
+  if (!x.device.is_cuda() || x.device.index != packed.device.index)
+    throw std::runtime_error(std::string(where) +
+                             ": all inputs must share one CUDA device");
+  return K;
+}
+
+__device__ __forceinline__ int int3_read_q(const uint8_t* row, int64_t k) {
+  const uint8_t* p = row + (k >> 3) * 3;
+  switch ((int)(k & 7)) {
+    case 0: return (int)(p[0] & 0x07);
+    case 1: return (int)((p[0] >> 3) & 0x07);
+    case 2: return (int)((p[0] >> 6) | ((p[1] & 0x01) << 2));
+    case 3: return (int)((p[1] >> 1) & 0x07);
+    case 4: return (int)((p[1] >> 4) & 0x07);
+    case 5: return (int)((p[1] >> 7) | ((p[2] & 0x03) << 1));
+    case 6: return (int)((p[2] >> 2) & 0x07);
+    default: return (int)(p[2] >> 5);
+  }
+}
+
+template <typename T>
+__global__ void int3_dequant_t_kernel(const uint8_t* packed,
+                                      const __half* scales,
+                                      const __half* zeros, T* out_kn,
+                                      int64_t N, int64_t K,
+                                      int64_t bytes_per_row, int64_t G,
+                                      int64_t n) {
+  const int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= n) return;
+  const int64_t k = idx / N;
+  const int64_t col = idx - k * N;
+  const uint8_t* row = packed + col * bytes_per_row;
+  const int q = int3_read_q(row, k);
+  const int64_t g = k / kInt3Group;
+  const float scale = __half2float(scales[col * G + g]);
+  const float zero = zeros ? __half2float(zeros[col * G + g])
+                           : -4.f * scale;
+  st<T>(out_kn, idx, (float)q * scale + zero);
+}
+
+NDArray int3_dequant(const NDArray& packed, const NDArray& scales,
+                     const NDArray& zeros, int group_size, DType out_dtype) {
+  const int64_t K = validate_int3_weight(packed, scales, zeros, group_size,
+                                         "int3_dequant");
+  const int64_t N = packed.shape[0];
+  const int64_t G = K / kInt3Group;
+  const int64_t bytes = K * 3 / 8;
+  NDArray out({K, N}, out_dtype, packed.device);
+  const int64_t n = K * N;
+  if (n) {
+    DISPATCH_FLOAT(out_dtype, T, {
+      int3_dequant_t_kernel<T><<<nblk(n), kT>>>(
+          static_cast<uint8_t*>(packed.data_ptr()),
+          static_cast<__half*>(scales.data_ptr()),
+          zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+          static_cast<T*>(out.data_ptr()), N, K, bytes, G, n);
+    });
+    cuda_check_last("int3_dequant");
+  }
+  return out;
+}
+
+// Direct packed W3A16 GEMV. Each lane owns complete 3-byte octets, so a group
+// boundary never bisects a decode (128 is divisible by eight). For M>1 the
+// public GEMV operation launches one independent decode row per activation;
+// the fused API uses the tile kernel for that case.
+__global__ void int3_gemv_kernel(
+    const __half* __restrict__ x, const uint8_t* __restrict__ packed,
+    const __half* __restrict__ scales, const __half* __restrict__ zeros,
+    __half* __restrict__ y, int M, int N, int K, int bytes_per_row, int G,
+    int blocks_per_m) {
+  extern __shared__ unsigned char xs_raw[];
+  __half* xs = reinterpret_cast<__half*>(xs_raw);
+  const int linear_block = (int)blockIdx.x;
+  const int m = linear_block / blocks_per_m;
+  const int n_block = linear_block - m * blocks_per_m;
+  const __half* xrow = x + (int64_t)m * K;
+  for (int k = threadIdx.x; k < K; k += blockDim.x) xs[k] = xrow[k];
+  __syncthreads();
+  const int warps = blockDim.x >> 5;
+  const int wid = threadIdx.x >> 5;
+  const int lane = threadIdx.x & 31;
+  const int n = n_block * warps + wid;
+  if (m >= M || n >= N) return;
+  const uint8_t* row = packed + (int64_t)n * bytes_per_row;
+  const __half* srow = scales + (int64_t)n * G;
+  const __half* zrow = zeros ? zeros + (int64_t)n * G : nullptr;
+  const int octets = K >> 3;
+  float acc = 0.f;
+  for (int octet = lane; octet < octets; octet += 32) {
+    const uint8_t* p = row + octet * 3;
+    const int q0 = (int)(p[0] & 0x07);
+    const int q1 = (int)((p[0] >> 3) & 0x07);
+    const int q2 = (int)((p[0] >> 6) | ((p[1] & 0x01) << 2));
+    const int q3 = (int)((p[1] >> 1) & 0x07);
+    const int q4 = (int)((p[1] >> 4) & 0x07);
+    const int q5 = (int)((p[1] >> 7) | ((p[2] & 0x03) << 1));
+    const int q6 = (int)((p[2] >> 2) & 0x07);
+    const int q7 = (int)(p[2] >> 5);
+    const int k0 = octet << 3;
+    const int g = k0 / kInt3Group;
+    const float scale = __half2float(srow[g]);
+    const float zero = zrow ? __half2float(zrow[g]) : -4.f * scale;
+    const __half* xk = xs + k0;
+    acc += ((float)q0 * scale + zero) * __half2float(xk[0])
+         + ((float)q1 * scale + zero) * __half2float(xk[1])
+         + ((float)q2 * scale + zero) * __half2float(xk[2])
+         + ((float)q3 * scale + zero) * __half2float(xk[3])
+         + ((float)q4 * scale + zero) * __half2float(xk[4])
+         + ((float)q5 * scale + zero) * __half2float(xk[5])
+         + ((float)q6 * scale + zero) * __half2float(xk[6])
+         + ((float)q7 * scale + zero) * __half2float(xk[7]);
+  }
+  for (int off = 16; off; off >>= 1)
+    acc += __shfl_down_sync(0xffffffffu, acc, off);
+  if (lane == 0) y[(int64_t)m * N + n] = __float2half(acc);
+}
+
+static inline void launch_int3_gemv(const NDArray& x, const NDArray& packed,
+                                    const NDArray& scales,
+                                    const NDArray& zeros, NDArray& out,
+                                    int64_t M, int64_t N, int64_t K,
+                                    const char* where) {
+  const int threads = 256;
+  const int warps = threads / 32;
+  const int64_t blocks_per_m = (N + warps - 1) / warps;
+  const int64_t blocks = M * blocks_per_m;
+  const size_t shmem = (size_t)K * sizeof(__half);
+  if (shmem > 96 * 1024)
+    throw std::runtime_error(std::string(where) +
+                             ": K exceeds the packed GEMV shared-memory limit");
+  if (blocks > std::numeric_limits<int>::max())
+    throw std::runtime_error(std::string(where) +
+                             ": GEMV launch grid exceeds CUDA int limits");
+  if (shmem > 48 * 1024) {
+    cudaFuncSetAttribute(int3_gemv_kernel,
+                         cudaFuncAttributeMaxDynamicSharedMemorySize,
+                         96 * 1024);
+  }
+  int3_gemv_kernel<<<(unsigned)blocks, threads, shmem>>>(
+      static_cast<__half*>(x.data_ptr()),
+      static_cast<uint8_t*>(packed.data_ptr()),
+      static_cast<__half*>(scales.data_ptr()),
+      zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+      static_cast<__half*>(out.data_ptr()), (int)M, (int)N, (int)K,
+      (int)(K * 3 / 8), (int)(K / kInt3Group), (int)blocks_per_m);
+  cuda_check_last(where);
+}
+
+NDArray int3_linear(const NDArray& x, const NDArray& packed,
+                    const NDArray& scales, const NDArray& zeros,
+                    int group_size) {
+  const int64_t K = validate_int3_linear_inputs(
+      x, packed, scales, zeros, group_size, "int3_linear");
+  const int64_t M = x.numel() / K;
+  const int64_t N = packed.shape[0];
+  if (M > std::numeric_limits<int>::max() ||
+      N > std::numeric_limits<int>::max() ||
+      K > std::numeric_limits<int>::max())
+    throw std::runtime_error("int3_linear: dimensions exceed CUDA int limits");
+  Shape os = x.shape;
+  os.back() = N;
+  NDArray out(os, DType::Float16, x.device);
+  if (M && N)
+    launch_int3_gemv(x, packed, scales, zeros, out, M, N, K, "int3_gemv");
+  return out;
+}
+
+#define TC_I3_TILE 16
+__global__ void int3_gemm_fused_kernel(
+    const __half* x, const uint8_t* packed, const __half* scales,
+    const __half* zeros, __half* y, int M, int N, int K, int bytes_per_row,
+    int G) {
+  __shared__ float xs[TC_I3_TILE][TC_I3_TILE];
+  __shared__ float ws[TC_I3_TILE][TC_I3_TILE];
+  const int row = blockIdx.y * TC_I3_TILE + threadIdx.y;
+  const int col = blockIdx.x * TC_I3_TILE + threadIdx.x;
+  float acc = 0.f;
+  for (int k0 = 0; k0 < K; k0 += TC_I3_TILE) {
+    const int kx = k0 + threadIdx.x;
+    xs[threadIdx.y][threadIdx.x] =
+        (row < M && kx < K)
+            ? __half2float(x[(int64_t)row * K + kx])
+            : 0.f;
+    const int kw = k0 + threadIdx.y;
+    float wv = 0.f;
+    if (col < N && kw < K) {
+      const uint8_t* prow = packed + (int64_t)col * bytes_per_row;
+      const int q = int3_read_q(prow, kw);
+      const int g = kw / kInt3Group;
+      const float scale = __half2float(scales[(int64_t)col * G + g]);
+      const float zero = zeros ? __half2float(zeros[(int64_t)col * G + g])
+                               : -4.f * scale;
+      wv = (float)q * scale + zero;
+    }
+    ws[threadIdx.y][threadIdx.x] = wv;
+    __syncthreads();
+    #pragma unroll
+    for (int t = 0; t < TC_I3_TILE; ++t)
+      acc += xs[threadIdx.y][t] * ws[t][threadIdx.x];
+    __syncthreads();
+  }
+  if (row < M && col < N)
+    y[(int64_t)row * N + col] = __float2half(acc);
+}
+
+NDArray int3_linear_fused(const NDArray& x, const NDArray& packed,
+                          const NDArray& scales, const NDArray& zeros,
+                          int group_size) {
+  const int64_t K = validate_int3_linear_inputs(
+      x, packed, scales, zeros, group_size, "int3_linear_fused");
+  const int64_t M = x.numel() / K;
+  const int64_t N = packed.shape[0];
+  if (M > std::numeric_limits<int>::max() ||
+      N > std::numeric_limits<int>::max() ||
+      K > std::numeric_limits<int>::max())
+    throw std::runtime_error(
+        "int3_linear_fused: dimensions exceed CUDA int limits");
+  Shape os = x.shape;
+  os.back() = N;
+  NDArray out(os, DType::Float16, x.device);
+  if (M == 0 || N == 0) return out;
+  if (M == 1) {
+    launch_int3_gemv(x, packed, scales, zeros, out, M, N, K, "int3_gemv");
+    return out;
+  }
+  dim3 block(TC_I3_TILE, TC_I3_TILE);
+  dim3 grid((unsigned)((N + TC_I3_TILE - 1) / TC_I3_TILE),
+            (unsigned)((M + TC_I3_TILE - 1) / TC_I3_TILE));
+  int3_gemm_fused_kernel<<<grid, block>>>(
+      static_cast<__half*>(x.data_ptr()),
+      static_cast<uint8_t*>(packed.data_ptr()),
+      static_cast<__half*>(scales.data_ptr()),
+      zeros.numel() ? static_cast<__half*>(zeros.data_ptr()) : nullptr,
+      static_cast<__half*>(out.data_ptr()), (int)M, (int)N, (int)K,
+      (int)(K * 3 / 8), (int)(K / kInt3Group));
+  cuda_check_last("int3_linear_fused");
+  return out;
+}
+
 // -------------------------------------- fused group-32 W8A16 tile GEMM (Q2-K0b)
 // y[M,N] = x[M,K] @ dequant(codes)[N,K]^T. Trinity stores one uint8 code per
 // weight with signed q represented by code=q+128, plus one fp16 scale per
