@@ -16,6 +16,15 @@ NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
     const NDArray& kq, const NDArray& v, float scale, float delta,
     bool is_causal, const NDArray* sinks = nullptr, NDArray* selected = nullptr);
 std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq);
+// APA-SP2 additions. Raw scalar helper is CPU-callable; table lookup is Python.
+float apa_sp2_delta(double epsilon, double e_q);
+NDArray apa_selective_attention_sp_epsilon(const NDArray& q, const NDArray& k,
+    const NDArray& kq, const NDArray& v, float scale, double epsilon, double e_q,
+    bool is_causal, const NDArray* sinks = nullptr, NDArray* selected = nullptr);
+std::pair<NDArray,NDArray> apa_sp2_scores(const NDArray& q, const NDArray& k,
+    const NDArray& kq, float scale, int first, int count, bool wcoop);
+NDArray apa_sp2_baseline_thresholds(const NDArray& q, const NDArray& kq,
+    float scale, float zthr, bool causal);
 // APA_SP1_ADDITION_END declaration
 namespace ops {
 

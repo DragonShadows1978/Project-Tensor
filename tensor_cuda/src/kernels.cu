@@ -7502,5 +7502,6 @@ NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
   cuda_check_last("apa_selective_sp");
   return out;
 }
+#include "apa_sp2.cuh"
 // APA_SP1_ADDITION_END kernel_and_launcher
 }  // namespace tc
