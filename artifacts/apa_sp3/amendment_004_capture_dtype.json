@@ -1,0 +1,28 @@
+{
+  "order": "orders/APA_SP3_AMENDMENT_3.md",
+  "order_sha256": "2e419f6fbc6de0537adb54de8ccce96dd17867d71ae9cd73f237bfbde39a3345",
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "protocol_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224",
+  "status": "REGISTERED_BEFORE_CPU_GATES",
+  "fix": "Convert each native uint8 diagnostic mask to float32 before tc.cat; capture retains existing uint8 conversion, selected count, little-endian packbits and causal guards.",
+  "implementation_scope": [
+    "scripts/apa_sp3_model.py",
+    "tensor_cuda/tests/test_apa_sp3.py"
+  ],
+  "unchanged": "All arithmetic, selectors, arm dispatch, thresholds, protocol, runner, build inputs and production kernels.",
+  "gates": [
+    "Original source must fail test_capture_blend_nonfloat_cat_preserves_packed_masks with the lead dtype RuntimeError against a float-only cat stub.",
+    "Fixed source must pass the same test for uint8 and int32 masks, multiple chunks, partial last chunk, rectangular causal geometry, selected counts, packed bytes and native output.",
+    "All existing APA-SP3 CPU tests must pass without assertion or tolerance changes.",
+    "Rerun six registered semantic mutants on disposable copies; threshold 0.8 unchanged; no invalid mutants.",
+    "Verify source/build/protocol/import pins and all 692 dry-run cells in dependency order.",
+    "Audit every existing GPU receipt and stale dependency rejection; preserve receipt bytes; no GPU retries."
+  ],
+  "call_site_audit": "Report actual B blend versus C/D/E selective dispatch and V padding truthfully; do not change dispatch to force a literal same-call-site claim.",
+  "prior_art": "Existing selection and measurement prior art unchanged. Float dtype adaptation is routine representation plumbing; no prior art known to me for this specific capture repair; no new algorithm or optimization claimed.",
+  "seat": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "xhigh",
+    "evidence": "logs/apa_sp3_r3.log"
+  }
+}

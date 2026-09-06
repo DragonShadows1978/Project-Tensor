@@ -1,0 +1,53 @@
+{
+  "gate": "author mutation baseline",
+  "threshold": 0.8,
+  "sources": {
+    "apa_sp3_metrics": "26e9b9e13f15baae7069e981dea064939c8b232f8b43e3517625f44792c178a3",
+    "apa_sp3_model": "e95f2ba8ee4407a46792c1c332cd7a31d62981775429ec6becf275f471507cf2",
+    "apa_sp3_common": "2365412261effca3a0dbe4d80ee1b9b730510a3d50b52c826375a0c65cb261d5"
+  },
+  "defects": [
+    {
+      "name": "skip_inverted",
+      "module": "apa_sp3_metrics",
+      "before": "skipped = ~np.asarray(selected, bool)",
+      "after": "skipped = np.asarray(selected, bool)",
+      "test": "test_mass_and_max_relative_weight_are_distinct_and_all_key_normalized"
+    },
+    {
+      "name": "wrong_normalizer",
+      "module": "apa_sp3_metrics",
+      "before": "wrel[skipped].sum() / wrel.sum()",
+      "after": "wrel[skipped].sum() / len(wrel)",
+      "test": "test_mass_and_max_relative_weight_are_distinct_and_all_key_normalized"
+    },
+    {
+      "name": "off_by_one_targets",
+      "module": "apa_sp3_model",
+      "before": "targets = ids[-512:]",
+      "after": "targets = ids[-513:-1]",
+      "test": "test_last512_scores_exactly_last512_targets"
+    },
+    {
+      "name": "downward_margin",
+      "module": "apa_sp3_common",
+      "before": "np.nextafter(f, np.float32(np.inf))",
+      "after": "np.nextafter(f, np.float32(-np.inf))",
+      "test": "test_margin_rounds_up_and_never_uses_percentile"
+    },
+    {
+      "name": "stale_resume",
+      "module": "apa_sp3_common",
+      "before": "j.get('fingerprint') != fingerprint()",
+      "after": "False",
+      "test": "test_stale_or_red_receipt_is_not_resumable"
+    },
+    {
+      "name": "swapped_scale_delta",
+      "module": "apa_sp3_model",
+      "before": "q, k, kq, v, scale, self.delta,",
+      "after": "q, k, kq, v, self.delta, scale,",
+      "test": "test_sp_binding_parameter_order_and_no_wrong_arm_dispatch"
+    }
+  ]
+}

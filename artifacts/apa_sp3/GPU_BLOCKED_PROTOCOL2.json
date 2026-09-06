@@ -1,0 +1,53 @@
+{
+  "status": "BLOCKED_NO_GPU",
+  "evidence_class": "host CUDA device observation; no model perplexity",
+  "supersedes": "GPU_BLOCKED.json (r1 historical protocol block retained unchanged)",
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "protocol_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224",
+  "protocol_status": "REGISTERED_PROTOCOL_2",
+  "cudaGetDeviceCount": 100,
+  "device_count": 0,
+  "cuda_error": "no CUDA-capable device is detected",
+  "g0": {
+    "status": "UNRUN",
+    "kind": "fresh-process determinism",
+    "observed_A": null,
+    "observed_B": null,
+    "repeats_per_arm": 2,
+    "tolerance": 0.001,
+    "token_count": 333337,
+    "tokens_file_sha256": "5684e72cbab28236391ebcac9113aeca5b318ce6eeed69c410f1094950269a28",
+    "token_sha256": "d3c64882a9cbd4264a21f60ac239680d3a7d0631ab06d0d8a5d4fac8286d268a",
+    "protocol_source": "/mnt/ForgeRealm/GraftRepository/tests/minicpm3_bulkbits_floor.py",
+    "feeding": "one_full_prefill_per_window_no_cache_between_windows",
+    "reason": "no CUDA-capable device; protocol preflight PASS"
+  },
+  "historical_context": {
+    "A": 20.065,
+    "B": 19.817,
+    "device": "RTX 3070 8 GB",
+    "targets": false,
+    "recoverable": false
+  },
+  "commands_file": "artifacts/apa_sp3/lead_commands.txt",
+  "job_estimates_file": "artifacts/apa_sp3/dry_run.json",
+  "cells": 692,
+  "bounds": {
+    "worker_s": 480,
+    "own_child_grace_s": 5,
+    "lease_wait_s": 20,
+    "foreground_cooldown_s": 30,
+    "outer_s": 590
+  },
+  "risks": [
+    "six-window in-process controls add twelve prefills per subsequent model job; unchanged deadline can RED",
+    "standard full prefill at 32768 needs 80 GiB for one BF16 40-head score tensor; 12 GB cannot fit this registered setup",
+    "G2/C calibration fractions cover registered first prefix; six-window PPL separately labeled",
+    "GPU/diagnostic numeric parity, D=A, G2/G3 and blind verification unrun"
+  ],
+  "model": "gpt-6-astra",
+  "reasoning_effort": "xhigh",
+  "execution_log": "logs/apa_sp3_r2.log",
+  "gpu_jobs_executed": 0,
+  "process_safety": "no git/subagents/background shell jobs/services/foreign process signals; only bounded own foreground children"
+}

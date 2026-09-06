@@ -1,0 +1,662 @@
+{
+  "schema": "apa_sp3_registration_v1",
+  "registered_utc": "2026-09-06T14:51:14.000418+00:00",
+  "immutable": true,
+  "order_sha256": "e4be9e0b38284715338dfd1730c51dde79507f24057290c244e68f248ece404e",
+  "execution": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "xhigh",
+    "receipt": "logs/apa_sp3_r1.log",
+    "gpu_seat": false
+  },
+  "parent_registrations": {
+    "artifacts/apa_sp1/registration.json": "12059d49f39abe9450b34989f06ac5ca8a736d80e3127c9d41c1ed97e650c9fe",
+    "artifacts/apa_sp1/registration_sp1_1.json": "382194c1f9d94c146bddcf533b7becadee60fe7d212a2029fabf133243c683b4",
+    "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/artifacts/apa_sp2/registration.json": "3b8df8bfdd6e3d351395f96ca654bfe9070a26bfaed390d73cc620546a7ff027"
+  },
+  "source_sha256": {
+    "tensor_cuda/src/paint_bake.cu": "5c5ea305df2da870b03dedd44d698728d6a13ecdf1d07e8ef1f7bcd8c4d13f50",
+    "tensor_cuda/src/kernels.cu": "6c416ece5cac153b761c7af6d0ff1cf8baf8f7e6d3bd9e04e32f3fd536d7d192",
+    "tensor_cuda/src/apa_sp1_1.cuh": "74248ccb1579efd10d2c7a64473030b1358166875a753cc9f1339829f8afe48a",
+    "tensor_cuda/src/paint_inpaint.cu": "77fd450425aeec42b5d0dbb29069dfbd4c50aef067382c48801cae9c3b33cce7",
+    "tensor_cuda/src/gemm_apa.cu": "4827910cc9383b4c6cf7505b12da99eb6e54cc8792a3a43d492a58de8eee25f6",
+    "tensor_cuda/src/ops.cpp": "f08f8dec223f9555f95af3eb9fcac96d9730d366bc37f4a55c87bda25a215fbf",
+    "tensor_cuda/src/terrain_objects.cu": "401b56b58f747878106b0b333d2b589be72fa32cb1f7824046653e0a27b267a0",
+    "tensor_cuda/src/paint_raster.cu": "cd6da34283999d2624087d81420c00f427f143ebadb163f3baad158dc199cab7",
+    "tensor_cuda/src/dda.cu": "58289183587f1aa936321d85de232d03e71922845851cead862c8a526974d6d1",
+    "tensor_cuda/src/terrain.cu": "11bd7c7b3f6d0a80a6b627e48dede0e68869ffc03af8d20d7112e68b56f97d73",
+    "tensor_cuda/src/autograd.cpp": "ad24a0a9853e9c173ac69e1c3bb0a1077cb96b88297f1b9b26c1ee58b7a36377",
+    "tensor_cuda/src/matmul.cu": "426d9901da12936fe41c003176d3d43d5412ecfa9de0613d62348a60ce52a15e",
+    "tensor_cuda/src/bindings.cpp": "7d3f6edb65dd465f39f8885a41d8267d0c5c2edcaef54edfc509403f2da01e12",
+    "tensor_cuda/src/conv.cu": "1cda2a6e147dc3dd599ea57e89b3423ff68464de8c837f51ed8d433dc18fe0a8",
+    "tensor_cuda/include/tc/core.h": "6f34346b29305466f091fba4999adf2c4897314b1b76d66bd3a0c357f6ebca79",
+    "tensor_cuda/include/tc/autograd.h": "22c5bc0123e40e506181302fa091cad0861b0a05b202d428c253421866a6b32c",
+    "tensor_cuda/include/tc/ops.h": "7d8d9d95ab91f4356c71d424dacb73b3b99a6989e20b83ed1a68665f77896b84",
+    "tensor_cuda/tensor_cuda/__init__.py": "8483866432159c4c2b8f7ec6429f33de174c37ba1ff64c157c2e7b2e9a1a0c0d",
+    "tensor_cuda/tensor_cuda/nn.py": "4659cdfa382c0166543a555ef5101e0e3b7ceb8d930bb822be95a0324263517d",
+    "tensor_cuda/tensor_cuda/optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
+    "tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a",
+    "tensor_cuda/tensor_cuda/functional.py": "418ee285bdeefacbd9d5a1ccaf39700b8e83ea339377230c79f1d4480a1e3d9c",
+    "tensor_cuda/tensor_cuda/quantization/__init__.py": "d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f",
+    "tensor_cuda/tensor_cuda/quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943"
+  },
+  "kernel_body_pins": {
+    "tensor_cuda/src/paint_bake.cu": [
+      {
+        "signature": "__global__ void bake_back_project_kernel(\n    const float* __restrict__ atlas_positions_h, int64_t sample_count,\n    const float* __restrict__ view, int side, int channels,\n    const float* __restrict__ view_depth,\n    const uint8_t* __restrict__ view_reliable,\n    const float* __restrict__ view_cosine,\n    const float* __restrict__ world_to_camera,\n    const float* __restrict__ image_projection, float depth_threshold,\n    uint8_t* __restrict__ output_valid,\n    float* __restrict__ output_colors,\n    float* __restrict__ output_cosine,\n    float* __restrict__ output_depth_delta)",
+        "sha256": "8c1c8cc16298cf2466737ff8de57cc5bf9fc00abb96e045e497aaaed07bfa722"
+      },
+      {
+        "signature": "__global__ void bake_cosine_blend_fixed_kernel(\n    const float* __restrict__ view_colors,\n    const float* __restrict__ view_cosine,\n    const uint8_t* __restrict__ view_valid,\n    const float* __restrict__ view_weights,\n    const uint8_t* __restrict__ view_enabled, int views,\n    int64_t sample_count, float* __restrict__ output_texture,\n    float* __restrict__ output_trust,\n    uint8_t* __restrict__ output_valid)",
+        "sha256": "b6e0626730e08ff53f4e75c6bb18a2fced1ed6348f473530dde80db094888625"
+      },
+      {
+        "signature": "__global__ void bake_cosine_blend_dynamic_kernel(\n    const float* __restrict__ view_colors,\n    const float* __restrict__ view_cosine,\n    const uint8_t* __restrict__ view_valid,\n    const float* __restrict__ view_weights,\n    const uint8_t* __restrict__ view_enabled, int views,\n    int64_t sample_count, int channels, float* __restrict__ output_texture,\n    float* __restrict__ output_trust,\n    uint8_t* __restrict__ output_valid)",
+        "sha256": "f4046e3766e6efc4d7d4996b2fb495eeb5d061f03f3b63225dc1a53bbf80f463"
+      }
+    ],
+    "tensor_cuda/src/kernels.cu": [
+      {
+        "signature": "__global__ void fill_kernel(T* p, int64_t n, float v)",
+        "sha256": "f80d23af8dd65ed3b2ffa7b0f5a1f7c32059718f4d98d20864acfe98a4868ebb"
+      },
+      {
+        "signature": "__global__ void cast_kernel(const SrcT* s, DstT* d, int64_t n)",
+        "sha256": "394418aeab32572a53190ac82182ed427a66101d9b46d673462c762b7fabf5c7"
+      },
+      {
+        "signature": "__global__ void cast_to_u8_kernel(const T* s, uint8_t* d, int64_t n)",
+        "sha256": "e69e2eaef909c01371b1cf60bbd372dff90f0198a7e2d58d8292e8d0bfa4201d"
+      },
+      {
+        "signature": "__global__ void cast_from_u8_kernel(const uint8_t* s, T* d, int64_t n)",
+        "sha256": "b0ec6167d9c38d1317e48e31c1c30c65dc30ec223fabff366fd0fd32fecfb586"
+      },
+      {
+        "signature": "__global__ void binary_kernel(const T* a, const T* b, T* out, DimSpec s,\n                              int64_t n, int op)",
+        "sha256": "3780581ee18dc5fda57aa5e9e681b11c07d7d6fd3b45d8e057b47b34fc6062b0"
+      },
+      {
+        "signature": "__global__ void scalar_kernel(const T* a, T* out, int64_t n, float s, int op, int lhs)",
+        "sha256": "6c47bedccc70f0f489689d70f5418f3907d5212ec63729ab56fde48561a0131d"
+      },
+      {
+        "signature": "__global__ void unary_kernel(const T* a, T* out, int64_t n, int op)",
+        "sha256": "d88056fda8c89c6608c317108f74a16a710b392210ff9860148eaae4135bd035"
+      },
+      {
+        "signature": "__global__ void nan_to_num_kernel(const T* a, T* out, int64_t n, float nan, float pinf, float ninf)",
+        "sha256": "645733959b35bd078666ca8ab8318f247b220970d02905ab994409280d4efa72"
+      },
+      {
+        "signature": "__global__ void clamp_kernel(const T* a, T* out, int64_t n, float lo, float hi)",
+        "sha256": "5916302032186c485a46cb24522cc68c2e374151dd1d0d1dc23952cca4d7c56f"
+      },
+      {
+        "signature": "__global__ void ge_kernel(const T* a, T* out, int64_t n, float s)",
+        "sha256": "6e6d3505baa4dc3697e8d2ead7f2fcefce0e49b5707c184113751a2faf88a142"
+      },
+      {
+        "signature": "__global__ void reduce_lastdim_kernel(const T* __restrict__ in,\n                                      T* __restrict__ out,\n                                      int64_t R, int64_t n_rows)",
+        "sha256": "822a05528efdfe338efdf26b18a6633d7d82705dd1e501e2f5869a5b4cfd1ab1"
+      },
+      {
+        "signature": "__global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n)",
+        "sha256": "074c46c4d806578f3e0145cf91014897a97b7da62ae924d17bc906fbf9721cac"
+      },
+      {
+        "signature": "__global__ void permute_kernel(const T* in, T* out, PermSpec s, int64_t n)",
+        "sha256": "6985f371755084a6d77e631497331f0710e26fb2d060745bda9f3fb6582abc6f"
+      },
+      {
+        "signature": "__global__ void pow_kernel(const T* a, T* out, int64_t n, float p)",
+        "sha256": "3cb3fee0ce7b0b838e57cb774f581ae10ca3ca78d84e085ab1c974faffc3b4de"
+      },
+      {
+        "signature": "__global__ void compare_kernel(const T* a, const T* b, T* out, DimSpec s, int64_t n, int op)",
+        "sha256": "740254709a018b715fdf197960bef01afe7e00257a4ac32a9e1e18964ed4f967"
+      },
+      {
+        "signature": "__global__ void compare_scalar_kernel(const T* a, T* out, int64_t n, float s, int op)",
+        "sha256": "8768ffa956d8f64a3174a97ee31b3fb7204e2c85b7daf1a7f0ce0096cf33e54d"
+      },
+      {
+        "signature": "__global__ void where_kernel(const T* c, const T* x, const T* y, T* out, Dim3Spec s, int64_t n)",
+        "sha256": "d2f77c49eabebf395a6e6466e465afe0c7388632a39fabcb0ee33dcf6244de35"
+      },
+      {
+        "signature": "__global__ void dimcopy_kernel(const T* small_in, T* small_out, const T* big_in, T* big_out, DimCopySpec s, int64_t n)",
+        "sha256": "438d8405e280e8336818c2132a975e691edac23cd05c0a5d01eb7d7c6647ca5e"
+      },
+      {
+        "signature": "__global__ void embed_fwd_kernel(const T* w, const int64_t* idx, T* out, int64_t row, int64_t n)",
+        "sha256": "7d3a2d2339240fce765896c94c0db1edbf015e3fa4b4bdea95f8a50290086347"
+      },
+      {
+        "signature": "__global__ void embed_bwd_kernel(const T* grad, const int64_t* idx, float* gWf, int64_t row, int64_t n)",
+        "sha256": "f5370ad03063efce6a09a5b8e1e878b5165eb9f2dc6d2289c8d3c6d5b2baff83"
+      },
+      {
+        "signature": "__global__ void sgd_kernel(T* p, const T* g, T* buf, int64_t n, float lr, float mom, float wd)",
+        "sha256": "7a8fc11bbb3bfb9a0723da0fc11144c9b76384c7b60e0f132d0b51e9736d80a5"
+      },
+      {
+        "signature": "__global__ void adam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,\n                            float b1, float b2, float eps, float bc1, float bc2,\n                            float wd, int decoupled)",
+        "sha256": "b7aa0c8feea81e0d62e575888586d3d84b24f589ceefbaab6de0b6ac84993ae6"
+      },
+      {
+        "signature": "__global__ void lion_kernel(T* p, const T* g, T* m, int64_t n, float lr,\n                            float b1, float b2, float wd)",
+        "sha256": "27434406da8f60f65552170fa0da9ca514f75b172e72c7dc5ab177afc8170b0a"
+      },
+      {
+        "signature": "__global__ void radam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,\n                             float b1, float b2, float eps, float bc1, float bc2,\n                             float rect, int rectified, float wd, int decoupled)",
+        "sha256": "9d68d9370264bacd71cc9de1e5f88aa825c76f5ce79985b38346fe5b3da05513"
+      },
+      {
+        "signature": "__global__ void rmsprop_kernel(T* p, const T* g, T* sq, int64_t n, float lr,\n                               float alpha, float eps, float wd)",
+        "sha256": "dc1313c4ac52b74aa292327e039d6b0e7706d1b511da0a004fe46854e0ddefb0"
+      },
+      {
+        "signature": "__global__ void adagrad_kernel(T* p, const T* g, T* acc, int64_t n, float lr, float eps, float wd)",
+        "sha256": "1100c8d3ead2d76092e25db36b5122139f8e8f5da101e2beebcec3aa02f7da3c"
+      },
+      {
+        "signature": "__global__ void scale_kernel(T* p, int64_t n, float s)",
+        "sha256": "879231ed4e464732d64fa8353f73ef30d379dcd58260404a53c7b9c6b4f872f6"
+      },
+      {
+        "signature": "__global__ void apa_qg_kernel(const T* rotated, const T* boundaries, const T* codebook,\n                              T* out, int nb, int64_t n)",
+        "sha256": "c539027c943e93f7cbfd8872c2a648c962e1220bef5686cb2e6818f42caf27d1"
+      },
+      {
+        "signature": "__global__ void apa_selective_kernel(\n    const T* q, const T* k, const T* kq, const T* v, T* out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "1033c4c25658ddbbe02121ad3afa31525c505ff44de82303e4b169c1113f8217"
+      },
+      {
+        "signature": "__global__ void apa_selective_stats_kernel(\n    const T* q, const T* kq, float* thr_out,\n    int B, int H, int L, int S, int D, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "2b5467dafe3d8c51c0a29385e77bbcea7d7e03beefa569e88d5eaa799c7484d3"
+      },
+      {
+        "signature": "__global__ void apa_selective_split_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const float* thr_in,\n    float* part_m, float* part_l, float* part_acc,\n    int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group, int num_parts, int part_keys)",
+        "sha256": "af452e695db264a04be731e6ad5f2f7f7cc89cdb5c34f6ccc0687bf19f9d0825"
+      },
+      {
+        "signature": "__global__ void apa_selective_merge_kernel(\n    const float* part_m, const float* part_l, const float* part_acc,\n    const T* sinks, T* out, int H, int VD, int num_parts, int use_sink)",
+        "sha256": "1ee6dd2eed23e561b60d94af5c68e79fdc1991e0018d94ed9b5f8e221ec1256a"
+      },
+      {
+        "signature": "__global__ void apa_selective_sink_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* sinks, T* out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "61ebea5ff1c99b15785f119d86f6ab469fa8fd0ce023acc729e24957cc812823"
+      },
+      {
+        "signature": "__global__ void apa_selective_fwd_train_kernel(\n    const T* q, const T* k, const T* kq, const T* v, T* out,\n    float* lse_out, float* thr_out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "18336e2874687f235076b00d683030e54829b406bccbaae3278ab211f58393e8"
+      },
+      {
+        "signature": "__global__ void apa_selective_bwd_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* dO,\n    const float* lse, const float* thr_in,\n    T* dq, T* dk, T* dv,\n    int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group)",
+        "sha256": "20771a1d712f6fd183600fb95d2f42517e4073264ec655a42240d5ab3a4af245"
+      },
+      {
+        "signature": "__global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,\n                                          int S, float zthr,\n                                          int Lchunk, int Lq, int64_t row0,\n                                          int window)",
+        "sha256": "30d168ae2811bb29f77dfa95ea7f7a1f718fa6497f9fdaa55cac4005f5a73567"
+      },
+      {
+        "signature": "__global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,\n                                              const T* sinks, T* out,\n                                              int H, int L, int S,\n                                              float zthr,\n                                              int Lq, int64_t row0, int window)",
+        "sha256": "5f099ab10ce1824770644d4f66748b50073c68cf2c85c8f6d5ed7b134a1c0860"
+      },
+      {
+        "signature": "__global__ void int4_dequant_t_kernel(const uint8_t* packed, const __half* scales,\n                                      const __half* zeros, T* out_kn,\n                                      int64_t N, int64_t K, int group_size,\n                                      int64_t G, int64_t n)",
+        "sha256": "e747d524d653af6ad347e06baeb5b75a43df70509d8ca12fc30e749098484477"
+      },
+      {
+        "signature": "__global__ void int4_gemm_fused_kernel(\n    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,\n    T* y, int M, int N, int K, int group_size, int G)",
+        "sha256": "073990ed99339e28881daca985ba51cefc42dbbbdd780b447e940042c135c3c7"
+      },
+      {
+        "signature": "__global__ void int4_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ packed,\n    const __half* __restrict__ scales, const __half* __restrict__ zeros,\n    T* __restrict__ y, int N, int K, int group_size, int G)",
+        "sha256": "3ae649a12e2d1e333c984722735cd2b4c1d4867b88912844e5024b9fb597831b"
+      },
+      {
+        "signature": "__global__ void intn_dequant_t_kernel(const uint8_t* packed,\n                                      const __half* scales,\n                                      const __half* zeros, T* out_kn,\n                                      int64_t N, int64_t K,\n                                      int64_t bytes_per_row, int bits,\n                                      int group_size, int64_t G, int64_t n)",
+        "sha256": "c8b9faa30b27da7fe76e69e9836fb740a0cac15cef5391c729939dc58508f56d"
+      },
+      {
+        "signature": "__global__ void intn_gemm_fused_kernel(\n    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,\n    T* y, int M, int N, int K, int bytes_per_row, int bits, int group_size,\n    int G)",
+        "sha256": "cba81482eef7f5f269b02124172c1c2d3d3f0d9afc62739ee32fc5c9a2334863"
+      },
+      {
+        "signature": "__global__ void intn_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ packed,\n    const __half* __restrict__ scales, const __half* __restrict__ zeros,\n    T* __restrict__ y, int N, int K, int bytes_per_row, int bits,\n    int group_size, int G)",
+        "sha256": "a13a8f4fe398e37afba6ca7d5d9a62ae584838ac425fd9da06a705d35b4216a6"
+      },
+      {
+        "signature": "__global__ void mxfp4_gemm_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ blocks,\n    const uint8_t* __restrict__ scales, T* __restrict__ y,\n    int M, int N, int K, int G)",
+        "sha256": "6242a8dc08201633d3c315d7505bf7b65a2c63c6e1ff74a9f67695eba9bc3db4"
+      },
+      {
+        "signature": "__global__ void mxfp4_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ blocks,\n    const uint8_t* __restrict__ scales, T* __restrict__ y,\n    int N, int K, int G)",
+        "sha256": "3ee4cee63b69cf4d1e6b5ec8ac03da2147fa4a21ac1c8ff90747b1b2827acb41"
+      },
+      {
+        "signature": "__global__ void kv_int4_pack_kernel(const T* __restrict__ x,\n                                    const T* __restrict__ scales,\n                                    uint8_t* __restrict__ packed,\n                                    int64_t D, int group, int64_t G,\n                                    int64_t nbytes)",
+        "sha256": "0d72a66328bda7fb74491a6f2683baafa2569a4c7afe140ea6b842da7fc3ce4a"
+      },
+      {
+        "signature": "__global__ void kv_int4_unpack_kernel(const uint8_t* __restrict__ packed,\n                                      const T* __restrict__ scales,\n                                      T* __restrict__ out,\n                                      int64_t BKV, int64_t S, int64_t D,\n                                      int group, int64_t G, int64_t lo,\n                                      int64_t n_out, int64_t total)",
+        "sha256": "7d6307caf0f63d9a3ac54b5dea34c964f60c41337aa89b1be6d77d45373c9f42"
+      },
+      {
+        "signature": "__global__ void arg_kernel(const T* a, int64_t* out, int64_t outer, int64_t A, int64_t inner, int is_max)",
+        "sha256": "88d2d98200673fabfffb1e1f75f0d0659e0fbaa5f2219ad3fa62ef87d62a697a"
+      },
+      {
+        "signature": "__global__ void cumsum_kernel(const T* a, T* out, int64_t outer, int64_t A, int64_t inner)",
+        "sha256": "f55dc6dcbaa49e211fa3af579c1470e145e7a6824912d737e60e65307937c278"
+      },
+      {
+        "signature": "__global__ void gather_kernel(const T* a, const int64_t* index, T* out, GatherSpec s, int64_t n)",
+        "sha256": "b16f893d448e4c3e19310720451613bf36d4fd5bb3473a622ad506e67ef83ad4"
+      },
+      {
+        "signature": "__global__ void scatter_add_kernel(const T* src, const int64_t* index, float* out, GatherSpec s, int64_t n)",
+        "sha256": "896337e2af04e55cbca04b90e9de091e9e110a665f164f3e8dd32d37746416cd"
+      },
+      {
+        "signature": "__global__ void flip_kernel(const T* a, T* out, FlipSpec s, int64_t n)",
+        "sha256": "f03135995688141009a81b8251de0ec656d650258c466efc6f8fe20e3db122db"
+      },
+      {
+        "signature": "__global__ void topk_kernel(const T* a, T* vals, int64_t* idxs,\n                            int64_t outer, int64_t S, int k, int largest)",
+        "sha256": "0b01e332fd4e5a03ab2c03baf7d3005e0f598e023f49737ced8ce553a573caf1"
+      },
+      {
+        "signature": "__global__ void argmax_last_axis_kernel(const T* a, int64_t* out, int64_t N)",
+        "sha256": "5848ad755dac88cb0dfbbae7e2ec7055366ea2a5ebc225deaf1a85f88c60dd2a"
+      },
+      {
+        "signature": "__global__ void fused_sdpa_noncausal_kernel(\n    const T* q, const T* k, const T* v, T* out,\n    int Lq, int Lk, int D, float scale)",
+        "sha256": "cebc419da3b74afe9e4affab88fd66156dd5b31a4cc6235a046b02787a122f45"
+      },
+      {
+        "signature": "__global__ void apa_int4_pack_kernel(const T* __restrict__ k,\n                                     uint8_t* __restrict__ codes,\n                                     float* __restrict__ kscale,\n                                     int64_t nkeys, int D)",
+        "sha256": "1120a163dcf321faf3cc50db88f9b8883c20a620b46501e39cdb6ce2c17d4348"
+      },
+      {
+        "signature": "__global__ void apa_int4_pack_rows_kernel(\n    const T* __restrict__ k, uint8_t* __restrict__ codes,\n    float* __restrict__ kscale, int64_t batch_kv, int src_s, int dst_s,\n    int row0, int nrows, int D)",
+        "sha256": "c9ec8f9b780356d5d16836b1e693d476a1306382878df74eb9d2a7b33c9ff3f1"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_kernel(\n    const T* q, const T* k, const uint8_t* codes, const float* kscale,\n    const T* v, T* out, int B, int H, int L, int S, int D, int VD,\n    float scale, float zthr, int is_causal, int KVH, int group,\n    int packed_d, int code_s)",
+        "sha256": "3e218f51f1c2a2683e89f00d89fa5ef56e5d23010a5532110e683301fecf36b9"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_splitk_kernel(\n    const T* q, const uint8_t* codes, const float* kscale,\n    float* partial_sum, float* partial_sumsq, float* bulk_cache,\n    int B, int H, int L, int S, int D, float scale, int is_causal, int KVH,\n    int group, int packed_d, int code_s, int stats_parts,\n    int stats_part_keys)",
+        "sha256": "520927c0ca1b89b3f7d816d5ae08fc4528b93491699e52fd1bf03a7848af495f"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_reduce_kernel(\n    const float* partial_sum, const float* partial_sumsq, float* thr_out,\n    int L, int S, float zthr, int is_causal, int stats_parts)",
+        "sha256": "c4c9f90425f70d60bfd135127fe2dc837e9afb20296efce1b79b2e477657bf16"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_kernel(\n    const T* q, const uint8_t* codes, const float* kscale, float* thr_out,\n    float* bulk_cache,\n    int B, int H, int L, int S, int D, float scale, float zthr,\n    int is_causal, int KVH, int group, int packed_d, int code_s)",
+        "sha256": "e62bcc917174dc2f0d40aa5b1c4e7d14f73895337a5087f96c93e2fb721e68cc"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_split_kernel(\n    const T* q, const T* k, const uint8_t* codes, const float* kscale,\n    const T* v, const float* thr_in, const float* bulk_cache,\n    float* part_m, float* part_l,\n    float* part_acc, int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group, int packed_d, int code_s,\n    int num_parts, int part_keys)",
+        "sha256": "60dae96d11c41fb7b95f5565830791a434ee1a6717be18c67d078bc93dd1e7d7"
+      },
+      {
+        "signature": "__global__ void apa_int4_sdpa_noncausal_kernel(\n    const T* __restrict__ q, const T* __restrict__ k,\n    const uint8_t* __restrict__ codes, const float* __restrict__ kscale,\n    const T* __restrict__ v, T* __restrict__ out,\n    int Lq, int Lk, int D, float scale, float zthr, float inv_cnt,\n    int refine_all)",
+        "sha256": "717b8185918962c04a8ac9c9370172d84cc2d96a61f4f875d486d10df0ed6e6f"
+      },
+      {
+        "signature": "__global__ void __launch_bounds__(kThreads)\nattn_noncausal_f16_kernel(const __half* __restrict__ q,\n                          const __half* __restrict__ k,\n                          const uint8_t* __restrict__ codes,\n                          const float* __restrict__ kscale,\n                          const __half* __restrict__ v,\n                          __half* __restrict__ out, int Lq, int Lk, int D,\n                          int num_qtiles, float scale, float zthr,\n                          float inv_cnt,\n                          unsigned long long* __restrict__ refine_count)",
+        "sha256": "3b66e5eff6a5b3b3bec8d61222b463fe5a196058bcaf3a6a2ae4eb6456c76be1"
+      },
+      {
+        "signature": "__global__ void rms_norm_kernel(const XT* x, const float* w, OT* o,\n                                int64_t D, float inv_d, float eps)",
+        "sha256": "a465885e10c4633b82c99e9655e09d84fef96aee5ed0b7a415a24ea1c866b36b"
+      },
+      {
+        "signature": "__global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S)",
+        "sha256": "c37a33bd460d96e95cb80c8e756ad0af644c7167aad79361127adfefa8d25643"
+      },
+      {
+        "signature": "__global__ void write_rows_kernel(T* __restrict__ buf,\n                                  const T* __restrict__ src,\n                                  int64_t CAP, int64_t L, int64_t D,\n                                  int64_t start, int64_t n)",
+        "sha256": "b25a6f095399bd405abc43bc4ae8725f8953c0671bffa2a7b51f76b4e41ec1b8"
+      },
+      {
+        "signature": "__global__ void splice_rows_bytes_kernel(\n    uint8_t* __restrict__ out, const uint8_t* __restrict__ old_cache,\n    const uint8_t* __restrict__ insert, int64_t old_seq, int64_t insert_seq,\n    int64_t out_seq, int64_t row_bytes, int64_t head_tokens,\n    int64_t tail_start, int64_t nbytes)",
+        "sha256": "419538a092b6208359e1464446016b1a69e41003b21fd8ea7a5f89277681a952"
+      },
+      {
+        "signature": "__global__ void export_rows_bytes_kernel(\n    uint8_t* __restrict__ out, const uint8_t* __restrict__ cache,\n    int64_t old_seq, int64_t out_seq, int64_t row_bytes,\n    int64_t start, int64_t nbytes)",
+        "sha256": "0722b8e5404046648d23097129ffef9c020ce7c271e4db9335ea5fc927d9ea7b"
+      },
+      {
+        "signature": "__global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,\n                            const T* __restrict__ sn, T* __restrict__ y,\n                            int64_t pos0, int64_t L, int64_t D, int64_t n,\n                            float sin_sign, int pair_swap)",
+        "sha256": "8087a7e063550fd8aca128bcf3d904c3f3f7027bc90c6907e2dbf8d845507a2c"
+      },
+      {
+        "signature": "__global__ void export_rope_rows_kernel(\n    const T* __restrict__ cache, const T* __restrict__ cs,\n    const T* __restrict__ sn, T* __restrict__ out, int64_t old_seq,\n    int64_t out_seq, int64_t D, int64_t start, int64_t pos0,\n    int64_t n, float sin_sign, int pair_swap)",
+        "sha256": "1b901cfed854fd441190aa59105441b5b8418a02951ebf0e795268903b504d34"
+      },
+      {
+        "signature": "__global__ void gated_delta_step_kernel(\n    const float* __restrict__ q, const float* __restrict__ k,\n    const float* __restrict__ v, const float* __restrict__ a,\n    const float* __restrict__ b, const float* __restrict__ A_neg,\n    const float* __restrict__ dtb, const float* __restrict__ state_in,\n    float* __restrict__ state_out, float* __restrict__ out,\n    int H, int Hk, int Dk, int Dv)",
+        "sha256": "f07b1a4ee0f486bdb1a3f9e1d44a9165d7ed5b27f17a20b2619f461d711b6709"
+      },
+      {
+        "signature": "__global__ void apa_selective_sp_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* sinks,\n    T* out, uint8_t* selected, int H, int L, int S, int D, int VD,\n    int KVH, int group, float scale, float delta, bool causal)",
+        "sha256": "5d887b9034876620955800aad02ecefb1ca3ad0c8ab6931e1338d2abe336560a"
+      }
+    ],
+    "tensor_cuda/src/apa_sp1_1.cuh": [
+      {
+        "signature": "__global__ void apa_selective_sp_splitk_kernel(\n    const T* q, const T* k, const T* kq, const T* v, uint8_t* selected,\n    float* part_m, float* part_l, float* part_acc,\n    int H, int S, int D, int VD, float scale, float delta,\n    int KVH, int group, int num_parts, int part_keys)",
+        "sha256": "bf00743cd160856d2f900eb88acc70c28d8ca4859c75f4e9137ec83c07594a53"
+      },
+      {
+        "signature": "__global__ void apa_sp1_1_baseline_mask_kernel(\n    const float* q, const float* kq, const float* thr, uint8_t* mask)",
+        "sha256": "1b9567b9b37bdf9e11822a922e8ebdba0968e61627ae58d88e661a3e25151c64"
+      }
+    ],
+    "tensor_cuda/src/paint_inpaint.cu": [
+      {
+        "signature": "__global__ void inpaint_island_passes_kernel(\n    const float* __restrict__ positions,\n    float* __restrict__ vertex_colors,\n    float* __restrict__ vertex_mask,\n    const int64_t* __restrict__ neighbor_offsets,\n    const int64_t* __restrict__ neighbors,\n    const int64_t* __restrict__ island_offsets,\n    const int64_t* __restrict__ island_occurrences,\n    int64_t island_count, int pass_count_cap,\n    int64_t* __restrict__ island_uncolored)",
+        "sha256": "d0ebabe1cd2902660a0ad641c6feb1c88f855eaf201e331083a3845a7d5db10b"
+      }
+    ],
+    "tensor_cuda/src/gemm_apa.cu": [
+      {
+        "signature": "__global__ void quantize_bf16_rows(const __nv_bfloat16* src, uint8_t* codes,\n                                   float* scales, int rows, int D)",
+        "sha256": "8a48af2bf7b5343898f04ec039b1c89941c24ca38edc2a54f5d9222db5f7a4c7"
+      },
+      {
+        "signature": "__global__ void scale_stats_count(const int32_t* accum,\n                                  const float* qscales,\n                                  const float* kscales, float* scores,\n                                  float* thresholds, int* counts, SbShape s,\n                                  float attn_scale, float zthr,\n                                  int is_causal, int64_t row0, int window)",
+        "sha256": "fc4afac2b8d8625e1a5889d08ad929d636f0f453f55cd5d127ad848fa3af24f3"
+      },
+      {
+        "signature": "__global__ void compact_pairs_bounded(\n    const float* scores, const float* thresholds,\n    int* pair_rows, int* pair_keys, unsigned long long* counters, int capacity,\n    int clamp_overflow, SbShape s, int is_causal, int64_t row0, int window)",
+        "sha256": "66f0423acc8b256a9d8721a9ec4ae88e76f8448fb18793e1d45420616a1b8d43"
+      },
+      {
+        "signature": "__global__ void gather_selected_bf16(\n    const __nv_bfloat16* q, const __nv_bfloat16* k,\n    const int* pair_rows, const int* pair_keys, int pair0, int pairs,\n    const unsigned long long* chunk_attempted,\n    __nv_bfloat16* qg, __nv_bfloat16* kg, SbShape s)",
+        "sha256": "1a8b8ce5d631dbe023eef0b68afefac1d8526e852e6e1c5d5124e29c4bbd7854"
+      },
+      {
+        "signature": "__global__ void scatter_refined(float* scores, const float* exact,\n                                const int* pair_rows, const int* pair_keys,\n                                int pair0, int pairs,\n                                const unsigned long long* chunk_attempted,\n                                int rows, int S)",
+        "sha256": "96a0955b10260541cfc5e73fbfbfc2dd83f74064c6097fa5bb81972acbb74028"
+      },
+      {
+        "signature": "__global__ void copy_query_chunk(const __nv_bfloat16* q,\n                                 __nv_bfloat16* qchunk, int B, int H,\n                                 int full_L, int chunk_L, int D, int q0)",
+        "sha256": "9a4bca1dde49dfae1bb315da7c8c65071ca3f4b8bc96532bb0e368901518f566"
+      },
+      {
+        "signature": "__global__ void copy_output_chunk(const __nv_bfloat16* chunk,\n                                  __nv_bfloat16* out, int B, int H,\n                                  int full_L, int chunk_L, int VD, int q0)",
+        "sha256": "a131c6c0caf976ffc4899fa9daadbf80a8bf9ff3805e1868c6019e9f095399f7"
+      },
+      {
+        "signature": "__global__ void blend_dense_exact(float* scores, const float* exact,\n                                  const float* thresholds, SbShape s,\n                                  int is_causal, int64_t row0, int window)",
+        "sha256": "5295bfd5ba9cf99994de3b873b271ce671ec4674f2d6d13e0a5c30309ca1c330"
+      },
+      {
+        "signature": "__global__ void fp32_score_softmax_bf16(const float* scores,\n                                        __nv_bfloat16* probs, SbShape s,\n                                        int is_causal, int64_t row0,\n                                        int window)",
+        "sha256": "31e024a1e17761bed0eb7152de16593af1345fdef096c27fa4803729aa1f9465"
+      },
+      {
+        "signature": "__global__ void widen_accum_and_mask(const int32_t* accum,\n                                     const float* scores,\n                                     const float* thresholds,\n                                     int64_t* wide, uint8_t* selected,\n                                     SbShape s, int is_causal,\n                                     int64_t row0, int window)",
+        "sha256": "8f83831b19e6e7f85394412a39905a7f881aa05424910f550311a350a1ca06b3"
+      }
+    ],
+    "tensor_cuda/src/terrain_objects.cu": [
+      {
+        "signature": "__global__ void terrain_render_objects_overlay_kernel(\n    TerrainRenderCamera camera, TerrainRenderLight light,\n    TerrainObjectKernelList objects, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "2064e2d1206b2226c60a3c0fc01dd13814f6af79d26f8c70f34aedc2b85fe0bf"
+      }
+    ],
+    "tensor_cuda/src/paint_raster.cu": [
+      {
+        "signature": "__global__ void packed_winner_scatter_min_kernel(\n    const int64_t* __restrict__ pixel_indices,\n    const int64_t* __restrict__ depth_keys,\n    const int64_t* __restrict__ face_ids, int64_t candidate_count,\n    int64_t pixel_count, uint64_t* __restrict__ winners)",
+        "sha256": "fe6c2d8c8a7b6fb808921e3e42840cf52947b623afc4c12571c70c9aec5e6162"
+      },
+      {
+        "signature": "__global__ void triangle_winner_kernel(\n    const float* __restrict__ clip_positions,\n    const int64_t* __restrict__ faces, int64_t face_count, int height,\n    int width, uint64_t* __restrict__ winners)",
+        "sha256": "0e8448ef9e4fb0333fc3c7968913364bada8552f61465e6a57ef6634a7805f4c"
+      },
+      {
+        "signature": "__global__ void unpack_winners_kernel(\n    const uint64_t* __restrict__ winners, int64_t pixel_count,\n    int64_t* __restrict__ depth_keys, int64_t* __restrict__ face_ids)",
+        "sha256": "8b8b2185d2378309f685baab99db239e3ebcc0eeae1d417d18b7029cfe9ecdca"
+      },
+      {
+        "signature": "__global__ void winner_resolve_kernel(\n    const float* __restrict__ clip_positions,\n    const int64_t* __restrict__ faces, int64_t face_count,\n    const int64_t* __restrict__ winner_faces, int height, int width,\n    int64_t pixel_count, int64_t* __restrict__ resolved_depth,\n    float* __restrict__ barycentric_output)",
+        "sha256": "058cd8138917d37ce317aea5c47291f5da524bd600c9b02d31814ff1da5940a0"
+      }
+    ],
+    "tensor_cuda/src/dda.cu": [
+      {
+        "signature": "__global__ void dda_raycast_kernel(\n    const uint8_t* __restrict__ grid, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, const float* __restrict__ origins,\n    const float* __restrict__ directions, int64_t ray_count, int max_steps,\n    uint8_t* __restrict__ hit, uint8_t* __restrict__ material,\n    int64_t* __restrict__ voxel, int64_t* __restrict__ face_axis,\n    int64_t* __restrict__ face_sign, float* __restrict__ distance)",
+        "sha256": "89df9d050204c4e7bfcdb60c271c073ddd5874e44bde1bfa24d9b50460bd31c7"
+      }
+    ],
+    "tensor_cuda/src/terrain.cu": [
+      {
+        "signature": "__global__ void terrain_render_grounding_kernel(\n    int64_t dim_x, int64_t dim_y, int64_t dim_z,\n    TerrainRenderCamera camera, TerrainRenderLight light, float z_horizon,\n    float fog_start, float fog_full, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "e1ff7db24fa049692e8c9789d69def7691a829e75c4dc1e8c56b66a2ee789a3b"
+      },
+      {
+        "signature": "__global__ void terrain_render_blocky_kernel(\n    const uint8_t* __restrict__ materials, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "7e82086848996ce6d176eaa9554a694d3d300712ee21323afb0393ecdbe41043"
+      },
+      {
+        "signature": "__global__ void terrain_render_smooth_kernel(\n    const uint8_t* __restrict__ materials, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "247167dde3f99b43768c7a9c0dff33b3865f46da4e13825fad4cf617b8daf76d"
+      },
+      {
+        "signature": "__global__ void terrain_render_cached_smooth_kernel(\n    const uint8_t* __restrict__ materials,\n    const uint8_t* __restrict__ density_field, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    int support_radius, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "1ebfc3dc18179fe458752c7b0aa5b2c7ddd10755e875edf6586e74dbac492ad6"
+      },
+      {
+        "signature": "__global__ void terrain_render_detail_kernel(\n    const uint8_t* __restrict__ materials,\n    const uint8_t* __restrict__ density_field, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    int support_radius, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "bd627b3e09b3bc62d5b5db8e64fce4c83816bd586fb268edbdc1a754208ca87c"
+      },
+      {
+        "signature": "__global__ void terrain_filter_axis_kernel(\n    const uint8_t* __restrict__ input, uint8_t* __restrict__ output,\n    int64_t dim_x, int64_t dim_y, int64_t dim_z, int axis,\n    int filter_level, bool occupancy_input)",
+        "sha256": "0714ba127096f5f7b0b36307280fe4a54d9f7fc9084917f7ca9d3a972e134705"
+      }
+    ],
+    "tensor_cuda/src/matmul.cu": [],
+    "tensor_cuda/src/conv.cu": [
+      {
+        "signature": "__global__ void im2col_kernel(const T* x, T* cols, ConvDims d, int64_t n)",
+        "sha256": "300b2c557e3d6da59efd67facdcb8a062c69dad64f709b7e5da4d5d3a5b9a566"
+      },
+      {
+        "signature": "__global__ void col2im_kernel(const T* cols, float* xg, ConvDims d, int64_t n)",
+        "sha256": "4a711dcc721116124c6a7da4fae1e08cd5e71300232a44e31c6d90ad5ea08ce7"
+      },
+      {
+        "signature": "__global__ void avgpool_kernel(const T* x, T* out, ConvDims d, int64_t n)",
+        "sha256": "d37ca88264f2beabddd841fe3eab665b43fd477fd936d51daa5907788c0bc585"
+      },
+      {
+        "signature": "__global__ void avgpool_bwd_kernel(const T* g, float* xg, ConvDims d, int64_t n)",
+        "sha256": "fc6ca18ea0890e9114ef8bfe1732a8aaa6a5052799640dd26c15a0a93d72376f"
+      },
+      {
+        "signature": "__global__ void maxpool_kernel(const T* x, T* out, int64_t* argmax, ConvDims d, int64_t n)",
+        "sha256": "6b0f25ba06fb6a64aad26ed6572551ae8b1522e15f3ead011a4f36fda336ed5b"
+      },
+      {
+        "signature": "__global__ void maxpool_bwd_kernel(const T* g, const int64_t* argmax, float* xg, int64_t n)",
+        "sha256": "66b624a1712a47aaaa88a0744df0c69ec8b891bc40676892ebb93387ca9e31c2"
+      }
+    ]
+  },
+  "external_sha256": {
+    "/mnt/ForgeRealm/GraftRepository/core/minicpm3_tc.py": "3d19734f51d28eb48dc20a62658f2bfc250fdac4fce2cb906116d034b1371a69",
+    "/mnt/ForgeRealm/GraftRepository/core/mistral7b_tc.py": "49430e5920508d740a2f8be7b6ba0caadd0442c7798454cf6fa2a808204bf1c4",
+    "/mnt/ForgeRealm/GraftRepository/core/qwen_tc.py": "1353e44f727fc24d1638e4e238d160619fea561602c921259b010af5f63478e3",
+    "/mnt/ForgeRealm/GraftRepository/adapters/tokenizer.py": "e7c5ec1340910318708418963e55fc4dd334eefdd75fa0b902ae2446dd3d0859",
+    "/mnt/ForgeRealm/GraftRepository/docs/MiniCPM3-MLA_Results.md": "b73d7b32f0c58551e8119d5343ed956f4b0c3fc87c1822c3704d0b60ddaee83f",
+    "/mnt/ForgeRealm/GraftRepository/tests/minicpm3_apa_recovery.py": "765585c5e7dfaa7fb35999557e23a175eb7a1173de215ed6d7b85b01d4a04cf4",
+    "/mnt/ForgeRealm/AI-AtlasForge/workspace/APA-Quant-Rust_LLM_testing/mission_b74b7906/test_graft_e1_mla.py": "8c8f592a7f2d79ab710221e8389cc66d0893bd50bc2ca481c4e8f9e01fe2ce64",
+    "/mnt/ForgeRealm/AI-AtlasForge/workspace/APA-Quant-Rust_LLM_testing/mission_b74b7906/benchmark_tensor_cuda.py": "30487fdb89d1df1222fd0d85ca753a196eb9dcde6b86b5d16d18c4649bcb09b7",
+    "/home/vader/.cache/huggingface/hub/models--openbmb--MiniCPM3-4B/snapshots/d6b14ddaefdb11c624dd75c3c779549bc90b08cb/tokenizer.json": "b00802b71a613e3f7df3899fe9643a3ff949736d333a2b892448a974383fe372",
+    "/home/vader/.cache/huggingface/hub/models--openbmb--MiniCPM3-4B/snapshots/d6b14ddaefdb11c624dd75c3c779549bc90b08cb/config.json": "cf1d08cb7c1815c676e685bd6ce94eb8b85a57d53871e6e159ee8c650717d98a"
+  },
+  "model": {
+    "id": "openbmb/MiniCPM3-4B",
+    "snapshot": "/home/vader/.cache/huggingface/hub/models--openbmb--MiniCPM3-4B/snapshots/d6b14ddaefdb11c624dd75c3c779549bc90b08cb",
+    "weight_bits": 4,
+    "group_size": 128,
+    "compute_dtype": "bfloat16",
+    "weight_blob_claim": "f4c69dfe493d3b644071e1b3820d68f49bcd6674cd40e71b9e451b8534586613",
+    "weight_hash_verification": "pending separate host receipt; blob filename is not a verification"
+  },
+  "protocol": {
+    "status": "RED_MISSING_ORIGINAL_PROTOCOL",
+    "source": "/mnt/ForgeRealm/GraftRepository/docs/MiniCPM3-MLA_Results.md",
+    "reported_corpus": "guide corpus; exact file/prefix/tokenization not found",
+    "named_harness": "/mnt/ForgeRealm/AI-AtlasForge/workspace/APA-Quant-Rust_LLM_testing/mission_b74b7906/test_graft_e1_mla.py",
+    "named_harness_finding": "graft routing experiment; no perplexity calculation",
+    "missing_scripts": [
+      "/tmp/minicpm3_engine_bench.py",
+      "/tmp/minicpm3_reference.py",
+      "/tmp/minicpm3_ceiling.py"
+    ],
+    "recovery_harness_finding": "WikiText or local-doc fallback; six cached-chunk windows and 511 targets; NOT original receipt protocol",
+    "token_sha256": null,
+    "tokens_path": null,
+    "resolution": "A separate create-only protocol amendment must pin recovered original source, token file, token SHA and exact scoring convention BEFORE any model gate. No synthetic, WikiText or alternate-doc substitution."
+  },
+  "arms": {
+    "A": "standard",
+    "B": "apa_two_pass",
+    "C": "apa_sp_matched",
+    "D": "apa_sp_refine_all",
+    "E": "apa_sp_provable"
+  },
+  "lengths": [
+    1024,
+    8192
+  ],
+  "primary_bulk_bits": 4,
+  "secondary_bulk_bits": 8,
+  "g0": {
+    "targets": {
+      "A": 20.065,
+      "B": 19.817
+    },
+    "absolute_tolerance": 0.01,
+    "same_process": true,
+    "stop_on_miss": true
+  },
+  "c_delta": {
+    "scope": "one global delta per bitwidth; pooled eligible query-key pairs over all 62 layers at S=1024; frozen for S=8192 and decode",
+    "selection": "B actual native diagnostic masks give target fraction. Fixed grid [0,32] step 1/128 on B activations gives initial delta; ties choose smaller delta. Up to 8 actual C calibration forwards, fraction only, bisection with bounds 0,32; first actual fraction within 0.01 freezes delta. If none match, RED; no PPL-based tuning.",
+    "fraction_tolerance": 0.01,
+    "max_trials": 8,
+    "grid_step": 0.0078125,
+    "upper": 32.0,
+    "no_quality_claim_without_actual_match": true
+  },
+  "d_delta": {
+    "value": 3.4028234663852886e+38,
+    "finite_float32_max": true,
+    "all_selected_required": true,
+    "ppl_absolute_tolerance": 0.005,
+    "stop_on_miss": true
+  },
+  "e_delta": {
+    "epsilon": 0.001,
+    "eq": "upward-rounded float32 maximum |scale*q dot reconstructed_k - scale*q dot original_k| over ALL eligible keys, heads, queries, layers in B/C at BOTH lengths. If any layer missing E blocked.",
+    "formula": "upward_float32(log(1000)+2*eq)",
+    "scope": "finite activation envelope, not a universal proof for E activations; verify E error max separately",
+    "no_percentile_bound": true
+  },
+  "g2": {
+    "scope": "all eligible bottom-right causal query-key pairs, no sampling",
+    "exact_scores": "float64 dot of the captured BF16-representable Q/K, scale=96**-0.5",
+    "bulk_scores": "same float64 dot with reconstructed BF16 kq; also record runtime rounding difference when available",
+    "quantiles": "exact nearest-rank order statistics, float32 storage; report rounding in receipt",
+    "mass": "dense exact softmax probability mass of unrefined keys; weight ratio exp(s_j-max(s)); no omitted-key interpretation",
+    "split": "one layer per analysis job; activation and native selection capture separate from timing; replay does not supply timing"
+  },
+  "g3": {
+    "contexts": [
+      2048,
+      8192,
+      32768
+    ],
+    "arms": [
+      "A",
+      "B",
+      "C"
+    ],
+    "steps": 32,
+    "protocol": "identical teacher-forced continuation tokens, cached expanded MLA for all arms; absorbed_decode=False; no generation divergence confound",
+    "timing": "wall with synchronization before and after each token; prefill excluded",
+    "trained_window_boundary": "32 decode steps at S=32768 exceed trained context; report as extrapolation, never trained-window quality"
+  },
+  "runtime_flags": {
+    "TC_APA_SP": "0 except C/D/E and kernel gates",
+    "TC_APA_SELECTIVE_PATH": "0",
+    "TC_ATTN_QTILE": "0",
+    "alloc_pooling": false,
+    "RMSNormTC.USE_FUSED": false,
+    "QuantLinearTC.FUSED_DECODE": false,
+    "F.USE_FUSED_SOFTMAX": false,
+    "absorbed_decode": false
+  },
+  "safety": {
+    "lease": "/tmp/forge-gpu.lock",
+    "wait_seconds": 30,
+    "worker_timeout_seconds": 510,
+    "termination_grace_seconds": 5,
+    "cooldown_seconds": 30,
+    "outer_timeout_seconds": 590,
+    "foreign_process_policy": "abort on other compute PID; never signal it",
+    "resume": "only PASS receipts with current registration, protocol, build, harness and dependency hashes; RED receipts stop, no automatic retry"
+  },
+  "cpu_gates": {
+    "prefill_test": "test_d96_prefill_contract_and_dense_pin",
+    "splitk_test": "test_d96_splitk_contract_and_dense_pin",
+    "gpu_kernel_tolerance": {
+      "atol": 0.001,
+      "rtol": 0.001
+    },
+    "low_dtype_atol": 0.02,
+    "low_dtype_rtol": 0.02,
+    "mutation_required_kill_rate": 0.8,
+    "baseline_is_author_only": true
+  },
+  "lead_predictions": {
+    "P1": "D equals A within 0.005 ppl",
+    "P2": "C within 0.05 ppl of B at matched fraction",
+    "P3": "E fraction >=0.95, real eq >=0.8, E ppl within 0.01 of A",
+    "P4": "bulk4 p99 error <0.5*max; C skipped weight ratio >0.1 on some layer while ppl unmoved (P2 tolerance)",
+    "P5": "C/B decode tokens/s at S=32768 >=2"
+  },
+  "seat_predictions": {
+    "S1": "G0 likely RED on current engine even after tokens recovered; documented matmul/softmax drift exceeds 0.01",
+    "S2": "D likely differs from A by >0.005 ppl: BF16 cuBLAS/softmax rounding differs from fused FP32 accumulation",
+    "S3": "E fraction >=0.95 at bulk4; conditional finite bound will not establish general low-precision usefulness",
+    "S4": "C within 0.05 of B if realised fraction matches; skipped weight ratio >0.1 likely",
+    "S5": "C/B full-model decode at S=32768 <2 because latent expansion, re-quantization and INT4 projections remain in both arms"
+  },
+  "stop_conditions": [
+    "missing protocol/token provenance",
+    "G0 parity miss",
+    "D incorrect or not all selected",
+    "C actual fraction mismatch after registered trials",
+    "OOM or deadline reached: RED row, no alternate path or relaxed threshold"
+  ],
+  "prior_art": {
+    "BLASST": "Yuan et al. 2025/2026, arXiv:2512.12087: running-max log threshold; APA promotes individual keys instead of omitting blocks",
+    "ThriftAttention": "Sharratt 2026, arXiv:2605.23081: selective precision and weight-sensitive error motivation; no FP4 tensor-core implementation port",
+    "FlashAttention-2": "Dao 2023, arXiv:2307.08691 and Milakov/Gimelshein 2018 online normalizer: stable online softmax/work partitioning; existing SP implementation reused, no FA2 port",
+    "TurboQuant": "Zandieh et al. 2025, arXiv:2504.19874: rotation and scalar codebook via existing quant.py; reconstructed BF16 keys, no QJL residual or packed FP4 arithmetic",
+    "APA": "David Perry 2026, docs/APA_PAPER_DRAFT.md: all-key denominator, |bulk| z selection and precision promotion",
+    "SP2": "existing conditional log(1/epsilon)+2eq proof; here model finite max measurement, no new universal theorem",
+    "SP3": "new experiment wiring, global model calibration, captured-activation tail audit and fail-closed receipts; empirical percentiles and matched-control experiments are standard, no novelty claimed"
+  }
+}
