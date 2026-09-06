@@ -31,8 +31,8 @@ MUTANTS=[
 
 def main():
     tag=sys.argv[1] if len(sys.argv)>1 else 'initial'
-    if tag not in ('initial','final'):
-        raise RuntimeError('usage: apa_sp3_mutations.py [initial|final]')
+    if tag not in ('initial','final','protocol2'):
+        raise RuntimeError('usage: apa_sp3_mutations.py [initial|final|protocol2]')
     folder=ART/'mutations'/tag;folder.mkdir(parents=True,exist_ok=False)
     # Separate immutable seed registration, before baseline/mutants in this run.
     publish(ART/f'mutation_manifest_{tag}.json',{

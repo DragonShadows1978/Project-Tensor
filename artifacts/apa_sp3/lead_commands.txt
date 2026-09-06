@@ -1,17 +1,27 @@
 # One foreground invocation per cell. STOP at each RED. No automatic batch.
-# Recover and pin original protocol before model jobs. Never replace registration.
+# PROTOCOL-2 is pinned. Never replace registration or any immutable job receipt.
+# Estimates are worker time; add 30s cooldown + up to 60s lease/setup/receipt overhead; hard outer ceiling 590s.
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3
+timeout 30s bash scripts/apa_sp3_lead_gpu.sh list
 # kernel96: estimate [2, 20] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run kernel96
-# g0: estimate [35, 150] seconds; primary
+# g0_A_1: estimate [60, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_A_1
+# g0_B_1: estimate [60, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_B_1
+# g0_A_2: estimate [60, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_A_2
+# g0_B_2: estimate [60, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_B_2
+# g0: estimate [1, 10] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0
-# ppl_b4_D_1024: estimate [45, 180] seconds; primary
+# ppl_b4_D_1024: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_D_1024
-# ppl_b4_A_8192: estimate [120, 480] seconds; primary
+# ppl_b4_A_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_A_8192
-# ppl_b4_B_8192: estimate [120, 480] seconds; primary
+# ppl_b4_B_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_B_8192
-# capture_b4_B_1024: estimate [50, 250] seconds; primary
+# capture_b4_B_1024: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_1024
 # margin_b4_B_1024_l00: estimate [3, 60] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_B_1024_l00
@@ -139,27 +149,27 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_B_10
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_B_1024_l61
 # calibration_b4: estimate [1, 5] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run calibration_b4
-# match_b4_0: estimate [45, 250] seconds; primary
+# match_b4_0: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_0
-# match_b4_1: estimate [45, 250] seconds; primary
+# match_b4_1: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_1
-# match_b4_2: estimate [45, 250] seconds; primary
+# match_b4_2: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_2
-# match_b4_3: estimate [45, 250] seconds; primary
+# match_b4_3: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_3
-# match_b4_4: estimate [45, 250] seconds; primary
+# match_b4_4: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_4
-# match_b4_5: estimate [45, 250] seconds; primary
+# match_b4_5: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_5
-# match_b4_6: estimate [45, 250] seconds; primary
+# match_b4_6: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_6
-# match_b4_7: estimate [45, 250] seconds; primary
+# match_b4_7: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b4_7
 # freeze_b4: estimate [1, 5] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run freeze_b4
-# ppl_b4_C_1024: estimate [45, 180] seconds; primary
+# ppl_b4_C_1024: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_C_1024
-# capture_b4_C_1024: estimate [50, 250] seconds; primary
+# capture_b4_C_1024: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_1024
 # margin_b4_C_1024_l00: estimate [3, 60] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_1024_l00
@@ -285,9 +295,9 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_10
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_1024_l60
 # margin_b4_C_1024_l61: estimate [3, 60] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_1024_l61
-# ppl_b4_C_8192: estimate [120, 480] seconds; primary
+# ppl_b4_C_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_C_8192
-# ppl_b4_D_8192: estimate [120, 480] seconds; primary
+# ppl_b4_D_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_D_8192
 # capture_b4_B_8192: estimate [180, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_8192
@@ -541,33 +551,293 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_81
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_8192_l60
 # margin_b4_C_8192_l61: estimate [30, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_C_8192_l61
-# decode_b4_A_2048: estimate [60, 480] seconds; primary
+# decode_b4_A_2048: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_A_2048
-# decode_b4_B_2048: estimate [60, 480] seconds; primary
+# decode_b4_B_2048: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_2048
-# decode_b4_C_2048: estimate [60, 480] seconds; primary
+# decode_b4_C_2048: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_2048
-# decode_b4_A_8192: estimate [60, 480] seconds; primary
+# decode_b4_A_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_A_8192
-# decode_b4_B_8192: estimate [60, 480] seconds; primary
+# decode_b4_B_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_8192
-# decode_b4_C_8192: estimate [60, 480] seconds; primary
+# decode_b4_C_8192: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_8192
-# decode_b4_A_32768: estimate [60, 480] seconds; primary
+# decode_b4_A_32768: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_A_32768
-# decode_b4_B_32768: estimate [60, 480] seconds; primary
+# decode_b4_B_32768: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_32768
-# decode_b4_C_32768: estimate [60, 480] seconds; primary
+# decode_b4_C_32768: estimate [140, 480] seconds; primary
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_32768
-# ppl_b8_A_1024: estimate [40, 200] seconds; optional bulk8
+# eq_b4: estimate [1, 10] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_b4
+# ppl_b4_E_1024: estimate [140, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_1024
+# capture_b4_E_1024: estimate [140, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_1024
+# margin_b4_E_1024_l00: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l00
+# margin_b4_E_1024_l01: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l01
+# margin_b4_E_1024_l02: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l02
+# margin_b4_E_1024_l03: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l03
+# margin_b4_E_1024_l04: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l04
+# margin_b4_E_1024_l05: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l05
+# margin_b4_E_1024_l06: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l06
+# margin_b4_E_1024_l07: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l07
+# margin_b4_E_1024_l08: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l08
+# margin_b4_E_1024_l09: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l09
+# margin_b4_E_1024_l10: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l10
+# margin_b4_E_1024_l11: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l11
+# margin_b4_E_1024_l12: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l12
+# margin_b4_E_1024_l13: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l13
+# margin_b4_E_1024_l14: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l14
+# margin_b4_E_1024_l15: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l15
+# margin_b4_E_1024_l16: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l16
+# margin_b4_E_1024_l17: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l17
+# margin_b4_E_1024_l18: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l18
+# margin_b4_E_1024_l19: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l19
+# margin_b4_E_1024_l20: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l20
+# margin_b4_E_1024_l21: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l21
+# margin_b4_E_1024_l22: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l22
+# margin_b4_E_1024_l23: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l23
+# margin_b4_E_1024_l24: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l24
+# margin_b4_E_1024_l25: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l25
+# margin_b4_E_1024_l26: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l26
+# margin_b4_E_1024_l27: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l27
+# margin_b4_E_1024_l28: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l28
+# margin_b4_E_1024_l29: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l29
+# margin_b4_E_1024_l30: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l30
+# margin_b4_E_1024_l31: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l31
+# margin_b4_E_1024_l32: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l32
+# margin_b4_E_1024_l33: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l33
+# margin_b4_E_1024_l34: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l34
+# margin_b4_E_1024_l35: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l35
+# margin_b4_E_1024_l36: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l36
+# margin_b4_E_1024_l37: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l37
+# margin_b4_E_1024_l38: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l38
+# margin_b4_E_1024_l39: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l39
+# margin_b4_E_1024_l40: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l40
+# margin_b4_E_1024_l41: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l41
+# margin_b4_E_1024_l42: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l42
+# margin_b4_E_1024_l43: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l43
+# margin_b4_E_1024_l44: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l44
+# margin_b4_E_1024_l45: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l45
+# margin_b4_E_1024_l46: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l46
+# margin_b4_E_1024_l47: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l47
+# margin_b4_E_1024_l48: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l48
+# margin_b4_E_1024_l49: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l49
+# margin_b4_E_1024_l50: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l50
+# margin_b4_E_1024_l51: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l51
+# margin_b4_E_1024_l52: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l52
+# margin_b4_E_1024_l53: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l53
+# margin_b4_E_1024_l54: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l54
+# margin_b4_E_1024_l55: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l55
+# margin_b4_E_1024_l56: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l56
+# margin_b4_E_1024_l57: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l57
+# margin_b4_E_1024_l58: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l58
+# margin_b4_E_1024_l59: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l59
+# margin_b4_E_1024_l60: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l60
+# margin_b4_E_1024_l61: estimate [3, 60] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l61
+# ppl_b4_E_8192: estimate [140, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_8192
+# capture_b4_E_8192: estimate [180, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192
+# margin_b4_E_8192_l00: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l00
+# margin_b4_E_8192_l01: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l01
+# margin_b4_E_8192_l02: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l02
+# margin_b4_E_8192_l03: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l03
+# margin_b4_E_8192_l04: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l04
+# margin_b4_E_8192_l05: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l05
+# margin_b4_E_8192_l06: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l06
+# margin_b4_E_8192_l07: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l07
+# margin_b4_E_8192_l08: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l08
+# margin_b4_E_8192_l09: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l09
+# margin_b4_E_8192_l10: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l10
+# margin_b4_E_8192_l11: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l11
+# margin_b4_E_8192_l12: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l12
+# margin_b4_E_8192_l13: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l13
+# margin_b4_E_8192_l14: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l14
+# margin_b4_E_8192_l15: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l15
+# margin_b4_E_8192_l16: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l16
+# margin_b4_E_8192_l17: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l17
+# margin_b4_E_8192_l18: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l18
+# margin_b4_E_8192_l19: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l19
+# margin_b4_E_8192_l20: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l20
+# margin_b4_E_8192_l21: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l21
+# margin_b4_E_8192_l22: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l22
+# margin_b4_E_8192_l23: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l23
+# margin_b4_E_8192_l24: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l24
+# margin_b4_E_8192_l25: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l25
+# margin_b4_E_8192_l26: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l26
+# margin_b4_E_8192_l27: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l27
+# margin_b4_E_8192_l28: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l28
+# margin_b4_E_8192_l29: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l29
+# margin_b4_E_8192_l30: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l30
+# margin_b4_E_8192_l31: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l31
+# margin_b4_E_8192_l32: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l32
+# margin_b4_E_8192_l33: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l33
+# margin_b4_E_8192_l34: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l34
+# margin_b4_E_8192_l35: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l35
+# margin_b4_E_8192_l36: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l36
+# margin_b4_E_8192_l37: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l37
+# margin_b4_E_8192_l38: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l38
+# margin_b4_E_8192_l39: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l39
+# margin_b4_E_8192_l40: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l40
+# margin_b4_E_8192_l41: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l41
+# margin_b4_E_8192_l42: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l42
+# margin_b4_E_8192_l43: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l43
+# margin_b4_E_8192_l44: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l44
+# margin_b4_E_8192_l45: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l45
+# margin_b4_E_8192_l46: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l46
+# margin_b4_E_8192_l47: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l47
+# margin_b4_E_8192_l48: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l48
+# margin_b4_E_8192_l49: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l49
+# margin_b4_E_8192_l50: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l50
+# margin_b4_E_8192_l51: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l51
+# margin_b4_E_8192_l52: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l52
+# margin_b4_E_8192_l53: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l53
+# margin_b4_E_8192_l54: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l54
+# margin_b4_E_8192_l55: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l55
+# margin_b4_E_8192_l56: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l56
+# margin_b4_E_8192_l57: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l57
+# margin_b4_E_8192_l58: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l58
+# margin_b4_E_8192_l59: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l59
+# margin_b4_E_8192_l60: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l60
+# margin_b4_E_8192_l61: estimate [30, 480] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l61
+# eq_check_E: estimate [1, 10] seconds; primary
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_check_E
+# ppl_b8_A_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_A_1024
-# ppl_b8_B_1024: estimate [40, 200] seconds; optional bulk8
+# ppl_b8_B_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_B_1024
-# ppl_b8_A_8192: estimate [120, 480] seconds; optional bulk8
+# ppl_b8_A_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_A_8192
-# ppl_b8_B_8192: estimate [120, 480] seconds; optional bulk8
+# ppl_b8_B_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_B_8192
-# capture_b8_B_1024: estimate [50, 250] seconds; optional bulk8
+# capture_b8_B_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_1024
 # margin_b8_B_1024_l00: estimate [3, 60] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_1024_l00
@@ -695,29 +965,29 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_10
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_1024_l61
 # calibration_b8: estimate [1, 5] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run calibration_b8
-# match_b8_0: estimate [45, 250] seconds; optional bulk8
+# match_b8_0: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_0
-# match_b8_1: estimate [45, 250] seconds; optional bulk8
+# match_b8_1: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_1
-# match_b8_2: estimate [45, 250] seconds; optional bulk8
+# match_b8_2: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_2
-# match_b8_3: estimate [45, 250] seconds; optional bulk8
+# match_b8_3: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_3
-# match_b8_4: estimate [45, 250] seconds; optional bulk8
+# match_b8_4: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_4
-# match_b8_5: estimate [45, 250] seconds; optional bulk8
+# match_b8_5: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_5
-# match_b8_6: estimate [45, 250] seconds; optional bulk8
+# match_b8_6: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_6
-# match_b8_7: estimate [45, 250] seconds; optional bulk8
+# match_b8_7: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_7
 # freeze_b8: estimate [1, 5] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run freeze_b8
-# ppl_b8_C_1024: estimate [45, 180] seconds; optional bulk8
+# ppl_b8_C_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_C_1024
-# ppl_b8_D_1024: estimate [45, 180] seconds; optional bulk8
+# ppl_b8_D_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_D_1024
-# capture_b8_C_1024: estimate [50, 250] seconds; optional bulk8
+# capture_b8_C_1024: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_1024
 # margin_b8_C_1024_l00: estimate [3, 60] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_1024_l00
@@ -843,9 +1113,9 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_10
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_1024_l60
 # margin_b8_C_1024_l61: estimate [3, 60] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_1024_l61
-# ppl_b8_C_8192: estimate [120, 480] seconds; optional bulk8
+# ppl_b8_C_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_C_8192
-# ppl_b8_D_8192: estimate [120, 480] seconds; optional bulk8
+# ppl_b8_D_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_D_8192
 # capture_b8_B_8192: estimate [180, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192
@@ -1099,281 +1369,26 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_81
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_8192_l60
 # margin_b8_C_8192_l61: estimate [30, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_8192_l61
-# decode_b8_A_2048: estimate [60, 480] seconds; optional bulk8
+# decode_b8_A_2048: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_2048
-# decode_b8_B_2048: estimate [60, 480] seconds; optional bulk8
+# decode_b8_B_2048: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_2048
-# decode_b8_C_2048: estimate [60, 480] seconds; optional bulk8
+# decode_b8_C_2048: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_2048
-# decode_b8_A_8192: estimate [60, 480] seconds; optional bulk8
+# decode_b8_A_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_8192
-# decode_b8_B_8192: estimate [60, 480] seconds; optional bulk8
+# decode_b8_B_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_8192
-# decode_b8_C_8192: estimate [60, 480] seconds; optional bulk8
+# decode_b8_C_8192: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_8192
-# decode_b8_A_32768: estimate [60, 480] seconds; optional bulk8
+# decode_b8_A_32768: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_32768
-# decode_b8_B_32768: estimate [60, 480] seconds; optional bulk8
+# decode_b8_B_32768: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_32768
-# decode_b8_C_32768: estimate [60, 480] seconds; optional bulk8
+# decode_b8_C_32768: estimate [140, 480] seconds; optional bulk8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_32768
-# eq_b4: estimate [1, 10] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_b4
-# ppl_b4_E_1024: estimate [45, 180] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_1024
-# capture_b4_E_1024: estimate [50, 250] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_1024
-# margin_b4_E_1024_l00: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l00
-# margin_b4_E_1024_l01: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l01
-# margin_b4_E_1024_l02: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l02
-# margin_b4_E_1024_l03: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l03
-# margin_b4_E_1024_l04: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l04
-# margin_b4_E_1024_l05: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l05
-# margin_b4_E_1024_l06: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l06
-# margin_b4_E_1024_l07: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l07
-# margin_b4_E_1024_l08: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l08
-# margin_b4_E_1024_l09: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l09
-# margin_b4_E_1024_l10: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l10
-# margin_b4_E_1024_l11: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l11
-# margin_b4_E_1024_l12: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l12
-# margin_b4_E_1024_l13: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l13
-# margin_b4_E_1024_l14: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l14
-# margin_b4_E_1024_l15: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l15
-# margin_b4_E_1024_l16: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l16
-# margin_b4_E_1024_l17: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l17
-# margin_b4_E_1024_l18: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l18
-# margin_b4_E_1024_l19: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l19
-# margin_b4_E_1024_l20: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l20
-# margin_b4_E_1024_l21: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l21
-# margin_b4_E_1024_l22: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l22
-# margin_b4_E_1024_l23: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l23
-# margin_b4_E_1024_l24: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l24
-# margin_b4_E_1024_l25: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l25
-# margin_b4_E_1024_l26: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l26
-# margin_b4_E_1024_l27: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l27
-# margin_b4_E_1024_l28: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l28
-# margin_b4_E_1024_l29: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l29
-# margin_b4_E_1024_l30: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l30
-# margin_b4_E_1024_l31: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l31
-# margin_b4_E_1024_l32: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l32
-# margin_b4_E_1024_l33: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l33
-# margin_b4_E_1024_l34: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l34
-# margin_b4_E_1024_l35: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l35
-# margin_b4_E_1024_l36: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l36
-# margin_b4_E_1024_l37: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l37
-# margin_b4_E_1024_l38: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l38
-# margin_b4_E_1024_l39: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l39
-# margin_b4_E_1024_l40: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l40
-# margin_b4_E_1024_l41: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l41
-# margin_b4_E_1024_l42: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l42
-# margin_b4_E_1024_l43: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l43
-# margin_b4_E_1024_l44: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l44
-# margin_b4_E_1024_l45: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l45
-# margin_b4_E_1024_l46: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l46
-# margin_b4_E_1024_l47: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l47
-# margin_b4_E_1024_l48: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l48
-# margin_b4_E_1024_l49: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l49
-# margin_b4_E_1024_l50: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l50
-# margin_b4_E_1024_l51: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l51
-# margin_b4_E_1024_l52: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l52
-# margin_b4_E_1024_l53: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l53
-# margin_b4_E_1024_l54: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l54
-# margin_b4_E_1024_l55: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l55
-# margin_b4_E_1024_l56: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l56
-# margin_b4_E_1024_l57: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l57
-# margin_b4_E_1024_l58: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l58
-# margin_b4_E_1024_l59: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l59
-# margin_b4_E_1024_l60: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l60
-# margin_b4_E_1024_l61: estimate [3, 60] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l61
-# ppl_b4_E_8192: estimate [120, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_8192
-# capture_b4_E_8192: estimate [180, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192
-# margin_b4_E_8192_l00: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l00
-# margin_b4_E_8192_l01: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l01
-# margin_b4_E_8192_l02: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l02
-# margin_b4_E_8192_l03: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l03
-# margin_b4_E_8192_l04: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l04
-# margin_b4_E_8192_l05: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l05
-# margin_b4_E_8192_l06: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l06
-# margin_b4_E_8192_l07: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l07
-# margin_b4_E_8192_l08: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l08
-# margin_b4_E_8192_l09: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l09
-# margin_b4_E_8192_l10: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l10
-# margin_b4_E_8192_l11: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l11
-# margin_b4_E_8192_l12: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l12
-# margin_b4_E_8192_l13: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l13
-# margin_b4_E_8192_l14: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l14
-# margin_b4_E_8192_l15: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l15
-# margin_b4_E_8192_l16: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l16
-# margin_b4_E_8192_l17: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l17
-# margin_b4_E_8192_l18: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l18
-# margin_b4_E_8192_l19: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l19
-# margin_b4_E_8192_l20: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l20
-# margin_b4_E_8192_l21: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l21
-# margin_b4_E_8192_l22: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l22
-# margin_b4_E_8192_l23: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l23
-# margin_b4_E_8192_l24: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l24
-# margin_b4_E_8192_l25: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l25
-# margin_b4_E_8192_l26: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l26
-# margin_b4_E_8192_l27: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l27
-# margin_b4_E_8192_l28: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l28
-# margin_b4_E_8192_l29: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l29
-# margin_b4_E_8192_l30: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l30
-# margin_b4_E_8192_l31: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l31
-# margin_b4_E_8192_l32: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l32
-# margin_b4_E_8192_l33: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l33
-# margin_b4_E_8192_l34: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l34
-# margin_b4_E_8192_l35: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l35
-# margin_b4_E_8192_l36: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l36
-# margin_b4_E_8192_l37: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l37
-# margin_b4_E_8192_l38: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l38
-# margin_b4_E_8192_l39: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l39
-# margin_b4_E_8192_l40: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l40
-# margin_b4_E_8192_l41: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l41
-# margin_b4_E_8192_l42: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l42
-# margin_b4_E_8192_l43: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l43
-# margin_b4_E_8192_l44: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l44
-# margin_b4_E_8192_l45: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l45
-# margin_b4_E_8192_l46: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l46
-# margin_b4_E_8192_l47: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l47
-# margin_b4_E_8192_l48: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l48
-# margin_b4_E_8192_l49: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l49
-# margin_b4_E_8192_l50: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l50
-# margin_b4_E_8192_l51: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l51
-# margin_b4_E_8192_l52: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l52
-# margin_b4_E_8192_l53: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l53
-# margin_b4_E_8192_l54: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l54
-# margin_b4_E_8192_l55: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l55
-# margin_b4_E_8192_l56: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l56
-# margin_b4_E_8192_l57: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l57
-# margin_b4_E_8192_l58: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l58
-# margin_b4_E_8192_l59: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l59
-# margin_b4_E_8192_l60: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l60
-# margin_b4_E_8192_l61: estimate [30, 480] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l61
-# eq_check_E: estimate [1, 10] seconds; primary
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_check_E
+# Inspect results (no GPU work):
+timeout 30s bash scripts/apa_sp3_lead_gpu.sh summary
+# Alternative: resume runs at most ONE remaining cell and stops on RED/stale:
+# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 4
+# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 8

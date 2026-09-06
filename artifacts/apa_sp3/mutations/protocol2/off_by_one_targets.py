@@ -34,7 +34,7 @@ def last512(logits, ids):
     if logits.shape[0] != len(ids) or len(ids) < 513:
         raise Red('last-512 scoring shape')
     x = np.asarray(logits[-513:-1], np.float64)
-    targets = ids[-512:]
+    targets = ids[-513:-1]
     if not np.isfinite(x).all():
         raise Red('nonfinite logits')
     mx = x.max(-1)

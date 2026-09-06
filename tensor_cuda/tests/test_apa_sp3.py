@@ -146,11 +146,200 @@ def test_parity_stop_rail_preserves_numbers_and_never_calls_sp(monkeypatch,tmp_p
     monkeypatch.setattr(driver,'ART',tmp_path)
     (tmp_path/'protocol_amendment.json').write_text('{}')
     seen=[]
-    fake=SimpleNamespace(set=lambda arm,**kw:seen.append(arm),
-                         forward=lambda ids:dict(ppl=20.1 if seen[-1]=='A' else 19.817))
-    with pytest.raises(common.Red,match='G0_PARITY_MISS'):driver.g0_guard(fake,np.arange(1024))
+    fake=SimpleNamespace(set=lambda arm,**kw:seen.append(arm))
+    monkeypatch.setattr(model,'score_windows',lambda m,ids:dict(ppl=12.1 if seen[-1]=='A' else 12.,target_sha256='same'))
+    monkeypatch.setattr(driver,'require_pass',lambda job:dict(result={a:dict(ppl=12.,target_sha256='same') for a in 'AB'}))
+    with pytest.raises(common.Red,match='G0_DETERMINISM_MISS'):driver.g0_guard(fake,np.arange(6144))
     assert seen==['A','B']
     assert len(list((tmp_path/'progress').glob('*.json')))==1
+
+
+# Prior art: constructed negative-path tests and independent scoring oracles,
+# standard verification practice. Added here for the lead's PROTOCOL-2 (2026).
+def test_protocol2_registered_complete_stream_and_bos():
+    p,ids=common.protocol()
+    assert p['status']==common.PROTOCOL2_STATUS
+    assert p['token_count']==len(ids)==333337 and ids.dtype.str=='<i8'
+    assert ids[0]==1 and p['tokenizer']['eos_token_id']==73440
+    assert p['corpus']['rows']==4358 and p['corpus']['characters']==1289979
+    assert p['tokens_sha256']==common.sha(common.ART/'protocol2_tokens.npy')
+    assert p['token_sha256']==hashlib.sha256(ids.tobytes()).hexdigest()
+
+
+def protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=False):
+    original=common.ART
+    j=common.read(original/'protocol_amendment.json')
+    (tmp_path/'registration.json').write_bytes((original/'registration.json').read_bytes())
+    manifest=tmp_path/'protocol_amendment.json'
+    manifest.write_bytes((original/'protocol_amendment.json').read_bytes())
+    monkeypatch.setattr(common,'ART',tmp_path)
+    def save():
+        manifest.write_text(json.dumps(j))
+        if allow_manifest_repin:
+            # Isolate deeper semantic pins after deliberately bypassing ONLY
+            # the outer digest in this test fixture; production has no bypass.
+            monkeypatch.setattr(common,'PROTOCOL2_SHA',common.sha(manifest))
+    return j,save
+
+
+@pytest.mark.parametrize('attack',['status','tolerance','corpus','legacy_downgrade'])
+def test_protocol2_forged_amendment_red(monkeypatch,tmp_path,attack):
+    j,save=protocol_fixture(monkeypatch,tmp_path)
+    if attack=='status':j['status']='APPROVED_BY_ME'
+    elif attack=='tolerance':j['g0']['absolute_tolerance']=10.
+    elif attack=='corpus':j['corpus']['config']='other'
+    else:j['status']='RECOVERED_ORIGINAL'
+    save()
+    with pytest.raises(common.Red):common.protocol()
+
+
+@pytest.mark.parametrize('attack',['registration','order_digest','order_bytes'])
+def test_protocol2_stale_amendment_red(monkeypatch,tmp_path,attack):
+    j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
+    if attack=='registration':j['registration_sha256']='0'*64
+    elif attack=='order_digest':j['amendment_order_sha256']='0'*64
+    else:
+        stale=tmp_path/'order.md';stale.write_text('stale order')
+        j['amendment_order_path']=str(stale)
+        monkeypatch.setattr(common,'PROTOCOL2_ORDER',stale)
+    save()
+    with pytest.raises(common.Red):common.protocol()
+
+
+@pytest.mark.parametrize('attack',['file_bytes','canonical_bytes'])
+def test_protocol2_wrong_stream_sha_red(monkeypatch,tmp_path,attack):
+    j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
+    ids=np.load(j['tokens_path']);ids[10]=(ids[10]+1)%73448
+    wrong=tmp_path/'wrong.npy';np.save(wrong,ids,allow_pickle=False)
+    j['tokens_path']=str(wrong)
+    if attack=='canonical_bytes':j['tokens_sha256']=common.sha(wrong)
+    save()
+    with pytest.raises(common.Red,match='protocol pin failed: tokens_path|canonical token SHA mismatch'):
+        common.protocol()
+
+
+@pytest.mark.parametrize('attack',['short','dtype','rank','vocabulary','scoring'])
+def test_protocol2_semantic_stream_and_scoring_guards_red(monkeypatch,tmp_path,attack):
+    j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
+    ids=np.load(j['tokens_path'])
+    if attack=='short':ids=ids[:32800];j['token_count']=len(ids)
+    elif attack=='dtype':ids=ids.astype('>i8')
+    elif attack=='rank':ids=ids[None]
+    elif attack=='vocabulary':ids[0]=73448
+    else:j['scoring']='last_511'
+    wrong=tmp_path/'wrong.npy';np.save(wrong,ids,allow_pickle=False)
+    j.update(tokens_path=str(wrong),tokens_sha256=common.sha(wrong),token_sha256=hashlib.sha256(ids.tobytes()).hexdigest())
+    save()
+    with pytest.raises(common.Red):common.protocol()
+
+
+def test_protocol2_six_disjoint_full_prefills_pool_nll_not_ppl():
+    seen=[]
+    def forward(ids):
+        seen.append(ids.copy())
+        n=len(seen)
+        return dict(targets=512,total_nll=n*512.,wall_ms=n,peak_resident_mib=n)
+    ids=np.arange(32801,dtype='<i8')
+    got=model.score_windows(SimpleNamespace(forward=forward),ids)
+    assert len(seen)==6 and all(len(w)==1024 for w in seen)
+    np.testing.assert_array_equal(np.concatenate(seen),ids[:6144])
+    assert got['targets']==3072 and got['ppl']==pytest.approx(np.exp(3.5))
+    assert got['wall_ms']==21 and got['peak_resident_mib']==6
+    assert got['feeding']==common.FEEDING
+    expected=np.concatenate([ids[w*1024+512:(w+1)*1024] for w in range(6)])
+    assert got['target_sha256']==hashlib.sha256(expected.tobytes()).hexdigest()
+
+
+@pytest.mark.parametrize('S',[8192,32768])
+def test_protocol2_long_rows_start_at_zero_last512(S):
+    ids=np.arange(33337,dtype='<i8')%3;seen=[]
+    def forward(w):
+        seen.append(w.copy())
+        return dict(model.last512(np.zeros((S,3)),w),wall_ms=1,peak_resident_mib=2)
+    got=model.score_windows(SimpleNamespace(forward=forward),ids,S)
+    assert len(seen)==1
+    np.testing.assert_array_equal(seen[0],ids[:S])
+    assert got['targets']==512 and got['ppl']==pytest.approx(3.)
+
+
+def test_protocol2_last512_fp64_matches_independent_logaddexp_oracle():
+    ids=np.arange(1024)%7
+    logits=np.random.default_rng(23).normal(size=(1024,7)).astype(np.float32)*100
+    got=model.last512(logits,ids)
+    x=logits[511:1023].astype(np.float64)
+    want=np.sum(np.logaddexp.reduce(x,axis=1)-x[np.arange(512),ids[512:1024]],dtype=np.float64)
+    assert got['total_nll']==pytest.approx(want,rel=1e-14)
+    assert got['targets']==512
+
+
+def repeat_fixture(monkeypatch):
+    p,ids=common.protocol()
+    target=np.concatenate([ids[w*1024+512:(w+1)*1024] for w in range(6)])
+    jobs={}
+    for i,n in enumerate(p['g0']['order'][:-1]):
+        a=n.split('_')[1];rep=int(n[-1])
+        jobs[n]=dict(process_identity=dict(pid=100+i,start_ticks=str(i)),
+                     result=dict(arm=a,repeat=rep,ppl=12. if a=='A' else 13.,targets=3072,
+                                 target_sha256=hashlib.sha256(target.tobytes()).hexdigest()))
+    monkeypatch.setattr(driver,'require_pass',lambda n:jobs[n])
+    return jobs
+
+
+def test_g0_fresh_repeats_accept_and_b_minus_a_is_prediction_only(monkeypatch):
+    repeat_fixture(monkeypatch)
+    result=driver.g0_repeats()
+    assert result['fresh_processes'] and result['B_minus_A']==1.
+    assert result['B_minus_A_prediction_within_0_3'] is False
+    assert result['B_minus_A_is_gate'] is False
+
+
+@pytest.mark.parametrize('attack',['same_process','A_miss','B_miss','wrong_targets','missing_targets','nan'])
+def test_g0_determinism_rail_rejects_bad_repeats(monkeypatch,attack):
+    rr=repeat_fixture(monkeypatch)
+    if attack=='same_process':rr['g0_A_2']['process_identity']=rr['g0_A_1']['process_identity']
+    elif attack in ('A_miss','B_miss'):rr[f'g0_{attack[0]}_2']['result']['ppl']+=.0011
+    elif attack=='wrong_targets':rr['g0_B_2']['result']['target_sha256']='0'*64
+    elif attack=='missing_targets':rr['g0_B_2']['result']['targets']=3066
+    else:rr['g0_A_2']['result']['ppl']=float('nan')
+    with pytest.raises(common.Red,match='G0_DETERMINISM_MISS'):driver.g0_repeats()
+
+
+def test_g0_registry_runs_fresh_arm_jobs_before_sp():
+    cells=driver.cells();byid={c['id']:c for c in cells}
+    assert byid['g0']['depends']==['g0_A_1','g0_B_1','g0_A_2','g0_B_2']
+    seen=set()
+    for c in cells:
+        assert set(c['depends'])<=seen
+        seen.add(c['id'])
+    for a in 'AB':
+        for i in (1,2):assert byid[f'g0_{a}_{i}']['kind']=='baseline'
+
+
+@pytest.mark.parametrize('arm',list('ABCDE'))
+@pytest.mark.parametrize('S',[1024,8192])
+def test_protocol2_every_ppl_arm_uses_identical_feeding(monkeypatch,arm,S):
+    seen=[]
+    class Fake:
+        def set(self,a,bits=4,delta=None,observe=False,**kw):self.observe=observe
+        def forward(self,ids,score=True):
+            if self.observe:
+                return dict(refinement=dict(fraction=1. if arm=='D' else .1))
+            seen.append(ids.copy())
+            return dict(targets=512,total_nll=512*np.log(12.),wall_ms=1,peak_resident_mib=2)
+    monkeypatch.setattr(model,'Model',Fake)
+    control={a:dict(ppl=12.) for a in 'AB'}
+    monkeypatch.setattr(driver,'g0_guard',lambda m,ids:control)
+    def dep(n):
+        if n=='g0':return dict(result=control)
+        if n.startswith('ppl_'):return dict(result=dict(ppl=12.))
+        return dict(result=dict(delta=1.,target_fraction=.1))
+    monkeypatch.setattr(driver,'require_pass',dep)
+    result=driver.execute(dict(kind='ppl',arm=arm,S=S,bits=4,depends=[]))
+    _,ids=common.protocol()
+    count=6 if S==1024 else 1
+    assert len(seen)==count and result['targets']==count*512
+    np.testing.assert_array_equal(np.concatenate(seen),ids[:count*S])
+    assert result['feeding']==common.FEEDING
 
 
 def test_stale_or_red_receipt_is_not_resumable(monkeypatch,tmp_path):

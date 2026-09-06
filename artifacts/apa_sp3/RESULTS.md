@@ -5,16 +5,19 @@ Evidence class: **model perplexity** for scored rows; **kernel sweep** for activ
 
 Registration SHA256: `d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c` (immutable).
 Model: openbmb/MiniCPM3-4B; INT4 affine groups of 128; BF16 compute; 62 layers, 40 heads, composite D=96 and zero-padded V=96.
-Execution seat: gpt-6-astra, reasoning effort xhigh, confirmed by logs/apa_sp3_r1.log. No GPU model execution by this seat.
+Execution seat: gpt-6-astra, reasoning effort xhigh, confirmed by logs/apa_sp3_r2.log. No GPU model execution by this seat.
 
-## G0 protocol and parity
+## G0 PROTOCOL-2 determinism
 
-Published targets: A=20.065 and B=19.817, absolute tolerance 0.01, same process. These are historical targets, not reproduced values.
-Source: `/mnt/ForgeRealm/GraftRepository/docs/MiniCPM3-MLA_Results.md`.
-The named `/mnt/ForgeRealm/AI-AtlasForge/workspace/APA-Quant-Rust_LLM_testing/mission_b74b7906/test_graft_e1_mla.py` is a graft-router experiment, with no PPL/corpus prefix calculation.
-Dispatch finding: documented `/tmp/minicpm3_engine_bench.py`, `minicpm3_reference.py`, `minicpm3_ceiling.py` were absent. Exact original guide source, concatenation, prefix, special-token policy and scorer were not recovered. Token SHA is **null** in the immutable base registration; any later recovery must be pinned in a separate amendment.
-The later `GraftRepository/tests/minicpm3_apa_recovery.py` uses six WikiText-or-local-document windows in cached chunks and scores 511 targets; it does not establish the original protocol. No fallback corpus is substituted.
-Every model worker requires a separately pinned recovery amendment and rechecks A/B in that process before an SP arm. G0 miss stops PPL arms; D miss stops SP model arms. No tolerances change.
+Historical context only: A=20.065 / B=19.817 came from an unrecoverable single guide window on an 8 GB RTX 3070. They are not targets. No further recovery attempted.
+Authorized amendment: `orders/APA_SP3_AMENDMENT_2.md`; immutable implementation JSON `artifacts/apa_sp3/protocol_amendment.json`, SHA256 `db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224`. Base registration is unchanged.
+Offline wikitext-2-raw-v1 test: 4358 rows joined by newline, 1289979 characters, 333337 tokens. Stream file SHA256 `5684e72cbab28236391ebcac9113aeca5b318ce6eeed69c410f1094950269a28`; canonical little-endian int64 bytes SHA256 `d3c64882a9cbd4264a21f60ac239680d3a7d0631ab06d0d8a5d4fac8286d268a`.
+Tokenizer: snapshot AutoTokenizer defaults; one BOS <s> id 1 at the beginning of the entire stream; no EOS, chat template or per-window BOS. Direct read-only cached test Arrow; no fallback corpus or cache writes.
+Reference: `/mnt/ForgeRealm/GraftRepository/tests/minicpm3_bulkbits_floor.py::get_text` and `window_nll`. Reuse newline join and six consecutive disjoint windows. The reference loop scores 511 targets; amendment 2 explicitly requires all 512, which this scorer implements.
+Feeding: one full prefill per window, fresh KV cache each time, six windows of 1024 at offsets 0,1024,2048,3072,4096,5120. Logits 511:1023 predict tokens 512:1024, fp64 log-softmax; PPL = exp(total NLL / 3072). Same feeding for every arm. Long rows use the prefix at token 0 and the last 512 in-input targets.
+G0: four fresh processes A1,B1,A2,B2; repeats of each arm must agree within 0.001 PPL. Process identities and target hashes are checked. Repeat 1 supplies each baseline after both repeats pass. B-A within +/-0.3 PPL is a prediction, never a stop gate. The preserved in-process A/B safeguard compares six-window PPL to these fresh baselines at 0.001 before later model arms.
+G0 miss stops model arms; D must still refine all eligible keys and satisfy |D-A|<=0.005. C calibration and G2 retain the registered single-prefix scope; their diagnostic fractions are labeled separately from six-window PPL.
+G0 status: BLOCKED / unrun; repeat differences: null; B-A: None; prediction met: None.
 
 ## Perplexity and prefill table — model perplexity
 
@@ -52,7 +55,7 @@ Every model worker requires a separately pinned recovery amendment and rechecks 
 
 The heuristic tail cannot yet be judged: no real-activation error, unrefined-mass or skipped-relative-weight rows have run. A skipped key remains in the softmax at bulk precision; these measurements will quantify its exact-softmax importance, not mass removed from attention. Synthetic sweep outliers do not supply this model’s margin.
 
-The model comparison is incomplete: reproduced original-token G0 parity and a scored C comparison at matched actual fraction are both required; see their individual statuses above. G2/G3 rows establish nothing about model quality by themselves. The ε=1e−3 margin is conditional on the measured finite error envelope; E’s separate capture checks its transfer, and neither check supplies a universal quantization bound or a CUDA rounding proof.
+The model comparison is incomplete: PROTOCOL-2 fresh-process G0 determinism and a scored C comparison at matched actual fraction are both required; see their individual statuses above. G2/G3 rows establish nothing about model quality by themselves. The ε=1e−3 margin is conditional on the measured finite error envelope; E’s separate capture checks its transfer, and neither check supplies a universal quantization bound or a CUDA rounding proof.
 
 ## Decode table — kernel sweep / in-model timing
 
@@ -87,18 +90,19 @@ D uses finite float32 max δ, requires every eligible pair selected and |D−A|�
 
 | Owner | ID | Registered prediction | Status |
 |---|---|---|---|
-| Lead | P1 | D equals A within 0.005 ppl | UNASSESSED; requires applicable model receipts |
-| Lead | P2 | C within 0.05 ppl of B at matched fraction | UNASSESSED; requires applicable model receipts |
-| Lead | P3 | E fraction >=0.95, real eq >=0.8, E ppl within 0.01 of A | UNASSESSED; requires applicable model receipts |
-| Lead | P4 | bulk4 p99 error <0.5*max; C skipped weight ratio >0.1 on some layer while ppl unmoved (P2 tolerance) | UNASSESSED; requires applicable model receipts |
-| Lead | P5 | C/B decode tokens/s at S=32768 >=2 | UNASSESSED; requires applicable model receipts |
-| Seat | S1 | G0 likely RED on current engine even after tokens recovered; documented matmul/softmax drift exceeds 0.01 | UNASSESSED; requires applicable model receipts |
-| Seat | S2 | D likely differs from A by >0.005 ppl: BF16 cuBLAS/softmax rounding differs from fused FP32 accumulation | UNASSESSED; requires applicable model receipts |
-| Seat | S3 | E fraction >=0.95 at bulk4; conditional finite bound will not establish general low-precision usefulness | UNASSESSED; requires applicable model receipts |
-| Seat | S4 | C within 0.05 of B if realised fraction matches; skipped weight ratio >0.1 likely | UNASSESSED; requires applicable model receipts |
-| Seat | S5 | C/B full-model decode at S=32768 <2 because latent expansion, re-quantization and INT4 projections remain in both arms | UNASSESSED; requires applicable model receipts |
+| Lead | P1 | D equals A within 0.005 ppl | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead | P2 | C within 0.05 ppl of B at matched fraction | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead | P3 | E fraction >=0.95, real eq >=0.8, E ppl within 0.01 of A | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead | P4 | bulk4 p99 error <0.5*max; C skipped weight ratio >0.1 on some layer while ppl unmoved (P2 tolerance) | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead | P5 | C/B decode tokens/s at S=32768 >=2 | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Seat | S1 | G0 likely RED on current engine even after tokens recovered; documented matmul/softmax drift exceeds 0.01 | HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim |
+| Seat | S2 | D likely differs from A by >0.005 ppl: BF16 cuBLAS/softmax rounding differs from fused FP32 accumulation | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Seat | S3 | E fraction >=0.95 at bulk4; conditional finite bound will not establish general low-precision usefulness | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Seat | S4 | C within 0.05 of B if realised fraction matches; skipped weight ratio >0.1 likely | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Seat | S5 | C/B full-model decode at S=32768 <2 because latent expansion, re-quantization and INT4 projections remain in both arms | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead amendment 2 | B-A | Fresh B-A within +/-0.3 at bulk4, prediction only | UNASSESSED |
 
-CPU gates: {"D96_pins": ["test_d96_prefill_contract_and_dense_pin", "test_d96_splitk_contract_and_dense_pin"], "G0": "NOT REPRODUCED; source/token provenance missing; preflight refuses before lease", "GPU": "BLOCKED; cudaGetDeviceCount=100, no device; 0 GPU jobs", "adapter_cpu_import": "PASS; 6 modules, no model instantiation", "blind_verification": "lead-owned, unrun", "dry_run_cells": 688, "evidence_class": "unit test / host compile / code inspection", "host_build": {"core_log": "artifacts/apa_sp3/build.log", "diagnostic_log": "artifacts/apa_sp3/diagnostic_rebuild.log", "manifest_sha256": "85b1ada58e1732432f55ce39ddc918b02f102df31543371f1cdf192446abe726", "status": "PASS"}, "mutation": {"killed": 6, "manifest": "artifacts/apa_sp3/mutation_manifest_final.json", "nonerror": 6, "rate": 1.0, "receipt": "artifacts/apa_sp3/mutation_results_final.json", "scope": "author baseline; not blind verification", "threshold": 0.8}, "observer_host_gate": {"GPU_allocation_accounting": "still untested; no device", "after_preload": "cudaMalloc failed: no CUDA-capable device is detected", "expected": "cudaMalloc failed: no CUDA-capable device is detected", "status": "PASS_HOST_FAILURE_PRESERVATION"}, "pins": {"preexisting_kernel_bodies": 107, "preexisting_source_files": 24, "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c", "unchanged": true}, "pytest": {"failed": 0, "log": "artifacts/apa_sp3/cpu_after_observer_fix.log", "log_sha256": "e3b5ed70339f6e7fd37062881ce10bb786760d5273efeca28262f0c881d57f0d", "passed": 20, "skipped": 0}, "status": "PASS_CPU_ONLY", "supersedes": "CPU_GATES.json: observer RTLD_LOCAL resolution fix and new build seal"}
+CPU gates: {"D96_pins": ["test_d96_prefill_contract_and_dense_pin", "test_d96_splitk_contract_and_dense_pin"], "GPU": "BLOCKED: cudaGetDeviceCount=100, device_count=0, no CUDA-capable device is detected; 0 GPU jobs", "adapter_cpu_import": "PASS; six modules pinned; no model instantiation; host_protocol2.json", "amendment_guards": {"names": ["test_protocol2_forged_amendment_red", "test_protocol2_stale_amendment_red", "test_protocol2_wrong_stream_sha_red"], "receipt": "artifacts/apa_sp3/guard_rejections_protocol2.json", "status": "PASS_ALL_REJECTED"}, "blind_verification": "lead-owned, unrun", "dry_run_cells": 692, "evidence_class": "unit test / host compile / code inspection", "fingerprint": {"artifacts/apa_sp3/adapter_import_cpu.json": "89f6369bbf700eff2209abc07b337775a59259c7abd465fa19be5072e9e6a490", "artifacts/apa_sp3/amendment_001_execution.json": "c680b376073a9790c7fb995c73d8ce9bbbc46512381133b0fae6e8861f9897b5", "artifacts/apa_sp3/amendment_002_native_bulk.json": "622b55b4b66a580fe38dd6f25e2471da5abb8dc7b76c590176a1b5618ffd1ba4", "artifacts/apa_sp3/amendment_003_B_native_scores.json": "b2689d07f8f70481d1f0740de256975a7be93cd902a4eb07831f94fd43bf00d5", "artifacts/apa_sp3/build/manifest.json": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1", "artifacts/apa_sp3/registration.json": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c", "artifacts/apa_sp3/weight_identity.json": "16d121d485ad7a21fdeb8cf2b881b8ecc1bb1532185e6fd425a8cbcdc8356ead", "scripts/apa_sp3_build.sh": "c9b28b49872d515deff42ba6ecf5c840f5ffab6c516533025f435208e0054c66", "scripts/apa_sp3_common.py": "2365412261effca3a0dbe4d80ee1b9b730510a3d50b52c826375a0c65cb261d5", "scripts/apa_sp3_control.py": "485cd771a747ec07b5f258be7b22c3c25608a2242d4b212542c5350e468ff734", "scripts/apa_sp3_diag_bindings.cpp": "e3612f50d4cc9456e79ab063889bc62071b2f3fa365e0890902bebe232d24f17", "scripts/apa_sp3_gpu.py": "9a680340294b9d0dcac3ca9fc731cb91304ae7f9253f597e43649707bdd33a09", "scripts/apa_sp3_lead_gpu.sh": "e5f970e7a29bee103f82c82bc0acf4318fd6087c76979ead4266ef60209fed86", "scripts/apa_sp3_make_diag.py": "2b01cb3c58434d88cc08f51797eb89fa101e527a1b093b3867cb26f99fd010ef", "scripts/apa_sp3_metrics.py": "26e9b9e13f15baae7069e981dea064939c8b232f8b43e3517625f44792c178a3", "scripts/apa_sp3_model.py": "e95f2ba8ee4407a46792c1c332cd7a31d62981775429ec6becf275f471507cf2", "scripts/apa_sp3_mutations.py": "affc907439e27b2c71d334093d9be819fb78d4eb4add0e0a2982f8a0b1cfb2c0", "scripts/apa_sp3_peak.cpp": "fb439af92e0e968ff2d09b7a53f58ddb69a32e442953ca455c89506615acb7bc", "scripts/apa_sp3_protocol2.py": "f585a942aae501f2efeac8469531ee315a3c09bee98853433aa1de7335c93899", "scripts/apa_sp3_report.py": "5c5e475cf62c9c4348b340488cc7c066ddc09062ce0676c9c773a8a1fb1b9b50"}, "g0_preflight": "PASS for g0_A_1; no lease/device/model needed", "host_build": {"command": "timeout --kill-after=5s 575s env PYTHONDONTWRITEBYTECODE=1 bash scripts/apa_sp3_build.sh", "log": "artifacts/apa_sp3/build_protocol2.log", "log_sha256": "3ef7b7a60d88ed51464b8f312cf59a875eeaec3cbf47c5c473ee6736d61d4f39", "manifest_sha256": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1", "status": "PASS"}, "mutation": {"killed": 6, "manifest": "artifacts/apa_sp3/mutation_manifest_protocol2.json", "nonerror": 6, "rate": 1.0, "receipt": "artifacts/apa_sp3/mutation_results_protocol2.json", "source_pins_current": true, "threshold": 0.8}, "observer_host_gate": "PASS native no-device failure preserved; GPU allocation accounting remains untested", "pins": {"amendment_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224", "preexisting_kernel_bodies": 107, "preexisting_source_files": 24, "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c", "unchanged": true}, "protocol": {"feeding": "one_full_prefill_per_window_no_cache_between_windows", "status": "REGISTERED_PROTOCOL_2", "token_count": 333337, "token_sha256": "d3c64882a9cbd4264a21f60ac239680d3a7d0631ab06d0d8a5d4fac8286d268a", "tokens_file_sha256": "5684e72cbab28236391ebcac9113aeca5b318ce6eeed69c410f1094950269a28"}, "pytest": {"failed": 0, "log": "artifacts/apa_sp3/cpu_protocol2_delivery.log", "log_sha256": "bc597605a824565d6cc6b7a4d38324edf67198280b8360727e56107cfb2c1075", "passed": 57, "skipped": 0}, "status": "PASS_CPU_ONLY", "supersedes": "CPU_GATES_FINAL.json (r1 retained unchanged)"}
 D=96 tests: `test_d96_prefill_contract_and_dense_pin`, `test_d96_splitk_contract_and_dense_pin`, and compiled flag/device/scalar guards for both geometries. Native GPU numerical pins are delivered in job `kernel96`, unrun here.
 Author tests and mutations are baseline evidence only. Independent blind verification under House Rules §8 is lead-owned and unrun; no subagents were launched.
 
@@ -108,7 +112,11 @@ Author tests and mutations are baseline evidence only. Independent blind verific
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3
 timeout 30s bash scripts/apa_sp3_lead_gpu.sh list
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run kernel96
-# Recover original protocol/token pins in a separate amendment before G0:
+# Four separately leased fresh processes, then aggregate determinism:
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_A_1
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_B_1
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_A_2
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0_B_2
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run g0
 # Each resume invocation runs at most ONE cell; stops on RED/stale receipts:
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 4
@@ -116,13 +124,14 @@ timeout 30s bash scripts/apa_sp3_lead_gpu.sh summary
 ```
 Complete commands: `artifacts/apa_sp3/lead_commands.txt`; every cell and per-job estimate: `dry_run.json`. Optional secondary uses `resume 8` after primary prerequisites. No multi-hour automatic batch is launched.
 Each leased operation: flock --wait 20, worker timeout 480s plus 5s own-child termination grace, foreground 30s cooldown; outer guard TERM at 585s plus 3s grace. Device/PID inspection fails closed. Never signal a foreign PID. Operator keeps right of way; advisory-lock cooperation is required.
-Planning estimates, not timings: G0 35–150s; 1024 PPL 45–180s; 1024 capture/calibration 50–250s; 8192 prefill/capture 120–480s or RED timeout/OOM; per-layer G2 3–60s at 1024, 30–480s at 8192; decode including cache prefill 60–480s or RED. Actual upper-bound compliance is enforced, not predicted.
+Planning estimates for workers, not timings: each fresh baseline 60–480s; G0 aggregation 1–10s; model PPL/capture/match/decode 140–480s including twelve control prefills, or RED timeout/OOM; per-layer G2 3–60s at 1024, 30–480s at 8192. The 480s worker cap is unchanged; six-window controls increase deadline risk. Add 30s cooldown plus up to 20s lease / 40s setup-receipt overhead; outer bound 590s. Actual upper-bound compliance is enforced, not predicted.
 Memory reasoning: a single BF16 40-head S² score tensor needs 5.0 GiB at 8192 and 80 GiB at 32768, before intermediates and ~2.9 GB model residency. Standard full prefill at 32768 cannot fit on 12 GB; its decode setup will record OOM. 8192 standard fit and B/SP full-prefill deadlines remain unverified. No alternate cache-building scheme is silently substituted.
 
 ## Prior art
 
 | Work | What is reused / what SP3 adds |
 |---|---|
+| GraftRepository MiniCPM3 floor protocol (2026) | get_text newline join and six-window teacher-forced NLL reference; lead amendment fixes 512 targets, chooses full prefills and fp64. New immutable token manifest and fresh-process gate wiring; no new scoring algorithm. |
 | [BLASST](https://arxiv.org/abs/2512.12087) | Yuan et al. 2025/2026, arXiv:2512.12087: running-max log threshold; APA promotes individual keys instead of omitting blocks |
 | [ThriftAttention](https://arxiv.org/abs/2605.23081) | Sharratt 2026, arXiv:2605.23081: selective precision and weight-sensitive error motivation; no FP4 tensor-core implementation port |
 | [FlashAttention-2](https://arxiv.org/abs/2307.08691) | Dao 2023, arXiv:2307.08691 and Milakov/Gimelshein 2018 online normalizer: stable online softmax/work partitioning; existing SP implementation reused, no FA2 port |
@@ -136,7 +145,8 @@ Bulk4/8 here means a TurboQuant codebook reconstructed to BF16 Kq. Existing SP b
 
 ## Deviations, RED and residuals
 
-- Original token SHA and exact guide protocol unavailable: registration honestly records null; no PPL reproduction claimed. Separate amendment is required before model gates. This is a delivered block, not a waived gate.
+- Original registration token SHA remains null and original S1 is retained as historical; lead amendment 2 supplies the new protocol and token pins. This seat did not run fresh A/B or GPU gates; their receipt statuses are shown above. Current blocked receipt: `artifacts/apa_sp3/GPU_BLOCKED_PROTOCOL2.json`. Historical values are not targets.
+- Floor reference deviations explicitly authorized by amendment: full-prefill feeding, 512 instead of 511 scored targets, fp64 instead of fp32 NLL. Default BF16 matches the adapter; no compute dtype deviation. Read-only Arrow load uses exactly the specified cached test split.
 - Missing local SP2/SPD1 artifacts were read from sibling worktrees, read-only. SP1/SP1.1 registration hashes are corroborated by the local ledger and SP2 parent registration; their original JSONs are absent here.
 - Native GPU behavior, diagnostic bit parity, BF16 D≈A, long-context fit/time and actual model quality remain untested. Kernel-body hash equality proves source preservation, not GPU correctness.
 - Resident peak is an explicitly qualified estimate. Cold/warm effects and single-call prefill variability remain; decode measures 32 steps and includes expansion/quantization overhead common to arms.

@@ -23,7 +23,7 @@ def preflight(job):
         raise Red('MODEL_ARMS_STOPPED: see artifacts/apa_sp3/STOP_MODEL_ARMS.json')
     if (ART/'jobs'/(job+'.json')).exists():
         raise Red('existing immutable job receipt; no automatic retry')
-    if c['kind'] not in ('kernel','margin','calibration','freeze','eq','eq_check'):
+    if c['kind'] != 'kernel':
         protocol()
     for d in c['depends']:
         require_pass(d)

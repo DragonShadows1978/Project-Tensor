@@ -208,7 +208,7 @@ def upward_float32(x):
     if not math.isfinite(x) or x < 0:
         raise Red('margin must be finite nonnegative')
     f = np.float32(x)
-    return float(np.nextafter(f, np.float32(np.inf))) if float(f) < x else float(f)
+    return float(np.nextafter(f, np.float32(-np.inf))) if float(f) < x else float(f)
 
 
 if __name__ == '__main__':

@@ -22,10 +22,19 @@ from apa_sp3_common import (ART, ROOT, REG_SHA, Red, fingerprint, load_runtime, 
 
 
 def cells():
-    out = [{'id': 'kernel96', 'kind': 'kernel', 'estimate_s': [2, 20], 'depends': []},
-           {'id': 'g0', 'kind': 'parity', 'bits': 4, 'S': 1024, 'estimate_s': [35, 150], 'depends': []},
-           {'id': 'ppl_b4_D_1024', 'kind': 'ppl', 'arm': 'D', 'bits': 4, 'S': 1024,
-            'estimate_s': [45, 180], 'depends': ['g0', 'kernel96']}]
+    # Prior art: ordinary interleaved repeats / independent-process controls.
+    # Lead amendment 2 (2026) replaces irrecoverable historical-value gates.
+    out = [{'id': 'kernel96', 'kind': 'kernel', 'estimate_s': [2, 20], 'depends': []}]
+    repeats = []
+    for rep in (1,2):
+        for arm in ('A','B'):
+            name = f'g0_{arm}_{rep}'
+            out.append(dict(id=name, kind='baseline', arm=arm, repeat=rep, bits=4, S=1024,
+                            estimate_s=[60,480], depends=repeats[-1:]))
+            repeats.append(name)
+    out += [dict(id='g0', kind='parity', bits=4, S=1024, estimate_s=[1,10], depends=repeats),
+            dict(id='ppl_b4_D_1024',kind='ppl',arm='D',bits=4,S=1024,
+                 estimate_s=[140,480],depends=['g0','kernel96'])]
     for bits in (4, 8):
         primary = bits == 4
         for S in (1024, 8192):
@@ -88,28 +97,68 @@ def cells():
     out.append(dict(id='eq_check_E',kind='eq_check',bits=4,estimate_s=[1,10],
                     depends=['eq_b4']+[f'margin_b4_E_{S}_l{i:02d}' for S in (1024,8192) for i in range(62)]))
     for x in out:
+        if x['kind'] in ('ppl','match','capture','decode'):
+            # Includes the retained in-process guard: twelve 1024 prefills
+            # plus the requested arm, before the unchanged 480s deadline.
+            x['estimate_s']=[max(x['estimate_s'][0],140),480]
         x['estimate_s'][1]=min(x['estimate_s'][1],480)
         x['optional_secondary'] = x.get('bits') == 8
         x['worker_timeout_s'] = 480
         x['job_ceiling_s'] = 590
         x['estimate_scope'] = 'planning estimate, unmeasured; 8192/32768 may OOM or exceed ceiling'
-    return out
+    return [c for c in out if not c['optional_secondary']] + [c for c in out if c['optional_secondary']]
 
 
 def g0_guard(model, ids):
+    """Retain r1's in-process control, now against fresh PROTOCOL-2 baselines."""
+    from apa_sp3_model import score_windows
+    baselines = require_pass('g0')['result']
     numbers = {}
     for arm in ('A', 'B'):
         model.set(arm, bits=4)
-        numbers[arm] = model.forward(ids[:1024])
-    targets = registration()['g0']['targets']
+        numbers[arm] = score_windows(model, ids)
+    targets = {a:baselines[a]['ppl'] for a in ('A','B')}
     # Preserve the numbers BEFORE throwing: a miss must not disappear into an exception.
     publish(ART / 'progress' / f'g0_inprocess.{os.getpid()}.{time.time_ns()}.json',
             {'evidence_class': 'model perplexity', 'numbers': numbers, 'targets': targets,
              'protocol_sha256': sha(ART/'protocol_amendment.json')})
-    if any(abs(numbers[a]['ppl']-targets[a]) > .01 for a in ('A','B')):
-        raise Red('G0_PARITY_MISS: ' + json.dumps({a:numbers[a]['ppl'] for a in numbers}) +
-                  '; targets A=20.065 B=19.817 tolerance=0.01; stop all PPL arms', numbers)
+    if any(not math.isfinite(numbers[a]['ppl']) or abs(numbers[a]['ppl']-targets[a]) > .001
+           or numbers[a]['target_sha256'] != baselines[a]['target_sha256'] for a in ('A','B')):
+        raise Red('G0_DETERMINISM_MISS: ' + json.dumps({a:numbers[a]['ppl'] for a in numbers}) +
+                  '; fresh baseline targets '+json.dumps(targets)+' tolerance=0.001; stop all PPL arms', numbers)
     return numbers
+
+
+def g0_repeats():
+    # Prior art: independent-process determinism check, standard experimental
+    # control. Do not average repeated PPL to conceal a determinism miss.
+    proto, ids = protocol()
+    names = proto['g0']['order'][:-1]
+    rr = {n:require_pass(n) for n in names}
+    identities = [r['process_identity'] for r in rr.values()]
+    fresh = len({json.dumps(p,sort_keys=True) for p in identities}) == 4
+    numbers = {}
+    for a in ('A','B'):
+        first, second = (rr[f'g0_{a}_{i}']['result'] for i in (1,2))
+        for i,r in enumerate((first,second),1):
+            if r.get('arm') != a or r.get('repeat') != i or r.get('targets') != 3072:
+                raise Red('G0_DETERMINISM_MISS: incomplete or wrong-arm repeat',rr)
+        numbers[a] = first
+        numbers[a+'_repeat_2'] = second
+    import hashlib
+    target_sha = hashlib.sha256(np.concatenate([ids[w*1024+512:(w+1)*1024]
+                                for w in range(6)]).astype('<i8').tobytes()).hexdigest()
+    diffs = {a:numbers[a+'_repeat_2']['ppl']-numbers[a]['ppl'] for a in ('A','B')}
+    result = dict(evidence_class='model perplexity',**numbers,repeat_differences=diffs,
+                  fresh_processes=fresh,process_identities=identities,
+                  protocol_source=proto['scoring_source_path'],baseline='repeat 1',
+                  tolerance=.001,B_minus_A=numbers['B']['ppl']-numbers['A']['ppl'])
+    result['B_minus_A_prediction_within_0_3'] = abs(result['B_minus_A']) <= .3
+    result['B_minus_A_is_gate'] = False
+    if (not fresh or any(not math.isfinite(v) or abs(v)>.001 for v in diffs.values())
+            or any(r['result'].get('target_sha256') != target_sha for r in rr.values())):
+        raise Red('G0_DETERMINISM_MISS: fresh-process/target/repeat check failed',result)
+    return result
 
 
 def kernel96():
@@ -169,6 +218,8 @@ def execute(cell):
         require_pass(d)
     if kind == 'kernel':
         return kernel96()
+    if kind == 'parity':
+        return g0_repeats()  # aggregation only; never creates a model
     if kind == 'margin':
         from apa_sp3_metrics import analyze_capture
         cap = ART/'captures'/f"b{bits}_{cell['arm']}_{cell['S']}"/f"layer{cell['layer']:02d}"
@@ -201,18 +252,19 @@ def execute(cell):
         if not result['held']:
             raise Red('E_EMPIRICAL_ENVELOPE_VIOLATED',result)
         return result
-    # Every model job fails closed on missing original tokens before CUDA load.
+    # Every model job fails closed on protocol pins before CUDA load.
     proto, ids = protocol()
-    from apa_sp3_model import Model, capture_space
+    from apa_sp3_model import Model, capture_space, score_windows
     if kind == 'match' and cell['trial']:
         prev = require_pass(f"match_b{bits}_{cell['trial']-1}")['result']
         if prev['matched']:
             return dict(prev, carried_without_gpu=True)
     model = Model()
+    if kind == 'baseline':
+        model.set(cell['arm'],bits=4)
+        return dict(score_windows(model,ids),arm=cell['arm'],repeat=cell['repeat'],
+                    evidence_class='model perplexity',protocol_source=proto['scoring_source_path'])
     parity = g0_guard(model, ids)  # A/B in this very process, before any SP arm.
-    if kind == 'parity':
-        return {'evidence_class':'model perplexity','A':parity['A'],'B':parity['B'],
-                'protocol_source':proto['source_path'],'in_process':True}
     if kind == 'match':
         from apa_sp3_metrics import next_delta
         cal = require_pass(f'calibration_b{bits}')['result']
@@ -239,17 +291,18 @@ def execute(cell):
     if kind=='decode':
         return dict(model.decode(ids,S,delta),arm=arm,S=S,bits=bits,delta=delta,
                     evidence_class='kernel sweep',inprocess_g0=parity)
-    result=model.forward(ids[:S])
+    result=score_windows(model,ids,S)
     if arm in ('C','D','E'):
         # Counts measured outside timing on another identical-token forward.
         model.set(arm,bits,delta,observe=True)
         observed=model.forward(ids[:S],score=False)
         result['refinement']=observed['refinement']
+        result['refinement_scope']='registered single prefix at token 0; separate from six-window PPL'
     if arm=='D':
         if result['refinement']['fraction']!=1.:
             raise Red('D_NOT_REFINE_ALL')
         if S==1024:
-            result['D_minus_A']=result['ppl']-parity['A']['ppl']
+            result['D_minus_A']=result['ppl']-require_pass('g0')['result']['A']['ppl']
             if abs(result['D_minus_A'])>.005:
                 publish(ART/'progress'/f'D_miss.{os.getpid()}.{time.time_ns()}.json',result)
                 raise Red('D_NE_A: '+json.dumps(result)+'; stop SP model arms',result)
@@ -278,7 +331,10 @@ def work(job):
     start=time.perf_counter()
     receipt={'job':job,'cell':cell,'registration_sha256':REG_SHA,'fingerprint':fingerprint(),
              'protocol_sha256':sha(ART/'protocol_amendment.json') if (ART/'protocol_amendment.json').exists() else None,
-             'status':'RED','pid':os.getpid(),'evidence_class':'model perplexity' if cell['kind'] in ('ppl','parity') else 'kernel sweep'}
+             'status':'RED','pid':os.getpid(),
+             'process_identity':dict(pid=os.getpid(),boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                                     start_ticks=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()[19]),
+             'evidence_class':'model perplexity' if cell['kind'] in ('ppl','parity','baseline') else 'kernel sweep'}
     try:
         verify_sources()
         receipt['dependencies']={d:sha(ART/'jobs'/(d+'.json')) for d in cell['depends'] if (ART/'jobs'/(d+'.json')).exists()}
@@ -289,7 +345,7 @@ def work(job):
         receipt['traceback']=traceback.format_exc()
         if isinstance(e,Red) and e.details is not None:
             receipt['result']=e.details
-        if isinstance(e,Red) and str(e).startswith(('G0_PARITY_MISS','D_NE_A','D_NOT_REFINE_ALL')):
+        if isinstance(e,Red) and str(e).startswith(('G0_DETERMINISM_MISS','G0_PARITY_MISS','D_NE_A','D_NOT_REFINE_ALL')):
             stop=ART/'STOP_MODEL_ARMS.json'
             if not stop.exists():
                 publish(stop,{'job':job,'error':str(e),'registration_sha256':REG_SHA,
@@ -308,8 +364,9 @@ def main():
     p.add_argument('--bits',type=int,choices=(4,8),default=4)
     a=p.parse_args()
     if a.dry_run:
+        proto, _ = protocol()
         print(json.dumps({'status':'PLANNED_NOT_RUN','registration_sha256':REG_SHA,
-                          'protocol':registration()['protocol'],'cells':cells()},indent=2))
+                          'protocol':proto,'cells':cells()},indent=2))
         return 0
     if a.next:
         for c in cells():
