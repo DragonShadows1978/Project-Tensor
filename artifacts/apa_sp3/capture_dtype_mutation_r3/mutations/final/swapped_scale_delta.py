@@ -246,7 +246,7 @@ class Model:
         if self.arm not in ('C', 'D', 'E'):
             raise Red('SP dispatch reached under wrong arm')
         # Binding order is scale, delta, causal, sinks, diagnostics (verified).
-        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, self.delta, scale,
                                                        causal, None, self.observe)
         if self.observe:
             out, mask = result

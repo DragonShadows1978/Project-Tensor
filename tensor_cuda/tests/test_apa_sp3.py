@@ -395,6 +395,83 @@ def test_capture_metrics_all_pairs_causal_not_sampled(tmp_path):
     assert not (tmp_path/'scratch.f32').exists()
 
 
+@pytest.mark.parametrize('mask_dtype',[np.uint8,np.int32])
+def test_capture_blend_nonfloat_cat_preserves_packed_masks(tmp_path,mask_dtype):
+    # Prior art: ordinary dependency stubs and independent byte/count oracles;
+    # no prior art known to me for this specific regression fixture. Reproduce
+    # the lead's 2026 uint8-cat failure through the real blend/capture methods.
+    class Tensor:
+        def __init__(self,data):
+            self.data=np.asarray(data)
+            self.shape=self.data.shape
+            self.dtype=str(self.data.dtype)
+        def numpy(self):return self.data
+        def float(self):return Tensor(self.data.astype(np.float32))
+        def slice(self,dim,start,length):
+            index=[slice(None)]*self.data.ndim
+            index[dim]=slice(start,start+length)
+            return Tensor(self.data[tuple(index)])
+        def transpose(self,a,b):return Tensor(self.data.swapaxes(a,b))
+        def __mul__(self,scale):return Tensor(self.data*scale)
+
+    cats=[]
+    def cat(tensors,dim):
+        if any(t.dtype not in ('float32','float16','bfloat16') for t in tensors):
+            raise RuntimeError('op supports float32/float16/bfloat16 only')
+        cats.append([t.dtype for t in tensors])
+        return Tensor(np.concatenate([t.data for t in tensors],axis=dim))
+
+    B,H,L,S,D=1,40,5,9,96
+    q=Tensor(np.zeros((B,H,L,D),np.float32))
+    k=Tensor(np.zeros((B,H,S,D),np.float32))
+    kq=Tensor(np.zeros((B,H,S,D),np.float32))
+    v=Tensor(np.zeros((B,H,S,64),np.float32))
+    selected=np.zeros((B,H,L,S),mask_dtype)
+    packed=np.zeros((B,H,L,2),np.uint8)
+    expected_selected=0
+    for h in range(H):
+        for row in range(L):
+            for j in range(S-L+row+1):
+                if j%3==(h+row)%3:
+                    selected[0,h,row,j]=1
+                    packed[0,h,row,j//8] |= 1 << (j%8)
+                    expected_selected+=1
+    with pytest.raises(RuntimeError,match='op supports float32/float16/bfloat16 only'):
+        cat([Tensor(selected[:,:,:2]),Tensor(selected[:,:,2:])],dim=2)
+
+    diag_calls=[]
+    def blend(bulk,rank,z,Lq,row0):
+        length=bulk.shape[2]
+        diag_calls.append((Lq,row0,length))
+        assert z==1.25 and rank.shape==bulk.shape
+        return Tensor(np.zeros_like(bulk.data)),Tensor(selected[:,:,row0:row0+length])
+
+    native=Tensor(np.zeros((B,H,L,64),np.float32))
+    obj=model.Model.__new__(model.Model)
+    obj.tc=SimpleNamespace(cat=cat,matmul=lambda a,b:Tensor(a.data@b.data))
+    obj.diag=SimpleNamespace(blend=blend)
+    native_args=[]
+    obj.original_blend=lambda *args:native_args.append(args) or native
+    obj.observe=True;obj.capture_dir=tmp_path;obj.rows=[]
+    obj.layer=0;obj.arm='B';obj.bits=4;obj.delta=None
+    assert obj.blend(q,k,kq,v,1,96**-.5,1.25,True,2) is native
+    assert all(a is b for a,b in zip(native_args[0][:4],(q,k,kq,v)))
+    assert diag_calls==[(L,0,2),(L,2,2),(L,4,1)]
+    assert len(cats)==2 and all(t=='float32' for chunk in cats for t in chunk)
+    pairs=H*sum(range(S-L+1,S+1))
+    assert obj.rows==[dict(layer=0,selected=expected_selected,pairs=pairs,
+                           fraction=expected_selected/pairs,path='B_native_blend')]
+    p=tmp_path/'layer00'
+    got=np.load(p/'selected.pack.npy',allow_pickle=False)
+    np.testing.assert_array_equal(got,packed)
+    np.testing.assert_array_equal(np.unpackbits(got,axis=-1,count=S,bitorder='little'),selected)
+    meta=common.read(p/'capture.json')
+    assert meta['selected']==expected_selected and meta['pairs']==pairs
+    assert meta['path']=='B_native_blend' and meta['causal'] is True
+    assert [(c['row0'],c['length']) for c in meta['native_bulk_chunks']]==[(0,2),(2,2),(4,1)]
+    for name,digest in meta['files'].items():assert common.sha(p/name)==digest
+
+
 def test_no_device_receipt_is_observation_only():
     lib=ctypes.CDLL('/usr/local/cuda-12.6/lib64/libcudart.so')
     count=ctypes.c_int()
