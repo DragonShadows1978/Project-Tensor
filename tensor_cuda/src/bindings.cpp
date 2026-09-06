@@ -659,6 +659,30 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   }, py::arg("packed"), py::arg("scales"), py::arg("group") = 32,
      py::arg("lo") = 0, py::arg("n") = 0, py::arg("out_dtype") = "bfloat16");
   // Fused sparse selective APA attention (inference only, no autograd).
+// APA_SP1_ADDITION_BEGIN binding
+  // Separate opt-in API; no existing Python wrapper/launcher is redirected.
+  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+      Tensor& v, double scale, double delta, bool is_causal,
+      py::object sinks_obj, bool diagnostics) -> py::object {
+    const NDArray* sinks = nullptr;
+    if (!sinks_obj.is_none()) sinks = &sinks_obj.cast<Tensor&>().data();
+    NDArray selected;
+    // Validate geometry in the launcher before any diagnostic allocation.
+    // The launcher creates selected only after validation when requested.
+    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+        kq.data(), v.data(), (float)scale, (float)delta, is_causal,
+        sinks, diagnostics ? &selected : nullptr);
+    Tensor output = Tensor::make(result, false);
+    if (diagnostics) return py::make_tuple(output, Tensor::make(selected, false));
+    return py::cast(output);
+  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
+     py::arg("scale"), py::arg("delta"), py::arg("is_causal") = false,
+     py::arg("sinks") = py::none(), py::arg("diagnostics") = false);
+  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+    return py::make_tuple(Tensor::make(result.first,false),Tensor::make(result.second,false));
+  }, py::arg("q"), py::arg("kq"));
+// APA_SP1_ADDITION_END binding
   m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                       double scale, double zthr, bool is_causal) {
     return Tensor::make(
