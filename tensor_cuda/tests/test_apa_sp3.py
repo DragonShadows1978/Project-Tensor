@@ -209,7 +209,7 @@ def test_protocol2_stale_amendment_red(monkeypatch,tmp_path,attack):
 @pytest.mark.parametrize('attack',['file_bytes','canonical_bytes'])
 def test_protocol2_wrong_stream_sha_red(monkeypatch,tmp_path,attack):
     j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
-    ids=np.load(j['tokens_path']);ids[10]=(ids[10]+1)%73448
+    ids=np.load(common.local_path(j['tokens_path']));ids[10]=(ids[10]+1)%73448
     wrong=tmp_path/'wrong.npy';np.save(wrong,ids,allow_pickle=False)
     j['tokens_path']=str(wrong)
     if attack=='canonical_bytes':j['tokens_sha256']=common.sha(wrong)
@@ -221,7 +221,7 @@ def test_protocol2_wrong_stream_sha_red(monkeypatch,tmp_path,attack):
 @pytest.mark.parametrize('attack',['short','dtype','rank','vocabulary','scoring'])
 def test_protocol2_semantic_stream_and_scoring_guards_red(monkeypatch,tmp_path,attack):
     j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
-    ids=np.load(j['tokens_path'])
+    ids=np.load(common.local_path(j['tokens_path']))
     if attack=='short':ids=ids[:32800];j['token_count']=len(ids)
     elif attack=='dtype':ids=ids.astype('>i8')
     elif attack=='rank':ids=ids[None]
@@ -368,7 +368,8 @@ def test_all_cells_unique_and_dependencies_registered():
     assert len([c for c in cells if c['kind']=='margin' and c['bits']==4 and c['arm'] in 'BC'])==248
     for c in cells:
         assert set(c['depends'])<=ids
-        assert c['worker_timeout_s']==480 and c['job_ceiling_s']==590
+        expected_rail=290 if c['kind'] in ('capture_range','ceiling','decode_pool') else 480
+        assert c['worker_timeout_s']==expected_rail and c['job_ceiling_s']==590
     for S in (2048,8192,32768):
         for arm in 'ABC':assert f'decode_b4_{arm}_{S}' in ids
 

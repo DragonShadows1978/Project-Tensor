@@ -1,0 +1,181 @@
+--- a4/scripts/apa_sp3_control.py
++++ a5/scripts/apa_sp3_control.py
+@@ -27,6 +27,11 @@
+         protocol()
+     for d in c['depends']:
+         require_pass(d)
++    if c['kind'] == 'decode_pool':
++        from apa_sp3_a5_decode import preflight as pool_preflight
++        outcome = pool_preflight(c)
++        if outcome:
++            return outcome
+     from apa_sp3_a4_jobs import require_fit
+     require_fit(c)
+     if c['kind']=='capture_range' and c['layer_start']==0:
+@@ -75,7 +80,8 @@
+         if mode=='validate':validate(sys.argv[2])
+         elif mode=='preflight':
+             from apa_sp3_common import receipt_validation
+-            with receipt_validation():preflight(sys.argv[2])
++            with receipt_validation():outcome=preflight(sys.argv[2])
++            if outcome:print(outcome)
+         elif mode=='idle':idle()
+         elif mode=='timeout':print(validate(sys.argv[2])['worker_timeout_s'])
+         elif mode=='kind':print(validate(sys.argv[2])['kind'])
+--- a4/scripts/apa_sp3_gpu.py
++++ a5/scripts/apa_sp3_gpu.py
+@@ -111,7 +111,8 @@
+ 
+ 
+ def cells():
+-    return overlay(base_cells())
++    from apa_sp3_a5_registry import overlay as overlay_a5
++    return overlay_a5(overlay(base_cells()))
+ 
+ 
+ def g0_guard(model, ids):
+@@ -219,6 +220,9 @@
+ 
+ def execute(cell):
+     kind, bits = cell['kind'], cell.get('bits',4)
++    if kind == 'decode_pool':
++        from apa_sp3_a5_decode import execute as execute_a5
++        return execute_a5(cell)
+     if kind in KINDS:
+         from apa_sp3_a4_jobs import execute as execute_a4
+         return execute_a4(cell)
+@@ -376,6 +380,8 @@
+     p.add_argument('--worker')
+     p.add_argument('--next',action='store_true')
+     p.add_argument('--bits',type=int,choices=(4,8),default=4)
++    p.add_argument('--include-32k-captures', action='store_true',
++                   default=os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES') == '1')
+     a=p.parse_args()
+     if a.dry_run:
+         proto, _ = protocol()
+@@ -383,7 +389,8 @@
+                           'protocol':proto,'cells':cells()},indent=2))
+         return 0
+     if a.next:
+-        for c in cells():
++        from apa_sp3_a5_registry import default_cells
++        for c in default_cells(cells(), a.include_32k_captures):
+             if c.get('bits',4)!=a.bits:
+                 continue
+             from apa_sp3_common import job_path
+--- a4/scripts/apa_sp3_a4_provenance.py
++++ a5/scripts/apa_sp3_a4_provenance.py
+@@ -17,9 +17,13 @@
+ 
+ def closure(cell):
+     kind = cell['kind']
++    if kind == 'decode_pool':
++        return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a5_decode.py']))
+     names = ['common.py', 'gpu.py', 'control.py', 'lead_gpu.sh', 'a4_provenance.py']
+     paths = ['scripts/apa_sp3_' + n for n in names]
+     paths += ['artifacts/apa_sp3/registration.json']
++    paths += ['scripts/apa_sp3_a5_provenance.py', 'scripts/apa_sp3_a5_registry.py',
++              'artifacts/apa_sp3/amendment_009_decode_pool.json']
+     if kind in ENGINE_KINDS:
+         paths += ['artifacts/apa_sp3/build/manifest.json',
+                   'artifacts/apa_sp3/adapter_import_cpu.json',
+@@ -66,7 +70,8 @@
+         import hashlib
+         identity = hashlib.sha256((identity+sha(ART/FOLLOWUP)).encode()).hexdigest()
+     m['effective_sha256'] = identity
+-    return m
++    from apa_sp3_a5_provenance import extend_bridge
++    return extend_bridge(m)
+ 
+ 
+ def current_fingerprint(cell):
+@@ -85,6 +90,19 @@
+     except FileNotFoundError:
+         return False
+     old = j.get('fingerprint', {})
++    if 'a5_transition' in m:
++        if (j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1' and old == now
++                and j.get('fingerprint_amendment_sha256') == m['effective_sha256']):
++            return True
++        if kind == 'decode_pool':
++            return False
++        from apa_sp3_a5_provenance import previous_current
++        previous = previous_current(cell, now, m['a5_transition'])
++        if previous is None:
++            return False
++        parent = {k:v for k,v in m.items() if k not in ('a5_transition', 'parent_effective_sha256')}
++        parent['effective_sha256'] = m['parent_effective_sha256']
++        return compatible(j, current=previous, amendment=parent)
+     if j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1':
+         return old == now and j.get('fingerprint_amendment_sha256') == m['effective_sha256']
+     # Only pinned legacy endpoints can cross this explicit bridge. A future
+--- a4/scripts/apa_sp3_lead_gpu.sh
++++ a5/scripts/apa_sp3_lead_gpu.sh
+@@ -28,7 +28,11 @@
+       exec timeout --signal=TERM --kill-after=3s 585s env APA_SP3_OUTER=1 bash "$0" run "$job"
+     fi
+     # Validate registry and dependencies before acquiring lease or probing GPU.
+-    timeout 15s python3 scripts/apa_sp3_control.py preflight "$job"
++    decision=$(timeout 15s python3 scripts/apa_sp3_control.py preflight "$job")
++    if [[ "$decision" == NON_FIT ]]; then
++      echo 'Registered/planned NON_FIT receipt recorded before GPU lease; no retry.'
++      exit 0
++    fi
+     exec bash "$0" _leased "$job"
+     ;;
+   _leased)
+--- a4/scripts/apa_sp3_report.py
++++ a5/scripts/apa_sp3_report.py
+@@ -94,7 +94,7 @@
+         text.append(f'C−B PPL is {cm["ppl"]-bm["ppl"]:+.6g} over the six registered last-512 windows. Interpret it only alongside C’s actual matched fraction. This six-window model-perplexity evidence does not establish cross-corpus or cross-length quality.')
+     else:
+         text.append('The model comparison is incomplete: PROTOCOL-2 fresh-process G0 determinism and a scored C comparison at matched actual fraction are both required; see their individual statuses above. G2/G3 rows establish nothing about model quality by themselves. The ε=1e−3 margin is conditional on the measured finite error envelope; E’s separate capture checks its transfer, and neither check supplies a universal quantization bound or a CUDA rounding proof.')
+-    text += ['', '## Decode table — kernel sweep / in-model timing', '',
++    text += ['', '## Legacy pool-off decode — memory-shape evidence; excluded from P5', '',
+              '| Bits | Starting S | Arm | Status | tokens/s | Steps | Prefill seconds |',
+              '|---|---:|---|---|---:|---:|---:|']
+     decode=[]
+@@ -112,6 +112,9 @@
+     for owner,key in [('Lead','lead_predictions'),('Seat','seat_predictions')]:
+         for name,pred in r[key].items():
+             state='HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim' if key=='seat_predictions' and name=='S1' else 'UNASSESSED; P2 uses fresh B; requires applicable model receipts'
++            if key == 'lead_predictions' and name == 'P5':
++                from apa_sp3_a5_report import prediction
++                state = json.dumps(prediction(jobs), sort_keys=True)
+             text.append(f'| {owner} | {name} | {pred} | {state} |')
+     text.append('| Lead amendment 2 | B-A | Fresh B-A within +/-0.3 at bulk4, prediction only | '+str(get('g0').get('B_minus_A_prediction_within_0_3','UNASSESSED'))+' |')
+     cpu_path=ART/'CPU_GATES_PROTOCOL2.json'
+@@ -179,6 +182,11 @@
+     extra,a4=render(ART,jobs,cells())
+     with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+     combined=read(ART/'results.json');combined['a4']=a4
++    from apa_sp3_a5_report import render as render_a5
++    import os
++    extra,a5=render_a5(ART,jobs,cells(),os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES')=='1')
++    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
++    combined['a5']=a5
+     (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
+     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
+ 
+--- a4/tensor_cuda/tests/test_apa_sp3_a4.py
++++ a5/tensor_cuda/tests/test_apa_sp3_a4.py
+@@ -25,7 +25,7 @@
+ 
+ 
+ def test_a4_registered_dag_ranges_bounds_and_grid():
+-    cells = driver.cells()
++    cells = [c for c in driver.cells() if c['kind'] != 'decode_pool']
+     base = driver.base_cells()
+     assert len(cells) == len(base)+167 == 859
+     by = {c['id']: c for c in cells}
+--- a4/tensor_cuda/tests/test_apa_sp3.py
++++ a5/tensor_cuda/tests/test_apa_sp3.py
+@@ -368,7 +368,7 @@
+     assert len([c for c in cells if c['kind']=='margin' and c['bits']==4 and c['arm'] in 'BC'])==248
+     for c in cells:
+         assert set(c['depends'])<=ids
+-        expected_rail=290 if c['kind'] in ('capture_range','ceiling') else 480
++        expected_rail=290 if c['kind'] in ('capture_range','ceiling','decode_pool') else 480
+         assert c['worker_timeout_s']==expected_rail and c['job_ceiling_s']==590
+     for S in (2048,8192,32768):
+         for arm in 'ABC':assert f'decode_b4_{arm}_{S}' in ids

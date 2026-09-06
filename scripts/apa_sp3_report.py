@@ -6,7 +6,7 @@ No numerical algorithm or scientific novelty claimed by this renderer.
 """
 import json
 from pathlib import Path
-from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA
+from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA, receipt_valid
 from apa_sp3_gpu import cells
 
 
@@ -16,11 +16,9 @@ def value(x):
 
 def receipts():
     out={}
-    for p in sorted((ART/'jobs').glob('*.json')) if (ART/'jobs').exists() else []:
+    for p in sorted((ART/'jobs').glob('*.json')) + sorted((ART/'jobs_a4').glob('*.json')):
         j=read(p)
-        if j.get('fingerprint')!=fingerprint():
-            j=dict(j,status='STALE',result={})
-        elif j.get('status')=='PASS':
+        if j.get('status')=='PASS':
             try:require_pass(j['job'])
             except Exception as e:j=dict(j,status='STALE',result={},error=str(e))
         out[j['job']]=j
@@ -96,7 +94,7 @@ def main():
         text.append(f'C−B PPL is {cm["ppl"]-bm["ppl"]:+.6g} over the six registered last-512 windows. Interpret it only alongside C’s actual matched fraction. This six-window model-perplexity evidence does not establish cross-corpus or cross-length quality.')
     else:
         text.append('The model comparison is incomplete: PROTOCOL-2 fresh-process G0 determinism and a scored C comparison at matched actual fraction are both required; see their individual statuses above. G2/G3 rows establish nothing about model quality by themselves. The ε=1e−3 margin is conditional on the measured finite error envelope; E’s separate capture checks its transfer, and neither check supplies a universal quantization bound or a CUDA rounding proof.')
-    text += ['', '## Decode table — kernel sweep / in-model timing', '',
+    text += ['', '## Legacy pool-off decode — memory-shape evidence; excluded from P5', '',
              '| Bits | Starting S | Arm | Status | tokens/s | Steps | Prefill seconds |',
              '|---|---:|---|---|---:|---:|---:|']
     decode=[]
@@ -114,6 +112,9 @@ def main():
     for owner,key in [('Lead','lead_predictions'),('Seat','seat_predictions')]:
         for name,pred in r[key].items():
             state='HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim' if key=='seat_predictions' and name=='S1' else 'UNASSESSED; P2 uses fresh B; requires applicable model receipts'
+            if key == 'lead_predictions' and name == 'P5':
+                from apa_sp3_a5_report import prediction
+                state = json.dumps(prediction(jobs), sort_keys=True)
             text.append(f'| {owner} | {name} | {pred} | {state} |')
     text.append('| Lead amendment 2 | B-A | Fresh B-A within +/-0.3 at bulk4, prediction only | '+str(get('g0').get('B_minus_A_prediction_within_0_3','UNASSESSED'))+' |')
     cpu_path=ART/'CPU_GATES_PROTOCOL2.json'
@@ -177,8 +178,19 @@ def main():
                  '# Alternative: resume runs at most ONE remaining cell and stops on RED/stale:',
                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 4',
                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 8']
-    (ART/'lead_commands.txt').write_text('\n'.join(commands)+'\n')
+    from apa_sp3_a4_report import render
+    extra,a4=render(ART,jobs,cells())
+    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+    combined=read(ART/'results.json');combined['a4']=a4
+    from apa_sp3_a5_report import render as render_a5
+    import os
+    extra,a5=render_a5(ART,jobs,cells(),os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES')=='1')
+    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+    combined['a5']=a5
+    (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from apa_sp3_common import receipt_validation
+    with receipt_validation():main()

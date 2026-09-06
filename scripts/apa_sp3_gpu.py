@@ -19,9 +19,10 @@ import numpy as np
 from apa_sp3_common import (ART, ROOT, REG_SHA, Red, fingerprint, load_runtime, protocol,
                            publish, read, registration, require_pass, sha, upward_float32,
                            verify_sources)
+from apa_sp3_a4_registry import KINDS, overlay
 
 
-def cells():
+def base_cells():
     # Prior art: ordinary interleaved repeats / independent-process controls.
     # Lead amendment 2 (2026) replaces irrecoverable historical-value gates.
     out = [{'id': 'kernel96', 'kind': 'kernel', 'estimate_s': [2, 20], 'depends': []}]
@@ -107,6 +108,11 @@ def cells():
         x['job_ceiling_s'] = 590
         x['estimate_scope'] = 'planning estimate, unmeasured; 8192/32768 may OOM or exceed ceiling'
     return [c for c in out if not c['optional_secondary']] + [c for c in out if c['optional_secondary']]
+
+
+def cells():
+    from apa_sp3_a5_registry import overlay as overlay_a5
+    return overlay_a5(overlay(base_cells()))
 
 
 def g0_guard(model, ids):
@@ -214,6 +220,12 @@ def kernel96():
 
 def execute(cell):
     kind, bits = cell['kind'], cell.get('bits',4)
+    if kind == 'decode_pool':
+        from apa_sp3_a5_decode import execute as execute_a5
+        return execute_a5(cell)
+    if kind in KINDS:
+        from apa_sp3_a4_jobs import execute as execute_a4
+        return execute_a4(cell)
     for d in cell['depends']:
         require_pass(d)
     if kind == 'kernel':
@@ -324,12 +336,16 @@ def work(job):
         raise Red('unknown cell')
     if os.environ.get('APA_SP3_LEASE')!='1':
         raise Red('invoke through leased shell runner')
-    dest=ART/'jobs'/(job+'.json')
+    from apa_sp3_common import job_path, cell_fingerprint
+    from apa_sp3_a4_provenance import bridge
+    dest=job_path(job)
     if dest.exists():
         raise Red('job receipt already exists; use summary/resume; no automatic RED retry')
     cell=all_cells[job]
     start=time.perf_counter()
-    receipt={'job':job,'cell':cell,'registration_sha256':REG_SHA,'fingerprint':fingerprint(),
+    receipt={'job':job,'cell':cell,'registration_sha256':REG_SHA,'fingerprint':cell_fingerprint(cell),
+             'fingerprint_schema':'apa_sp3_per_kind_v1',
+             'fingerprint_amendment_sha256':bridge()['effective_sha256'],
              'protocol_sha256':sha(ART/'protocol_amendment.json') if (ART/'protocol_amendment.json').exists() else None,
              'status':'RED','pid':os.getpid(),
              'process_identity':dict(pid=os.getpid(),boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
@@ -337,8 +353,10 @@ def work(job):
              'evidence_class':'model perplexity' if cell['kind'] in ('ppl','parity','baseline') else 'kernel sweep'}
     try:
         verify_sources()
-        receipt['dependencies']={d:sha(ART/'jobs'/(d+'.json')) for d in cell['depends'] if (ART/'jobs'/(d+'.json')).exists()}
-        receipt['result']=execute(cell)
+        receipt['dependencies']={d:sha(job_path(d)) for d in cell['depends'] if job_path(d).exists()}
+        from apa_sp3_common import receipt_validation
+        with receipt_validation():
+            receipt['result']=execute(cell)
         receipt['status']='PASS'
     except Exception as e:
         receipt['error']=f'{type(e).__name__}: {e}'
@@ -362,6 +380,8 @@ def main():
     p.add_argument('--worker')
     p.add_argument('--next',action='store_true')
     p.add_argument('--bits',type=int,choices=(4,8),default=4)
+    p.add_argument('--include-32k-captures', action='store_true',
+                   default=os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES') == '1')
     a=p.parse_args()
     if a.dry_run:
         proto, _ = protocol()
@@ -369,10 +389,12 @@ def main():
                           'protocol':proto,'cells':cells()},indent=2))
         return 0
     if a.next:
-        for c in cells():
+        from apa_sp3_a5_registry import default_cells
+        for c in default_cells(cells(), a.include_32k_captures):
             if c.get('bits',4)!=a.bits:
                 continue
-            path=ART/'jobs'/(c['id']+'.json')
+            from apa_sp3_common import job_path
+            path=job_path(c['id'])
             if path.exists():
                 require_pass(c['id'])  # RED/stale is a stop, not a resume skip
                 continue

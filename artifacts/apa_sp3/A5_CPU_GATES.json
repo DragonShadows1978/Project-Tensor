@@ -1,0 +1,80 @@
+{
+  "status": "PASS",
+  "evidence_class": "author CPU tests and constructed-input mutation baseline; not GPU or blind verification",
+  "command": "timeout 120s env PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m pytest -q -p no:cacheprovider tensor_cuda/tests/test_apa_sp3.py tensor_cuda/tests/test_apa_sp3_a4.py tensor_cuda/tests/test_apa_sp3_a5.py",
+  "passed": 113,
+  "failed": 0,
+  "warnings": 2,
+  "elapsed_s": 10.0,
+  "log": "a5_cpu_accepted.log",
+  "log_sha256": "874d8ef3c5ee8411aa5317212ec279d5abb1dbae34d6b58f30b332ded334c3a6",
+  "initial_RED": "a5_cpu_initial.log: 1 failed, 112 passed; manifest order vs topological order oracle, fixed without weakening cell equality or dependency checks",
+  "pool_state_pin": "test_decode_pool_worker_pool_state_pin",
+  "pin_scope": "actual worker/dispatcher and unchanged Model.decode loop with stateful CPU fake runtime; pool TRUE inside guard, cache prefill, all 32 steps; no native GPU state measurement",
+  "mutations": {
+    "status": "PASS",
+    "kill_rate": 1.0,
+    "mutants": [
+      {
+        "name": "drop_pool_enable",
+        "exit_code": 1,
+        "killed": true,
+        "invalid": false
+      },
+      {
+        "name": "shorten_measured_steps",
+        "exit_code": 1,
+        "killed": true,
+        "invalid": false
+      },
+      {
+        "name": "relax_planning_boundary",
+        "exit_code": 1,
+        "killed": true,
+        "invalid": false
+      },
+      {
+        "name": "default_32k_capture",
+        "exit_code": 1,
+        "killed": true,
+        "invalid": false
+      },
+      {
+        "name": "raw_decode_P5",
+        "exit_code": 1,
+        "killed": true,
+        "invalid": false
+      }
+    ],
+    "production_edits": false,
+    "original_sources_unchanged": true
+  },
+  "source_pins": {
+    "status": "PASS",
+    "evidence_class": "code inspection",
+    "source_files": 24,
+    "kernel_bodies": 107
+  },
+  "shell_syntax": "bash -n PASS",
+  "dry_run_cells": 877,
+  "default_cells": 733,
+  "new_cells": 18,
+  "excluded_32k_captures": 126,
+  "source_eligible": 147,
+  "source_invalidated": 0,
+  "synthetic_a4_kinds": 17,
+  "receipts_byte_identical": 148,
+  "lead_identity_simulation": {
+    "evidence_class": "CPU simulation of lead build identity; not live runtime validation",
+    "accepted": 147,
+    "elapsed_s": 0.593012219760567,
+    "substituted_key": "artifacts/apa_sp3/build/manifest.json",
+    "substituted_sha256": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1",
+    "actual_local_sha256": "40952be526a834d5bb121e0213c02f973597dfef529de9e1b7534e387a4654b6",
+    "original_receipts_unchanged": true,
+    "note": "Only current build-manifest hash substituted in memory; no file/model/GPU change. Full recursive dependency and protocol checks executed."
+  },
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "cell_amendment_sha256": "8f0809b8f00cf1db333048f63da30f1a10a907c2c9890b97733693efaa209bfc",
+  "fingerprint_amendment_sha256": "23af444cfd89bed69f79bc766681a680315fb801cea702fe313c6214c7d6dc1f"
+}
