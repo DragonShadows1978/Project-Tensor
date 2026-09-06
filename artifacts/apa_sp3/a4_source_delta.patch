@@ -1,0 +1,340 @@
+--- r3/scripts/apa_sp3_build.sh
++++ a4/scripts/apa_sp3_build.sh
+@@ -5,7 +5,7 @@
+   exec timeout --signal=TERM --kill-after=5s 570s env APA_SP3_BUILD_BOUNDED=1 bash "$0"
+ fi
+ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 ]] || exit 64
++[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
+ cd "$ROOT"
+ BUILD="$ROOT/artifacts/apa_sp3/build"
+ mkdir -p "$BUILD"
+--- r3/scripts/apa_sp3_common.py
++++ a4/scripts/apa_sp3_common.py
+@@ -17,7 +17,8 @@
+ ART = ROOT / 'artifacts/apa_sp3'
+ BUILD = ART / 'build'
+ REG_SHA = 'd9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c'
+-PROTOCOL2_ORDER = ROOT / 'orders/APA_SP3_AMENDMENT_2.md'
++ORIGINAL_ROOT = Path('/mnt/ForgeRealm/Project-Tensor-wt-apa-sp3')
++PROTOCOL2_ORDER = ORIGINAL_ROOT / 'orders/APA_SP3_AMENDMENT_2.md'
+ PROTOCOL2_ORDER_SHA = '20a1f49798410bd703763f3fcd3daba1b9e0eea662ec2184e4b061ca877b0407'
+ PROTOCOL2_SHA = 'db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224'
+ PROTOCOL2_STATUS = 'REGISTERED_PROTOCOL_2'
+@@ -30,9 +31,16 @@
+         self.details=details
+ 
+ 
++def local_path(path):
++    # Prior art: relocatable content-addressed artifacts, standard build practice.
++    # Preserve recorded absolute identities; read identical bytes in this seat.
++    path = Path(path)
++    return ROOT / path.relative_to(ORIGINAL_ROOT) if path.is_relative_to(ORIGINAL_ROOT) else path
++
++
+ def sha(path):
+     h = hashlib.sha256()
+-    with Path(path).open('rb') as f:
++    with local_path(path).open('rb') as f:
+         for block in iter(lambda: f.read(8 << 20), b''):
+             h.update(block)
+     return h.hexdigest()
+@@ -129,7 +137,7 @@
+     if j['scoring'] != 'last_512_targets_within_input':
+         raise Red('recovered scoring differs: a separately reviewed implementation amendment is required')
+     import numpy as np
+-    ids = np.load(j['tokens_path'], allow_pickle=False)
++    ids = np.load(local_path(j['tokens_path']), allow_pickle=False)
+     if ids.dtype.str != '<i8' or ids.ndim != 1 or len(ids) < 32800:
+         raise Red('need a 1D little-endian int64 token stream with >=32800 tokens')
+     if j.get('status') == PROTOCOL2_STATUS and (len(ids) <= 32800 or len(ids) != j['token_count']):
+@@ -185,20 +193,50 @@
+     return {str(p.relative_to(ROOT)): sha(p) for p in files if p.is_file()}
+ 
+ 
+-def require_pass(job):
+-    p = ART / 'jobs' / (job + '.json')
++def job_path(job):
++    # A4 changed capture ids get a separate create-only receipt namespace.
++    from apa_sp3_a4_registry import MANIFEST, manifest
++    names = {c['id'] for c in manifest()['cells']} if (ART/MANIFEST).exists() else set()
++    return ART / ('jobs_a4' if job in names else 'jobs') / (job + '.json')
++
++
++def cell_fingerprint(cell):
++    from apa_sp3_a4_provenance import current_fingerprint
++    return current_fingerprint(cell)
++
++
++def receipt_valid(j):
++    if j.get('fingerprint') == fingerprint():
++        return True  # exact legacy identity (also retained for mutation probes)
++    from apa_sp3_a4_provenance import compatible
++    return compatible(j)
++
++
++def require_pass(job, _seen=None, _validated=None):
++    # Prior art: memoization of a dependency traversal (standard DAG checking).
++    # Scope is ONE validation call only, so later calls recheck changed files.
++    validated = {} if _validated is None else _validated
++    if job in validated:
++        return validated[job]
++    p = job_path(job)
+     if not p.exists():
+         raise Red(f'BLOCKED_DEPENDENCY: {job}')
+     j = read(p)
+-    if j.get('status') != 'PASS' or j.get('fingerprint') != fingerprint():
++    if j.get('status') != 'PASS' or not receipt_valid(j):
+         raise Red(f'RED_OR_STALE_DEPENDENCY: {job}')
+     if j.get('cell',{}).get('kind') not in (None,'kernel'):
+         protocol()  # also detect changed stream/source bytes, not just manifest
+         if j.get('protocol_sha256') != sha(ART/'protocol_amendment.json'):
+             raise Red(f'stale protocol: {job}')
++    seen = set() if _seen is None else set(_seen)
++    if job in seen:
++        raise Red('dependency receipt cycle')
++    seen.add(job)
+     for d,digest in j.get('dependencies',{}).items():
+-        if sha(ART/'jobs'/(d+'.json')) != digest:
++        if sha(job_path(d)) != digest:
+             raise Red(f'changed dependency receipt: {d}')
++        require_pass(d, seen, validated)
++    validated[job] = j
+     return j
+ 
+ 
+--- r3/scripts/apa_sp3_control.py
++++ a4/scripts/apa_sp3_control.py
+@@ -5,7 +5,7 @@
+ import json
+ import subprocess
+ import sys
+-from apa_sp3_common import ART, REG_SHA, Red, fingerprint, protocol, publish, require_pass, sha, verify_sources
++from apa_sp3_common import ART, REG_SHA, Red, fingerprint, protocol, publish, require_pass, sha, verify_sources, job_path, cell_fingerprint
+ from apa_sp3_gpu import cells
+ 
+ 
+@@ -21,13 +21,19 @@
+     verify_sources()
+     if (ART/'STOP_MODEL_ARMS.json').exists() and c['kind'] not in ('kernel','margin','calibration','freeze','eq','eq_check'):
+         raise Red('MODEL_ARMS_STOPPED: see artifacts/apa_sp3/STOP_MODEL_ARMS.json')
+-    if (ART/'jobs'/(job+'.json')).exists():
++    if job_path(job).exists():
+         raise Red('existing immutable job receipt; no automatic retry')
+     if c['kind'] != 'kernel':
+         protocol()
+     for d in c['depends']:
+         require_pass(d)
+-    if not (ART/'build/libapa_sp3_peak.so').exists():
++    from apa_sp3_a4_jobs import require_fit
++    require_fit(c)
++    if c['kind']=='capture_range' and c['layer_start']==0:
++        dest=ART/'captures'/f"b{c['bits']}_{c['arm']}_{c['S']}"
++        if dest.exists():
++            raise Red('CAPTURE_DEST_EXISTS: '+str(dest)+'; lead must preserve/archive prior partial evidence')
++    if c['kind'] != 'torch_reference' and not (ART/'build/libapa_sp3_peak.so').exists():
+         raise Red('missing built observer')
+ 
+ 
+@@ -47,10 +53,11 @@
+ 
+ 
+ def finish(job,rc,log):
+-    p=ART/'jobs'/(job+'.json')
++    p=job_path(job)
+     if not p.exists():
+-        publish(p,{'job':job,'status':'RED','registration_sha256':REG_SHA,
+-                   'fingerprint':fingerprint(),'exit_code':rc,'log':log,
++        c=validate(job)
++        publish(p,{'job':job,'cell':c,'status':'RED','registration_sha256':REG_SHA,
++                   'fingerprint':cell_fingerprint(c),'exit_code':rc,'log':log,
+                    'error':'WORKER_TIMEOUT' if rc in (124,137) else 'WORKER_EXIT_WITHOUT_RECEIPT',
+                    'evidence_class':'process receipt; no model result inferred',
+                    'scope':'own child only was bounded by timeout; foreign processes untouched'})
+@@ -62,6 +69,8 @@
+         if mode=='validate':validate(sys.argv[2])
+         elif mode=='preflight':preflight(sys.argv[2])
+         elif mode=='idle':idle()
++        elif mode=='timeout':print(validate(sys.argv[2])['worker_timeout_s'])
++        elif mode=='kind':print(validate(sys.argv[2])['kind'])
+         elif mode=='finish':finish(sys.argv[2],int(sys.argv[3]),sys.argv[4])
+         else:raise Red('invalid action')
+     except Exception as e:
+--- r3/scripts/apa_sp3_gpu.py
++++ a4/scripts/apa_sp3_gpu.py
+@@ -19,9 +19,10 @@
+ from apa_sp3_common import (ART, ROOT, REG_SHA, Red, fingerprint, load_runtime, protocol,
+                            publish, read, registration, require_pass, sha, upward_float32,
+                            verify_sources)
+-
+-
+-def cells():
++from apa_sp3_a4_registry import KINDS, overlay
++
++
++def base_cells():
+     # Prior art: ordinary interleaved repeats / independent-process controls.
+     # Lead amendment 2 (2026) replaces irrecoverable historical-value gates.
+     out = [{'id': 'kernel96', 'kind': 'kernel', 'estimate_s': [2, 20], 'depends': []}]
+@@ -109,6 +110,10 @@
+     return [c for c in out if not c['optional_secondary']] + [c for c in out if c['optional_secondary']]
+ 
+ 
++def cells():
++    return overlay(base_cells())
++
++
+ def g0_guard(model, ids):
+     """Retain r1's in-process control, now against fresh PROTOCOL-2 baselines."""
+     from apa_sp3_model import score_windows
+@@ -214,6 +219,9 @@
+ 
+ def execute(cell):
+     kind, bits = cell['kind'], cell.get('bits',4)
++    if kind in KINDS:
++        from apa_sp3_a4_jobs import execute as execute_a4
++        return execute_a4(cell)
+     for d in cell['depends']:
+         require_pass(d)
+     if kind == 'kernel':
+@@ -324,12 +332,16 @@
+         raise Red('unknown cell')
+     if os.environ.get('APA_SP3_LEASE')!='1':
+         raise Red('invoke through leased shell runner')
+-    dest=ART/'jobs'/(job+'.json')
++    from apa_sp3_common import job_path, cell_fingerprint
++    from apa_sp3_a4_provenance import BRIDGE
++    dest=job_path(job)
+     if dest.exists():
+         raise Red('job receipt already exists; use summary/resume; no automatic RED retry')
+     cell=all_cells[job]
+     start=time.perf_counter()
+-    receipt={'job':job,'cell':cell,'registration_sha256':REG_SHA,'fingerprint':fingerprint(),
++    receipt={'job':job,'cell':cell,'registration_sha256':REG_SHA,'fingerprint':cell_fingerprint(cell),
++             'fingerprint_schema':'apa_sp3_per_kind_v1',
++             'fingerprint_amendment_sha256':sha(ART/BRIDGE),
+              'protocol_sha256':sha(ART/'protocol_amendment.json') if (ART/'protocol_amendment.json').exists() else None,
+              'status':'RED','pid':os.getpid(),
+              'process_identity':dict(pid=os.getpid(),boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+@@ -337,7 +349,7 @@
+              'evidence_class':'model perplexity' if cell['kind'] in ('ppl','parity','baseline') else 'kernel sweep'}
+     try:
+         verify_sources()
+-        receipt['dependencies']={d:sha(ART/'jobs'/(d+'.json')) for d in cell['depends'] if (ART/'jobs'/(d+'.json')).exists()}
++        receipt['dependencies']={d:sha(job_path(d)) for d in cell['depends'] if job_path(d).exists()}
+         receipt['result']=execute(cell)
+         receipt['status']='PASS'
+     except Exception as e:
+@@ -372,7 +384,8 @@
+         for c in cells():
+             if c.get('bits',4)!=a.bits:
+                 continue
+-            path=ART/'jobs'/(c['id']+'.json')
++            from apa_sp3_common import job_path
++            path=job_path(c['id'])
+             if path.exists():
+                 require_pass(c['id'])  # RED/stale is a stop, not a resume skip
+                 continue
+--- r3/scripts/apa_sp3_lead_gpu.sh
++++ a4/scripts/apa_sp3_lead_gpu.sh
+@@ -3,10 +3,11 @@
+ # runner discipline. SP3 adapts to one full-model or one captured-layer job.
+ set -euo pipefail
+ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 ]] || exit 64
++[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
+ cd "$ROOT"
+ export PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+ export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
++export HF_MODULES_CACHE="$ROOT/artifacts/apa_sp3/hf_modules_a4"
+ export CUDA_VISIBLE_DEVICES=0
+ action=${1:-summary}
+ case "$action" in
+@@ -39,11 +40,17 @@
+     # Fail closed on missing device or any existing compute process. No signals.
+     timeout 10s python3 scripts/apa_sp3_control.py idle
+     export APA_SP3_LEASE=1
+-    export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
++    kind=$(timeout 10s python3 scripts/apa_sp3_control.py kind "$job")
++    if [[ "$kind" != torch_reference ]]; then
++      export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
++    else
++      unset LD_PRELOAD
++    fi
+     mkdir -p logs artifacts/apa_sp3/jobs artifacts/apa_sp3/scratch
+     stamp=$(date -u +%Y%m%dT%H%M%SZ)
++    rail=$(timeout 10s python3 scripts/apa_sp3_control.py timeout "$job")
+     set +e
+-    timeout --signal=TERM --kill-after=5s 480s python3 scripts/apa_sp3_gpu.py --worker "$job" >"logs/apa_sp3_${job}_${stamp}.log" 2>&1
++    timeout --signal=TERM --kill-after=5s "${rail}s" python3 scripts/apa_sp3_gpu.py --worker "$job" >"logs/apa_sp3_${job}_${stamp}.log" 2>&1
+     rc=$?
+     set -e
+     unset LD_PRELOAD
+--- r3/scripts/apa_sp3_report.py
++++ a4/scripts/apa_sp3_report.py
+@@ -6,7 +6,7 @@
+ """
+ import json
+ from pathlib import Path
+-from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA
++from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA, receipt_valid
+ from apa_sp3_gpu import cells
+ 
+ 
+@@ -16,11 +16,9 @@
+ 
+ def receipts():
+     out={}
+-    for p in sorted((ART/'jobs').glob('*.json')) if (ART/'jobs').exists() else []:
++    for p in sorted((ART/'jobs').glob('*.json')) + sorted((ART/'jobs_a4').glob('*.json')):
+         j=read(p)
+-        if j.get('fingerprint')!=fingerprint():
+-            j=dict(j,status='STALE',result={})
+-        elif j.get('status')=='PASS':
++        if j.get('status')=='PASS':
+             try:require_pass(j['job'])
+             except Exception as e:j=dict(j,status='STALE',result={},error=str(e))
+         out[j['job']]=j
+@@ -177,7 +175,11 @@
+                  '# Alternative: resume runs at most ONE remaining cell and stops on RED/stale:',
+                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 4',
+                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 8']
+-    (ART/'lead_commands.txt').write_text('\n'.join(commands)+'\n')
++    from apa_sp3_a4_report import render
++    extra,a4=render(ART,jobs,cells())
++    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
++    combined=read(ART/'results.json');combined['a4']=a4
++    (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
+     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
+ 
+ 
+--- r3/tensor_cuda/tests/test_apa_sp3.py
++++ a4/tensor_cuda/tests/test_apa_sp3.py
+@@ -209,7 +209,7 @@
+ @pytest.mark.parametrize('attack',['file_bytes','canonical_bytes'])
+ def test_protocol2_wrong_stream_sha_red(monkeypatch,tmp_path,attack):
+     j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
+-    ids=np.load(j['tokens_path']);ids[10]=(ids[10]+1)%73448
++    ids=np.load(common.local_path(j['tokens_path']));ids[10]=(ids[10]+1)%73448
+     wrong=tmp_path/'wrong.npy';np.save(wrong,ids,allow_pickle=False)
+     j['tokens_path']=str(wrong)
+     if attack=='canonical_bytes':j['tokens_sha256']=common.sha(wrong)
+@@ -221,7 +221,7 @@
+ @pytest.mark.parametrize('attack',['short','dtype','rank','vocabulary','scoring'])
+ def test_protocol2_semantic_stream_and_scoring_guards_red(monkeypatch,tmp_path,attack):
+     j,save=protocol_fixture(monkeypatch,tmp_path,allow_manifest_repin=True)
+-    ids=np.load(j['tokens_path'])
++    ids=np.load(common.local_path(j['tokens_path']))
+     if attack=='short':ids=ids[:32800];j['token_count']=len(ids)
+     elif attack=='dtype':ids=ids.astype('>i8')
+     elif attack=='rank':ids=ids[None]
+@@ -368,7 +368,8 @@
+     assert len([c for c in cells if c['kind']=='margin' and c['bits']==4 and c['arm'] in 'BC'])==248
+     for c in cells:
+         assert set(c['depends'])<=ids
+-        assert c['worker_timeout_s']==480 and c['job_ceiling_s']==590
++        expected_rail=290 if c['kind'] in ('capture_range','ceiling') else 480
++        assert c['worker_timeout_s']==expected_rail and c['job_ceiling_s']==590
+     for S in (2048,8192,32768):
+         for arm in 'ABC':assert f'decode_b4_{arm}_{S}' in ids
+ 

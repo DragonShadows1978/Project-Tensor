@@ -5,7 +5,7 @@ if [[ "${APA_SP3_BUILD_BOUNDED:-0}" != 1 ]]; then
   exec timeout --signal=TERM --kill-after=5s 570s env APA_SP3_BUILD_BOUNDED=1 bash "$0"
 fi
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 ]] || exit 64
+[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
 cd "$ROOT"
 BUILD="$ROOT/artifacts/apa_sp3/build"
 mkdir -p "$BUILD"

@@ -12,12 +12,29 @@ import os
 from pathlib import Path
 import sys
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+_VALIDATION = ContextVar('apa_sp3_validation', default=None)
+
+
+@contextmanager
+def receipt_validation():
+    # Prior art: memoized dependency DAG traversal, standard build-system
+    # practice. Cache only within ONE bounded preflight/worker/report action;
+    # the next action rechecks all source, protocol and receipt identities.
+    token = _VALIDATION.set({})
+    try:
+        yield
+    finally:
+        _VALIDATION.reset(token)
 
 ROOT = Path(__file__).resolve().parents[1]
 ART = ROOT / 'artifacts/apa_sp3'
 BUILD = ART / 'build'
 REG_SHA = 'd9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c'
-PROTOCOL2_ORDER = ROOT / 'orders/APA_SP3_AMENDMENT_2.md'
+ORIGINAL_ROOT = Path('/mnt/ForgeRealm/Project-Tensor-wt-apa-sp3')
+PROTOCOL2_ORDER = ORIGINAL_ROOT / 'orders/APA_SP3_AMENDMENT_2.md'
 PROTOCOL2_ORDER_SHA = '20a1f49798410bd703763f3fcd3daba1b9e0eea662ec2184e4b061ca877b0407'
 PROTOCOL2_SHA = 'db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224'
 PROTOCOL2_STATUS = 'REGISTERED_PROTOCOL_2'
@@ -30,9 +47,16 @@ class Red(RuntimeError):
         self.details=details
 
 
+def local_path(path):
+    # Prior art: relocatable content-addressed artifacts, standard build practice.
+    # Preserve recorded absolute identities; read identical bytes in this seat.
+    path = Path(path)
+    return ROOT / path.relative_to(ORIGINAL_ROOT) if path.is_relative_to(ORIGINAL_ROOT) else path
+
+
 def sha(path):
     h = hashlib.sha256()
-    with Path(path).open('rb') as f:
+    with local_path(path).open('rb') as f:
         for block in iter(lambda: f.read(8 << 20), b''):
             h.update(block)
     return h.hexdigest()
@@ -129,7 +153,7 @@ def protocol():
     if j['scoring'] != 'last_512_targets_within_input':
         raise Red('recovered scoring differs: a separately reviewed implementation amendment is required')
     import numpy as np
-    ids = np.load(j['tokens_path'], allow_pickle=False)
+    ids = np.load(local_path(j['tokens_path']), allow_pickle=False)
     if ids.dtype.str != '<i8' or ids.ndim != 1 or len(ids) < 32800:
         raise Red('need a 1D little-endian int64 token stream with >=32800 tokens')
     if j.get('status') == PROTOCOL2_STATUS and (len(ids) <= 32800 or len(ids) != j['token_count']):
@@ -185,20 +209,64 @@ def fingerprint():
     return {str(p.relative_to(ROOT)): sha(p) for p in files if p.is_file()}
 
 
-def require_pass(job):
-    p = ART / 'jobs' / (job + '.json')
+def job_path(job):
+    # A4 changed capture ids get a separate create-only receipt namespace.
+    from apa_sp3_a4_registry import MANIFEST, manifest
+    names = {c['id'] for c in manifest()['cells']} if (ART/MANIFEST).exists() else set()
+    return ART / ('jobs_a4' if job in names else 'jobs') / (job + '.json')
+
+
+def cell_fingerprint(cell):
+    from apa_sp3_a4_provenance import current_fingerprint
+    return current_fingerprint(cell)
+
+
+def receipt_valid(j, cache=None):
+    cache = {} if cache is None else cache
+    if 'legacy_fingerprint' not in cache:
+        cache['legacy_fingerprint'] = fingerprint()
+    if j.get('fingerprint') == cache['legacy_fingerprint']:
+        return True  # exact legacy identity (also retained for mutation probes)
+    from apa_sp3_a4_provenance import compatible, bridge, current_fingerprint
+    if not j.get('cell',{}).get('kind'):
+        return False
+    if 'bridge' not in cache:
+        cache['bridge'] = bridge()
+    kind = j['cell']['kind']
+    key = ('fingerprint', kind)
+    if key not in cache:
+        try:cache[key] = current_fingerprint(j['cell'])
+        except FileNotFoundError:return False
+    return compatible(j, current=cache[key], amendment=cache['bridge'])
+
+
+def require_pass(job, _seen=None, _validated=None):
+    # Prior art: memoization of a dependency traversal (standard DAG checking).
+    # Scope is ONE validation call only, so later calls recheck changed files.
+    validated = (_VALIDATION.get() if _VALIDATION.get() is not None else {}) if _validated is None else _validated
+    if job in validated:
+        return validated[job]
+    p = job_path(job)
     if not p.exists():
         raise Red(f'BLOCKED_DEPENDENCY: {job}')
     j = read(p)
-    if j.get('status') != 'PASS' or j.get('fingerprint') != fingerprint():
+    if j.get('status') != 'PASS' or not receipt_valid(j, validated):
         raise Red(f'RED_OR_STALE_DEPENDENCY: {job}')
     if j.get('cell',{}).get('kind') not in (None,'kernel'):
-        protocol()  # also detect changed stream/source bytes, not just manifest
+        if 'protocol_validated' not in validated:
+            protocol()  # check stream/source bytes once per validation action
+            validated['protocol_validated'] = True
         if j.get('protocol_sha256') != sha(ART/'protocol_amendment.json'):
             raise Red(f'stale protocol: {job}')
+    seen = set() if _seen is None else set(_seen)
+    if job in seen:
+        raise Red('dependency receipt cycle')
+    seen.add(job)
     for d,digest in j.get('dependencies',{}).items():
-        if sha(ART/'jobs'/(d+'.json')) != digest:
+        if sha(job_path(d)) != digest:
             raise Red(f'changed dependency receipt: {d}')
+        require_pass(d, seen, validated)
+    validated[job] = j
     return j
 
 

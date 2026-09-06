@@ -6,7 +6,7 @@ No numerical algorithm or scientific novelty claimed by this renderer.
 """
 import json
 from pathlib import Path
-from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA
+from apa_sp3_common import ART, ROOT, REG_SHA, Red, fingerprint, read, registration, require_pass, sha, protocol, PROTOCOL2_SHA, receipt_valid
 from apa_sp3_gpu import cells
 
 
@@ -16,11 +16,9 @@ def value(x):
 
 def receipts():
     out={}
-    for p in sorted((ART/'jobs').glob('*.json')) if (ART/'jobs').exists() else []:
+    for p in sorted((ART/'jobs').glob('*.json')) + sorted((ART/'jobs_a4').glob('*.json')):
         j=read(p)
-        if j.get('fingerprint')!=fingerprint():
-            j=dict(j,status='STALE',result={})
-        elif j.get('status')=='PASS':
+        if j.get('status')=='PASS':
             try:require_pass(j['job'])
             except Exception as e:j=dict(j,status='STALE',result={},error=str(e))
         out[j['job']]=j
@@ -177,8 +175,14 @@ def main():
                  '# Alternative: resume runs at most ONE remaining cell and stops on RED/stale:',
                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 4',
                  '# timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh resume 8']
-    (ART/'lead_commands.txt').write_text('\n'.join(commands)+'\n')
+    from apa_sp3_a4_report import render
+    extra,a4=render(ART,jobs,cells())
+    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+    combined=read(ART/'results.json');combined['a4']=a4
+    (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from apa_sp3_common import receipt_validation
+    with receipt_validation():main()

@@ -3,10 +3,11 @@
 # runner discipline. SP3 adapts to one full-model or one captured-layer job.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 ]] || exit 64
+[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
 cd "$ROOT"
 export PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
+export HF_MODULES_CACHE="$ROOT/artifacts/apa_sp3/hf_modules_a4"
 export CUDA_VISIBLE_DEVICES=0
 action=${1:-summary}
 case "$action" in
@@ -39,11 +40,17 @@ case "$action" in
     # Fail closed on missing device or any existing compute process. No signals.
     timeout 10s python3 scripts/apa_sp3_control.py idle
     export APA_SP3_LEASE=1
-    export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
+    kind=$(timeout 10s python3 scripts/apa_sp3_control.py kind "$job")
+    if [[ "$kind" != torch_reference ]]; then
+      export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
+    else
+      unset LD_PRELOAD
+    fi
     mkdir -p logs artifacts/apa_sp3/jobs artifacts/apa_sp3/scratch
     stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    rail=$(timeout 10s python3 scripts/apa_sp3_control.py timeout "$job")
     set +e
-    timeout --signal=TERM --kill-after=5s 480s python3 scripts/apa_sp3_gpu.py --worker "$job" >"logs/apa_sp3_${job}_${stamp}.log" 2>&1
+    timeout --signal=TERM --kill-after=5s "${rail}s" python3 scripts/apa_sp3_gpu.py --worker "$job" >"logs/apa_sp3_${job}_${stamp}.log" 2>&1
     rc=$?
     set -e
     unset LD_PRELOAD
