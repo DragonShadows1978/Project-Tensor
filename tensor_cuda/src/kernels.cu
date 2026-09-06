@@ -7353,9 +7353,7 @@ std::pair<NDArray, NDArray> gated_delta_step(
 // softmax maximum. A skipped key stays below final_bulk_max-delta; an early
 // refinement may be conservative. This is NOT z-score-equivalent APA.
 // One warp/CTA/row: coalesced dimensions, strictly ascending key visits.
-// No split-K: resetting prefix state in independent partitions changes this
-// rule; obtaining incoming prefix maxima needs a prior scan or serialized
-// carry. Decode grid underfill is a registered cost, not claimed solved.
+// SP1.1 decode uses conservative partition-local prefixes; prefill stays SP1.
 template <typename T, int CAP, bool DIAGNOSTICS>
 __global__ void apa_selective_sp_kernel(
     const T* q, const T* k, const T* kq, const T* v, const T* sinks,
@@ -7438,6 +7436,8 @@ __global__ void apa_selective_sp_kernel(
   }
 }
 
+#include "apa_sp1_1.cuh"
+
 NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
     const NDArray& kq, const NDArray& v, float scale, float delta,
     bool is_causal, const NDArray* sinks, NDArray* selected) {
@@ -7474,6 +7474,10 @@ NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
   NDArray out({B,H,L,VD}, q.dtype, q.device);
   if (selected) *selected = NDArray({B,H,L,S}, DType::Uint8, q.device);
   DISPATCH_FLOAT(q.dtype, T, {
+    if (L == 1) {
+      apa_selective_sp_splitk_dispatch<T>(q,k,kq,v,sinks,out,selected,scale,delta,
+          (int)H,(int)S,(int)D,(int)VD,(int)KVH,rows,cap);
+    } else {
     auto launch = [&](auto cap_tag, auto diagnostic_tag) {
       constexpr int CAP = decltype(cap_tag)::value;
       constexpr bool DIAG = decltype(diagnostic_tag)::value;
@@ -7493,6 +7497,7 @@ NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
     };
     if (selected) dispatch_cap(std::true_type{});
     else dispatch_cap(std::false_type{});
+    }
   });
   cuda_check_last("apa_selective_sp");
   return out;

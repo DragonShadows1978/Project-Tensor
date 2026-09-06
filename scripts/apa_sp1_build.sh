@@ -37,7 +37,7 @@ timeout 10s python3 - <<'PY'
 from pathlib import Path
 import hashlib,json
 root=Path.cwd();build=root/'artifacts/apa_sp1/build'
-files=list((root/'tensor_cuda/src').glob('*.cu'))+list((root/'tensor_cuda/src').glob('*.cpp'))+list((root/'tensor_cuda/include/tc').glob('*.h'))
+files=list((root/'tensor_cuda/src').glob('*.cuh'))+list((root/'tensor_cuda/src').glob('*.cu'))+list((root/'tensor_cuda/src').glob('*.cpp'))+list((root/'tensor_cuda/include/tc').glob('*.h'))
 result={'evidence_class':'host CUDA compile/link (not GPU execution)',
         'sources':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
         'modules':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in build.glob('_tensor_cuda*.so')}}

@@ -7,10 +7,22 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$ROOT"
 export PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 mode=${1:-resume}
-if [[ "$mode" == list || "$mode" == summary ]]; then
+if [[ "$mode" == list || "$mode" == summary || "$mode" == splitk-summary ]]; then
   exec timeout 30s python3 scripts/apa_sp1_gpu.py "$mode"
 fi
-if [[ "$mode" == resume ]]; then
+if [[ "$mode" == splitk ]]; then
+  if [[ $# -ge 2 ]]; then
+    target="splitk_$2"
+  else
+    target=$(timeout 30s python3 scripts/apa_sp1_gpu.py next-splitk)
+    if [[ "$target" == DONE ]]; then
+      echo 'Split-K classes complete. Run splitk-summary.'
+      exit 0
+    fi
+  fi
+elif [[ "$mode" == partb ]]; then
+  target=partb
+elif [[ "$mode" == resume ]]; then
   target=$(timeout 30s python3 scripts/apa_sp1_gpu.py next)
   if [[ "$target" == DONE ]]; then
     echo 'All registered classes have current completed receipts. Run summary.'
@@ -21,12 +33,12 @@ elif [[ "$mode" == run ]]; then
 elif [[ "$mode" == _lease ]]; then
   target=${2:?internal lease target}
 else
-  echo "usage: $0 list|summary|resume|run SHAPE_OR_BOUNDARY_LEGACY_SELECTOR_PROBE" >&2
+  echo "usage: $0 list|summary|splitk-summary|resume|splitk [DECODE_ID|boundary]|partb|run TARGET" >&2
   exit 64
 fi
 case "$target" in
-  boundary|legacy|selector|probe) ;;
-  *) [[ "$target" =~ ^(prefill|decode)_s(512|2048|8192|32768)_d(64|128)_c[01]_h(4_kv4|8_kv2)$ ]] || {
+  boundary|legacy|selector|probe|splitk_boundary|partb) ;;
+  *) [[ "$target" =~ ^(splitk_decode|prefill|decode)_s(512|2048|8192|32768)_d(64|128)_c[01]_h(4_kv4|8_kv2)$ ]] || {
        echo 'Invalid shape id; use list' >&2; exit 64;
      } ;;
 esac
@@ -52,7 +64,8 @@ export APA_SP1_LEASED=1 TC_APA_SP=1 TC_APA_SELECTIVE_PATH=0
 unset TC_APAMQ_DF_V2 TC_APAMQ_DF_V3 TC_APAMQ_DF_V4 TC_APA_STATS_PART_KEYS TC_APA_FRAC
 mkdir -p artifacts/apa_sp1/gpu
 case "$target" in
-  boundary|legacy|selector|probe) args=("$target") ;;
+  boundary|legacy|selector|probe|splitk_boundary|partb) args=("$target") ;;
+  splitk_decode_*) args=(splitk "${target#splitk_}") ;;
   *) args=(shape "$target") ;;
 esac
 # A unique transcript records timeouts even when Python cannot save JSON.

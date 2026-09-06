@@ -678,6 +678,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"),
      py::arg("scale"), py::arg("delta"), py::arg("is_causal") = false,
      py::arg("sinks") = py::none(), py::arg("diagnostics") = false);
+  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+    return py::make_tuple(Tensor::make(result.first,false),Tensor::make(result.second,false));
+  }, py::arg("q"), py::arg("kq"));
 // APA_SP1_ADDITION_END binding
   m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                       double scale, double zthr, bool is_causal) {

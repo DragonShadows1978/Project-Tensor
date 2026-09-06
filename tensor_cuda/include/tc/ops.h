@@ -15,6 +15,7 @@ namespace tc {
 NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
     const NDArray& kq, const NDArray& v, float scale, float delta,
     bool is_causal, const NDArray* sinks = nullptr, NDArray* selected = nullptr);
+std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq);
 // APA_SP1_ADDITION_END declaration
 namespace ops {
 

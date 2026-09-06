@@ -29,7 +29,9 @@ import apa_sp1_reference as ref
 def fingerprint():
     files=[ART/'registration.json',ART/'calibration.json',ART/'build/manifest.json',
            ROOT/'scripts/apa_sp1_gpu.py',ROOT/'scripts/apa_sp1_lead_gpu.sh',
-           ROOT/'tensor_cuda/tests/apa_sp1_reference.py']
+           ROOT/'tensor_cuda/tests/apa_sp1_reference.py',
+           ART/'registration_sp1_1.json',ROOT/'tensor_cuda/tests/apa_sp1_1_reference.py',
+           ROOT/'scripts/apa_sp1_1_gpu.py']
     return {str(p.relative_to(ROOT)):sha(p) for p in files}
 
 
@@ -103,8 +105,9 @@ def metrics(got,want):
                 relative_frobenius=float(np.sqrt(np.square(d).sum()/max(den,1e-30))))
 
 
-def all_references(q,k,kq,v,shape,delta,z,newmask,sinks=None):
+def all_references(q,k,kq,v,shape,delta,z,newmask,sinks=None,splitk=False):
     # All rows/elements, bounded query chunks; one pair of dot matrices per chunk.
+    from apa_sp1_1_reference import partition_mask
     B,H,L,D=q.shape;S=k.shape[2];VD=v.shape[-1];KVH=k.shape[1]
     sp=np.empty((B,H,L,VD),np.float32);old=np.empty_like(sp);dense=np.empty_like(sp)
     counts=dict(valid=0,sp=0,z=0,intersection=0,union=0,negative_sp=0,cpu_gpu_mask_disagreements=0)
@@ -116,7 +119,7 @@ def all_references(q,k,kq,v,shape,delta,z,newmask,sinks=None):
                 lengths=S-L+np.arange(first,last)+1 if shape['causal'] else np.full(n,S)
                 bulk=q[b,h,first:last]@kq[b,kh].T*np.float32(1/np.sqrt(D))
                 exact=q[b,h,first:last]@k[b,kh].T*np.float32(1/np.sqrt(D))
-                sm=ref.prefix_mask(bulk,delta,lengths);zm,_=ref.zmask(bulk,z,lengths)
+                sm=(partition_mask(bulk,delta,lengths=lengths) if splitk else ref.prefix_mask(bulk,delta,lengths));zm,_=ref.zmask(bulk,z,lengths)
                 gm=newmask[b,h,first:last].astype(bool)
                 vv=np.broadcast_to(v[b,kh],(n,S,VD))
                 sink=None if sinks is None else np.full(n,sinks[h],dtype=np.float32)
@@ -134,7 +137,7 @@ def all_references(q,k,kq,v,shape,delta,z,newmask,sinks=None):
     return sp,old,dense,counts
 
 
-def shape_gate(tc,shape,index,reg):
+def shape_gate(tc,shape,index,reg,splitk=False):
     delta=calibration()[geom_key(shape['kind'],shape['S'],shape['D'],shape['causal'])]['delta']
     q,k,kq,v=arrays(shape,np.random.SeedSequence([reg['data']['gpu_seed'],index]))
     tensors=[tc.tensor(x) for x in [q,k,kq,v]]
@@ -148,15 +151,17 @@ def shape_gate(tc,shape,index,reg):
         # Timing path and diagnostics must have exactly the same output bytes.
         plain=new().numpy();baseline=old().numpy();tc.synchronize()
     diag_identical=np.array_equal(plain,got)
-    spref,oldref,dense,tail=all_references(q,k,kq,v,shape,delta,z,gm)
+    spref,oldref,dense,tail=all_references(q,k,kq,v,shape,delta,z,gm,splitk=splitk)
     del gm
     tol=reg['data']['gpu_fp32_tolerance']
     sp_ok=bool(np.allclose(got,spref,**tol));old_ok=bool(np.allclose(baseline,oldref,**tol))
-    g2=dict(status='PASS' if sp_ok and old_ok and diag_identical else 'FAIL',
+    masks_ok=not splitk or tail['cpu_gpu_mask_disagreements']==0
+    g2=dict(status='PASS' if sp_ok and old_ok and diag_identical and masks_ok else 'FAIL',
+            sp_mask_exact=masks_ok,
             sp_vs_own_emulator=metrics(got,spref),baseline_vs_own_emulator=metrics(baseline,oldref),
             diagnostics_bit_identical=diag_identical,tolerance=tol,checked_elements=int(got.size))
     candidate_error=metrics(got,dense);baseline_error=metrics(baseline,dense)
-    result=dict(shape=shape,delta=delta,G2=g2,tail=tail,sp_vs_dense_fp32=candidate_error,
+    result=dict(shape=shape,variant='sp1_1_splitk' if splitk else 'sp1_prefill',delta=delta,G2=g2,tail=tail,sp_vs_dense_fp32=candidate_error,
                 baseline_vs_dense_fp32=baseline_error,scope_note='this establishes nothing about model quality')
     if g2['status']!='PASS':
         result['G3']={'status':'BLOCKED_BY_G2'};return result
@@ -178,10 +183,10 @@ def shape_gate(tc,shape,index,reg):
     parts=(S+2047)//2048 if shape['L']==1 and rows<112 and S>=4096 else 0
     result['memory']={'evidence_class':'code inspection: structural allocation counts; NOT measured peak VRAM',
                       'resident_input_bytes':sum(a.nbytes for a in [q,k,kq,v]),'output_bytes':int(got.nbytes),
-                      'sp_transient_global_bytes_excluding_output':0,
+                      'sp_transient_global_bytes_excluding_output':4*rows*((S+2047)//2048)*(VD+2) if splitk else 0,
                       'baseline_transient_global_bytes_excluding_output':4*rows*(1+parts*(VD+2)) if parts else 0,
                       'diagnostic_mask_bytes_excluded_from_timing':rows*S,
-                      'sp_block_threads':32,'sp_shared_bytes':0,'sp_register_storage_order':'O(D+VD) per row; ptxas receipt reports spills',
+                      'sp_block_threads':128 if splitk else 32,'sp_shared_bytes':(5*next(c for c in [64,128,256,512] if c>=max(shape['D'],VD))+260)*4 if splitk else 0,'sp_register_storage_order':'O(D+VD) per row; ptxas receipt reports spills',
                       'actual_peak_vram_bytes':None,'kq_residency':'full floating reconstructed/perturbed K, same for both; no KV compression claim'}
     result['G3']=dict(status='COMPLETE_MATCHED' if tail['matched'] else 'RED_UNMATCHED_FRACTION',
                      evidence_class='kernel sweep',cuda_event_ms=samples,wall_ms=wall,
@@ -249,62 +254,43 @@ def completed(name):
 
 
 def summary():
-    reg=registration();rows=[]
-    for shape in reg['shapes']:
-        found=[]
-        for path in (ART/'gpu').glob(shape['id']+'.*.json'):
-            a=json.loads(path.read_text())
-            if a.get('status')=='COMPLETE' and a.get('fingerprint')==fingerprint():found.append((path,a))
-        if found:rows.append(sorted(found)[-1][1])
-    matched=[r for r in rows if r.get('G3',{}).get('status')=='COMPLETE_MATCHED']
-    pre=[r for r in matched if r['shape']['kind']=='prefill'];dec=[r for r in matched if r['shape']['kind']=='decode']
-    count=sum(r['G3']['P3_deviation_hit'] is True for r in matched)
-    all_done=len(rows)==len(reg['shapes'])
-    def tail_overlap(group):
-        return sum(r['tail']['intersection'] for r in group)/max(sum(r['tail']['z'] for r in group),1)
-    def median_speed(group):
-        return float(np.median([r['G3']['speedup'] for r in group])) if group else None
-    scores={'P1_and_P2_proof':'See CPU/theory receipts; not a GPU timing prediction',
-            'P2_prefill_overlap_ge_0_8':'PENDING' if len(pre)!=24 else ('HIT' if all(r['tail']['overlap_recall']>=0.8 for r in pre) else 'MISS'),
-            'P2_decode_overlap_less':'PENDING' if len(pre)!=24 or len(dec)!=24 else ('HIT' if tail_overlap(dec)<tail_overlap(pre) else 'MISS'),
-            'P3_half_shapes_deviation':'HIT' if count>=len(reg['shapes'])/2 else ('MISS' if all_done else 'PENDING'),
-            'P3_all_prefill_speed':'PENDING' if len(pre)!=24 else ('HIT' if all(r['G3']['speedup']>=1.4 for r in pre) else 'MISS'),
-            'P3_decode_speed_smaller':'PENDING' if len(pre)!=24 or len(dec)!=24 else ('HIT' if median_speed(dec)<median_speed(pre) else 'MISS'),
-            'A3_prefill_overlap_le_0_65':'PENDING' if len(pre)!=24 else ('HIT' if all(r['tail']['overlap_recall']<=0.65 for r in pre) else 'MISS'),
-            'A4_decode_speed_le_1':'PENDING' if len(dec)!=24 else ('HIT' if all(r['G3']['speedup']<=1 for r in dec) else 'MISS'),
-            'A5_prefill_majority_below_1_4':'PENDING' if len(pre)!=24 else ('HIT' if sum(r['G3']['speedup']<1.4 for r in pre)>12 else 'MISS')}
-    text=['# APA-SP1 G3 table','', 'Evidence class: kernel sweep. **this establishes nothing about model quality**.','',
-          f'Completed {len(rows)}/{len(reg["shapes"])}; matched {len(matched)}. Missing/unmatched shapes cannot count as prediction hits.','',
-          '| shape | matched | speedup | SP fraction | z fraction | overlap | SP dense relF | baseline dense relF | deviation ratio |',
-          '|---|---|---|---|---|---|---|---|---|']
-    for r in rows:
-        t=r['tail'];g=r.get('G3',{})
-        text.append(f'| {r["shape"]["id"]} | {t["matched"]} | {g.get("speedup")} | {t["sp_fraction"]:.6f} | {t["z_fraction"]:.6f} | {t["overlap_recall"]:.6f} | {r["sp_vs_dense_fp32"]["relative_frobenius"]} | {r["baseline_vs_dense_fp32"]["relative_frobenius"]} | {g.get("deviation_ratio")} |')
-    text+=['',json.dumps(scores,indent=2),'','Memory shapes, raw timings, IQR and full-output G2 results are in the per-shape JSON receipts.']
-    (ART/'gpu_summary.md').write_text('\n'.join(text)+'\n')
-    print('\n'.join(text))
+    from apa_sp1_1_scoring import finalize
+    finalize()
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['shape','boundary','probe','legacy','selector','next','list','summary']);p.add_argument('shape',nargs='?');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['shape','boundary','probe','legacy','selector','next','list','summary','splitk','splitk_boundary','partb','next-splitk','splitk-summary']);p.add_argument('shape',nargs='?');args=p.parse_args()
     reg=registration()
     if args.mode=='list':
         print('\n'.join(s['id'] for s in reg['shapes']));return
     if args.mode=='summary':summary();return
+    if args.mode=='splitk-summary':
+        from apa_sp1_1_gpu import splitk_summary
+        splitk_summary();return
+    if args.mode=='next-splitk':
+        for name in ['splitk_boundary']+['splitk_'+s['id'] for s in reg['shapes'] if s['kind']=='decode']:
+            if not completed(name):print(name);return
+        print('DONE');return
     if args.mode=='next':
         for name in ['boundary','legacy','selector']+[s['id'] for s in reg['shapes']]:
             if not completed(name):print(name);return
         print('DONE');return
     assert os.environ.get('APA_SP1_LEASED')=='1','Use scripts/apa_sp1_lead_gpu.sh'
     # A lease marker alone is not permission to use an installed runtime.
-    name=args.shape if args.mode=='shape' else args.mode
+    name=('splitk_'+args.shape) if args.mode=='splitk' else (args.shape if args.mode=='shape' else args.mode)
     try:
         tc=load_runtime()
         probe=tc.tensor(np.zeros(1,dtype=np.float32));tc.synchronize();del probe
         if args.mode=='probe':result={'status':'COMPLETE','cuda_probe':'PASS'}
-        elif args.mode=='shape':
+        elif args.mode in ['shape','splitk']:
             ix=next(i for i,s in enumerate(reg['shapes']) if s['id']==args.shape)
-            result=shape_gate(tc,reg['shapes'][ix],ix,reg);result['status']='COMPLETE'
+            shape=reg['shapes'][ix]
+            if args.mode=='splitk':assert shape['kind']=='decode'
+            result=shape_gate(tc,shape,ix,reg,splitk=shape['L']==1);result['status']='COMPLETE'
+        elif args.mode in ['splitk_boundary','partb']:
+            from apa_sp1_1_gpu import splitk_boundary,partb_gate
+            result=(splitk_boundary if args.mode=='splitk_boundary' else partb_gate)(tc,reg)
+            result['status']='COMPLETE'
         elif args.mode=='boundary':result={'status':'COMPLETE','G2_boundary':boundary_gate(tc,reg)}
         elif args.mode=='legacy':
             files=['test_apa_selective.py','test_apa_selective_splitk.py','test_apa_selective_int4.py','test_apa_value_dim.py',
