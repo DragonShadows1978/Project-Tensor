@@ -99,3 +99,28 @@ Fingerprint audit (receipt_fingerprint_capture_dtype.json): all eight former PAS
 R3 delivery verification: delivery_capture_dtype.json PASS_CPU_ONLY/GPU_RED. All 692 dependency-ordered command entries retained with worker estimates; GPU commands are review-only comments until the lead resolves stale/immutable receipt prerequisites. No existing PASS replay scheduled and no A/8192 retry command exists. Existing b4_B_1024 capture directory preserved. Leased runner/fingerprint/reporter scripts unchanged. Generic summary was run once (summary_capture_dtype.log), then mutable report/commands received this amendment-specific handoff; retained copies RESULTS_CAPTURE_DTYPE.md and lead_commands_capture_dtype.txt preserve it if a later generic summary regenerates its older template. Current main RESULTS.md/results.json use STALE for all ten old jobs and do not fill current PPL from historical values. Historical lead G0/D/B8192 observations are labeled explicitly. GPU_BLOCKED_CAPTURE_DTYPE.json is the fresh blocked report. Current CPU fingerprint/mutation pins and all original job hashes rechecked after artifact generation.
 
 Final RED: GPU capture fix not card-validated; literal same-call-site/all-tensor confirmation contradicted by existing adapter dispatch; A/8192 OOM preserved and never retried; all old current dependencies stale; C/E quality, G2/G3 and lead blind verification pending. No thresholds/registration/kernel bodies altered. Prior art unchanged; mechanical cast and ordinary stub/oracle annotations are at code/test sites, ledger and final report. No git/subagents/background shell waits/jobs/service changes/process signals; no GPU model workload, successful GPU allocation, receipt deletion or replay. All started own foreground commands completed under bounds. Execution model gpt-6-astra, reasoning effort xhigh, logs/apa_sp3_r3.log.
+
+
+## Amendment 5 — pool-on decode and default capture policy (2026-09-06)
+
+Immutable plan: orders/APA_SP3_AMENDMENT_5.md. New order ledger:
+`docs/APA_SP3_A5_LEDGER.md`; report: `artifacts/apa_sp3/A5_REPORT.md`.
+Registered 18 decode_pool cells in amendment_009_decode_pool.json and exact
+per-kind source bridge in amendment_010_pool_fingerprint.json. All prior cell
+records and 148 original receipt bytes preserved; zero source-invalidated PASS.
+CPU evidence: 113 passed; 5/5 registered mutants killed; 17 synthetic a4-kind
+bridges accepted; 147 PASS recursively valid in original-build CPU simulation.
+Current local runtime identity remains stale, not waived. Source/kernel pins
+PASS. Dry-run 877 cells; default 733 excludes raw decode and all 126 32K capture
+cells. Pool-state pin: test_decode_pool_worker_pool_state_pin.
+GPU/P5 unrun; no 8192-based 32K estimates fabricated. Rail >=290s estimate is
+terminal non-fit before lease. Pool peaks are CUDA default-pool reserved/used
+high-water, not whole-device resident. Raw decode evidence remains unchanged.
+Prior art: existing TensorCUDA (2026) stream-ordered transient pool; NVIDIA CUDA
+12.6 pool counters (local headers verified); existing SP3 teacher-forced timing;
+a4 hash bridge and Kahn scheduling; conventional cost scaling, no prior art
+known to me for this exact planning formula. Historical Make/Nix/Kahn/mutation
+attributions remain unverified leads detailed at code sites and A5 ledger/report.
+No git, subagents, GPU leases/queries, background shell work, signals/kills,
+live-service edits or live-worktree access. Bounded foreground CPU commands
+completed. gpt-6-astra, xhigh; logs/apa_sp3_a5_r1.log.

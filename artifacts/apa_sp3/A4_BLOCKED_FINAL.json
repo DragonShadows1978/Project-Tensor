@@ -1,0 +1,30 @@
+{
+  "status": "BLOCKED_NO_GPU",
+  "evidence_class": "environment/order constraint; no GPU probe or model execution",
+  "order_sha256": "e2b9dd3c074688d9ac457183f9219ea9ad08a29f006232942e6001cf19c0b236",
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "reason": "Dispatched sandbox has no GPU per lead order. No GPU device queries, leased GPU jobs, T full-model loads, fits or perplexities executed here.",
+  "device_nodes": {
+    "/dev/nvidia0": false,
+    "/dev/nvidiactl": false
+  },
+  "missing_local_capture_arrays": true,
+  "runtime_note": "Local host build compiled for CPU API gates differs from original lead build identity. Preserve lead build on merge; source audit retains 147 PASS receipts, invalidates zero due to source changes.",
+  "native_observed_timeout": "capture_b4_B_8192 WORKER_TIMEOUT (lead order); not claimed fixed by GPU evidence",
+  "pending": [
+    "Native B/C/E range parity and worker times at 8192/32768",
+    "T actual fused backend and 4B bf16 fit at all lengths",
+    "15 ceiling grid jobs and peak estimates",
+    "Conditional B/C 32K PPL; D/T 32K target pin and gap",
+    "Lead-owned blind verification"
+  ],
+  "process_safety": "No git, subagents, foreign-process signals, live service edits or live-worktree access. Host child commands only, bounded foreground; no GPU lease acquired.",
+  "disk": {
+    "free_bytes": 392135499776,
+    "first_32768_range_required_free_bytes": 490783899647,
+    "first_8192_range_required_free_bytes": 50923044863,
+    "capture_32768_fits_disk": false,
+    "note": "Full unsampled 32768 activation/mask layout exceeds current filesystem free space; lead must provide capacity before those captures. PPL/ceiling/T do not need capture storage."
+  },
+  "no_external_actions": "No nvidia-smi commands or leased GPU workers launched; only CPU tests/host compilation in isolated checkout. No live worktree access."
+}

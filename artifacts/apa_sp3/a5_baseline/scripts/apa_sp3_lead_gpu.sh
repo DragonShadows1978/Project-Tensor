@@ -28,11 +28,7 @@ case "$action" in
       exec timeout --signal=TERM --kill-after=3s 585s env APA_SP3_OUTER=1 bash "$0" run "$job"
     fi
     # Validate registry and dependencies before acquiring lease or probing GPU.
-    decision=$(timeout 15s python3 scripts/apa_sp3_control.py preflight "$job")
-    if [[ "$decision" == NON_FIT ]]; then
-      echo 'Registered/planned NON_FIT receipt recorded before GPU lease; no retry.'
-      exit 0
-    fi
+    timeout 15s python3 scripts/apa_sp3_control.py preflight "$job"
     exec bash "$0" _leased "$job"
     ;;
   _leased)

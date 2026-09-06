@@ -27,11 +27,6 @@ def preflight(job):
         protocol()
     for d in c['depends']:
         require_pass(d)
-    if c['kind'] == 'decode_pool':
-        from apa_sp3_a5_decode import preflight as pool_preflight
-        outcome = pool_preflight(c)
-        if outcome:
-            return outcome
     from apa_sp3_a4_jobs import require_fit
     require_fit(c)
     if c['kind']=='capture_range' and c['layer_start']==0:
@@ -80,8 +75,7 @@ if __name__=='__main__':
         if mode=='validate':validate(sys.argv[2])
         elif mode=='preflight':
             from apa_sp3_common import receipt_validation
-            with receipt_validation():outcome=preflight(sys.argv[2])
-            if outcome:print(outcome)
+            with receipt_validation():preflight(sys.argv[2])
         elif mode=='idle':idle()
         elif mode=='timeout':print(validate(sys.argv[2])['worker_timeout_s'])
         elif mode=='kind':print(validate(sys.argv[2])['kind'])

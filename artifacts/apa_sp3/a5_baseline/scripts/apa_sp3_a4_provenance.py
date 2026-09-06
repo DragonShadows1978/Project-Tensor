@@ -17,13 +17,9 @@ MODEL_KINDS = ENGINE_KINDS - {'margin'}
 
 def closure(cell):
     kind = cell['kind']
-    if kind == 'decode_pool':
-        return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a5_decode.py']))
     names = ['common.py', 'gpu.py', 'control.py', 'lead_gpu.sh', 'a4_provenance.py']
     paths = ['scripts/apa_sp3_' + n for n in names]
     paths += ['artifacts/apa_sp3/registration.json']
-    paths += ['scripts/apa_sp3_a5_provenance.py', 'scripts/apa_sp3_a5_registry.py',
-              'artifacts/apa_sp3/amendment_009_decode_pool.json']
     if kind in ENGINE_KINDS:
         paths += ['artifacts/apa_sp3/build/manifest.json',
                   'artifacts/apa_sp3/adapter_import_cpu.json',
@@ -70,8 +66,7 @@ def bridge():
         import hashlib
         identity = hashlib.sha256((identity+sha(ART/FOLLOWUP)).encode()).hexdigest()
     m['effective_sha256'] = identity
-    from apa_sp3_a5_provenance import extend_bridge
-    return extend_bridge(m)
+    return m
 
 
 def current_fingerprint(cell):
@@ -90,19 +85,6 @@ def compatible(j, *, current=None, amendment=None):
     except FileNotFoundError:
         return False
     old = j.get('fingerprint', {})
-    if 'a5_transition' in m:
-        if (j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1' and old == now
-                and j.get('fingerprint_amendment_sha256') == m['effective_sha256']):
-            return True
-        if kind == 'decode_pool':
-            return False
-        from apa_sp3_a5_provenance import previous_current
-        previous = previous_current(cell, now, m['a5_transition'])
-        if previous is None:
-            return False
-        parent = {k:v for k,v in m.items() if k not in ('a5_transition', 'parent_effective_sha256')}
-        parent['effective_sha256'] = m['parent_effective_sha256']
-        return compatible(j, current=previous, amendment=parent)
     if j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1':
         return old == now and j.get('fingerprint_amendment_sha256') == m['effective_sha256']
     # Only pinned legacy endpoints can cross this explicit bridge. A future

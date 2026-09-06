@@ -1,0 +1,53 @@
+{
+  "immutable": true,
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "order_sha256": "e2b9dd3c074688d9ac457183f9219ea9ad08a29f006232942e6001cf19c0b236",
+  "extends_sha256": "c9568ed887964b41f144f69d86d2bd327e9310215ec27be71a296a39e59d8cb7",
+  "file_transitions": {
+    "scripts/apa_sp3_a4_audit.py": {
+      "from_sha256": "8f27c7dea3c2fa1ff4b17c3f813fb0731fc9aa805956cace74ab4bd59e4dd9a7",
+      "to_sha256": "f41fce13477542d10b10dc5fb65928c94dd6def4d386d61e621047db12701588"
+    },
+    "scripts/apa_sp3_a4_capture.py": {
+      "from_sha256": "1d0838e9980b1f1fc0a9358bfcf4bc6ba00643163d305754e860627130b8b86d",
+      "to_sha256": "1acf3ec945e4eb82d70615e4e32338a90b5acd757adf6623a97e6b7edcf3f518"
+    },
+    "scripts/apa_sp3_a4_provenance.py": {
+      "from_sha256": "e55abf3fad421faf4fbfe2f553b12d3fa406b214368e81a8b3c5e5da73f98e12",
+      "to_sha256": "c05805987404e30ff4db3ff75a66a77ee2cdbd4c80542c28eeecc6d66bbe97fa"
+    },
+    "scripts/apa_sp3_a4_report.py": {
+      "from_sha256": "e624a3aaf450dc4e28796e3a2d5cfc125499f093fdc06f2fee8fd5a323cec6af",
+      "to_sha256": "ef359f686c4d2eff64dbe90559ea31109eb6cfe1f34af64f1e44708a4bdba536"
+    },
+    "scripts/apa_sp3_common.py": {
+      "from_sha256": "159442b346c3d1063776a43dfd03828295623d68633538281e785c5e2e56bd14",
+      "to_sha256": "de8310b0c2349a10b2f83da99d1ecb7dd1dee5d817b2cd9a6ee59b24881c4ce4"
+    },
+    "scripts/apa_sp3_control.py": {
+      "from_sha256": "7fba4897a9802f8d14faf673596c06da0f0e8de87f2d414fdcd0e55333483c7a",
+      "to_sha256": "7b540f0690535f8e5598cea17778119ea2cf29091b93c6d00c38c860d917e75d"
+    },
+    "scripts/apa_sp3_gpu.py": {
+      "from_sha256": "39fad4a49db09cfebafececa773a855cc8ed15fc902700895438caf22e69ca1a",
+      "to_sha256": "cfab12a645a3b8643d1d790e1e3b432257859f7db1fd801dcc2c189b81a6ed0f"
+    },
+    "scripts/apa_sp3_report.py": {
+      "from_sha256": "1d081eeb83b5a243e78c3b7d11cfcaca41d2887aea9122ab73dbf4aca31df32c",
+      "to_sha256": "4b14e468a1e703aea6c142af32391deb4bbe2ec5049df975c6c0cc52ab7f81b3"
+    }
+  },
+  "reason": "Post-baseline CPU identity simulation hit its 55s bound due to repeated graph/protocol hashing. Memoize immutable dependency validation only within one bounded preflight/worker/report; reset each action. Legacy measurement arithmetic and closure membership unchanged.",
+  "gates": [
+    "Complete author CPU suite passes with exact checks retained.",
+    "Mutate ancestor receipt between validation scopes: next scope must reject it.",
+    "All 147 local legacy PASS receipts validate in a CPU-only simulation that supplies original lead build identity; no build bytes or receipts modified.",
+    "Dry-run retains 859 cells and all registered deps/rails."
+  ],
+  "additional_details": [
+    "Move unchanged capture disk-size formula into reusable helper; first-range free-space check also runs before GPU lease.",
+    "HF tiny load gates established need for AutoModel registration and rebuilding uninitialized nonpersistent rotary buffers via unchanged remote _init_rope; use dtype=bf16 and reject incomplete load information.",
+    "Renderer archive/disk comments corrected; report-only code is outside numerical import closures."
+  ],
+  "prior_art": "Memoized DAG traversal and per-action snapshots are standard build-system practice (Make, Feldman 1979; unverified lead); file-size accounting and Transformers loader lifecycle repairs are standard techniques, no new numerical algorithm."
+}

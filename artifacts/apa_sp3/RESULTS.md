@@ -57,7 +57,7 @@ The heuristic tail cannot yet be judged: no real-activation error, unrefined-mas
 
 The model comparison is incomplete: PROTOCOL-2 fresh-process G0 determinism and a scored C comparison at matched actual fraction are both required; see their individual statuses above. G2/G3 rows establish nothing about model quality by themselves. The ε=1e−3 margin is conditional on the measured finite error envelope; E’s separate capture checks its transfer, and neither check supplies a universal quantization bound or a CUDA rounding proof.
 
-## Decode table — kernel sweep / in-model timing
+## Legacy pool-off decode — memory-shape evidence; excluded from P5
 
 | Bits | Starting S | Arm | Status | tokens/s | Steps | Prefill seconds |
 |---|---:|---|---|---:|---:|---:|
@@ -94,7 +94,7 @@ D uses finite float32 max δ, requires every eligible pair selected and |D−A|�
 | Lead | P2 | C within 0.05 ppl of B at matched fraction | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
 | Lead | P3 | E fraction >=0.95, real eq >=0.8, E ppl within 0.01 of A | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
 | Lead | P4 | bulk4 p99 error <0.5*max; C skipped weight ratio >0.1 on some layer while ppl unmoved (P2 tolerance) | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
-| Lead | P5 | C/B decode tokens/s at S=32768 >=2 | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
+| Lead | P5 | C/B decode tokens/s at S=32768 >=2 | {"ratio": null, "source_kind": "decode_pool", "status": "UNASSESSED", "threshold": 2.0} |
 | Seat | S1 | G0 likely RED on current engine even after tokens recovered; documented matmul/softmax drift exceeds 0.01 | HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim |
 | Seat | S2 | D likely differs from A by >0.005 ppl: BF16 cuBLAS/softmax rounding differs from fused FP32 accumulation | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
 | Seat | S3 | E fraction >=0.95 at bulk4; conditional finite bound will not establish general low-precision usefulness | UNASSESSED; P2 uses fresh B; requires applicable model receipts |
@@ -210,4 +210,35 @@ Ranges restore predecessor hidden activations; each layer sees the full token pr
 Aggregation rehashes each layer manifest and checks exact stat identity of every array since its completed range SHA256. It pins all 62 manifests as one set. Margin workers rehash their input arrays. 32768 captures are B/C bulk4; no new 32768 margin/E calibration cells were authorized.
 
 Fingerprint compatibility is governed by amendment_006_fingerprint.json: per-kind import closures and exact reviewed source transitions. Unknown closure changes reject reuse. Source eligibility and current runtime/build prerequisites are reported separately in a4_receipt_audit.json.
+
+
+## A5 production-pool decode — kernel sweep / in-model timing
+
+Pool ON after raw persistent weight loading, including in-process controls and all decode forwards. 32 teacher-forced tokens, per-token CUDA-synchronized wall time. Prefill excluded from tokens/s; setup, controls and prefill included in worker TERM 290s (+5s grace). 32K plans use same-arm/bit pool-on 8192: setup + guard + 16*prefill + 4*decode_work + 15 seconds. Missing measurement blocks; estimate >=290s is terminal non-fit before lease.
+
+| Bits | S | Arm | Status/outcome | tokens/s | ms/token | Pool reserved peak MiB | Planning seconds |
+|---:|---:|---|---|---:|---:|---:|---|
+| 4 | 2048 | A | UNRUN | — | — | — | [60, 280] |
+| 4 | 2048 | B | UNRUN | — | — | — | [60, 280] |
+| 4 | 2048 | C | UNRUN | — | — | — | [60, 280] |
+| 4 | 8192 | A | UNRUN | — | — | — | [60, 280] |
+| 4 | 8192 | B | UNRUN | — | — | — | [60, 280] |
+| 4 | 8192 | C | UNRUN | — | — | — | [60, 280] |
+| 8 | 2048 | A | UNRUN | — | — | — | [60, 280] |
+| 8 | 2048 | B | UNRUN | — | — | — | [60, 280] |
+| 8 | 2048 | C | UNRUN | — | — | — | [60, 280] |
+| 8 | 8192 | A | UNRUN | — | — | — | [60, 280] |
+| 8 | 8192 | B | UNRUN | — | — | — | [60, 280] |
+| 8 | 8192 | C | UNRUN | — | — | — | [60, 280] |
+| 4 | 32768 | A | UNRUN | — | — | — | — |
+| 4 | 32768 | B | UNRUN | — | — | — | — |
+| 4 | 32768 | C | UNRUN | — | — | — | — |
+| 8 | 32768 | A | UNRUN | — | — | — | — |
+| 8 | 32768 | B | UNRUN | — | — | — | — |
+| 8 | 32768 | C | UNRUN | — | — | — | — |
+
+Peak source: CUDA default-pool ReservedMemHigh and UsedMemHigh, reset before measured prefill. `peak_resident_mib` is a compatibility alias for reserved pool high water, **not whole-device resident peak**; raw weights and driver/context allocations are excluded. Legacy pool-off decode receipts retain exact intercepted-allocation evidence and are never scheduled by default.
+P5 (bulk4, C/B at starting S=32768): `{"ratio": null, "source_kind": "decode_pool", "status": "UNASSESSED", "threshold": 2.0}`. Only valid `decode_pool` receipts qualify. No pool-off fallback. Contexts 32769–32800 exceed the trained window. **G2/G3 rows establish nothing about model quality by themselves.**
+
+32K captures remain registered but are OFF by default. Explicit `run CELL` is lead cell-list inclusion; `APA_SP3_INCLUDE_32K_CAPTURES=1` opts into resume/command generation. The separately generated `lead_commands_32k_captures.txt` is a lead opt-in list. Existing a4 disk preflight is unchanged; its conservative 490,783,899,647-byte first-range requirement exceeds the lead-reported free disk. This amendment does not relax that rail.
 

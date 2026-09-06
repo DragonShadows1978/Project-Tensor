@@ -1,35 +1,30 @@
-# A4, after the lead merges this isolated worktree. One foreground command at a time.
-# No automatic loop, rebuild, retry, receipt replacement, or process intervention.
-# Source-compatible existing PASS cells are omitted at execution time by preflight; do not rerun them.
-# Worker estimates below; add 30s foreground cooldown + <=20s lease and <=45s setup/receipt.
-# Capture ranges and ceiling: worker TERM 290s +5s own-child grace; other workers 480s+5s. Outer rail 590s.
+# A5: after lead merge; one foreground command at a time; never execute this file as a batch.
+# Existing receipts retained. Pool-off decode excluded. 32K captures require explicit opt-in.
+# Decode pool worker TERM 290s +5s grace; all prior kinds retain registered rails. Outer bound 590s.
+# Estimates are planning only. Add <=20s lease, 30s cooldown and setup/receipt overhead.
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3
 timeout 30s bash scripts/apa_sp3_lead_gpu.sh list
-timeout 30s python3 scripts/apa_sp3_a4_audit.py
-# If first-range preflight reports CAPTURE_DEST_EXISTS, the lead must archive the prior partial directory; never overwrite it.
-# First 32768 range needs 490783899648 free bytes under the disk rail; free space is checked before GPU access.
-# The lead retains original immutable RED capture receipts; jobs_a4 removes receipt-name collision.
-# Dependency order follows the full DAG. Re-render summary after each completed cell to refresh statuses.
+timeout 30s python3 scripts/apa_sp3_a5_audit.py
 # kernel96 | kind=kernel | deps=- | worker estimate=[2, 20]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # g0_A_1 | kind=baseline | deps=- | worker estimate=[60, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # g0_B_1 | kind=baseline | deps=g0_A_1 | worker estimate=[60, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # g0_A_2 | kind=baseline | deps=g0_B_1 | worker estimate=[60, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # g0_B_2 | kind=baseline | deps=g0_A_2 | worker estimate=[60, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # g0 | kind=parity | deps=g0_A_1,g0_B_1,g0_A_2,g0_B_2 | worker estimate=[1, 10]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b4_D_1024 | kind=ppl | deps=g0,kernel96 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b4_A_8192 | kind=ppl | deps=g0 | worker estimate=[140, 480]s | status=RED
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b4_B_8192 | kind=ppl | deps=g0 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # capture_b4_B_1024 | kind=capture | deps=g0 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b8_A_1024 | kind=ppl | deps=g0 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_A_1024
 # ppl_b8_B_1024 | kind=ppl | deps=g0 | worker estimate=[140, 480]s | status=UNRUN
@@ -67,129 +62,129 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ceiling_b4_B_2
 # ceiling_b4_B_32768 | kind=ceiling | deps=g0 | worker estimate=[30, 280]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ceiling_b4_B_32768
 # margin_b4_B_1024_l00 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l01 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l02 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l03 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l04 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l05 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l06 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l07 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l08 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l09 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l10 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l11 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l12 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l13 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l14 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l15 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l16 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l17 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l18 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l19 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l20 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l21 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l22 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l23 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l24 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l25 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l26 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l27 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l28 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l29 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l30 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l31 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l32 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l33 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l34 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l35 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l36 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l37 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l38 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l39 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l40 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l41 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l42 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l43 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l44 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l45 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l46 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l47 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l48 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l49 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l50 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l51 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l52 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l53 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l54 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l55 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l56 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l57 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l58 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l59 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l60 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_B_1024_l61 | kind=margin | deps=capture_b4_B_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b8_B_1024_l00 | kind=margin | deps=capture_b8_B_1024 | worker estimate=[3, 60]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_1024_l00
 # margin_b8_B_1024_l01 | kind=margin | deps=capture_b8_B_1024 | worker estimate=[3, 60]s | status=UNRUN
@@ -315,96 +310,57 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_10
 # margin_b8_B_1024_l61 | kind=margin | deps=capture_b8_B_1024 | worker estimate=[3, 60]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_B_1024_l61
 # ppl_b4_B_32768 | kind=ppl_long | deps=g0,kernel96,ppl_b4_D_1024,ceiling_b4_B_32768 | worker estimate=[60, 480]s | status=UNRUN
-# ONLY if own ceiling_b4_*_32768 receipt has fit=true; preflight enforces this before GPU access.
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_B_32768
 # ppl_b4_D_32768 | kind=ppl_long | deps=g0,kernel96,ppl_b4_D_1024,ppl_T_32768 | worker estimate=[60, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_D_32768
 # calibration_b4 | kind=calibration | deps=margin_b4_B_1024_l00,margin_b4_B_1024_l01,margin_b4_B_1024_l02,margin_b4_B_1024_l03,margin_b4_B_1024_l04,margin_b4_B_1024_l05,margin_b4_B_1024_l06,margin_b4_B_1024_l07,margin_b4_B_1024_l08,margin_b4_B_1024_l09,margin_b4_B_1024_l10,margin_b4_B_1024_l11,margin_b4_B_1024_l12,margin_b4_B_1024_l13,margin_b4_B_1024_l14,margin_b4_B_1024_l15,margin_b4_B_1024_l16,margin_b4_B_1024_l17,margin_b4_B_1024_l18,margin_b4_B_1024_l19,margin_b4_B_1024_l20,margin_b4_B_1024_l21,margin_b4_B_1024_l22,margin_b4_B_1024_l23,margin_b4_B_1024_l24,margin_b4_B_1024_l25,margin_b4_B_1024_l26,margin_b4_B_1024_l27,margin_b4_B_1024_l28,margin_b4_B_1024_l29,margin_b4_B_1024_l30,margin_b4_B_1024_l31,margin_b4_B_1024_l32,margin_b4_B_1024_l33,margin_b4_B_1024_l34,margin_b4_B_1024_l35,margin_b4_B_1024_l36,margin_b4_B_1024_l37,margin_b4_B_1024_l38,margin_b4_B_1024_l39,margin_b4_B_1024_l40,margin_b4_B_1024_l41,margin_b4_B_1024_l42,margin_b4_B_1024_l43,margin_b4_B_1024_l44,margin_b4_B_1024_l45,margin_b4_B_1024_l46,margin_b4_B_1024_l47,margin_b4_B_1024_l48,margin_b4_B_1024_l49,margin_b4_B_1024_l50,margin_b4_B_1024_l51,margin_b4_B_1024_l52,margin_b4_B_1024_l53,margin_b4_B_1024_l54,margin_b4_B_1024_l55,margin_b4_B_1024_l56,margin_b4_B_1024_l57,margin_b4_B_1024_l58,margin_b4_B_1024_l59,margin_b4_B_1024_l60,margin_b4_B_1024_l61 | worker estimate=[1, 5]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # calibration_b8 | kind=calibration | deps=margin_b8_B_1024_l00,margin_b8_B_1024_l01,margin_b8_B_1024_l02,margin_b8_B_1024_l03,margin_b8_B_1024_l04,margin_b8_B_1024_l05,margin_b8_B_1024_l06,margin_b8_B_1024_l07,margin_b8_B_1024_l08,margin_b8_B_1024_l09,margin_b8_B_1024_l10,margin_b8_B_1024_l11,margin_b8_B_1024_l12,margin_b8_B_1024_l13,margin_b8_B_1024_l14,margin_b8_B_1024_l15,margin_b8_B_1024_l16,margin_b8_B_1024_l17,margin_b8_B_1024_l18,margin_b8_B_1024_l19,margin_b8_B_1024_l20,margin_b8_B_1024_l21,margin_b8_B_1024_l22,margin_b8_B_1024_l23,margin_b8_B_1024_l24,margin_b8_B_1024_l25,margin_b8_B_1024_l26,margin_b8_B_1024_l27,margin_b8_B_1024_l28,margin_b8_B_1024_l29,margin_b8_B_1024_l30,margin_b8_B_1024_l31,margin_b8_B_1024_l32,margin_b8_B_1024_l33,margin_b8_B_1024_l34,margin_b8_B_1024_l35,margin_b8_B_1024_l36,margin_b8_B_1024_l37,margin_b8_B_1024_l38,margin_b8_B_1024_l39,margin_b8_B_1024_l40,margin_b8_B_1024_l41,margin_b8_B_1024_l42,margin_b8_B_1024_l43,margin_b8_B_1024_l44,margin_b8_B_1024_l45,margin_b8_B_1024_l46,margin_b8_B_1024_l47,margin_b8_B_1024_l48,margin_b8_B_1024_l49,margin_b8_B_1024_l50,margin_b8_B_1024_l51,margin_b8_B_1024_l52,margin_b8_B_1024_l53,margin_b8_B_1024_l54,margin_b8_B_1024_l55,margin_b8_B_1024_l56,margin_b8_B_1024_l57,margin_b8_B_1024_l58,margin_b8_B_1024_l59,margin_b8_B_1024_l60,margin_b8_B_1024_l61 | worker estimate=[1, 5]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run calibration_b8
-# capture_b4_B_32768_r00_01 | kind=capture_range | deps=ppl_b4_B_32768 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r00_01
 # match_b4_0 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_0 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_0
-# capture_b4_B_32768_r01_02 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r00_01 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r01_02
 # match_b4_1 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_0 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_1 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_0 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_1
-# capture_b4_B_32768_r02_03 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r01_02 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r02_03
 # match_b4_2 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_1 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_2 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_1 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_2
-# capture_b4_B_32768_r03_04 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r02_03 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r03_04
 # match_b4_3 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_2 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_3 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_2 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_3
-# capture_b4_B_32768_r04_05 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r03_04 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r04_05
 # match_b4_4 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_3 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_4 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_3 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_4
-# capture_b4_B_32768_r05_06 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r04_05 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r05_06
 # match_b4_5 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_5 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_4 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_5
-# capture_b4_B_32768_r06_07 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r05_06 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r06_07
 # match_b4_6 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_5 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_6 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_5 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_6
-# capture_b4_B_32768_r07_08 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r06_07 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r07_08
 # match_b4_7 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b4,match_b4_6 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # match_b8_7 | kind=match | deps=g0,ppl_b4_D_1024,calibration_b8,match_b8_6 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run match_b8_7
-# capture_b4_B_32768_r08_09 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r07_08 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r08_09
 # freeze_b4 | kind=freeze | deps=match_b4_0,match_b4_1,match_b4_2,match_b4_3,match_b4_4,match_b4_5,match_b4_6,match_b4_7 | worker estimate=[1, 5]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # freeze_b8 | kind=freeze | deps=match_b8_0,match_b8_1,match_b8_2,match_b8_3,match_b8_4,match_b8_5,match_b8_6,match_b8_7 | worker estimate=[1, 5]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run freeze_b8
-# capture_b4_B_32768_r09_10 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r08_09 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r09_10
 # ppl_b4_C_1024 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # capture_b4_C_1024 | kind=capture | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b4_C_8192 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # ppl_b4_D_8192 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b4,ppl_b4_A_8192 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_D_8192
-# decode_b4_A_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
-# decode_b4_B_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_2048
-# decode_b4_C_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_2048
-# decode_b4_A_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_A_8192
-# decode_b4_B_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_8192
-# decode_b4_C_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_8192
-# decode_b4_A_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_A_32768
-# decode_b4_B_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_B_32768
-# decode_b4_C_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b4_C_32768
 # ppl_b8_C_1024 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_C_1024
 # ppl_b8_D_1024 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
@@ -415,24 +371,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_1
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_C_8192
 # ppl_b8_D_8192 | kind=ppl | deps=g0,ppl_b4_D_1024,freeze_b8,ppl_b8_A_8192 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b8_D_8192
-# decode_b8_A_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_2048
-# decode_b8_B_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_2048
-# decode_b8_C_2048 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_2048
-# decode_b8_A_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_8192
-# decode_b8_B_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_8192
-# decode_b8_C_8192 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_8192
-# decode_b8_A_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_A_32768
-# decode_b8_B_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_B_32768
-# decode_b8_C_32768 | kind=decode | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[140, 480]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_b8_C_32768
 # ceiling_b4_C_4096 | kind=ceiling | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[30, 280]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ceiling_b4_C_4096
 # ceiling_b4_C_8192 | kind=ceiling | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[30, 280]s | status=UNRUN
@@ -451,132 +389,154 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192_r00_16
 # capture_b8_C_8192_r00_16 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_8192_r00_16
-# capture_b4_B_32768_r10_11 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r09_10 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r10_11
+# decode_pool_b4_A_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_A_2048
+# decode_pool_b4_B_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_B_2048
+# decode_pool_b4_C_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_C_2048
+# decode_pool_b4_A_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_A_8192
+# decode_pool_b4_B_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_B_8192
+# decode_pool_b4_C_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_C_8192
+# decode_pool_b8_A_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_A_2048
+# decode_pool_b8_B_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_B_2048
+# decode_pool_b8_C_2048 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_C_2048
+# decode_pool_b8_A_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_A_8192
+# decode_pool_b8_B_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_B_8192
+# decode_pool_b8_C_8192 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8 | worker estimate=[60, 280]s | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_C_8192
 # margin_b4_C_1024_l00 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l01 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l02 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l03 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l04 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l05 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l06 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l07 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l08 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l09 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l10 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l11 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l12 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l13 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l14 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l15 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l16 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l17 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l18 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l19 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l20 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l21 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l22 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l23 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l24 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l25 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l26 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l27 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l28 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l29 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l30 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l31 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l32 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l33 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l34 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l35 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l36 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l37 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l38 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l39 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l40 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l41 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l42 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l43 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l44 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l45 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l46 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l47 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l48 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l49 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l50 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l51 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l52 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l53 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l54 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l55 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l56 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l57 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l58 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l59 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l60 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b4_C_1024_l61 | kind=margin | deps=capture_b4_C_1024 | worker estimate=[3, 60]s | status=STALE
-# Existing RED/stale: retain receipt; resolve this branch with the lead. Independent branches remain runnable.
+# Existing RED/stale retained; lead resolves branch, no automatic retry.
 # margin_b8_C_1024_l00 | kind=margin | deps=capture_b8_C_1024 | worker estimate=[3, 60]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_1024_l00
 # margin_b8_C_1024_l01 | kind=margin | deps=capture_b8_C_1024 | worker estimate=[3, 60]s | status=UNRUN
@@ -702,7 +662,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_10
 # margin_b8_C_1024_l61 | kind=margin | deps=capture_b8_C_1024 | worker estimate=[3, 60]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_1024_l61
 # ppl_b4_C_32768 | kind=ppl_long | deps=g0,kernel96,ppl_b4_D_1024,ceiling_b4_C_32768,freeze_b4 | worker estimate=[60, 480]s | status=UNRUN
-# ONLY if own ceiling_b4_*_32768 receipt has fit=true; preflight enforces this before GPU access.
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_C_32768
 # capture_b4_B_8192_r16_32 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b4,capture_b4_B_8192_r00_16 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_8192_r16_32
@@ -712,8 +671,18 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192_r16_32
 # capture_b8_C_8192_r16_32 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b8,capture_b8_C_8192_r00_16 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_8192_r16_32
-# capture_b4_B_32768_r11_12 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r10_11 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r11_12
+# decode_pool_b4_A_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4,decode_pool_b4_A_8192 | worker estimate=pending decode_pool_b4_A_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_A_32768
+# decode_pool_b4_B_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4,decode_pool_b4_B_8192 | worker estimate=pending decode_pool_b4_B_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_B_32768
+# decode_pool_b4_C_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b4,decode_pool_b4_C_8192 | worker estimate=pending decode_pool_b4_C_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b4_C_32768
+# decode_pool_b8_A_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8,decode_pool_b8_A_8192 | worker estimate=pending decode_pool_b8_A_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_A_32768
+# decode_pool_b8_B_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8,decode_pool_b8_B_8192 | worker estimate=pending decode_pool_b8_B_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_B_32768
+# decode_pool_b8_C_32768 | kind=decode_pool | deps=g0,ppl_b4_D_1024,freeze_b8,decode_pool_b8_C_8192 | worker estimate=pending decode_pool_b8_C_8192; setup+guard+16*prefill+4*decode_work+15; >=290s NON_FITs | status=UNRUN
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_pool_b8_C_32768
 # capture_b4_B_8192_r32_48 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b4,capture_b4_B_8192_r16_32 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_8192_r32_48
 # capture_b4_C_8192_r32_48 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b4,capture_b4_C_8192_r16_32 | worker estimate=[30, 188]s | status=UNRUN
@@ -722,10 +691,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192_r32_48
 # capture_b8_C_8192_r32_48 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b8,capture_b8_C_8192_r16_32 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_8192_r32_48
-# capture_b4_B_32768_r12_13 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r11_12 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r12_13
-# capture_b4_C_32768_r00_01 | kind=capture_range | deps=ppl_b4_C_32768 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r00_01
 # capture_b4_B_8192_r48_62 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b4,capture_b4_B_8192_r32_48 | worker estimate=[30, 172]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_8192_r48_62
 # capture_b4_C_8192_r48_62 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b4,capture_b4_C_8192_r32_48 | worker estimate=[30, 172]s | status=UNRUN
@@ -734,10 +699,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192_r48_62
 # capture_b8_C_8192_r48_62 | kind=capture_range | deps=g0,ppl_b4_D_1024,freeze_b8,capture_b8_C_8192_r32_48 | worker estimate=[30, 172]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_8192_r48_62
-# capture_b4_B_32768_r13_14 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r12_13 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r13_14
-# capture_b4_C_32768_r01_02 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r00_01 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r01_02
 # capture_b4_B_8192 | kind=capture_aggregate | deps=capture_b4_B_8192_r00_16,capture_b4_B_8192_r16_32,capture_b4_B_8192_r32_48,capture_b4_B_8192_r48_62 | worker estimate=[5, 280]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_8192
 # capture_b4_C_8192 | kind=capture_aggregate | deps=capture_b4_C_8192_r00_16,capture_b4_C_8192_r16_32,capture_b4_C_8192_r32_48,capture_b4_C_8192_r48_62 | worker estimate=[5, 280]s | status=UNRUN
@@ -746,10 +707,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_8
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_B_8192
 # capture_b8_C_8192 | kind=capture_aggregate | deps=capture_b8_C_8192_r00_16,capture_b8_C_8192_r16_32,capture_b8_C_8192_r32_48,capture_b8_C_8192_r48_62 | worker estimate=[5, 280]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b8_C_8192
-# capture_b4_B_32768_r14_15 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r13_14 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r14_15
-# capture_b4_C_32768_r02_03 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r01_02 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r02_03
 # margin_b4_B_8192_l00 | kind=margin | deps=capture_b4_B_8192 | worker estimate=[30, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_B_8192_l00
 # margin_b4_B_8192_l01 | kind=margin | deps=capture_b4_B_8192 | worker estimate=[30, 480]s | status=UNRUN
@@ -1246,32 +1203,16 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_81
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_8192_l60
 # margin_b8_C_8192_l61 | kind=margin | deps=capture_b8_C_8192 | worker estimate=[30, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b8_C_8192_l61
-# capture_b4_B_32768_r15_16 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r14_15 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r15_16
-# capture_b4_C_32768_r03_04 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r02_03 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r03_04
 # eq_b4 | kind=eq | deps=margin_b4_B_1024_l00,margin_b4_B_1024_l01,margin_b4_B_1024_l02,margin_b4_B_1024_l03,margin_b4_B_1024_l04,margin_b4_B_1024_l05,margin_b4_B_1024_l06,margin_b4_B_1024_l07,margin_b4_B_1024_l08,margin_b4_B_1024_l09,margin_b4_B_1024_l10,margin_b4_B_1024_l11,margin_b4_B_1024_l12,margin_b4_B_1024_l13,margin_b4_B_1024_l14,margin_b4_B_1024_l15,margin_b4_B_1024_l16,margin_b4_B_1024_l17,margin_b4_B_1024_l18,margin_b4_B_1024_l19,margin_b4_B_1024_l20,margin_b4_B_1024_l21,margin_b4_B_1024_l22,margin_b4_B_1024_l23,margin_b4_B_1024_l24,margin_b4_B_1024_l25,margin_b4_B_1024_l26,margin_b4_B_1024_l27,margin_b4_B_1024_l28,margin_b4_B_1024_l29,margin_b4_B_1024_l30,margin_b4_B_1024_l31,margin_b4_B_1024_l32,margin_b4_B_1024_l33,margin_b4_B_1024_l34,margin_b4_B_1024_l35,margin_b4_B_1024_l36,margin_b4_B_1024_l37,margin_b4_B_1024_l38,margin_b4_B_1024_l39,margin_b4_B_1024_l40,margin_b4_B_1024_l41,margin_b4_B_1024_l42,margin_b4_B_1024_l43,margin_b4_B_1024_l44,margin_b4_B_1024_l45,margin_b4_B_1024_l46,margin_b4_B_1024_l47,margin_b4_B_1024_l48,margin_b4_B_1024_l49,margin_b4_B_1024_l50,margin_b4_B_1024_l51,margin_b4_B_1024_l52,margin_b4_B_1024_l53,margin_b4_B_1024_l54,margin_b4_B_1024_l55,margin_b4_B_1024_l56,margin_b4_B_1024_l57,margin_b4_B_1024_l58,margin_b4_B_1024_l59,margin_b4_B_1024_l60,margin_b4_B_1024_l61,margin_b4_B_8192_l00,margin_b4_B_8192_l01,margin_b4_B_8192_l02,margin_b4_B_8192_l03,margin_b4_B_8192_l04,margin_b4_B_8192_l05,margin_b4_B_8192_l06,margin_b4_B_8192_l07,margin_b4_B_8192_l08,margin_b4_B_8192_l09,margin_b4_B_8192_l10,margin_b4_B_8192_l11,margin_b4_B_8192_l12,margin_b4_B_8192_l13,margin_b4_B_8192_l14,margin_b4_B_8192_l15,margin_b4_B_8192_l16,margin_b4_B_8192_l17,margin_b4_B_8192_l18,margin_b4_B_8192_l19,margin_b4_B_8192_l20,margin_b4_B_8192_l21,margin_b4_B_8192_l22,margin_b4_B_8192_l23,margin_b4_B_8192_l24,margin_b4_B_8192_l25,margin_b4_B_8192_l26,margin_b4_B_8192_l27,margin_b4_B_8192_l28,margin_b4_B_8192_l29,margin_b4_B_8192_l30,margin_b4_B_8192_l31,margin_b4_B_8192_l32,margin_b4_B_8192_l33,margin_b4_B_8192_l34,margin_b4_B_8192_l35,margin_b4_B_8192_l36,margin_b4_B_8192_l37,margin_b4_B_8192_l38,margin_b4_B_8192_l39,margin_b4_B_8192_l40,margin_b4_B_8192_l41,margin_b4_B_8192_l42,margin_b4_B_8192_l43,margin_b4_B_8192_l44,margin_b4_B_8192_l45,margin_b4_B_8192_l46,margin_b4_B_8192_l47,margin_b4_B_8192_l48,margin_b4_B_8192_l49,margin_b4_B_8192_l50,margin_b4_B_8192_l51,margin_b4_B_8192_l52,margin_b4_B_8192_l53,margin_b4_B_8192_l54,margin_b4_B_8192_l55,margin_b4_B_8192_l56,margin_b4_B_8192_l57,margin_b4_B_8192_l58,margin_b4_B_8192_l59,margin_b4_B_8192_l60,margin_b4_B_8192_l61,margin_b4_C_1024_l00,margin_b4_C_1024_l01,margin_b4_C_1024_l02,margin_b4_C_1024_l03,margin_b4_C_1024_l04,margin_b4_C_1024_l05,margin_b4_C_1024_l06,margin_b4_C_1024_l07,margin_b4_C_1024_l08,margin_b4_C_1024_l09,margin_b4_C_1024_l10,margin_b4_C_1024_l11,margin_b4_C_1024_l12,margin_b4_C_1024_l13,margin_b4_C_1024_l14,margin_b4_C_1024_l15,margin_b4_C_1024_l16,margin_b4_C_1024_l17,margin_b4_C_1024_l18,margin_b4_C_1024_l19,margin_b4_C_1024_l20,margin_b4_C_1024_l21,margin_b4_C_1024_l22,margin_b4_C_1024_l23,margin_b4_C_1024_l24,margin_b4_C_1024_l25,margin_b4_C_1024_l26,margin_b4_C_1024_l27,margin_b4_C_1024_l28,margin_b4_C_1024_l29,margin_b4_C_1024_l30,margin_b4_C_1024_l31,margin_b4_C_1024_l32,margin_b4_C_1024_l33,margin_b4_C_1024_l34,margin_b4_C_1024_l35,margin_b4_C_1024_l36,margin_b4_C_1024_l37,margin_b4_C_1024_l38,margin_b4_C_1024_l39,margin_b4_C_1024_l40,margin_b4_C_1024_l41,margin_b4_C_1024_l42,margin_b4_C_1024_l43,margin_b4_C_1024_l44,margin_b4_C_1024_l45,margin_b4_C_1024_l46,margin_b4_C_1024_l47,margin_b4_C_1024_l48,margin_b4_C_1024_l49,margin_b4_C_1024_l50,margin_b4_C_1024_l51,margin_b4_C_1024_l52,margin_b4_C_1024_l53,margin_b4_C_1024_l54,margin_b4_C_1024_l55,margin_b4_C_1024_l56,margin_b4_C_1024_l57,margin_b4_C_1024_l58,margin_b4_C_1024_l59,margin_b4_C_1024_l60,margin_b4_C_1024_l61,margin_b4_C_8192_l00,margin_b4_C_8192_l01,margin_b4_C_8192_l02,margin_b4_C_8192_l03,margin_b4_C_8192_l04,margin_b4_C_8192_l05,margin_b4_C_8192_l06,margin_b4_C_8192_l07,margin_b4_C_8192_l08,margin_b4_C_8192_l09,margin_b4_C_8192_l10,margin_b4_C_8192_l11,margin_b4_C_8192_l12,margin_b4_C_8192_l13,margin_b4_C_8192_l14,margin_b4_C_8192_l15,margin_b4_C_8192_l16,margin_b4_C_8192_l17,margin_b4_C_8192_l18,margin_b4_C_8192_l19,margin_b4_C_8192_l20,margin_b4_C_8192_l21,margin_b4_C_8192_l22,margin_b4_C_8192_l23,margin_b4_C_8192_l24,margin_b4_C_8192_l25,margin_b4_C_8192_l26,margin_b4_C_8192_l27,margin_b4_C_8192_l28,margin_b4_C_8192_l29,margin_b4_C_8192_l30,margin_b4_C_8192_l31,margin_b4_C_8192_l32,margin_b4_C_8192_l33,margin_b4_C_8192_l34,margin_b4_C_8192_l35,margin_b4_C_8192_l36,margin_b4_C_8192_l37,margin_b4_C_8192_l38,margin_b4_C_8192_l39,margin_b4_C_8192_l40,margin_b4_C_8192_l41,margin_b4_C_8192_l42,margin_b4_C_8192_l43,margin_b4_C_8192_l44,margin_b4_C_8192_l45,margin_b4_C_8192_l46,margin_b4_C_8192_l47,margin_b4_C_8192_l48,margin_b4_C_8192_l49,margin_b4_C_8192_l50,margin_b4_C_8192_l51,margin_b4_C_8192_l52,margin_b4_C_8192_l53,margin_b4_C_8192_l54,margin_b4_C_8192_l55,margin_b4_C_8192_l56,margin_b4_C_8192_l57,margin_b4_C_8192_l58,margin_b4_C_8192_l59,margin_b4_C_8192_l60,margin_b4_C_8192_l61 | worker estimate=[1, 10]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_b4
-# capture_b4_B_32768_r16_17 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r15_16 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r16_17
-# capture_b4_C_32768_r04_05 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r03_04 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r04_05
 # ppl_b4_E_1024 | kind=ppl | deps=g0,ppl_b4_D_1024,eq_b4 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_1024
 # ppl_b4_E_8192 | kind=ppl | deps=g0,ppl_b4_D_1024,eq_b4 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run ppl_b4_E_8192
-# capture_b4_B_32768_r17_18 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r16_17 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r17_18
-# capture_b4_C_32768_r05_06 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r04_05 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r05_06
 # capture_b4_E_1024 | kind=capture | deps=ppl_b4_E_1024,eq_b4 | worker estimate=[140, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_1024
 # capture_b4_E_8192_r00_16 | kind=capture_range | deps=ppl_b4_E_8192,eq_b4 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192_r00_16
-# capture_b4_B_32768_r18_19 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r17_18 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r18_19
-# capture_b4_C_32768_r06_07 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r05_06 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r06_07
 # margin_b4_E_1024_l00 | kind=margin | deps=capture_b4_E_1024 | worker estimate=[3, 60]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l00
 # margin_b4_E_1024_l01 | kind=margin | deps=capture_b4_E_1024 | worker estimate=[3, 60]s | status=UNRUN
@@ -1398,28 +1339,12 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_10
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_1024_l61
 # capture_b4_E_8192_r16_32 | kind=capture_range | deps=ppl_b4_E_8192,eq_b4,capture_b4_E_8192_r00_16 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192_r16_32
-# capture_b4_B_32768_r19_20 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r18_19 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r19_20
-# capture_b4_C_32768_r07_08 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r06_07 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r07_08
 # capture_b4_E_8192_r32_48 | kind=capture_range | deps=ppl_b4_E_8192,eq_b4,capture_b4_E_8192_r16_32 | worker estimate=[30, 188]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192_r32_48
-# capture_b4_B_32768_r20_21 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r19_20 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r20_21
-# capture_b4_C_32768_r08_09 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r07_08 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r08_09
 # capture_b4_E_8192_r48_62 | kind=capture_range | deps=ppl_b4_E_8192,eq_b4,capture_b4_E_8192_r32_48 | worker estimate=[30, 172]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192_r48_62
-# capture_b4_B_32768_r21_22 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r20_21 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r21_22
-# capture_b4_C_32768_r09_10 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r08_09 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r09_10
 # capture_b4_E_8192 | kind=capture_aggregate | deps=capture_b4_E_8192_r00_16,capture_b4_E_8192_r16_32,capture_b4_E_8192_r32_48,capture_b4_E_8192_r48_62 | worker estimate=[5, 280]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_E_8192
-# capture_b4_B_32768_r22_23 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r21_22 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r22_23
-# capture_b4_C_32768_r10_11 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r09_10 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r10_11
 # margin_b4_E_8192_l00 | kind=margin | deps=capture_b4_E_8192 | worker estimate=[30, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l00
 # margin_b4_E_8192_l01 | kind=margin | deps=capture_b4_E_8192 | worker estimate=[30, 480]s | status=UNRUN
@@ -1544,190 +1469,6 @@ timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_81
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l60
 # margin_b4_E_8192_l61 | kind=margin | deps=capture_b4_E_8192 | worker estimate=[30, 480]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run margin_b4_E_8192_l61
-# capture_b4_B_32768_r23_24 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r22_23 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r23_24
-# capture_b4_C_32768_r11_12 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r10_11 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r11_12
 # eq_check_E | kind=eq_check | deps=eq_b4,margin_b4_E_1024_l00,margin_b4_E_1024_l01,margin_b4_E_1024_l02,margin_b4_E_1024_l03,margin_b4_E_1024_l04,margin_b4_E_1024_l05,margin_b4_E_1024_l06,margin_b4_E_1024_l07,margin_b4_E_1024_l08,margin_b4_E_1024_l09,margin_b4_E_1024_l10,margin_b4_E_1024_l11,margin_b4_E_1024_l12,margin_b4_E_1024_l13,margin_b4_E_1024_l14,margin_b4_E_1024_l15,margin_b4_E_1024_l16,margin_b4_E_1024_l17,margin_b4_E_1024_l18,margin_b4_E_1024_l19,margin_b4_E_1024_l20,margin_b4_E_1024_l21,margin_b4_E_1024_l22,margin_b4_E_1024_l23,margin_b4_E_1024_l24,margin_b4_E_1024_l25,margin_b4_E_1024_l26,margin_b4_E_1024_l27,margin_b4_E_1024_l28,margin_b4_E_1024_l29,margin_b4_E_1024_l30,margin_b4_E_1024_l31,margin_b4_E_1024_l32,margin_b4_E_1024_l33,margin_b4_E_1024_l34,margin_b4_E_1024_l35,margin_b4_E_1024_l36,margin_b4_E_1024_l37,margin_b4_E_1024_l38,margin_b4_E_1024_l39,margin_b4_E_1024_l40,margin_b4_E_1024_l41,margin_b4_E_1024_l42,margin_b4_E_1024_l43,margin_b4_E_1024_l44,margin_b4_E_1024_l45,margin_b4_E_1024_l46,margin_b4_E_1024_l47,margin_b4_E_1024_l48,margin_b4_E_1024_l49,margin_b4_E_1024_l50,margin_b4_E_1024_l51,margin_b4_E_1024_l52,margin_b4_E_1024_l53,margin_b4_E_1024_l54,margin_b4_E_1024_l55,margin_b4_E_1024_l56,margin_b4_E_1024_l57,margin_b4_E_1024_l58,margin_b4_E_1024_l59,margin_b4_E_1024_l60,margin_b4_E_1024_l61,margin_b4_E_8192_l00,margin_b4_E_8192_l01,margin_b4_E_8192_l02,margin_b4_E_8192_l03,margin_b4_E_8192_l04,margin_b4_E_8192_l05,margin_b4_E_8192_l06,margin_b4_E_8192_l07,margin_b4_E_8192_l08,margin_b4_E_8192_l09,margin_b4_E_8192_l10,margin_b4_E_8192_l11,margin_b4_E_8192_l12,margin_b4_E_8192_l13,margin_b4_E_8192_l14,margin_b4_E_8192_l15,margin_b4_E_8192_l16,margin_b4_E_8192_l17,margin_b4_E_8192_l18,margin_b4_E_8192_l19,margin_b4_E_8192_l20,margin_b4_E_8192_l21,margin_b4_E_8192_l22,margin_b4_E_8192_l23,margin_b4_E_8192_l24,margin_b4_E_8192_l25,margin_b4_E_8192_l26,margin_b4_E_8192_l27,margin_b4_E_8192_l28,margin_b4_E_8192_l29,margin_b4_E_8192_l30,margin_b4_E_8192_l31,margin_b4_E_8192_l32,margin_b4_E_8192_l33,margin_b4_E_8192_l34,margin_b4_E_8192_l35,margin_b4_E_8192_l36,margin_b4_E_8192_l37,margin_b4_E_8192_l38,margin_b4_E_8192_l39,margin_b4_E_8192_l40,margin_b4_E_8192_l41,margin_b4_E_8192_l42,margin_b4_E_8192_l43,margin_b4_E_8192_l44,margin_b4_E_8192_l45,margin_b4_E_8192_l46,margin_b4_E_8192_l47,margin_b4_E_8192_l48,margin_b4_E_8192_l49,margin_b4_E_8192_l50,margin_b4_E_8192_l51,margin_b4_E_8192_l52,margin_b4_E_8192_l53,margin_b4_E_8192_l54,margin_b4_E_8192_l55,margin_b4_E_8192_l56,margin_b4_E_8192_l57,margin_b4_E_8192_l58,margin_b4_E_8192_l59,margin_b4_E_8192_l60,margin_b4_E_8192_l61 | worker estimate=[1, 10]s | status=UNRUN
 timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run eq_check_E
-# capture_b4_B_32768_r24_25 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r23_24 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r24_25
-# capture_b4_C_32768_r12_13 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r11_12 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r12_13
-# capture_b4_B_32768_r25_26 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r24_25 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r25_26
-# capture_b4_C_32768_r13_14 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r12_13 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r13_14
-# capture_b4_B_32768_r26_27 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r25_26 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r26_27
-# capture_b4_C_32768_r14_15 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r13_14 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r14_15
-# capture_b4_B_32768_r27_28 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r26_27 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r27_28
-# capture_b4_C_32768_r15_16 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r14_15 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r15_16
-# capture_b4_B_32768_r28_29 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r27_28 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r28_29
-# capture_b4_C_32768_r16_17 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r15_16 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r16_17
-# capture_b4_B_32768_r29_30 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r28_29 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r29_30
-# capture_b4_C_32768_r17_18 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r16_17 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r17_18
-# capture_b4_B_32768_r30_31 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r29_30 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r30_31
-# capture_b4_C_32768_r18_19 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r17_18 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r18_19
-# capture_b4_B_32768_r31_32 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r30_31 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r31_32
-# capture_b4_C_32768_r19_20 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r18_19 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r19_20
-# capture_b4_B_32768_r32_33 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r31_32 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r32_33
-# capture_b4_C_32768_r20_21 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r19_20 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r20_21
-# capture_b4_B_32768_r33_34 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r32_33 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r33_34
-# capture_b4_C_32768_r21_22 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r20_21 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r21_22
-# capture_b4_B_32768_r34_35 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r33_34 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r34_35
-# capture_b4_C_32768_r22_23 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r21_22 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r22_23
-# capture_b4_B_32768_r35_36 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r34_35 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r35_36
-# capture_b4_C_32768_r23_24 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r22_23 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r23_24
-# capture_b4_B_32768_r36_37 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r35_36 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r36_37
-# capture_b4_C_32768_r24_25 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r23_24 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r24_25
-# capture_b4_B_32768_r37_38 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r36_37 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r37_38
-# capture_b4_C_32768_r25_26 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r24_25 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r25_26
-# capture_b4_B_32768_r38_39 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r37_38 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r38_39
-# capture_b4_C_32768_r26_27 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r25_26 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r26_27
-# capture_b4_B_32768_r39_40 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r38_39 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r39_40
-# capture_b4_C_32768_r27_28 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r26_27 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r27_28
-# capture_b4_B_32768_r40_41 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r39_40 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r40_41
-# capture_b4_C_32768_r28_29 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r27_28 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r28_29
-# capture_b4_B_32768_r41_42 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r40_41 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r41_42
-# capture_b4_C_32768_r29_30 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r28_29 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r29_30
-# capture_b4_B_32768_r42_43 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r41_42 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r42_43
-# capture_b4_C_32768_r30_31 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r29_30 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r30_31
-# capture_b4_B_32768_r43_44 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r42_43 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r43_44
-# capture_b4_C_32768_r31_32 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r30_31 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r31_32
-# capture_b4_B_32768_r44_45 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r43_44 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r44_45
-# capture_b4_C_32768_r32_33 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r31_32 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r32_33
-# capture_b4_B_32768_r45_46 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r44_45 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r45_46
-# capture_b4_C_32768_r33_34 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r32_33 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r33_34
-# capture_b4_B_32768_r46_47 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r45_46 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r46_47
-# capture_b4_C_32768_r34_35 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r33_34 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r34_35
-# capture_b4_B_32768_r47_48 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r46_47 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r47_48
-# capture_b4_C_32768_r35_36 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r34_35 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r35_36
-# capture_b4_B_32768_r48_49 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r47_48 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r48_49
-# capture_b4_C_32768_r36_37 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r35_36 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r36_37
-# capture_b4_B_32768_r49_50 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r48_49 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r49_50
-# capture_b4_C_32768_r37_38 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r36_37 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r37_38
-# capture_b4_B_32768_r50_51 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r49_50 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r50_51
-# capture_b4_C_32768_r38_39 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r37_38 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r38_39
-# capture_b4_B_32768_r51_52 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r50_51 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r51_52
-# capture_b4_C_32768_r39_40 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r38_39 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r39_40
-# capture_b4_B_32768_r52_53 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r51_52 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r52_53
-# capture_b4_C_32768_r40_41 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r39_40 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r40_41
-# capture_b4_B_32768_r53_54 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r52_53 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r53_54
-# capture_b4_C_32768_r41_42 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r40_41 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r41_42
-# capture_b4_B_32768_r54_55 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r53_54 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r54_55
-# capture_b4_C_32768_r42_43 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r41_42 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r42_43
-# capture_b4_B_32768_r55_56 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r54_55 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r55_56
-# capture_b4_C_32768_r43_44 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r42_43 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r43_44
-# capture_b4_B_32768_r56_57 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r55_56 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r56_57
-# capture_b4_C_32768_r44_45 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r43_44 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r44_45
-# capture_b4_B_32768_r57_58 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r56_57 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r57_58
-# capture_b4_C_32768_r45_46 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r44_45 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r45_46
-# capture_b4_B_32768_r58_59 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r57_58 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r58_59
-# capture_b4_C_32768_r46_47 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r45_46 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r46_47
-# capture_b4_B_32768_r59_60 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r58_59 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r59_60
-# capture_b4_C_32768_r47_48 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r46_47 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r47_48
-# capture_b4_B_32768_r60_61 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r59_60 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r60_61
-# capture_b4_C_32768_r48_49 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r47_48 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r48_49
-# capture_b4_B_32768_r61_62 | kind=capture_range | deps=ppl_b4_B_32768,capture_b4_B_32768_r60_61 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768_r61_62
-# capture_b4_C_32768_r49_50 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r48_49 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r49_50
-# capture_b4_B_32768 | kind=capture_aggregate | deps=capture_b4_B_32768_r00_01,capture_b4_B_32768_r01_02,capture_b4_B_32768_r02_03,capture_b4_B_32768_r03_04,capture_b4_B_32768_r04_05,capture_b4_B_32768_r05_06,capture_b4_B_32768_r06_07,capture_b4_B_32768_r07_08,capture_b4_B_32768_r08_09,capture_b4_B_32768_r09_10,capture_b4_B_32768_r10_11,capture_b4_B_32768_r11_12,capture_b4_B_32768_r12_13,capture_b4_B_32768_r13_14,capture_b4_B_32768_r14_15,capture_b4_B_32768_r15_16,capture_b4_B_32768_r16_17,capture_b4_B_32768_r17_18,capture_b4_B_32768_r18_19,capture_b4_B_32768_r19_20,capture_b4_B_32768_r20_21,capture_b4_B_32768_r21_22,capture_b4_B_32768_r22_23,capture_b4_B_32768_r23_24,capture_b4_B_32768_r24_25,capture_b4_B_32768_r25_26,capture_b4_B_32768_r26_27,capture_b4_B_32768_r27_28,capture_b4_B_32768_r28_29,capture_b4_B_32768_r29_30,capture_b4_B_32768_r30_31,capture_b4_B_32768_r31_32,capture_b4_B_32768_r32_33,capture_b4_B_32768_r33_34,capture_b4_B_32768_r34_35,capture_b4_B_32768_r35_36,capture_b4_B_32768_r36_37,capture_b4_B_32768_r37_38,capture_b4_B_32768_r38_39,capture_b4_B_32768_r39_40,capture_b4_B_32768_r40_41,capture_b4_B_32768_r41_42,capture_b4_B_32768_r42_43,capture_b4_B_32768_r43_44,capture_b4_B_32768_r44_45,capture_b4_B_32768_r45_46,capture_b4_B_32768_r46_47,capture_b4_B_32768_r47_48,capture_b4_B_32768_r48_49,capture_b4_B_32768_r49_50,capture_b4_B_32768_r50_51,capture_b4_B_32768_r51_52,capture_b4_B_32768_r52_53,capture_b4_B_32768_r53_54,capture_b4_B_32768_r54_55,capture_b4_B_32768_r55_56,capture_b4_B_32768_r56_57,capture_b4_B_32768_r57_58,capture_b4_B_32768_r58_59,capture_b4_B_32768_r59_60,capture_b4_B_32768_r60_61,capture_b4_B_32768_r61_62 | worker estimate=[5, 280]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_B_32768
-# capture_b4_C_32768_r50_51 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r49_50 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r50_51
-# capture_b4_C_32768_r51_52 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r50_51 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r51_52
-# capture_b4_C_32768_r52_53 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r51_52 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r52_53
-# capture_b4_C_32768_r53_54 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r52_53 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r53_54
-# capture_b4_C_32768_r54_55 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r53_54 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r54_55
-# capture_b4_C_32768_r55_56 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r54_55 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r55_56
-# capture_b4_C_32768_r56_57 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r55_56 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r56_57
-# capture_b4_C_32768_r57_58 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r56_57 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r57_58
-# capture_b4_C_32768_r58_59 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r57_58 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r58_59
-# capture_b4_C_32768_r59_60 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r58_59 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r59_60
-# capture_b4_C_32768_r60_61 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r59_60 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r60_61
-# capture_b4_C_32768_r61_62 | kind=capture_range | deps=ppl_b4_C_32768,capture_b4_C_32768_r60_61 | worker estimate=[30, 188]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768_r61_62
-# capture_b4_C_32768 | kind=capture_aggregate | deps=capture_b4_C_32768_r00_01,capture_b4_C_32768_r01_02,capture_b4_C_32768_r02_03,capture_b4_C_32768_r03_04,capture_b4_C_32768_r04_05,capture_b4_C_32768_r05_06,capture_b4_C_32768_r06_07,capture_b4_C_32768_r07_08,capture_b4_C_32768_r08_09,capture_b4_C_32768_r09_10,capture_b4_C_32768_r10_11,capture_b4_C_32768_r11_12,capture_b4_C_32768_r12_13,capture_b4_C_32768_r13_14,capture_b4_C_32768_r14_15,capture_b4_C_32768_r15_16,capture_b4_C_32768_r16_17,capture_b4_C_32768_r17_18,capture_b4_C_32768_r18_19,capture_b4_C_32768_r19_20,capture_b4_C_32768_r20_21,capture_b4_C_32768_r21_22,capture_b4_C_32768_r22_23,capture_b4_C_32768_r23_24,capture_b4_C_32768_r24_25,capture_b4_C_32768_r25_26,capture_b4_C_32768_r26_27,capture_b4_C_32768_r27_28,capture_b4_C_32768_r28_29,capture_b4_C_32768_r29_30,capture_b4_C_32768_r30_31,capture_b4_C_32768_r31_32,capture_b4_C_32768_r32_33,capture_b4_C_32768_r33_34,capture_b4_C_32768_r34_35,capture_b4_C_32768_r35_36,capture_b4_C_32768_r36_37,capture_b4_C_32768_r37_38,capture_b4_C_32768_r38_39,capture_b4_C_32768_r39_40,capture_b4_C_32768_r40_41,capture_b4_C_32768_r41_42,capture_b4_C_32768_r42_43,capture_b4_C_32768_r43_44,capture_b4_C_32768_r44_45,capture_b4_C_32768_r45_46,capture_b4_C_32768_r46_47,capture_b4_C_32768_r47_48,capture_b4_C_32768_r48_49,capture_b4_C_32768_r49_50,capture_b4_C_32768_r50_51,capture_b4_C_32768_r51_52,capture_b4_C_32768_r52_53,capture_b4_C_32768_r53_54,capture_b4_C_32768_r54_55,capture_b4_C_32768_r55_56,capture_b4_C_32768_r56_57,capture_b4_C_32768_r57_58,capture_b4_C_32768_r58_59,capture_b4_C_32768_r59_60,capture_b4_C_32768_r60_61,capture_b4_C_32768_r61_62 | worker estimate=[5, 280]s | status=UNRUN
-timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run capture_b4_C_32768
 timeout 30s bash scripts/apa_sp3_lead_gpu.sh summary

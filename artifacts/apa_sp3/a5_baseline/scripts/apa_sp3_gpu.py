@@ -111,8 +111,7 @@ def base_cells():
 
 
 def cells():
-    from apa_sp3_a5_registry import overlay as overlay_a5
-    return overlay_a5(overlay(base_cells()))
+    return overlay(base_cells())
 
 
 def g0_guard(model, ids):
@@ -220,9 +219,6 @@ def kernel96():
 
 def execute(cell):
     kind, bits = cell['kind'], cell.get('bits',4)
-    if kind == 'decode_pool':
-        from apa_sp3_a5_decode import execute as execute_a5
-        return execute_a5(cell)
     if kind in KINDS:
         from apa_sp3_a4_jobs import execute as execute_a4
         return execute_a4(cell)
@@ -380,8 +376,6 @@ def main():
     p.add_argument('--worker')
     p.add_argument('--next',action='store_true')
     p.add_argument('--bits',type=int,choices=(4,8),default=4)
-    p.add_argument('--include-32k-captures', action='store_true',
-                   default=os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES') == '1')
     a=p.parse_args()
     if a.dry_run:
         proto, _ = protocol()
@@ -389,8 +383,7 @@ def main():
                           'protocol':proto,'cells':cells()},indent=2))
         return 0
     if a.next:
-        from apa_sp3_a5_registry import default_cells
-        for c in default_cells(cells(), a.include_32k_captures):
+        for c in cells():
             if c.get('bits',4)!=a.bits:
                 continue
             from apa_sp3_common import job_path
