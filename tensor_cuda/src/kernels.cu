@@ -7348,4 +7348,154 @@ std::pair<NDArray, NDArray> gated_delta_step(
   return {out, new_state};
 }
 
+// APA_SP1_ADDITION_BEGIN kernel_and_launcher
+// APA-SP1: ascending-prefix BULK maximum, distinct from the mixed-score
+// softmax maximum. A skipped key stays below final_bulk_max-delta; an early
+// refinement may be conservative. This is NOT z-score-equivalent APA.
+// One warp/CTA/row: coalesced dimensions, strictly ascending key visits.
+// No split-K: resetting prefix state in independent partitions changes this
+// rule; obtaining incoming prefix maxima needs a prior scan or serialized
+// carry. Decode grid underfill is a registered cost, not claimed solved.
+template <typename T, int CAP, bool DIAGNOSTICS>
+__global__ void apa_selective_sp_kernel(
+    const T* q, const T* k, const T* kq, const T* v, const T* sinks,
+    T* out, uint8_t* selected, int H, int L, int S, int D, int VD,
+    int KVH, int group, float scale, float delta, bool causal) {
+  const int row = blockIdx.x;
+  const int lane = threadIdx.x;
+  const int i = row % L, bh = row / L, h = bh % H, b = bh / H;
+  const int64_t kvbh = (int64_t)b * KVH + h / group;
+  const int smax = causal ? S - L + i + 1 : S;
+  constexpr int N = (CAP + 31) / 32;
+  constexpr unsigned FULL = 0xffffffffu;
+  float qr[N], acc[N];
+  #pragma unroll
+  for (int t = 0; t < N; ++t) {
+    const int d = lane + 32 * t;
+    qr[t] = d < D ? ld<T>(q, (int64_t)row * D + d) : 0.f;
+    acc[t] = 0.f;
+  }
+  float bulk_max = -INFINITY, m = -INFINITY, denom = 0.f;
+  for (int j = 0; j < smax; ++j) {
+    const int64_t koff = (kvbh * S + j) * D;
+    float dot = 0.f;
+    #pragma unroll
+    for (int t = 0; t < N; ++t) {
+      const int d = lane + 32 * t;
+      if (d < D) dot += qr[t] * ld<T>(kq, koff + d);
+    }
+    #pragma unroll
+    for (int off = 16; off > 0; off >>= 1)
+      dot += __shfl_down_sync(FULL, dot, off);
+    const float bulk = __shfl_sync(FULL, dot, 0) * scale;
+    bulk_max = fmaxf(bulk_max, bulk);
+    const bool refine = bulk >= bulk_max - delta;
+    float score = bulk;
+    if (refine) {
+      float ex = 0.f;
+      #pragma unroll
+      for (int t = 0; t < N; ++t) {
+        const int d = lane + 32 * t;
+        if (d < D) ex += qr[t] * ld<T>(k, koff + d);
+      }
+      #pragma unroll
+      for (int off = 16; off > 0; off >>= 1)
+        ex += __shfl_down_sync(FULL, ex, off);
+      score = __shfl_sync(FULL, ex, 0) * scale;
+    }
+    if constexpr (DIAGNOSTICS) {
+      if (lane == 0) selected[(int64_t)row * S + j] = refine ? 1 : 0;
+    }
+    const float next = fmaxf(m, score);
+    const float correction = __expf(m - next);
+    const float weight = __expf(score - next);
+    denom = denom * correction + weight;
+    #pragma unroll
+    for (int t = 0; t < N; ++t) {
+      const int d = lane + 32 * t;
+      if (d < VD)
+        acc[t] = acc[t] * correction + weight * ld<T>(v, (kvbh * S + j) * VD + d);
+    }
+    m = next;
+  }
+  if constexpr (DIAGNOSTICS) {
+    for (int j = smax + lane; j < S; j += 32)
+      selected[(int64_t)row * S + j] = 0;
+  }
+  if (sinks) {
+    const float sink = ld<T>(sinks, h);
+    const float next = fmaxf(m, sink);
+    const float correction = __expf(m - next);
+    denom = denom * correction + __expf(sink - next);
+    #pragma unroll
+    for (int t = 0; t < N; ++t) acc[t] *= correction;
+  }
+  const float inv = denom > 0.f ? 1.f / denom : 0.f;
+  #pragma unroll
+  for (int t = 0; t < N; ++t) {
+    const int d = lane + 32 * t;
+    if (d < VD) st<T>(out, (int64_t)row * VD + d, acc[t] * inv);
+  }
+}
+
+NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+    const NDArray& kq, const NDArray& v, float scale, float delta,
+    bool is_causal, const NDArray* sinks, NDArray* selected) {
+  const char* flag = std::getenv("TC_APA_SP");
+  if (!flag || std::strcmp(flag, "1") != 0)
+    throw std::runtime_error("apa_sp: experimental entry requires TC_APA_SP=1 (default OFF)");
+  if (!std::isfinite(scale) || scale <= 0.f || !std::isfinite(delta) || delta < 0.f)
+    throw std::runtime_error("apa_sp: scale must be finite positive; delta finite nonnegative");
+  if (q.ndim() != 4 || k.ndim() != 4 || kq.ndim() != 4 || v.ndim() != 4)
+    throw std::runtime_error("apa_sp: q/k/kq/v must be rank four");
+  if (q.dtype != DType::Float32 && q.dtype != DType::Float16 && q.dtype != DType::BFloat16)
+    throw std::runtime_error("apa_sp: supports float32, float16, bfloat16 only");
+  for (const NDArray* a : {&q, &k, &kq, &v}) {
+    if (a->dtype != q.dtype || !a->device.is_cuda() || a->device.index != q.device.index)
+      throw std::runtime_error("apa_sp: inputs must share CUDA device and dtype");
+    for (int64_t n : a->shape)
+      if (n <= 0 || n > std::numeric_limits<int>::max())
+        throw std::runtime_error("apa_sp: dimensions must be positive and fit int");
+  }
+  const int64_t B = q.shape[0], H = q.shape[1], L = q.shape[2], D = q.shape[3];
+  const int64_t KVH = k.shape[1], S = k.shape[2], VD = v.shape[3];
+  if (k.shape != kq.shape || k.shape[0] != B || k.shape[3] != D ||
+      v.shape[0] != B || v.shape[1] != KVH || v.shape[2] != S || H % KVH != 0)
+    throw std::runtime_error("apa_sp: shape/GQA mismatch");
+  if (is_causal && S < L)
+    throw std::runtime_error("apa_sp: bottom-right causal requires S >= L");
+  const int cap = (int)(D > VD ? D : VD);
+  if (cap > TC_APA_MAXD || B > std::numeric_limits<int>::max() / H / L)
+    throw std::runtime_error("apa_sp: dimension cap or launch range exceeded");
+  if (sinks && (sinks->ndim() != 1 || sinks->shape[0] != H ||
+      sinks->dtype != q.dtype || !sinks->device.is_cuda() || sinks->device.index != q.device.index))
+    throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+  const int rows = (int)(B * H * L);
+  NDArray out({B,H,L,VD}, q.dtype, q.device);
+  if (selected) *selected = NDArray({B,H,L,S}, DType::Uint8, q.device);
+  DISPATCH_FLOAT(q.dtype, T, {
+    auto launch = [&](auto cap_tag, auto diagnostic_tag) {
+      constexpr int CAP = decltype(cap_tag)::value;
+      constexpr bool DIAG = decltype(diagnostic_tag)::value;
+      apa_selective_sp_kernel<T,CAP,DIAG><<<rows,32>>>(
+          static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+          static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+          sinks ? static_cast<T*>(sinks->data_ptr()) : nullptr,
+          static_cast<T*>(out.data_ptr()),
+          selected ? static_cast<uint8_t*>(selected->data_ptr()) : nullptr,
+          (int)H,(int)L,(int)S,(int)D,(int)VD,(int)KVH,(int)(H/KVH),scale,delta,is_causal);
+    };
+    auto dispatch_cap = [&](auto diag) {
+      if (cap <= 64) launch(std::integral_constant<int,64>{},diag);
+      else if (cap <= 128) launch(std::integral_constant<int,128>{},diag);
+      else if (cap <= 256) launch(std::integral_constant<int,256>{},diag);
+      else launch(std::integral_constant<int,512>{},diag);
+    };
+    if (selected) dispatch_cap(std::true_type{});
+    else dispatch_cap(std::false_type{});
+  });
+  cuda_check_last("apa_selective_sp");
+  return out;
+}
+// APA_SP1_ADDITION_END kernel_and_launcher
 }  // namespace tc

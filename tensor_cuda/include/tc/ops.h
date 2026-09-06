@@ -9,6 +9,13 @@
 #include <vector>
 
 namespace tc {
+// APA_SP1_ADDITION_BEGIN declaration
+// Experimental inference only. Explicit entry; requires TC_APA_SP=1.
+// Optional uint8 selected[B,H,L,S] is diagnostic storage, never timed.
+NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+    const NDArray& kq, const NDArray& v, float scale, float delta,
+    bool is_causal, const NDArray* sinks = nullptr, NDArray* selected = nullptr);
+// APA_SP1_ADDITION_END declaration
 namespace ops {
 
 // Arithmetic (broadcasting). Scalar overloads avoid allocating a full tensor.
