@@ -1,92 +1,12 @@
-# APA-SP4G A2: execute each reviewed foreground command separately; stop on RED.
-# New driver; original measured execution closure preserved. No long rows/retries.
-# Worker285s / hard290s; outer588s; lease<=20s and cooldown30s.
+# A3: run each foreground command separately; stop on RED.
+# Capture90-250s incl load30-120s; sweep30-270s without model load.
+# Worker285s/hard290s, outer588s, lease20s, cooldown30s; no C bypass.
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g
-bash scripts/apa_sp4g_a2_lead_gpu.sh list
-# parity: worker estimate[60, 285]s; deps=kernel512
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_source_2048
-# parity: worker estimate[60, 285]s; deps=diag_a2_source_2048
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_scale_2048
-# parity: worker estimate[60, 285]s; deps=diag_a2_scale_2048
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_value_2048
-# parity: worker estimate[60, 285]s; deps=diag_a2_value_2048
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_rope_2048
-# precision: worker estimate[60, 285]s; deps=diag_a2_rope_2048
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_fp32_A_2048_w0
-# precision: worker estimate[60, 285]s; deps=diag_a2_fp32_A_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_fp32_2048_w0
-# replay_probe: worker estimate[5, 90]s; deps=capture_B_8192
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_replay_B_8192_l05
-# ppl_capture: worker estimate[60, 285]s; deps=kernel512
-bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_B_2048_w0
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l05
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l11
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l17
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l23
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l29
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l35
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l41
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l47
-# ppl_capture: worker estimate[60, 285]s; deps=kernel512
-bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_B_8192_w0
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l05
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l11
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l17
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l23
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l29
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l35
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l41
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l47
-# ppl_capture: worker estimate[60, 285]s; deps=kernel512,freeze; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_C_2048_w0
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l05
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l11
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l17
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l23
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l29
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l35
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l41
-# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l47
-# ppl_capture: worker estimate[60, 285]s; deps=kernel512,freeze; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_C_8192_w0
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l05
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l11
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l17
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l23
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l29
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l35
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l41
-# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
-bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l47
-bash scripts/apa_sp4g_a2_lead_gpu.sh summary
+bash scripts/apa_sp4g_a3_lead_gpu.sh list
+# depends: kernel512
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c0
+# depends: kernel512
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c1
+# depends: diag_a3_call_l05_c0,diag_a3_call_l05_c1
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_sweep_l05
+bash scripts/apa_sp4g_a3_lead_gpu.sh summary

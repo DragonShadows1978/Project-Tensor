@@ -1,103 +1,77 @@
-# APA-SP4G A2 results
+# APA-SP4G amendment 3
 
-**RED: D/A exactness and old G2 replay remain unresolved on the card. A2 CPU PASS_CPU_ONLY.** This seat has no CUDA device; new diagnostics are prepared, not claimed executed or fixed. Historical A1 measurements below retain their original fingerprints.
+**RED: D/A model exactness remains unresolved. A3 diagnostics are prepared; no harness fix, kernel change, or A′ comparator is claimed validated. C/E remain blocked.**
 
-## Model perplexity — QAT INT4 Gemma-4-12B-it; only eight global layers change
+The fork/merge audit is in `docs/APA_SP4G_LEDGER.md` and its hash-pinned copy `A3_FORK_MERGE_AUDIT.md`. Source inspection finds identical scale1, no sinks, bottom-right causal mask, H16/KV1 mapping, exact K/V, and shared output projection/block scalar. Prediction: no single argument correction; inspect the cast/o_proj boundary and downstream propagation if nominal FP32 outputs agree. This is reasoning, not a measured cause.
 
-| S / scored targets | A standard | B two-pass4 r=.15 | D refine-all | D−A |
-|---|---:|---:|---:|---:|
-| 2048 / 4096 | 165.644274 | 167.649292 | 169.788756 | +4.144481 (2.502%) |
-| 8192 / 512 | 38.863892 | 38.561350 | 39.382288 | +0.518396 (1.334%) |
+## Existing card evidence
 
-Evidence class: model perplexity, `jobs_a1/ppl_{A,B,D}_{2048,8192}.json`. Short is four2048-token windows with **1024 targets each,4096 total**, as the immutable protocol and receipts specify (the lead card header said2048×4 targets). Window PPLs:
-
-| Arm | w0 | w1 | w2 | w3 |
-|---|---:|---:|---:|---:|
-| A | 52.4805 | 537.9733 | 362.9962 | 73.4590 |
-| B | 49.4104 | 571.4903 | 374.4083 | 74.7195 |
-| D | 53.4724 | 582.5763 | 355.9433 | 74.9502 |
-
-Raw untemplated wikitext PPL near165 is the known -it regime, not evidence by itself of a port failure. The June refine sweep recorded standard121.74 and attributed high raw-text PPL to the model’s template binding (`/mnt/ForgeRealm/GraftRepository/docs/GEMMA4_PORT_LEDGER.md:287-295`, historical source evidence; its HF control was pending). The52→538 window spread is context supplied by the lead as template-boundness; this amendment does not run a new templating experiment.
-
-PROTOCOL-G unchanged: 292282 canonical int64 tokens, SHA `8bb85a61060d4221fef55f0b134914c55e6110ffbfd10913aed54e99f130d1cb`; raw test newline join, -it default tokenizer, no chat template; cached64-query blocks, fp64 NLL, aggregate exp(total NLL/targets). `registration.json` SHA `099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e`. B fused at threshold0, fast_max_seq0, scale1, bulk4; clean decode incremental kq_count retained. No torch/BF16-weight reference.
-
-## Hypotheses and registered card cells
-
-| Hypothesis | Diagnostic cell | Current finding / decision |
+| Measurement | Value / finding | Evidence |
 |---|---|---|
-| a: K/V source | `diag_a2_source_2048` (UNRUN) | Source inspection argues against storage cost: QUANT_V/QUANT_KV4 off, standard and APA prefill share exact k/v tuples; reconstructed kq is separate. Runtime same-state Q/K/V identity, value comparison, and standard-over-APA-input check pending. |
-| b: scale/softcap | `diag_a2_scale_2048` (UNRUN) | Both global prefill routes scale1.0; no attention-logit softcap in either branch. Final-logit processing is outside this fork. Runtime scale and same-tensor outputs pending. |
-| c: shared K=V projection | `diag_a2_value_2048` (UNRUN) | Shared kraw feeds K norm and scale-free V RMSNorm; V is not roped. Same V variable at both forks. Per-layer same-state comparison pending. |
-| d: p-RoPE/qk-norm order | `diag_a2_rope_2048` (UNRUN) | Q/K RMSNorm then p-RoPE precede both branches (gemma4_tc.py:523-544); repeat same x/cos/sin/offset/cache, compare post-fork Q/K bitwise. Runtime pending. |
-| e: accumulation/intermediates | `diag_a2_fp32_2048_w0` (UNRUN) | Concrete numerical-path difference: A materializes bf16 QK logits and probabilities; D keeps fused FP32 dot/softmax/value accumulation. A32 precursor plus D32 one-window treatment and per-call comparisons quantify it; no full-model FP32 claim. Cause of PPL gap remains unnamed until card treatment. |
+| `diag_a2_source_2048` | PPL 52.480487085; PASS diagnostic; max per-call FP32 difference 4.00543212890625e-05 | `jobs_a2/diag_a2_source_2048.json` |
+| `diag_a2_scale_2048` | PPL 52.480487085; PASS diagnostic; max per-call FP32 difference 4.00543212890625e-05 | `jobs_a2/diag_a2_scale_2048.json` |
+| `diag_a2_value_2048` | PPL 52.480487085; PASS diagnostic; max per-call FP32 difference 4.00543212890625e-05 | `jobs_a2/diag_a2_value_2048.json` |
+| `diag_a2_rope_2048` | PPL 52.480487085; PASS diagnostic; max per-call FP32 difference 4.00543212890625e-05 | `jobs_a2/diag_a2_rope_2048.json` |
+| `diag_a2_fp32_A_2048_w0` | PPL 49.921178938; PASS diagnostic; max per-call FP32 difference 4.00543212890625e-05 | `jobs_a2/diag_a2_fp32_A_2048_w0.json` |
+| `diag_a2_fp32_2048_w0` | PPL 53.472390467; PASS diagnostic; max per-call FP32 difference 4.38690185546875e-05 | `jobs_a2/diag_a2_fp32_2048_w0.json` |
 
-Registration before code/gates: `amendment_006_a2_hypotheses.json` and `amendment_007_a2_execution.json`. The four source/scale/value/RoPE jobs each run standard window0 and repeat its first global call per layer from the same x, cos, sin, offset and immutable tuple cache. They compare Q/K/V and post-output projection, both bf16 and FP32 attention outputs. A completed diagnostic PASS means a measurement exists, not that a parity hypothesis passed. Full receipt probes are authoritative.
+16/16 B margin receipts PASS. The corrected actual-PPL original-call capture establishes bitwise replay of output and native selection; lead confirms the old context bug. Old RED receipts are preserved. C capture/margins reported `FileNotFoundError` by the lead because calibration never ran behind the RED exactness gate; no C result is inferred.
 
-**A′ decision:** standard over the exact K/V at the APA entry is implemented only as a registered diagnostic comparator (`standard` in a2_model.py); storage quantization is explicitly off. No independent AP reference arm is adopted or storage cost claimed without runtime evidence. The same-state test returns original A output to preserve its propagation. Kq is never substituted for exact K. If storage evidence contradicts source inspection, lead may activate A′ with separate PPL receipts and report A′−A.
+A32=49.9211789381 improves on A bf16=52.48049 by about2.56 PPL; D32=53.4723904675 is essentially unchanged from D bf16. D32−A32=3.5512115293. All144 per-call FP32 A/SP comparisons in each precision receipt have max_abs≤4.38690185546875e-5. This tension requires direct reference and merge measurements; it does not identify an A-only semantic operation or justify widening0.005.
 
-**Tolerance proposal to lead:** preserve abs(D−A)≤0.005 PPL and both existing REDs. There is no cause-confirmed Gemma-specific replacement rule yet. Conditional on confirmed storage difference, use abs(D−A′)≤0.005 and report storage cost separately. Do not widen0.005. Four PPL points exceed MiniCPM3’s0.0005 refine-all evidence by orders of magnitude; this seat does not dismiss the gap as rounding. BF16 intermediate rounding is a specific candidate requiring the FP32 treatment. A32/D32 retain QAT/bf16 everywhere except global attention; they cannot establish full-model FP32 parity.
+Historical model PPL: four2048-token windows,1024 scored targets each: A165.644, B167.649, D169.789;8192 last512: A38.864, B38.561, D39.382 (rounded lead card values; exact `jobs_a1/ppl_*` receipts authoritative). Historical full report preserved at `a3_baseline/RESULTS.md`; its A2 pending-state narrative is superseded here. High raw-wikitext PPL and52→538 window spread are the lead’s known -it template-bound regime, not a new template experiment. Model input and feeding remain PROTOCOL-G. All≥16384 RAIL non-fits remain deferred under A2; no retries or OOM reinterpretation.
 
-## Replay finding and change
+## Registered diagnostics and interpretations
 
-All eight historical8192 B margins are RED `NATIVE_REPLAY_NOT_BITWISE`. Source inspection found no atomic reduction in the active D512 B kernel and no cuBLAS blend in the forced-fused route. The old harness reconstructs128-query bands and uses final-prefix Kq for early calls. It did not preserve original-call Kq or masks. Quantizer FP32 matmul dimensions change with prefix length, so row independence in real arithmetic does not prove bitwise Kq identity. This is a concrete replay-context defect in the evidence chain; its responsibility for the observed error versus native nondeterminism is **not yet determined**.
+| Cell | Input / work | Outcome meaning | Status |
+|---|---|---|---|
+| `diag_a3_call_l05_c0` | first actual prefix call L512/S512/offset0 | Tests nominal full-prefix mask, scale, sinks and head/V mapping; saves native QK/probabilities and fork/merge outputs. | UNRUN / GPU blocked in seat |
+| `diag_a3_call_l05_c1` | second actual prefix call L511/S1023/offset512 | Adds cached-prefix causal offset; discrepancy appearing only here directs attention to cache/offset handling. | UNRUN / GPU blocked in seat |
+| `diag_a3_sweep_l05` | both saved calls;24 FP32 combinations each | Scale1 or512^-0.5 × sink None/zero × causal on/off × native/absolute-rowwise/zero-rowwise offsets; classify single-change matches across BOTH calls. | UNRUN / GPU blocked in seat |
 
-`diag_a2_replay_B_8192_l05` repeats the first captured512-query call with final Kq and with regenerated original-prefix Kq, then compares the old128-band shape. It reports repeat variation, Kq/context treatment effect, max-abs and relative error (denominator max(abs(reference),1e-30)), without accepting a tolerance. Old capture regeneration is diagnostic only; it cannot certify the original mask.
+The real PPL prefix is1023 tokens, so c1 is511 queries. Neither forcing flag enters the adapter chunk-size formula. Prior calls propagate original A. Each diagnostic stops by a caught local exception after the selected attention finishes; it measures no PPL. Saved arrays include q/k/kq/v, native scores/probabilities/attention, A/SP bf16 and FP32 outputs, dense NumPy FP32, staged-bf16 NumPy, and outputs after FP32→bf16 and o_proj. Exact source tuple-cache/QKV/replay checks reject changed inputs or missing operations.
 
-The correction records Q/K/Kq/V/output and packed native mask at every call during the **actual PPL run**, using lossless bf16 bit payloads. G2 replays the entire original call and requires bitwise output **and mask** before tiling FP64 statistics. No selection is recomputed on statistical bands. The PPL output remains the original native output and the diagnostic copy must match it bitwise. New cells `ppl_capture_{B,C}_{2048,8192}_w0` and `margin_a2_{B,C}_{2048,8192}_l{05,11,17,23,29,35,41,47}` share dependency hashes and exact selected/pair counts. C remains blocked by original exactness/calibration; no bypass.
+Per-call max-abs and relative Frobenius `||candidate-reference||F/max(||reference||F,1e-30)` use float64 reductions. Numerical FP32 agreement requires BOTH max-abs≤1e-4 and relative-Frobenius≤1e-5. BF16 metrics are descriptive; no BF16 acceptance tolerance or PPL widening. NumPy dot/softmax/value arithmetic is FP32. Staged-bf16 emulation is descriptive and does not claim bitwise cuBLAS summation. Native A/isolation/replacement projection and SP diagnostic/native output must replay bitwise; D’s mask must select every eligible key.
 
-Population amendment: short G2 uses actual window0 PPL queries0..2046, long0..8190 (2047/8191 rows), every eligible pair across16 heads. Last input token is a scored target, not an executed query. This is explicitly distinct from old independent prefix captures of2048/8192 rows. All-population nearest-rank percentiles are retained; no sampling or averaging band percentiles. Extra capture/I/O cost may hit285s and must remain RED. No end-to-end margin fix claimed before card replay.
+None maps to nullptr in the SP binding. Zero sink means an extra zero-logit/zero-value denominator term. The SP ABI has no offset argument: explicit absolute and lost-offset probes invoke existing L1 split-K on each allowed key prefix. This changes geometry and is labelled as such; it is not a product fix. Causal-off offset labels reuse their literally identical native calls. BF16 nominal controls live in the call cells; the suspect sweep is FP32 to separate large semantic differences from materialization effects.
 
-## Rail non-fits and clean decode
+## Fix or A′ decision path
 
-`RAIL_NONFITS_A2.json` records every `ppl_*_16384` and16K/24K/32K ceiling as **RAIL non-fit under285s**. This is a time-budget non-fit; memory capacity is unknown, not OOM. Five observed returncode124 terminations are distinguished from administratively deferred unrun rows. No retries scheduled. All additional≥16K work waits for a lead long lease.
+- **nominal_agrees:** If both nominal fp32 branches match dense and each other, no argument culprit established. Quantify cast/projected differences; stop RED pending lead propagation investigation. Do not automatically activate A prime or C.
+- **single_argument:** Only candidate differing in ONE effective suspect, correcting a nominal mismatch on BOTH calls, and consistent with dense expected semantics qualifies as a candidate. Preserve diagnostics, name exact harness defect, append immutable treatment registration/source fingerprint; re-run D window0 with abs(D-A)<=.005, then original full short/8192 exactness before original C calibration/freeze/PPL/margins. No present auto-unblock.
+- **semantic:** If standard differs from dense by a named reproducible operation absent in SP, leave kernel unchanged. Append A prime registration naming exact removed op, code boundary, A prime-A cost, same inputs/flags/feeding; gate D vs A prime at .005. Lead chooses reference and calibration DAG. Unknown op cannot be registered as executed.
+- **neither:** If neither or multiple inconsistent candidates match, retain RED; no knob selection or tolerance widening.
 
-| Arm | 4096 ceiling | 8192 ceiling | decode2048 ms/token | decode8192 ms/token |
-|---|---|---|---:|---:|
-| A | FIT | FIT | 31.3229 | 73.3171 |
-| B | FIT | FIT | 38.7183 | 87.7506 |
-| D | FIT | FIT | — | — |
+Reserved successor IDs: `ppl_a3_D_fixed_2048_w0`, `ppl_a3_AP_2048_w0`, `exactness_a3_D_AP_2048_w0`. They are conditional registration paths, not executable cells: the runner rejects them until a separate immutable amendment names the measured culprit, exact harness treatment or removed operation, fingerprints, reference and dependencies. There is no known op to remove honestly before these diagnostics. A named harness fix must first clear original D-vs-A window0 at0.005; original full-short and8192 exactness then protect existing C calibration/freeze/PPL/margins. A′ requires lead adoption of the like-for-like comparator and A′−A cost reporting. Existing exactness REDs are never rewritten.
 
-Evidence: corresponding `jobs_a1/ceiling_*` and `decode_*` receipts. G2/G3 rows establish nothing about model quality by themselves.
+## Measured A3 comparisons
 
-## Fingerprints, CPU gates and lead commands
+No A3 card receipts yet. No fabricated output-error numbers or culprit.
 
-30 historical PASS receipts remain valid, including kernel512, all A/B/D PPL, measured decode/ceiling and capture_B_8192. All historical RED bytes remain unchanged. All A1 scripts, tests, runner and build are byte-identical; A2 renders the refreshed report through its isolated runner. Old captures remain historical evidence but lack actual-PPL per-call masks required by new G2. No old RED is reused as PASS. New jobs write create-only `jobs_a2/` with a separate complete closure. Unknown transitions reject. `amendment_008_a2_fingerprint.json`, `CPU_GATES_A2.json`, `GPU_BLOCKED_A2.json`, and `receipt_audit_A2.json` provide exact inventories.
+## Fingerprints, CPU and lead handoff
 
-CPU gate: `{"status": "PASS_CPU_ONLY", "registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e", "evidence_class": "author CPU suite / lossless payload, context/mask tests / copied-source mutation baseline; no GPU claim", "pytest": {"passed": 67, "failed": 0, "skipped": 0, "original_tests": 48, "a2_tests": 19, "log": "logs/apa_sp4g_a2_cpu_final.log", "sha256": "83f8750ff0ac5586089b5ba7645551b77986546567093a2ad5cf84d3c9f80990", "warnings": "2 SWIG import warnings and final swigvarlink warning retained"}, "mutation": {"status": "PASS", "killed": 8, "nonerror": 8, "rate": 1.0, "threshold": 0.8, "receipt": "artifacts/apa_sp4g/mutations_a2/results.json", "sha256": "50e6338865bd5ed7495559dbbac9d438cd80995bde9fdc3ec13bda0e37a7ce56"}, "fingerprint_amendment_sha256": "f484d1619e9010756575800e8fcda37c5df4c930dbc6e84bbf85002c60798b6f", "historical_pass_receipts_valid": 30, "historical_red_receipts_preserved": 15, "build": "UNCHANGED_FROM_CARD_PASS; no rebuild", "blind_verification": "lead-owned UNRUN"}`. Author baseline only; blind verification remains lead-owned UNRUN.
+Registration010 SHA `d2da08a10e08413887bced5da9829cbfbca0e1ffb5545f1cdae3f63db5e46852`. Source/payload/receipt identity is fail-closed in new `jobs_a3/`. All23 preexisting execution files and72 historical receipt files retain exact bytes; no old receipt is upgraded. Original registration, compiled build, product adapter and kernels stay pinned. Source closure and validation identities: `amendment_011_a3_fingerprint.json`, `CPU_GATES_A3.json`, `GPU_BLOCKED_A3.json`, `DELIVERY_CHECKS_A3.json`.
 
-Use refreshed `lead_commands.txt` and `cells.json`. Each command is one foreground lease; no batch. A2 runner rejects historical/long cell IDs. Original runner and report generator are retained to preserve measured closures; use the A2 summary and do not use the old long schedule.
+CPU gate: `{"status": "PASS_CPU_ONLY", "passed": 88, "failed": 0, "skipped": 0, "wall_s": 0.9, "baseline_log": "logs/apa_sp4g_a3_cpu_final.log", "baseline_log_sha256": "2f5bc73e423e7454fad8d6f51862602470b3dbcec2e41cf1cfdf54d04a8ec8c6", "first_baseline": "logs/apa_sp4g_a3_cpu_01.log", "first_passed": 87, "followup_reason": "amendment_012: direct standard-NumPy check; finite tolerance agreement is not transitive. Bounds unchanged.", "mutations": {"path": "artifacts/apa_sp4g/mutations_a3_final/results.json", "sha256": "1abc501388702d79570df224878644a2ce725d2019b5f758f359a2e9496d6f86", "killed": 10, "nonerror": 10, "rate": 1.0, "threshold": 0.8}, "python_ast_files": 9, "shell_syntax": "PASS", "warnings": "2 existing SWIG import warnings plus final swigvarlink warning retained unsuppressed", "fingerprint_amendment_sha256": "fdd3cf12deea588373c6b3e804255bb2c53dd0a9985c31022f9e4e115e8cbcb1", "evidence_class": "author CPU baseline and copied-source mutations; not blind review or GPU measurement", "blind_review": "lead-owned UNRUN", "GPU_workers": 0, "model_loads": 0}`. Author baseline and copied-source mutants only; blind review remains lead-owned UNRUN.
+
+Use `lead_commands.txt` (three dependency-ordered foreground calls) and `cells.json`. Estimates: each capture90–250s including model load; sweep30–270s with no model load. Historical QAT load≈75–85s, planning30–120s; A3 estimates unmeasured. Worker285s/hard290s, outer588s, lease≤20s, cooldown30s; ≥2GiB disk headroom. Every cell has its own receipt and log. Stop on RED; no background chain.
 
 ```bash
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g
-bash scripts/apa_sp4g_a2_lead_gpu.sh list
-bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_source_2048
-bash scripts/apa_sp4g_a2_lead_gpu.sh resume
-bash scripts/apa_sp4g_a2_lead_gpu.sh summary
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c0
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c1
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_sweep_l05
+bash scripts/apa_sp4g_a3_lead_gpu.sh summary
 ```
-
-Per-cell wall estimates are registered and unmeasured for A2: parity/FP32/PPL-capture60–285s; replay5–90s; margin2048 10–90s,8192 60–270s. A1 measured QAT loading mostly75–76s (first A84.7s); original30–120s planning range retained. Extra paired attention and disk writes may hit the rail. Worker285s TERM/290s hard, outer588s, lease wait20s, foreground cooldown30s. No A2 GPU worker or model load was started in this seat.
 
 ## Prior art
 
-A2 reuses the June Gemma port/floor (2026) MQA standard branch and quantizer; SP3 (2026) same-tensor references, native-mask replay and exact dependency provenance; IEEE754 (2019) float bit representation and NumPy packbits (system year unverified — lead to check: NumPy packbits bitorder release). Controlled same-state and precision ablations are standard experimental methods; no prior art known to me for any distinct novel method introduced here, and no novelty claimed. New work is diagnostic/capture wiring. Code sites and ledger carry the same annotations.
+June Gemma port/floor (2026) supplies the standard MQA branch, exact shared KV, chunking and PPL protocol. SP3 (2026) supplies same-tensor comparison/native replay and registered receipt dependencies; Make/Feldman (1979) and SHA256/NIST (2001) are provenance precedents. Dense attention is the established [Vaswani et al. (2017)](https://arxiv.org/abs/1706.03762) operation, with ordinary stable softmax and Frobenius error norms. IEEE754 (2019) informs ties-to-even BF16 bit rounding. New work is capture, comparison and bounded sweep wiring; no novel attention/selector/optimization claim. No prior art known to me for a distinct novel method introduced here.
 
-- Gemma June 2026: port ledger and floor script: model/caches/flags/feeding reused; new experiment harness.
-- SP3 2026: calibration, provenance, receipts, clean decode lesson; new architecture wiring.
-- BLASST Yuan et al. 2025/2026: https://arxiv.org/abs/2512.12087; running-max comparison; APA refines keys and retains denominator.
-- ThriftAttention Sharratt 2026: https://arxiv.org/abs/2605.23081; precision-selection/softmax-weight motivation; no FP4 implementation port.
-- FlashAttention-2 Dao 2023: https://arxiv.org/abs/2307.08691; existing online softmax/work partition; no new kernel.
-- TurboQuant Zandieh et al. 2025: https://arxiv.org/abs/2504.19874; existing rotated scalar-codebook reconstructed BF16 kq; no QJL residual.
-- SP2 2026: conditional delta log(1/epsilon)+2eq reused; empirical finite max not universal proof.
-- standard methods: NLL Shannon1948, nearest-rank statistics, bisection, content hashing NIST2001, leases, Make Feldman1979 dependency invalidation; no novelty claimed.
+Inherited SP uses [BLASST, Yuan et al. (2025/2026)](https://arxiv.org/abs/2512.12087) running-max comparison, [ThriftAttention, Sharratt (2026)](https://arxiv.org/abs/2605.23081) weight-sensitive precision motivation, [FlashAttention-2, Dao (2023)](https://arxiv.org/abs/2307.08691) online softmax/work partition, and [TurboQuant, Zandieh et al. (2025)](https://arxiv.org/abs/2504.19874) reconstructed-key quantization. No kernels or selection rules changed. Author mutation gates follow DeMillo/Lipton/Sayward (1978), unverified — lead to check: Hints on Test Data Selection. A3 externally checked arXiv titles/authors/years for Vaswani, FA2, BLASST and TurboQuant; other literature annotations are inherited from original registration, not a new reproduction.
 
-Prior literature annotations are retained from the immutable registration; no new external experiment reproduced. BLASST running-max comparison, ThriftAttention weight-sensitive precision, FA2 online softmax and TurboQuant reconstructed-key quantization are inherited, not newly implemented.
+## RED, safety and identity
 
-## RED, process safety and identity
+Not claimed fixed: D/A exactness, a named argument or A-only-op cause, C/E calibration/quality, new GPU numerical comparisons, long-context memory capacity. G2/G3 rows establish nothing about model quality by themselves. GPU unavailable to this seat; exact visibility receipt is `a3_device_visibility.json`. Zero GPU workers and zero model loads started here. No git, subagents, background jobs/waits, process kills/signals, services, model writes or product/kernel edits. All executed calls foreground and under10min. Runner preserves existing bounded owned-worker timeouts for the lead.
 
-Not claimed fixed: D/A PPL exactness; actual GPU replay; whether old error is context or nondeterminism; FP32 treatment; C/E calibration and quality; new margin rail clearance; device memory ceilings above8192. No tolerance was widened. No card result is fabricated from CPU tests. No GPU device (cudaGetDeviceCount100, count0, `no CUDA-capable device is detected`).
-
-No git, subagents, background jobs/waits, process kills/signals, live-service changes, model writes, product/kernel edits or SP3 edits. All executed commands foreground and under10min. Driver retains bounded owned-child timeout semantics for lead use.
-
-Seat: gpt-6-astra, reasoning xhigh, recorded in `logs/apa_sp4g_a2_r1.log`. Model under test: Gemma-4-12B-it QAT q4_0 symmetric-8 group32, bf16 engine compute.
-
-A2 measured diagnostic results: `{}`. A2 failures: `[]`.
+Seat: **gpt-6-astra / reasoning xhigh**, `logs/apa_sp4g_a3_r1.log`. Model under test: **Gemma-4-12B-it QAT q4_0 symmetric-8 group32**, bf16 engine compute; original -it token stream unchanged.
