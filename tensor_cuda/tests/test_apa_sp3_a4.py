@@ -25,7 +25,7 @@ from apa_sp3_model import last512, score_windows
 
 
 def test_a4_registered_dag_ranges_bounds_and_grid():
-    cells = [c for c in driver.cells() if c['kind'] != 'decode_pool']
+    cells = [c for c in driver.cells() if c['kind'] not in ('decode_pool','decode_clean','decode_repro','decode_bisect')]
     base = driver.base_cells()
     assert len(cells) == len(base)+167 == 859
     by = {c['id']: c for c in cells}

@@ -17,11 +17,16 @@ MODEL_KINDS = ENGINE_KINDS - {'margin'}
 
 def closure(cell):
     kind = cell['kind']
+    if kind in ('decode_clean','decode_repro','decode_bisect'):
+        return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a6_decode.py',
+                          'scripts/apa_sp3_a5_decode.py','orders/APA_SP3_AMENDMENT_6.md']))
     if kind == 'decode_pool':
         return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a5_decode.py']))
     names = ['common.py', 'gpu.py', 'control.py', 'lead_gpu.sh', 'a4_provenance.py']
     paths = ['scripts/apa_sp3_' + n for n in names]
     paths += ['artifacts/apa_sp3/registration.json']
+    paths += ['scripts/apa_sp3_a6_provenance.py','scripts/apa_sp3_a6_registry.py',
+              'artifacts/apa_sp3/amendment_011_decode_clean.json']
     paths += ['scripts/apa_sp3_a5_provenance.py', 'scripts/apa_sp3_a5_registry.py',
               'artifacts/apa_sp3/amendment_009_decode_pool.json']
     if kind in ENGINE_KINDS:
@@ -71,7 +76,8 @@ def bridge():
         identity = hashlib.sha256((identity+sha(ART/FOLLOWUP)).encode()).hexdigest()
     m['effective_sha256'] = identity
     from apa_sp3_a5_provenance import extend_bridge
-    return extend_bridge(m)
+    from apa_sp3_a6_provenance import extend_bridge as extend_a6
+    return extend_a6(extend_bridge(m))
 
 
 def current_fingerprint(cell):
@@ -90,6 +96,18 @@ def compatible(j, *, current=None, amendment=None):
     except FileNotFoundError:
         return False
     old = j.get('fingerprint', {})
+    if 'a6_transition' in m:
+        if (j.get('fingerprint_schema')=='apa_sp3_per_kind_v1' and old==now
+            and j.get('fingerprint_amendment_sha256')==m['effective_sha256']):
+            return True
+        if kind in ('decode_clean','decode_repro','decode_bisect'):
+            return False
+        from apa_sp3_a6_provenance import previous_current as previous_a6
+        previous=previous_a6(cell,now,m['a6_transition'])
+        if previous is None:return False
+        parent={k:v for k,v in m.items() if k not in ('a6_transition','a6_parent_effective_sha256')}
+        parent['effective_sha256']=m['a6_parent_effective_sha256']
+        return compatible(j,current=previous,amendment=parent)
     if 'a5_transition' in m:
         if (j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1' and old == now
                 and j.get('fingerprint_amendment_sha256') == m['effective_sha256']):

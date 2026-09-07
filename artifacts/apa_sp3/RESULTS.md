@@ -861,3 +861,8 @@ P5 (bulk4, C/B at starting S=32768): `{"ratio": null, "source_kind": "decode_poo
 
 32K captures remain registered but are OFF by default. Explicit `run CELL` is lead cell-list inclusion; `APA_SP3_INCLUDE_32K_CAPTURES=1` opts into resume/command generation. The separately generated `lead_commands_32k_captures.txt` is a lead opt-in list. Existing a4 disk preflight is unchanged; its conservative 490,783,899,647-byte first-range requirement exceeds the lead-reported free disk. This amendment does not relax that rail.
 
+
+
+## Amendment 6 synthesis — clean decode is the current throughput column
+
+Host build and 157 CPU gates pass. All 736 inherited receipts are byte-identical, with zero source invalidation; 727 prior PASS receipts validate in the explicitly labeled original-build CPU identity simulation. Preserve the lead build at integration. The greedy June-stack reproduction, twelve-rung teacher-forced ladder and eighteen clean cells are registered but GPU execution is blocked in this seat. P5 and its clean8192 fallback ratio remain unmeasured. Legacy SP3 disables the fast-stack flags from June; this is source evidence, not measured causal attribution. See [A6_REPORT.md](A6_REPORT.md), [A6_TABLES.md](A6_TABLES.md), and the refreshed [lead_commands.txt](lead_commands.txt). The older P5 sections above are historical; only decode_clean measurements now qualify.

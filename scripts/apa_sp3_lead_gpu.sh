@@ -3,7 +3,7 @@
 # runner discipline. SP3 adapts to one full-model or one captured-layer job.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
+[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a6 ]] || exit 64
 cd "$ROOT"
 export PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
@@ -45,7 +45,8 @@ case "$action" in
     timeout 10s python3 scripts/apa_sp3_control.py idle
     export APA_SP3_LEASE=1
     kind=$(timeout 10s python3 scripts/apa_sp3_control.py kind "$job")
-    if [[ "$kind" != torch_reference ]]; then
+    observer=$(timeout 10s python3 scripts/apa_sp3_control.py interposer "$job")
+    if [[ "$observer" == 1 ]]; then
       export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
     else
       unset LD_PRELOAD

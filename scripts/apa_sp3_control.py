@@ -27,6 +27,11 @@ def preflight(job):
         protocol()
     for d in c['depends']:
         require_pass(d)
+    if c['kind'] in ('decode_clean','decode_repro','decode_bisect'):
+        from apa_sp3_a6_decode import preflight as clean_preflight
+        outcome=clean_preflight(c)
+        if outcome:
+            return outcome
     if c['kind'] == 'decode_pool':
         from apa_sp3_a5_decode import preflight as pool_preflight
         outcome = pool_preflight(c)
@@ -44,7 +49,8 @@ def preflight(job):
         required=required_space(c['S'],c['layer_start'])
         if shutil.disk_usage(ART).free < required:
             raise Red(f'CAPTURE_DISK_OOM: need {required} free bytes before GPU lease')
-    if c['kind'] != 'torch_reference' and not (ART/'build/libapa_sp3_peak.so').exists():
+    from apa_sp3_a6_registry import needs_interposer
+    if needs_interposer(c) and not (ART/'build/libapa_sp3_peak.so').exists():
         raise Red('missing built observer')
 
 
@@ -85,6 +91,9 @@ if __name__=='__main__':
         elif mode=='idle':idle()
         elif mode=='timeout':print(validate(sys.argv[2])['worker_timeout_s'])
         elif mode=='kind':print(validate(sys.argv[2])['kind'])
+        elif mode=='interposer':
+            from apa_sp3_a6_registry import needs_interposer
+            print('1' if needs_interposer(validate(sys.argv[2])) else '0')
         elif mode=='finish':finish(sys.argv[2],int(sys.argv[3]),sys.argv[4])
         else:raise Red('invalid action')
     except Exception as e:

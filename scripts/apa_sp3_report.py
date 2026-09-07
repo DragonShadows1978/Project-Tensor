@@ -113,7 +113,7 @@ def main():
         for name,pred in r[key].items():
             state='HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim' if key=='seat_predictions' and name=='S1' else 'UNASSESSED; P2 uses fresh B; requires applicable model receipts'
             if key == 'lead_predictions' and name == 'P5':
-                from apa_sp3_a5_report import prediction
+                from apa_sp3_a6_report import prediction
                 state = json.dumps(prediction(jobs), sort_keys=True)
             text.append(f'| {owner} | {name} | {pred} | {state} |')
     text.append('| Lead amendment 2 | B-A | Fresh B-A within +/-0.3 at bulk4, prediction only | '+str(get('g0').get('B_minus_A_prediction_within_0_3','UNASSESSED'))+' |')
@@ -187,6 +187,10 @@ def main():
     extra,a5=render_a5(ART,jobs,cells(),os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES')=='1')
     with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
     combined['a5']=a5
+    from apa_sp3_a6_report import render as render_a6
+    extra,a6=render_a6(ART,jobs,cells())
+    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+    combined['a6']=a6
     (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
 

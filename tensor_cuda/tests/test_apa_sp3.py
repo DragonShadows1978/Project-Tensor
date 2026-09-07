@@ -368,7 +368,7 @@ def test_all_cells_unique_and_dependencies_registered():
     assert len([c for c in cells if c['kind']=='margin' and c['bits']==4 and c['arm'] in 'BC'])==248
     for c in cells:
         assert set(c['depends'])<=ids
-        expected_rail=290 if c['kind'] in ('capture_range','ceiling','decode_pool') else 480
+        expected_rail=290 if c['kind'] in ('capture_range','ceiling','decode_pool','decode_clean','decode_repro','decode_bisect') else 480
         assert c['worker_timeout_s']==expected_rail and c['job_ceiling_s']==590
     for S in (2048,8192,32768):
         for arm in 'ABC':assert f'decode_b4_{arm}_{S}' in ids

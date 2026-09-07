@@ -112,7 +112,8 @@ def base_cells():
 
 def cells():
     from apa_sp3_a5_registry import overlay as overlay_a5
-    return overlay_a5(overlay(base_cells()))
+    from apa_sp3_a6_registry import overlay as overlay_a6
+    return overlay_a6(overlay_a5(overlay(base_cells())))
 
 
 def g0_guard(model, ids):
@@ -220,6 +221,9 @@ def kernel96():
 
 def execute(cell):
     kind, bits = cell['kind'], cell.get('bits',4)
+    if kind in ('decode_clean','decode_repro','decode_bisect'):
+        from apa_sp3_a6_decode import execute as clean_execute
+        return clean_execute(cell)
     if kind == 'decode_pool':
         from apa_sp3_a5_decode import execute as execute_a5
         return execute_a5(cell)
@@ -389,7 +393,7 @@ def main():
                           'protocol':proto,'cells':cells()},indent=2))
         return 0
     if a.next:
-        from apa_sp3_a5_registry import default_cells
+        from apa_sp3_a6_registry import default_cells
         for c in default_cells(cells(), a.include_32k_captures):
             if c.get('bits',4)!=a.bits:
                 continue

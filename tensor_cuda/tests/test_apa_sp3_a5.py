@@ -25,7 +25,7 @@ import apa_sp3_model as model_module
 
 
 def test_a5_registration_preserves_all_prior_cells_and_rails():
-    cells = driver.cells()
+    cells = [c for c in driver.cells() if c['kind'] not in ('decode_clean','decode_repro','decode_bisect')]
     before = common.read(common.ART/'a5_before.json')
     by = {c['id']:c for c in cells}
     assert len(cells) == len(by) == 877
@@ -239,7 +239,7 @@ def test_pool_counter_source_and_failure(monkeypatch):
 
 
 def test_default_capture_gate_and_commands_dependency_order(tmp_path):
-    cells=driver.cells()
+    cells=[c for c in driver.cells() if c['kind'] not in ('decode_clean','decode_repro','decode_bisect')]
     default=registry.default_cells(cells)
     captures={c['id'] for c in cells if c['kind'].startswith('capture_') and c.get('S')==32768}
     assert len(captures)==126
@@ -265,12 +265,13 @@ def test_next_default_does_not_select_32k_captures_or_raw_decode(monkeypatch,tmp
     raw=dict(id='decode_b4_C_2048',kind='decode',bits=4)
     capture=dict(id='capture_b4_C_32768',kind='capture_aggregate',bits=4,S=32768)
     pooled=dict(id='decode_pool_b4_C_2048',kind='decode_pool',bits=4)
-    monkeypatch.setattr(driver,'cells',lambda:[raw,capture,pooled])
+    clean_cell=dict(id='decode_clean_b4_C_2048',kind='decode_clean',bits=4)
+    monkeypatch.setattr(driver,'cells',lambda:[raw,capture,pooled,clean_cell])
     monkeypatch.setattr(common,'job_path',lambda id:tmp_path/id)
     monkeypatch.setattr(sys,'argv',['test','--next'])
     monkeypatch.delenv('APA_SP3_INCLUDE_32K_CAPTURES',raising=False)
     assert driver.main()==0
-    assert capsys.readouterr().out.strip()==pooled['id']
+    assert capsys.readouterr().out.strip()==clean_cell['id']
     monkeypatch.setattr(sys,'argv',['test','--next','--include-32k-captures'])
     assert driver.main()==0
     assert capsys.readouterr().out.strip()==capture['id']
