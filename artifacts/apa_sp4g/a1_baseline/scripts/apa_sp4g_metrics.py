@@ -26,13 +26,9 @@ def capture_for(cell):
     if m['arm']!=cell['arm'] or m['S']!=cell['S']:raise Red('CAPTURE_CELL_MISMATCH')
     return p.parent,m
 
-def replay_context(cell):
+def band(cell):
     os.environ['TC_APA_SP']='1';directory,m=capture_for(cell);tc=load_runtime()
     import _apa_sp4g_diag as diag
-    return directory,m,tc,diag
-
-def band(cell,context=None):
-    directory,m,tc,diag=replay_context(cell) if context is None else context
     layer=cell['layer'];lo=cell['lo'];hi=lo+cell['n'];records=m['records'][str(layer)]
     # Restore exact BF16-representable floats; intersect original adaptive query
     # chunks, preserve absolute bottom-right alignment by truncating K at stop.
@@ -69,10 +65,10 @@ def band(cell,context=None):
     pairs=err.size;count=int(selected.sum())
     return dict(files=[f],error_file=f['path'],pairs=pairs,selected=count,fraction=count/pairs,queries=len(masses),mass_sum=float(sum(masses)),mass_max=max(masses),max_skipped_relative_weight=max(relative),eq_sp=float(sperr.max()),replay_bitwise=True)
 
-def aggregate_rows(cell,rows):
+def summarize(cell):
+    rows=[require_pass(d)['result'] for d in cell['depends']]
     pairs=sum(r['pairs'] for r in rows);expected=16*cell['S']*(cell['S']+1)//2
     if pairs!=expected or sum(r['queries'] for r in rows)!=16*cell['S']:raise Red('MARGIN_ALL_PAIR_COVERAGE')
-    if not all(r['replay_bitwise'] for r in rows):raise Red('NATIVE_REPLAY_NOT_BITWISE')
     # Scratch is unique and owned by this worker; durable errors remain hashed.
     scratch=A/'scratch'/f'{cell["id"]}.{os.getpid()}.errors';scratch.parent.mkdir(exist_ok=True)
     if scratch.exists():raise Red('SCRATCH_EXISTS')
@@ -83,22 +79,6 @@ def aggregate_rows(cell,rows):
         er=stats(x);count=sum(r['selected'] for r in rows)
         return dict(error=er,eq_sp=max(r['eq_sp'] for r in rows),pairs=pairs,selected=count,fraction=count/pairs,unrefined_mass_mean=sum(r['mass_sum'] for r in rows)/(16*cell['S']),unrefined_mass_max=max(r['mass_max'] for r in rows),max_skipped_relative_weight=max(r['max_skipped_relative_weight'] for r in rows),coverage='all causal pairs; nearest-rank exact population',replay_bitwise=all(r['replay_bitwise'] for r in rows))
     finally:del x;scratch.unlink()
-
-def whole_layer(cell):
-    # Prior art: existing SP4G/SP3 (2026) exact capture replay, tiled dots,
-    # memory maps and population order statistics. A1 coalesces dispatch only.
-    # All 16 query heads remain in the population despite ONE shared KV head.
-    context=replay_context(cell);rows=[]
-    for lo in range(0,cell['S'],128):
-        tile=dict(cell,id=f'{cell["id"]}_tile_q{lo:05d}',lo=lo,n=min(128,cell['S']-lo))
-        rows.append(band(tile,context))
-    result=aggregate_rows(cell,rows)
-    return dict(result,files=[f for r in rows for f in r['files']],
-                replay_tiles=len(rows),execution='one whole-layer worker')
-
-def summarize(cell):
-    rows=[require_pass(d)['result'] for d in cell['depends']]
-    return aggregate_rows(cell,rows)
 
 def eq_result(cell):
     rows=[require_pass(d)['result'] for d in cell['depends']];eq=upward(max(r['eq_sp'] for r in rows))

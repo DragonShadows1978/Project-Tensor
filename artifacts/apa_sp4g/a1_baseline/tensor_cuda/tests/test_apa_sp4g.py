@@ -3,7 +3,7 @@ references, constructed-input/negative-path tests; DeMillo/Lipton/Sayward1978
 mutation testing (unverified lead: Hints on Test Data Selection). New MQA seam
 coverage only. See registration for fixed gates; no CUDA numerical claims here.
 """
-import ast,ctypes,hashlib,importlib.util,json,os,re,sys
+import ast,hashlib,importlib.util,json,os,sys
 from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
@@ -14,7 +14,6 @@ import apa_sp4g_registry as registry
 import apa_sp4g_model as model
 import apa_sp4g_metrics as metrics
 import apa_sp4g_gpu as gpu
-import apa_sp4g_a1_provenance as provenance
 import apa_sp1_reference as ref
 import apa_sp1_1_reference as split
 # Mutants are independent copies; tests import exactly one selected module copy.
@@ -156,20 +155,9 @@ def test_registry_all_cells_ordered_and_required_grid_complete():
         assert len(d[f'ppl_{arm}_2048']['depends'])==4
     for S in (2048,8192):
         for arm in 'BC':
-            for l in registry.LAYERS:
-                c=d[f'margin_{arm}_{S}_l{l:02d}']
-                assert c['kind']=='margin_layer' and len(c['depends'])==1
-                assert c['estimate_s']==([10,90] if S==2048 else [60,270])
-                assert c['estimate_s'][1]<285
+            for l in registry.LAYERS:assert len(d[f'margin_{arm}_{S}_l{l:02d}']['depends'])==S//128
     for arm in 'ABC':assert f'decode_{arm}_8192' in d[f'decode_{arm}_32768']['depends']
     assert len(d['eq']['depends'])==32
-    assert len(cs)==128 and sum(c['kind']=='margin_layer' for c in cs)==32
-    assert not any('fallback_for' in c for c in cs)
-    fallbacks=registry.fallback_cells()
-    assert sum(c['kind']=='margin_band' for c in fallbacks)==1280
-    for c in fallbacks:
-        assert d[c['fallback_for']]['kind']=='margin_layer'
-        if c['kind']=='margin_summary':assert len(c['depends'])==c['S']//128
 
 def test_create_only_receipt_preserves_first_bytes(tmp_path):
     p=tmp_path/'r.json';common.publish(p,dict(value=1));first=p.read_bytes()
@@ -267,122 +255,3 @@ def test_exactness_gate_rejects_model_ppl_miss(monkeypatch):
 def test_exactness_gate_accepts_registered_tolerance(monkeypatch):
     monkeypatch.setattr(gpu,'require_pass',lambda name:dict(result=dict(ppl={'A':9.,'D':9.004}[name])))
     r=gpu.execute(dict(kind='exactness',depends=['A','D']));assert r['absolute_difference']<.005
-
-def test_worker_ctypes_symbols_resolve_at_import_without_cuda_calls(monkeypatch):
-    # NVIDIA CUDA12.6 ABI (2024); real dlsym plus call-denying wrappers.
-    # Import itself must find EVERY symbol, without invoking a CUDA API.
-    live=ctypes.CDLL('/usr/local/cuda-12.6/lib64/libcudart.so.12');resolved=[]
-    class Symbol:
-        def __call__(self,*args):raise AssertionError('CUDA call during import')
-    class Library:
-        def __getattr__(self,name):
-            getattr(live,name);resolved.append(name);return Symbol()
-    monkeypatch.setattr(ctypes,'CDLL',lambda path:Library())
-    ns={'__name__':'symbol_import_probe'}
-    exec(compile((R/'scripts/apa_sp4g_model.py').read_text(),'worker-import','exec'),ns)
-    uses=set()
-    for module in ('common','gpu','model','metrics'):
-        for n in ast.walk(ast.parse((R/f'scripts/apa_sp4g_{module}.py').read_text())):
-            if isinstance(n,ast.Attribute) and re.fullmatch(r'cuda[A-Z]\w*',n.attr):uses.add(n.attr)
-            if isinstance(n,ast.Constant) and isinstance(n.value,str) and re.fullmatch(r'cuda[A-Z]\w*',n.value):uses.add(n.value)
-    assert set(resolved)==uses==set(model.CUDART_SIGNATURES)
-    assert len(resolved)==4
-    for name,args in model.CUDART_SIGNATURES.items():
-        assert getattr(model.CUDART,name).argtypes==args
-        assert getattr(model.CUDART,name).restype is ctypes.c_int
-
-def test_misspelled_pool_symbol_reds_during_import():
-    source=(R/'scripts/apa_sp4g_model.py').read_text().replace(
-        "'cudaDeviceGetDefaultMemPool':", "'cudaGetDeviceDefaultMemPool':",1)
-    with pytest.raises(AttributeError,match='undefined symbol: cudaGetDeviceDefaultMemPool'):
-        exec(compile(source,'misspelled-worker-import','exec'),{'__name__':'bad_symbol_probe'})
-
-def test_pool_counters_use_registered_high_water_abi():
-    seen=[]
-    def get(pool,attr,value):
-        seen.append(('get',attr));ctypes.cast(value,ctypes.POINTER(ctypes.c_uint64))[0]=attr*(1<<20);return 0
-    def reset(pool,attr,value):
-        seen.append(('reset',attr));assert ctypes.cast(value,ctypes.POINTER(ctypes.c_uint64))[0]==0;return 0
-    pool=model.PoolPeak.__new__(model.PoolPeak);pool.pool=ctypes.c_void_p(1)
-    pool.cuda=SimpleNamespace(cudaMemPoolGetAttribute=get,cudaMemPoolSetAttribute=reset)
-    pool.reset();r=pool.result()
-    assert seen==[('reset',6),('reset',8),('get',6),('get',8)]
-    assert r['pool_reserved_high_mib']==6 and r['pool_used_high_mib']==8
-
-def test_whole_layer_replays_every_tile_and_uses_population_percentiles(monkeypatch,tmp_path):
-    monkeypatch.setattr(metrics,'A',tmp_path);seen=[];population=[];context=object()
-    monkeypatch.setattr(metrics,'replay_context',lambda c:context)
-    def band(c,ctx):
-        assert ctx is context;seen.append((c['lo'],c['n']))
-        pairs=16*sum(range(c['lo']+1,c['lo']+c['n']+1))
-        x=np.full(pairs,1. if c['lo']==0 else 9.,np.float64);population.append(x)
-        path=tmp_path/(c['id']+'.npy');np.save(path,x)
-        return dict(files=[dict(path=str(path))],error_file=str(path),pairs=pairs,
-                    queries=16*c['n'],selected=0,mass_sum=16*c['n'],mass_max=1.,
-                    max_skipped_relative_weight=1.,eq_sp=float(x[0]),replay_bitwise=True)
-    monkeypatch.setattr(metrics,'band',band)
-    result=metrics.whole_layer(dict(id='layer',S=256))
-    assert seen==[(0,128),(128,128)] and result['replay_tiles']==2
-    assert result['pairs']==16*256*257//2 and result['replay_bitwise'] is True
-    assert result['error']==metrics.stats(np.concatenate(population))
-    assert result['unrefined_mass_mean']==1. and len(result['files'])==2
-    assert not list((tmp_path/'scratch').iterdir())
-
-@pytest.mark.parametrize('pairs,replay',[(0,True),(16,False)])
-def test_whole_layer_rejects_incomplete_population_or_nonbitwise_replay(pairs,replay):
-    row=dict(pairs=pairs,queries=16,replay_bitwise=replay)
-    with pytest.raises(common.Red,match='COVERAGE|BITWISE'):
-        metrics.aggregate_rows(dict(S=1),[row])
-
-def test_fallback_requires_current_rail_and_preserves_red(monkeypatch,tmp_path):
-    c=dict(id='layer',kind='margin_layer',depends=[])
-    monkeypatch.setattr(registry,'by_id',lambda:{'layer':c})
-    monkeypatch.setattr(common,'job_path',lambda n:tmp_path/(n+'.json'))
-    monkeypatch.setattr(common,'fingerprint',lambda c:{'code':'live'})
-    j=dict(cell=c,status='RED',registration_sha256=common.REG_SHA,fingerprint={'code':'live'},dependencies={},result={'outcome':'RAIL'})
-    p=tmp_path/'layer.json';p.write_text(json.dumps(j));first=p.read_bytes()
-    assert common.require_margin_rail('layer')==j and p.read_bytes()==first
-    for change in (dict(status='PASS'),dict(result={'outcome':'WORKER_FAILED'}),dict(fingerprint={'code':'stale'}),dict(dependencies={'fake':'hash'})):
-        p.write_text(json.dumps(dict(j,**change)))
-        with pytest.raises(common.Red,match='FALLBACK'):common.require_margin_rail('layer')
-
-def test_kernel_bridge_exact_endpoint_and_unknown_changes_rejected():
-    import apa_sp4g_a1_provenance as provenance
-    j=common.read(common.A/'jobs/kernel512.json');m=provenance.bridge()
-    now=common.fingerprint(j['cell'])
-    assert provenance.legacy_compatible(j,current=now,amendment=m)
-    assert common.require_pass('kernel512')==j
-    for path in now:
-        assert not provenance.legacy_compatible(j,current=dict(now,**{path:'unknown'}),amendment=m)
-    assert not provenance.legacy_compatible(dict(j,status='RED'),current=now,amendment=m)
-    assert not provenance.legacy_compatible(dict(j,cell=dict(j['cell'],worker_s=999)),current=now,amendment=m)
-
-def test_a1_namespace_preserves_original_model_red():
-    p=common.A/'jobs/ppl_A_2048_w0.json';r=common.read(p)
-    assert r['status']=='RED' and 'undefined symbol: cudaGetDeviceDefaultMemPool' in r['error']
-    assert common.job_path('ppl_A_2048_w0')==common.A/'jobs_a1/ppl_A_2048_w0.json'
-    assert common.sha(p)==common.read(common.A/'a1_before.json')['files'][str(p.relative_to(R))]
-
-def test_explicit_completed_fallback_satisfies_dependency_without_rewriting_red(monkeypatch,tmp_path):
-    cs={
-        'layer':dict(id='layer',kind='margin_layer',depends=[]),
-        'band':dict(id='band',kind='margin_band',depends=[],fallback_for='layer'),
-        'layer_bands':dict(id='layer_bands',kind='margin_summary',depends=['band'],fallback_for='layer'),
-        'eq':dict(id='eq',kind='eq',depends=['layer']),
-    }
-    monkeypatch.setattr(registry,'by_id',lambda:cs)
-    monkeypatch.setattr(common,'job_path',lambda n:tmp_path/(n+'.json'))
-    monkeypatch.setattr(common,'fingerprint',lambda c:{'code':'live'})
-    def receipt(name,status='PASS',result=None,dependencies=None):
-        j=dict(cell=cs[name],status=status,registration_sha256=common.REG_SHA,
-               fingerprint={'code':'live'},dependencies=dependencies or {},result=result or {})
-        common.publish(common.job_path(name),j);return j
-    receipt('layer','RED',dict(outcome='RAIL'));red_bytes=common.job_path('layer').read_bytes()
-    with pytest.raises(common.Red,match='RED'):common.require_pass('layer')
-    receipt('band')
-    summary=receipt('layer_bands',result=dict(eq_sp=1.),dependencies={'band':common.sha(common.job_path('band'))})
-    assert common.require_pass('layer')==summary
-    assert common.dependency_path('layer')==common.job_path('layer_bands')
-    receipt('eq',dependencies={'layer':common.sha(common.job_path('layer_bands'))})
-    assert common.require_pass('eq')['status']=='PASS'
-    assert common.job_path('layer').read_bytes()==red_bytes

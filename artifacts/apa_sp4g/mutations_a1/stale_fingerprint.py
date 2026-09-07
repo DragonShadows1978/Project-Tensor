@@ -66,7 +66,7 @@ def require_margin_rail(name):
     from apa_sp4g_registry import by_id
     c=by_id()[name];j=read(job_path(name))
     if (c['kind']!='margin_layer' or j.get('cell')!=c or j.get('status')!='RED'
-            or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint(c)
+            or j.get('registration_sha256')!=REG_SHA or False
             or j.get('result',{}).get('outcome')!='RAIL'):
         raise Red('FALLBACK_REQUIRES_CURRENT_WHOLE_LAYER_RAIL: '+name)
     for d in c['depends']:require_pass(d)

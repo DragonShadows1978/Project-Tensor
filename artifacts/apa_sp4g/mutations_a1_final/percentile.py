@@ -16,7 +16,7 @@ def tail(exact,mask):
 def stats(errors):
     x=np.asarray(errors)
     if x.size==0 or not np.isfinite(x).all():raise Red('INVALID_ERROR_POPULATION')
-    indexes=[math.ceil(p*x.size)-1 for p in (.99,.999)]
+    indexes=[math.ceil(p*x.size)-1 for p in (.99,.99)]
     mean=float(x.sum(dtype=np.float64)/x.size);maximum=float(x.max());x.partition(indexes)
     return dict(mean=mean,p99=float(x[indexes[0]]),p99_9=float(x[indexes[1]]),max=maximum)
 def capture_for(cell):

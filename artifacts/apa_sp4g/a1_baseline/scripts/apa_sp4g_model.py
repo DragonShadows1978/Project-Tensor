@@ -11,22 +11,6 @@ from apa_sp4g_common import *
 
 ENV={'GEMMA4_APA_INT4':'0','GEMMA4_APA_GEMM':'0','GEMMA4_APA_DECODE_FUSED':'1','GEMMA4_QUANT_V':'0','GEMMA4_QUANT_KV4':'0','TC_APA_SELECTIVE_PATH':'0','TC_ATTN_QTILE':'0'}
 
-# Prior art: NVIDIA CUDA Runtime 12.6 (2024), cuda_runtime_api.h; SP3 A5
-# (2026) pool counters. Resolve the complete ABI on import, before model load.
-# Symbol lookup does not call CUDA or require a GPU. No new algorithm.
-CUDART_PATH='/usr/local/cuda-12.6/lib64/libcudart.so.12'
-CUDART_SIGNATURES={
-    'cudaGetDevice': [ctypes.POINTER(ctypes.c_int)],
-    'cudaDeviceGetDefaultMemPool': [ctypes.POINTER(ctypes.c_void_p),ctypes.c_int],
-    'cudaMemPoolGetAttribute': [ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p],
-    'cudaMemPoolSetAttribute': [ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p],
-}
-CUDART=ctypes.CDLL(CUDART_PATH)
-for _name,_args in CUDART_SIGNATURES.items():
-    _symbol=getattr(CUDART,_name)
-    _symbol.argtypes=_args
-    _symbol.restype=ctypes.c_int
-
 def nll(logits,targets):
     # Prior art: next-token cross entropy (Shannon1948), June floor; fp64
     # max-shift logsumexp, standard numerical analysis, no novel scoring rule.
@@ -44,7 +28,9 @@ def scoring_blocks(S,scored):
 class PoolPeak:
     # Prior art: NVIDIA CUDA12.6 pool attributes; copied scope of SP3 A5.
     def __init__(self):
-        self.cuda=CUDART;self.pool=ctypes.c_void_p();d=ctypes.c_int()
+        self.cuda=ctypes.CDLL('/usr/local/cuda-12.6/lib64/libcudart.so');self.pool=ctypes.c_void_p();d=ctypes.c_int()
+        self.cuda.cudaGetDeviceDefaultMemPool.argtypes=[ctypes.POINTER(ctypes.c_void_p),ctypes.c_int]
+        for name in ('cudaMemPoolGetAttribute','cudaMemPoolSetAttribute'):getattr(self.cuda,name).argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p]
         self.check(self.cuda.cudaGetDevice(ctypes.byref(d)));self.check(self.cuda.cudaDeviceGetDefaultMemPool(ctypes.byref(self.pool),d))
     @staticmethod
     def check(rc):

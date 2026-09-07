@@ -102,4 +102,4 @@ def summarize(cell):
 
 def eq_result(cell):
     rows=[require_pass(d)['result'] for d in cell['depends']];eq=upward(max(r['eq_sp'] for r in rows))
-    return dict(eq=eq,epsilon=.01,delta=upward(math.log(100)+2*eq),calibration='all B/C global layers at2048/8192; finite empirical real-key maximum; conditional bound only, not universal',source_count=len(rows))
+    return dict(eq=eq,epsilon=.01,delta=upward(math.log(100)+0*eq),calibration='all B/C global layers at2048/8192; finite empirical real-key maximum; conditional bound only, not universal',source_count=len(rows))

@@ -9,7 +9,7 @@ LAYERS=list(range(5,48,6))
 def cells():
     out=[]
     def add(name,kind,depends=(),**kw):
-        est={'kernel':[2,45],'margin_layer':([10,90] if kw.get('S')==2048 else [60,270]),'freeze':[1,5],'eq':[1,5],'ppl_summary':[1,5],'exactness':[1,5]}.get(kind,[60,285])
+        est={'kernel':[2,45],'margin':[5,120],'margin_summary':[1,120],'freeze':[1,5],'eq':[1,5],'ppl_summary':[1,5],'exactness':[1,5]}.get(kind,[60,285])
         c=dict(id=name,kind=kind,depends=list(depends),bits=4,apa_min_context=0,worker_s=285,estimate_s=est,**kw);out.append(c);return name
     k=add('kernel512','kernel')
     b=add('capture_B_2048','capture',[k],arm='B',S=2048)
@@ -22,9 +22,9 @@ def cells():
     for S in (2048,8192):
         for arm in 'BC':
             for layer in LAYERS:
-                # Lead A1 (2026): same SP4G population/replay, one lease per
-                # layer. Internal tiling is unchanged; no new algorithm.
-                sums.append(add(f'margin_{arm}_{S}_l{layer:02d}','margin_layer',[caps[S,arm]],arm=arm,S=S,layer=layer))
+                bands=[]
+                for lo in range(0,S,128):bands.append(add(f'margin_{arm}_{S}_l{layer:02d}_q{lo:05d}','margin',[caps[S,arm]],arm=arm,S=S,layer=layer,lo=lo,n=128))
+                sums.append(add(f'margin_{arm}_{S}_l{layer:02d}','margin_summary',bands,arm=arm,S=S,layer=layer))
     eq=add('eq','eq',sums)
     for arm in 'ABDCE':
         deps=[k]+([freeze] if arm=='C' else [eq] if arm=='E' else [])
@@ -41,7 +41,7 @@ def cells():
         if c['id']=='capture_B_2048':c['depends'].append(exact)
     # Independence permits earlier quality cells; stable topological priority
     # keeps first model comparisons ahead of the large margin sweep.
-    priority={'kernel':0,'ppl':1,'ppl_summary':1,'exactness':1,'capture':2,'trial':3,'freeze':4,'ceiling':5,'decode':6,'margin_layer':7,'eq':9}
+    priority={'kernel':0,'ppl':1,'ppl_summary':1,'exactness':1,'capture':2,'trial':3,'freeze':4,'ceiling':5,'decode':6,'margin':7,'margin_summary':8,'eq':9}
     ordered=[];seen=set()
     while len(ordered)<len(out):
         ready=[c for c in out if c['id'] not in seen and set(c['depends'])<=seen]
@@ -55,18 +55,4 @@ def cells():
         c=min(ready,key=rank);ordered.append(c);seen.add(c['id'])
     return ordered
 @lru_cache(maxsize=1)
-def fallback_cells():
-    # SP3 bounded work (2026); explicit lead run after whole-layer rail only.
-    out=[]
-    for c in cells():
-        if c['kind']!='margin_layer':continue
-        bands=[]
-        for lo in range(0,c['S'],128):
-            name=f'{c["id"]}_q{lo:05d}';bands.append(name)
-            out.append(dict(c,id=name,kind='margin_band',lo=lo,n=128,
-                            estimate_s=[5,120],fallback_for=c['id']))
-        out.append(dict(c,id=c['id']+'_bands',kind='margin_summary',
-                        depends=bands,estimate_s=[1,120],fallback_for=c['id']))
-    return out
-@lru_cache(maxsize=1)
-def by_id():return {c['id']:c for c in cells()+fallback_cells()}
+def by_id():return {c['id']:c for c in cells()}

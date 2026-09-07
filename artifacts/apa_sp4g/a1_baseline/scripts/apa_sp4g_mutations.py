@@ -12,7 +12,7 @@ MUTANTS=[
  ('margin_term','metrics','math.log(100)+2*eq','math.log(100)+0*eq','test_eq_uses_both_lengths_and_upward_margin'),
  ('relaxed_match','gpu',"abs(r['fraction']-target)<=.01","abs(r['fraction']-target)<=.02",'test_match_outside_tolerance_does_not_carry'),
  ('reverse_bracket','gpu',"if r['fraction']<target:","if r['fraction']>target:",'test_bisection_direction_and_global_delta'),
- ('stale_fingerprint','common',"(j.get('fingerprint')!=fingerprint(c) and not legacy_compatible(j))",'False','test_receipt_stale_source_rejected'),
+ ('stale_fingerprint','common',"j.get('fingerprint')!=fingerprint(c)",'False','test_receipt_stale_source_rejected'),
 ]
 def main():
     label='mutations' if len(sys.argv)==1 else 'mutations_'+sys.argv[1]

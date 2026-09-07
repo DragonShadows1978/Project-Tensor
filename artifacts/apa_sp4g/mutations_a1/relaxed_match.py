@@ -10,7 +10,7 @@ CPU_KINDS={'freeze','eq','margin_summary','ppl_summary','exactness'}
 
 def choose_trial(previous,target):
     for name,r in previous:
-        if abs(r['fraction']-target)<=.01:return dict(carry=name,delta=r['delta'])
+        if abs(r['fraction']-target)<=.02:return dict(carry=name,delta=r['delta'])
     lo,hi=0.,32.
     for _,r in previous:
         if r['fraction']<target:lo=max(lo,r['delta'])

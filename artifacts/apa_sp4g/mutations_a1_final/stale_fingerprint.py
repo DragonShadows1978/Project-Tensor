@@ -101,7 +101,7 @@ def require_pass(name,cache=None):
         require_margin_rail(name)
         cache[name]=require_pass(name+'_bands',cache);return cache[name]
     from apa_sp4g_a1_provenance import legacy_compatible
-    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or (j.get('fingerprint')!=fingerprint(c) and not legacy_compatible(j)):raise Red('STALE_OR_RED_RECEIPT: '+name)
+    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or False:raise Red('STALE_OR_RED_RECEIPT: '+name)
     if 'fallback_for' in c:require_margin_rail(c['fallback_for'])
     expected={}
     for d in c['depends']:require_pass(d,cache);expected[d]=sha(dependency_path(d))

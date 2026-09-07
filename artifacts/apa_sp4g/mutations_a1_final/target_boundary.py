@@ -36,7 +36,7 @@ def nll(logits,targets):
     return float(loss.sum(dtype=np.float64))
 
 def scoring_blocks(S,scored):
-    pos=S-scored-1
+    pos=S-scored
     if not 0<scored<S:raise Red('INVALID_SCORING_WINDOW')
     while pos<S-1:
         n=min(64,S-1-pos);yield pos,n;pos+=n

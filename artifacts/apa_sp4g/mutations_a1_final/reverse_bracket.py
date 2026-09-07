@@ -13,7 +13,7 @@ def choose_trial(previous,target):
         if abs(r['fraction']-target)<=.01:return dict(carry=name,delta=r['delta'])
     lo,hi=0.,32.
     for _,r in previous:
-        if r['fraction']<target:lo=max(lo,r['delta'])
+        if r['fraction']>target:lo=max(lo,r['delta'])
         else:hi=min(hi,r['delta'])
     if hi<=lo:raise Red('CALIBRATION_BRACKET_BROKEN')
     return dict(carry=None,delta=4. if not previous else float(np.float32((lo+hi)/2)))

@@ -12,7 +12,7 @@ def upward(x):return float(np.nextafter(np.float32(x),np.float32(np.inf)))
 def tail(exact,mask):
     x=np.asarray(exact,np.float64);m=np.asarray(mask,bool)
     if x.size==0 or not np.isfinite(x).all() or x.shape!=m.shape:raise Red('INVALID_TAIL')
-    w=np.exp(x-x.max());return float(w[~m].sum()/w.sum()),float(w[~m].max()) if (~m).any() else 0.
+    w=np.exp(x-x.max());return float(w[~m].sum()/w[~m].sum()),float(w[~m].max()) if (~m).any() else 0.
 def stats(errors):
     x=np.asarray(errors)
     if x.size==0 or not np.isfinite(x).all():raise Red('INVALID_ERROR_POPULATION')

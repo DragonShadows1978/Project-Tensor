@@ -72,9 +72,9 @@ def execute(c):
             r=require_pass(d)['result']
             if abs(r['fraction']-target)<=.01:return dict(delta=r['delta'],fraction=r['fraction'],target=target,trial=r.get('carried_from',d),match_abs=abs(r['fraction']-target))
         raise Red('C_MATCH_FAILED_12_REGISTERED_TRIALS')
-    if kind in ('margin_layer','margin_band','margin_summary','eq'):
-        from apa_sp4g_metrics import band,whole_layer,summarize,eq_result
-        return {'margin_layer':whole_layer,'margin_band':band,'margin_summary':summarize,'eq':eq_result}[kind](c)
+    if kind in ('margin','margin_summary','eq'):
+        from apa_sp4g_metrics import band,summarize,eq_result
+        return {'margin':band,'margin_summary':summarize,'eq':eq_result}[kind](c)
     delta=None
     if c['arm']=='C':
         if kind=='trial':
@@ -115,24 +115,20 @@ def execute(c):
 
 def evidence(c):return 'model perplexity' if c['kind'] in ('ppl','ppl_summary','exactness') else 'kernel sweep' if c['kind'] not in ('freeze','eq') else 'finite calibration / reasoning'
 def make_receipt(c,status,result,error=None):
-    return dict(cell=c,status=status,registration_sha256=REG_SHA,fingerprint_schema='apa_sp4g_per_kind_v1',fingerprint=fingerprint(c),dependencies={d:sha(dependency_path(d)) for d in c['depends']},result=result,error=error,evidence_class=evidence(c))
+    return dict(cell=c,status=status,registration_sha256=REG_SHA,fingerprint_schema='apa_sp4g_per_kind_v1',fingerprint=fingerprint(c),dependencies={d:sha(job_path(d)) for d in c['depends']},result=result,error=error,evidence_class=evidence(c))
 def preflight(c):
     verify_sources();verify_weight();tokens();build_check()
-    from apa_sp4g_a1_provenance import bridge
-    amendment=bridge()
-    gate=read(A/'CPU_GATES_A1.json')
+    gate=read(A/'CPU_GATES.json')
     if gate.get('status')!='PASS_CPU_ONLY' or gate.get('registration_sha256')!=REG_SHA:raise Red('CPU_GATE_REQUIRED')
-    if gate.get('fingerprint_amendment_sha256')!=amendment['sha256']:raise Red('CPU_GATE_AMENDMENT_CHANGED')
     for p,h in gate['execution_sha256'].items():
         if sha(R/p)!=h:raise Red('CPU_GATE_STALE: '+p)
     if job_path(c['id']).exists():require_pass(c['id']);return 'DONE'
     cache={}
     for d in c['depends']:require_pass(d,cache)
-    if 'fallback_for' in c:require_margin_rail(c['fallback_for'])
-    if c['kind'] in ('capture','trial','margin_layer','margin_band','margin_summary'):
+    if c['kind'] in ('capture','trial','margin','margin_summary'):
         # Conservative owned-artifact headroom, not a capacity extrapolation:
         # current cell output plus scratch; full all-pair output retained.
-        need=12*(1<<30) if c['kind'] in ('margin_layer','margin_summary') else 8*(1<<30)
+        need=12*(1<<30) if c['kind']=='margin_summary' else 8*(1<<30)
         if shutil.disk_usage(A).free<need:raise Red('DISK_RAIL_NEEDS_BYTES: '+str(need))
     return 'CPU' if c['kind'] in CPU_KINDS else 'GPU'
 def idle():

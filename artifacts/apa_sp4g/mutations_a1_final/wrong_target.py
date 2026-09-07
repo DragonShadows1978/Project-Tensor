@@ -32,7 +32,7 @@ def nll(logits,targets):
     # max-shift logsumexp, standard numerical analysis, no novel scoring rule.
     x=np.asarray(logits,np.float64);y=np.asarray(targets,np.int64)
     if x.ndim!=2 or x.shape[0]!=len(y) or len(y)==0 or not np.isfinite(x).all():raise Red('INVALID_LOGITS')
-    mx=x.max(axis=1);loss=mx+np.log(np.exp(x-mx[:,None]).sum(axis=1))-x[np.arange(len(y)),y]
+    mx=x.max(axis=1);loss=mx+np.log(np.exp(x-mx[:,None]).sum(axis=1))-x[np.arange(len(y)),np.roll(y,1)]
     return float(loss.sum(dtype=np.float64))
 
 def scoring_blocks(S,scored):

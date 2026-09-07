@@ -58,53 +58,26 @@ def load_runtime():
     import tensor_cuda as tc
     if Path(tc.__file__).resolve().parent!=R/'tensor_cuda/tensor_cuda' or Path(tc._C.__file__).resolve().parent!=BUILD:raise Red('WRONG_ENGINE_CHECKOUT')
     return tc
-def job_path(name):return A/('jobs' if name=='kernel512' else 'jobs_a1')/f'{name}.json'
-
-def require_margin_rail(name):
-    # SP3 (2026) explicit rail forks: a failed whole-layer measurement is
-    # preserved and never reclassified. Only current RAIL permits opt-in bands.
-    from apa_sp4g_registry import by_id
-    c=by_id()[name];j=read(job_path(name))
-    if (c['kind']!='margin_layer' or j.get('cell')!=c or j.get('status')!='RED'
-            or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint(c)
-            or j.get('result',{}).get('outcome')!='RAIL'):
-        raise Red('FALLBACK_REQUIRES_CURRENT_WHOLE_LAYER_RAIL: '+name)
-    for d in c['depends']:require_pass(d)
-    if j.get('dependencies')!={d:sha(dependency_path(d)) for d in c['depends']}:
-        raise Red('FALLBACK_RAIL_DEPENDENCY_CHANGED: '+name)
-    return j
-
-def dependency_path(name):
-    from apa_sp4g_registry import by_id
-    if by_id()[name]['kind']=='margin_layer' and job_path(name+'_bands').exists():
-        require_margin_rail(name)
-        return job_path(name+'_bands')
-    return job_path(name)
+def job_path(name):return A/'jobs'/f'{name}.json'
 # Per-kind import closure: report-only edits never invalidate model receipts.
 CLOSURES={
  'kernel':['gpu'], 'capture':['gpu','model'], 'trial':['gpu','model'],
- 'freeze':['gpu'], 'margin_layer':['gpu','metrics'], 'margin_band':['gpu','metrics'], 'margin_summary':['gpu','metrics'],
+ 'freeze':['gpu'], 'margin':['gpu','metrics'], 'margin_summary':['gpu','metrics'],
  'eq':['gpu','metrics'], 'ppl':['gpu','model'], 'ppl_summary':['gpu'], 'exactness':['gpu'],
  'ceiling':['gpu','model'], 'decode':['gpu','model']}
 def fingerprint(cell):
-    names=['common','registry','a1_provenance']+CLOSURES[cell['kind']]
+    names=['common','registry']+CLOSURES[cell['kind']]
     paths=[R/f'scripts/apa_sp4g_{n}.py' for n in sorted(set(names))]
     paths += [R/'scripts/apa_sp4g_lead_gpu.sh',A/'registration.json',BUILD/'manifest.json',A/'CPU_GATES.json']
-    paths += [A/'amendment_002_a1_execution.json']
     return {str(p.relative_to(R)):sha(p) for p in paths}
 def require_pass(name,cache=None):
     from apa_sp4g_registry import by_id
     cache=(VALIDATION.get() if VALIDATION.get() is not None else {}) if cache is None else cache
     if name in cache:return cache[name]
     j=read(job_path(name));c=by_id()[name]
-    if c['kind']=='margin_layer' and job_path(name+'_bands').exists():
-        require_margin_rail(name)
-        cache[name]=require_pass(name+'_bands',cache);return cache[name]
-    from apa_sp4g_a1_provenance import legacy_compatible
-    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or (j.get('fingerprint')!=fingerprint(c) and not legacy_compatible(j)):raise Red('STALE_OR_RED_RECEIPT: '+name)
-    if 'fallback_for' in c:require_margin_rail(c['fallback_for'])
+    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint(c):raise Red('STALE_OR_RED_RECEIPT: '+name)
     expected={}
-    for d in c['depends']:require_pass(d,cache);expected[d]=sha(dependency_path(d))
+    for d in c['depends']:require_pass(d,cache);expected[d]=sha(job_path(d))
     if j.get('dependencies')!=expected:raise Red('DEPENDENCY_CHANGED: '+name)
     for f in j.get('result',{}).get('files',[]):
         # SP3 a4: rehash at creation; exact inode/size/mtime/ctime identity
