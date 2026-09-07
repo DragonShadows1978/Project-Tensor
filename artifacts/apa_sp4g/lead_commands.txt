@@ -1,263 +1,92 @@
-# APA-SP4G exact commands, dependency order. No batch is automatically started.
-# Model load ALONE: 30-120s unmeasured. Worker hard max 290s; outer 588s; GPU cooldown 30s plus lease up to 20s.
-# CPU aggregate cells have no GPU lease/cooldown. Original kernel512 is reused through the exact A1 bridge; original model RED stays in jobs/. New jobs go to jobs_a1/.
-# Whole-layer margins:2048 10-90s;8192 60-270s, no model load. Fallback ONLY after corresponding whole-layer RED RAIL; see lead_commands_fallback.txt.
+# APA-SP4G A2: execute each reviewed foreground command separately; stop on RED.
+# New driver; original measured execution closure preserved. No long rows/retries.
+# Worker285s / hard290s; outer588s; lease<=20s and cooldown30s.
 cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g
-bash scripts/apa_sp4g_lead_gpu.sh list
-# kernel512: kernel; worker 2-45s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: 
-bash scripts/apa_sp4g_lead_gpu.sh run kernel512
-# ppl_A_2048_w0: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048_w0
-# ppl_A_2048_w1: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048_w1
-# ppl_A_2048_w2: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048_w2
-# ppl_A_2048_w3: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048_w3
-# ppl_A_2048: ppl_summary; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_A_2048_w0,ppl_A_2048_w1,ppl_A_2048_w2,ppl_A_2048_w3
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048
-# ppl_B_2048_w0: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_2048_w0
-# ppl_B_2048_w1: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_2048_w1
-# ppl_B_2048_w2: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_2048_w2
-# ppl_B_2048_w3: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_2048_w3
-# ppl_B_2048: ppl_summary; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_B_2048_w0,ppl_B_2048_w1,ppl_B_2048_w2,ppl_B_2048_w3
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_2048
-# ppl_D_2048_w0: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_2048_w0
-# ppl_D_2048_w1: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_2048_w1
-# ppl_D_2048_w2: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_2048_w2
-# ppl_D_2048_w3: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_2048_w3
-# ppl_D_2048: ppl_summary; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_D_2048_w0,ppl_D_2048_w1,ppl_D_2048_w2,ppl_D_2048_w3
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_2048
-# exactness_2048: exactness; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_A_2048,ppl_D_2048
-bash scripts/apa_sp4g_lead_gpu.sh run exactness_2048
-# capture_B_2048: capture; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,exactness_2048
-bash scripts/apa_sp4g_lead_gpu.sh run capture_B_2048
-# trial_00: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run trial_00
-# trial_01: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00
-bash scripts/apa_sp4g_lead_gpu.sh run trial_01
-# trial_02: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01
-bash scripts/apa_sp4g_lead_gpu.sh run trial_02
-# trial_03: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02
-bash scripts/apa_sp4g_lead_gpu.sh run trial_03
-# trial_04: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03
-bash scripts/apa_sp4g_lead_gpu.sh run trial_04
-# trial_05: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04
-bash scripts/apa_sp4g_lead_gpu.sh run trial_05
-# trial_06: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05
-bash scripts/apa_sp4g_lead_gpu.sh run trial_06
-# trial_07: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06
-bash scripts/apa_sp4g_lead_gpu.sh run trial_07
-# trial_08: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06,trial_07
-bash scripts/apa_sp4g_lead_gpu.sh run trial_08
-# trial_09: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06,trial_07,trial_08
-bash scripts/apa_sp4g_lead_gpu.sh run trial_09
-# trial_10: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06,trial_07,trial_08,trial_09
-bash scripts/apa_sp4g_lead_gpu.sh run trial_10
-# trial_11: trial; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06,trial_07,trial_08,trial_09,trial_10
-bash scripts/apa_sp4g_lead_gpu.sh run trial_11
-# freeze: freeze; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: capture_B_2048,trial_00,trial_01,trial_02,trial_03,trial_04,trial_05,trial_06,trial_07,trial_08,trial_09,trial_10,trial_11
-bash scripts/apa_sp4g_lead_gpu.sh run freeze
-# ppl_C_2048_w0: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_2048_w0
-# ppl_C_2048_w1: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_2048_w1
-# ppl_C_2048_w2: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_2048_w2
-# ppl_C_2048_w3: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_2048_w3
-# ppl_C_2048: ppl_summary; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_C_2048_w0,ppl_C_2048_w1,ppl_C_2048_w2,ppl_C_2048_w3
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_2048
-# ceiling_A_4096: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_A_4096
-# ceiling_A_8192: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_A_8192
-# ceiling_B_4096: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_B_4096
-# ceiling_B_8192: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_B_8192
-# ceiling_D_4096: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_D_4096
-# ceiling_D_8192: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_D_8192
-# ceiling_C_4096: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_C_4096
-# ceiling_C_8192: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_C_8192
-# decode_A_2048: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run decode_A_2048
-# decode_A_8192: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run decode_A_8192
-# decode_B_2048: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run decode_B_2048
-# decode_B_8192: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run decode_B_8192
-# decode_C_2048: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run decode_C_2048
-# decode_C_8192: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run decode_C_8192
-# margin_B_2048_l05: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l05
-# margin_B_2048_l11: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l11
-# margin_B_2048_l17: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l17
-# margin_B_2048_l23: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l23
-# margin_B_2048_l29: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l29
-# margin_B_2048_l35: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l35
-# margin_B_2048_l41: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l41
-# margin_B_2048_l47: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_2048
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_2048_l47
-# margin_C_2048_l05: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l05
-# margin_C_2048_l11: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l11
-# margin_C_2048_l17: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l17
-# margin_C_2048_l23: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l23
-# margin_C_2048_l29: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l29
-# margin_C_2048_l35: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l35
-# margin_C_2048_l41: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l41
-# margin_C_2048_l47: margin_layer; worker 10-90s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: freeze
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_2048_l47
-# ppl_A_8192: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_8192
-# ppl_A_16384: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_16384
-# ppl_B_8192: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_8192
-# ppl_B_16384: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_16384
-# ppl_D_8192: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_8192
-# exactness_8192: exactness; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_A_8192,ppl_D_8192
-bash scripts/apa_sp4g_lead_gpu.sh run exactness_8192
-# ppl_D_16384: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_16384
-# exactness_16384: exactness; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_A_16384,ppl_D_16384
-bash scripts/apa_sp4g_lead_gpu.sh run exactness_16384
-# ppl_C_8192: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_8192
-# ppl_C_16384: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_16384
-# capture_B_8192: capture; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run capture_B_8192
-# margin_B_8192_l05: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l05
-# margin_B_8192_l11: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l11
-# margin_B_8192_l17: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l17
-# margin_B_8192_l23: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l23
-# margin_B_8192_l29: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l29
-# margin_B_8192_l35: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l35
-# margin_B_8192_l41: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l41
-# margin_B_8192_l47: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_B_8192_l47
-# capture_C_8192: capture; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run capture_C_8192
-# margin_C_8192_l05: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l05
-# margin_C_8192_l11: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l11
-# margin_C_8192_l17: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l17
-# margin_C_8192_l23: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l23
-# margin_C_8192_l29: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l29
-# margin_C_8192_l35: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l35
-# margin_C_8192_l41: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l41
-# margin_C_8192_l47: margin_layer; worker 60-270s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: capture_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run margin_C_8192_l47
-# eq: eq; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: margin_B_2048_l05,margin_B_2048_l11,margin_B_2048_l17,margin_B_2048_l23,margin_B_2048_l29,margin_B_2048_l35,margin_B_2048_l41,margin_B_2048_l47,margin_C_2048_l05,margin_C_2048_l11,margin_C_2048_l17,margin_C_2048_l23,margin_C_2048_l29,margin_C_2048_l35,margin_C_2048_l41,margin_C_2048_l47,margin_B_8192_l05,margin_B_8192_l11,margin_B_8192_l17,margin_B_8192_l23,margin_B_8192_l29,margin_B_8192_l35,margin_B_8192_l41,margin_B_8192_l47,margin_C_8192_l05,margin_C_8192_l11,margin_C_8192_l17,margin_C_8192_l23,margin_C_8192_l29,margin_C_8192_l35,margin_C_8192_l41,margin_C_8192_l47
-bash scripts/apa_sp4g_lead_gpu.sh run eq
-# ppl_E_2048_w0: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_2048_w0
-# ppl_E_2048_w1: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_2048_w1
-# ppl_E_2048_w2: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_2048_w2
-# ppl_E_2048_w3: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_2048_w3
-# ppl_E_2048: ppl_summary; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_E_2048_w0,ppl_E_2048_w1,ppl_E_2048_w2,ppl_E_2048_w3
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_2048
-# ceiling_E_4096: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_E_4096
-# ceiling_E_8192: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_E_8192
-# ppl_E_8192: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_8192
-# ppl_E_16384: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_16384
-# ceiling_A_16384: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_A_16384
-# ceiling_A_24576: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_A_24576
-# ceiling_B_16384: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_B_16384
-# ceiling_B_24576: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_B_24576
-# ceiling_D_16384: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_D_16384
-# ceiling_D_24576: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_D_24576
-# ceiling_C_16384: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_C_16384
-# ceiling_C_24576: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_C_24576
-# ceiling_E_16384: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_E_16384
-# ceiling_E_24576: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_E_24576
-# ppl_A_32768: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_32768
-# ceiling_A_32768: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_A_32768
-# decode_A_32768: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,decode_A_8192
-bash scripts/apa_sp4g_lead_gpu.sh run decode_A_32768
-# ppl_B_32768: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_B_32768
-# ceiling_B_32768: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_B_32768
-# decode_B_32768: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,decode_B_8192
-bash scripts/apa_sp4g_lead_gpu.sh run decode_B_32768
-# ppl_D_32768: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_D_32768
-# ceiling_D_32768: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_D_32768
-# ppl_C_32768: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_C_32768
-# ceiling_C_32768: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_C_32768
-# decode_C_32768: decode; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,freeze,decode_C_8192
-bash scripts/apa_sp4g_lead_gpu.sh run decode_C_32768
-# ppl_E_32768: ppl; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ppl_E_32768
-# ceiling_E_32768: ceiling; worker 60-285s (planning, not measurement); +0-50s lease/cooldown; outer<=588s; depends: kernel512,eq
-bash scripts/apa_sp4g_lead_gpu.sh run ceiling_E_32768
-# exactness_32768: exactness; worker 1-5s (planning, not measurement); +0-0s lease/cooldown; outer<=588s; depends: ppl_A_32768,ppl_D_32768
-bash scripts/apa_sp4g_lead_gpu.sh run exactness_32768
-bash scripts/apa_sp4g_lead_gpu.sh summary
+bash scripts/apa_sp4g_a2_lead_gpu.sh list
+# parity: worker estimate[60, 285]s; deps=kernel512
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_source_2048
+# parity: worker estimate[60, 285]s; deps=diag_a2_source_2048
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_scale_2048
+# parity: worker estimate[60, 285]s; deps=diag_a2_scale_2048
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_value_2048
+# parity: worker estimate[60, 285]s; deps=diag_a2_value_2048
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_rope_2048
+# precision: worker estimate[60, 285]s; deps=diag_a2_rope_2048
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_fp32_A_2048_w0
+# precision: worker estimate[60, 285]s; deps=diag_a2_fp32_A_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_fp32_2048_w0
+# replay_probe: worker estimate[5, 90]s; deps=capture_B_8192
+bash scripts/apa_sp4g_a2_lead_gpu.sh run diag_a2_replay_B_8192_l05
+# ppl_capture: worker estimate[60, 285]s; deps=kernel512
+bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_B_2048_w0
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l05
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l11
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l17
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l23
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l29
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l35
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l41
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_B_2048_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_2048_l47
+# ppl_capture: worker estimate[60, 285]s; deps=kernel512
+bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_B_8192_w0
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l05
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l11
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l17
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l23
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l29
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l35
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l41
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_B_8192_w0
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_B_8192_l47
+# ppl_capture: worker estimate[60, 285]s; deps=kernel512,freeze; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_C_2048_w0
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l05
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l11
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l17
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l23
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l29
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l35
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l41
+# margin_a2: worker estimate[10, 90]s; deps=ppl_capture_C_2048_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_2048_l47
+# ppl_capture: worker estimate[60, 285]s; deps=kernel512,freeze; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run ppl_capture_C_8192_w0
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l05
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l11
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l17
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l23
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l29
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l35
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l41
+# margin_a2: worker estimate[60, 270]s; deps=ppl_capture_C_8192_w0; C BLOCKED until lead resolves exactness and original calibration
+bash scripts/apa_sp4g_a2_lead_gpu.sh run margin_a2_C_8192_l47
+bash scripts/apa_sp4g_a2_lead_gpu.sh summary
