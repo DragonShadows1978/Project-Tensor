@@ -5,21 +5,21 @@ T: pinned HF MiniCPM3 snapshot, bf16 weights, full SDPA attention. Flash is pref
 
 | S | Arm | Status | PPL | Engine minus T | SDPA backend |
 |---:|---|---|---:|---:|---|
-| 1024 | T | UNRUN | — | — | — |
-| 1024 | A | STALE | — | — | — |
-| 1024 | B | STALE | — | — | — |
-| 1024 | C | STALE | — | — | — |
-| 1024 | D | STALE | — | — | — |
-| 8192 | T | UNRUN | — | — | — |
+| 1024 | T | PASS | 7.610716 | — | ['SDPBackend.EFFICIENT_ATTENTION'] |
+| 1024 | A | PASS | 8.655828 | 1.045111 | — |
+| 1024 | B | PASS | 8.778802 | 1.168086 | — |
+| 1024 | C | PASS | 8.661116 | 1.0504 | — |
+| 1024 | D | PASS | 8.655352 | 1.044635 | — |
+| 8192 | T | PASS | 8.475996 | — | ['SDPBackend.EFFICIENT_ATTENTION'] |
 | 8192 | A | RED | — | — | — |
-| 8192 | B | STALE | — | — | — |
-| 8192 | C | STALE | — | — | — |
+| 8192 | B | PASS | 10.403578 | 1.927582 | — |
+| 8192 | C | PASS | 10.042419 | 1.566423 | — |
 | 8192 | D | UNRUN | — | — | — |
-| 32768 | T | UNRUN | — | — | — |
+| 32768 | T | PASS | 6.603129 | — | ['SDPBackend.EFFICIENT_ATTENTION'] |
 | 32768 | A | UNRUN | — | — | — |
 | 32768 | B | UNRUN | — | — | — |
 | 32768 | C | UNRUN | — | — | — |
-| 32768 | D | UNRUN | — | — | — |
+| 32768 | D | RED | — | — | — |
 
 INT4 engine versus bf16 T gaps are observations, not RED parity failures. D@32768 requires T with identical targets; the 0.005 D/A gate remains confined to existing engine controls. D@32768 adds a layer-0 first-128-query refine-all check; no full 62-layer 32K diagnostic claim.
 
@@ -27,23 +27,23 @@ INT4 engine versus bf16 T gaps are observations, not RED parity failures. D@3276
 
 | Arm | S | Status | Fit | Outcome | Peak resident MiB estimate |
 |---|---:|---|---|---|---:|
-| A | 4096 | UNRUN | — | — | — |
+| A | 4096 | PASS | True | FIT | 5925.15625 |
 | A | 8192 | UNRUN | — | — | — |
-| A | 16384 | UNRUN | — | — | — |
-| A | 24576 | UNRUN | — | — | — |
+| A | 16384 | PASS | False | OOM | 3966.5 |
+| A | 24576 | PASS | False | OOM | 4493.5625 |
 | A | 32768 | UNRUN | — | — | — |
-| B | 4096 | UNRUN | — | — | — |
-| B | 8192 | UNRUN | — | — | — |
-| B | 16384 | UNRUN | — | — | — |
-| B | 24576 | UNRUN | — | — | — |
-| B | 32768 | UNRUN | — | — | — |
-| C | 4096 | UNRUN | — | — | — |
-| C | 8192 | UNRUN | — | — | — |
-| C | 16384 | UNRUN | — | — | — |
-| C | 24576 | UNRUN | — | — | — |
-| C | 32768 | UNRUN | — | — | — |
+| B | 4096 | PASS | True | FIT | 4924.25 |
+| B | 8192 | PASS | True | FIT | 4436.59375 |
+| B | 16384 | PASS | True | FIT | 5959.40625 |
+| B | 24576 | RED | — | — | — |
+| B | 32768 | RED | — | — | — |
+| C | 4096 | PASS | True | FIT | 3675.1875 |
+| C | 8192 | PASS | True | FIT | 4436.59375 |
+| C | 16384 | PASS | True | FIT | 5959.40625 |
+| C | 24576 | PASS | True | FIT | 7482.21875 |
+| C | 32768 | RED | — | — | — |
 
-Measured grid summary: `{"A": {"grid_complete": false, "max_successful_grid_S": null}, "B": {"grid_complete": false, "max_successful_grid_S": null}, "C": {"grid_complete": false, "max_successful_grid_S": null}}`.
+Measured grid summary: `{"A": {"grid_complete": false, "max_successful_grid_S": 4096}, "B": {"grid_complete": false, "max_successful_grid_S": 16384}, "C": {"grid_complete": false, "max_successful_grid_S": 24576}}`.
 A timeout is unknown fit, never an OOM or successful prefill. Every grid point is independent. Largest successful S is only a grid result, not an extrapolated capacity or model-quality finding.
 
 ## A4 capture split and immutable receipt handling
