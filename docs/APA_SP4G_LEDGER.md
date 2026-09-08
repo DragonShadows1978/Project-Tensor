@@ -695,3 +695,140 @@ A6_REPORT.md under Prior art; no novelty claim. Seat gpt-6-astra / xhigh.
 A6 ledger timing correction (append-only): the preceding prose says2.59s;
 CPU_GATES_A6.json and logs/apa_sp4g_a6_cpu_final.log record2.41s.
 Use2.41s. Test counts, gate/source hashes and findings are unchanged.
+
+A7 registration and implementation, 2026-09-08. Evidence classes: source/receipt
+inspection, pre-gate registration, reasoning; no new GPU run. Order
+orders/APA_SP4G_AMENDMENT_7.md is immutable. Registration021 SHA256
+`e13f685f3c89fa9430b643aca320a4e93247a83fcfbea9456892c5ec50fbca8c`.
+Preserved snapshot a7_before.json covers63 historical execution/test sources,
+127 job receipts and20 amendments. Separate A7 source files and jobs_a7 only;
+RESULTS/commands/cells snapshots saved create-only in a7_baseline. No prior
+receipt, source, product, kernel, order or model edited. Registration created
+by foreground `PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 python3
+scripts/apa_sp4g_a7_register.py` before any A7 CPU gate.
+
+21 cells ceiling_long_{A,B,C}_{16384,24576,32768,49152,65536,98304,131072};
+A ascending first, then B then C. Every cell1500s worker/1560s outer;20s flock
+wait,30s cooldown. Authority David/lead amendment7 only. Same-arm first CUDA
+OOM establishes registered inferred non-fits at later S without execution.
+RAIL stays fit=null and RED; accepted as a completed censored cell so next
+rung can run, never retry. Unexpected errors/exit137/124 are not OOM and stop
+dependent execution. Existing rails remain unchanged. Cooperative checks
+cannot hard-bound hung native calls without prohibited signals; limitation
+registered before tests. Outer lease receipt flags elapsed-budget overruns.
+
+Both prediction sets are verbatim in021 (lead) and explicit reasoning (seat).
+Seat expects16K and24K fit,32K+ time censoring under requested quadratic
+estimates; no guaranteed extra C rung. Actual June adaptive chunks reach64
+queries:16K standard score tensor32MiB, not the lead's single-shot8GiB.
+B already streams attention and shares reconstructed Kq with C. No kernel
+or adapter change proposed. Anchors: A8192 load75.1898195/prefill105.2469303s;
+B75.9175281/113.3530865s; C clean8192 decode prefill75.7288161/118.8089848s
+(exclude2.6965463s decode). Formula load+prefill*(S/8192)^2; exponent requested,
+not fitted (A4096->8192 prefill ratio~2.03). Full21 numeric estimates in021.
+
+Cache accounting from live June adapter:8 globals*K/V*MQA1*D512*bf16=16384
+bytes/token;40 sliding tuples*2*KV8*D256*1023*2=335216640bytes fixed. Tuples
+and dtype are checked after successful full-S prefill; Kq scratch, RoPE,
+allocator/copies excluded from logical payload. Model.prefill invokes June
+__call__ adaptive chunks exactly, pinned292282-token prefix long enough;
+C frozen delta3.0 anchored to A6 freeze SHA; pooling ON, no captures/scoring.
+June3070 context ~10-11K bf16 solid,12K ragged,16K OOM; qv12K solid7802MiB.
+Terminology discrepancy: lead says bf16 weights, June says bf16 KV/compute
+with QAT INT4 body. Record both, do not claim12B bf16 weights fit8GB.
+
+Peak observation: NVIDIA NVML own-PID accounting maxMemoryUsage when already
+available; otherwise null+RED_PEAK_UNAVAILABLE. Synchronous own-PID boundary
+maximum is a lower bound, never an exact peak; pool reserved/used high-water
+separate. No device accounting setting changes, threads, interposer or
+background polling. Partial OOM/RAIL telemetry and complete-S theoretical
+cache retained. Peak minus KV still includes weights/allocator/overhead.
+
+Registered CPU gates: full existing suite plus A7 schema/rails/dependencies,
+OOM-vs-rail/errors, immutable/tamper tests, unchanged June prefix path,
+frozen delta/pooling, shape/accounting ABIs and partial failure receipts.
+Eight registered mutation lanes, all non-error lanes must run and kill>=.80;
+source copies only. Author baseline, no blind-review claim; lead owns blind
+verification. Exact commands, baseline/failures and seal follow append-only.
+
+Prior art: June Gemma/SP3/SP4G2026 adapter, pool, chunks, receipt DAG reused;
+new work ceiling harness/telemetry only. BLASST/Yuan2025/26 running-max
+https://arxiv.org/abs/2512.12087 and FA2/Dao2023 online softmax
+https://arxiv.org/abs/2307.08691 primary abstracts checked via web. Inherited
+ThriftAttention/Sharratt2026, TurboQuant/Zandieh2025 unverified — lead to check
+arXiv2605.23081/2504.19874. NVIDIA NVML/CUDA12.6(2024) ABI, local nvml.h and
+https://docs.nvidia.com/deploy/nvml-api/structnvmlAccountingStats__t.html checked
+for process peak semantics. Make/Feldman1979, SHA256/NIST2001, classical
+quadratic extrapolation/dimensional analysis, DeMillo/Lipton/Sayward1978
+mutation testing reused; historical metadata unverified — lead to check Make,
+FIPS180, Hints on Test Data Selection. No prior art known to me for a distinct
+new method; no novelty claim. Code-site annotations and final Prior art.
+Seat gpt-6-astra / xhigh per logs/apa_sp4g_a7_r1.log live header. No git,
+subagents, background jobs/waits, kills/signals, service or model changes.
+
+A7 first CPU baseline:28 A7 tests passed in0.18s; full suite176 passed in2.51s,
+0 failures/skips,2 existing SWIG warnings plus unsuppressed swigvarlink warning.
+Logs apa_sp4g_a7_cpu_initial.log / apa_sp4g_a7_cpu_baseline.log. Live CUDA
+probe a7_device_visibility.json: cudaGetDeviceCount100, device_count0,
+`no CUDA-capable device is detected`; A7 GPU workers/model loads0.
+
+Before sealing, tightened final worker check to include telemetry/cleanup:
+a late FIT becomes RAIL; measured CUDA OOM stays OOM. Added exact-peak receipt
+validation requiring accounting provenance and peak>=sampled lower bound.
+CPU preseal exposed a test-fixture mistake:177 passed,1 failed; verbatim
+`Failed: DID NOT RAISE <class 'apa_sp4g_common.Red'>` in
+`test_a7_exact_peak_must_be_accounting_and_at_least_sampled` (log
+apa_sp4g_a7_cpu_preseal.log). The supposed lower peak7400 equalled the fixture
+sample7400, which must be accepted. Corrected lower-bound case to7399 and
+added explicit7400 equality PASS. No production threshold relaxed.
+
+A7 sealed CPU handoff, 2026-09-08. Evidence classes: author CPU suite,
+source-copy mutation gates, artifact identity, live CLI and CUDA visibility.
+Corrected preseal suite178/178 in2.47s (apa_sp4g_a7_cpu_preseal_fixed.log).
+Registered mutations8/8 non-error lanes detected, rate1.0>=0.80; full receipts
+in mutations_a7/results.json and logs/apa_sp4g_a7_mutations.log. All live
+sources remained untouched by mutation execution, including inherited Model.
+Fingerprint022 SHA256
+`4c0b8738d42d136138ea3a0894e1f191c08902342356f9ce98d3b9196bd6b797`.
+Post-seal full suite178 passed,0 failed,0 skipped in2.53s,2 unsuppressed SWIG
+warnings and final swigvarlink warning; log apa_sp4g_a7_cpu_final.log.
+No execution/test edits after seal.7 Python AST files and shell syntax PASS.
+CPU_GATES_A7.json SHA256
+`2e9fde44c10bd229a5f3ffc8974a4aac4ce043745b9d66d52b02e491066632d4`.
+
+One administrative receipt-creation command had an extra closing parenthesis:
+`SyntaxError: unmatched ')'`; no CPU_GATES_A7.json was created by that attempt.
+Premature next/preflight therefore failed closed with `FileNotFoundError:
+[Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/artifacts/apa_sp4g/CPU_GATES_A7.json'`.
+Corrected only the inline creation command (no sealed source change), created
+the gate from the passing log/mutation receipt and reran live CLI checks.
+Use apa_sp4g_a7_next_live.log / preflight_live.log / report_sealed.log as final
+CLI evidence; earlier report_final.log precedes successful CPU-gate publication.
+
+Live list:21 registered cells. Live next:ceiling_long_A_16384. Its preflight:
+GPU (ready for lead, not visible in this sandbox). Exact first command:
+`bash scripts/apa_sp4g_a7_lead_gpu.sh run ceiling_long_A_16384`.
+Full21 commands in lead_commands.txt, A-first ascending per arm; each separate
+foreground invocation. First-cell extrapolated worker496.18s; B16K529.33s,
+C16K550.96s;32K estimates1759.14/1889.57/1976.67s exceed1500s, but all registered
+rungs remain runnable until actual OOM, with each rail receipted and no retry.
+Summary command `bash scripts/apa_sp4g_a7_lead_gpu.sh summary` refreshes RESULTS,
+A7_REPORT, cells.json and GPU_BLOCKED_A7.json. Summary RED,0/21 GPU receipts.
+All21 exact estimates, both predictions, theoretical KV at every S, June3070
+context, peak telemetry scope, source citations and safety are in A7_REPORT.
+RESULTS gains A7 table and retains the prior A6 report as an unchanged snapshot.
+
+Final identity validation:173 fingerprint entries,63 historical execution/test
+files,127 historical receipts,20 earlier amendments unchanged. Original
+registration remains099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e.
+No rebuild needed; existing build manifest/product/adapter/input pins pass.
+GPU RED: cudaGetDeviceCount100/device_count0, `no CUDA-capable device is detected`.
+No long GPU cell, model load or memory-ceiling measurement claimed. Exact peak
+also remains unavailable if NVML accounting is unsupported/disabled; do not
+substitute sampled/pool peaks. Blind review is lead owned and UNRUN. Not
+claimed fixed: memory ceiling, historical PPL exactness, hard no-kill native
+wall bound. No git, subagents, background waits/jobs, process signals/kills,
+services, product/kernel edits or model writes. Model gpt-6-astra, effort xhigh.
+Prior art remains at code sites and A7_REPORT Prior art as recorded above;
+no new attention or selection method. DELIVERY_CHECKS_A7.json records hashes
+and final command/table/preservation checks.
