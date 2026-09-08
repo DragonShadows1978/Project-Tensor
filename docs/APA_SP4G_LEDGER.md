@@ -575,3 +575,123 @@ logs/apa_sp4g_a5_r1.log. Model Gemma-4-12B-it QAT q4_0 symmetric-8 g32, bf16
 engine with global attention fp32 ablation. Not claimed fixed: numerical gap,
 its causal mechanism, or model exactness. GPU comparisons and conditional
 D32 rerun remain UNRUN for lead.
+
+
+A6 registration and implementation, 2026-09-07 (before A6 CPU/card gates).
+Evidence classes: immutable lead ruling, prior card receipts, source inspection,
+and registered prediction. No new GPU measurement yet.
+
+Order orders/APA_SP4G_AMENDMENT_6.md and original registration untouched.
+Ruling019 artifacts/apa_sp4g/amendment_019_a6_ruling.json SHA256
+ac2cc1519634cd74e0540790dce7b5aa2a4900a8922d52c6a1f1d8305fa130b3.
+a6_before.json seals prior sources, job receipts and amendments; a6_baseline
+preserves RESULTS, lead_commands and cells before refresh. Separate jobs_a6,
+propagation_a6, captures_a6 and margin_errors_a6; historical runners unchanged.
+
+Raw receipt discrepancy with lead wording, explicitly NOT corrected by rounding
+or threshold relaxation: c1 L511/S1023 max_abs3.528594970703125e-5; layer5
+b15 L64/S2047 max_abs3.910064697265625e-5 and relF9.043649367824469e-7.
+These exceed3.5e-5/7e-7. Lead per-call PASS interpretation recorded verbatim;
+literal bound verdict RED with all5 exact rows in ruling019 and RESULTS.
+No measured literal PASS claim. C/E authority is explicit amendment6, no
+rewriting historical RED. Floor2.56 from standard A52.48048708520552 minus
+A3249.92117893813879 =2.5593081470667265; applies as lead reporting convention
+to other windows and8192, where it is not independently measured. No statistical
+confidence interval claim. Old0.005 gate remains RED/inapplicable under ruling.
+
+Cell diag_a6_propagation_A32_vs_A_2048_w0: one A32 load; saved A bf16 baseline
+from a5; full144 fp32 pins and bf16 return, actual2047 query-row coverage,
+A32 schedule and exact PPL reproduction required. Lead predicts ~0.1 relF by
+L29; seat predicts0.05-0.2 and >=5 times L5. Before-card operationalization:
+AMPLIFIED if L29>=.05 and>=5*L5; FLAT if L29<=2*L5; else INCONCLUSIVE.
+Flat/inconclusive is a create-only RED receipt and STOP all C/E descendants.
+A completed flat diagnostic remains reportable; missing/worker/stale RED never
+counts as completion. Predictions are not measurements or a chaos certificate.
+
+45 cells:1 diagnostic,12 calibration trials,1 freeze,10 C/E PPL (8 short+2
+8192),2 pooled PPL CPU summaries,16 C margins,1 empirical eq CPU,2 C decode.
+Target B actual window0 pair fraction0.15160508148834423 (rounded0.152),
+match±.01, one frozen delta. Trials carry first match without a model load.
+E retains inherited conditional empirical e_q formula over32 B/C margin rows.
+Production bf16 and original scoring unchanged. Decode Model.decode is unwrapped;
+no diagnostic guard, trace, counter or extra host copy in timed path. Other
+model cells inherit cooperative guard; margin checks at native-call boundaries.
+No product/kernel edits. Own-PID resident query removes inherited subprocess
+timeout in A6 scope only, because timeout may signal a process.
+
+Registered CPU gates: original full SP4G suite plus A6 semantics/instrumentation/
+provenance/replay/clean decode tests, no skips. Eight source-copy mutations
+(floor_relaxed, floor_nan, flat_accepted, fingerprint_ignored, coverage_dropped,
+precision_wrong_arm, calibration_relaxed, decode_wrapped), all lanes run,
+non-error kill fraction>=.80. No blind-review claim; lead owns blind dispatch.
+
+Prior art: June Gemma floor/port and SP4G A2/A4/A5 (2026) precision seam,
+residual instrumentation, native population replay and clean decode reused;
+new work only combines diagnostic/floor reporting and dependency wiring.
+Haber/Ruthotto (2017), Stable Architectures for Deep Neural Networks,
+https://arxiv.org/abs/1705.03341; primary abstract verified this seat for
+forward stability/dynamical-system context. Higham/Mary (2022), Mixed precision
+algorithms in numerical linear algebra, DOI10.1017/S0962492922000022; primary
+metadata/abstract verified for mixed-precision error context. Neither proves
+Gemma low-precision chaos or2.56 PPL floor; that connection is experimental
+inference. BLASST/Yuan2025/26 running-max, ThriftAttention/Sharratt2026
+weight-sensitive precision, FA2/Dao2023 online softmax, TurboQuant/Zandieh2025
+quantizer are inherited; unverified this seat, lead to check arXiv2512.12087,
+2605.23081,2307.08691,2504.19874. Classical bisection, Frobenius norms,
+Make/Feldman1979 dependency DAG, SHA256/NIST2001 provenance. DeMillo/Lipton/
+Sayward1978 mutation tests: unverified, lead to check Hints on Test Data
+Selection. No prior art known to me for a distinct new method introduced here;
+no novelty claim. Annotations at code sites, ledger and report Prior art.
+
+Safety: no git, subagents, background jobs/waits, process kills/signals,
+services or model writes. Foreground only; workers285s cooperative, lease20s,
+cooldown30s, intended per-call599s. Cannot force-bound a hung native operation
+without signals; clean timing is checked before/after only. No hard wall-time
+guarantee claimed. Seat gpt-6-astra / reasoning xhigh per live a6 log header.
+
+
+A6 sealed final CPU handoff, 2026-09-07. Evidence classes: author CPU tests,
+source-copy mutations, current CLI/preflight, artifact/provenance identity.
+
+Initial A6 suite19/19; full baseline148 passed,0 failed,0 skipped,2 existing
+SWIG warnings plus final swigvarlink warning unsuppressed. Eight registered
+mutations8/8 non-error lanes detected, rate1.0 >=0.80. Sources never replaced.
+Fingerprint020 fe32afcfd5383e9cc395f690e6078ea2b3406f96d323bf5faa94e6138a3daca4;
+post-seal full CPU suite148/148 in2.59s (exact wall in CPU_GATES_A6.json/log).
+CPU_GATES_A6.json SHA256
+356a36a0f3b1b01b0a748e373f8c92fdd4e4d4c6078b87bf9aef81c77b35222c.
+No execution/test edits after seal. AST9 files and bash syntax PASS. Build,
+product, order, token stream and weight stat pins verified; no rebuild needed.
+Preserved53 historical execution/test files,82 job receipts,18 amendments.
+Original registration remains099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e.
+
+Current CUDA probe: cudaGetDeviceCount100, device_count0, error verbatim
+no CUDA-capable device is detected. A6 GPU workers0, model loads0; no GPU
+result fabricated. Foreground lead list emits exactly45 registered cells;
+next emits diag_a6_propagation_A32_vs_A_2048_w0; its preflight emits GPU.
+44 C/E successor cells are released from the old0.005 gate and pending the
+new diagnostic and ordinary calibration/capture dependencies. A flat or
+inconclusive result remains a hard stop, not a permission to keep scanning.
+
+RESULTS.md and A6_REPORT.md now carry the exact5-call table (lead PASS,
+literal bounds RED), noise-floor evidence/scope, A/B/C/D/E PPL table including
+all4 windows and8192, floor-classified differences, prior D/A propagation,
+side-by-side lead/seat prediction, full cell list/estimates, RED and prior art.
+PPL_TABLE_A6.json contains every available pair and source receipt hashes;
+GPU_BLOCKED_A6.json provides exact dependency errors and per-cell commands.
+lead_commands.txt has all45 commands in registered order; each is a separate
+foreground invocation. Planning estimates: model90-275s including75-130s
+load,2048 margin10-90s,8192 margin60-270s,CPU1-30s; GPU adds lease<=20s and
+cooldown30s. All actual seat calls foreground under10minutes; no git,
+subagents, background jobs/waits, process kills/signals, service/product or
+model writes. Clean decode remains unwrapped. Cooperative native-call bound
+limitation retained. Not claimed fixed: historical exactness, literal scalar
+bounds, unrun A6 diagnostic/C/E. Blind review lead-owned UNRUN.
+
+DELIVERY_CHECKS_A6.json records final artifact hashes and live checks.
+Prior art remains as annotated above and at every added code site and in
+A6_REPORT.md under Prior art; no novelty claim. Seat gpt-6-astra / xhigh.
+
+A6 ledger timing correction (append-only): the preceding prose says2.59s;
+CPU_GATES_A6.json and logs/apa_sp4g_a6_cpu_final.log record2.41s.
+Use2.41s. Test counts, gate/source hashes and findings are unchanged.

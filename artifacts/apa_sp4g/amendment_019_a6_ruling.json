@@ -1,0 +1,1165 @@
+{
+  "order": {
+    "path": "orders/APA_SP4G_AMENDMENT_6.md",
+    "sha256": "de2033a1a4a029146b595793ff304f66149247d06e1f09c5363aad713b2259d6"
+  },
+  "original_registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "before_sha256": "c117b1946b9c97871e56dab362b8e5e421bd85022d7ffb43e7c583149d850b7e",
+  "ruling_verbatim": "# APA-SP4G amendment 6 (lead ruling, 2026-09-07) \u2014 exactness is a per-call property on this model; register the noise floor; unblock C and E\n\nCard results for a5 (`artifacts/apa_sp4g/jobs*/`, `captures_a5/`,\n`propagation_a5/`):\n\n- Scored cached blocks, identical inputs, fp32: SP vs standard relF\n  7e-7 at (L=64, S_all=1087), and at (64, 2047) on layers 5 and 47;\n  bf16: SP closer to dense fp32 than standard is, again. With a3 that\n  is five call shapes, all agreeing to 3e-5 max-abs.\n- Propagation, window 0, bf16, A vs D residual after each global\n  layer (relF / max-abs): L5 0.0048/0.25 \u2192 L11 0.0074/0.25 \u2192 L17\n  0.0103/2.45 \u2192 L23 0.038/67.5 \u2192 L29 0.125/40.7 \u2192 L35 0.129/32.1 \u2192\n  L41 0.145/24.5 \u2192 L47 0.074/3.47 \u2192 final norm 0.119/55.5. A \u2248 0.3 %\n  rounding-level difference at the first global layer is amplified\n  ~30\u00d7 by layer 29.\n- `ppl_a4_D32_2048_w0` = 53.47239 (pins complete), bit-identical to\n  D bf16, because the SP kernel accumulates in fp32 internally and\n  rounds once on return; A32 = 49.92118 vs A bf16 = 52.48049: the\n  standard branch alone moves 2.56 ppl with its own rounding path.\n\n## Ruling (lead; implement as an immutable amendment JSON, registration untouched)\n\n1. **Exactness for this model is a PER-CALL property and it PASSES:**\n   the refine-all single pass equals the standard branch to \u2264 3.5e-5\n   max-abs / \u2264 7e-7 rel-Frobenius in fp32 on identical inputs across\n   the five captured shapes (prefill 512, cached 511, cached 64 at\n   S_all 1087 and 2047, layers 5 and 47). Record this as the D/A\n   exactness verdict in RESULTS.md with the per-call table.\n2. **Model-level perplexity on Gemma 4 QAT INT4 carries a registered\n   numerical-path noise floor of \u00b12.56 ppl on window 0** (= |A32 \u2212 A\n   bf16|, the standard branch's own rounding sensitivity), and the\n   propagation table is the mechanism. Every model-level ppl\n   difference between arms on this model is reported against that\n   floor; differences inside it are \"not resolvable on this model\",\n   not wins or losses. The 0.005 gate stays as written for the record\n   (RED) and is annotated as inapplicable here for the reason above.\n3. **One more receipt to make the ruling airtight (cheap):**\n   `diag_a6_propagation_A32_vs_A_2048_w0` \u2014 the same per-layer\n   residual comparison between standard-fp32 and standard-bf16. The\n   prediction: the same amplification profile (relF growing to ~0.1 by\n   layer 29). If it shows that, the ruling stands on its own evidence;\n   if A32 vs A propagates flat, say so and stop \u2014 the lead was wrong.\n4. **Unblock C and E** under the ruling: calibration (match B's\n   realised 0.152 on the global layers), C and E ppl on all four\n   windows and 8192 (bf16 production path), C margins at 2048 and\n   8192 on the 8 global layers, C clean decode at 2048 and 8192. Table\n   columns: A bf16, B, C, D, E, with the \u00b12.56 floor stated in the\n   header. P2 is evaluated as \"C \u2212 B inside the floor\" or not.\n5. Fingerprint amendment; CPU gates; refreshed lead commands and\n   blocked-report. No git, no subagents, foreground only, < 10 min per\n   call, never kill anything. Prior Art Directive applies; the\n   chaotic-amplification observation is worth a literature line if you\n   know one (error propagation in deep residual nets under low\n   precision) \u2014 \"unverified, lead to check\" is acceptable.\n\n## Done (verbatim)\n\n1. The amendment JSON path/sha recording the ruling and the floor.\n2. The A32-vs-A propagation cell id and your prediction beside mine.\n3. The unblocked C/E cell list with estimates; lead commands.\n4. Fingerprint amendment; CPU gates; prior art; RED; process safety;\n   model id and effort.\n",
+  "cells": [
+    {
+      "id": "diag_a6_propagation_A32_vs_A_2048_w0",
+      "kind": "propagation_check",
+      "depends": [
+        "diag_a4_propagation_A_2048_w0",
+        "diag_a2_fp32_A_2048_w0",
+        "a4_completed:ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A32",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "trial_a6_00",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 0
+    },
+    {
+      "id": "trial_a6_01",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 1
+    },
+    {
+      "id": "trial_a6_02",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 2
+    },
+    {
+      "id": "trial_a6_03",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 3
+    },
+    {
+      "id": "trial_a6_04",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 4
+    },
+    {
+      "id": "trial_a6_05",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 5
+    },
+    {
+      "id": "trial_a6_06",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 6
+    },
+    {
+      "id": "trial_a6_07",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 7
+    },
+    {
+      "id": "trial_a6_08",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06",
+        "trial_a6_07"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 8
+    },
+    {
+      "id": "trial_a6_09",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06",
+        "trial_a6_07",
+        "trial_a6_08"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 9
+    },
+    {
+      "id": "trial_a6_10",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06",
+        "trial_a6_07",
+        "trial_a6_08",
+        "trial_a6_09"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 10
+    },
+    {
+      "id": "trial_a6_11",
+      "kind": "trial",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06",
+        "trial_a6_07",
+        "trial_a6_08",
+        "trial_a6_09",
+        "trial_a6_10"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 11
+    },
+    {
+      "id": "freeze_a6",
+      "kind": "freeze",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a6_00",
+        "trial_a6_01",
+        "trial_a6_02",
+        "trial_a6_03",
+        "trial_a6_04",
+        "trial_a6_05",
+        "trial_a6_06",
+        "trial_a6_07",
+        "trial_a6_08",
+        "trial_a6_09",
+        "trial_a6_10",
+        "trial_a6_11"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        15
+      ]
+    },
+    {
+      "id": "ppl_a6_C_2048_w0",
+      "kind": "ppl_capture",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_C_2048_w1",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 1,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_C_2048_w2",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 2,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_C_2048_w3",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 3,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_C_2048",
+      "kind": "aggregate",
+      "depends": [
+        "ppl_a6_C_2048_w0",
+        "ppl_a6_C_2048_w1",
+        "ppl_a6_C_2048_w2",
+        "ppl_a6_C_2048_w3"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ],
+      "operation": "ppl"
+    },
+    {
+      "id": "ppl_a6_C_8192",
+      "kind": "ppl_capture",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "margin_a6_C_2048_l05",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 5,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l11",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 11,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l17",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 17,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l23",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 23,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l29",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 29,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l35",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 35,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l41",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 41,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_2048_l47",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 47,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a6_C_2048_w0"
+    },
+    {
+      "id": "margin_a6_C_8192_l05",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 5,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l11",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 11,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l17",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 17,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l23",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 23,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l29",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 29,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l35",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 35,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l41",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 41,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "margin_a6_C_8192_l47",
+      "kind": "margin",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "ppl_a6_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 47,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a6_C_8192"
+    },
+    {
+      "id": "eq_a6",
+      "kind": "eq",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "margin_a2_B_2048_l05",
+        "margin_a2_B_2048_l11",
+        "margin_a2_B_2048_l17",
+        "margin_a2_B_2048_l23",
+        "margin_a2_B_2048_l29",
+        "margin_a2_B_2048_l35",
+        "margin_a2_B_2048_l41",
+        "margin_a2_B_2048_l47",
+        "margin_a2_B_8192_l05",
+        "margin_a2_B_8192_l11",
+        "margin_a2_B_8192_l17",
+        "margin_a2_B_8192_l23",
+        "margin_a2_B_8192_l29",
+        "margin_a2_B_8192_l35",
+        "margin_a2_B_8192_l41",
+        "margin_a2_B_8192_l47",
+        "margin_a6_C_2048_l05",
+        "margin_a6_C_2048_l11",
+        "margin_a6_C_2048_l17",
+        "margin_a6_C_2048_l23",
+        "margin_a6_C_2048_l29",
+        "margin_a6_C_2048_l35",
+        "margin_a6_C_2048_l41",
+        "margin_a6_C_2048_l47",
+        "margin_a6_C_8192_l05",
+        "margin_a6_C_8192_l11",
+        "margin_a6_C_8192_l17",
+        "margin_a6_C_8192_l23",
+        "margin_a6_C_8192_l29",
+        "margin_a6_C_8192_l35",
+        "margin_a6_C_8192_l41",
+        "margin_a6_C_8192_l47"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ]
+    },
+    {
+      "id": "ppl_a6_E_2048_w0",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "eq_a6"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_E_2048_w1",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "eq_a6"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 1,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_E_2048_w2",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "eq_a6"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 2,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_E_2048_w3",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "eq_a6"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 3,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a6_E_2048",
+      "kind": "aggregate",
+      "depends": [
+        "ppl_a6_E_2048_w0",
+        "ppl_a6_E_2048_w1",
+        "ppl_a6_E_2048_w2",
+        "ppl_a6_E_2048_w3"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ],
+      "operation": "ppl"
+    },
+    {
+      "id": "ppl_a6_E_8192",
+      "kind": "ppl",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "eq_a6"
+      ],
+      "S": 8192,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "decode_a6_C_2048",
+      "kind": "decode",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "decode_a6_C_8192",
+      "kind": "decode",
+      "depends": [
+        "diag_a6_propagation_A32_vs_A_2048_w0",
+        "freeze_a6"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    }
+  ],
+  "receipt_namespace": "jobs_a6",
+  "exactness": {
+    "scope": "PER-CALL identical inputs only; finite captured calls",
+    "lead_verdict": "PASS",
+    "literal_bounds": {
+      "max_abs": 3.5e-05,
+      "relative_frobenius": 7e-07
+    },
+    "per_call": [
+      {
+        "cell": "diag_a3_call_l05_c0",
+        "path": "artifacts/apa_sp4g/jobs_a3/diag_a3_call_l05_c0.json",
+        "sha256": "3ef01a9f1ed3b5fa5422dee7845a7af7431a8c2b223906e465a26324ca4c369f",
+        "layer": 5,
+        "L": 512,
+        "S_all": 512,
+        "max_abs": 3.0517578125e-05,
+        "relative_frobenius": 4.919979464851573e-07,
+        "literal_bounds_pass": true
+      },
+      {
+        "cell": "diag_a3_call_l05_c1",
+        "path": "artifacts/apa_sp4g/jobs_a3/diag_a3_call_l05_c1.json",
+        "sha256": "1d26e725591ceeb6c6ff9e3c0ba87ef6d927e887827ac307bf1e24400a87ce51",
+        "layer": 5,
+        "L": 511,
+        "S_all": 1023,
+        "max_abs": 3.528594970703125e-05,
+        "relative_frobenius": 6.597439434854552e-07,
+        "literal_bounds_pass": false
+      },
+      {
+        "cell": "diag_a5_call_l05_b00",
+        "path": "artifacts/apa_sp4g/jobs_a5/diag_a5_call_l05_b00.json",
+        "sha256": "ecfff322396cba0e4306b93c1e5b7767a3ce2f50ececf5b0c07294bbbd106e7c",
+        "layer": 5,
+        "L": 64,
+        "S_all": 1087,
+        "max_abs": 2.6702880859375e-05,
+        "relative_frobenius": 6.988060041939539e-07,
+        "literal_bounds_pass": true
+      },
+      {
+        "cell": "diag_a5_call_l05_b15",
+        "path": "artifacts/apa_sp4g/jobs_a5/diag_a5_call_l05_b15.json",
+        "sha256": "ceae7b3e63e334afcdabdc0ce17c0be3c21c7b26d00f1764ab34131c8e4e3afc",
+        "layer": 5,
+        "L": 64,
+        "S_all": 2047,
+        "max_abs": 3.910064697265625e-05,
+        "relative_frobenius": 9.043649367824469e-07,
+        "literal_bounds_pass": false
+      },
+      {
+        "cell": "diag_a5_call_l47_b15",
+        "path": "artifacts/apa_sp4g/jobs_a5/diag_a5_call_l47_b15.json",
+        "sha256": "012e00c2ba3f7e69306258eb256b86e3954d082b9278c3a7c754b9f85169b309",
+        "layer": 47,
+        "L": 64,
+        "S_all": 2047,
+        "max_abs": 1.0251998901367188e-05,
+        "relative_frobenius": 4.3157730809521125e-07,
+        "literal_bounds_pass": true
+      }
+    ],
+    "literal_bounds_verdict": "RED",
+    "discrepancy": "Receipt c1 max_abs=3.528594970703125e-5; b15 layer5 max_abs=3.910064697265625e-5 / relF=9.043649367824469e-7 exceed the stated bounds. Lead PASS is recorded as a ruling, never as literal threshold compliance. Bounds are not relaxed.",
+    "C_E_authority": "Explicit lead amendment 6; no old gate or receipt is rewritten. New propagation stop remains binding."
+  },
+  "noise_floor": {
+    "absolute_ppl": 2.56,
+    "measured_absolute_ppl": 2.55930814706673,
+    "A_bf16": 52.48048708520552,
+    "A32": 49.92117893813879,
+    "evidence": [
+      {
+        "path": "artifacts/apa_sp4g/jobs_a1/ppl_A_2048_w0.json",
+        "sha256": "badd50e3ce001bfe41bb4fb62ef1d0daed9a819c10f1ef198f8e571b61668db1"
+      },
+      {
+        "path": "artifacts/apa_sp4g/jobs_a2/diag_a2_fp32_A_2048_w0.json",
+        "sha256": "461b7de94e6c8dbabb3d262ed35d2a963693daf09b5e5e78efdb65eb001699a4"
+      }
+    ],
+    "measured_scope": "2048 window0; one deterministic standard-attention precision ablation",
+    "reporting_scope": "Lead directs application to every model-level arm PPL difference, including other windows/8192; extrapolated reporting convention there, not separately measured confidence interval",
+    "inside": "not resolvable on this model",
+    "rule": "abs(left_ppl-right_ppl) <= 2.56",
+    "historical_gate": {
+      "tolerance": 0.005,
+      "verdict": "RED",
+      "applicable": false,
+      "reason": "Standard branch own rounding path shifts PPL by 2.5593081470667265; retain historical failure and annotate inapplicable under lead ruling"
+    },
+    "P2": "C - B inside the floor or outside the floor; no within-floor wins/losses"
+  },
+  "predictions": {
+    "lead": "Same amplification profile, relF growing to ~0.1 by layer29; if flat stop, the lead was wrong.",
+    "seat": "Expect amplification too: layer29 relF roughly 0.05 to 0.2 and at least 5 times layer5. Exact A/D magnitudes need not repeat; this is a prediction, not a measurement."
+  },
+  "propagation_fork": {
+    "cell": "diag_a6_propagation_A32_vs_A_2048_w0",
+    "reference": "saved A bf16 all2047 rows in jobs_a5",
+    "amplified_min_layer29": 0.05,
+    "amplified_min_growth": 5.0,
+    "flat_max_growth": 2.0,
+    "rule": "AMPLIFIED if L29 relF >= .05 AND >= 5*L5; FLAT if L29 <= 2*L5; otherwise INCONCLUSIVE. Flat or inconclusive => RED STOP all C/E, no retry or widened fork.",
+    "note": "Seat operationalization registered before the new diagnostic; not a theorem, causal proof, or test of chaos."
+  },
+  "protocol": {
+    "calibration_target": 0.15160508148834423,
+    "match_abs": 0.01,
+    "max_trials": 12,
+    "calibration": "Inherited bounded bisection, actual global-layer window0 PPL pair population; freeze one delta",
+    "ppl": "C/E bf16 production path; four consecutive2048 windows last1024, 8192 prefix0 last512; unchanged PROTOCOL-G",
+    "margins": "All8 global layers, all executed PPL query rows at2048/8192; actual-call bitwise native output and selection replay; finite empirical eq over32 B/C rows",
+    "E": "Inherited upward(log(100)+2*upward(max empirical eq_sp)); conditional finite-population bound only",
+    "decode": "Inherited Model.decode, June flags, pooling before load,32 synced steps, no trace/wrapper/interposer/counters, one argmax host copy"
+  },
+  "safety": {
+    "foreground_only": true,
+    "no_git": true,
+    "no_subagents": true,
+    "no_signals": true,
+    "worker_cooperative_s": 285,
+    "lease_wait_s": 20,
+    "cooldown_s": 30,
+    "call_budget_s": 599,
+    "load_estimate_s": [
+      75,
+      130
+    ],
+    "no_rows_ge": 16384,
+    "disk_gib": 12,
+    "limitation": "Cooperative Python-boundary checks cannot force-bound a hung native call without signals. Clean decode checks before and after measurement only to preserve timing. No process kill authorized."
+  },
+  "cpu_gates": [
+    "All existing SP4G tests and A6 tests, zero skips",
+    "Exact receipt table including literal bound failures",
+    "Floor inclusive boundary and nonfinite rejection",
+    "A32 native fp32 and returned bf16 pins, complete residual coverage",
+    "Flat/inconclusive stop enforced transitively for every C/E kind",
+    "Stale fingerprint and payload rejection",
+    "B fraction matched within .01; four short windows and8192;16 margins;2 clean decode cells",
+    "Mutation kill rate >= .80 of non-error mutants; all registered mutants run; no error lanes"
+  ],
+  "mutation_plan": [
+    "floor_relaxed",
+    "floor_nan",
+    "flat_accepted",
+    "fingerprint_ignored",
+    "coverage_dropped",
+    "precision_wrong_arm",
+    "calibration_relaxed",
+    "decode_wrapped"
+  ],
+  "prior_art": [
+    "SP4G A2/A4/A5 and June Gemma port/floor (2026): reuse precision seam, residual capture, population replay, frozen delta and clean decode.",
+    "Haber and Ruthotto (2017), Stable Architectures for Deep Neural Networks, https://arxiv.org/abs/1705.03341: verified abstract for perturbation/stability motivation only; does not prove QAT rounding chaos or a2.56 PPL floor.",
+    "Higham and Mary (2022), Mixed precision algorithms in numerical linear algebra, https://doi.org/10.1017/S0962492922000022: mixed-precision error context; no Gemma-specific conclusion.",
+    "BLASST/Yuan (2025/2026), ThriftAttention/Sharratt (2026), FlashAttention2/Dao (2023), TurboQuant/Zandieh (2025): inherited selector, precision, online softmax and quantizer; unverified this seat, lead to check arXiv2512.12087,2605.23081,2307.08691,2504.19874.",
+    "NIST SHA256 (2001), Make/Feldman (1979), classical bisection, Frobenius norms and DeMillo/Lipton/Sayward (1978) mutation tests; inherited methods. No prior art known to me for a distinct new method introduced here; no novelty claim."
+  ],
+  "seat": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "xhigh",
+    "evidence": "logs/apa_sp4g_a6_r1.log session header"
+  }
+}
