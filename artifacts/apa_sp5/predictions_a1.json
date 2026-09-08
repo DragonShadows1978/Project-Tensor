@@ -1,0 +1,39 @@
+{
+  "amendment": "APA_SP5_AMENDMENT_1",
+  "amendment_sha256": "06a5a1e742ae2474469f8d5177bc5b9d35b4d89e9553d928c9cac1d7a6753e33",
+  "registration_sha256": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+  "recorded": "BEFORE any N=16 window cell beyond the four already on disk from r1",
+  "lead_prediction": {
+    "text": "With 16 windows the pooled C - B lands inside the pooled floor, and window 1 stays an outlier in both directions. If instead C is consistently above A across windows by more than the per-window floor, that is the finding and it points at the delta=3.16 selection on this model.",
+    "owner": "lead"
+  },
+  "seat_prediction": {
+    "A1S1": {
+      "text": "The lead's SECOND branch is the one that fires: C will be consistently above A, not scattered around it. Mechanism from the r1 receipts, not from the N=4 ppl: at delta=3.16 the running-max tail refines 16.8 % of keys, and the r1 calibration measured the z-score tail leaving 34-68 % of softmax mass unrefined on these keys with a max skipped relative weight of 1.0 on EVERY layer. Both tails are leaving real mass at 4-bit precision, and these are the noisiest bulk keys of the three architectures (mean 0.56-0.89 vs MiniCPM3 0.25, Gemma 0.11). Refine-all (D) already sits +5.22 above A pooled at N=4, so even the exact arm is slightly above; a 16.8 % tail should sit further above, consistently.",
+      "sharp_form": "C - A > 0 in at least 12 of 16 windows.",
+      "confidence": "medium-high"
+    },
+    "A1S2": {
+      "text": "Pooled C - B at N=16 will still be OUTSIDE the pooled floor, so the lead's first branch MISSES. Reason: B and C are not two noisy draws around a common mean -- they select different key sets by different rules, and on window 1 they differ by 2.9x. Pooling 16 windows shrinks the FLOOR (which is scatter that partially cancels, as r1 amendment 1 showed: sign is inconsistent) faster than it shrinks a systematic arm difference (which does not cancel). More windows should make C - B MORE resolvable, not less.",
+      "confidence": "medium"
+    },
+    "A1S3": {
+      "text": "Window 1 stays an extreme outlier and it is a MASS story, not a sink story. Prediction for item 4: on window 1 the unrefined softmax mass under BOTH tails will be markedly higher than on the calm window 2, while the sink mass per query will be comparable between the two windows on the same layer. The sink is a per-head learned scalar; it does not know what text is in the window, so it cannot be the source of a text-dependent 2.9x swing. What CAN be text-dependent is how peaked the attention distribution is over real keys.",
+      "confidence": "medium-high"
+    },
+    "A1S4": {
+      "text": "The per-window floor distribution will be heavy-tailed and right-skewed: most windows under 2 %, a minority above 5 %, median well below the 8.73 % that window 0 happened to give. r1 already saw 8.73 / 1.24 / 0.52 / 0.23 on the first four. The pooled floor at N=16 will therefore be SMALLER than the N=4 pooled floor of 12.89 ppl in relative terms.",
+      "confidence": "medium"
+    },
+    "A1S5": {
+      "text": "Decode: the APA arms will be several times slower per token than standard at 2048, and the cause is the adapter re-quantizing the whole concatenated k every step (gpt_oss20b_tc.py:741), not the kernels. I expect the SP arm and the two-pass arm to be within about 1.5x of EACH OTHER while both are far from standard -- that shape is the signature of a shared adapter cost, and it is what SP3 found on MiniCPM3 (7x and 14x vs standard, but close to each other relative to that gap).",
+      "confidence": "medium"
+    },
+    "A1S6": {
+      "text": "Ceilings: B and C both reach 4096 and 8192 under the normal rail and both RAIL (time, not memory) at 16384. Basis: measured single-pass W=2048 forward is 67.5 s and this shape scales ~2x per doubling, giving ~135 s at 4096, ~270 s at 8192 (at the 285 s rail) and ~540 s at 16384 (over it). Memory is not the wall for the fused arms: KV grows only ~12 MiB per 1K tokens (8 KV heads x 64 dim x 2 tensors x 2 B x 24 layers) against 927 MiB free.",
+      "confidence": "medium"
+    }
+  },
+  "note": "Windows 0-3 for arms A/B/C/D/E and the window-0..3 A32 partners already exist on disk from r1 and are reused rather than recomputed; the per-window cell runner reproduces the r1 numbers exactly because it is the same scoring code path (verified for A/w00).",
+  "prior_art": "No new algorithm in this amendment. Predictions reason from the r1 receipts and from SP3/SP4G precedent; the mass-vs-sink framing in A1S3 is the seat's, and I know of no prior art for that specific decomposition."
+}

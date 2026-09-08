@@ -1,4 +1,12 @@
-# APA-SP5 — GPT-OSS-20B (MoE, GQA 64/8 × D=64, attention sinks) — seat results
+# APA-SP5 — GPT-OSS-20B — seat results
+
+> **SUPERSEDED IN PART BY AMENDMENT 1 (N=16).** Sections 3, 5 and 6 below were
+> written against the N=4 protocol and are kept verbatim as the r1 record.
+> The instrument was extended to **N=16 windows / 8,192 targets** on the lead's
+> ruling that a window is a cell; the r1 RED is **RESOLVED** and the N=4
+> reading of C vs B **reversed**. Read **§10 AMENDMENT 1** first — it is the
+> current result. Sections 1, 2, 4, 7 and 9 stand unchanged.
+
 
 Seat: Opus 5 (`claude-opus-5[1m]`), reasoning effort: the `opus-max` seat
 profile (max). Card: RTX 4070 SUPER 12 GB. Branch `apa-sp5`.
@@ -277,3 +285,198 @@ worth more than the prediction was.
    `apa_selective_attention_sp` already dispatches `cap <= 64`, arbitrary GQA,
    and a sinks tensor. `git status tensor_cuda/` is **empty**; `TC_APA_SP`
    remains default OFF and is set per-process only.
+
+
+---
+
+# 10. AMENDMENT 1 — N=16, and the resolution of the r1 RED
+
+Lead ruling: *"a window is a cell."* Correct — each PROTOCOL-O window is one
+~46 s cell, so the instrument was never lease-bound, it was N-bound. The set
+is now **96 window cells** (A, A32, B, C, D, E × 16 windows), all PASS.
+Windows 0–3 were seeded from the r1 receipts after the per-window runner was
+verified to reproduce the r1 path **to the last digit**
+(`ppl_C_W1024_w01 = 2341.776919703325` recomputed on the card = the r1
+window-1 value exactly); every seeded cell carries a provenance block naming
+its r1 source and sha256.
+
+Amendment predictions: `artifacts/apa_sp5/predictions_a1.json`
+sha256 `cbcb534d52f048898912d231870a7c8d26e3ac8a0b512bec0d9f1f0a81618330`.
+Fingerprint: `artifacts/apa_sp5/amendment_001_fingerprint.json`
+sha256 `22c700687246218896852a4e42c2e9b3a496a377c5a8d9e02017f51744019681`
+(**additive only — nothing from r1 invalidated, relaxed or edited**).
+
+## 10.1 The pooled result (8,192 targets)
+
+| arm | pooled ppl | Δ vs A | in pooled floors | verdict |
+|---|---:|---:|---:|---|
+| **A** standard | **232.27** | — | — | baseline |
+| **A32** fp32 full layers | **230.72** | −1.54 | — | *this is the floor* |
+| **B** two-pass z-score | **273.47** | **+41.21** | **26.7×** | **RESOLVABLE** |
+| **C** single-pass matched δ=3.16 | **244.21** | **+11.94** | **7.8×** | **RESOLVABLE** |
+| **D** single-pass refine-all | **232.77** | +0.50 | 0.33× | not resolvable |
+| **E** single-pass provable δ | **232.75** | +0.48 | 0.31× | not resolvable |
+
+**Pooled floor = 1.54 ppl (0.66 %).** **C − B = −29.26 = 19.0× the floor,
+RESOLVABLE.**
+
+Sign counts across the 16 windows: **C below B in 14/16**; B above A in 15/16;
+C above A in 11/16; **D and E above A in 9/16 each — a coin flip, which is what
+"exact" should look like.**
+
+## 10.2 What this reverses, and what it confirms
+
+**The r1 N=4 reading was an artifact of one window and is now overturned.**
+
+| claim | at N=4 | at N=16 |
+|---|---|---|
+| C vs B | C **worse** by +114.2, "not decidable" | **C better** by −29.26, resolvable at 19× the floor, better in 14/16 windows |
+| D vs A | +5.22, inside a 12.89 floor | **+0.50 against a 1.54 floor** — a far tighter statement of the same conclusion |
+| pooled floor | 12.89 ppl (2.14 %) | **1.54 ppl (0.66 %)** |
+
+So on GPT-OSS-20B the single-pass running-max tail **beats** the two-pass
+z-score tail at matched refine fraction (0.1681 vs 0.1685) — **the SP3
+MiniCPM3 result, not the Gemma null.** That is the third architecture and the
+second confirmation, and it is consistent with the r1 mechanism: these are the
+noisiest bulk keys of the three, and tail-choice penalty scales with bulk error.
+
+## 10.3 The floor is a distribution, not a number
+
+Per-window relative floor across 16 windows: **median 1.10 %, mean 1.71 %,
+min 0.23 %, max 8.73 %.** Window 0 — the window the original order named for
+the floor — is the **most extreme of sixteen**. Signs are mixed (9 positive,
+7 negative), so pooling **cancels** scatter rather than accumulating it; that
+is why the pooled floor (0.66 %) is far below any single window's.
+
+Each arm's per-window deviation from A, in multiples of **that window's own**
+floor (full table in `aggregate_a1_N16.json`):
+
+| arm | range across windows | reading |
+|---|---|---|
+| B | +1.3 to **+256.2** (15/16 positive) | systematically and hugely above A |
+| C | −4.5 to **+42.9** (11/16 positive) | mostly above A, one extreme window |
+| D | −6.4 to +6.3 | scattered about zero |
+| E | −6.7 to +6.3 | scattered about zero |
+
+## 10.4 Item 4 — bitwise-replay margins: a MASS story, not a sink story
+
+Four cells, **replay bitwise on all of them** (kernel output *and*, for arm C,
+the kernel's own diagnostic selection mask reproduced exactly). Medians over
+the 12 full-attention layers, every 32nd query position, all 64 heads:
+
+| arm / window | unrefined mass | fraction | sink mass | e_mean | max skipped rel. weight |
+|---|---:|---:|---:|---:|---:|
+| B / w1 | **0.4891** | 0.1825 | 0.2881 | 0.705 | 1.00 |
+| B / w2 | 0.4871 | 0.1818 | 0.2680 | 0.684 | 1.00 |
+| C / w1 | **0.1098** | 0.2301 | 0.2777 | 0.699 | 1.00 |
+| C / w2 | 0.1192 | 0.2592 | 0.2591 | 0.672 | 1.00 |
+
+**The answer to the lead's question.** On window 1 the z-score tail leaves
+**4.45× more softmax mass unrefined** than the running-max tail (0.489 vs
+0.110) — at a *lower* refine fraction (0.182 vs 0.230). The sink mass is
+**identical between the arms (1.04×)**, as it must be: the sink is a learned
+per-head scalar that cannot know what text is in the window. **It is a mass
+story, not a sink story.**
+
+The second half is just as informative: **B's and C's margins are essentially
+the same on window 1 and window 2** (B 0.489 → 0.487; C 0.110 → 0.119). So
+window 1 is *not* a window where the tails behave differently — it is a window
+where the **same** mass deficit is punished far harder by the text. The 2.9×
+ppl spread is text sensitivity acting on a constant selection deficit, not a
+selection anomaly.
+
+Per-layer on window 1, B leaves 0.32–0.69 of the mass unrefined against C's
+0.065–0.178, and **the max relative weight of a skipped key is 1.0 for both
+arms on every layer** — both tails skip some query's top-weighted key
+somewhere; only the *mass* differs.
+
+## 10.5 Item 5 — decode, reported as an adapter cost
+
+32 synced steps at S=2048, clean configuration, prefill in 512-token chunks:
+
+| arm | ms/token (mean) | median | vs standard |
+|---|---:|---:|---:|
+| A standard | **82.58** | 80.44 | 1.00× |
+| B two-pass | **84.02** | 82.71 | **1.02×** |
+| C single-pass | **84.18** | 83.54 | **1.02×** |
+
+**The cited adapter line** (`/mnt/ForgeRealm/GraftRepository/core/gpt_oss20b_tc.py:741`):
+
+    kq = _quantize_keys(k, R, CB, BND)
+
+sits *after* `k` has been concatenated with the whole `kv_cache`, so **every
+decode step re-quantizes the entire key history**; nothing in the port caches
+quantized keys (`kq` appears only at :741 and its two use sites :747/:763).
+Standard does no quantization and pays none of it.
+
+**And yet the gap is 1.02×.** That is a correction to my own registered
+prediction A1S5 ("several times slower"): the re-quantization is real in
+source but is **not** the dominant decode cost on this model, because the MoE
+expert routing dominates the step. The honest statement is: *the adapter does
+re-quantize per step, and on a 20B MoE that cost is invisible next to routing.*
+On MiniCPM3 the same adapter pattern cost 7–14×; the architecture, not the
+pattern alone, decides whether it matters.
+
+A receipted OOM is kept: `decode_a1/decode_A_2048.json` — **arm A OOMs during
+a 1024-token prefill chunk** even before decode starts. Another S×S receipt.
+
+## 10.6 Item 6 — ceilings (OOM and RAIL distinguished)
+
+| arm | S | chunk | outcome | reached | wall | min free MiB |
+|---|---:|---|---|---:|---:|---:|
+| B | 4,096 | 512 | **FITS** | 4,096 | 130.4 s | 735 |
+| C | 4,096 | 512 | **FITS** | 4,096 | 127.8 s | 735 |
+| C | 4,096 | 1024 | **OOM** | — | 67.3 s | 829 |
+| B | 8,192 | 512 | **RAIL** | 7,680 | 246.2 s | 544 |
+| C | 8,192 | 512 | **RAIL** | 7,680 | 245.2 s | 543 |
+
+Arm A stays a **registered non-fit at 2,048** (r1 receipt kept).
+
+Two findings:
+
+1. **At 4,096 the binding constraint is the prefill CHUNK TRANSIENT, not the
+   KV cache.** Chunk 1024 OOMs *with 829 MiB free*; chunk 512 fits and runs to
+   completion with 735 MiB free. That distinction matters for anyone sizing
+   this model and would have been invisible without recording both.
+2. **At 8,192 the wall is TIME, not memory** — both arms stopped at the budget
+   with ~544 MiB still free. Measured consumption is **53.6 MiB per 1K tokens**;
+   with 735 MiB free at 4,096 the line extrapolates to memory exhaustion near
+   **17,800 tokens**. So 16,384 should *fit memory* but needs ~525 s (~32
+   ms/token measured), which is over any 285 s worker rail — registered as a
+   long-lease cell for David's authorization, not run.
+
+## 10.7 Amendment predictions — verdicts
+
+| owner | prediction | verdict |
+|---|---|---|
+| **lead** | pooled C − B lands **inside** the pooled floor; window 1 stays an outlier in both directions | **MISS on the first half** (C − B = −29.26 = 19× the floor, decisively resolvable); **HIT on the second** (window 1 is the sole window where B beats C, at +1537 on C − B) |
+| **lead (2nd branch)** | if instead C is consistently above A by more than the per-window floor, that is the finding and it points at the δ=3.16 selection | **THIS IS THE BRANCH THAT FIRED, partially**: C is above A in 11/16 windows and resolvable pooled (7.8× floor) — but B is above A in **15/16** at **26.7×**, so the finding points at *both* tails leaving mass at 4 bits, with the z-score tail much the worse |
+| seat A1S1 | C above A in ≥12 of 16 | **NEAR MISS — 11 of 16.** Directionally right, one window short of the sharp form I registered |
+| seat A1S2 | pooled C − B still outside the pooled floor at N=16 | **HIT**, and for the stated reason: pooling shrank the floor (12.89 → 1.54) faster than the arm difference |
+| seat A1S3 | window 1 is a mass story, not a sink story | **HIT** — 4.45× mass ratio, 1.04× sink ratio |
+| seat A1S4 | floor distribution right-skewed, median well under 8.73 %; pooled floor smaller than N=4's | **HIT** — median 1.10 %, pooled 0.66 % vs 2.14 % |
+| seat A1S5 | APA decode several times slower than standard; SP and two-pass within ~1.5× of each other | **MISS on the gap** (1.02×, not "several times"); HIT on the shape (B and C within 1.002× of each other). My mechanism reasoning was wrong: re-quantization is real but not dominant on a MoE |
+| seat A1S6 | B and C reach 4096 and 8192 under the normal rail; both RAIL at 16384 | **half** — 4096 FITS (and only with 512-chunks, which I did not anticipate); 8192 RAILs rather than fitting; 16384 untested but RAIL-by-construction as predicted |
+
+I got the mass-vs-sink decomposition and the floor distribution right, and I
+was **wrong about decode** and one window short on C-vs-A. The lead's first
+branch missed but its second branch is the one the data chose.
+
+## 10.8 What amendment 1 changes in the APA record
+
+1. **The single pass beats the two-pass tail on a second architecture.**
+   MiniCPM3 (noisy keys): −0.118 ppl. GPT-OSS-20B (noisiest keys): **−29.26
+   pooled, resolvable at 19× the floor, better in 14/16 windows.** Gemma
+   (cleanest keys): no difference. The **tail-choice penalty scales with bulk
+   error** principle now has three points and holds at all three.
+2. **Refine-all equals standard at model level to 0.50 ppl against a 1.54 ppl
+   floor** — the tightest model-level exactness statement in the series,
+   because the floor got smaller rather than the claim getting louder.
+3. **A protocol lesson worth more than the arm result:** N=4 gave a
+   *confidently wrong* answer (C worse than B) that N=16 reversed. The floor
+   was not the problem; the sample was. Registering "not decidable" at N=4
+   rather than reporting the artifact is what made the reversal visible instead
+   of embarrassing.
+4. **An adapter cost can be real in source and invisible in the measurement.**
+   The port genuinely re-quantizes every decode step; on this MoE it costs 2 %.
+   Cite the mechanism, but measure before pricing it.

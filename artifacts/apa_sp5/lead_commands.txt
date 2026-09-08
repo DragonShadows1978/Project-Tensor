@@ -1,114 +1,93 @@
-# APA-SP5 lead command chain (GPT-OSS-20B).
-# registration.json sha256 = 3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159
-# predictions.json   sha256 = 17427eb3c53f9830b195abc415cbb2d05a8e16099bdd30a2e76c296c99492e44
-# amendment_001      sha256 = 4cc5bca1ca6207bb6ad76cf2dd87c6a2f3f7db1ebad162ab08652381eaa5cd55
+# APA-SP5 lead command chain — REFRESHED for amendment 1 (2026-09-08).
 #
-# Every line runs through scripts/apa_sp5_lead_gpu.sh, which takes the
-# /tmp/forge-gpu.lock flock, bounds the worker with timeout(1), holds the
-# registered 30 s cooldown INSIDE the lease, and never signals a process it
-# did not start. Default worker rail 285 s; override with
-# APA_SP5_WORKER_RAIL=<seconds> where a line says so.
+# registration.json          3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159
+# predictions.json (r1)      17427eb3c53f9830b195abc415cbb2d05a8e16099bdd30a2e76c296c99492e44
+# amendment_001_sensitivity  4cc5bca1ca6207bb6ad76cf2dd87c6a2f3f7db1ebad162ab08652381eaa5cd55
+# predictions_a1.json        cbcb534d52f048898912d231870a7c8d26e3ac8a0b512bec0d9f1f0a81618330
+# amendment_001_fingerprint  22c700687246218896852a4e42c2e9b3a496a377c5a8d9e02017f51744019681
+# order APA_SP5_AMENDMENT_1  06a5a1e742ae2474469f8d5177bc5b9d35b4d89e9553d928c9cac1d7a6753e33
 #
-# WALLS: "measured" = this seat ran it and the number is the observed wall.
-#        "estimated" = scaled from a measured cell; the basis is stated.
-# All measured walls include the ~12.5 s warm-page-cache model load
-# (37.2 s on a cold cache -- the first cell after a reboot pays that).
+# Every GPU line runs through scripts/apa_sp5_lead_gpu.sh: flock on
+# /tmp/forge-gpu.lock, timeout(1) worker rail (default 285 s), 30 s cooldown
+# held INSIDE the lease, never signals a process it did not start.
+# scripts/apa_sp5_a1_batch.sh runs a RANGE of window cells, each as its own
+# lease, so a shared-card operator waits at most one cell (~47 s + 30 s).
 #
-# ---------------------------------------------------------------- PREREQ
-# (0) Host build. No CUDA context, no GPU lease needed. measured 80 s.
-#     Refuses to run if artifacts/apa_sp5/build/manifest.json exists.
-bash scripts/apa_sp5_build.sh
+# WALLS: "measured" = observed. "estimated" = scaled, basis stated.
 #
-# (0b) Token stream. CPU only, offline HF cache. measured 21 s.
-#      Create-only: fails if artifacts/apa_sp5/tokens.npy exists.
-python3 scripts/apa_sp5_tokens.py
+# ================================================== STATUS: EVERYTHING BELOW
+# ================================================== IS DONE AND ON DISK.
+# The seat ran the complete amendment-1 set. These lines reproduce it.
 #
-# ------------------------------------------------------- ALREADY RUN BY SEAT
-# These completed on the card during this order; receipts are on disk.
-# Re-run only to reproduce.
+# ---- prereq (done in r1; refuse to re-run if their outputs exist)
+bash scripts/apa_sp5_build.sh                    # measured 80 s, host only, no lease
+python3 scripts/apa_sp5_tokens.py                # measured 21 s, CPU only
 #
-# kernel/shape pin (GQA 64/8, D=64, real sinks vs fp64 dense).   measured 12 s
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_shape_pin.py
+# ---- N=16 per-window cells: 96 cells, all PASS.        measured ~46 s each
+# Windows 0-3 for A,B,C,D,E and A32 w00-w03 were SEEDED from the r1 N=4
+# receipts (CPU, no lease) after the runner was verified to reproduce the r1
+# path to the last digit (ppl_C_W1024_w01 = 2341.776919703325 both ways):
+python3 scripts/apa_sp5_a1_seed.py               # measured <1 s, CPU only
+# The remaining 71 cells were run on the card:
+bash scripts/apa_sp5_a1_batch.sh A   4 15         # measured ~77 s/cell incl. cooldown
+bash scripts/apa_sp5_a1_batch.sh A32 4 15
+bash scripts/apa_sp5_a1_batch.sh B   4 15
+bash scripts/apa_sp5_a1_batch.sh C   4 15
+bash scripts/apa_sp5_a1_batch.sh D   4 15
+bash scripts/apa_sp5_a1_batch.sh E   4 15
+# A single cell, if one needs redoing:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_window.py --arm C --window 7
 #
-# item 0, cost of one window, per arm.                     measured 47-82 s each
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item0_wall.py --W 1024 --arm A
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item0_wall.py --W 1024 --arm B
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item0_wall.py --W 2048 --arm C
-#   NOTE: --W 2048 --arm A is a MEASURED OOM (receipt in the log). Do not
-#   re-run expecting a number; it is a finding.
+# ---- aggregate (CPU only, no lease)                          measured <1 s
+python3 scripts/apa_sp5_a1_aggregate.py
 #
-# item 1, sensitivity floor, window 0 (the registered construction). measured 82 s
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item1_sensitivity.py --W 1024 --window 0
+# ---- item 4 bitwise-replay margins: 4 cells, all PASS.   measured ~95 s each
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm C --window 1 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm C --window 2 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window 1 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window 2 --qstep 32
 #
-# item 1 at protocol scale (amendment 1). measured 286 s -- EXCEEDS the 285 s
-# worker rail by construction (two 4-window passes cannot fit); run with the
-# widened rail under the order's 590 s outer bound. This is a recorded deviation.
-APA_SP5_WORKER_RAIL=560 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item1_sensitivity.py --W 1024 --window 0 --N 4
+# ---- item 5 decode: 3 cells PASS + 1 receipted OOM.    measured ~140 s each
+# NOTE --prefill-chunk 512 is REQUIRED: at 1024 even arm A OOMs during the
+# prefill that precedes decode (receipt: decode_a1/decode_A_2048.json, RED).
+# Kept as a receipt, not deleted.
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm A --S 2048 --prefill-chunk 512 --out artifacts/apa_sp5/decode_a1/decode_A_2048_pc512.json
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm B --S 2048 --prefill-chunk 512
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm C --S 2048 --prefill-chunk 512
 #
-# calibration: e_q, B fraction, C delta, sink mass, all 12 full layers. measured 88 s
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_calib.py --W 1024 --bulk-bits 4 --out artifacts/apa_sp5/calib_W1024_b4_all.json
+# ---- item 6 ceilings: 4 cells + 1 receipted OOM.     measured 130-246 s each
+# --chunk 512 is REQUIRED at 4096+; at chunk 1024 arm C OOMs on the CHUNK
+# TRANSIENT, not the KV cache (receipt: ceiling_C_4096.json OOM at 829 MiB
+# free, vs ceiling_C_4096_pc512.json FITS at 735 MiB free). Kept as a receipt.
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 4096 --chunk 512
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 4096 --chunk 512 --out artifacts/apa_sp5/ceiling_a1/ceiling_C_4096_pc512.json
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 8192 --chunk 512 --budget-s 240
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 8192 --chunk 512 --budget-s 240
 #
-# item 3, per-call exactness gate, two layers.                  measured 70 s each
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item3_exactness.py --layer 11
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item3_exactness.py --layer 19
+# ================================================== NOT RUN — LEAD'S CALL
 #
-# item 2, sink on/off pin on the highest-sink layer.                 measured 62 s
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_item2_sinkpin.py --layer 19
+# [1] ceiling_{B,C}_16384. NOT RUN, and RAIL BY CONSTRUCTION under any 285 s
+#     worker: measured 4096 = 128 s and 7680 = 245 s give ~32 ms/token, so
+#     16384 needs ~525 s. Memory is NOT expected to be the wall — the measured
+#     consumption line is 53.6 MiB per 1K tokens with 735 MiB free at 4096,
+#     which extrapolates to memory exhaustion near 17,800 tokens. Run only with
+#     a David-authorized long lease:
+#   APA_SP5_WORKER_RAIL=1500 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 512 --budget-s 1400
+#   APA_SP5_WORKER_RAIL=1500 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 16384 --chunk 512 --budget-s 1400
 #
-# PROTOCOL-O perplexity, all five arms, bulk 4.               measured 155-165 s each
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm A --W 1024 --N 4
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm B --W 1024 --N 4
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm C --W 1024 --N 4
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm D --W 1024 --N 4
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm E --W 1024 --N 4
+# [2] decode at 8192. estimated ~330 s (prefill 8192 at 512-chunks is ~245 s
+#     to 7680 plus the decode steps), so it needs a widened worker rail:
+#   APA_SP5_WORKER_RAIL=560 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm A --S 8192 --prefill-chunk 512
+#   (and --arm B, --arm C)
 #
-# realised refine fractions from the kernel's own diagnostic mask. measured 60 s each
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_frac.py --delta 3.16   --label C
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_frac.py --delta 44.315 --label E
+# [3] bulk 8 secondary. C's delta 3.16 is bulk-4-calibrated; recalibrate first:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_calib.py --W 1024 --bulk-bits 8 --out artifacts/apa_sp5/calib_W1024_b8_all.json
+#     then take C_delta_median as <D8> and run the window set at bulk 8:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_window.py --arm C --window <N> --bulk-bits 8 --delta <D8>
+#     estimated ~46 s/cell, same as bulk 4 (the bulk width changes the
+#     quantizer table, not the number of kernel launches).
 #
-# ------------------------------------------------------------- CHAIN TO RUN
-# Dependency order. Each block depends on every block above it.
-#
-# [1] bulk 8 secondary (registration says: only if the wall permits -- it does).
-#     estimated 155-165 s each, from the measured bulk-4 ppl cells; the bulk
-#     width changes the quantizer table, not the number of kernel launches.
-#     NOTE: C's delta 3.16 was calibrated at bulk 4. At bulk 8 the bulk error
-#     shrinks, so the matched fraction will NOT be 0.168 -- recalibrate first:
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_calib.py --W 1024 --bulk-bits 8 --out artifacts/apa_sp5/calib_W1024_b8_all.json
-#     then take C_delta_median from that file as <D8> and run:
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm A --W 1024 --N 4 --bulk-bits 8
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm B --W 1024 --N 4 --bulk-bits 8
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm C --W 1024 --N 4 --bulk-bits 8 --delta <D8>
-bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_ppl.py --arm D --W 1024 --N 4 --bulk-bits 8
-#
-# [2] item 4 margins on the full-attention layers, at W and at 8192.
-#     NOT IMPLEMENTED BY THIS SEAT -- see RESULTS.md "Not delivered". The
-#     calibration cell already reports the item-4 metrics (|bulk-exact|
-#     mean/p99/max, unrefined mass, max relative skipped weight, fraction, and
-#     sink mass per query) for arm B's rule and for the matched delta, on real
-#     activations at W=1024, but it recomputes the selection in fp64 rather
-#     than replaying the kernel's own mask bitwise as SP4G a2 does. A bitwise
-#     replay harness is the honest remaining work for this item.
-#
-# [3] item 5 clean decode, arms A/B/C at 2048 and 8192, 32 synced steps.
-#     NOT IMPLEMENTED BY THIS SEAT. Blocking fact the lead needs first:
-#     GptOss20B_TC.__call__ DOES take kv_caches and the port has an
-#     incremental path, but GptOssAttentionTC re-runs _quantize_keys over the
-#     WHOLE concatenated k every call (gpt_oss20b_tc.py:735-742) -- so this
-#     adapter RE-QUANTIZES PER STEP, like MiniCPM3 and unlike Gemma. On the
-#     SP3 precedent that alone predicts a large APA decode gap that is an
-#     adapter cost, not a kernel cost. Measure it before quoting any ms/token.
-#
-# [4] item 6 ceiling at {4096, 8192, 16384} per arm.
-#     NOT IMPLEMENTED BY THIS SEAT as a cell, but the decisive rung is already
-#     MEASURED: arm A OOMs at 2048. Standard cannot reach 4096 on this card,
-#     because sink_attention_tc materializes B x H x L x S = 2,048 MiB at 4096
-#     against 927 MiB free. The APA arms fit 2048 (measured, 67.5 s at W=2048).
-#     Estimated from the measured W=1024 (33.9 s) and W=2048 (67.5 s) single-
-#     pass walls, which scale ~2.0x per doubling on this shape:
-#       4096  ~135 s   FITS the 285 s rail
-#       8192  ~270 s   AT the rail; run with APA_SP5_WORKER_RAIL=560
-#      16384  ~540 s   EXCEEDS the 285 s rail; needs the long lease
-#     Long-lease rungs 24K-96K are registered as lead cells only if David
-#     re-authorizes the 1,500 s lease; the kernel-opt bench's 96K sink-APA
-#     result (2026-07-08) is the context for expecting them to fit memory.
+# [4] margins on more windows. estimated ~95 s each; windows 1 and 2 answered
+#     the amendment's question, but the 16-window set would show whether the
+#     B-vs-C mass gap is as flat across text as windows 1 and 2 suggest:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window <N> --qstep 32

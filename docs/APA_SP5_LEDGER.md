@@ -170,3 +170,152 @@ Annotated at each code site, and here:
 - **A protocol question for David:** N=4 is what the 285 s rail permits, and it
   is not enough to resolve the tails on this model. More windows need a longer
   lease. That is a scope decision, not a seat decision.
+
+---
+
+# Amendment 1 (2026-09-08) — N=16, items 4/5/6 as cells
+
+Lead ruling accepted: **a window is a cell**. Each PROTOCOL-O window is one
+~46 s cell, so the instrument was N-bound, not lease-bound. Same seat (Opus 5,
+`opus-max`, reasoning max), same lease discipline, no git, no subagents.
+
+Amendment order sha256 `06a5a1e742ae2474469f8d5177bc5b9d35b4d89e9553d928c9cac1d7a6753e33`.
+Predictions (registered BEFORE any new window cell)
+`artifacts/apa_sp5/predictions_a1.json` sha256
+`cbcb534d52f048898912d231870a7c8d26e3ac8a0b512bec0d9f1f0a81618330`.
+Fingerprint `artifacts/apa_sp5/amendment_001_fingerprint.json` sha256
+`22c700687246218896852a4e42c2e9b3a496a377c5a8d9e02017f51744019681` —
+**additive only, expected_invalidated = []**; the r1 registration keeps its
+exact bytes (verified: still `3cc3b3e1…58159`).
+
+## Cells
+
+| kind | count | status | wall each |
+|---|---:|---|---:|
+| `ppl_{A,A32,B,C,D,E}_W1024_w{00..15}` | 96 | all PASS | ~46 s (77 s incl. cooldown) |
+| `aggregate_a1_N16` | 1 | PASS | <1 s, CPU |
+| `margins_{B,C}_W1024_w{01,02}` | 4 | all PASS, **replay bitwise** | ~95 s |
+| `decode_{A,B,C}_2048` | 3 PASS + 1 receipted OOM | | ~140 s |
+| `ceiling_{B,C}_{4096,8192}` | 4 + 1 receipted OOM | 2 FITS, 2 RAIL | 130–246 s |
+
+Windows 0–3 were **seeded** from the r1 N=4 receipts (CPU, no lease) after the
+per-window runner was verified to reproduce the r1 code path **to the last
+digit**: `ppl_C_W1024_w01 = 2341.776919703325` recomputed on the card equals
+the r1 aggregate's window-1 value exactly. Each seeded cell carries a
+provenance block naming its source file and sha256. The other 71 ran on the
+card in batches of ≤12, each cell taking and releasing its own lease.
+
+## Result — the r1 RED is resolved, and the N=4 reading is reversed
+
+Pooled over 16 windows / **8,192 targets**:
+
+| arm | pooled ppl | Δ vs A | in floors | verdict |
+|---|---:|---:|---:|---|
+| A | 232.27 | — | — | baseline |
+| A32 | 230.72 | −1.54 | — | **the floor** |
+| B | 273.47 | +41.21 | 26.7× | RESOLVABLE |
+| C | 244.21 | +11.94 | 7.8× | RESOLVABLE |
+| D | 232.77 | +0.50 | 0.33× | not resolvable |
+| E | 232.75 | +0.48 | 0.31× | not resolvable |
+
+**Pooled floor 1.54 ppl (0.66 %). C − B = −29.26 = 19.0× the floor,
+RESOLVABLE, C better in 14 of 16 windows.** At N=4 the same comparison read
++114.2 the *other* way; window 1 alone carried it. D and E sit above A in 9/16
+windows — a coin flip, which is what exactness should look like.
+
+Floor as a distribution: per-window relative median **1.10 %**, mean 1.71 %,
+min 0.23 %, max **8.73 % (window 0 — the window the original order named)**.
+Signs mixed 9+/7−, so pooling cancels.
+
+## Item 4 — the lead's question answered
+
+Bitwise replay PASSED on all four cells (kernel output and, for arm C, the
+kernel's own diagnostic mask, both reproduced exactly).
+
+| arm/win | unrefined mass | fraction | sink mass |
+|---|---:|---:|---:|
+| B / w1 | **0.4891** | 0.1825 | 0.2881 |
+| C / w1 | **0.1098** | 0.2301 | 0.2777 |
+| B / w2 | 0.4871 | 0.1818 | 0.2680 |
+| C / w2 | 0.1192 | 0.2592 | 0.2591 |
+
+**A MASS story, not a sink story**: mass ratio B/C = **4.45×**, sink ratio
+**1.04×**. The sink is a learned per-head scalar and cannot know the text.
+Further: **B's and C's margins barely move between window 1 and window 2**, so
+window 1 is not a window where the tails behave differently — it is a window
+where the *same* mass deficit is punished harder by the text. Max relative
+weight of a skipped key is 1.0 for both arms on every layer.
+
+## Item 5 — decode as an adapter cost
+
+A **82.58**, B **84.02**, C **84.18** ms/token at S=2048 (32 synced steps);
+APA/standard = **1.02×**.
+
+Cited line, `/mnt/ForgeRealm/GraftRepository/core/gpt_oss20b_tc.py:741`:
+`kq = _quantize_keys(k, R, CB, BND)` — `k` here is the whole concatenated key
+history, so **every step re-quantizes the entire cache**; `kq` appears only at
+:741 and its use sites :747/:763, so nothing caches it. **No fix applied**, per
+the amendment.
+
+**Honest correction to my own registered prediction A1S5** ("several times
+slower"): the gap is 1.02×. The re-quantization is real in source but is not
+the dominant decode cost on a 20B MoE — expert routing is. On MiniCPM3 the
+same pattern cost 7–14×. *The architecture, not the pattern alone, decides
+whether an adapter cost matters.*
+
+## Item 6 — ceilings
+
+B and C both **FIT 4,096** (130.4 / 127.8 s, 735 MiB free) and both **RAIL at
+8,192** (reached 7,680 in ~246 s with ~544 MiB still free — **time wall, not
+memory**). Arm A remains a registered non-fit at 2,048.
+
+Two distinctions worth keeping:
+1. At 4,096 the binding constraint is the **prefill chunk transient**, not the
+   KV cache: chunk 1024 OOMs *with 829 MiB free*, chunk 512 completes with 735.
+   Both receipts kept.
+2. Measured consumption **53.6 MiB per 1K tokens** → memory exhaustion
+   extrapolates to ~**17,800 tokens**, so 16,384 should fit memory but needs
+   ~525 s at the measured ~32 ms/token. Registered as a long-lease cell for
+   David's authorization; **not run**.
+
+## Failures and corrections in this amendment (RED honesty)
+
+1. **One batch exceeded the 10-minute foreground limit** and the harness moved
+   it to the background — the order forbids background tasks. I did not kill it
+   (that would violate the no-kill rule and it held the GPU lease); I waited for
+   it to drain and then sized every subsequent batch to fit the foreground
+   window. Reported, not hidden.
+2. **My prediction A1S5 was wrong** about decode magnitude, and the mechanism
+   reasoning behind it was wrong too. Recorded as a MISS with the corrected
+   mechanism.
+3. **A1S1 was a near miss** — I registered "C above A in ≥12 of 16" and got 11.
+4. **The first ceiling_C_4096 OOMed** at chunk 1024; rather than treat it as
+   the ceiling, I varied the chunk and found the transient was the constraint.
+   Both receipts kept so the distinction survives.
+
+## Prior art (amendment 1)
+
+No new algorithm. Bitwise replay = SP4G a2; ceiling ascent = SP4G a7; decode
+construction = SP3 a6 / SP4G a6; pooled-NLL perplexity is standard practice
+(the perplexity of the concatenated target set). The selection rule remains
+**BLASST**'s running-max criterion (Yuan et al., arXiv 2512.12087) applied to
+**precision** rather than sparsity — APA is David's design, the single pass and
+the z-score impossibility proof are APA-SP1's; **ThriftAttention** (Sharratt,
+arXiv 2605.23081) for weight-proportional error; **FlashAttention-2** (Dao
+2023) / online softmax (Milakov & Gimelshein 2018); **GPT-OSS attention sinks**
+(OpenAI model card 2025) and **StreamingLLM** (Xiao et al., arXiv 2309.17453).
+Mine here: the seeding-with-provenance construction and the mass-vs-sink
+decomposition that answers the lead's question — **no prior art known to me**
+for that specific decomposition. **UNVERIFIED — lead to check**: no network in
+this seat; all arXiv numbers come from the lead's own prior-art comparison doc
+or seat knowledge.
+
+## Deviations (amendment 1)
+
+1. The backgrounded batch described above. No new worker-rail deviation: every
+   amendment-1 cell ran under the standard 285 s worker rail.
+2. `--prefill-chunk 512` / `--chunk 512` are required at 2,048+ and 4,096+
+   respectively; both the failing and the passing receipts are kept so the
+   choice is visible rather than silently baked in.
+3. `ceiling_{B,C}_16384` not run (RAIL by construction under a 285 s worker);
+   registered as a long-lease cell. Bulk 8 still not run.
