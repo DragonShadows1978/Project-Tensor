@@ -1,0 +1,61 @@
+{
+  "registration_sha256": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+  "note": "Both sets are recorded BEFORE the remaining gates run. Where an item-0/item-1/calibration measurement has ALREADY settled a prediction (because the order requires those measurements first), that is stated explicitly and the verdict is given with its receipt \u2014 it is not re-predicted after the fact.",
+  "lead": {
+    "P1": {
+      "text": "per-call SP == standard <= 1e-5 relF in fp32 including sinks",
+      "status": "SETTLED EARLY by the kernel/shape pin (that pin is a synthetic-input instance of P1; the real-activation per-call gate G_exactness_per_call still runs)",
+      "shape_pin_result": "HIT \u2014 fp32 relF 2.27e-7, max-abs 7.7e-7, against a dense fp64 reference with real learned sinks"
+    },
+    "P2": {
+      "text": "bulk error on D=64 GQA keys at 4 bits sits between MiniCPM3 and Gemma (mean 0.15-0.25) and the z-score tail leaves 50-80 % of mass unrefined",
+      "status": "SETTLED EARLY by calibration (it is a registration input)",
+      "result": "MISS on the error, HIT on the mass. Measured bulk error mean 0.564-0.891 per full layer (median ~0.71) \u2014 roughly 3x MiniCPM3 (0.25) and 6x Gemma (0.11), OUTSIDE and above the predicted 0.15-0.25 band. These are the NOISIEST bulk keys of the three architectures, not an intermediate case. Unrefined mass under the z-score tail: 0.344-0.677, median 0.484 \u2014 inside the predicted 50-80 % band at the low edge (7 of 12 layers below 0.50)."
+    },
+    "P3": {
+      "text": "C - B is negative or inside the floor",
+      "status": "OPEN"
+    },
+    "P4": {
+      "text": "E refines 40-90 % (provable delta usable, as on Gemma)",
+      "status": "OPEN \u2014 but the input is already unfavourable: e_q = 19.86 gives delta = 44.3, against Gemma's e_q 1.14 / delta 6.89 which refined 69 %. A delta of 44 logit units is enormous relative to the score spread."
+    },
+    "P5": {
+      "text": "the sink takes >= 10 % of softmax mass on a median full layer and the running-max rule's selection is unaffected by it (sink is not a key)",
+      "status": "FIRST HALF SETTLED EARLY by calibration",
+      "result": "HIT on the mass: median-of-layer-medians sink mass = 0.2455 (24.6 %), and 9 of 12 full layers are at or above 10 %. Range 0.0125 (layer 11) to 0.6359 (layer 19). Second half (selection unaffected) is pinned by the kernel source and confirmed by the shape pin: the sink is folded AFTER the key loop, so it cannot enter the running max that drives the decisions."
+    },
+    "P6": {
+      "text": "no OOM by 16K, standard fastest on prefill again unless the port materializes S x S on full layers (say which from the code before the card)",
+      "status": "CODE READING DONE BEFORE THE CARD, AND ALREADY REFUTED BY MEASUREMENT",
+      "code_reading": "The port DOES materialize S x S on full-attention layers. sink_attention_tc (gpt_oss20b_tc.py:345-372) computes scores = matmul(query, key_h) with NO chunking, giving a dense B x H x L x S tensor, then adds a full (1,1,L,S) mask, then tc.cat s an extra sink column (a SECOND S+1-wide tensor), then softmaxes. At H=64 that is 512 MiB per tensor at S=2048 and 2,048 MiB at S=4096.",
+      "result": "REFUTED on both halves. Standard OOMs at W=2048, far short of 16K. The APA arms, whose fused kernels are O(L) in score memory, DO fit 2048. This inverts Gemma and reproduces MiniCPM3: APA buys real memory headroom here."
+    }
+  },
+  "seat": {
+    "S1": {
+      "text": "The per-call fp32 exactness gate PASSES on real activations at <= 1e-5 relF, exactly as the synthetic shape pin did. The sink adds no new exactness risk because it enters after every selection decision and is a single scalar per head \u2014 the same arithmetic in both paths.",
+      "confidence": "high"
+    },
+    "S2": {
+      "text": "The model-level D-vs-A difference will be LARGE in absolute ppl (tens of points) and still NOT RESOLVABLE, because this model amplifies bf16 rounding even harder than Gemma did: the measured floor is 8.7 % of baseline vs Gemma's ~4.9 %. Already supported: D 657.55 vs A 673.12 at W=1024 window 0 is a 15.6 ppl / 2.3 % difference, comfortably inside 58.76.",
+      "confidence": "high"
+    },
+    "S3": {
+      "text": "P4 MISSES: E refines ESSENTIALLY EVERYTHING (>= 95 %), like MiniCPM3 and unlike Gemma. Reason: the provable delta is set by the quantizer WORST CASE, and on these keys the max error (19.86) is 28x the mean (0.71) and 4x the p99 (4.90). delta = 44.3 will sit far above the running-max spread of almost every query. The Gemma result was a property of an unusually clean quantizer, not of the rule.",
+      "confidence": "high"
+    },
+    "S4": {
+      "text": "C - B will be NEGATIVE in sign (C better) but the magnitude will be swamped by the floor, so P3 is HIT only in the weak sense of \"inside the floor\". Mechanism: the z-score tail leaves ~48 % of mass unrefined here vs 25 % on Gemma and 92 % on MiniCPM3, and the bulk keys are the noisiest of the three, so there IS something for the running-max tail to fix \u2014 just not 58 ppl worth of it.",
+      "confidence": "medium"
+    },
+    "S5": {
+      "text": "The 3 layers with near-zero sink mass (11: 1.3 %, 13: 1.3 %, 7: 6.7 %) and the 3 with very high sink mass (19: 64 %, 21: 58 %, 23: 40 %) will show DIFFERENT unrefined-mass behaviour, because a query that puts 64 % of its mass in the sink has only 36 % distributed over real keys and so a much flatter effective distribution over them. Specifically I predict the high-sink layers show HIGHER unrefined real-key mass at the same delta. This is the one thing no previous model in this series could be asked.",
+      "confidence": "medium \u2014 this is a genuine open question, not a restatement of a measurement"
+    },
+    "S6": {
+      "text": "On the ceiling: the APA arms reach 4096 and probably 8192 under the rail, and standard reaches NEITHER \u2014 standard's wall is memory at 2048 while the APA arms' wall will be TIME, not memory, because the resident MXFP4 body leaves only 927 MiB and the fused path's KV grows ~12 MiB per 1K tokens (8 KV heads x 64 dim x 2 tensors x 2 B x 24 layers). Extrapolating, KV alone reaches 927 MiB at roughly 75K tokens, so time rails first.",
+      "confidence": "medium"
+    }
+  }
+}

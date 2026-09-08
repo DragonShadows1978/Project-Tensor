@@ -1,0 +1,308 @@
+{
+  "order": {
+    "path": "orders/APA_SP5_GPTOSS20B_MODEL_TEST.md",
+    "sha256": "a87553d18e53019477654868cf0824b66c04140f47269b17ec01132db3420931"
+  },
+  "cites": {
+    "apa_sp3_registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "apa_sp4g_registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+    "apa_sp3_report": "/mnt/Shared/APA_SP3_Model_Test_Report_2026-09-07.md",
+    "apa_sp4g_report": "/mnt/Shared/APA_SP4G_Gemma4_Model_Test_Report_2026-09-08.md",
+    "prior_art_comparison": "/mnt/Shared/APA_SP_Prior_Art_Comparison_2026-09-06.md"
+  },
+  "model": {
+    "id": "openai/gpt-oss-20b",
+    "snapshot": "/home/vader/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee",
+    "port": "/mnt/ForgeRealm/GraftRepository/core/gpt_oss20b_tc.py",
+    "port_sha256": {
+      "core/gpt_oss20b_tc.py": "da8ca3bc8c961d731d9e32bf4558702ad1b8b10c8ecc37b18326e7df4ade74a1",
+      "core/mistral7b_tc.py": "49430e5920508d740a2f8be7b6ba0caadd0442c7798454cf6fa2a808204bf1c4"
+    },
+    "port_status": "READ-ONLY; never edited. Arm wiring is done by monkey-patching GptOssAttentionTC.__call__ inside the SP5 harness process only.",
+    "layers": 24,
+    "num_heads": 64,
+    "num_kv_heads": 8,
+    "head_dim": 64,
+    "sliding_window": 128,
+    "full_attention_layers": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      15,
+      17,
+      19,
+      21,
+      23
+    ],
+    "sliding_attention_layers": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      20,
+      22
+    ],
+    "experts": "MoE 32 experts, 4 per token, resident packed MXFP4",
+    "compute_dtype": "bfloat16",
+    "weights": "INT4 group 64 (attn/head), MXFP4 (experts)",
+    "apa_scope": "full \u2014 APA runs on the 12 full-attention layers only; the 12 sliding layers are bounded at 128 keys and stay standard (port resolve_gpt_oss_attention_mode apa_skip_reason=\"sliding_window_bounded\")"
+  },
+  "engine": {
+    "build": "artifacts/apa_sp5/build",
+    "source_sha256": {
+      "scripts/apa_sp5_model.py": "95a906dd053a826e60b2a5fe57ce7a46d6b29f327594572bb02b4fbe8a867dde",
+      "scripts/apa_sp5_tokens.py": "a7bde008580b3423b427ce1d51d03692b973874696fe9c2bc331757e9c15d85d",
+      "scripts/apa_sp5_item0_wall.py": "9aed85e41cdd6c282921ad127e8f71ac60442a907bf2d444819d01e1445a253f",
+      "scripts/apa_sp5_item1_sensitivity.py": "9bb7220fa2868f5c5e868f14625e4761db3e338dc8706d51e96fff2d1b17326d",
+      "scripts/apa_sp5_calib.py": "b33167c3c097322b530b5335736caec1b782a8990e5ab4ac19b2cb42e40a14f8",
+      "scripts/apa_sp5_shape_pin.py": "3d62dc68e6597761fa08f51740b5abafc9c04174645e6fe452d9d08a44d817b8",
+      "scripts/apa_sp5_build.sh": "dbf8740cee9cf068d003b42bb36e6663462ccb7d3d0cf61998e5e3aee665d8d7",
+      "scripts/apa_sp5_lead_gpu.sh": "631f59411f13e252ba8f1f7b9781cf92ff6570dbbb6d19787de4fea1f7019cd3",
+      "tensor_cuda/src/kernels.cu": "6c416ece5cac153b761c7af6d0ff1cf8baf8f7e6d3bd9e04e32f3fd536d7d192",
+      "tensor_cuda/src/bindings.cpp": "7d3f6edb65dd465f39f8885a41d8267d0c5c2edcaef54edfc509403f2da01e12",
+      "tensor_cuda/src/gemm_apa.cu": "4827910cc9383b4c6cf7505b12da99eb6e54cc8792a3a43d492a58de8eee25f6"
+    },
+    "kernel_bodies": "byte-identical to branch HEAD; git status on tensor_cuda/ is EMPTY. NO launcher addition was needed: apa_selective_attention_sp already dispatches cap<=64 and arbitrary GQA (KVH, H/KVH) and already accepts a sinks tensor.",
+    "TC_APA_SP": "stays default OFF; every SP5 cell sets TC_APA_SP=1 in its own environment only"
+  },
+  "protocol": {
+    "name": "PROTOCOL-O",
+    "dataset": "wikitext-2-raw-v1 test, offline HF cache",
+    "tokenizer": "the model's own harmony/o200k tokenizer; NO chat template; add_special_tokens=False",
+    "token_count": 287210,
+    "token_sha256": "6b0ac3850d9fe65af588188ae37dd2172e77562dedb026260704777546ef2670",
+    "tokens_file_sha256": "980877d71ad0dc15c5d209f6f553d499144b0bc51334b9024a45a982a02cc9de",
+    "text_sha256": "696cca6b65a171b0a358a4be6732cdfdf2dd6164a32e20fd70e3c13fc4dfae83",
+    "W": 1024,
+    "N": 4,
+    "windows": "consecutive, non-overlapping: window i = tokens [i*1024, (i+1)*1024)",
+    "scored": "the last W/2 = 512 target positions of each window, in fp64",
+    "total_targets": 2048,
+    "W_N_choice_reason": "MEASURED (item 0, on the card): resident load 12.5 s (warm page cache; 37.2 s cold), one W=1024 window forward 33.9 s, one W=2048 window 67.5 s. W=2048 x N=4 = 284.6 s nominal, 0.4 s under the 285 s worker rail \u2014 no margin. DECISIVE: arm A (standard) OOMs at W=2048 on this card, because the port's sink_attention_tc materializes a dense B x H x L x S score tensor (64 x 2048 x 2048 x 2 B = 512 MiB) and holds several at once against 927 MiB free. A protocol whose baseline arm cannot execute is not a protocol. W=1024 x N=4 = 150 s, every arm runs, 135 s of margin.",
+    "long_row": "prefix 0, score the last 512 within 8192 \u2014 REGISTERED NON-FIT for arm A: standard already OOMs at 2048, so 8192 is impossible for it (8,192 MiB per score tensor). Registered as a lead-run cell for arms B/C/D/E only, whose fused kernels are O(L) in score memory.",
+    "head": "lm_head evaluated through int4_linear_fused in 256-position chunks. MEASURED CAUSE: the default two-stage int4_linear dequantizes the whole lm_head weight to a 2880 x 201088 fp16 buffer = 1,105 MiB and OOMs at EVERY chunk size including M=1, against 927 MiB free. kernels.cu states the fused path is \"Correctness-identical to int4_linear\". Harness/VRAM choice; no model or kernel change."
+  },
+  "sensitivity_floor": {
+    "construction": "A in bf16 vs A with the 12 FULL-attention layers computed in fp32 (q/k/v/sinks promoted, bf16 restored before o_proj), window 0, W=1024. fp32 attention is chunked over 128 query positions \u2014 arithmetically identical (per-row softmax is independent), required because a dense fp32 64x1024x1024 score tensor is 256 MiB.",
+    "A_bf16_ppl": 673.1165494033148,
+    "A32_fp32_full_ppl": 614.3563818422778,
+    "floor_ppl": 58.760167561037065,
+    "floor_relative": 0.08729568098292206,
+    "rule": "Any model-level ppl difference of magnitude <= 58.76 ppl (8.73 % of the window-0 baseline) is NOT RESOLVABLE on this model and is reported as such, never as a win or a loss. This is a reporting convention (SP4G amendment 6 precedent), NOT a confidence interval.",
+    "evidence_class": "model perplexity"
+  },
+  "arms": {
+    "A": {
+      "name": "standard (sink attention)",
+      "entry": "port sink_attention_tc on full layers; sliding_sink_attention_tc on sliding layers",
+      "sink_handling": "the [H] learned sink logit is concatenated as one extra score column, softmax runs over S+1 columns, then the sink column is SLICED OFF before the value matmul \u2014 sink is in the DENOMINATOR ONLY and contributes no value vector",
+      "materializes_SxS": true
+    },
+    "B": {
+      "name": "two-pass APA (the original z-score rule)",
+      "entry": "tc.apa_selective_attention_sink",
+      "refine_percentile": 0.15,
+      "refine_percentile_source": "the port's own registered default GptOssAttentionTC.refine_percentile = 0.15",
+      "z": 1.0364333894937898,
+      "rule": "threshold on |bulk| at mean + z*std (a GLOBAL statistic \u2014 this is the rule APA-SP1 proved cannot be implemented in one irrevocable pass)",
+      "sink_handling": "folded inside the fused sink kernel at the end of the key loop; sink is never a selection candidate",
+      "measured_realised_fraction_full_layers": 0.16847773056903814,
+      "materializes_SxS": false
+    },
+    "C": {
+      "name": "single-pass, ONE global delta matched to B",
+      "entry": "tc._C.apa_selective_attention_sp(..., sinks=<layer sinks>)",
+      "delta": 3.16,
+      "delta_rule": "ONE global delta for all 12 full layers, bisected on this model's real keys to reproduce B's realised refine fraction 0.1685 within +/-0.01. Per-layer matched deltas ranged 2.46-4.10 (median 3.1575); the registered single global value is 3.16.",
+      "sink_handling": "the sink logit is folded into the running max AFTER the key loop (kernels.cu apa_selective_sp_kernel: \"if (sinks) {...}\"), so it enters the denominator and rescales the accumulator but is NEVER a selection candidate \u2014 a sink cannot be refined, and it cannot move the running max that drives the rule's decisions because it is applied after every decision is made",
+      "materializes_SxS": false
+    },
+    "D": {
+      "name": "single-pass refine-all (exact w.r.t. the rule)",
+      "entry": "same, delta = 1e9",
+      "delta": 1000000000.0,
+      "sink_handling": "identical to C",
+      "materializes_SxS": false
+    },
+    "E": {
+      "name": "single-pass provable delta",
+      "entry": "same",
+      "delta": 44.3153181628634,
+      "delta_rule": "delta = ln(1/eps) + 2*e_q with eps = 0.01 and e_q = the MAX absolute bulk-vs-exact logit error measured on THIS model's real keys (the SP2/SP3 registered rule: the max, not a percentile). Measured e_q = 19.855 over all 12 full layers -> delta = 4.605 + 39.710 = 44.315.",
+      "e_q": 19.855073988437653,
+      "e_q_p99": 4.903475825488564,
+      "eps": 0.01,
+      "sink_handling": "identical to C",
+      "materializes_SxS": false
+    }
+  },
+  "bulk_bits": {
+    "primary": 4,
+    "secondary": 8,
+    "secondary_condition": "run bulk 8 only if the wall permits after the bulk-4 chain completes"
+  },
+  "measured_inputs_before_registration": {
+    "note": "These were measured on the card BEFORE this file was written, because the order requires item 0 to size the protocol and because C's delta and E's e_q are defined as functions of this model's real keys. They are INPUTS to the registration, not results of a gate.",
+    "bulk_error_4bit_per_full_layer": {
+      "1": {
+        "mean": 0.8910490049364914,
+        "p99": 4.903475825488564,
+        "max": 15.060579597949982
+      },
+      "3": {
+        "mean": 0.6498439454171218,
+        "p99": 3.193526866137978,
+        "max": 10.49379301071167
+      },
+      "5": {
+        "mean": 0.614203612646224,
+        "p99": 2.3077733129262925,
+        "max": 7.1416981518268585
+      },
+      "7": {
+        "mean": 0.6978985873512907,
+        "p99": 4.748796397745604,
+        "max": 15.80194491147995
+      },
+      "9": {
+        "mean": 0.569148458692817,
+        "p99": 2.4349134093523017,
+        "max": 14.38884437084198
+      },
+      "11": {
+        "mean": 0.563668218991969,
+        "p99": 2.256675191223619,
+        "max": 8.712080210447311
+      },
+      "13": {
+        "mean": 0.638255993332032,
+        "p99": 2.5512286505103106,
+        "max": 9.839993178844452
+      },
+      "15": {
+        "mean": 0.7143097709544499,
+        "p99": 2.830771990120408,
+        "max": 8.864933714270592
+      },
+      "17": {
+        "mean": 0.7281636948948236,
+        "p99": 2.9909794014692306,
+        "max": 11.264662772417068
+      },
+      "19": {
+        "mean": 0.8895159261498194,
+        "p99": 4.332271950915455,
+        "max": 18.650557816028595
+      },
+      "21": {
+        "mean": 0.8316190884059823,
+        "p99": 4.3459352082014036,
+        "max": 19.855073988437653
+      },
+      "23": {
+        "mean": 0.7143310983667891,
+        "p99": 3.789451517164695,
+        "max": 16.540161907672882
+      }
+    },
+    "sink_softmax_mass_median_per_full_layer": {
+      "1": 0.25282950954147265,
+      "3": 0.3040552570973292,
+      "5": 0.39052889181995565,
+      "7": 0.0674557457919435,
+      "9": 0.10832755605074257,
+      "11": 0.016736480799196707,
+      "13": 0.012525634324358301,
+      "15": 0.11252029485456422,
+      "17": 0.23819592606249562,
+      "19": 0.6359262604956097,
+      "21": 0.5753632668000316,
+      "23": 0.4027970349236358
+    },
+    "B_realised_fraction_per_full_layer": {
+      "1": 0.1672175469426797,
+      "3": 0.1685078488681675,
+      "5": 0.168564691531893,
+      "7": 0.1684476122699088,
+      "9": 0.17013661136937658,
+      "11": 0.16857122098060912,
+      "13": 0.17052189811704638,
+      "15": 0.16914469686281802,
+      "17": 0.16779540990602526,
+      "19": 0.16537857481983428,
+      "21": 0.16701601860702128,
+      "23": 0.1663509581608308
+    },
+    "C_matched_delta_per_full_layer": {
+      "1": 3.2473736107294826,
+      "3": 2.532646268600729,
+      "5": 2.4607434868539713,
+      "7": 4.102977819738953,
+      "9": 3.067694604405915,
+      "11": 3.286932885630449,
+      "13": 3.662313036611522,
+      "15": 3.6491591781214083,
+      "17": 3.446761863788197,
+      "19": 3.03428107498803,
+      "21": 2.936281144620807,
+      "23": 2.8261265754827036
+    }
+  },
+  "gates": {
+    "G_shape_pin": {
+      "statement": "The single-pass entry instantiates GPT-OSS-20B's exact shape (B=1,H=64,KVH=8,D=VD=64) WITH a real learned sink tensor, and agrees with a dense fp64 NumPy reference that folds the sink into the denominator only.",
+      "threshold": "fp32: <= 1e-4 max-abs AND <= 1e-5 relative Frobenius",
+      "also": "sinks must be load-bearing (sinks-on vs sinks-zeroed must differ), zero causal leak in the diagnostic selection mask, and the kernel selection fraction must match an fp64 implementation of the rule"
+    },
+    "G_exactness_per_call": {
+      "statement": "On identical captured inputs from a real forward \u2014 one full layer, a prefill chunk and a cached short block \u2014 single-pass refine-all vs the standard sink path vs a dense fp32 NumPy reference.",
+      "threshold": "fp32: <= 1e-4 max-abs AND <= 1e-5 relative Frobenius",
+      "note": "This is THE exactness gate (SP4G principle 5: exactness is a PER-CALL property on numerically chaotic models). Model-level D vs A is REPORTED against the sensitivity floor, NOT gated."
+    },
+    "G_model_level": {
+      "statement": "Arms A/B/C/D/E over PROTOCOL-O.",
+      "threshold": "NONE. Reported only, each difference labelled resolvable / not-resolvable against the 58.76 ppl floor.",
+      "reason": "SP4G established that a sub-floor ppl gate on a model that amplifies rounding is a guaranteed false RED. Registering a gate we know the model cannot support would be gate theatre."
+    },
+    "G_margins": {
+      "statement": "Bitwise replay on the full-attention layers: |bulk-exact| mean/p99/max, unrefined softmax mass, max relative weight of a skipped key, realised fraction, AND sink mass per query.",
+      "threshold": "replay must be BITWISE (output and selection mask identical to the original call) or the cell is RED; the metrics themselves are measurements, not gates"
+    },
+    "G_ceiling": {
+      "statement": "Largest S that completes prefill per arm at {4096, 8192, 16384} under the 285 s worker rail on 12 GB.",
+      "threshold": "none; OOM and RAIL are both results and are distinguished"
+    },
+    "G_decode": {
+      "statement": "32 synced decode steps, ms/token, arms A/B/C at 2048 and 8192, plus whether the port re-quantizes keys per step.",
+      "threshold": "none; measurement"
+    }
+  },
+  "stop_conditions": [
+    "Any GPU cell exceeding the 285 s worker rail is recorded RAIL and NOT retried at a longer lease without David authorizing it.",
+    "Any OOM is a receipted finding, never a silent fallback.",
+    "If G_shape_pin or G_exactness_per_call fails in fp32, STOP and report \u2014 do not tune delta, do not widen the tolerance.",
+    "No threshold in this file is edited after a gate has run."
+  ],
+  "scope_of_proof": "Margins, ceilings and decode timings establish NOTHING about model quality by themselves. They establish selection behaviour, memory shape and speed. Only the perplexity rows speak to quality, and on this model only above the registered 58.76 ppl floor.",
+  "prior_art": {
+    "running_max_criterion": "BLASST, Yuan et al., arXiv 2512.12087 (MLSys 2026) \u2014 APA applies it to PRECISION (refine) rather than sparsity (drop); same comparator, opposite consequence.",
+    "weight_proportional_error": "ThriftAttention, Sharratt, arXiv 2605.23081 (2026)",
+    "online_softmax": "Milakov & Gimelshein (2018); FlashAttention-2, Dao (2023)",
+    "attention_sinks": "GPT-OSS model card (OpenAI, 2025); StreamingLLM, Xiao et al., arXiv 2309.17453 (2023) for the sink phenomenon",
+    "bulk_key_quantizer": "TurboQuant-style rotation + codebook (Zandieh et al., 2025), as implemented in tensor_cuda.quant",
+    "protocol_shape": "SP3 PROTOCOL-2 and SP4G PROTOCOL-G (this repo, 2026); wikitext-2 (Merity et al., 2016)",
+    "sensitivity_floor_method": "SP4G amendment 6 (this repo, 2026)",
+    "unverified": "No network in this seat. Every citation above is from the lead's own prior-art comparison document or the seat's knowledge; the lead should verify BLASST and ThriftAttention arXiv numbers and the TurboQuant attribution through the proxy. Search terms: \"BLASST block-sparse attention running max\", \"ThriftAttention mixed precision block FP4\", \"TurboQuant vector quantization KV cache\", \"attention sink StreamingLLM\", \"gpt-oss-20b attention sinks model card\"."
+  },
+  "immutable": true
+}
