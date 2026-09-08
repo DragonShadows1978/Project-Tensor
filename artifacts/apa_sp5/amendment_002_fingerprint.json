@@ -1,0 +1,64 @@
+{
+  "amendment": "APA_SP5_AMENDMENT_2",
+  "amendment_path": "orders/APA_SP5_AMENDMENT_2.md",
+  "amendment_sha256": "dc2ccc76bdab0c2211bb8833fae7b8b53479d6502ce1e4d0b32182796c730f87",
+  "registration_sha256": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+  "predictions_a2_sha256": "a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380",
+  "statement": "ADDITIVE, with ONE modification to an a1 script, declared here. Nothing registered in r1 or a1 is relaxed, and no threshold is edited. The r1 registration keeps its exact bytes.",
+  "expected_invalidated": [],
+  "modified_sources": {
+    "scripts/apa_sp5_a1_ceiling.py": {
+      "sha256": "c7181a65b713a63255b56d9fb0aeb0dcba36f2d7ccacacd1cad3aab426a9a60f",
+      "change": "ADDITIVE instrumentation only: record a per-chunk completed-token trace and, on the OOM path, completed_tokens_at_failure / failed_on_chunk_starting_at / free_mib_before_failing_chunk. No control flow, no threshold and no measurement semantics changed.",
+      "why": "amendment 2 asks for \"tokens completed at failure\", which the a1 version did not record. The first a2 cell (ceiling_long_C_16384.json) was run BEFORE this change and lacks the trace; it is KEPT as a receipt and was re-run as ceiling_long_C_16384_trace.json with identical outcome (OOM), identical min_free (347 MiB) and identical peak (11,527 MiB), which is itself a reproducibility check.",
+      "a1_receipts_affected": "NONE. Every a1 ceiling receipt keeps its bytes; the added fields appear only in cells run after the change."
+    }
+  },
+  "new_sources": {
+    "scripts/apa_sp5_a2_lease.sh": "7283f93130d29e12ef365b2d3f796b662fc89d18b1e353bef21deb2d91fda6a5",
+    "scripts/apa_sp5_a2_ladder.sh": "80687d64a1ad16cb35d1908ef74b2cd012b298406f7a25292301cba64b2461f1",
+    "artifacts/apa_sp5/a2_inject/sitecustomize.py": "3372a30c348cb069dbc601385aacfdb78db338c20c3cd6328993def2dc896077"
+  },
+  "prior_registration_files": {
+    "artifacts/apa_sp5/registration.json": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+    "artifacts/apa_sp5/predictions.json": "17427eb3c53f9830b195abc415cbb2d05a8e16099bdd30a2e76c296c99492e44",
+    "artifacts/apa_sp5/predictions_a1.json": "cbcb534d52f048898912d231870a7c8d26e3ac8a0b512bec0d9f1f0a81618330",
+    "artifacts/apa_sp5/predictions_a2.json": "a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380",
+    "artifacts/apa_sp5/amendment_001_fingerprint.json": "22c700687246218896852a4e42c2e9b3a496a377c5a8d9e02017f51744019681",
+    "artifacts/apa_sp5/amendment_001_sensitivity_floor_scale.json": "4cc5bca1ca6207bb6ad76cf2dd87c6a2f3f7db1ebad162ab08652381eaa5cd55",
+    "artifacts/apa_sp5/aggregate_a1_N16.json": "605d49386959f795c8d4821f769c4aab7d502413d77938076dec960883843a40"
+  },
+  "engine": {
+    "build": "artifacts/apa_sp5/build (unchanged; not rebuilt since r1)",
+    "kernels_cu_sha256": "6c416ece5cac153b761c7af6d0ff1cf8baf8f7e6d3bd9e04e32f3fd536d7d192",
+    "bindings_cpp_sha256": "7d3f6edb65dd465f39f8885a41d8267d0c5c2edcaef54edfc509403f2da01e12",
+    "kernel_bodies": "byte-identical to branch HEAD; git status tensor_cuda/ EMPTY",
+    "TC_APA_SP": "default OFF; set per-process only"
+  },
+  "read_only_files_NOT_edited": {
+    "core/gpt_oss20b_tc.py": "da8ca3bc8c961d731d9e32bf4558702ad1b8b10c8ecc37b18326e7df4ade74a1",
+    "scripts/gpt_oss20b_stream_forward_smoke.py": "c9fc9ee2e67f00fc033f87784d231640b538a3f83ff47f4678d121ad1dca22a5",
+    "scripts/gpt_oss20b_context_ladder.py": "f28da16cc4824076241c8b608e9ac63af29dcf14f5cccb6345df1b9d8a371c0f",
+    "note": "GraftRepository git status on core/ and scripts/ is EMPTY. The streamed single-pass rung was obtained WITHOUT editing any of these three files; see injection_route below."
+  },
+  "injection_route": {
+    "problem_1": "the ladder emits only --attention-mode {standard,apa_selective} (context_ladder.py parse_setting), and the port's sole apa_selective branch is hard-wired to the TWO-PASS entry at core/gpt_oss20b_tc.py:744 -- attn = tc.apa_selective_attention_sink(q,k,kq,v,self.sinks,self.scaling,float(z),True) -- which takes a z-score percentile and has no delta parameter. grep for apa_selective_attention_sp in ladder, smoke and port returns NOTHING: there is no single-pass seam.",
+    "problem_2": "the smoke HARD-CODES the stock engine at scripts/gpt_oss20b_stream_forward_smoke.py:24 (sys.path.insert(0, \"/mnt/ForgeRealm/Project-Tensor/tensor_cuda\")), and that build has NO apa_selective_attention_sp.",
+    "solution": "artifacts/apa_sp5/a2_inject/sitecustomize.py, placed on the subprocess PYTHONPATH. Python imports sitecustomize at interpreter start; it (a) preloads the SP5 engine into sys.modules so the smoke's later import finds it and its own path insert is a no-op, and (b) rebinds GptOssAttentionTC.__call__ in the subprocess's own memory. Armed only when APA_SP5_SP_DELTA is set, so an uninstrumented run is the stock two-pass path byte-for-byte. It refuses to run if the preloaded engine lacks the SP entry, so a mislabelled cell cannot be produced.",
+    "honest_label": "results are \"the H4 ladder construction with the single-pass entry injected in-process\", NOT \"the ladder natively supports the single pass\". It does not.",
+    "precedent": "the same in-process monkey-patch the SP5 a1 harness uses, accepted by the lead as deviation 2."
+  },
+  "h4_reference": {
+    "path": "/mnt/ForgeRealm/GraftRepository/artifacts/gpt_oss_20b/h4_context_ladder_apa_16k_sampled.json",
+    "sha256": "4cb92e9b3f51c2b179981d171ef95043538fabd300138e83e702266a66504d7a",
+    "prompt_path": "/mnt/ForgeRealm/GraftRepository/artifacts/gpt_oss_20b/h4_context_ladder_apa_16k_sampled/prompts/prompt_16384.txt",
+    "prompt_sha256": "c33c172aa50606813f228115cffdf5bee26550109cedbb904d7244f3d63a77ba",
+    "note": "the a2 ladder cells consume the EXACT H4 prompt bytes, so the comparison is on identical input, not a re-derived corpus. H4 used bulk_bits=8; the a2 cells match that (SP5 elsewhere uses bulk 4)."
+  },
+  "new_cell_kinds": {
+    "ceiling_long_{B,C}_{16384,24576}": "resident mode, chunk 512, 1,500 s lease",
+    "ladder_stream_{B,C}_16384": "streamed mode, H4 construction, bulk 8"
+  },
+  "lease": "David-authorized for THIS amendment only: 1,500 s worker / 1,560 s outer per cell, one cell per lease. NOT generalized.",
+  "prior_art": "No new algorithm. Ceiling ascent = SP4G a7 / SP5 a1; streamed ladder = GraftRepository H4 (July 2026); sitecustomize / monkey-patching = CPython stdlib mechanism. The rule remains BLASST (Yuan et al., arXiv 2512.12087) applied to precision."
+}

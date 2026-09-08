@@ -86,11 +86,12 @@ def main():
                gpu_mib_after_load=gpu_mib())
     min_free = free0
     t0 = time.perf_counter()
+    pos = 0
+    trace = []
     try:
         with tc.no_grad():
             model.extend_rope(S + 8)
             caches = None
-            pos = 0
             while pos < S:
                 n = min(args.chunk, S - pos)
                 chunk = ids[pos:pos + n].reshape(1, n)
@@ -98,7 +99,12 @@ def main():
                                      position_offset=pos, max_layers=cfg.num_layers)
                 tc.synchronize()
                 pos += n
-                min_free = min(min_free, freemib()[0])
+                fnow = freemib()[0]
+                min_free = min(min_free, fnow)
+                # amendment 2: the completed-token trace IS the measurement --
+                # an OOM must report exactly how far the arm got.
+                trace.append(dict(tokens=pos, free_mib=fnow,
+                                  elapsed_s=round(time.perf_counter() - t0, 2)))
                 el = time.perf_counter() - t0
                 if el > args.budget_s and pos < S:
                     rec.update(status='RAIL', outcome='RAIL',
@@ -115,7 +121,11 @@ def main():
         oom = 'out of memory' in msg.lower()
         rec.update(status='RED', outcome='OOM' if oom else 'ERROR',
                    error_type=type(e).__name__, error=msg[:400],
+                   completed_tokens_at_failure=pos,
+                   failed_on_chunk_starting_at=pos,
+                   free_mib_before_failing_chunk=(trace[-1]['free_mib'] if trace else free0),
                    prefill_wall_s=time.perf_counter() - t0)
+    rec['token_trace'] = trace
     rec['min_free_mib'] = min_free
     rec['peak_used_mib'] = total - min_free
     rec['gpu_mib_end'] = gpu_mib()

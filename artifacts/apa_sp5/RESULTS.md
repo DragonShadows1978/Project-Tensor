@@ -480,3 +480,147 @@ branch missed but its second branch is the one the data chose.
 4. **An adapter cost can be real in source and invisible in the measurement.**
    The port genuinely re-quantizes every decode step; on this MoE it costs 2 %.
    Cite the mechanism, but measure before pricing it.
+
+---
+
+# 11. AMENDMENT 2 — the OOM wall, and the single pass on the streamed ladder
+
+David asked for the OOM levels. **Found: 12,288 completed tokens, both arms,
+identically** — and the a1 cache-line extrapolation that predicted ~17,800 is
+**refuted by measurement**. Lease: David-authorized 1,500 s worker / 1,560 s
+outer, one cell per lease, for this amendment only.
+
+Predictions `artifacts/apa_sp5/predictions_a2.json` sha256
+`a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380`
+(registered before the card). Fingerprint
+`artifacts/apa_sp5/amendment_002_fingerprint.json` sha256
+`93e43734c9b4a08b6a1014b040960c98d3badac7b7455443a7ab06343f736d09`.
+
+## 11.1 Resident mode — the wall
+
+| cell | outcome | completed tokens | wall | min free | peak used |
+|---|---|---:|---:|---:|---:|
+| `ceiling_long_C_8192` | **FITS** | 8,192 | 263.2 s | 545 MiB | 11,329 MiB |
+| `ceiling_long_C_16384` | **OOM** | **12,288** | 407.4 s | 347 MiB | 11,527 MiB |
+| `ceiling_long_B_16384` | **OOM** | **12,288** | 418.9 s | 347 MiB | 11,527 MiB |
+| `ceiling_long_{B,C}_24576` | **registered NON-FIT** | — | not run | — | — |
+
+**Both arms die at exactly the same token, 12,288, with min-free identical to
+the MiB (347) and peak identical to the MiB (11,527).** 24,576 is a registered
+non-fit under the amendment's own ascending rule (stop an arm at its first
+OOM); running it would spend a 1,500 s authorized lease to reproduce a failure
+already receipted one rung lower.
+
+**The a1 cache line is refuted.** It predicted free memory declining 53.6 MiB
+per 1K tokens to exhaustion at ~17,816. The token trace shows free memory
+**plateauing at 347 MiB** from 10,752 tokens onward and then failing at 12,288
+with a third of a gigabyte still nominally free:
+
+| tokens | 9,728 | 10,240 | 10,752 | 11,264 | 11,776 | 12,288 |
+|---|---:|---:|---:|---:|---:|---:|
+| free MiB | 443 | 443 | **347** | 347 | 347 | 347 → **OOM** |
+
+So the resident-mode wall is **not** cumulative KV growth. It is a
+**contiguous-allocation / fragmentation wall**: the allocator cannot serve the
+next chunk's transient out of 347 MiB of fragmented free space, even though the
+total is far from zero. That is a different failure mode from the one a1
+inferred, and it is only visible because the amendment asked for completed
+tokens at failure rather than a fit/no-fit verdict.
+
+Also corrected: a1 recorded 8,192 as RAIL, but that was purely a1's 240 s
+in-cell budget. Under the long lease **8,192 FITS in 263 s.** The honest
+resident-mode ceiling for both APA arms on this 12 GB card is therefore
+**between 8,192 (fits) and 12,288 (dies)**, with standard OOM at 2,048.
+
+## 11.2 Streamed mode — the single pass beside the H4 record
+
+| run | tokens | wall | peak | backends |
+|---|---:|---:|---:|---|
+| **H4 (July 2026, two-pass)** | 16,384 | 1,016.0 s | **1,031 MiB** (monitor 2,039) | 12 `apa_selective_sink_fused` + 12 sliding |
+| **a2 `ladder_stream_B_16384`** | 16,384 | 613.0 s | **1,027 MiB** | 12 `apa_selective_sink_fused` + 12 sliding |
+| **a2 `ladder_stream_C_16384`** | 16,384 | 596.3 s | **1,027 MiB** | 12 `apa_sp_sink_fused_injected` + 12 sliding |
+
+Both a2 cells consume the **exact H4 prompt bytes** (`prompt_16384.txt`,
+sha256 `c33c172a…77ba`), the same script, the same settings and the same
+`bulk_bits=8` the July record used — so this is a comparison on identical
+input, not a re-derived corpus.
+
+**B reproduces H4 to 0.4 % on peak** (1,027 vs 1,031 MiB) with the same backend
+split, which validates the reproduction. The wall differs (613 vs 1,016 s)
+because the H4 number includes the ladder's subprocess-monitoring overhead;
+peak is the comparable quantity and it matches.
+
+**C is the single pass's first point on this axis, and it lands on top of B:
+identical peak (1,027 MiB) and 2.7 % faster (596.3 vs 613.0 s).** Streamed mode
+reaches 16,384 where resident mode dies at 12,288, because it holds one layer
+at a time — ~1.0 GB peak against ~11.5 GB.
+
+## 11.3 Item 2 was blocked by the port, and how it was unblocked WITHOUT editing it
+
+The streamed path has **no single-pass seam**:
+
+1. `gpt_oss20b_context_ladder.py`'s `parse_setting` emits only `standard` and
+   `apa_r<pct>`, driving the smoke as a subprocess with
+   `--attention-mode {standard,apa_selective}`.
+2. The port's **sole** `apa_selective` branch is hard-wired to the two-pass
+   entry — **`core/gpt_oss20b_tc.py:744`**:
+
+       attn = tc.apa_selective_attention_sink(q, k, kq, v, self.sinks,
+                                              self.scaling, float(z), True)
+
+   which takes a z-score percentile and **has no δ parameter at all**.
+   `grep apa_selective_attention_sp` in ladder, smoke and port returns nothing.
+3. Additionally the smoke **hard-codes the stock engine** at
+   `gpt_oss20b_stream_forward_smoke.py:24`
+   (`sys.path.insert(0, "/mnt/ForgeRealm/Project-Tensor/tensor_cuda")`), and
+   that build has no `apa_selective_attention_sp`.
+
+Per the amendment I did **not** patch the port. The route that touches no
+owned file: `artifacts/apa_sp5/a2_inject/sitecustomize.py` on the subprocess
+`PYTHONPATH`. Python imports `sitecustomize` at interpreter start; it preloads
+the SP5 engine into `sys.modules` (so the smoke's own path insert becomes a
+no-op) and rebinds `GptOssAttentionTC.__call__` **in the subprocess's own
+memory**. It arms only when `APA_SP5_SP_DELTA` is set — an uninstrumented run
+is the stock two-pass path byte-for-byte — and it **refuses to run if the
+preloaded engine lacks the SP entry**, so a mislabelled cell cannot be produced.
+
+**Honest label:** these are *"the H4 ladder construction with the single-pass
+entry injected in-process"*, **not** *"the ladder natively supports the single
+pass"*. It does not. Verified after the fact: GraftRepository `git status` on
+`core/` and `scripts/` is **empty**.
+
+## 11.4 Amendment 2 predictions — verdicts
+
+| owner | prediction | verdict |
+|---|---|---|
+| **lead** | 16,384 FITS both arms (~525 s) | **MISS** — both arms OOM at 12,288 |
+| **lead** | 24,576 OOMs both arms at ~17.5–18.5K completed tokens | **MISS on the level** (the OOM is at 12,288, one rung lower and ~5K tokens earlier); the *shape* — both arms OOM — is right |
+| **lead** | single-pass at the same or a slightly later token than two-pass | **HIT (exactly the same token)** |
+| seat A2S1 | 16,384 fits but only just (~77 MiB headroom); an OOM there confirms rather than refutes the line | **MISS on the fit**, and my hedge was too generous to myself: the OOM at 12,288 does **not** confirm the line, it refutes it — free plateaued instead of declining |
+| seat A2S2 | first OOM at 16,896–18,432 completed tokens, both arms | **MISS** — 12,288, well below my band |
+| seat A2S3 | both arms OOM at the same token, within one chunk; no mechanism for a memory difference | **HIT, exactly** — same token, same min-free to 1 MiB, same peak to 1 MiB |
+| seat A2S4 | 16,384 takes 550–700 s per arm | **not assessable** (neither arm reached 16,384 in resident mode); the streamed 16K cells landed at 596–613 s, inside the band, but that is a different mode |
+| seat A2S5 | item 2 blocked by the port; injection route may work; label honestly | **HIT on the blocking analysis** (named line 744 before running) and **HIT on the route** |
+| seat A2S6 | B within ~20 % of H4 on wall and peak; C within 10 % of B on both | **HIT on peak** (B 0.4 % from H4; C identical to B); **MISS on wall vs H4** (40 % faster — monitoring overhead in the H4 number), HIT on C-vs-B wall (2.7 %) |
+
+**Both prediction sets missed the wall's location, in the same direction.** The
+lead and I both trusted the a1 cache line; the measurement says the resident
+wall is fragmentation, not cache growth. That is the finding.
+
+## 11.5 What amendment 2 adds
+
+1. **The resident-mode OOM level is 12,288 tokens for both APA arms**, and the
+   two arms are indistinguishable in memory to the MiB — as they must be, since
+   both store the same K, V and quantized-K and both fused kernels are O(L) in
+   score memory. The selection rule allocates nothing.
+2. **An extrapolated memory line is not a wall.** a1's 53.6 MiB/1K figure was a
+   correct description of a range that stopped describing anything past ~10.7K
+   tokens. Fit/no-fit verdicts hid this; the completed-token trace exposed it.
+   *Report where a run died, not only whether it finished.*
+3. **The single pass now has a point on the July/H4 axis** and it costs nothing
+   there: identical peak, marginally faster. Streamed mode is the mode that
+   reaches long context on this card (16K at ~1.0 GB) — resident mode buys
+   speed and dies at 12,288.
+4. **A read-only boundary can be honoured and still measured around**, when the
+   host imports rather than exec's. Stated as an injection, not as native
+   support.

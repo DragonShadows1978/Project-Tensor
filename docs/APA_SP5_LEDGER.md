@@ -319,3 +319,132 @@ or seat knowledge.
    choice is visible rather than silently baked in.
 3. `ceiling_{B,C}_16384` not run (RAIL by construction under a 285 s worker);
    registered as a long-lease cell. Bulk 8 still not run.
+
+---
+
+# Amendment 2 (2026-09-08) — the OOM wall; the streamed single-pass rung
+
+David: "and we're checking OOM levels?" Yes. Lease **David-authorized for this
+amendment only**: 1,500 s worker / 1,560 s outer, one cell per lease, flock
+`--wait`, foreground, no kills, 30 s cooldown. Not generalized.
+
+Order sha256 `dc2ccc76bdab0c2211bb8833fae7b8b53479d6502ce1e4d0b32182796c730f87`.
+Predictions (both sets, before the card) `predictions_a2.json` sha256
+`a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380`.
+Fingerprint `amendment_002_fingerprint.json` sha256
+`93e43734c9b4a08b6a1014b040960c98d3badac7b7455443a7ab06343f736d09`.
+
+## Lease mechanics (how a 25-minute cell fits 10-minute foreground calls)
+
+`scripts/apa_sp5_a2_lease.sh start` detaches ONE leased job with `setsid` and
+returns immediately; I then polled `status` from fresh short calls. The flock,
+the 1,500 s `timeout(1)` leash and the 30 s cooldown all live **inside** the
+detached job, so a caller who stops polling cannot skip them. This is a
+detached OS process holding its own lease — **not** a Claude Code background
+task (the order forbids those, and the harness reaps them).
+
+## Item 1 — resident mode: the wall is 12,288 tokens, both arms
+
+| cell | outcome | completed tokens | wall | min free | peak used |
+|---|---|---:|---:|---:|---:|
+| `ceiling_long_C_8192` | FITS | 8,192 | 263.2 s | 545 MiB | 11,329 |
+| `ceiling_long_C_16384` | **OOM** | **12,288** | 407.4 s | 347 MiB | 11,527 |
+| `ceiling_long_B_16384` | **OOM** | **12,288** | 418.9 s | 347 MiB | 11,527 |
+| `ceiling_long_{B,C}_24576` | **registered NON-FIT** | — | not run | — | — |
+
+Both arms fail at the **same token**, with min-free and peak identical **to the
+MiB**. 24,576 is a registered non-fit under the amendment's ascending rule.
+
+**The a1 cache line is REFUTED by the token trace.** a1 measured 53.6 MiB per
+1K tokens and extrapolated exhaustion at ~17,816. The trace shows free memory
+**plateauing at 347 MiB** from 10,752 onward and failing at 12,288 with 347 MiB
+still free:
+
+    9,728→443  10,240→443  10,752→347  11,264→347  11,776→347  12,288→OOM
+
+The resident wall is therefore a **contiguous-allocation / fragmentation**
+wall, not cumulative KV growth. Different failure mode than a1 inferred.
+
+**Also corrected:** a1's 8,192 RAIL was a1's own 240 s budget, not a wall —
+under the long lease 8,192 **FITS** in 263 s. Honest resident ceiling for both
+APA arms: **fits 8,192, dies at 12,288** (standard OOM at 2,048).
+
+## Item 2 — BLOCKED by the port, unblocked without editing it
+
+Three blocking facts, all read from source before running anything:
+
+1. `context_ladder.py parse_setting` emits only `standard` / `apa_r<pct>`.
+2. **`core/gpt_oss20b_tc.py:744`** — the port's SOLE `apa_selective` branch:
+   `attn = tc.apa_selective_attention_sink(q, k, kq, v, self.sinks, self.scaling, float(z), True)`
+   — a z-score percentile, **no δ parameter**. `grep apa_selective_attention_sp`
+   in ladder, smoke and port returns **nothing**.
+3. `gpt_oss20b_stream_forward_smoke.py:24` **hard-codes** the stock engine
+   (`sys.path.insert(0, "/mnt/ForgeRealm/Project-Tensor/tensor_cuda")`), which
+   has no SP entry.
+
+Route taken (no owned file edited): `artifacts/apa_sp5/a2_inject/
+sitecustomize.py` on the subprocess `PYTHONPATH` — preloads the SP5 engine into
+`sys.modules` and rebinds `GptOssAttentionTC.__call__` in the subprocess's own
+memory. Arms only when `APA_SP5_SP_DELTA` is set; **refuses to run if the
+preloaded engine lacks the SP entry**, so a mislabelled cell cannot exist.
+Verified after: GraftRepository `git status core/ scripts/` is **empty**.
+
+**Labelled honestly:** "H4 ladder construction with the SP entry injected
+in-process", not "the ladder supports the single pass".
+
+| run | tokens | wall | peak | backends |
+|---|---:|---:|---:|---|
+| H4 (July, two-pass) | 16,384 | 1,016.0 s | **1,031 MiB** | 12 two-pass + 12 sliding |
+| `ladder_stream_B_16384` | 16,384 | 613.0 s | **1,027 MiB** | 12 two-pass + 12 sliding |
+| `ladder_stream_C_16384` | 16,384 | 596.3 s | **1,027 MiB** | 12 **SP injected** + 12 sliding |
+
+Both consume the **exact H4 prompt bytes** (sha256 `c33c172a…77ba`) at
+`bulk_bits=8` as the July record used. B reproduces H4's peak to **0.4 %**
+(wall differs because H4's number includes ladder monitoring overhead). **C —
+the single pass's first point on this axis — matches B's peak exactly and runs
+2.7 % faster.**
+
+## Failures, corrections and RED (amendment 2)
+
+1. **Both prediction sets missed the wall, in the same direction.** Lead said
+   16,384 FITS and 24,576 OOMs at 17.5–18.5K; I said OOM at 16,896–18,432.
+   Truth: 12,288. We both trusted the a1 cache line; it does not describe the
+   region past ~10.7K tokens. **Seat A2S3 (same token, no memory mechanism to
+   separate the arms) was exactly right**, and A2S5's blocking analysis named
+   line 744 before the card.
+2. **My a1 ceiling script did not record completed tokens on the OOM path.**
+   The first a2 cell ran without it; I added the trace (additive
+   instrumentation only, declared in the fingerprint) and **re-ran** — identical
+   outcome, identical min-free (347) and peak (11,527), which doubles as a
+   reproducibility check. Both receipts kept.
+3. **Two harness bugs of my own in the injection**, both caught and fixed
+   before any measurement: an unguarded `__import__` hook recursed
+   pathologically (a bare import went 0.1 s → >200 s), and the first guard
+   fired mid-import against a partially initialized module.
+
+## Prior art (amendment 2)
+
+No new algorithm. Ceiling ascent = SP4G a7 / SP5 a1; streamed ladder
+construction = GraftRepository H4 (July 2026); `sitecustomize` and
+monkey-patching are CPython stdlib mechanisms; `flock(2)`/`setsid(1)`/
+`timeout(1)` are Unix. The selection rule remains **BLASST**'s running-max
+criterion (Yuan et al., arXiv 2512.12087) applied to **precision** rather than
+sparsity — APA is David's design, the single pass and the z-score
+impossibility proof are APA-SP1's. **No prior art known to me** for the
+fragmentation-vs-cache-growth distinction as stated here. **UNVERIFIED — lead
+to check:** no network in this seat; arXiv numbers from the lead's prior-art
+comparison doc or seat knowledge.
+
+## Deviations (amendment 2)
+
+1. `scripts/apa_sp5_a1_ceiling.py` modified — **additive instrumentation
+   only** (completed-token trace + OOM fields). No control flow, threshold or
+   measurement semantics changed; declared in the fingerprint with the reason
+   and the re-run reproducibility check. No a1 receipt altered.
+2. `ceiling_long_{B,C}_24576` **not run** — registered non-fits under the
+   amendment's own ascending rule.
+3. `ladder_stream_{B,C}_{32768,65536}` remain **long-lease-only cells needing a
+   separate authorization** (H4 wall implies ~37 min at 32K, ~93 min at 64K,
+   both over the 1,500 s granted here).
+4. The streamed cells use `bulk_bits=8` to match the July H4 record; every
+   other SP5 cell uses bulk 4. Stated wherever the numbers appear.

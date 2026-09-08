@@ -91,3 +91,57 @@ bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 8192 
 #     the amendment's question, but the 16-window set would show whether the
 #     B-vs-C mass gap is as flat across text as windows 1 and 2 suggest:
 #   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window <N> --qstep 32
+
+# ============================================================ AMENDMENT 2
+# predictions_a2.json          a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380
+# amendment_002_fingerprint    93e43734c9b4a08b6a1014b040960c98d3badac7b7455443a7ab06343f736d09
+# order APA_SP5_AMENDMENT_2    dc2ccc76bdab0c2211bb8833fae7b8b53479d6502ce1e4d0b32182796c730f87
+#
+# LEASE: David authorized 1,500 s worker / 1,560 s outer, ONE CELL PER LEASE,
+# for THIS AMENDMENT ONLY. Do not generalize it. scripts/apa_sp5_a2_lease.sh
+# detaches one leased job (setsid) and returns; poll it with `status` from
+# fresh short calls. flock + 1,500 s timeout + 30 s cooldown live INSIDE the
+# detached job so they cannot be skipped. It is not a Claude Code background
+# task and it never kills anything.
+#
+# ---- DONE BY THE SEAT. These reproduce it.
+#
+# resident-mode wall.                              measured 263-419 s each
+bash scripts/apa_sp5_a2_lease.sh start ceil_C_8192_long python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 8192  --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_8192.json
+bash scripts/apa_sp5_a2_lease.sh start ceil_C_16384_tr  python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_16384_trace.json
+bash scripts/apa_sp5_a2_lease.sh start ceil_B_16384     python3 scripts/apa_sp5_a1_ceiling.py --arm B --S 16384 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_B_16384.json
+#   poll: bash scripts/apa_sp5_a2_lease.sh status <tag>
+#   RESULT: 8,192 FITS; 16,384 OOMs BOTH arms at 12,288 completed tokens with
+#   347 MiB still free (fragmentation wall, not KV growth — the a1 cache line
+#   is refuted). ceiling_long_{B,C}_24576 are REGISTERED NON-FITS, not run.
+#
+# streamed-mode 16K, H4 construction, bulk 8.        measured 596-613 s each
+bash scripts/apa_sp5_a2_lease.sh start ladder_B_16384 bash scripts/apa_sp5_a2_ladder.sh B 16384
+bash scripts/apa_sp5_a2_lease.sh start ladder_C_16384 bash scripts/apa_sp5_a2_ladder.sh C 16384
+#   Arm C injects the SP entry in-process via
+#   artifacts/apa_sp5/a2_inject/sitecustomize.py because the streamed path has
+#   NO single-pass seam (port core/gpt_oss20b_tc.py:744 is hard-wired to the
+#   two-pass entry; smoke:24 hard-codes an engine without the SP symbol).
+#   The port and smoke are NOT edited — verified: GraftRepository git status
+#   on core/ and scripts/ is empty.
+#   RESULT: H4 1,016 s / 1,031 MiB; B 613.0 s / 1,027 MiB; C 596.3 s / 1,027 MiB.
+#
+# ---- NOT RUN — NEEDS A SEPARATE AUTHORIZATION
+#
+# [A] streamed 32K and 64K. estimated ~37 min and ~93 min from the H4 wall —
+#     both exceed the 1,500 s granted here. Registered as long-lease cells:
+#   bash scripts/apa_sp5_a2_lease.sh start ladder_C_32768 bash scripts/apa_sp5_a2_ladder.sh C 32768
+#   bash scripts/apa_sp5_a2_lease.sh start ladder_B_32768 bash scripts/apa_sp5_a2_ladder.sh B 32768
+#     (and 65536; the lease script's 1500 s timeout must be raised for these)
+#
+# [B] the resident wall between 8,192 and 12,288. The exact fit/die boundary is
+#     bracketed but not bisected. estimated ~300-400 s per rung:
+#   bash scripts/apa_sp5_a2_lease.sh start ceil_C_10240 python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 10240 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_10240.json
+#     Worth it only if the exact number matters; the mechanism (fragmentation
+#     at ~347 MiB free) is already receipted by the token trace.
+#
+# [C] a smaller chunk at 16,384. The a1 4,096 result showed the chunk transient
+#     is the binding constraint (chunk 1024 OOMed with 829 MiB free, chunk 512
+#     fitted). chunk 256 might push the resident wall past 12,288 — untested,
+#     and it is a real open question rather than a formality:
+#   bash scripts/apa_sp5_a2_lease.sh start ceil_C_16384_c256 python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 256 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_16384_c256.json
