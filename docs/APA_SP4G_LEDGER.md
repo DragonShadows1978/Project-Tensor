@@ -256,3 +256,168 @@ no services, model writes, product/kernel/SP3 edits. All actual commands
 foreground<10min. Model under test Gemma-4-12B-it QAT q4_0 symmetric-8 g32,
 bf16 engine compute. Seat gpt-6-astra / reasoning xhigh, verified current
 `logs/apa_sp4g_a3_r1.log` header.
+
+A4 registration BEFORE implementation/gates, 2026-09-07. Evidence: source
+inspection and existing card receipts, not new GPU execution.
+Immutable amendment013 SHA9fce2b05849eb4e69e8cb5cc2a3434e4c05510677128473aa1f49a4c28af2b1a.
+Order remains untouched; a4_before.json pins all historical execution files
+and job receipts; a4_baseline saves the previous synthesis/commands/cells.
+
+Suspect-cell audit contradicts the lead's proposed missed-cast diagnosis:
+apa_sp4g_a2_model.py:85-93 explicitly converts q/k/kq/v via .float(), calls
+native SP, and returns d.astype('bfloat16') for treatment D32. Both A2 receipts
+contain144 fp32 comparisons. bindings.cpp:222 calls ops::cast(Float32),
+ops.cpp:1013 allocates/converts a changed dtype, SP binding forwards data,
+kernels.cu:7441+ validates all dtypes and dispatches on q.dtype. SP's bf16
+kernel already uses float loads/dots/softmax/accumulators before its final
+bf16 store. Therefore identical D32/bf16 PPL does not establish a missed cast.
+Historical dtype was not receipted; source evidence supports fp32, runtime
+assertion on the original cell cannot be retroactively claimed. No confirmed
+arithmetic bug is fixed. A4 adds actual native-boundary input/output dtype
+pins, schedule/coverage checks and explicit A32 scope. Do not extend fp32
+through o_proj because the A2 A32 comparator did not do so.
+
+Lead prediction registered: abs(D32-A32)<=.005; A32 exact receipt49.92117893813879.
+Seat prediction: unchanged arithmetic may repeat D32=53.472390467473765 and
+FAIL. The gate is unchanged from lead a4; failure stops all successors.
+A4 propagation splits into A/D leases and a named aggregate, saving all2047
+executed residual rows at each of8 complete global blocks plus final norm.
+C/E successors are registered behind D32: actual-PPL fraction calibration,
+C/E four short windows plus8192, C16 full-population margins and clean decode,
+extra A32 reference windows1-3/8192 for a like-for-like comparison table.
+No >=16384 retries; empirical E bound remains conditional and finite.
+
+Prior art: June Gemma port/floor and SP3/SP4G A2/A3 (2026): same attention seam,
+feeding, bitwise replay, capture and clean decode; inherited BLASST/Yuan et al.
+(2025/2026) running maximum, ThriftAttention/Sharratt (2026) weight-sensitive
+precision, FlashAttention2/Dao (2023) online softmax, TurboQuant/Zandieh et al.
+(2025) reconstructed quantization, SP2 conditional delta. Primary arXiv records
+checked via web:2512.12087,2605.23081,2307.08691,2504.19874. Standard FP dtype
+assertions, Frobenius norm, bisection, SHA256/NIST (2001), Make/Feldman (1979),
+DeMillo/Lipton/Sayward (1978) mutation tests (unverified — lead to check:
+Hints on Test Data Selection). New work is diagnostic/dispatch wiring;
+no prior art known to me for a distinct novel method; no novelty claim.
+CUDA visibility source probe: rc100, device_count0, 'no CUDA-capable device
+is detected'. Will record blocked GPU handoff; no model loaded. Seat
+ gpt-6-astra / xhigh, logs/apa_sp4g_a4_r1.log. No git/subagents/background
+waits/kills; large A2 captures and error arrays retained.
+
+A4 handoff review found a concrete new calibration lookup defect before GPU:
+B PPL capture result has global_fraction.fraction; A4 trial/freeze read a
+nonexistent top-level fraction. This would fail closed with KeyError after
+D32, not alter a numerical result. Amendment015 registers the schema fix and
+regression BEFORE correction. Initial100-pass CPU gate and8/8 mutations,
+fingerprint014 and initial DELIVERY_CHECKS_A4 remain intact, superseded for
+execution by fingerprint016 / CPU_GATES_A4_V2. No metric, tolerance, selection
+population or algorithm change. Prior art: SP4G A2 (2026) actual-PPL schema;
+standard regression testing. No new prior art. All GPU work still UNRUN.
+
+A4 final CPU handoff complete; GPU gate UNRUN / C/E BLOCKED. Evidence classes:
+source inspection, CPU comparisons of saved A3 card payloads, author CPU gates,
+source-copy mutations, dependency/provenance dry checks. No new card result.
+
+New load-bearing finding, a4_suspect_cell_audit.json and logs/apa_sp4g_a4_audit.log:
+on BOTH A3 layer5 c0/c1, saved SP_fp32_cast_bf16 vs SP_bf16 is BITWISE equal
+(max_abs0,relF0), and SP_fp32_projected vs actual_D_projected is also BITWISE
+(max_abs0,relF0). This supports unchanged D output after the return cast at
+these calls. It does not prove all-layer equality or retroactively receipt
+A2's native dtype. The proposed missed-cast diagnosis is not established;
+source evidence supports A2 already executing the requested precision scope.
+Fix delivered is observed native input/output pins and full-call coverage,
+not a claimed attention arithmetic rescue. Registered lead prediction and
+.005 D32/A32 gate remain exact; seat contrary prediction retained.
+
+Implementation: additive scripts/apa_sp4g_a4_{register,registry,common,model,
+metrics,gpu,report,mutations,audit}.py, apa_sp4g_a4_lead_gpu.sh, test_apa_sp4g_a4.py.
+PrecisionModel inherits the original A2 attention interception and PROTOCOL-G,
+asserts bf16 source, fp32 Q/K/Kq/V immediately before native entry, fp32 native
+output and bf16 return, receipts all144 calls on window0, checks their geometry
+against A2 A32. ResidualModel observes complete global-block output including
+layer_scalar and post-final-norm compute cast, restoring the original class
+and norm after each worker. No kernel/product/adapter edit. C capture IS its
+PPL; A2 bitwise native replay copied with only lookup/id/output namespace
+changes; old captures and margin errors kept. New B target schema correction
+is amendment015, reproduced before fix as `KeyError: 'fraction'` in
+logs/apa_sp4g_a4_schema_regression_before.log, then fixed to
+result.global_fraction.fraction. This was a new harness defect; no GPU had run.
+
+52 immutable cells in amendment013 and cells.json; lead_commands.txt contains
+all52 in exact dependency order, each a separate foreground lease:
+- ppl_a4_D32_2048_w0 first; any RED stops all successors.
+- diag_a4_propagation_A_2048_w0 / diag_a4_propagation_D_2048_w0, aggregate
+  diag_a4_propagation_2048_w0; separate loads keep each within285s.
+- trial_a4_00..11, freeze_a4: actual-PPL window0 B fraction, match±.01;
+  completed-match carry executes no model; one frozen delta.
+- ppl_a4_A32_2048_w1..3 and ppl_a4_A32_8192, for C's matching reference table.
+- ppl_a4_C_2048_w0..3 / ppl_a4_C_2048 / ppl_a4_C_8192; w0/8192 also capture.
+- margin_a4_C_{2048,8192}_l{05,11,17,23,29,35,41,47}; eq_a4 using B16+C16.
+- ppl_a4_E_2048_w0..3 / ppl_a4_E_2048 / ppl_a4_E_8192.
+- decode_a4_C_2048 / decode_a4_C_8192: original clean32-step decode unchanged.
+
+Planning: load75–130s (prior75–126s observations), model cell90–275s total;
+margin10–90s@2048 /60–270s@8192, CPU aggregates1–30s. All new timings
+UNMEASURED. Worker285s/hard290, outer585s/hard588, lease wait20, foreground
+cooldown30, disk>=12GiB. No>=16384 retry or long lease; old rail non-fits
+are not OOM or hardware capacity evidence. All trials/quality/decode after
+current D32 pass only, propagation completion additionally precedes trials.
+
+CPU gates:
+- Initial full baseline100 passed,0 failed,0 skipped; logs/apa_sp4g_a4_cpu_01.log
+  and apa_sp4g_a4_cpu_final.log. Initial mutations8/8; immutable CPU_GATES_A4,
+  fingerprint014 and initial delivery manifest intentionally superseded by015.
+- Final full baseline101 passed,0 failed,0 skipped in1.11s;
+  logs/apa_sp4g_a4_cpu_v2.log. Two existing SWIG import warnings and final
+  swigvarlink warning retained unsuppressed.
+- Final mutations8/8 non-error, rate1.0>=.80; mutations_a4_v2/results.json and
+  logs/apa_sp4g_a4_mutations_v2.log. Source-copy only; no live file replacement.
+- Dtype test test_a4_fp32_native_dispatch_dtype_pin_and_returned_arm; negative
+  tests reject silent failed cast and native bf16 output. New schema regression
+  test_a4_calibration_uses_actual_ppl_fraction_receipt covers trial/freeze on
+  real B PPL receipt shape. Norm aggregate test distinguishes full-population
+  Frobenius from averaging chunk ratios; gaps and mismatched dtype RED.
+-10 Python ASTs and shell syntax PASS. List/next/D32 preflight/summary PASS;
+  preflight GPU is classification only. Six representative propagation/trial/
+  C/E/margin/decode preflights reject missing D32 receipt. Existing B16 margin
+  dependencies validate PASS. Live52-cell list, manifest and command order match.
+
+Immutable registration013 SHA
+9fce2b05849eb4e69e8cb5cc2a3434e4c05510677128473aa1f49a4c28af2b1a.
+Final fingerprint016 SHA
+c1e024c9d6924ffb834af389c9dfff53e272c54ca187912f4b953cd747e3ea20.
+CPU_GATES_A4_V2 SHA
+79891cdfb6b8a8156c4a88e107ee09f38bffe0df9deaeef0bc7bf5f242af7091.
+DELIVERY_CHECKS_A4_V2 SHA
+a827c9f8f8286163d2e6e35f6ab189aa5d97af9bc6c99b571f872b90b5c19e85.
+33 preexisting execution/test files and75 job receipts preserved byte-for-byte;
+original registration099a8bd9... unchanged, build/product/adapter/token/weight
+pins checked. New jobs_a4 receipts0. GPU_BLOCKED_A4_V2 is the current handoff;
+initial GPU_BLOCKED_A4 / DELIVERY_CHECKS_A4 are superseded by015/016, not current
+source seals. Narrative RESULTS now shows all baseline rows, A3 call table,
+bitwise cast/projected audit, pending propagation/C/E and dual A/A32 columns.
+
+Prior art: unchanged from initial A4 entry and code sites; June Gemma/SP3/SP4G
+A2/A3 (2026) seam, schedule, replay, capture, calibration, provenance and clean
+decode; SP2 conditional empirical delta; BLASST/Yuan(2025/2026),
+ThriftAttention/Sharratt(2026), FA2/Dao(2023), TurboQuant/Zandieh(2025)
+inherited and untouched. Primary arXiv records checked; no external benchmark
+claim. Standard Frobenius/precision ablation/bisection/hash/dependency methods;
+DeMillo/Lipton/Sayward(1978) unverified — lead to check Hints on Test Data
+Selection. No new algorithm; no prior art known to me for a distinct novel
+method introduced here. New work is observation/dispatch/report wiring.
+
+RED / Not claimed fixed: D32/A32 exactness, missed-cast root cause, numerical
+propagation causality, C/E quality or capacity. Finite per-call agreement is
+not model exactness; G2/G3 establish nothing about model quality themselves.
+Author CPU tests/mutations are NOT blind review; lead-owned review UNRUN.
+a4_device_visibility: cudaGetDeviceCount100, device_count0, error verbatim
+`no CUDA-capable device is detected`. Zero GPU workers/model loads and zero
+signals in this seat. No git, subagents, background jobs/waits, kills,
+services, model writes, kernel/product/SP3 edits; actual commands foreground
+<10min. Lead runner retains bounded owned-worker timeouts from prior orders;
+no timeout fired during this seat. Model under test Gemma4-12B-it QAT q4_0
+exact symmetric-8 g32, bf16 engine. Seat gpt-6-astra / reasoning xhigh,
+verified logs/apa_sp4g_a4_r1.log header.
+
+Receipt transcription correction: the final101-pass CPU log and
+CPU_GATES_A4_V2 record1.10s (JSON1.1), not1.11s in the preceding entry.
+Counts, hashes and verdict unchanged.
