@@ -1,6 +1,6 @@
 # APA-SP4G amendment 6
 
-**RED residuals. D/A per-call exactness: PASS by lead ruling; literal stated bounds: RED.** C/E are released from the historical0.005 PPL dependency by amendment6 and scheduled behind the new propagation stop. A6 GPU measurements are UNRUN or blocked; no A32-vs-A amplification finding yet.
+**RED residuals. D/A per-call exactness: PASS by lead ruling; literal stated bounds: RED.** C/E are released from the historical0.005 PPL dependency by amendment6 and scheduled behind the new propagation stop. A6 GPU measurements are completed for the diagnostic.
 
 **Evidence discrepancy:** Receipt c1 max_abs=3.528594970703125e-5; b15 layer5 max_abs=3.910064697265625e-5 / relF=9.043649367824469e-7 exceed the stated bounds. Lead PASS is recorded as a ruling, never as literal threshold compliance. Bounds are not relaxed.
 
@@ -26,12 +26,12 @@ Measured window0: A bf16=52.4804870852055, A32=49.9211789381388; |A32−A|=2.559
 
 | Row | A bf16 | B | C | D | E | P2: C − B against ±2.56 |
 |---|---:|---:|---:|---:|---:|---|
-| 2048_w0 | 52.48048709 | 49.41041564 | UNRUN/RED | 53.47239047 | UNRUN/RED | UNRUN |
-| 2048_w1 | 537.97325533 | 571.49025268 | UNRUN/RED | 582.57631198 | UNRUN/RED | UNRUN |
-| 2048_w2 | 362.99618674 | 374.40827539 | UNRUN/RED | 355.94325393 | UNRUN/RED | UNRUN |
-| 2048_w3 | 73.45901658 | 74.71952840 | UNRUN/RED | 74.95015168 | UNRUN/RED | UNRUN |
-| 2048 | 165.64427445 | 167.64929211 | UNRUN/RED | 169.78875584 | UNRUN/RED | UNRUN |
-| 8192 | 38.86389187 | 38.56135027 | UNRUN/RED | 39.38228832 | UNRUN/RED | UNRUN |
+| 2048_w0 | 52.48048709 | 49.41041564 | 51.88388607 | 53.47239047 | 53.16165234 | +2.47347043; C − B inside the floor; not resolvable on this model |
+| 2048_w1 | 537.97325533 | 571.49025268 | 609.35601969 | 582.57631198 | 525.40126632 | +37.86576701; C − B outside the floor; outside the registered floor |
+| 2048_w2 | 362.99618674 | 374.40827539 | 371.11944625 | 355.94325393 | 359.97875530 | -3.28882914; C − B outside the floor; outside the registered floor |
+| 2048_w3 | 73.45901658 | 74.71952840 | 73.60051639 | 74.95015168 | 75.18971208 | -1.11901201; C − B inside the floor; not resolvable on this model |
+| 2048 | 165.64427445 | 167.64929211 | 171.42515228 | 169.78875584 | 165.81782708 | +3.77586017; C − B outside the floor; outside the registered floor |
+| 8192 | 38.86389187 | 38.56135027 | 39.43323066 | 39.38228832 | 37.99512343 | +0.87188039; C − B inside the floor; not resolvable on this model |
 
 Validated PPL receipt paths/hashes and **every available arm pair** with its floor classification are in `PPL_TABLE_A6.json`. No within-floor difference is labelled a win or loss.
 
@@ -48,7 +48,7 @@ Historical D32=53.4723904674738, A32=49.9211789381388; D32−A32=+3.551211529334
 
 ## Propagation receipt and predictions
 
-Cell: `diag_a6_propagation_A32_vs_A_2048_w0`; state: UNRUN/RED: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/artifacts/apa_sp4g/jobs_a6/diag_a6_propagation_A32_vs_A_2048_w0.json'
+Cell: `diag_a6_propagation_A32_vs_A_2048_w0`; state: PASS, AMPLIFIED; None
 
 **Lead prediction:** Same amplification profile, relF growing to ~0.1 by layer29; if flat stop, the lead was wrong.
 
@@ -60,15 +60,15 @@ One new A32 load; compare against saved A bf16 residuals from `jobs_a5/diag_a4_p
 
 | Layer | D−A bf16 relF | D−A max-abs | A32−A relF | A32−A max-abs |
 |---|---:|---:|---:|---:|
-| 5 | 0.00482106304 | 0.25 | UNRUN | UNRUN |
-| 11 | 0.00743735688 | 0.25 | UNRUN | UNRUN |
-| 17 | 0.0103417778 | 2.45117188 | UNRUN | UNRUN |
-| 23 | 0.0382708158 | 67.5 | UNRUN | UNRUN |
-| 29 | 0.124512706 | 40.6875 | UNRUN | UNRUN |
-| 35 | 0.128977027 | 32.125 | UNRUN | UNRUN |
-| 41 | 0.144904834 | 24.5 | UNRUN | UNRUN |
-| 47 | 0.0736480457 | 3.46875 | UNRUN | UNRUN |
-| final_norm | 0.119381166 | 55.5 | UNRUN | UNRUN |
+| 5 | 0.00482106304 | 0.25 | 0.00482107767 | 0.25 |
+| 11 | 0.00743735688 | 0.25 | 0.00753248699 | 0.25 |
+| 17 | 0.0103417778 | 2.45117188 | 0.0112727392 | 3.1328125 |
+| 23 | 0.0382708158 | 67.5 | 0.0310998025 | 70 |
+| 29 | 0.124512706 | 40.6875 | 0.144096183 | 37.375 |
+| 35 | 0.128977027 | 32.125 | 0.142266821 | 32.6875 |
+| 41 | 0.144904834 | 24.5 | 0.156331575 | 15.453125 |
+| 47 | 0.0736480457 | 3.46875 | 0.0700486792 | 2.71875 |
+| final_norm | 0.119381166 | 55.5 | 0.117511898 | 56.3125 |
 
 Evidence class: prior card residual diagnostic, `jobs_a5/diag_a4_propagation_2048_w0.json`. D/A L29-to-L5 relF ratio=25.827. The approximately0.3% figure describes attention-output differences; post-block L5 residual relF is0.4821%. Observed amplification is a mechanism lead, not proof of chaos or a complete causal explanation of PPL.
 
@@ -80,51 +80,51 @@ Run **each command separately in the foreground**, in `lead_commands.txt` order.
 
 | Cell | Worker estimate (s) | State |
 |---|---:|---|
-| `diag_a6_propagation_A32_vs_A_2048_w0` | 90–275 | READY_GPU |
-| `trial_a6_00` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_01` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_02` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_03` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_04` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_05` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_06` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_07` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_08` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_09` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_10` | 90–275 | BLOCKED_DEPENDENCY |
-| `trial_a6_11` | 90–275 | BLOCKED_DEPENDENCY |
-| `freeze_a6` | 1–15 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_2048_w0` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_2048_w1` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_2048_w2` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_2048_w3` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_2048` | 1–30 | BLOCKED_DEPENDENCY |
-| `ppl_a6_C_8192` | 90–275 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l05` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l11` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l17` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l23` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l29` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l35` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l41` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_2048_l47` | 10–90 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l05` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l11` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l17` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l23` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l29` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l35` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l41` | 60–270 | BLOCKED_DEPENDENCY |
-| `margin_a6_C_8192_l47` | 60–270 | BLOCKED_DEPENDENCY |
-| `eq_a6` | 1–30 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_2048_w0` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_2048_w1` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_2048_w2` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_2048_w3` | 90–275 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_2048` | 1–30 | BLOCKED_DEPENDENCY |
-| `ppl_a6_E_8192` | 90–275 | BLOCKED_DEPENDENCY |
-| `decode_a6_C_2048` | 90–275 | BLOCKED_DEPENDENCY |
-| `decode_a6_C_8192` | 90–275 | BLOCKED_DEPENDENCY |
+| `diag_a6_propagation_A32_vs_A_2048_w0` | 90–275 | PASS |
+| `trial_a6_00` | 90–275 | PASS |
+| `trial_a6_01` | 90–275 | PASS |
+| `trial_a6_02` | 90–275 | PASS |
+| `trial_a6_03` | 90–275 | PASS |
+| `trial_a6_04` | 90–275 | PASS |
+| `trial_a6_05` | 90–275 | PASS |
+| `trial_a6_06` | 90–275 | PASS |
+| `trial_a6_07` | 90–275 | PASS |
+| `trial_a6_08` | 90–275 | PASS |
+| `trial_a6_09` | 90–275 | PASS |
+| `trial_a6_10` | 90–275 | PASS |
+| `trial_a6_11` | 90–275 | PASS |
+| `freeze_a6` | 1–15 | PASS |
+| `ppl_a6_C_2048_w0` | 90–275 | PASS |
+| `ppl_a6_C_2048_w1` | 90–275 | PASS |
+| `ppl_a6_C_2048_w2` | 90–275 | PASS |
+| `ppl_a6_C_2048_w3` | 90–275 | PASS |
+| `ppl_a6_C_2048` | 1–30 | PASS |
+| `ppl_a6_C_8192` | 90–275 | PASS |
+| `margin_a6_C_2048_l05` | 10–90 | PASS |
+| `margin_a6_C_2048_l11` | 10–90 | PASS |
+| `margin_a6_C_2048_l17` | 10–90 | PASS |
+| `margin_a6_C_2048_l23` | 10–90 | PASS |
+| `margin_a6_C_2048_l29` | 10–90 | PASS |
+| `margin_a6_C_2048_l35` | 10–90 | PASS |
+| `margin_a6_C_2048_l41` | 10–90 | PASS |
+| `margin_a6_C_2048_l47` | 10–90 | PASS |
+| `margin_a6_C_8192_l05` | 60–270 | PASS |
+| `margin_a6_C_8192_l11` | 60–270 | PASS |
+| `margin_a6_C_8192_l17` | 60–270 | PASS |
+| `margin_a6_C_8192_l23` | 60–270 | PASS |
+| `margin_a6_C_8192_l29` | 60–270 | PASS |
+| `margin_a6_C_8192_l35` | 60–270 | PASS |
+| `margin_a6_C_8192_l41` | 60–270 | PASS |
+| `margin_a6_C_8192_l47` | 60–270 | PASS |
+| `eq_a6` | 1–30 | PASS |
+| `ppl_a6_E_2048_w0` | 90–275 | PASS |
+| `ppl_a6_E_2048_w1` | 90–275 | PASS |
+| `ppl_a6_E_2048_w2` | 90–275 | PASS |
+| `ppl_a6_E_2048_w3` | 90–275 | PASS |
+| `ppl_a6_E_2048` | 1–30 | PASS |
+| `ppl_a6_E_8192` | 90–275 | PASS |
+| `decode_a6_C_2048` | 90–275 | PASS |
+| `decode_a6_C_8192` | 90–275 | PASS |
 
 Exact command per cell and dependency reason: `GPU_BLOCKED_A6.json`; complete command list: `lead_commands.txt`.
 
