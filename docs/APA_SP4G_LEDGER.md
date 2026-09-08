@@ -421,3 +421,157 @@ verified logs/apa_sp4g_a4_r1.log header.
 Receipt transcription correction: the final101-pass CPU log and
 CPU_GATES_A4_V2 record1.10s (JSON1.1), not1.11s in the preceding entry.
 Counts, hashes and verdict unchanged.
+
+A5 registration BEFORE gates, 2026-09-07. Evidence class: source inspection
+and existing lead receipts; no new GPU measurements. Order immutable.
+Registration017 SHA68835c48c2fb800ed475bd25affc12920a8c1b54b2292dedefb3f7de70b4ccf0.
+a5_before.json pins prior execution/test sources and all existing receipts;
+a5_baseline saves prior narrative, commands and cells. Lead prediction is
+registered verbatim in017: each of3 calls DISAGREES >1e-3 relF fp32, in SP
+cache/offset/causal/dispatch, not standard. This is a hypothesis, not a finding.
+
+Named source correction to order geometry, NOT a protocol change: A4 D32
+receipt has144 dtype-pinned calls, layer5 index2 L64/S1087/offset1023 and
+index17 L64/S2047/offset1983; layer47 same schedule. Model.perplexity uses
+ctx=2048-1024-1=1023, inputs1023..2046, targets1024..2047. Therefore the order's
+1088/2048 counts are one too large. A5 records both stated and actual sizes,
+executes unchanged Model.perplexity and captures actual failing-window calls.
+No extra token or synthetic call is substituted. Three cells:
+diag_a5_call_l05_b00, diag_a5_call_l05_b15, diag_a5_call_l47_b15.
+
+Source dispatch: kernels.cu:7477 tests L==1 for split-K; L64 always reaches
+apa_selective_sp_kernel<T,512,DIAG>,1024 CTAs x32 threads. Causal bound is
+S-L+i (last key inclusive) in both SP and native standard softmax. Gemma
+adapter:647-714 uses tuple caches for L>1 and whole-span Kq reconstruction
+for S<=4096; KVRing.kq_count is NOT a field on these caches. Receipt null
+with explicit not-applicable reason, never fabricate a zero count. Dispatch
+metadata is determined from pinned launcher source and observed native args;
+no GPU profiler trace claimed. Source facts do not settle numerical parity.
+
+A4 card verified: D32=53.472390467473765, A32=49.92117893813879,
+absolute difference3.551211529334978, gate RED; all144 native pins complete.
+Error verbatim: A4_D32_A32_EXACTNESS_FAILED; STOP, lead investigates.
+A5 completed-result dependency validates entire existing D32 provenance,
+full PPL/dtype/schedule result and exactness RED; a failed worker is not
+completion. Propagation A/D and aggregate are separately registered under
+same ids in jobs_a5, independent of a5 comparison outcomes and D32 PASS.
+C/E original gates remain unchanged. Conditional D32 rerun gets a fresh
+jobs_a5 receipt under same id, never overwrites jobs_a4 RED.
+
+Prior art: SP4G A3/A4 (2026) capture/replay, dense reference, dtype pins and
+residual norms reused; Make/Feldman (1979) dependency DAG, NIST SHA256 (2001)
+provenance, ordinary Frobenius comparison. Vaswani et al. (2017) attention,
+BLASST/Yuan et al. (2025/26) running maximum, FlashAttention2/Dao (2023)
+online softmax, TurboQuant/Zandieh et al. (2025) inherited quantizer; primary
+arXiv1706.03762,2512.12087,2307.08691,2504.19874 consulted this seat.
+ThriftAttention/Sharratt (2026) inherited weight-sensitive error annotation;
+unverified — lead to check arXiv2605.23081. DeMillo/Lipton/Sayward (1978)
+mutation testing, unverified — lead to check Hints on Test Data Selection.
+New work is diagnostic and dependency wiring; no novelty claim, no prior
+art known to me for a distinct new method introduced in this amendment.
+
+Fresh CUDA probe: cudaGetDeviceCount=100, device_count=0, error verbatim
+no CUDA-capable device is detected. GPU workers0, model loads0. No git,
+subagents, background jobs/waits, kills/signals, services or product edits.
+A5 runner uses cooperative Python-boundary deadline checks, no process
+signals; cannot force-bound a hung native call without violating no-kill.
+Seat gpt-6-astra, reasoning xhigh; logs/apa_sp4g_a5_r1.log header verified.
+
+A5 final handoff, 2026-09-07. Evidence classes: author CPU baseline,
+source-copy mutations, exact source/receipt preservation, live CPU preflights.
+No new card run, no new model capture, no numerical diagnosis claimed.
+
+Files added: scripts/apa_sp4g_a5_{register,registry,common,model,gpu,report,
+mutations}.py; scripts/apa_sp4g_a5_lead_gpu.sh;
+tensor_cuda/tests/test_apa_sp4g_a5.py. Mutable handoff RESULTS.md,
+lead_commands.txt and cells.json refreshed; previous bytes saved in
+artifacts/apa_sp4g/a5_baseline. A5_REPORT.md is the final narrative.
+No historical execution file, kernel, product, order, registration or job
+receipt modified. Final preserved() verifies44 old execution/test files and
+76 old job receipts byte-for-byte, plus inherited product/build/weight/token
+pins. Existing captures_a2, margin_errors_a2 and captures_a3 retained.
+
+Per-call implementation uses actual Model.perplexity(ids,1024), catches the
+local CapturedCall only after the selected mixer/call, and restores class
+and native dispatch. Actual q/k/v parity is bitwise checked against observed
+native QK/softmax/PV; Kq checked on repeated seam invocation. Saves both
+native precisions, dense fp32 and staged-bf16 references, masks, intermediate
+standard tensors, final cast and o_proj outputs. Refine-all/diagnostic mask
+mismatches are preserved as observations/classification rather than erasing
+the numerical measurements. Source-derived dispatch is explicitly NOT a
+profiler observation. Conditional D32 rerun uses unchanged A4 dtype-pinned
+arithmetic and fresh jobs_a5 namespace. No fix until measured named cause;
+no SP kernel patch. PPL exactness and C/E remain RED / Not claimed fixed.
+
+CPU receipts:
+- logs/apa_sp4g_a5_cpu_01.log:27 A5 tests passed,0 failed,0 skipped in0.43s.
+- logs/apa_sp4g_a5_cpu_full.log:128 passed,0 failed,0 skipped in1.36s.
+- logs/apa_sp4g_a5_cpu_capture_integration.log:full cached layer47 fork,
+  both precisions, dense output, manifest and merge passed on CPU doubles;
+ 1 passed,27 deselected in1.03s. This is not a GPU comparison.
+- Final logs/apa_sp4g_a5_cpu_final.log:129 passed,0 failed,0 skipped in2.23s.
+  Two existing SWIG warnings and final swigvarlink warning left unsuppressed.
+-8/8 registered non-error source-copy mutants caught, rate1.0 >=0.80:
+  prefill_only,off_by_one,splitk_for_cached,completed_red_rejected,
+  worker_red_accepted,fingerprint_ignored,rerun_without_disagreement,
+  capture_wrong_layer. mutations_a5/results.json and corresponding logs;
+  original execution-source hashes rechecked against mutation manifest after
+  final test addition. No live file replacement. This is author verification,
+  NOT blind review; lead-owned review UNRUN.
+-8 ASTs pass (7 new Python scripts plus test); shell syntax PASS.
+  Source seal rechecked after report generation, unchanged.
+
+Live preflight receipts in DELIVERY_CHECKS_A5.json:
+- All3 scored-call cells and both A/D propagation captures return GPU
+  (classification only), accepting the real provenance-valid A4 numerical RED.
+- Aggregate blocks ONLY on missing jobs_a5/diag_a4_propagation_A_2048_w0.json;
+  depends on A/D capture completion, not D32 passing.
+- D32 rerun blocks on missing diag_a5_call_l05_b00; conditional disagreement
+  guard additionally tested at exact0.001, above threshold and missing third
+  receipt. No overwrite or PASS waiver of original D32.
+- trial_a4_00,ppl_a4_C_2048_w0,ppl_a4_E_2048_w0,decode_a4_C_2048 remain blocked,
+  verbatim A4_STALE_OR_RED_RECEIPT: ppl_a4_D32_2048_w0.
+- Live7-cell list equals manifest and lead command ids/order. Next is
+  diag_a5_call_l05_b00. resume executes one ready independent diagnostic only;
+  a diagnostic RED is not a dependency of propagation. D32 rerun opt-in only.
+
+Registration017 SHA
+68835c48c2fb800ed475bd25affc12920a8c1b54b2292dedefb3f7de70b4ccf0.
+Fingerprint018 SHA
+fc168bc3c51e0a3db6ec7d34f30992b002994ef1236669fd304023e9debf263b.
+CPU_GATES_A5 SHA
+74c94eb3d8dd2a3e5b4ea63c9d4c3eb454a4bfb1fec13b945703a180ad5ba43f.
+GPU_BLOCKED_A5 SHA
+992ef29fc0af2c4c4d0b918d0a58ee2e517f3e69763b353d251ea525f81384fc.
+DELIVERY_CHECKS_A5 SHA
+2f357741ecc9069231fbc71a005f82ed13d44b916b967da6b043c5354734da91.
+
+Prior art: as registered and annotated at new code sites. SP4G A3/A4 (2026)
+same-input capture/precision/residual/provenance machinery reused; Vaswani
+et al.(2017) attention reference; inherited BLASST/Yuan(2025/26),
+FlashAttention2/Dao(2023),TurboQuant/Zandieh(2025), with primary arXiv pages
+verified this seat. ThriftAttention/Sharratt(2026) arXiv2605.23081 and
+DeMillo/Lipton/Sayward(1978) Hints on Test Data Selection are explicitly
+unverified — lead to check. NIST SHA256(2001),Make/Feldman(1979),Frobenius
+norms, scoped instrumentation and cooperative deadlines are standard prior
+art. Only diagnostic selection/metadata and completed-result dependency wiring
+are added. No novelty claim; no prior art known to me for a distinct novel
+method introduced here. Full citations and reuse boundaries in A5_REPORT.md
+under Prior art. User prediction remains registered, neither confirmed nor
+refuted by CPU doubles or source inspection.
+
+RED / process safety: fresh a5_device_visibility.json confirms CUDA100,
+count0, error no CUDA-capable device is detected. GPU workers0, model loads0,
+new jobs_a5 receipts0. All actual tool calls foreground <10min; no git,
+subagents, background jobs/waits, process kills/signals, services, model
+writes or product/kernel/SP3 changes. One short foreground pytest exec yielded
+its tool session and was immediately collected, with no detached job/wait.
+No heavy concurrent work. Runner uses cooperative285s boundary checks,
+lease wait20s and foreground cooldown30s; it cannot forcibly terminate a hung
+native call without violating never-kill. This residual is explicit, not a
+hard-timeout guarantee. Per-cell estimates90–275s unmeasured for A5; lead
+executes one command at a time. Seat gpt-6-astra / reasoning xhigh, verified
+logs/apa_sp4g_a5_r1.log. Model Gemma-4-12B-it QAT q4_0 symmetric-8 g32, bf16
+engine with global attention fp32 ablation. Not claimed fixed: numerical gap,
+its causal mechanism, or model exactness. GPU comparisons and conditional
+D32 rerun remain UNRUN for lead.

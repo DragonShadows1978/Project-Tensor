@@ -1,0 +1,110 @@
+{
+  "status": "BLOCKED_NO_CUDA",
+  "overall": "RED",
+  "visibility": {
+    "cudaGetDeviceCount": 100,
+    "device_count": 0,
+    "error": "no CUDA-capable device is detected",
+    "GPU_workers": 0,
+    "model_loads": 0,
+    "evidence_class": "local CUDA runtime visibility only"
+  },
+  "new_GPU_cells": "UNRUN",
+  "classification": "No new numeric result; registered source-predicted paths only",
+  "A32_ppl": 49.92117893813879,
+  "D32_ppl": 53.472390467473765,
+  "absolute_difference": 3.551211529334978,
+  "exactness_pass": false,
+  "C_E_unblocked": false,
+  "preflights": [
+    {
+      "cell": "diag_a5_call_l05_b00",
+      "decision": "GPU",
+      "error": null,
+      "expected": "GPU"
+    },
+    {
+      "cell": "diag_a5_call_l05_b15",
+      "decision": "GPU",
+      "error": null,
+      "expected": "GPU"
+    },
+    {
+      "cell": "diag_a5_call_l47_b15",
+      "decision": "GPU",
+      "error": null,
+      "expected": "GPU"
+    },
+    {
+      "cell": "diag_a4_propagation_A_2048_w0",
+      "decision": "GPU",
+      "error": null,
+      "expected": "GPU"
+    },
+    {
+      "cell": "diag_a4_propagation_D_2048_w0",
+      "decision": "GPU",
+      "error": null,
+      "expected": "GPU"
+    },
+    {
+      "cell": "diag_a4_propagation_2048_w0",
+      "decision": "BLOCKED",
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/artifacts/apa_sp4g/jobs_a5/diag_a4_propagation_A_2048_w0.json'",
+      "expected": "BLOCKED"
+    },
+    {
+      "cell": "ppl_a4_D32_2048_w0",
+      "decision": "BLOCKED",
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/artifacts/apa_sp4g/jobs_a5/diag_a5_call_l05_b00.json'",
+      "expected": "BLOCKED"
+    }
+  ],
+  "quality_successors": [
+    {
+      "cell": "trial_a4_00",
+      "decision": "BLOCKED",
+      "error": "A4_STALE_OR_RED_RECEIPT: ppl_a4_D32_2048_w0"
+    },
+    {
+      "cell": "ppl_a4_C_2048_w0",
+      "decision": "BLOCKED",
+      "error": "A4_STALE_OR_RED_RECEIPT: ppl_a4_D32_2048_w0"
+    },
+    {
+      "cell": "ppl_a4_E_2048_w0",
+      "decision": "BLOCKED",
+      "error": "A4_STALE_OR_RED_RECEIPT: ppl_a4_D32_2048_w0"
+    },
+    {
+      "cell": "decode_a4_C_2048",
+      "decision": "BLOCKED",
+      "error": "A4_STALE_OR_RED_RECEIPT: ppl_a4_D32_2048_w0"
+    }
+  ],
+  "propagation_ungated": true,
+  "propagation_depends_on": "provenance-valid completed A32/D32; D32 PASS not required",
+  "commands": "artifacts/apa_sp4g/lead_commands.txt",
+  "runner": "scripts/apa_sp4g_a5_lead_gpu.sh",
+  "fingerprint_amendment_sha256": "fc168bc3c51e0a3db6ec7d34f30992b002994ef1236669fd304023e9debf263b",
+  "CPU_gates_sha256": "74c94eb3d8dd2a3e5b4ea63c9d4c3eb454a4bfb1fec13b945703a180ad5ba43f",
+  "worker_cooperative_s": 285,
+  "lease_wait_s": 20,
+  "cooldown_s": 30,
+  "hard_timeout": "none: never kill anything; cooperative checks cannot forcibly bound native hangs",
+  "safety": {
+    "git_calls": 0,
+    "subagents": 0,
+    "background_jobs": 0,
+    "process_signals": 0,
+    "GPU_workers": 0,
+    "model_loads": 0,
+    "actual_calls_foreground_under_10min": true
+  },
+  "seat": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "evidence": "logs/apa_sp4g_a5_r1.log"
+  },
+  "supersedes": "GPU_BLOCKED_A4_V2.json for dispatched-seat handoff; historical report retained"
+}

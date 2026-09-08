@@ -1,1124 +1,154 @@
-{
-  "amendment": "013",
-  "registration_sha256": "9fce2b05849eb4e69e8cb5cc2a3434e4c05510677128473aa1f49a4c28af2b1a",
-  "cells": [
-    {
-      "id": "ppl_a4_D32_2048_w0",
-      "kind": "precision",
-      "depends": [
-        "kernel512",
-        "diag_a2_fp32_A_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "D32",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "diag_a4_propagation_A_2048_w0",
-      "kind": "propagation",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "A",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "diag_a4_propagation_D_2048_w0",
-      "kind": "propagation",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "D",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "diag_a4_propagation_2048_w0",
-      "kind": "aggregate",
-      "depends": [
-        "diag_a4_propagation_A_2048_w0",
-        "diag_a4_propagation_D_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "A",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        1,
-        30
-      ],
-      "operation": "propagation"
-    },
-    {
-      "id": "trial_a4_00",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 0
-    },
-    {
-      "id": "trial_a4_01",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 1
-    },
-    {
-      "id": "trial_a4_02",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 2
-    },
-    {
-      "id": "trial_a4_03",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 3
-    },
-    {
-      "id": "trial_a4_04",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 4
-    },
-    {
-      "id": "trial_a4_05",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 5
-    },
-    {
-      "id": "trial_a4_06",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 6
-    },
-    {
-      "id": "trial_a4_07",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 7
-    },
-    {
-      "id": "trial_a4_08",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06",
-        "trial_a4_07"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 8
-    },
-    {
-      "id": "trial_a4_09",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06",
-        "trial_a4_07",
-        "trial_a4_08"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 9
-    },
-    {
-      "id": "trial_a4_10",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06",
-        "trial_a4_07",
-        "trial_a4_08",
-        "trial_a4_09"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 10
-    },
-    {
-      "id": "trial_a4_11",
-      "kind": "trial",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "diag_a4_propagation_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06",
-        "trial_a4_07",
-        "trial_a4_08",
-        "trial_a4_09",
-        "trial_a4_10"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ],
-      "index": 11
-    },
-    {
-      "id": "freeze_a4",
-      "kind": "freeze",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_capture_B_2048_w0",
-        "trial_a4_00",
-        "trial_a4_01",
-        "trial_a4_02",
-        "trial_a4_03",
-        "trial_a4_04",
-        "trial_a4_05",
-        "trial_a4_06",
-        "trial_a4_07",
-        "trial_a4_08",
-        "trial_a4_09",
-        "trial_a4_10",
-        "trial_a4_11"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        1,
-        15
-      ]
-    },
-    {
-      "id": "ppl_a4_A32_2048_w1",
-      "kind": "precision",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "A32",
-      "window": 1,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_A32_2048_w2",
-      "kind": "precision",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "A32",
-      "window": 2,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_A32_2048_w3",
-      "kind": "precision",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "A32",
-      "window": 3,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_A32_8192",
-      "kind": "precision",
-      "depends": [
-        "ppl_a4_D32_2048_w0"
-      ],
-      "S": 8192,
-      "arm": "A32",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_C_2048_w0",
-      "kind": "ppl_capture",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_C_2048_w1",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 1,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_C_2048_w2",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 2,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_C_2048_w3",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 3,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_C_2048",
-      "kind": "aggregate",
-      "depends": [
-        "ppl_a4_C_2048_w0",
-        "ppl_a4_C_2048_w1",
-        "ppl_a4_C_2048_w2",
-        "ppl_a4_C_2048_w3"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        1,
-        30
-      ],
-      "operation": "ppl"
-    },
-    {
-      "id": "ppl_a4_C_8192",
-      "kind": "ppl_capture",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "margin_a4_C_2048_l05",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 5,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l11",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 11,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l17",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 17,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l23",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 23,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l29",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 29,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l35",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 35,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l41",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 41,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_2048_l47",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_2048_w0"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        10,
-        90
-      ],
-      "layer": 47,
-      "population_rows": 2047,
-      "capture_cell": "ppl_a4_C_2048_w0"
-    },
-    {
-      "id": "margin_a4_C_8192_l05",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 5,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l11",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 11,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l17",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 17,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l23",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 23,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l29",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 29,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l35",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 35,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l41",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 41,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "margin_a4_C_8192_l47",
-      "kind": "margin",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "ppl_a4_C_8192"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        60,
-        270
-      ],
-      "layer": 47,
-      "population_rows": 8191,
-      "capture_cell": "ppl_a4_C_8192"
-    },
-    {
-      "id": "eq_a4",
-      "kind": "eq",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "margin_a2_B_2048_l05",
-        "margin_a2_B_2048_l11",
-        "margin_a2_B_2048_l17",
-        "margin_a2_B_2048_l23",
-        "margin_a2_B_2048_l29",
-        "margin_a2_B_2048_l35",
-        "margin_a2_B_2048_l41",
-        "margin_a2_B_2048_l47",
-        "margin_a2_B_8192_l05",
-        "margin_a2_B_8192_l11",
-        "margin_a2_B_8192_l17",
-        "margin_a2_B_8192_l23",
-        "margin_a2_B_8192_l29",
-        "margin_a2_B_8192_l35",
-        "margin_a2_B_8192_l41",
-        "margin_a2_B_8192_l47",
-        "margin_a4_C_2048_l05",
-        "margin_a4_C_2048_l11",
-        "margin_a4_C_2048_l17",
-        "margin_a4_C_2048_l23",
-        "margin_a4_C_2048_l29",
-        "margin_a4_C_2048_l35",
-        "margin_a4_C_2048_l41",
-        "margin_a4_C_2048_l47",
-        "margin_a4_C_8192_l05",
-        "margin_a4_C_8192_l11",
-        "margin_a4_C_8192_l17",
-        "margin_a4_C_8192_l23",
-        "margin_a4_C_8192_l29",
-        "margin_a4_C_8192_l35",
-        "margin_a4_C_8192_l41",
-        "margin_a4_C_8192_l47"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        1,
-        30
-      ]
-    },
-    {
-      "id": "ppl_a4_E_2048_w0",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "eq_a4"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_E_2048_w1",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "eq_a4"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 1,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_E_2048_w2",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "eq_a4"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 2,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_E_2048_w3",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "eq_a4"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 3,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "ppl_a4_E_2048",
-      "kind": "aggregate",
-      "depends": [
-        "ppl_a4_E_2048_w0",
-        "ppl_a4_E_2048_w1",
-        "ppl_a4_E_2048_w2",
-        "ppl_a4_E_2048_w3"
-      ],
-      "S": 2048,
-      "arm": "E",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        1,
-        30
-      ],
-      "operation": "ppl"
-    },
-    {
-      "id": "ppl_a4_E_8192",
-      "kind": "ppl",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "eq_a4"
-      ],
-      "S": 8192,
-      "arm": "E",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "decode_a4_C_2048",
-      "kind": "decode",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 2048,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    },
-    {
-      "id": "decode_a4_C_8192",
-      "kind": "decode",
-      "depends": [
-        "ppl_a4_D32_2048_w0",
-        "freeze_a4"
-      ],
-      "S": 8192,
-      "arm": "C",
-      "window": 0,
-      "bits": 4,
-      "apa_min_context": 0,
-      "worker_s": 285,
-      "estimate_s": [
-        90,
-        275
-      ]
-    }
-  ]
-}
+[
+  {
+    "id": "diag_a5_call_l05_b00",
+    "kind": "call",
+    "depends": [
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "A",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ],
+    "layer": 5,
+    "block": 0,
+    "call_index": 2,
+    "L": 64,
+    "S_all": 1087,
+    "position_offset": 1023,
+    "order_stated_S_all": 1088
+  },
+  {
+    "id": "diag_a5_call_l05_b15",
+    "kind": "call",
+    "depends": [
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "A",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ],
+    "layer": 5,
+    "block": 15,
+    "call_index": 17,
+    "L": 64,
+    "S_all": 2047,
+    "position_offset": 1983,
+    "order_stated_S_all": 2048
+  },
+  {
+    "id": "diag_a5_call_l47_b15",
+    "kind": "call",
+    "depends": [
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "A",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ],
+    "layer": 47,
+    "block": 15,
+    "call_index": 17,
+    "L": 64,
+    "S_all": 2047,
+    "position_offset": 1983,
+    "order_stated_S_all": 2048
+  },
+  {
+    "id": "diag_a4_propagation_A_2048_w0",
+    "kind": "propagation",
+    "depends": [
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "A",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ]
+  },
+  {
+    "id": "diag_a4_propagation_D_2048_w0",
+    "kind": "propagation",
+    "depends": [
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "D",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ]
+  },
+  {
+    "id": "diag_a4_propagation_2048_w0",
+    "kind": "aggregate",
+    "depends": [
+      "diag_a4_propagation_A_2048_w0",
+      "diag_a4_propagation_D_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "A",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      1,
+      30
+    ],
+    "operation": "propagation"
+  },
+  {
+    "id": "ppl_a4_D32_2048_w0",
+    "kind": "precision",
+    "depends": [
+      "diag_a5_call_l05_b00",
+      "diag_a5_call_l05_b15",
+      "diag_a5_call_l47_b15",
+      "diag_a2_fp32_A_2048_w0",
+      "a4_completed:ppl_a4_D32_2048_w0"
+    ],
+    "S": 2048,
+    "arm": "D32",
+    "window": 0,
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      90,
+      275
+    ],
+    "conditional": "all three calls completed; at least one SP vs standard fp32 relF > 0.001; no C/E unblock"
+  }
+]
