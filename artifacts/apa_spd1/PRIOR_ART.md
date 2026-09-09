@@ -1,0 +1,27 @@
+# APA-SPD1 prior art
+
+Evidence class: external literature / repository source inspection. Bibliographic
+links below were checked using the web tool on 2026-09-06 except where explicitly
+marked. This is a benchmark integration; no attention algorithm is newly claimed.
+
+| Code site / contender | Known prior art | Reused versus this seat's work |
+|---|---|---|
+| `grouped_dense` | Vaswani et al., *Attention Is All You Need*, 2017; Project-Tensor APAMQ-E1 `_standard_call`, 2026 | Scaled QK, softmax, PV; E1 grouped reshape avoids expanding KV. Added B/noncausal harness branches and shared-input comparison. |
+| `sdpa_call` | PyTorch contributors, SDPA API and backend selector, 2023–2026; [sdpa_kernel](https://docs.pytorch.org/docs/main/generated/torch.nn.attention.sdpa_kernel.html) | Calls existing math, efficient, flash implementations with one backend enabled at a time. Added registry, explicit efficient GQA expansion inside measurement, lower-right mask handling. Efficient is named as the installed PyTorch backend; no claim it is FlashAttention-2. |
+| Torch flash / optional `flash_attn_func` | Tri Dao, [FlashAttention-2](https://arxiv.org/abs/2307.08691), 2023; Dao et al., [FlashAttention](https://arxiv.org/abs/2205.14135), 2022 | Calls implementations, changes no tiling or kernels. Version and successful forced calls establish availability; CPU imports cannot establish sm_89 support. |
+| `bulk_keys`: TurboQuant | Amir Zandieh, Majid Daliri, Majid Hadian, Vahab Mirrokni, [TurboQuant](https://arxiv.org/abs/2504.19874), 2025 | Calls existing `tensor_cuda.quant._tables` / `_quantize_keys`: random rotations, norm normalization and scalar codebook reconstruction, four bits. Repository MSE-only component, no QJL residual, no packed-cache residency claim. New work is staging outside timed calls and using the same reconstructed K for both APA contenders. |
+| Codebooks | Max, *Quantizing for Minimum Distortion*, 1960; Lloyd, *Least Squares Quantization in PCM*, 1982 | Existing Lloyd-Max codebook builder reused. Bibliography unverified — lead to check: “Max 1960 quantizing minimum distortion”, “Lloyd 1982 PCM”. |
+| E1 symmetric INT4 | Project-Tensor APAMQ-E1, 2026; classical uniform scalar quantization | Reuses signed per-key absmax/7, rounding and reconstruction idea. Runs on common rounded K instead of E1's separate fp16 host staging; reports this preparation difference. This is not TurboQuant. No specific earlier author known to me for this absmax implementation. |
+| Two-pass APA | David / Project-Tensor, APA and `apa_selective_kernel` family, 2026; local `docs/APA_PAPER_DRAFT.md`, `scripts/apamq_e1_sweep.py` | Calls existing z-score-of-absolute-bulk selector and selective exact dot path. Grid r=.15; E1 extras r=.10. No threshold or product-kernel change. No independently verified external APA publication identity asserted. |
+| SP1 / SP1.1 | APA SP1 implementation seats, 2026; Jiayi Yuan et al., [BLASST](https://arxiv.org/abs/2512.12087), 2025/v3 2026 | Existing running-prefix-max comparison is prior art. APA promotes individual quantized-key scores to exact precision while retaining all keys; BLASST drops negligible blocks. This seat calls existing prefill and split-K kernels and freezes prior deltas, with transferred calibration clearly qualified. No invention claim for the comparator. Lead's comparison: `/mnt/Shared/APA_SP_Prior_Art_Comparison_2026-09-06.md`. |
+| Online softmax / split-K merge | Milakov & Gimelshein, *Online Normalizer Calculation for Softmax*, 2018; Flash-Decoding, Dao et al., 2023 | Existing max/rescale normalizer and partition merge reused through SP1.1. Links: https://arxiv.org/abs/1805.02867 and https://pytorch.org/blog/flash-decoding/ . Unverified — lead to check these two publication records. Partition-local SP decisions are not global SP output identity. |
+| Related selective precision | Sharratt, [ThriftAttention](https://arxiv.org/abs/2605.23081), 2026 | Related blockwise selective mixed precision; cited for context from lead's comparison. Not implemented or benchmarked here. |
+| Peak memory / events | NVIDIA CUDA runtime memory-pool/event APIs; E1 `CudaPoolStats` and SP1 `Events`, 2026 | Reuses UsedMemHigh/current deltas and CUDA events. No sampling thread. New integration separates timing from peak passes and uses torch's native allocated-memory peak for torch operations. API definitions cross-checked against local CUDA headers, not a new memory estimator. |
+| Summary and execution | NumPy linear quantiles / Hyndman & Fan, 1996, type 7; counterbalancing in classical experimental design (Fisher, 1935); NIST FIPS 180-4, 2015; util-linux `flock`, GNU `timeout`; SP1 runner, 2026 | Reuses standard median/IQR, deterministic interleaving, SHA-256 pins, advisory lease and bounded process execution. New work is one-cell scheduling, append-only attempts and missing-data-aware table assembly. These bibliographic leads are unverified — lead to check “Hyndman Fan sample quantiles 1996”, “Fisher design experiments 1935”, “NIST FIPS 180-4”. |
+
+Tests use an independent NumPy materialized-attention oracle and actual CPU torch
+SDPA to challenge grouped reshape, bottom-right masking and GQA mapping. Mutation
+testing follows HOUSE_RULES §8; it is an author baseline, not a blind red-team pass.
+Additional mutation-testing prior-art lead: DeMillo, Lipton & Sayward (1978),
+unverified — lead to check “Hints on Test Data Selection Help for the Practicing
+Programmer 1978”. Only temporary harness copies are mutated.
