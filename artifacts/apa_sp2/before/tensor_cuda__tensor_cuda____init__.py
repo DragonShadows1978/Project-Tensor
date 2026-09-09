@@ -1282,7 +1282,3 @@ def apa_selective_train(q, k, kq, v, scale, zthr, is_causal=False):
     Returns a single (B,H,L,D) tensor with autograd wired."""
     return _C.apa_selective_train(q, k, kq, v, scale, zthr, is_causal)
 __version__ = "0.1.0-phase1"
-
-# APA-SP2: explicit epsilon API; existing launchers remain unchanged.
-from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
-__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]

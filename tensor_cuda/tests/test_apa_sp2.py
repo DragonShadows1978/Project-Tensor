@@ -1,0 +1,262 @@
+"""G1: conditional proofs, actual host binding, immutable pins and runner logic.
+
+These are author-run CPU tests, not blind verification or GPU sweep evidence.
+"""
+import hashlib
+import json
+import math
+from pathlib import Path
+import re
+import sys
+
+import numpy as np
+import pytest
+
+ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT/'scripts'))
+from apa_sp2_common import ART, registration, sha, load_runtime
+import apa_sp1_reference as ref
+import apa_sp1_1_reference as split
+
+
+def test_all_supplied_kernel_bodies_sources_and_receipts_stay_pinned():
+    reg=registration()
+    bodies=0
+    for path,pins in reg['kernel_body_pins'].items():
+        text=(ROOT/path).read_text(); found={}
+        for m in re.finditer(r'__global__\s+void\s+',text):
+            op=text.index('{',m.start());end=op+1;depth=1
+            while depth:
+                depth+=(text[end]=='{')-(text[end]=='}');end+=1
+            found[text[m.start():op].strip()]=hashlib.sha256(text[m.start():end].encode()).hexdigest()
+        for pin in pins:
+            assert found[pin['signature']]==pin['sha256'];bodies+=1
+    assert bodies==107
+    for path,digest in reg['source_before_sha256'].items():
+        assert sha(ART/'before'/path.replace('/','__'))==digest
+    for path,digest in reg['receipt_pins'].items():
+        assert sha(ROOT/path)==digest,path
+
+
+def checked_skip_bound(bulk,exact,epsilon,e_q,mask):
+    star=exact.max(-1,keepdims=True)
+    relative=np.exp(exact-star)
+    # Proof is about unnormalized mass over exp(s_star); normalization cancels.
+    skip=~mask
+    assert np.all(relative[skip]<epsilon)
+    N=skip.sum(-1);Z=relative.sum(-1)
+    M=(relative*skip).sum(-1)/Z
+    assert np.all(M<=N*epsilon/Z+1e-14)
+    mixed=np.where(mask,exact,bulk)
+    u=np.exp(mixed-star)
+    T=np.abs(u-relative).sum(-1)/Z
+    tbound=N*epsilon*(-np.expm1(-e_q))/Z
+    assert np.all(T<=tbound+1e-14)
+    p=relative/Z[...,None];pt=u/u.sum(-1,keepdims=True)
+    assert np.all(np.abs(p-pt).sum(-1)<=np.minimum(2,2*tbound)+2e-14)
+
+
+def test_10000_known_error_draws_skip_mass_perturbation_and_monotonicity():
+    reg=registration()['G1'];rng=np.random.default_rng(reg['seed'])
+    visited=skipped=0
+    for offset in range(0,reg['random_draws'],100):
+        e_q=reg['known_errors'][(offset//100)%5]
+        epsilon=registration()['epsilon_grid'][(offset//100)%7]
+        exact=rng.normal(0,6,size=(100,reg['max_keys']))
+        bulk=exact+rng.uniform(-e_q,e_q,size=exact.shape)
+        delta=-math.log(epsilon)+2*e_q
+        prefix=np.maximum.accumulate(bulk,axis=-1)
+        mask=bulk>=prefix-delta
+        checked_skip_bound(bulk,exact,epsilon,e_q,mask)
+        # Changing only the suffix cannot invalidate an earlier skip.
+        suffix=rng.normal(0,50,size=(100,37))
+        whole=np.concatenate([bulk,suffix],axis=-1)
+        assert np.array_equal(mask,(whole>=np.maximum.accumulate(whole,axis=-1)-delta)[:,:bulk.shape[-1]])
+        assert not np.any((bulk>=whole.max(-1,keepdims=True)-delta)&~mask)
+        # Ordered random partitions have smaller prefix maxima; skips remain safe.
+        pm=np.zeros_like(mask)
+        labels=rng.integers(0,8,size=bulk.shape[-1])
+        for p in range(8):
+            ix=np.flatnonzero(labels==p)
+            if ix.size:pm[:,ix]=bulk[:,ix]>=np.maximum.accumulate(bulk[:,ix],axis=-1)-delta
+        assert not np.any(mask&~pm)
+        checked_skip_bound(bulk,exact,epsilon,e_q,pm)
+        finer=bulk>=prefix-(-math.log(epsilon/10)+2*e_q)
+        assert not np.any(mask&~finer)
+        visited+=len(bulk);skipped+=int((~mask).sum())
+    assert visited==10000 and skipped>10000  # no all-refine/vacuous safety pass
+
+
+def test_inclusive_boundary_and_large_error_correction_witness():
+    eps=.1;e=2.;delta=-math.log(eps)+2*e
+    bulk=np.array([e,e-delta-1e-6]);exact=np.array([0.,bulk[1]+e])
+    mask=bulk>=np.maximum.accumulate(bulk)-delta
+    assert mask.tolist()==[True,False]
+    checked_skip_bound(bulk,exact,eps,e,mask)
+    # Merely knowing exact weight<eps*w_star does NOT bound arbitrary upward error.
+    exact=np.array([0.,math.log(eps)-.01]);badbulk=exact+np.array([0.,2.])
+    assert abs(np.exp(badbulk[1])-np.exp(exact[1]))>eps
+    # The actual 2e margin prevents that unsafe skip.
+    assert (badbulk>=np.maximum.accumulate(badbulk)-delta).all()
+    for e in (0.,.5,2.):
+        b=np.array([1.,1.]);d=2*e
+        assert (b>=np.maximum.accumulate(b)-d).all()
+
+
+def test_scalar_host_derivation_rounding_and_invalid_domain():
+    tc=load_runtime()
+    for epsilon in [1.,*registration()['epsilon_grid'],1e-300]:
+        for e in [0.,.05,.5,2.,8.]:
+            exact=-math.log(epsilon)+2*e
+            actual=tc._C.apa_sp2_delta(epsilon,e)
+            assert actual>=exact
+            assert actual==0 or float(np.nextafter(np.float32(actual),np.float32(-np.inf)))<=exact
+    for eps,e in [(0,0),(-.1,0),(1.1,0),(np.nan,0),(np.inf,0),(.1,-1),(.1,np.nan),(.1,np.inf),(.1,1e100)]:
+        with pytest.raises(RuntimeError):tc._C.apa_sp2_delta(eps,e)
+
+
+def test_both_entries_agree_on_host_guards_and_cpu_prefill_split_outputs(monkeypatch):
+    tc=load_runtime();monkeypatch.setenv('TC_APA_SP','1')
+    empty=tc.tensor(np.zeros((0,1,1,1),np.float32),device='cpu')
+    args=(empty,empty,empty,empty,1.)
+    for epsilon,e in [(1.,0.),(.1,.05),(.001,2.)]:
+        delta=tc._C.apa_sp2_delta(epsilon,e)
+        errors=[]
+        for call in [lambda:tc._C.apa_selective_attention_sp(*args,delta),
+                     lambda:tc._C.apa_selective_attention_sp_epsilon(*args,epsilon,e)]:
+            with pytest.raises(RuntimeError) as caught:call()
+            errors.append(str(caught.value))
+        assert errors[0]==errors[1] and 'CUDA device' in errors[0]
+        rng=np.random.default_rng(19)
+        bulk=rng.normal(0,6,size=(4,97)).astype(np.float32)
+        exact=bulk+rng.uniform(-e,e,bulk.shape).astype(np.float32)
+        values=rng.normal(size=(4,97,3)).astype(np.float32)
+        manual=np.float32(-math.log(epsilon)+2*e)
+        if float(manual)<-math.log(epsilon)+2*e:manual=np.nextafter(manual,np.float32(np.inf))
+        a,am=ref.online_batch(bulk,exact,values,delta)
+        b,bm=ref.online_batch(bulk,exact,values,manual)
+        assert np.array_equal(a,b) and np.array_equal(am,bm)
+        for row in range(4):
+            parts=np.array_split(np.arange(97),5)
+            a,am=split.partition_online(bulk[row],exact[row],values[row],delta,parts,.3)
+            b,bm=split.partition_online(bulk[row],exact[row],values[row],manual,parts,.3)
+            assert np.array_equal(a,b) and np.array_equal(am,bm)
+    monkeypatch.delenv('TC_APA_SP')
+    with pytest.raises(RuntimeError,match='requires TC_APA_SP=1'):
+        tc._C.apa_selective_attention_sp_epsilon(*args,.1,.5)
+
+
+def example_table():
+    return dict(registration_sha256=sha(ART/'registration.json'),status='FROZEN',
+                quantizer='turboquant_lloyd_max_rotated_fp32',measurement_classes=64,
+                statistic='maximum_over_all_registered_G2_valid_scores',
+                entries={f'{b}:{D}':dict(e_q=.5,count=1,mean=.5,max=.5,p99_9=.5) for b in (2,4) for D in (64,128)})
+
+
+def test_table_provenance_no_fallback_and_launcher_lookup(tmp_path,monkeypatch):
+    tc=load_runtime();path=tmp_path/'synthetic_UNIT_TEST_ONLY.json'
+    path.write_text(json.dumps(example_table()))
+    margins=tc.RegisteredMargins.load(path,expected_sha256=sha(path))
+    assert margins.lookup(2,128,'float32',1/math.sqrt(128))==.5
+    with pytest.raises(TypeError):margins.entries['2:128']=1.
+    for args in [(3,64,'float32',.125),(True,64,'float32',.125),(2,64,'float16',.125),(2,64,'float32',1.),(2,32,'float32',1.)]:
+        with pytest.raises(ValueError):margins.lookup(*args)
+    with pytest.raises(ValueError,match='SHA256'):tc.RegisteredMargins.load(path,expected_sha256='0'*64)
+    bad=example_table();bad['measurement_classes']=63;path.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match='incomplete'):tc.RegisteredMargins.load(path,expected_sha256=sha(path))
+    bad=example_table();bad['entries']['2:64']['e_q']=.4;path.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match='invalid'):tc.RegisteredMargins.load(path,expected_sha256=sha(path))
+    class Fake:
+        shape=(1,4,16,64);dtype='float32';ndim=4
+    calls=[]
+    monkeypatch.setattr(tc._C,'apa_selective_attention_sp_epsilon',lambda *a:calls.append(a) or 'ok')
+    monkeypatch.setenv('TC_APA_SP','1')
+    q=Fake()
+    assert tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)=='ok'
+    assert calls[0][5:7]==(.001,.5)
+    with pytest.raises(ValueError,match='registered margin'):
+        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=None)
+    monkeypatch.delenv('TC_APA_SP')
+    with pytest.raises(RuntimeError,match='TC_APA_SP'):
+        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)
+
+
+def test_runner_grid_crossings_missing_data_and_failed_exits(tmp_path,monkeypatch):
+    import apa_sp2_common as common
+    from apa_sp2_summary import crossing,score
+    from apa_sp2_gpu import require_lease
+    reg=registration();measure,sweep=common.targets(reg)
+    assert len(set(measure+sweep))==512 and len(measure)==64 and len(sweep)==448
+    for target in measure+sweep:assert common.decode_target(target,reg)
+    for bad in ['bad','eq_b8_prefill_s2048_d64_c1_h4_kv4','../../tmp/evil']:
+        with pytest.raises(ValueError):common.decode_target(bad,reg)
+    monkeypatch.delenv('APA_SP2_LEASED',raising=False)
+    with pytest.raises(RuntimeError,match='BLOCKED'):require_lease()
+    rows=[dict(status='PASS',epsilon=.1,x=2),dict(status='PASS',epsilon=.03,x=.5)]
+    assert crossing(rows,lambda r:r['x']<1)==.03
+    assert crossing([None,*rows],lambda r:r['x']<1)=='BLOCKED_INCOMPLETE'
+    assert crossing(rows,lambda r:r['x']<0)=='NOT_OBSERVED_ON_GRID'
+    empty=[dict(bits=b,shape=s,rows=[None]*7) for b in (2,4) for s in reg['shapes']]
+    verdicts=score(reg,empty,None)
+    assert all(v['verdict'].startswith('BLOCKED') for v in verdicts.values())
+    monkeypatch.setattr(common,'ART',tmp_path);monkeypatch.setattr(common,'ROOT',tmp_path)
+    monkeypatch.setattr(common,'fingerprint',lambda:{'test':'unit'})
+    (tmp_path/'gpu').mkdir()
+    (tmp_path/'gpu/job.1.json').write_text(json.dumps(dict(status='PASS',fingerprint={'test':'unit'})))
+    (tmp_path/'gpu/job.2.exit.json').write_text(json.dumps(dict(status='WORKER_EXIT',returncode=0,fingerprint={'test':'unit'})))
+    assert common.latest('job')['status']=='PASS'
+    (tmp_path/'gpu/job.3.exit.json').write_text(json.dumps(dict(status='WORKER_EXIT',returncode=124,fingerprint={'test':'unit'})))
+    assert common.latest('job')['status']=='ERROR'
+
+
+def test_freeze_pools_all_classes_before_use_and_refuses_replacement(tmp_path,monkeypatch):
+    import apa_sp2_gpu as gpu
+    reg=registration();rows={}
+    # Synthetic data stays in pytest tmpdir. It never becomes a real G2 receipt.
+    for i,target in enumerate(gpu.targets(reg)[0]):
+        _,bits,s,_,_=gpu.decode_target(target,reg)
+        values=np.array([i/100,i/100+.01],np.float64)
+        path=tmp_path/f'unit_values_{i}.npy';np.save(path,values,allow_pickle=False)
+        rec=tmp_path/f'unit_receipt_{i}.json';rec.write_text('{}')
+        rows[target]=dict(status='PASS',bits=bits,shape=s,error_values=path.name,
+                          error_values_sha256=sha(path),_receipt=rec.name)
+    monkeypatch.setattr(gpu,'ART',tmp_path);monkeypatch.setattr(gpu,'ROOT',tmp_path)
+    (tmp_path/'registration.json').write_bytes((ART/'registration.json').read_bytes())
+    monkeypatch.setattr(gpu,'latest',lambda target:rows.get(target))
+    monkeypatch.setattr(gpu,'fingerprint',lambda:{'synthetic':'unit only'})
+    one=next(iter(rows));saved=rows.pop(one)
+    with pytest.raises(RuntimeError,match='G2 missing'):gpu.freeze()
+    assert not (tmp_path/'e_q_table.json').exists()
+    rows[one]=saved;gpu.freeze()
+    table=json.loads((tmp_path/'e_q_table.json').read_text())
+    assert table['measurement_classes']==64 and len(table['entries'])==4
+    for entry in table['entries'].values():
+        assert entry['count']==32 and len(entry['receipts'])==16
+        assert entry['e_q']>entry['max']>=entry['p99_9']>=entry['mean']
+    original=sha(tmp_path/'e_q_table.json');gpu.freeze()
+    assert sha(tmp_path/'e_q_table.json')==original
+    path=tmp_path/saved['error_values'];np.save(path,np.array([9.,9.]),allow_pickle=False)
+    saved['error_values_sha256']=sha(path)
+    with pytest.raises(RuntimeError,match='immutable'):gpu.freeze()
+    assert sha(tmp_path/'e_q_table.json')==original
+
+
+def test_complete_prediction_scoring_has_fixed_denominators_and_strict_crossings():
+    from apa_sp2_summary import score
+    reg=registration();curves=[]
+    for bits in (2,4):
+        for s in reg['shapes']:
+            islong=s['S']==(8192 if s['kind']=='prefill' else 32768)
+            fraction=.1 if s['causal'] and islong else .3
+            rows=[dict(status='PASS',epsilon=e,_receipt='synthetic unit only',
+                       fractions=dict(sp=fraction,baseline=.2),timing=dict(speedup=1.),
+                       sp_vs_dense_fp32=dict(relative_frobenius=.01,max_abs=.01),
+                       baseline_vs_dense_fp32=dict(relative_frobenius=.02,max_abs=.02)) for e in reg['epsilon_grid']]
+            curves.append(dict(shape=s,bits=bits,rows=rows))
+    got=score(reg,curves,dict(entries={'2:128':dict(e_q=.05)}))
+    assert all(got[k]['verdict']=='HIT' for k in ('P1','P2','P3','P4'))
+    assert got['P4']['measured']==160 and got['P3_e4_relative_frobenius']['wins']==64
+    # Strict improvement: ties on 17 of 64 drop the 75-percent claim below 48.
+    for c in curves[:17]:c['rows'][4]['sp_vs_dense_fp32']['relative_frobenius']=.02
+    got=score(reg,curves,None)
+    assert got['P3']['verdict']=='MISS' and got['P3_e4_relative_frobenius']['wins']==47

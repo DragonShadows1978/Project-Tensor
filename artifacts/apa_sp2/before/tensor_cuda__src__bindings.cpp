@@ -682,34 +682,6 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
     return py::make_tuple(Tensor::make(result.first,false),Tensor::make(result.second,false));
   }, py::arg("q"), py::arg("kq"));
-  // APA-SP2 derived-margin entry; original direct-delta binding stays intact.
-  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
-  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
-      Tensor& v, double scale, double epsilon, double e_q, bool is_causal,
-      py::object sinks_obj, bool diagnostics) -> py::object {
-    const NDArray* sinks = nullptr;
-    if (!sinks_obj.is_none()) sinks = &sinks_obj.cast<Tensor&>().data();
-    NDArray selected;
-    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
-        kq.data(), v.data(), (float)scale, epsilon, e_q, is_causal,
-        sinks, diagnostics ? &selected : nullptr);
-    Tensor output = Tensor::make(result, false);
-    if (diagnostics) return py::make_tuple(output, Tensor::make(selected, false));
-    return py::cast(output);
-  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"), py::arg("scale"),
-     py::arg("epsilon"), py::arg("e_q"), py::arg("is_causal") = false,
-     py::arg("sinks") = py::none(), py::arg("diagnostics") = false);
-  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
-                           int first, int count, bool wcoop) {
-    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
-    return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));
-  }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("scale"),
-     py::arg("first"), py::arg("count"), py::arg("wcoop"));
-  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
-                                         double zthr, bool causal) {
-    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
-        (float)scale,(float)zthr,causal),false);
-  }, py::arg("q"), py::arg("kq"), py::arg("scale"), py::arg("zthr"), py::arg("causal"));
 // APA_SP1_ADDITION_END binding
   m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                       double scale, double zthr, bool is_causal) {
