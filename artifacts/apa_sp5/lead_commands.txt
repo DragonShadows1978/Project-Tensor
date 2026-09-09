@@ -1,0 +1,147 @@
+# APA-SP5 lead command chain — REFRESHED for amendment 1 (2026-09-08).
+#
+# registration.json          3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159
+# predictions.json (r1)      17427eb3c53f9830b195abc415cbb2d05a8e16099bdd30a2e76c296c99492e44
+# amendment_001_sensitivity  4cc5bca1ca6207bb6ad76cf2dd87c6a2f3f7db1ebad162ab08652381eaa5cd55
+# predictions_a1.json        cbcb534d52f048898912d231870a7c8d26e3ac8a0b512bec0d9f1f0a81618330
+# amendment_001_fingerprint  22c700687246218896852a4e42c2e9b3a496a377c5a8d9e02017f51744019681
+# order APA_SP5_AMENDMENT_1  06a5a1e742ae2474469f8d5177bc5b9d35b4d89e9553d928c9cac1d7a6753e33
+#
+# Every GPU line runs through scripts/apa_sp5_lead_gpu.sh: flock on
+# /tmp/forge-gpu.lock, timeout(1) worker rail (default 285 s), 30 s cooldown
+# held INSIDE the lease, never signals a process it did not start.
+# scripts/apa_sp5_a1_batch.sh runs a RANGE of window cells, each as its own
+# lease, so a shared-card operator waits at most one cell (~47 s + 30 s).
+#
+# WALLS: "measured" = observed. "estimated" = scaled, basis stated.
+#
+# ================================================== STATUS: EVERYTHING BELOW
+# ================================================== IS DONE AND ON DISK.
+# The seat ran the complete amendment-1 set. These lines reproduce it.
+#
+# ---- prereq (done in r1; refuse to re-run if their outputs exist)
+bash scripts/apa_sp5_build.sh                    # measured 80 s, host only, no lease
+python3 scripts/apa_sp5_tokens.py                # measured 21 s, CPU only
+#
+# ---- N=16 per-window cells: 96 cells, all PASS.        measured ~46 s each
+# Windows 0-3 for A,B,C,D,E and A32 w00-w03 were SEEDED from the r1 N=4
+# receipts (CPU, no lease) after the runner was verified to reproduce the r1
+# path to the last digit (ppl_C_W1024_w01 = 2341.776919703325 both ways):
+python3 scripts/apa_sp5_a1_seed.py               # measured <1 s, CPU only
+# The remaining 71 cells were run on the card:
+bash scripts/apa_sp5_a1_batch.sh A   4 15         # measured ~77 s/cell incl. cooldown
+bash scripts/apa_sp5_a1_batch.sh A32 4 15
+bash scripts/apa_sp5_a1_batch.sh B   4 15
+bash scripts/apa_sp5_a1_batch.sh C   4 15
+bash scripts/apa_sp5_a1_batch.sh D   4 15
+bash scripts/apa_sp5_a1_batch.sh E   4 15
+# A single cell, if one needs redoing:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_window.py --arm C --window 7
+#
+# ---- aggregate (CPU only, no lease)                          measured <1 s
+python3 scripts/apa_sp5_a1_aggregate.py
+#
+# ---- item 4 bitwise-replay margins: 4 cells, all PASS.   measured ~95 s each
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm C --window 1 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm C --window 2 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window 1 --qstep 32
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window 2 --qstep 32
+#
+# ---- item 5 decode: 3 cells PASS + 1 receipted OOM.    measured ~140 s each
+# NOTE --prefill-chunk 512 is REQUIRED: at 1024 even arm A OOMs during the
+# prefill that precedes decode (receipt: decode_a1/decode_A_2048.json, RED).
+# Kept as a receipt, not deleted.
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm A --S 2048 --prefill-chunk 512 --out artifacts/apa_sp5/decode_a1/decode_A_2048_pc512.json
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm B --S 2048 --prefill-chunk 512
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm C --S 2048 --prefill-chunk 512
+#
+# ---- item 6 ceilings: 4 cells + 1 receipted OOM.     measured 130-246 s each
+# --chunk 512 is REQUIRED at 4096+; at chunk 1024 arm C OOMs on the CHUNK
+# TRANSIENT, not the KV cache (receipt: ceiling_C_4096.json OOM at 829 MiB
+# free, vs ceiling_C_4096_pc512.json FITS at 735 MiB free). Kept as a receipt.
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 4096 --chunk 512
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 4096 --chunk 512 --out artifacts/apa_sp5/ceiling_a1/ceiling_C_4096_pc512.json
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 8192 --chunk 512 --budget-s 240
+bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 8192 --chunk 512 --budget-s 240
+#
+# ================================================== NOT RUN — LEAD'S CALL
+#
+# [1] ceiling_{B,C}_16384. NOT RUN, and RAIL BY CONSTRUCTION under any 285 s
+#     worker: measured 4096 = 128 s and 7680 = 245 s give ~32 ms/token, so
+#     16384 needs ~525 s. Memory is NOT expected to be the wall — the measured
+#     consumption line is 53.6 MiB per 1K tokens with 735 MiB free at 4096,
+#     which extrapolates to memory exhaustion near 17,800 tokens. Run only with
+#     a David-authorized long lease:
+#   APA_SP5_WORKER_RAIL=1500 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 512 --budget-s 1400
+#   APA_SP5_WORKER_RAIL=1500 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_ceiling.py --arm B --S 16384 --chunk 512 --budget-s 1400
+#
+# [2] decode at 8192. estimated ~330 s (prefill 8192 at 512-chunks is ~245 s
+#     to 7680 plus the decode steps), so it needs a widened worker rail:
+#   APA_SP5_WORKER_RAIL=560 bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_decode.py --arm A --S 8192 --prefill-chunk 512
+#   (and --arm B, --arm C)
+#
+# [3] bulk 8 secondary. C's delta 3.16 is bulk-4-calibrated; recalibrate first:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_calib.py --W 1024 --bulk-bits 8 --out artifacts/apa_sp5/calib_W1024_b8_all.json
+#     then take C_delta_median as <D8> and run the window set at bulk 8:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_window.py --arm C --window <N> --bulk-bits 8 --delta <D8>
+#     estimated ~46 s/cell, same as bulk 4 (the bulk width changes the
+#     quantizer table, not the number of kernel launches).
+#
+# [4] margins on more windows. estimated ~95 s each; windows 1 and 2 answered
+#     the amendment's question, but the 16-window set would show whether the
+#     B-vs-C mass gap is as flat across text as windows 1 and 2 suggest:
+#   bash scripts/apa_sp5_lead_gpu.sh scripts/apa_sp5_a1_margins.py --arm B --window <N> --qstep 32
+
+# ============================================================ AMENDMENT 2
+# predictions_a2.json          a704c4117ff288e2efea6a634547296028955c015f26f038e6122ed122eaa380
+# amendment_002_fingerprint    93e43734c9b4a08b6a1014b040960c98d3badac7b7455443a7ab06343f736d09
+# order APA_SP5_AMENDMENT_2    dc2ccc76bdab0c2211bb8833fae7b8b53479d6502ce1e4d0b32182796c730f87
+#
+# LEASE: David authorized 1,500 s worker / 1,560 s outer, ONE CELL PER LEASE,
+# for THIS AMENDMENT ONLY. Do not generalize it. scripts/apa_sp5_a2_lease.sh
+# detaches one leased job (setsid) and returns; poll it with `status` from
+# fresh short calls. flock + 1,500 s timeout + 30 s cooldown live INSIDE the
+# detached job so they cannot be skipped. It is not a Claude Code background
+# task and it never kills anything.
+#
+# ---- DONE BY THE SEAT. These reproduce it.
+#
+# resident-mode wall.                              measured 263-419 s each
+bash scripts/apa_sp5_a2_lease.sh start ceil_C_8192_long python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 8192  --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_8192.json
+bash scripts/apa_sp5_a2_lease.sh start ceil_C_16384_tr  python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_16384_trace.json
+bash scripts/apa_sp5_a2_lease.sh start ceil_B_16384     python3 scripts/apa_sp5_a1_ceiling.py --arm B --S 16384 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_B_16384.json
+#   poll: bash scripts/apa_sp5_a2_lease.sh status <tag>
+#   RESULT: 8,192 FITS; 16,384 OOMs BOTH arms at 12,288 completed tokens with
+#   347 MiB still free (fragmentation wall, not KV growth — the a1 cache line
+#   is refuted). ceiling_long_{B,C}_24576 are REGISTERED NON-FITS, not run.
+#
+# streamed-mode 16K, H4 construction, bulk 8.        measured 596-613 s each
+bash scripts/apa_sp5_a2_lease.sh start ladder_B_16384 bash scripts/apa_sp5_a2_ladder.sh B 16384
+bash scripts/apa_sp5_a2_lease.sh start ladder_C_16384 bash scripts/apa_sp5_a2_ladder.sh C 16384
+#   Arm C injects the SP entry in-process via
+#   artifacts/apa_sp5/a2_inject/sitecustomize.py because the streamed path has
+#   NO single-pass seam (port core/gpt_oss20b_tc.py:744 is hard-wired to the
+#   two-pass entry; smoke:24 hard-codes an engine without the SP symbol).
+#   The port and smoke are NOT edited — verified: GraftRepository git status
+#   on core/ and scripts/ is empty.
+#   RESULT: H4 1,016 s / 1,031 MiB; B 613.0 s / 1,027 MiB; C 596.3 s / 1,027 MiB.
+#
+# ---- NOT RUN — NEEDS A SEPARATE AUTHORIZATION
+#
+# [A] streamed 32K and 64K. estimated ~37 min and ~93 min from the H4 wall —
+#     both exceed the 1,500 s granted here. Registered as long-lease cells:
+#   bash scripts/apa_sp5_a2_lease.sh start ladder_C_32768 bash scripts/apa_sp5_a2_ladder.sh C 32768
+#   bash scripts/apa_sp5_a2_lease.sh start ladder_B_32768 bash scripts/apa_sp5_a2_ladder.sh B 32768
+#     (and 65536; the lease script's 1500 s timeout must be raised for these)
+#
+# [B] the resident wall between 8,192 and 12,288. The exact fit/die boundary is
+#     bracketed but not bisected. estimated ~300-400 s per rung:
+#   bash scripts/apa_sp5_a2_lease.sh start ceil_C_10240 python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 10240 --chunk 512 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_10240.json
+#     Worth it only if the exact number matters; the mechanism (fragmentation
+#     at ~347 MiB free) is already receipted by the token trace.
+#
+# [C] a smaller chunk at 16,384. The a1 4,096 result showed the chunk transient
+#     is the binding constraint (chunk 1024 OOMed with 829 MiB free, chunk 512
+#     fitted). chunk 256 might push the resident wall past 12,288 — untested,
+#     and it is a real open question rather than a formality:
+#   bash scripts/apa_sp5_a2_lease.sh start ceil_C_16384_c256 python3 scripts/apa_sp5_a1_ceiling.py --arm C --S 16384 --chunk 256 --budget-s 1400 --out artifacts/apa_sp5/ceiling_a1/ceiling_long_C_16384_c256.json

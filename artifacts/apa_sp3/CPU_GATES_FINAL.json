@@ -1,0 +1,48 @@
+{
+  "status": "PASS_CPU_ONLY",
+  "evidence_class": "unit test / host compile / code inspection",
+  "pytest": {
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0,
+    "log": "artifacts/apa_sp3/cpu_after_observer_fix.log",
+    "log_sha256": "e3b5ed70339f6e7fd37062881ce10bb786760d5273efeca28262f0c881d57f0d"
+  },
+  "mutation": {
+    "killed": 6,
+    "nonerror": 6,
+    "rate": 1.0,
+    "threshold": 0.8,
+    "manifest": "artifacts/apa_sp3/mutation_manifest_final.json",
+    "receipt": "artifacts/apa_sp3/mutation_results_final.json",
+    "scope": "author baseline; not blind verification"
+  },
+  "host_build": {
+    "status": "PASS",
+    "core_log": "artifacts/apa_sp3/build.log",
+    "diagnostic_log": "artifacts/apa_sp3/diagnostic_rebuild.log",
+    "manifest_sha256": "85b1ada58e1732432f55ce39ddc918b02f102df31543371f1cdf192446abe726"
+  },
+  "pins": {
+    "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "preexisting_source_files": 24,
+    "preexisting_kernel_bodies": 107,
+    "unchanged": true
+  },
+  "adapter_cpu_import": "PASS; 6 modules, no model instantiation",
+  "dry_run_cells": 688,
+  "D96_pins": [
+    "test_d96_prefill_contract_and_dense_pin",
+    "test_d96_splitk_contract_and_dense_pin"
+  ],
+  "GPU": "BLOCKED; cudaGetDeviceCount=100, no device; 0 GPU jobs",
+  "G0": "NOT REPRODUCED; source/token provenance missing; preflight refuses before lease",
+  "blind_verification": "lead-owned, unrun",
+  "supersedes": "CPU_GATES.json: observer RTLD_LOCAL resolution fix and new build seal",
+  "observer_host_gate": {
+    "status": "PASS_HOST_FAILURE_PRESERVATION",
+    "after_preload": "cudaMalloc failed: no CUDA-capable device is detected",
+    "expected": "cudaMalloc failed: no CUDA-capable device is detected",
+    "GPU_allocation_accounting": "still untested; no device"
+  }
+}

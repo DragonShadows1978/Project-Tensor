@@ -1,0 +1,39 @@
+{
+  "cell": {
+    "id": "ppl_A_2048_w0",
+    "kind": "ppl",
+    "depends": [
+      "kernel512"
+    ],
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      60,
+      285
+    ],
+    "arm": "A",
+    "S": 2048,
+    "window": 0
+  },
+  "status": "RED",
+  "registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "fingerprint_schema": "apa_sp4g_per_kind_v1",
+  "fingerprint": {
+    "scripts/apa_sp4g_common.py": "1b00f0666cf527c49cfde8515c44449f61ca306c62f8579b3523a428c1dbfc4b",
+    "scripts/apa_sp4g_gpu.py": "13b47f38c53c13552e8047dff6b9ea9064d53aba69284aea3617da64230b1226",
+    "scripts/apa_sp4g_model.py": "3ec39be2f2027b5f8c52211451a2cc654a6909c0683b85bb5da36f10fbefe570",
+    "scripts/apa_sp4g_registry.py": "010619e7d4c4fdbd5d95bcb78b6c4a7537605eb15d6b66655585e5e6b52c3d07",
+    "scripts/apa_sp4g_lead_gpu.sh": "dd61744eb30ce3374bee5f4f92fe85bda412968810f86b7262d9404de3ec82b7",
+    "artifacts/apa_sp4g/registration.json": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+    "artifacts/apa_sp4g/build/manifest.json": "9dadd8332a94ab53c40d34f2f591e40edab160a6f1498bfb68842a6a518e3e4e",
+    "artifacts/apa_sp4g/CPU_GATES.json": "362f26ec3f25f67624c9e9caee6e4274739bdf5928b6efc7ad2f70cd52de4239"
+  },
+  "dependencies": {
+    "kernel512": "ad410fc7a0301077c18d160050d46a831cc04ce245ed1600a2e18586cbc552f0"
+  },
+  "result": {},
+  "error": "AttributeError: /usr/local/cuda-12.6/lib64/libcudart.so.12: undefined symbol: cudaGetDeviceDefaultMemPool",
+  "evidence_class": "model perplexity",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_gpu.py\", line 165, in main\n    try:r=execute(c);j=make_receipt(c,'PASS',r)\n          ^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_gpu.py\", line 94, in execute\n    owner=Model(c,delta,capture=kind in ('capture','trial'),observe=kind=='ppl' and c['arm']!='A')\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_model.py\", line 97, in __init__\n    self.pool=PoolPeak();self.resident_load_mib=resident()\n              ^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_model.py\", line 32, in __init__\n    self.cuda.cudaGetDeviceDefaultMemPool.argtypes=[ctypes.POINTER(ctypes.c_void_p),ctypes.c_int]\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/ctypes/__init__.py\", line 392, in __getattr__\n    func = self.__getitem__(name)\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/ctypes/__init__.py\", line 397, in __getitem__\n    func = self._FuncPtr((name_or_ordinal, self))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: /usr/local/cuda-12.6/lib64/libcudart.so.12: undefined symbol: cudaGetDeviceDefaultMemPool\n"
+}

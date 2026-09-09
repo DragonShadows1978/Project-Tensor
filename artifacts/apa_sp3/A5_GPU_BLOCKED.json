@@ -1,0 +1,42 @@
+{
+  "status": "BLOCKED_NO_GPU",
+  "evidence_class": "order/environment constraint; no GPU probe or model execution",
+  "order_sha256": "3ba2a1874bf9b631b24b1fb1325eae9f0313a23f3fee4fb68bb751486c7b2fe7",
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "device_nodes": {
+    "/dev/nvidia0": false,
+    "/dev/nvidiactl": false
+  },
+  "reason": "Lead order specifies CPU-only dispatched sandbox; no leased GPU jobs, nvidia-smi or full-model GPU loads run.",
+  "P5": "UNASSESSED: no decode_pool measurements. Raw pool-off decode cannot establish P5 speed.",
+  "short_worker_estimate_s": [
+    60,
+    280
+  ],
+  "decode_pool_worker_TERM_s": 290,
+  "worker_grace_s": 5,
+  "outer_ceiling_s": 590,
+  "long_planning": "Same-bit/arm decode_pool8192 receipt required. setup+guard+16*prefill+4*decode_work+15; >=290s terminal non-fit before GPU lease; no retry.",
+  "long_numeric_estimates": "PENDING 8192 pool-on measurement; none fabricated. A at 8192/32768 registered dense non-fit.",
+  "original_timeout": "decode_b4_B_32768 WORKER_TIMEOUT (lead order), not claimed fixed by GPU evidence; raw decode not rerun.",
+  "pool_peak": "CUDA default-pool reserved/used high-water; legacy-shaped peak_resident_mib aliases pool reserved high water, not device resident. Raw weights/context excluded.",
+  "runtime_note": "Local inherited a4 build differs from lead build identity; no runtime waiver. 147 source-eligible PASS; zero source-invalidated; 148 original bytes preserved; 147 validate in explicitly labeled original-build CPU simulation.",
+  "disk": {
+    "default_32k_captures": false,
+    "free_bytes": 388872527872,
+    "original_a4_first_32k_range_required_bytes": 490783899647,
+    "first_range_fits": false,
+    "note": "Lead order estimates ~93GB per 32K arm; unchanged a4 conservative disk preflight is ~490.8GB. Rail not relaxed. Capture execution remains lead decision."
+  },
+  "pending": [
+    "Native pool-on controls and 32-step timings",
+    "8192-derived 32K numeric plans/fit outcomes",
+    "P5 pool-on 32K B/C ratio",
+    "Lead-owned blind verification"
+  ],
+  "process_safety": "No git, subagents, shell background jobs, process kills/signals, GPU leases, live services or live worktree access. Only bounded foreground CPU child commands; all completed.",
+  "model_id": "gpt-6-astra",
+  "reasoning_effort": "xhigh",
+  "model_receipt": "logs/apa_sp3_a5_r1.log",
+  "exact_commands": "artifacts/apa_sp3/lead_commands.txt; rerender summary after merge using preserved lead build and receipts"
+}

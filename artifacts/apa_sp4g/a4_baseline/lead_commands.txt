@@ -1,0 +1,12 @@
+# A3: run each foreground command separately; stop on RED.
+# Capture90-250s incl load30-120s; sweep30-270s without model load.
+# Worker285s/hard290s, outer588s, lease20s, cooldown30s; no C bypass.
+cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g
+bash scripts/apa_sp4g_a3_lead_gpu.sh list
+# depends: kernel512
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c0
+# depends: kernel512
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c1
+# depends: diag_a3_call_l05_c0,diag_a3_call_l05_c1
+bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_sweep_l05
+bash scripts/apa_sp4g_a3_lead_gpu.sh summary

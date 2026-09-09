@@ -1,0 +1,127 @@
+{
+  "schema": "apa_sp4g_a3_registration_v1",
+  "immutable": true,
+  "order": {
+    "path": "orders/APA_SP4G_AMENDMENT_3.md",
+    "sha256": "28c511609ff26e5798ae1b9a4353fb41a60f23d2c65bba8c8a3232b5b1390c24"
+  },
+  "before_sha256": "55035a203ec62484007ea8495b0da305fa321c686d2c8088f052be74d4ccc217",
+  "original_registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "cells": [
+    {
+      "id": "diag_a3_call_l05_c0",
+      "kind": "call",
+      "arm": "A",
+      "S": 2048,
+      "window": 0,
+      "layer": 5,
+      "call_index": 0,
+      "L": 512,
+      "S_all": 512,
+      "position_offset": 0,
+      "depends": [
+        "kernel512"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        250
+      ]
+    },
+    {
+      "id": "diag_a3_call_l05_c1",
+      "kind": "call",
+      "arm": "A",
+      "S": 2048,
+      "window": 0,
+      "layer": 5,
+      "call_index": 1,
+      "L": 511,
+      "S_all": 1023,
+      "position_offset": 512,
+      "depends": [
+        "kernel512"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        250
+      ]
+    },
+    {
+      "id": "diag_a3_sweep_l05",
+      "kind": "sweep",
+      "arm": "D",
+      "S": 2048,
+      "layer": 5,
+      "depends": [
+        "diag_a3_call_l05_c0",
+        "diag_a3_call_l05_c1"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        30,
+        270
+      ]
+    }
+  ],
+  "capture": "Run original window0 context ids[:1023], last_token_only=True, adapter adaptive chunking unchanged. Observe layer5 call0 (L512 S512 off0) or call1 (L511 S1023 off512); propagate standard A for every preceding call/layer. Save native QK scores, probabilities, attention output before merge, fork Q/K/Kq/V and dtype/offset/cache/flags metadata. Repeat standard and APA branches on identical x/cos/sin/immutable tuple cache; assert Q/K/V bitwise, isolated standard vs actual native attention and projected output bitwise. Stop by caught local exception after selected attention returns; no partial forward output is called PPL.",
+  "comparisons": "All pairs native/isolated standard/SP bf16 and fp32, plus independent dense FP32 NumPy QK-softmax-V; max_abs and relative Frobenius ||candidate-reference||F/max(||reference||F,1e-30), reductions float64. Save attention outputs plus round-to-bf16 and o_proj outputs for both fp32 candidates. NumPy staged-bf16 materialization is descriptive only, dense FP32 is primary numerical reference.",
+  "thresholds": {
+    "fp32_max_abs": 0.0001,
+    "fp32_relative_frobenius": 1e-05,
+    "rule": "BOTH absolute and relative bounds; per-call diagnostic numerical agreement only, never PPL certification",
+    "bf16": "descriptive; no widened PPL tolerance",
+    "native_replay": "bitwise Q/K/V and standard native/isolation/merge; SP diagnostic/native output bitwise and mask exactly all eligible keys",
+    "ppl_abs": 0.005,
+    "mutation_min": 0.8
+  },
+  "sweep": {
+    "scale": [
+      "1.0",
+      "D**-0.5"
+    ],
+    "sink": [
+      "none",
+      "zero"
+    ],
+    "causal": [
+      true,
+      false
+    ],
+    "offset": [
+      "native_bottom_right",
+      "absolute_rowwise",
+      "zero_rowwise"
+    ],
+    "dtype": [
+      "float32"
+    ],
+    "explanation": "24 combinations per capture. SP API has no explicit offset: rowwise replay slices keys to absolute offset+i+1, or i+1 for lost offset, then uses L1 noncausal split-K. Offsets have no effect for causal-off cells, which remain labelled controls. Rowwise is a diagnostic geometry change, not a product fix. Every variant gets its own dense FP32 NumPy specification reference. Native bf16 controls in call cells. Sinks zero is an EXTRA zero-logit zero-value denominator term, not no sink."
+  },
+  "prediction": "Source audit predicts no single scale/sink/causal/offset argument correction: nominal source matches. Existing a2 FP32 call max_abs <=4.39e-5 suggests local FP32 agreement; suspected unresolved boundary is cast-to-bf16/o_proj and downstream propagation sensitivity. Not a named root cause; do not reassert intermediate precision alone explains D-A. Both NumPy and merge captures are required to falsify this prediction.",
+  "decision_forks": {
+    "nominal_agrees": "If both nominal fp32 branches match dense and each other, no argument culprit established. Quantify cast/projected differences; stop RED pending lead propagation investigation. Do not automatically activate A prime or C.",
+    "single_argument": "Only candidate differing in ONE effective suspect, correcting a nominal mismatch on BOTH calls, and consistent with dense expected semantics qualifies as a candidate. Preserve diagnostics, name exact harness defect, append immutable treatment registration/source fingerprint; re-run D window0 with abs(D-A)<=.005, then original full short/8192 exactness before original C calibration/freeze/PPL/margins. No present auto-unblock.",
+    "semantic": "If standard differs from dense by a named reproducible operation absent in SP, leave kernel unchanged. Append A prime registration naming exact removed op, code boundary, A prime-A cost, same inputs/flags/feeding; gate D vs A prime at .005. Lead chooses reference and calibration DAG. Unknown op cannot be registered as executed.",
+    "neither": "If neither or multiple inconsistent candidates match, retain RED; no knob selection or tolerance widening."
+  },
+  "conditional_successor_cells": [
+    "ppl_a3_D_fixed_2048_w0 (only after named harness treatment registration)",
+    "ppl_a3_AP_2048_w0 (only after exact removed-op registration and lead reference decision)",
+    "exactness_a3_D_AP_2048_w0 (conditional abs<=.005; no original RED overwritten)"
+  ],
+  "cpu_gates": [
+    "existing SP4G and A2 author suites plus A3 constructed dense/reference geometry, native fork/merge instrumentation, finite metrics, sweep single-change classifier, immutable fingerprints/dependency/payload rejection, no C scheduling",
+    "copied-source mutants after baseline: >=.80 non-error kills, all planned mutants must run without errors",
+    "Python AST and shell syntax; no GPU execution"
+  ],
+  "isolation": "New a3 modules only. All preexisting execution scripts/tests/build/registration/order/receipts hash-preserved. Refresh mutable handoff outputs, preserve their a3_baseline copies. New create-only jobs_a3 namespace; no historical compatibility waiver.",
+  "rails": "Worker285s/hard290s, outer588s, lease20s, cooldown30s foreground. No GPU in sandbox; lead runs registered cells one at a time. No >=16384 retry. Never kill anything in this seat.",
+  "prior_art": "June Gemma port/floor (2026) standard MQA and chunking; SP3 (2026) same-tensor/native replay/provenance; Vaswani et al. (2017) dense scaled dot-product attention and ordinary stable softmax; BLASST/Yuan et al. (2025/2026), ThriftAttention/Sharratt (2026), FlashAttention2/Dao (2023), TurboQuant/Zandieh et al. (2025) inherited kernels/rule, no new kernel. NumPy/IEEE754 (2019) bit representation; DeMillo/Lipton/Sayward (1978) mutation testing, unverified \u2014 lead to check Hints on Test Data Selection. New work is bounded diagnostic wiring; no prior art known to me for a distinct novel method, no novelty claimed.",
+  "seat": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "xhigh",
+    "receipt": "logs/apa_sp4g_a3_r1.log"
+  }
+}

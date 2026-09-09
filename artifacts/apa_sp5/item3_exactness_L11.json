@@ -1,0 +1,154 @@
+{
+  "layer": 11,
+  "W": 1024,
+  "bulk_bits": 4,
+  "shape": {
+    "H": 64,
+    "KVH": 8,
+    "D": 64,
+    "S_captured": 1024
+  },
+  "scale": 0.125,
+  "token_sha256": "6b0ac3850d9fe65af588188ae37dd2172e77562dedb026260704777546ef2670",
+  "cases": [
+    {
+      "case": "prefill_chunk",
+      "dtype": "float32",
+      "L": 256,
+      "S": 256,
+      "causal_offset": 0,
+      "SP_vs_standard": {
+        "max_abs": 1.1444091796875e-05,
+        "rel_frobenius": 2.9591939201278573e-07,
+        "bitwise": false
+      },
+      "SP_vs_dense": {
+        "max_abs": 7.656473815842446e-06,
+        "rel_frobenius": 2.319481221024692e-07,
+        "bitwise": false
+      },
+      "standard_vs_dense": {
+        "max_abs": 7.75758206206234e-06,
+        "rel_frobenius": 1.895448556915523e-07,
+        "bitwise": false
+      },
+      "SP_vs_dense_capture_fp32ref": {
+        "max_abs": 7.656473815842446e-06,
+        "rel_frobenius": 2.319481221024692e-07,
+        "bitwise": false
+      },
+      "all_refined": true,
+      "refined_fraction": 1.0,
+      "causal_leak": 0,
+      "sp_wall_s": 0.0011735460720956326,
+      "std_wall_s": 0.0037675616331398487
+    },
+    {
+      "case": "prefill_chunk",
+      "dtype": "bfloat16",
+      "L": 256,
+      "S": 256,
+      "causal_offset": 0,
+      "SP_vs_standard": {
+        "max_abs": 0.171875,
+        "rel_frobenius": 0.004621464214131077,
+        "bitwise": false
+      },
+      "SP_vs_dense": {
+        "max_abs": 0.03064361618054967,
+        "rel_frobenius": 0.0016623935801823608,
+        "bitwise": false
+      },
+      "standard_vs_dense": {
+        "max_abs": 0.16987783167642578,
+        "rel_frobenius": 0.004323503010276194,
+        "bitwise": false
+      },
+      "SP_vs_dense_capture_fp32ref": {
+        "max_abs": 0.03064361618054967,
+        "rel_frobenius": 0.0016623935801823608,
+        "bitwise": false
+      },
+      "all_refined": true,
+      "refined_fraction": 1.0,
+      "causal_leak": 0,
+      "sp_wall_s": 0.0010286923497915268,
+      "std_wall_s": 0.0038307602517306805
+    },
+    {
+      "case": "cached_block",
+      "dtype": "float32",
+      "L": 64,
+      "S": 1024,
+      "causal_offset": 960,
+      "SP_vs_standard": {
+        "max_abs": 3.719329833984375e-05,
+        "rel_frobenius": 9.772718657668387e-07,
+        "bitwise": false
+      },
+      "SP_vs_dense": {
+        "max_abs": 3.435952088892691e-05,
+        "rel_frobenius": 7.833362230743723e-07,
+        "bitwise": false
+      },
+      "standard_vs_dense": {
+        "max_abs": 2.6069073269852083e-05,
+        "rel_frobenius": 5.537008778944028e-07,
+        "bitwise": false
+      },
+      "SP_vs_dense_capture_fp32ref": {
+        "max_abs": 3.435952088892691e-05,
+        "rel_frobenius": 7.833362230743723e-07,
+        "bitwise": false
+      },
+      "all_refined": true,
+      "refined_fraction": 1.0,
+      "causal_leak": 0,
+      "sp_wall_s": 0.002100936137139797,
+      "std_wall_s": 0.0046823578886687756
+    },
+    {
+      "case": "cached_block",
+      "dtype": "bfloat16",
+      "L": 64,
+      "S": 1024,
+      "causal_offset": 960,
+      "SP_vs_standard": {
+        "max_abs": 0.125,
+        "rel_frobenius": 0.0042636525893347595,
+        "bitwise": false
+      },
+      "SP_vs_dense": {
+        "max_abs": 0.03094195106916331,
+        "rel_frobenius": 0.0016629448741148072,
+        "bitwise": false
+      },
+      "standard_vs_dense": {
+        "max_abs": 0.1362870487425134,
+        "rel_frobenius": 0.003941440706063571,
+        "bitwise": false
+      },
+      "SP_vs_dense_capture_fp32ref": {
+        "max_abs": 0.03094195106916331,
+        "rel_frobenius": 0.0016629448741148072,
+        "bitwise": false
+      },
+      "all_refined": true,
+      "refined_fraction": 1.0,
+      "causal_leak": 0,
+      "sp_wall_s": 0.0022811461240053177,
+      "std_wall_s": 0.0031207408756017685
+    }
+  ],
+  "gate": {
+    "name": "G_exactness_per_call",
+    "threshold": "fp32 <= 1e-4 max-abs and <= 1e-5 relF",
+    "worst_fp32_SP_vs_standard_max_abs": 3.719329833984375e-05,
+    "worst_fp32_SP_vs_standard_relF": 9.772718657668387e-07,
+    "worst_fp32_SP_vs_dense_max_abs": 3.435952088892691e-05,
+    "worst_fp32_SP_vs_dense_relF": 7.833362230743723e-07,
+    "refine_all_confirmed": true,
+    "causal_leak_total": 0,
+    "status": "PASS"
+  }
+}

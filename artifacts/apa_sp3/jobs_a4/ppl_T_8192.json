@@ -1,0 +1,1407 @@
+{
+  "job": "ppl_T_8192",
+  "cell": {
+    "id": "ppl_T_8192",
+    "kind": "torch_reference",
+    "depends": [
+      "g0"
+    ],
+    "estimate_s": [
+      30,
+      480
+    ],
+    "worker_timeout_s": 480,
+    "job_ceiling_s": 590,
+    "optional_secondary": false,
+    "estimate_scope": "planning only; 60s setup/guard + 8s/layer at 8192; quadratic x16 at 32768",
+    "arm": "T",
+    "S": 8192,
+    "bits": 16
+  },
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "fingerprint": {
+    "artifacts/apa_sp3/a4_torch_sources.json": "0e584487e43c80abc41ae47ed7a8babe5f8afb913f3bc3e6a5b2e9b98ae315ef",
+    "artifacts/apa_sp3/amendment_005_long_context.json": "15b4435d81b60ff9520aa57e77575a337b52e5223c6a430b323b178c9a0c2956",
+    "artifacts/apa_sp3/amendment_007_execution_details.json": "8f15455606794cec901a72929dc50fb2717d4e57f7598387933b028932f7077b",
+    "artifacts/apa_sp3/amendment_009_decode_pool.json": "8f0809b8f00cf1db333048f63da30f1a10a907c2c9890b97733693efaa209bfc",
+    "artifacts/apa_sp3/registration.json": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "artifacts/apa_sp3/weight_identity.json": "16d121d485ad7a21fdeb8cf2b881b8ecc1bb1532185e6fd425a8cbcdc8356ead",
+    "scripts/apa_sp3_a4_jobs.py": "b66b69f786080a054250dd0f93fd56b193f4a34499e7635bbeed8c148bb02ee3",
+    "scripts/apa_sp3_a4_provenance.py": "9a0128a350b1d3706965501cfdeb66b4f5c98af0b3818ddddc853fdf710ce00b",
+    "scripts/apa_sp3_a4_registry.py": "3c8b60df4544a2e99d6b26cc77f4a8ace0ef69a7f4479902c420f5952be2bc97",
+    "scripts/apa_sp3_a4_torch.py": "96b189fb339ceb96dcffbe9baf79851d4afd72c1462554ebac1fc25a5ae24ebc",
+    "scripts/apa_sp3_a5_provenance.py": "24caecb9b392ba26c2c331cf0749591a24520c79dc549cc65503380362d2fd7d",
+    "scripts/apa_sp3_a5_registry.py": "024abce1939657eb2974609b77d7d548d056c7d91b6771e72d58ce6a7d1291fd",
+    "scripts/apa_sp3_common.py": "de8310b0c2349a10b2f83da99d1ecb7dd1dee5d817b2cd9a6ee59b24881c4ce4",
+    "scripts/apa_sp3_control.py": "0e45674552181b399a61745b6063f3320ba867f91cf62003d295a6bd6d4af9f6",
+    "scripts/apa_sp3_gpu.py": "4ecdc18f1d8442385e7dfefddb62ef9d83f56455996111ebae5e6128c6c8e7f9",
+    "scripts/apa_sp3_lead_gpu.sh": "ae1ba03e78dfde3bff57c36624ac85275cb50e52d18b24ebdcbeed588e9a4845",
+    "scripts/apa_sp3_model.py": "c3635831bb776b9bc3d9a94507db588d670a305e72a083d2124a01abce6dcee6"
+  },
+  "fingerprint_schema": "apa_sp3_per_kind_v1",
+  "fingerprint_amendment_sha256": "a2a226e5cadd63c1357f8918b26a144c939d646cfee12cc43d1a8c1cc2363fa8",
+  "protocol_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224",
+  "status": "PASS",
+  "pid": 2260052,
+  "process_identity": {
+    "pid": 2260052,
+    "boot_id": "610633ba-2ced-4048-a3b0-cd84fc89ba5f",
+    "start_ticks": "270954981"
+  },
+  "evidence_class": "kernel sweep",
+  "dependencies": {
+    "g0": "ca58e7c16a53b6ab717eefa009306d2d92d8c944f34f458ab26611235a895266"
+  },
+  "result": {
+    "ppl": 8.475996262952835,
+    "total_nll": 1094.265958148332,
+    "mean_nll": 2.137238199508461,
+    "targets": 512,
+    "windows": [
+      {
+        "ppl": 8.475996262952835,
+        "mean_nll": 2.137238199508461,
+        "total_nll": 1094.265958148332,
+        "targets": 512,
+        "target_sha256": "a9f652930fba3b46d109c537db4e4258c3e80c5affda8dacc2af1ca0a5d427e2",
+        "wall_ms": 2256.1918180435896,
+        "peak_resident_mib": 9922.875,
+        "peak_allocated_mib": 8913.51953125,
+        "peak_reserved_mib": 9452.0,
+        "peak_status": "ESTIMATE: PyTorch reserved high-water plus pre-call device/context offset; internal driver transients may be missed",
+        "window": 0,
+        "start": 0
+      }
+    ],
+    "feeding": "one_full_prefill_per_window_no_cache_between_windows",
+    "target_sha256": "a9f652930fba3b46d109c537db4e4258c3e80c5affda8dacc2af1ca0a5d427e2",
+    "wall_ms": 2256.1918180435896,
+    "timing": "sum of independent full-prefill forward walls; sync each; NLL excluded",
+    "peak_resident_mib": 9922.875,
+    "peak_status": "max of per-window estimated peaks; see window receipts",
+    "arm": "T",
+    "S": 8192,
+    "fit": true,
+    "weight_bits": 16,
+    "evidence_class": "model perplexity, reference",
+    "sdpa_calls": [
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      },
+      {
+        "backend": "SDPBackend.EFFICIENT_ATTENTION",
+        "flash_supported": false,
+        "efficient_supported": true,
+        "q_shape": [
+          1,
+          40,
+          8192,
+          96
+        ],
+        "v_shape": [
+          1,
+          40,
+          8192,
+          64
+        ],
+        "sm": [
+          8,
+          9
+        ]
+      }
+    ],
+    "sdpa_backends": [
+      "SDPBackend.EFFICIENT_ATTENTION"
+    ],
+    "compatibility": [
+      "legacy is_torch_fx_available = hasattr(torch, fx)",
+      "legacy tied-weight list converted to identical embedding/head mapping",
+      "rebuild nonpersistent rotary buffers with unchanged remote _init_rope after meta loading"
+    ],
+    "packages": {
+      "torch": "2.11.0",
+      "transformers": "5.12.0"
+    },
+    "source_sha256": "0e584487e43c80abc41ae47ed7a8babe5f8afb913f3bc3e6a5b2e9b98ae315ef",
+    "projection": "only 512 required LM-head rows; full S attention, no cache, no attention chunks"
+  },
+  "wall_s": 10.308564934879541
+}

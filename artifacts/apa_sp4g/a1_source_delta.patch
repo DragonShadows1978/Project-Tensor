@@ -1,0 +1,492 @@
+--- r1/scripts/apa_sp4g_common.py
++++ a1/scripts/apa_sp4g_common.py
+@@ -58,26 +58,53 @@
+     import tensor_cuda as tc
+     if Path(tc.__file__).resolve().parent!=R/'tensor_cuda/tensor_cuda' or Path(tc._C.__file__).resolve().parent!=BUILD:raise Red('WRONG_ENGINE_CHECKOUT')
+     return tc
+-def job_path(name):return A/'jobs'/f'{name}.json'
++def job_path(name):return A/('jobs' if name=='kernel512' else 'jobs_a1')/f'{name}.json'
++
++def require_margin_rail(name):
++    # SP3 (2026) explicit rail forks: a failed whole-layer measurement is
++    # preserved and never reclassified. Only current RAIL permits opt-in bands.
++    from apa_sp4g_registry import by_id
++    c=by_id()[name];j=read(job_path(name))
++    if (c['kind']!='margin_layer' or j.get('cell')!=c or j.get('status')!='RED'
++            or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint(c)
++            or j.get('result',{}).get('outcome')!='RAIL'):
++        raise Red('FALLBACK_REQUIRES_CURRENT_WHOLE_LAYER_RAIL: '+name)
++    for d in c['depends']:require_pass(d)
++    if j.get('dependencies')!={d:sha(dependency_path(d)) for d in c['depends']}:
++        raise Red('FALLBACK_RAIL_DEPENDENCY_CHANGED: '+name)
++    return j
++
++def dependency_path(name):
++    from apa_sp4g_registry import by_id
++    if by_id()[name]['kind']=='margin_layer' and job_path(name+'_bands').exists():
++        require_margin_rail(name)
++        return job_path(name+'_bands')
++    return job_path(name)
+ # Per-kind import closure: report-only edits never invalidate model receipts.
+ CLOSURES={
+  'kernel':['gpu'], 'capture':['gpu','model'], 'trial':['gpu','model'],
+- 'freeze':['gpu'], 'margin':['gpu','metrics'], 'margin_summary':['gpu','metrics'],
++ 'freeze':['gpu'], 'margin_layer':['gpu','metrics'], 'margin_band':['gpu','metrics'], 'margin_summary':['gpu','metrics'],
+  'eq':['gpu','metrics'], 'ppl':['gpu','model'], 'ppl_summary':['gpu'], 'exactness':['gpu'],
+  'ceiling':['gpu','model'], 'decode':['gpu','model']}
+ def fingerprint(cell):
+-    names=['common','registry']+CLOSURES[cell['kind']]
++    names=['common','registry','a1_provenance']+CLOSURES[cell['kind']]
+     paths=[R/f'scripts/apa_sp4g_{n}.py' for n in sorted(set(names))]
+     paths += [R/'scripts/apa_sp4g_lead_gpu.sh',A/'registration.json',BUILD/'manifest.json',A/'CPU_GATES.json']
++    paths += [A/'amendment_002_a1_execution.json']
+     return {str(p.relative_to(R)):sha(p) for p in paths}
+ def require_pass(name,cache=None):
+     from apa_sp4g_registry import by_id
+     cache=(VALIDATION.get() if VALIDATION.get() is not None else {}) if cache is None else cache
+     if name in cache:return cache[name]
+     j=read(job_path(name));c=by_id()[name]
+-    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint(c):raise Red('STALE_OR_RED_RECEIPT: '+name)
++    if c['kind']=='margin_layer' and job_path(name+'_bands').exists():
++        require_margin_rail(name)
++        cache[name]=require_pass(name+'_bands',cache);return cache[name]
++    from apa_sp4g_a1_provenance import legacy_compatible
++    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or (j.get('fingerprint')!=fingerprint(c) and not legacy_compatible(j)):raise Red('STALE_OR_RED_RECEIPT: '+name)
++    if 'fallback_for' in c:require_margin_rail(c['fallback_for'])
+     expected={}
+-    for d in c['depends']:require_pass(d,cache);expected[d]=sha(job_path(d))
++    for d in c['depends']:require_pass(d,cache);expected[d]=sha(dependency_path(d))
+     if j.get('dependencies')!=expected:raise Red('DEPENDENCY_CHANGED: '+name)
+     for f in j.get('result',{}).get('files',[]):
+         # SP3 a4: rehash at creation; exact inode/size/mtime/ctime identity
+--- r1/scripts/apa_sp4g_gpu.py
++++ a1/scripts/apa_sp4g_gpu.py
+@@ -72,9 +72,9 @@
+             r=require_pass(d)['result']
+             if abs(r['fraction']-target)<=.01:return dict(delta=r['delta'],fraction=r['fraction'],target=target,trial=r.get('carried_from',d),match_abs=abs(r['fraction']-target))
+         raise Red('C_MATCH_FAILED_12_REGISTERED_TRIALS')
+-    if kind in ('margin','margin_summary','eq'):
+-        from apa_sp4g_metrics import band,summarize,eq_result
+-        return {'margin':band,'margin_summary':summarize,'eq':eq_result}[kind](c)
++    if kind in ('margin_layer','margin_band','margin_summary','eq'):
++        from apa_sp4g_metrics import band,whole_layer,summarize,eq_result
++        return {'margin_layer':whole_layer,'margin_band':band,'margin_summary':summarize,'eq':eq_result}[kind](c)
+     delta=None
+     if c['arm']=='C':
+         if kind=='trial':
+@@ -115,20 +115,24 @@
+ 
+ def evidence(c):return 'model perplexity' if c['kind'] in ('ppl','ppl_summary','exactness') else 'kernel sweep' if c['kind'] not in ('freeze','eq') else 'finite calibration / reasoning'
+ def make_receipt(c,status,result,error=None):
+-    return dict(cell=c,status=status,registration_sha256=REG_SHA,fingerprint_schema='apa_sp4g_per_kind_v1',fingerprint=fingerprint(c),dependencies={d:sha(job_path(d)) for d in c['depends']},result=result,error=error,evidence_class=evidence(c))
++    return dict(cell=c,status=status,registration_sha256=REG_SHA,fingerprint_schema='apa_sp4g_per_kind_v1',fingerprint=fingerprint(c),dependencies={d:sha(dependency_path(d)) for d in c['depends']},result=result,error=error,evidence_class=evidence(c))
+ def preflight(c):
+     verify_sources();verify_weight();tokens();build_check()
+-    gate=read(A/'CPU_GATES.json')
++    from apa_sp4g_a1_provenance import bridge
++    amendment=bridge()
++    gate=read(A/'CPU_GATES_A1.json')
+     if gate.get('status')!='PASS_CPU_ONLY' or gate.get('registration_sha256')!=REG_SHA:raise Red('CPU_GATE_REQUIRED')
++    if gate.get('fingerprint_amendment_sha256')!=amendment['sha256']:raise Red('CPU_GATE_AMENDMENT_CHANGED')
+     for p,h in gate['execution_sha256'].items():
+         if sha(R/p)!=h:raise Red('CPU_GATE_STALE: '+p)
+     if job_path(c['id']).exists():require_pass(c['id']);return 'DONE'
+     cache={}
+     for d in c['depends']:require_pass(d,cache)
+-    if c['kind'] in ('capture','trial','margin','margin_summary'):
++    if 'fallback_for' in c:require_margin_rail(c['fallback_for'])
++    if c['kind'] in ('capture','trial','margin_layer','margin_band','margin_summary'):
+         # Conservative owned-artifact headroom, not a capacity extrapolation:
+         # current cell output plus scratch; full all-pair output retained.
+-        need=12*(1<<30) if c['kind']=='margin_summary' else 8*(1<<30)
++        need=12*(1<<30) if c['kind'] in ('margin_layer','margin_summary') else 8*(1<<30)
+         if shutil.disk_usage(A).free<need:raise Red('DISK_RAIL_NEEDS_BYTES: '+str(need))
+     return 'CPU' if c['kind'] in CPU_KINDS else 'GPU'
+ def idle():
+--- r1/scripts/apa_sp4g_metrics.py
++++ a1/scripts/apa_sp4g_metrics.py
+@@ -26,9 +26,13 @@
+     if m['arm']!=cell['arm'] or m['S']!=cell['S']:raise Red('CAPTURE_CELL_MISMATCH')
+     return p.parent,m
+ 
+-def band(cell):
++def replay_context(cell):
+     os.environ['TC_APA_SP']='1';directory,m=capture_for(cell);tc=load_runtime()
+     import _apa_sp4g_diag as diag
++    return directory,m,tc,diag
++
++def band(cell,context=None):
++    directory,m,tc,diag=replay_context(cell) if context is None else context
+     layer=cell['layer'];lo=cell['lo'];hi=lo+cell['n'];records=m['records'][str(layer)]
+     # Restore exact BF16-representable floats; intersect original adaptive query
+     # chunks, preserve absolute bottom-right alignment by truncating K at stop.
+@@ -65,10 +69,10 @@
+     pairs=err.size;count=int(selected.sum())
+     return dict(files=[f],error_file=f['path'],pairs=pairs,selected=count,fraction=count/pairs,queries=len(masses),mass_sum=float(sum(masses)),mass_max=max(masses),max_skipped_relative_weight=max(relative),eq_sp=float(sperr.max()),replay_bitwise=True)
+ 
+-def summarize(cell):
+-    rows=[require_pass(d)['result'] for d in cell['depends']]
++def aggregate_rows(cell,rows):
+     pairs=sum(r['pairs'] for r in rows);expected=16*cell['S']*(cell['S']+1)//2
+     if pairs!=expected or sum(r['queries'] for r in rows)!=16*cell['S']:raise Red('MARGIN_ALL_PAIR_COVERAGE')
++    if not all(r['replay_bitwise'] for r in rows):raise Red('NATIVE_REPLAY_NOT_BITWISE')
+     # Scratch is unique and owned by this worker; durable errors remain hashed.
+     scratch=A/'scratch'/f'{cell["id"]}.{os.getpid()}.errors';scratch.parent.mkdir(exist_ok=True)
+     if scratch.exists():raise Red('SCRATCH_EXISTS')
+@@ -80,6 +84,22 @@
+         return dict(error=er,eq_sp=max(r['eq_sp'] for r in rows),pairs=pairs,selected=count,fraction=count/pairs,unrefined_mass_mean=sum(r['mass_sum'] for r in rows)/(16*cell['S']),unrefined_mass_max=max(r['mass_max'] for r in rows),max_skipped_relative_weight=max(r['max_skipped_relative_weight'] for r in rows),coverage='all causal pairs; nearest-rank exact population',replay_bitwise=all(r['replay_bitwise'] for r in rows))
+     finally:del x;scratch.unlink()
+ 
++def whole_layer(cell):
++    # Prior art: existing SP4G/SP3 (2026) exact capture replay, tiled dots,
++    # memory maps and population order statistics. A1 coalesces dispatch only.
++    # All 16 query heads remain in the population despite ONE shared KV head.
++    context=replay_context(cell);rows=[]
++    for lo in range(0,cell['S'],128):
++        tile=dict(cell,id=f'{cell["id"]}_tile_q{lo:05d}',lo=lo,n=min(128,cell['S']-lo))
++        rows.append(band(tile,context))
++    result=aggregate_rows(cell,rows)
++    return dict(result,files=[f for r in rows for f in r['files']],
++                replay_tiles=len(rows),execution='one whole-layer worker')
++
++def summarize(cell):
++    rows=[require_pass(d)['result'] for d in cell['depends']]
++    return aggregate_rows(cell,rows)
++
+ def eq_result(cell):
+     rows=[require_pass(d)['result'] for d in cell['depends']];eq=upward(max(r['eq_sp'] for r in rows))
+     return dict(eq=eq,epsilon=.01,delta=upward(math.log(100)+2*eq),calibration='all B/C global layers at2048/8192; finite empirical real-key maximum; conditional bound only, not universal',source_count=len(rows))
+--- r1/scripts/apa_sp4g_model.py
++++ a1/scripts/apa_sp4g_model.py
+@@ -11,6 +11,22 @@
+ 
+ ENV={'GEMMA4_APA_INT4':'0','GEMMA4_APA_GEMM':'0','GEMMA4_APA_DECODE_FUSED':'1','GEMMA4_QUANT_V':'0','GEMMA4_QUANT_KV4':'0','TC_APA_SELECTIVE_PATH':'0','TC_ATTN_QTILE':'0'}
+ 
++# Prior art: NVIDIA CUDA Runtime 12.6 (2024), cuda_runtime_api.h; SP3 A5
++# (2026) pool counters. Resolve the complete ABI on import, before model load.
++# Symbol lookup does not call CUDA or require a GPU. No new algorithm.
++CUDART_PATH='/usr/local/cuda-12.6/lib64/libcudart.so.12'
++CUDART_SIGNATURES={
++    'cudaGetDevice': [ctypes.POINTER(ctypes.c_int)],
++    'cudaDeviceGetDefaultMemPool': [ctypes.POINTER(ctypes.c_void_p),ctypes.c_int],
++    'cudaMemPoolGetAttribute': [ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p],
++    'cudaMemPoolSetAttribute': [ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p],
++}
++CUDART=ctypes.CDLL(CUDART_PATH)
++for _name,_args in CUDART_SIGNATURES.items():
++    _symbol=getattr(CUDART,_name)
++    _symbol.argtypes=_args
++    _symbol.restype=ctypes.c_int
++
+ def nll(logits,targets):
+     # Prior art: next-token cross entropy (Shannon1948), June floor; fp64
+     # max-shift logsumexp, standard numerical analysis, no novel scoring rule.
+@@ -28,9 +44,7 @@
+ class PoolPeak:
+     # Prior art: NVIDIA CUDA12.6 pool attributes; copied scope of SP3 A5.
+     def __init__(self):
+-        self.cuda=ctypes.CDLL('/usr/local/cuda-12.6/lib64/libcudart.so');self.pool=ctypes.c_void_p();d=ctypes.c_int()
+-        self.cuda.cudaGetDeviceDefaultMemPool.argtypes=[ctypes.POINTER(ctypes.c_void_p),ctypes.c_int]
+-        for name in ('cudaMemPoolGetAttribute','cudaMemPoolSetAttribute'):getattr(self.cuda,name).argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_void_p]
++        self.cuda=CUDART;self.pool=ctypes.c_void_p();d=ctypes.c_int()
+         self.check(self.cuda.cudaGetDevice(ctypes.byref(d)));self.check(self.cuda.cudaDeviceGetDefaultMemPool(ctypes.byref(self.pool),d))
+     @staticmethod
+     def check(rc):
+--- r1/scripts/apa_sp4g_registry.py
++++ a1/scripts/apa_sp4g_registry.py
+@@ -9,7 +9,7 @@
+ def cells():
+     out=[]
+     def add(name,kind,depends=(),**kw):
+-        est={'kernel':[2,45],'margin':[5,120],'margin_summary':[1,120],'freeze':[1,5],'eq':[1,5],'ppl_summary':[1,5],'exactness':[1,5]}.get(kind,[60,285])
++        est={'kernel':[2,45],'margin_layer':([10,90] if kw.get('S')==2048 else [60,270]),'freeze':[1,5],'eq':[1,5],'ppl_summary':[1,5],'exactness':[1,5]}.get(kind,[60,285])
+         c=dict(id=name,kind=kind,depends=list(depends),bits=4,apa_min_context=0,worker_s=285,estimate_s=est,**kw);out.append(c);return name
+     k=add('kernel512','kernel')
+     b=add('capture_B_2048','capture',[k],arm='B',S=2048)
+@@ -22,9 +22,9 @@
+     for S in (2048,8192):
+         for arm in 'BC':
+             for layer in LAYERS:
+-                bands=[]
+-                for lo in range(0,S,128):bands.append(add(f'margin_{arm}_{S}_l{layer:02d}_q{lo:05d}','margin',[caps[S,arm]],arm=arm,S=S,layer=layer,lo=lo,n=128))
+-                sums.append(add(f'margin_{arm}_{S}_l{layer:02d}','margin_summary',bands,arm=arm,S=S,layer=layer))
++                # Lead A1 (2026): same SP4G population/replay, one lease per
++                # layer. Internal tiling is unchanged; no new algorithm.
++                sums.append(add(f'margin_{arm}_{S}_l{layer:02d}','margin_layer',[caps[S,arm]],arm=arm,S=S,layer=layer))
+     eq=add('eq','eq',sums)
+     for arm in 'ABDCE':
+         deps=[k]+([freeze] if arm=='C' else [eq] if arm=='E' else [])
+@@ -41,7 +41,7 @@
+         if c['id']=='capture_B_2048':c['depends'].append(exact)
+     # Independence permits earlier quality cells; stable topological priority
+     # keeps first model comparisons ahead of the large margin sweep.
+-    priority={'kernel':0,'ppl':1,'ppl_summary':1,'exactness':1,'capture':2,'trial':3,'freeze':4,'ceiling':5,'decode':6,'margin':7,'margin_summary':8,'eq':9}
++    priority={'kernel':0,'ppl':1,'ppl_summary':1,'exactness':1,'capture':2,'trial':3,'freeze':4,'ceiling':5,'decode':6,'margin_layer':7,'eq':9}
+     ordered=[];seen=set()
+     while len(ordered)<len(out):
+         ready=[c for c in out if c['id'] not in seen and set(c['depends'])<=seen]
+@@ -55,4 +55,18 @@
+         c=min(ready,key=rank);ordered.append(c);seen.add(c['id'])
+     return ordered
+ @lru_cache(maxsize=1)
+-def by_id():return {c['id']:c for c in cells()}
++def fallback_cells():
++    # SP3 bounded work (2026); explicit lead run after whole-layer rail only.
++    out=[]
++    for c in cells():
++        if c['kind']!='margin_layer':continue
++        bands=[]
++        for lo in range(0,c['S'],128):
++            name=f'{c["id"]}_q{lo:05d}';bands.append(name)
++            out.append(dict(c,id=name,kind='margin_band',lo=lo,n=128,
++                            estimate_s=[5,120],fallback_for=c['id']))
++        out.append(dict(c,id=c['id']+'_bands',kind='margin_summary',
++                        depends=bands,estimate_s=[1,120],fallback_for=c['id']))
++    return out
++@lru_cache(maxsize=1)
++def by_id():return {c['id']:c for c in cells()+fallback_cells()}
+--- r1/scripts/apa_sp4g_report.py
++++ a1/scripts/apa_sp4g_report.py
+@@ -4,7 +4,7 @@
+ """
+ import collections,json,math
+ from apa_sp4g_common import *
+-from apa_sp4g_registry import cells,LAYERS
++from apa_sp4g_registry import cells,fallback_cells,LAYERS
+ 
+ def render():
+     r=registration();cs=cells();cache={};jobs={};audit=[]
+@@ -19,13 +19,13 @@
+         return 'RED / STALE' if job_path(name).exists() else 'UNRUN'
+     def fmt(x):return '—' if x is None else f'{x:.6g}' if isinstance(x,float) else str(x)
+     def row(*x):return '| '+' | '.join(fmt(v) for v in x)+' |'
+-    cpu=read(A/'CPU_GATES.json') if (A/'CPU_GATES.json').exists() else {'status':'PENDING'}
++    cpu=read(A/'CPU_GATES_A1.json') if (A/'CPU_GATES_A1.json').exists() else {'status':'PENDING'}
+     lines=['# APA-SP4G results', '',
+       f'**CPU {cpu["status"]}; GPU {"receipts present, inspect tables" if jobs or audit else "BLOCKED: no device in this seat; zero GPU cells executed"}.** No Gemma PPL, margin, ceiling or decode result is claimed without a valid current receipt.',
+       '',f'Registration SHA: `{REG_SHA}`. Model reference A is the engine\'s QAT INT4 Gemma-4-12B-it (exact q4_0 symmetric-8 group32 import, BF16 compute). A 12B BF16 weight set is roughly 24GB and does not fit the 12GB card; no torch or full-BF16 model reference was loaded. This tests attention changes inside this engine; it cannot establish parity to a BF16 model.',
+-      '', '## Adapter facts and PROTOCOL-G', '',
++      '', '## Amendment 1 status', '', 'Original card evidence: kernel512 PASS; ppl_A_2048_w0 RED with `AttributeError: /usr/local/cuda-12.6/lib64/libcudart.so.12: undefined symbol: cudaGetDeviceDefaultMemPool`. Both original receipts remain byte-identical in jobs/. The CUDA pool typo is repaired and all four APIs resolve on model-module import before model loading. New executions write jobs_a1/. Not claimed fixed: model PPL execution on the card has not been rerun in this seat.', '', 'Kernel512 remains valid through amendment_003_a1_fingerprint.json: raw common/registry/gpu closure files changed, so byte-identical closure is NOT claimed. The exact reviewed bridge pins before/after hashes; kernel512 function bytes, kernel dispatch, runtime loader, compiled build and numerical inputs remain unchanged. Unknown transitions fail closed; no RED receipt is eligible.', '', '## Adapter facts and PROTOCOL-G', '',
+       'Source inspection: `gemma4_tc.py:568/658` gates APA by strict `S_all > apa_min_context`; EVERY B/C/D/E cell sets `apa_min_context=0` and `fast_max_seq=0`. Thus the short windows actually exercise fused APA. A stays standard. B is reconstructed-key `apa_selective_attention` at lines 609/712, bulk 4/r=.15, with INT4/GEMM opt-ins off. C/D/E dispatch from that SAME binding with Q[B,16,L,512] and K/Kq/V[B,1,S,512], BF16, scale=1. No V padding or head expansion difference between arms. Hidden activations can differ as attention changes.',
+-      '', 'Both SP launchers already instantiate 512 (kernels.cu:7496, apa_sp1_1.cuh:179) and map 16 query heads to KV=1. Tests: `test_d512_mqa_prefill_contract_and_dense_pin`, `test_d512_mqa_splitk_contract_and_dense_pin`, `test_compiled_d512_mqa_flag_device_scalar_guards`; native numerical receipt will be `kernel512`. No production source or kernel-body edits.',
++      '', 'Both SP launchers already instantiate 512 (kernels.cu:7496, apa_sp1_1.cuh:179) and map 16 query heads to KV=1. Tests: `test_d512_mqa_prefill_contract_and_dense_pin`, `test_d512_mqa_splitk_contract_and_dense_pin`, `test_compiled_d512_mqa_flag_device_scalar_guards`; native numerical receipt `jobs/kernel512.json` PASSED on the lead card. No production source or kernel-body edits.',
+       '', '`KVRing.quantized_keys` at gemma4_tc.py:353-388 quantizes only `[kq_count:count)`, in 512-row chunks at cold start and ONE new row thereafter. CPU behavior pin: `test_live_gemma_kq_cache_only_quantizes_new_rows`. This path retains the June incremental fix. Prefill still quantizes whole prefixes (in 2048-row chunks above 4096); that is distinct from decode. Gemma K/V shared projection does not imply equal stored tensors: K is normalized/roped and V uses scale-free normalization without RoPE.',
+       '', f'Offline wikitext-2-raw-v1 test: {r["protocol"]["rows"]} Arrow rows, newline join exactly as June floor, no fallback. Default -it tokenizer, no chat template or per-window BOS. **{r["protocol"]["token_count"]} tokens**, canonical little-endian int64 SHA `{r["protocol"]["token_sha256"]}`; `.npy` SHA `{r["protocol"]["tokens_file_sha256"]}`. `tokens.npy` and all tokenizer/corpus inputs are pinned in registration.',
+       '', 'One feeding scheme for all arms: fresh caches per window; prefix of S−scored−1 tokens through June adaptive PREFILL_CHUNK=512, then 64-query cached blocks. Logits at positions S−scored−1 through S−2 predict targets S−scored through S−1. Short: four consecutive 2048-token windows at offsets 0/2048/4096/6144, exactly 1024 targets each (4096 total). Long: prefix 0, last 512 targets within input at 8192/16384/32768. FP64 log-softmax; aggregate exp(total NLL / total targets), never average PPL. June floor starts one query later and actually scores 1023; the mandated1024/fp64 correction is pre-registered.',
+@@ -41,7 +41,7 @@
+             lines.append(row(S,arm,status(name),j.get('targets'),p,p-av if p is not None and av is not None else None,j.get('global_fraction',{}).get('fraction')))
+     lines+=['','Short in-model D/A gate: '+status('exactness_2048')+'. Tolerance remains 0.005; RED blocks C calibration. Long D/A differences remain independently visible above.','',
+       '## G2 global margins — kernel sweep on real model activations', '',
+-      'All causal pairs, no sampling. Bands preserve absolute causal alignment and must replay the captured output bitwise. Error percentiles are nearest-rank over the entire layer population; no averaging percentiles. Unrefined mass is the mean per-query exact softmax mass on skipped keys; relative weight is max exp(exact_skipped − row_max_exact). These are different quantities.', '',
++      'All causal pairs, no sampling. One whole-layer cell per (S, arm, layer); internal 128-query tiles preserve absolute causal alignment and must replay the captured output bitwise. Error percentiles are nearest-rank over the entire layer population; no averaging percentiles. Unrefined mass is the mean per-query exact softmax mass on skipped keys; relative weight is max exp(exact_skipped − row_max_exact). These are different quantities.', '',
+       '| S | Arm | Layer | Status | Mean error | p99 | p99.9 | Max error | Mean unrefined mass | Max skipped relative weight | Fraction |',
+       '|---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|']
+     for S in (2048,8192):
+@@ -79,35 +79,41 @@
+     else:assessments['P5']='UNASSESSED; incomplete grid or rail is not an OOM'
+     lines+=['','Assessments: `'+json.dumps(assessments)+'`. Predictions are not measurements or pass criteria except the explicitly registered D/A exactness gate.', '',
+       '## CPU gates, lead commands, and wall estimates', '',
+-      '`'+json.dumps({k:v for k,v in cpu.items() if k!='execution_sha256'})+'` (complete source pins: `CPU_GATES.json`).', '',
++      '`'+json.dumps({k:v for k,v in cpu.items() if k!='execution_sha256'})+'` (complete source pins: `CPU_GATES_A1.json`).', '',
+       'Full cell manifest: `cells.json`; exact dependency-ordered commands and PER-JOB estimates: `lead_commands.txt`. Each resume runs at most ONE cell, stops on RED/stale evidence, and never overwrites a receipt. Independent cells can be selected by explicit run commands after a different cell hits a rail. No automatic retries or unbounded batch.', '',
+       '```bash','cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g','bash scripts/apa_sp4g_lead_gpu.sh list','bash scripts/apa_sp4g_lead_gpu.sh run kernel512','bash scripts/apa_sp4g_lead_gpu.sh run ppl_A_2048_w0','bash scripts/apa_sp4g_lead_gpu.sh resume','bash scripts/apa_sp4g_lead_gpu.sh summary','```', '',
+-      'QAT 12B load estimate ALONE: 30–120s, unmeasured, including GGUF read/repack/upload and per-layer garbage collection. Each model job estimate 60–285s including load; long runs may exceed the rail and become RED. Kernel 2–45s; each 128-query margin band 5–120s; population aggregation 1–120s. Worker TERM 285s plus5s owned-child grace =290s hard maximum. Outer TERM 585s plus3s grace =588s, under 590. Lease wait 20s; foreground 30s cooldown while retaining lock after GPU jobs. Only owned timeout children may be signalled; no process discovery-to-kill behavior.', '',
+-      f'There are {len(cs)} bounded cells, including 1280 G2 band cells. This conservative split is costly: those band cooldowns alone total {1280*30/3600:.2f} hours if every band is dispatched separately. It prioritizes explicit bounded all-pair receipts over an unverified claim that a whole 8192 layer fits 285s. A lead-authorized batching amendment could reduce lease overhead; none is silently applied. Full retained G2 float64 error populations require about 73GB plus captures; cell disk rails never reduce coverage.', '',
+-      '## Prior art', '']
++      'QAT 12B load estimate ALONE: 30–120s, unmeasured, including GGUF read/repack/upload and per-layer garbage collection. Each model job estimate 60–285s including load; long runs may exceed the rail and become RED. Kernel 2–45s; whole-layer margins at2048:10–90s, at8192:60–270s, including replay, CPU exact dots and full-population percentiles, with no model load. Estimates are unmeasured. Explicit fallback bands5–120s and fallback aggregation1–120s. Worker TERM 285s plus5s owned-child grace =290s hard maximum. Outer TERM 585s plus3s grace =588s, under 590. Lease wait 20s; foreground 30s cooldown while retaining lock after GPU jobs. Only owned timeout children may be signalled; no process discovery-to-kill behavior.', '',
++      f'There are {len(cs)} default cells, including32 whole-layer G2 cells (16 per length). S8192 cooldown falls from1024 to16 jobs:512 minutes to8 minutes; both lengths together960s=16 minutes. ONE KV head is shared by16 query heads: S8192 has536,936,448 causal query-head/key pairs per layer, and S2048 has33,570,816. All are included. Internal replay tiles remain128 queries; full retained float64 errors require about73GB plus captures. A whole-layer job hitting the unchanged rail stays RED. Only then may the lead explicitly run that layer’s margin_band and margin_summary cells listed in lead_commands_fallback.txt; default resume never dispatches fallback cells. A valid completed fallback summary can satisfy the layer dependency while retaining the original RED. Per-cell12GiB disk headroom covers retained errors plus population scratch.', '',
++      '## Prior art', '', 'Amendment1 introduces no new algorithm or prior art. Reuses SP3 a4(2026) exact reviewed fingerprint transitions, existing SP4G/June(2026) replay and population statistics, and NVIDIA CUDA Runtime12.6(2024) ABI verified against installed cuda_runtime_api.h/driver_types.h. New work is symbol spelling, import-time resolution and dispatch coalescing only.', '']
+     for title,detail in r['prior_art'].items():lines.append(f'- **{title}:** {detail}.')
+     lines+=['',r['literature_status']+'. Code comments and ledger state what is reused. SP4G adds experiment wiring, not a new attention algorithm. Bulk4 is reconstructed BF16 Kq computed by existing floating-point dots; this does not demonstrate packed FP4 arithmetic or compressed KV residency.', '',
+       '## Deviations, RED, residual risks, and process safety', '',
+-      '- No GPU was available in this seat. P1–P5, native diagnostic bit parity, real-model exactness/quality, observed fractions, memory fit, and throughput remain unmeasured until lead receipts exist. Host compilation is not CUDA numerical validation.',
++      '- No GPU was available in this seat. P1–P5, real-model diagnostic replay/exactness/quality, observed fractions, memory fit, and throughput remain unmeasured until valid lead receipts exist; the original D512/MQA kernel pin passed. Host compilation is not CUDA numerical validation.',
+       '- June off-by-one correction/fp64 and forced fused threshold 0 are registered. The floor default fast_max_seq=4096 would use blend at short S; the order explicitly requests fused B. INT4/GEMM opt-ins and K/V-storage quantization are off for tensor parity. Adaptive prefill can change the lead ceiling prediction; no full dense-prefill result is implied.',
+       '- E\'s eq is a finite maximum over B/C activations, not a universal bound on E-induced or unseen activations/longer sequences. Transfer is a measured hypothesis. C\'s matched fraction is the prefix calibration population, not a guarantee of ±0.01 on all scored windows or decode partition-local maxima.',
+       '- Diagnostic masks and captures add overhead only to diagnostic/PPL cells. Clean decode has no diagnostics. Full clean numerical output parity at real Gemma shapes and long rails is still untested.',
+-      '- `Not claimed fixed`: no observed GPU failure was reproduced or repaired. No production source changed. Author tests/mutations are baseline evidence; House Rules blind verification is lead-owned and UNRUN. Bulk8 secondary is deferred; no bulk8 claims.',
++      '- `Not claimed fixed`: the full model cell has not yet been rerun on the card. The reported symbol failure was reproduced and repaired at CPU import/symbol resolution scope. No production source changed. Author tests/mutations are baseline evidence; House Rules blind verification is lead-owned and UNRUN. Bulk8 secondary is deferred; no bulk8 claims.',
+       '- Receipts are atomic create-only, dependency/fingerprint checked per kind. Array creation hashes plus exact stat identity protect large artifacts on reuse; metadata JSON is rehashed. Unknown source transitions invalidate reuse and require separate amendments. Timeout/OOM evidence is preserved, never promoted to a successful model-quality result.',
+       '- No git commands, subagents, shell background jobs, live-service changes, or foreign-process signals. All execution was local preparation, host build and CPU verification. Read-only SP3 modules/receipts, Graft adapter/docs, and models were preserved.',
+-      f'- Model identity/effort honesty: {r["execution"]["model_id"]}; {r["execution"]["reasoning_effort"]}.',
++      '- Amendment1 seat: gpt-6-astra, reasoning xhigh, confirmed by logs/apa_sp4g_a1_r1.log. Original registration identity fields remain immutable.',
+       '', 'Receipt audit failures: `'+json.dumps(audit)+'`.', '',
+-      'Sources of truth: registration.json, cells.json, CPU_GATES.json, GPU_BLOCKED.json, build/manifest.json, jobs/*.json when run, logs/apa_sp4g_*, and docs/APA_SP4G_LEDGER.md.']
++      'Sources of truth: registration.json, cells.json, CPU_GATES_A1.json, GPU_BLOCKED_A1.json, amendment_002_a1_execution.json, amendment_003_a1_fingerprint.json, build/manifest.json, jobs/*.json and jobs_a1/*.json, logs/apa_sp4g_*, and docs/APA_SP4G_LEDGER.md.']
+     (A/'RESULTS.md').write_text('\n'.join(lines)+'\n')
+     (A/'receipt_audit.json').write_text(json.dumps(dict(valid=len(jobs),red_or_stale=audit,unrun=len(cs)-len(jobs)-len(audit)),indent=2)+'\n')
+-    command=['# APA-SP4G exact commands, dependency order. No batch is automatically started.', '# Model load ALONE: 30-120s unmeasured. Worker hard max 290s; outer 588s; GPU cooldown 30s plus lease up to 20s.', '# CPU aggregate cells have no GPU lease/cooldown. A failed cell is retained RED; run other independent cells explicitly.', 'cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g','bash scripts/apa_sp4g_lead_gpu.sh list']
++    command=['# APA-SP4G exact commands, dependency order. No batch is automatically started.', '# Model load ALONE: 30-120s unmeasured. Worker hard max 290s; outer 588s; GPU cooldown 30s plus lease up to 20s.', '# CPU aggregate cells have no GPU lease/cooldown. Original kernel512 is reused through the exact A1 bridge; original model RED stays in jobs/. New jobs go to jobs_a1/.', '# Whole-layer margins:2048 10-90s;8192 60-270s, no model load. Fallback ONLY after corresponding whole-layer RED RAIL; see lead_commands_fallback.txt.', 'cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g','bash scripts/apa_sp4g_lead_gpu.sh list']
+     from apa_sp4g_gpu import CPU_KINDS
+     for c in cs:
+         low,high=c['estimate_s'];extra=0 if c['kind'] in CPU_KINDS else 50
+         command += [f'# {c["id"]}: {c["kind"]}; worker {low}-{high}s (planning, not measurement); +0-{extra}s lease/cooldown; outer<=588s; depends: '+','.join(c['depends']),f'bash scripts/apa_sp4g_lead_gpu.sh run {c["id"]}']
+     command += ['bash scripts/apa_sp4g_lead_gpu.sh summary']
+     (A/'lead_commands.txt').write_text('\n'.join(command)+'\n')
+-    (A/'cells.json').write_text(json.dumps(cs,indent=2)+'\n')
++    from apa_sp4g_a1_provenance import BRIDGE
++    manifest=dict(schema='apa_sp4g_cells_a1',registration_sha256=REG_SHA,amendments=[dict(order='orders/APA_SP4G_AMENDMENT_1.md',execution='amendment_002_a1_execution.json',execution_sha256=sha(A/'amendment_002_a1_execution.json'),fingerprint=BRIDGE,fingerprint_sha256=sha(A/BRIDGE))],cells=cs,fallback_cells=fallback_cells(),fallback_policy='explicit run after current whole-layer RED RAIL only; excluded from default resume')
++    (A/'cells.json').write_text(json.dumps(manifest,indent=2)+'\n')
++    fallback=['# OPTIONAL ONLY. Run ONLY the group for a whole-layer cell that hit RED RAIL.', '# Default resume does not dispatch these. Every band preflight verifies the current whole-layer RAIL.', '# Run the group in order; the final summary satisfies the layer dependency while retaining the RED.', 'cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g']
++    for c in fallback_cells():
++        fallback += [f'# fallback_for={c["fallback_for"]}; kind={c["kind"]}; worker estimate={c["estimate_s"]}s; outer<=588s; GPU cooldown30s/lease<=20s (summary CPU only)',f'bash scripts/apa_sp4g_lead_gpu.sh run {c["id"]}']
++    (A/'lead_commands_fallback.txt').write_text('\n'.join(fallback)+'\n')
+     print(json.dumps(dict(report=str(A/'RESULTS.md'),cells=len(cs),valid_receipts=len(jobs),audit_failures=len(audit),cpu=cpu['status'])))
+ if __name__=='__main__':
+     t=VALIDATION.set({})
+--- r1/tensor_cuda/tests/test_apa_sp4g.py
++++ a1/tensor_cuda/tests/test_apa_sp4g.py
+@@ -3,7 +3,7 @@
+ mutation testing (unverified lead: Hints on Test Data Selection). New MQA seam
+ coverage only. See registration for fixed gates; no CUDA numerical claims here.
+ """
+-import ast,hashlib,importlib.util,json,os,sys
++import ast,ctypes,hashlib,importlib.util,json,os,re,sys
+ from pathlib import Path
+ from types import SimpleNamespace
+ import numpy as np
+@@ -155,9 +155,20 @@
+         assert len(d[f'ppl_{arm}_2048']['depends'])==4
+     for S in (2048,8192):
+         for arm in 'BC':
+-            for l in registry.LAYERS:assert len(d[f'margin_{arm}_{S}_l{l:02d}']['depends'])==S//128
++            for l in registry.LAYERS:
++                c=d[f'margin_{arm}_{S}_l{l:02d}']
++                assert c['kind']=='margin_layer' and len(c['depends'])==1
++                assert c['estimate_s']==([10,90] if S==2048 else [60,270])
++                assert c['estimate_s'][1]<285
+     for arm in 'ABC':assert f'decode_{arm}_8192' in d[f'decode_{arm}_32768']['depends']
+     assert len(d['eq']['depends'])==32
++    assert len(cs)==128 and sum(c['kind']=='margin_layer' for c in cs)==32
++    assert not any('fallback_for' in c for c in cs)
++    fallbacks=registry.fallback_cells()
++    assert sum(c['kind']=='margin_band' for c in fallbacks)==1280
++    for c in fallbacks:
++        assert d[c['fallback_for']]['kind']=='margin_layer'
++        if c['kind']=='margin_summary':assert len(c['depends'])==c['S']//128
+ 
+ def test_create_only_receipt_preserves_first_bytes(tmp_path):
+     p=tmp_path/'r.json';common.publish(p,dict(value=1));first=p.read_bytes()
+@@ -255,3 +266,122 @@
+ def test_exactness_gate_accepts_registered_tolerance(monkeypatch):
+     monkeypatch.setattr(gpu,'require_pass',lambda name:dict(result=dict(ppl={'A':9.,'D':9.004}[name])))
+     r=gpu.execute(dict(kind='exactness',depends=['A','D']));assert r['absolute_difference']<.005
++
++def test_worker_ctypes_symbols_resolve_at_import_without_cuda_calls(monkeypatch):
++    # NVIDIA CUDA12.6 ABI (2024); real dlsym plus call-denying wrappers.
++    # Import itself must find EVERY symbol, without invoking a CUDA API.
++    live=ctypes.CDLL('/usr/local/cuda-12.6/lib64/libcudart.so.12');resolved=[]
++    class Symbol:
++        def __call__(self,*args):raise AssertionError('CUDA call during import')
++    class Library:
++        def __getattr__(self,name):
++            getattr(live,name);resolved.append(name);return Symbol()
++    monkeypatch.setattr(ctypes,'CDLL',lambda path:Library())
++    ns={'__name__':'symbol_import_probe'}
++    exec(compile((R/'scripts/apa_sp4g_model.py').read_text(),'worker-import','exec'),ns)
++    uses=set()
++    for module in ('common','gpu','model','metrics'):
++        for n in ast.walk(ast.parse((R/f'scripts/apa_sp4g_{module}.py').read_text())):
++            if isinstance(n,ast.Attribute) and re.fullmatch(r'cuda[A-Z]\w*',n.attr):uses.add(n.attr)
++            if isinstance(n,ast.Constant) and isinstance(n.value,str) and re.fullmatch(r'cuda[A-Z]\w*',n.value):uses.add(n.value)
++    assert set(resolved)==uses==set(model.CUDART_SIGNATURES)
++    assert len(resolved)==4
++    for name,args in model.CUDART_SIGNATURES.items():
++        assert getattr(model.CUDART,name).argtypes==args
++        assert getattr(model.CUDART,name).restype is ctypes.c_int
++
++def test_misspelled_pool_symbol_reds_during_import():
++    source=(R/'scripts/apa_sp4g_model.py').read_text().replace(
++        "'cudaDeviceGetDefaultMemPool':", "'cudaGetDeviceDefaultMemPool':",1)
++    with pytest.raises(AttributeError,match='undefined symbol: cudaGetDeviceDefaultMemPool'):
++        exec(compile(source,'misspelled-worker-import','exec'),{'__name__':'bad_symbol_probe'})
++
++def test_pool_counters_use_registered_high_water_abi():
++    seen=[]
++    def get(pool,attr,value):
++        seen.append(('get',attr));ctypes.cast(value,ctypes.POINTER(ctypes.c_uint64))[0]=attr*(1<<20);return 0
++    def reset(pool,attr,value):
++        seen.append(('reset',attr));assert ctypes.cast(value,ctypes.POINTER(ctypes.c_uint64))[0]==0;return 0
++    pool=model.PoolPeak.__new__(model.PoolPeak);pool.pool=ctypes.c_void_p(1)
++    pool.cuda=SimpleNamespace(cudaMemPoolGetAttribute=get,cudaMemPoolSetAttribute=reset)
++    pool.reset();r=pool.result()
++    assert seen==[('reset',6),('reset',8),('get',6),('get',8)]
++    assert r['pool_reserved_high_mib']==6 and r['pool_used_high_mib']==8
++
++def test_whole_layer_replays_every_tile_and_uses_population_percentiles(monkeypatch,tmp_path):
++    monkeypatch.setattr(metrics,'A',tmp_path);seen=[];population=[];context=object()
++    monkeypatch.setattr(metrics,'replay_context',lambda c:context)
++    def band(c,ctx):
++        assert ctx is context;seen.append((c['lo'],c['n']))
++        pairs=16*sum(range(c['lo']+1,c['lo']+c['n']+1))
++        x=np.full(pairs,1. if c['lo']==0 else 9.,np.float64);population.append(x)
++        path=tmp_path/(c['id']+'.npy');np.save(path,x)
++        return dict(files=[dict(path=str(path))],error_file=str(path),pairs=pairs,
++                    queries=16*c['n'],selected=0,mass_sum=16*c['n'],mass_max=1.,
++                    max_skipped_relative_weight=1.,eq_sp=float(x[0]),replay_bitwise=True)
++    monkeypatch.setattr(metrics,'band',band)
++    result=metrics.whole_layer(dict(id='layer',S=256))
++    assert seen==[(0,128),(128,128)] and result['replay_tiles']==2
++    assert result['pairs']==16*256*257//2 and result['replay_bitwise'] is True
++    assert result['error']==metrics.stats(np.concatenate(population))
++    assert result['unrefined_mass_mean']==1. and len(result['files'])==2
++    assert not list((tmp_path/'scratch').iterdir())
++
++@pytest.mark.parametrize('pairs,replay',[(0,True),(16,False)])
++def test_whole_layer_rejects_incomplete_population_or_nonbitwise_replay(pairs,replay):
++    row=dict(pairs=pairs,queries=16,replay_bitwise=replay)
++    with pytest.raises(common.Red,match='COVERAGE|BITWISE'):
++        metrics.aggregate_rows(dict(S=1),[row])
++
++def test_fallback_requires_current_rail_and_preserves_red(monkeypatch,tmp_path):
++    c=dict(id='layer',kind='margin_layer',depends=[])
++    monkeypatch.setattr(registry,'by_id',lambda:{'layer':c})
++    monkeypatch.setattr(common,'job_path',lambda n:tmp_path/(n+'.json'))
++    monkeypatch.setattr(common,'fingerprint',lambda c:{'code':'live'})
++    j=dict(cell=c,status='RED',registration_sha256=common.REG_SHA,fingerprint={'code':'live'},dependencies={},result={'outcome':'RAIL'})
++    p=tmp_path/'layer.json';p.write_text(json.dumps(j));first=p.read_bytes()
++    assert common.require_margin_rail('layer')==j and p.read_bytes()==first
++    for change in (dict(status='PASS'),dict(result={'outcome':'WORKER_FAILED'}),dict(fingerprint={'code':'stale'}),dict(dependencies={'fake':'hash'})):
++        p.write_text(json.dumps(dict(j,**change)))
++        with pytest.raises(common.Red,match='FALLBACK'):common.require_margin_rail('layer')
++
++def test_kernel_bridge_exact_endpoint_and_unknown_changes_rejected():
++    import apa_sp4g_a1_provenance as provenance
++    j=common.read(common.A/'jobs/kernel512.json');m=provenance.bridge()
++    now=common.fingerprint(j['cell'])
++    assert provenance.legacy_compatible(j,current=now,amendment=m)
++    assert common.require_pass('kernel512')==j
++    for path in now:
++        assert not provenance.legacy_compatible(j,current=dict(now,**{path:'unknown'}),amendment=m)
++    assert not provenance.legacy_compatible(dict(j,status='RED'),current=now,amendment=m)
++    assert not provenance.legacy_compatible(dict(j,cell=dict(j['cell'],worker_s=999)),current=now,amendment=m)
++
++def test_a1_namespace_preserves_original_model_red():
++    p=common.A/'jobs/ppl_A_2048_w0.json';r=common.read(p)
++    assert r['status']=='RED' and 'undefined symbol: cudaGetDeviceDefaultMemPool' in r['error']
++    assert common.job_path('ppl_A_2048_w0')==common.A/'jobs_a1/ppl_A_2048_w0.json'
++    assert common.sha(p)==common.read(common.A/'a1_before.json')['files'][str(p.relative_to(R))]
++
++def test_explicit_completed_fallback_satisfies_dependency_without_rewriting_red(monkeypatch,tmp_path):
++    cs={
++        'layer':dict(id='layer',kind='margin_layer',depends=[]),
++        'band':dict(id='band',kind='margin_band',depends=[],fallback_for='layer'),
++        'layer_bands':dict(id='layer_bands',kind='margin_summary',depends=['band'],fallback_for='layer'),
++        'eq':dict(id='eq',kind='eq',depends=['layer']),
++    }
++    monkeypatch.setattr(registry,'by_id',lambda:cs)
++    monkeypatch.setattr(common,'job_path',lambda n:tmp_path/(n+'.json'))
++    monkeypatch.setattr(common,'fingerprint',lambda c:{'code':'live'})
++    def receipt(name,status='PASS',result=None,dependencies=None):
++        j=dict(cell=cs[name],status=status,registration_sha256=common.REG_SHA,
++               fingerprint={'code':'live'},dependencies=dependencies or {},result=result or {})
++        common.publish(common.job_path(name),j);return j
++    receipt('layer','RED',dict(outcome='RAIL'));red_bytes=common.job_path('layer').read_bytes()
++    with pytest.raises(common.Red,match='RED'):common.require_pass('layer')
++    receipt('band')
++    summary=receipt('layer_bands',result=dict(eq_sp=1.),dependencies={'band':common.sha(common.job_path('band'))})
++    assert common.require_pass('layer')==summary
++    assert common.dependency_path('layer')==common.job_path('layer_bands')
++    receipt('eq',dependencies={'layer':common.sha(common.job_path('layer_bands'))})
++    assert common.require_pass('eq')['status']=='PASS'
++    assert common.job_path('layer').read_bytes()==red_bytes

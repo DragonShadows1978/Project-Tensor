@@ -1,0 +1,31 @@
+{
+  "status": "PASS_ALL_REJECTED",
+  "evidence_class": "unit test; constructed byte/metadata attacks in temporary files",
+  "rows": [
+    {
+      "attack": "forged_amendment",
+      "status": "RED_EXPECTED",
+      "error": "forged or stale protocol amendment SHA",
+      "outer_manifest_repin_in_test_only": false
+    },
+    {
+      "attack": "stale_amendment",
+      "status": "RED_EXPECTED",
+      "error": "protocol amendment is not bound to this registration and original source",
+      "outer_manifest_repin_in_test_only": false
+    },
+    {
+      "attack": "wrong_stream_file_sha",
+      "status": "RED_EXPECTED",
+      "error": "protocol pin failed: tokens_path",
+      "outer_manifest_repin_in_test_only": true
+    },
+    {
+      "attack": "wrong_canonical_stream_sha",
+      "status": "RED_EXPECTED",
+      "error": "canonical token SHA mismatch",
+      "outer_manifest_repin_in_test_only": true
+    }
+  ],
+  "scope": "Stream cases repin only the outer manifest in the isolated fixture to exercise both deeper file/raw-byte guards. Production digest is never repinned; artifacts never modified."
+}

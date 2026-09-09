@@ -1,0 +1,13 @@
+# A5: run EACH command in a separate foreground call (<10 min).
+# A diagnostic RED must not skip any other diagnostic, especially propagation.
+# Use this A5 runner for the amended A4 propagation ids; old A4 remains immutable.
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a5_call_l05_b00
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a5_call_l05_b15
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a5_call_l47_b15
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a4_propagation_A_2048_w0
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a4_propagation_D_2048_w0
+bash scripts/apa_sp4g_a5_lead_gpu.sh run diag_a4_propagation_2048_w0
+# CONDITIONAL: after all three captures complete and ANY SP/A fp32 relF >0.001:
+bash scripts/apa_sp4g_a5_lead_gpu.sh run ppl_a4_D32_2048_w0
+# Refresh report after every independent batch:
+bash scripts/apa_sp4g_a5_lead_gpu.sh summary

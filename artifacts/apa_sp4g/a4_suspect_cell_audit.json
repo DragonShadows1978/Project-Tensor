@@ -1,0 +1,52 @@
+{
+  "evidence_class": "source audit plus CPU comparison of historical GPU captures",
+  "source_finding": "A2 explicitly cast Q/K/Kq/V to FP32; native dispatch preserves dtype; historical receipt lacks actual dtype pin. Missing-cast cause not established.",
+  "A2_A32_ppl": 49.92117893813879,
+  "A2_D32_ppl": 53.472390467473765,
+  "D_bf16_ppl": 53.472390467473765,
+  "comparisons": [
+    {
+      "call_index": 0,
+      "source": "artifacts/apa_sp4g/captures_a3/diag_a3_call_l05_c0/capture.json",
+      "source_sha256": "d45be7ba6d91191ad2982756d1d0345e276d9d6d48b4ec5d943c8d821a053396",
+      "SP_fp32_cast_bf16_vs_SP_bf16": {
+        "max_abs": 0.0,
+        "relative_frobenius": 0.0,
+        "bitwise": true,
+        "different_values": 0,
+        "denominator": "max(||reference||F,1e-30); float64 reductions",
+        "fp32_agreement": true
+      },
+      "SP_fp32_projected_vs_actual_D_projected": {
+        "max_abs": 0.0,
+        "relative_frobenius": 0.0,
+        "bitwise": true,
+        "different_values": 0,
+        "denominator": "max(||reference||F,1e-30); float64 reductions",
+        "fp32_agreement": true
+      }
+    },
+    {
+      "call_index": 1,
+      "source": "artifacts/apa_sp4g/captures_a3/diag_a3_call_l05_c1/capture.json",
+      "source_sha256": "cd15451383819d0e9697c5e8d7e15a3cc3715d34456669ff88a1f3a8529d7989",
+      "SP_fp32_cast_bf16_vs_SP_bf16": {
+        "max_abs": 0.0,
+        "relative_frobenius": 0.0,
+        "bitwise": true,
+        "different_values": 0,
+        "denominator": "max(||reference||F,1e-30); float64 reductions",
+        "fp32_agreement": true
+      },
+      "SP_fp32_projected_vs_actual_D_projected": {
+        "max_abs": 0.0,
+        "relative_frobenius": 0.0,
+        "bitwise": true,
+        "different_values": 0,
+        "denominator": "max(||reference||F,1e-30); float64 reductions",
+        "fp32_agreement": true
+      }
+    }
+  ],
+  "limitation": "Two A-propagated layer5 calls only. Not a rerun or proof of dtype in the historical A2 worker."
+}

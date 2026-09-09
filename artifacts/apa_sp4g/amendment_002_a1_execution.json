@@ -1,0 +1,30 @@
+{
+  "schema": "apa_sp4g_a1_execution_v1",
+  "immutable": true,
+  "registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "order_path": "orders/APA_SP4G_AMENDMENT_1.md",
+  "order_sha256": "5a8cc329e4d1330f5de5b0aed66c2a771f5acb8e1d4b13522d46c7d08289e783",
+  "before_sha256": "605082077cc560d98e83e94745e5c8a1e43ff370a38f44aa6f41f001a3d05e30",
+  "margin_kind": "margin_layer",
+  "margin_ids": "margin_{B,C}_{2048,8192}_l{05,11,17,23,29,35,41,47}",
+  "planning_estimate_s": {
+    "2048": [
+      10,
+      90
+    ],
+    "8192": [
+      60,
+      270
+    ]
+  },
+  "estimate_basis": "Unmeasured planning, includes capture reads, 128-query internal bitwise replay tiles, all 16 query heads, FP64 exact dots and full-population nearest-rank partition. No model load. 8192 has 67,108,864 positions per head before causal masking; 536,936,448 causal pairs across 16 heads. Rail unchanged at 285s TERM / 290s hard.",
+  "fallback": "Explicit run only: margin_band *_qNNNNN plus margin_summary *_bands, only after corresponding current whole-layer RED RAIL. Never scheduled by default resume; successful fallback summary may satisfy that layer dependency while preserving RED.",
+  "receipt_policy": "Preserve jobs/*.json and CPU_GATES.json. New non-kernel jobs in jobs_a1. Exact reviewed per-kind fingerprint bridge permits original kernel512 only; no RED promoted.",
+  "gates": [
+    "All original CPU tests, no skips or weakened tolerance",
+    "Resolve every worker ctypes symbol on import against installed libcudart.so.12 without calling a CUDA API; missing symbol fails import",
+    "Whole-layer scheduling, complete population aggregation, bitwise replay rejection, fallback rail guard and fingerprint unknown-transition negatives",
+    "Author mutation baseline after passing suite: all non-error, killed rate >=0.80"
+  ],
+  "prior_art": "SP3 a4 (2026) provenance bridge and bounded replay; existing SP4G/June protocol (2026) all-pairs measurements; NVIDIA CUDA Runtime 12.6 (2024) declarations locally verified. No new algorithm or prior art introduced."
+}

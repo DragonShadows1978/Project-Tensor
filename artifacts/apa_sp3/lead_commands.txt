@@ -1,0 +1,70 @@
+# A6 only: run ONE foreground command at a time, never execute this file as a batch.
+# Retain the lead original build and all prior receipts. Do not merge this seat build artifacts.
+# Worker 290s +5s grace; outer 585s +3s grace (<10min); lease wait <=20s; cooldown 30s.
+# No automatic retry. Independent ladder rungs do not depend on a previous rung passing.
+cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3
+timeout 30s python3 scripts/apa_sp3_a6_audit.py
+timeout 30s bash scripts/apa_sp3_lead_gpu.sh list
+# decode_repro_b4_A_2048 | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_repro_b4_A_2048
+# decode_bisect_00_reference | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_00_reference
+# decode_bisect_01_wrapper | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_01_wrapper
+# decode_bisect_02_host_logits | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_02_host_logits
+# decode_bisect_03_last_token_only | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_03_last_token_only
+# decode_bisect_04_cache_recompute | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_04_cache_recompute
+# decode_bisect_05_pool_after | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_05_pool_after
+# decode_bisect_06_interposer | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_06_interposer
+# decode_bisect_07_int4_eager | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_07_int4_eager
+# decode_bisect_08_norm_eager | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_08_norm_eager
+# decode_bisect_09_expanded_mla | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_09_expanded_mla
+# decode_bisect_10_softmax_eager | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_10_softmax_eager
+# decode_bisect_11_legacy_stack | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_bisect_11_legacy_stack
+# decode_clean_b4_A_2048 | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_A_2048
+# decode_clean_b4_B_2048 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_B_2048
+# decode_clean_b4_C_2048 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_C_2048
+# decode_clean_b4_A_8192 | deps=g0,kernel96 | estimate=Nones | unchanged dense full-prefill memory non-fit; no alternate cache setup | NON_FIT_REGISTERED_DENSE (registered, no worker)
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_A_8192
+# decode_clean_b4_B_8192 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_B_8192
+# decode_clean_b4_C_8192 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_C_8192
+# decode_clean_b4_A_32768 | deps=g0,kernel96 | estimate=Nones | unchanged dense full-prefill memory non-fit; no alternate cache setup | NON_FIT_REGISTERED_DENSE (registered, no worker)
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_A_32768
+# decode_clean_b4_B_32768 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4,decode_clean_b4_B_8192 | estimate=Nones | setup + 16*prefill + 4*(warmup+decode_work) + 15; >=290s non-fit | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_B_32768
+# decode_clean_b4_C_32768 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b4,decode_clean_b4_C_8192 | estimate=Nones | setup + 16*prefill + 4*(warmup+decode_work) + 15; >=290s non-fit | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b4_C_32768
+# decode_clean_b8_A_2048 | deps=g0,kernel96 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_A_2048
+# decode_clean_b8_B_2048 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_B_2048
+# decode_clean_b8_C_2048 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_C_2048
+# decode_clean_b8_A_8192 | deps=g0,kernel96 | estimate=Nones | unchanged dense full-prefill memory non-fit; no alternate cache setup | NON_FIT_REGISTERED_DENSE (registered, no worker)
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_A_8192
+# decode_clean_b8_B_8192 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_B_8192
+# decode_clean_b8_C_8192 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8 | estimate=[20, 280]s | unmeasured planning: load, prefill, discarded cache-preserving warmup, 32 steps | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_C_8192
+# decode_clean_b8_A_32768 | deps=g0,kernel96 | estimate=Nones | unchanged dense full-prefill memory non-fit; no alternate cache setup | NON_FIT_REGISTERED_DENSE (registered, no worker)
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_A_32768
+# decode_clean_b8_B_32768 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8,decode_clean_b8_B_8192 | estimate=Nones | setup + 16*prefill + 4*(warmup+decode_work) + 15; >=290s non-fit | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_B_32768
+# decode_clean_b8_C_32768 | deps=g0,kernel96,ppl_b4_D_1024,freeze_b8,decode_clean_b8_C_8192 | estimate=Nones | setup + 16*prefill + 4*(warmup+decode_work) + 15; >=290s non-fit | GPU_BLOCKED
+timeout --kill-after=2s 590s bash scripts/apa_sp3_lead_gpu.sh run decode_clean_b8_C_32768
+timeout 30s python3 scripts/apa_sp3_a6_report.py

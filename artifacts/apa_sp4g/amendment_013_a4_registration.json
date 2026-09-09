@@ -1,0 +1,1200 @@
+{
+  "order": {
+    "path": "orders/APA_SP4G_AMENDMENT_4.md",
+    "sha256": "ac1f4f400a5f0196a7950973289d18738b2afe79a23213ffc263b2a006aa9e0a"
+  },
+  "before_sha256": "920a0bbb2b9ad163a47dd4da20e6d7d1635eb82520975b3979f3717837a866b9",
+  "original_registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "cells": [
+    {
+      "id": "ppl_a4_D32_2048_w0",
+      "kind": "precision",
+      "depends": [
+        "kernel512",
+        "diag_a2_fp32_A_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "D32",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "diag_a4_propagation_A_2048_w0",
+      "kind": "propagation",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "diag_a4_propagation_D_2048_w0",
+      "kind": "propagation",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "D",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "diag_a4_propagation_2048_w0",
+      "kind": "aggregate",
+      "depends": [
+        "diag_a4_propagation_A_2048_w0",
+        "diag_a4_propagation_D_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ],
+      "operation": "propagation"
+    },
+    {
+      "id": "trial_a4_00",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 0
+    },
+    {
+      "id": "trial_a4_01",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 1
+    },
+    {
+      "id": "trial_a4_02",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 2
+    },
+    {
+      "id": "trial_a4_03",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 3
+    },
+    {
+      "id": "trial_a4_04",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 4
+    },
+    {
+      "id": "trial_a4_05",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 5
+    },
+    {
+      "id": "trial_a4_06",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 6
+    },
+    {
+      "id": "trial_a4_07",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 7
+    },
+    {
+      "id": "trial_a4_08",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06",
+        "trial_a4_07"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 8
+    },
+    {
+      "id": "trial_a4_09",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06",
+        "trial_a4_07",
+        "trial_a4_08"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 9
+    },
+    {
+      "id": "trial_a4_10",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06",
+        "trial_a4_07",
+        "trial_a4_08",
+        "trial_a4_09"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 10
+    },
+    {
+      "id": "trial_a4_11",
+      "kind": "trial",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "diag_a4_propagation_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06",
+        "trial_a4_07",
+        "trial_a4_08",
+        "trial_a4_09",
+        "trial_a4_10"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ],
+      "index": 11
+    },
+    {
+      "id": "freeze_a4",
+      "kind": "freeze",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_capture_B_2048_w0",
+        "trial_a4_00",
+        "trial_a4_01",
+        "trial_a4_02",
+        "trial_a4_03",
+        "trial_a4_04",
+        "trial_a4_05",
+        "trial_a4_06",
+        "trial_a4_07",
+        "trial_a4_08",
+        "trial_a4_09",
+        "trial_a4_10",
+        "trial_a4_11"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        15
+      ]
+    },
+    {
+      "id": "ppl_a4_A32_2048_w1",
+      "kind": "precision",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A32",
+      "window": 1,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_A32_2048_w2",
+      "kind": "precision",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A32",
+      "window": 2,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_A32_2048_w3",
+      "kind": "precision",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "A32",
+      "window": 3,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_A32_8192",
+      "kind": "precision",
+      "depends": [
+        "ppl_a4_D32_2048_w0"
+      ],
+      "S": 8192,
+      "arm": "A32",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_C_2048_w0",
+      "kind": "ppl_capture",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_C_2048_w1",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 1,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_C_2048_w2",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 2,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_C_2048_w3",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 3,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_C_2048",
+      "kind": "aggregate",
+      "depends": [
+        "ppl_a4_C_2048_w0",
+        "ppl_a4_C_2048_w1",
+        "ppl_a4_C_2048_w2",
+        "ppl_a4_C_2048_w3"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ],
+      "operation": "ppl"
+    },
+    {
+      "id": "ppl_a4_C_8192",
+      "kind": "ppl_capture",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "margin_a4_C_2048_l05",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 5,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l11",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 11,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l17",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 17,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l23",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 23,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l29",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 29,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l35",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 35,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l41",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 41,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_2048_l47",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_2048_w0"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        10,
+        90
+      ],
+      "layer": 47,
+      "population_rows": 2047,
+      "capture_cell": "ppl_a4_C_2048_w0"
+    },
+    {
+      "id": "margin_a4_C_8192_l05",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 5,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l11",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 11,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l17",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 17,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l23",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 23,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l29",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 29,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l35",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 35,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l41",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 41,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "margin_a4_C_8192_l47",
+      "kind": "margin",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "ppl_a4_C_8192"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        270
+      ],
+      "layer": 47,
+      "population_rows": 8191,
+      "capture_cell": "ppl_a4_C_8192"
+    },
+    {
+      "id": "eq_a4",
+      "kind": "eq",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "margin_a2_B_2048_l05",
+        "margin_a2_B_2048_l11",
+        "margin_a2_B_2048_l17",
+        "margin_a2_B_2048_l23",
+        "margin_a2_B_2048_l29",
+        "margin_a2_B_2048_l35",
+        "margin_a2_B_2048_l41",
+        "margin_a2_B_2048_l47",
+        "margin_a2_B_8192_l05",
+        "margin_a2_B_8192_l11",
+        "margin_a2_B_8192_l17",
+        "margin_a2_B_8192_l23",
+        "margin_a2_B_8192_l29",
+        "margin_a2_B_8192_l35",
+        "margin_a2_B_8192_l41",
+        "margin_a2_B_8192_l47",
+        "margin_a4_C_2048_l05",
+        "margin_a4_C_2048_l11",
+        "margin_a4_C_2048_l17",
+        "margin_a4_C_2048_l23",
+        "margin_a4_C_2048_l29",
+        "margin_a4_C_2048_l35",
+        "margin_a4_C_2048_l41",
+        "margin_a4_C_2048_l47",
+        "margin_a4_C_8192_l05",
+        "margin_a4_C_8192_l11",
+        "margin_a4_C_8192_l17",
+        "margin_a4_C_8192_l23",
+        "margin_a4_C_8192_l29",
+        "margin_a4_C_8192_l35",
+        "margin_a4_C_8192_l41",
+        "margin_a4_C_8192_l47"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ]
+    },
+    {
+      "id": "ppl_a4_E_2048_w0",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "eq_a4"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_E_2048_w1",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "eq_a4"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 1,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_E_2048_w2",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "eq_a4"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 2,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_E_2048_w3",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "eq_a4"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 3,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "ppl_a4_E_2048",
+      "kind": "aggregate",
+      "depends": [
+        "ppl_a4_E_2048_w0",
+        "ppl_a4_E_2048_w1",
+        "ppl_a4_E_2048_w2",
+        "ppl_a4_E_2048_w3"
+      ],
+      "S": 2048,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        1,
+        30
+      ],
+      "operation": "ppl"
+    },
+    {
+      "id": "ppl_a4_E_8192",
+      "kind": "ppl",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "eq_a4"
+      ],
+      "S": 8192,
+      "arm": "E",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "decode_a4_C_2048",
+      "kind": "decode",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 2048,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    },
+    {
+      "id": "decode_a4_C_8192",
+      "kind": "decode",
+      "depends": [
+        "ppl_a4_D32_2048_w0",
+        "freeze_a4"
+      ],
+      "S": 8192,
+      "arm": "C",
+      "window": 0,
+      "bits": 4,
+      "apa_min_context": 0,
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        275
+      ]
+    }
+  ],
+  "exactness": {
+    "cell": "ppl_a4_D32_2048_w0",
+    "reference": "diag_a2_fp32_A_2048_w0",
+    "reference_ppl": 49.92117893813879,
+    "tolerance": 0.005,
+    "rule": "absolute D32 minus A32 <= 0.005 AND complete native fp32 dtype pins; else STOP all successors",
+    "scope": "FP32 global Q/K/Kq/V and attention output; bf16 cast before o_proj, exactly A2 A32; no whole-model fp32 claim"
+  },
+  "predictions": {
+    "lead": "D32 within 0.005 of A32=49.921 (full receipt value used)",
+    "seat": "Source inspection finds A2 already calls SP with .float() inputs and returns D32 cast bf16. No identified dtype bug. Predict rerun may repeat 53.472 and fail; assertions improve evidence, not arithmetic."
+  },
+  "protocol": {
+    "base": "registration.json PROTOCOL-G unchanged",
+    "short": "4 consecutive 2048 windows, last 1024 targets each",
+    "long": "8192 prefix 0 last512",
+    "dtype_scope": "A32 and D32 cast identical input values at APA seam; standard QK/softmax/PV or SP in fp32; shared bf16 merge/o_proj and subsequent model",
+    "propagation": "separate A/D bf16 workers, identical immutable weights/ids/schedule; save all S-1 residual rows after 8 complete blocks including layer_scalar and after final norm; aggregate relative Frobenius vs A",
+    "calibration": "12 bounded C trials using actual PPL window0 population, match existing B PPL capture fraction within .01; one frozen delta; no capture required for trials",
+    "margins": "A2 original-call bitwise replay copied into A4 namespace; C capture IS window0/8192 PPL; 16 full-layer cells; empirical eq over B and C 2048/8192 only",
+    "E": "SP2 conditional delta upward(log(100)+2*upward(max empirical eq_sp)); finite population, not universal proof",
+    "clean_decode": "June flags, Model.decode unchanged, no diagnostic wrappers/counters or extra host copies"
+  },
+  "rails": {
+    "worker_s": 285,
+    "worker_hard_s": 290,
+    "outer_s": 585,
+    "outer_hard_s": 588,
+    "lease_wait_s": 20,
+    "cooldown_s": 30,
+    "no_rows_ge": 16384,
+    "no_retry": true,
+    "disk_gib": 12,
+    "propagation_split": "two loads in separate leases to keep each worker <=285s",
+    "load_estimate_s": [
+      75,
+      130
+    ],
+    "load_evidence": "a2/a3 observed approximately75-126s; new-cell estimates not measured"
+  },
+  "cpu": {
+    "dtype_pin_test": "test_a4_fp32_native_dispatch_dtype_pin_and_returned_arm",
+    "baseline": "all four SP4G test files; no skips",
+    "mutation_threshold": 0.8,
+    "mutation_sites": [
+      "cast_dropped",
+      "input_dtype_ignored",
+      "output_dtype_ignored",
+      "return_wrong_arm",
+      "gate_relaxed",
+      "gate_nan",
+      "coverage_gap",
+      "source_fingerprint_ignored"
+    ]
+  },
+  "prior_art": {
+    "Gemma June 2026": "port ledger and floor script: model/caches/flags/feeding reused; new experiment harness",
+    "SP3 2026": "calibration, provenance, receipts, clean decode lesson; new architecture wiring",
+    "BLASST Yuan et al. 2025/2026": "https://arxiv.org/abs/2512.12087; running-max comparison; APA refines keys and retains denominator",
+    "ThriftAttention Sharratt 2026": "https://arxiv.org/abs/2605.23081; precision-selection/softmax-weight motivation; no FP4 implementation port",
+    "FlashAttention-2 Dao 2023": "https://arxiv.org/abs/2307.08691; existing online softmax/work partition; no new kernel",
+    "TurboQuant Zandieh et al. 2025": "https://arxiv.org/abs/2504.19874; existing rotated scalar-codebook reconstructed BF16 kq; no QJL residual",
+    "SP2 2026": "conditional delta log(1/epsilon)+2eq reused; empirical finite max not universal proof",
+    "standard methods": "NLL Shannon1948, nearest-rank statistics, bisection, content hashing NIST2001, leases, Make Feldman1979 dependency invalidation; no novelty claimed"
+  },
+  "new_work": "Native dtype assertions, residual capture, additive reference ruling and dispatch plumbing. No new algorithm; no prior art known to me for a distinct novel method.",
+  "process_safety": "No git/subagents/background waits/kills. Existing execution files/receipts and large A2 payloads preserved.",
+  "seat": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "xhigh",
+    "evidence": "logs/apa_sp4g_a4_r1.log"
+  }
+}

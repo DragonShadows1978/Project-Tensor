@@ -1,0 +1,8 @@
+{
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "before_any_GPU_data": true,
+  "change": "G2/E error uses an actual native SP warp/FMA-order FP32 bulk score probe, compared with float64 exact dots at the actual float32 kernel scale. This supersedes registration G2 bulk_scores float64 mathematical dot description, which omitted GPU dot rounding. All keys/queries/layers and maximum-statistic E rule remain unchanged.",
+  "why": "The finite bound must cover the score consumed by SP, not only mathematical key reconstruction error. This is a correctness clarification discovered by final source audit, no thresholds/predictions changed.",
+  "B_semantics": "B selection masks are captured from its literal native blend/fused criterion. Its G2 score error is evaluated in SP arithmetic on B activations, consistently with the SP margin; it is not a measurement of cuBLAS BF16 score-rounding error.",
+  "GPU_pin": "kernel96 reconstructs native SP decisions exactly from the bulk probe for prefill and split-K at delta=.125, plus all-refine/dense and B diagnostic bit-parity checks."
+}

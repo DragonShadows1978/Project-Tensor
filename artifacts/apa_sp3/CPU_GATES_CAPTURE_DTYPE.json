@@ -1,0 +1,148 @@
+{
+  "status": "PASS_CPU_ONLY",
+  "evidence_class": "unit test / compiled CPU guards / source inspection; author baseline only",
+  "pytest": {
+    "passed": 59,
+    "failed": 0,
+    "skipped": 0,
+    "log": "artifacts/apa_sp3/cpu_capture_dtype_final.log",
+    "log_sha256": "adac5e86944e142c3dc1dc7c43108fb99d49392691fb666e5edf6a2a3a896cba"
+  },
+  "regression": {
+    "name": "test_capture_blend_nonfloat_cat_preserves_packed_masks",
+    "cases": [
+      "uint8",
+      "int32"
+    ],
+    "before": {
+      "failed": 2,
+      "error": "RuntimeError: op supports float32/float16/bfloat16 only",
+      "log": "artifacts/apa_sp3/cpu_capture_dtype_repro.log"
+    },
+    "after": "Both PASS; exact multi-chunk little-endian packed bytes, selected/pair counts, native argument/output identity, partial chunk and causal geometry checked"
+  },
+  "existing_tests": "All 57 retained byte-identical; suite now 59 cases.",
+  "mutation": {
+    "killed": 6,
+    "nonerror": 6,
+    "rate": 1.0,
+    "threshold": 0.8,
+    "manifest": "artifacts/apa_sp3/capture_dtype_mutation_r3/mutation_manifest_final.json",
+    "receipt": "artifacts/apa_sp3/capture_dtype_mutation_r3/mutation_results_final.json",
+    "status": "PASS"
+  },
+  "host": {
+    "status": "PASS_CPU_ONLY",
+    "cudaGetDeviceCount": 100,
+    "device_count": 0,
+    "cuda_error": "no CUDA-capable device is detected",
+    "source_files": 24,
+    "kernel_bodies": 107,
+    "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "protocol_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224",
+    "token_count": 333337,
+    "engine_path": "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp3/artifacts/apa_sp3/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "diagnostic_path": "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp3/artifacts/apa_sp3/build/_apa_sp3_diag.cpython-312-x86_64-linux-gnu.so",
+    "adapter_imports": {
+      "core": {
+        "path": "/mnt/ForgeRealm/GraftRepository/core/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "adapters": {
+        "path": "/mnt/ForgeRealm/GraftRepository/adapters/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "adapters.tokenizer": {
+        "path": "/mnt/ForgeRealm/GraftRepository/adapters/tokenizer.py",
+        "sha256": "e7c5ec1340910318708418963e55fc4dd334eefdd75fa0b902ae2446dd3d0859"
+      },
+      "core.mistral7b_tc": {
+        "path": "/mnt/ForgeRealm/GraftRepository/core/mistral7b_tc.py",
+        "sha256": "49430e5920508d740a2f8be7b6ba0caadd0442c7798454cf6fa2a808204bf1c4"
+      },
+      "core.qwen_tc": {
+        "path": "/mnt/ForgeRealm/GraftRepository/core/qwen_tc.py",
+        "sha256": "1353e44f727fc24d1638e4e238d160619fea561602c921259b010af5f63478e3"
+      },
+      "core.minicpm3_tc": {
+        "path": "/mnt/ForgeRealm/GraftRepository/core/minicpm3_tc.py",
+        "sha256": "3d19734f51d28eb48dc20a62658f2bfc250fdac4fce2cb906116d034b1371a69"
+      }
+    },
+    "existing_build": "All compiled-module and build-source pins reverified; no rebuild because build inputs and binaries unchanged.",
+    "model_diff": "Exactly masks.append(mask) -> masks.append(mask.float()) plus three comment lines.",
+    "test_diff": "Only new parameterized regression inserted; every pre-existing test byte unchanged.",
+    "cells": 692,
+    "dependency_order": "PASS",
+    "weight_identity": "PASS stat against earlier full-SHA receipt; no model loaded",
+    "fingerprint": {
+      "scripts/apa_sp3_build.sh": "c9b28b49872d515deff42ba6ecf5c840f5ffab6c516533025f435208e0054c66",
+      "scripts/apa_sp3_common.py": "2365412261effca3a0dbe4d80ee1b9b730510a3d50b52c826375a0c65cb261d5",
+      "scripts/apa_sp3_control.py": "485cd771a747ec07b5f258be7b22c3c25608a2242d4b212542c5350e468ff734",
+      "scripts/apa_sp3_diag_bindings.cpp": "e3612f50d4cc9456e79ab063889bc62071b2f3fa365e0890902bebe232d24f17",
+      "scripts/apa_sp3_gpu.py": "9a680340294b9d0dcac3ca9fc731cb91304ae7f9253f597e43649707bdd33a09",
+      "scripts/apa_sp3_lead_gpu.sh": "e5f970e7a29bee103f82c82bc0acf4318fd6087c76979ead4266ef60209fed86",
+      "scripts/apa_sp3_make_diag.py": "2b01cb3c58434d88cc08f51797eb89fa101e527a1b093b3867cb26f99fd010ef",
+      "scripts/apa_sp3_metrics.py": "26e9b9e13f15baae7069e981dea064939c8b232f8b43e3517625f44792c178a3",
+      "scripts/apa_sp3_model.py": "c3635831bb776b9bc3d9a94507db588d670a305e72a083d2124a01abce6dcee6",
+      "scripts/apa_sp3_mutations.py": "affc907439e27b2c71d334093d9be819fb78d4eb4add0e0a2982f8a0b1cfb2c0",
+      "scripts/apa_sp3_peak.cpp": "fb439af92e0e968ff2d09b7a53f58ddb69a32e442953ca455c89506615acb7bc",
+      "scripts/apa_sp3_protocol2.py": "f585a942aae501f2efeac8469531ee315a3c09bee98853433aa1de7335c93899",
+      "scripts/apa_sp3_report.py": "5c5e475cf62c9c4348b340488cc7c066ddc09062ce0676c9c773a8a1fb1b9b50",
+      "artifacts/apa_sp3/build/manifest.json": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1",
+      "artifacts/apa_sp3/registration.json": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+      "artifacts/apa_sp3/weight_identity.json": "16d121d485ad7a21fdeb8cf2b881b8ecc1bb1532185e6fd425a8cbcdc8356ead",
+      "artifacts/apa_sp3/adapter_import_cpu.json": "89f6369bbf700eff2209abc07b337775a59259c7abd465fa19be5072e9e6a490",
+      "artifacts/apa_sp3/amendment_001_execution.json": "c680b376073a9790c7fb995c73d8ce9bbbc46512381133b0fae6e8861f9897b5",
+      "artifacts/apa_sp3/amendment_002_native_bulk.json": "622b55b4b66a580fe38dd6f25e2471da5abb8dc7b76c590176a1b5618ffd1ba4",
+      "artifacts/apa_sp3/amendment_003_B_native_scores.json": "b2689d07f8f70481d1f0740de256975a7be93cd902a4eb07831f94fd43bf00d5",
+      "artifacts/apa_sp3/amendment_004_capture_dtype.json": "c221a5c91dd27459a6a7f37194b2c7a6d9779325c8933eae7919a171247f947d"
+    }
+  },
+  "observer_receipt": "artifacts/apa_sp3/observer_capture_dtype.json",
+  "dry_run": {
+    "cells": 692,
+    "dependency_order": "PASS",
+    "receipt": "artifacts/apa_sp3/lead_list_capture_dtype.json"
+  },
+  "build": {
+    "status": "UNCHANGED_VERIFIED",
+    "recompiled": false,
+    "reason": "Python observation-only edit; all build inputs and compiled module SHA pins reverified, compiled CPU guards rerun.",
+    "prior_compile": {
+      "status": "PASS",
+      "command": "timeout --kill-after=5s 575s env PYTHONDONTWRITEBYTECODE=1 bash scripts/apa_sp3_build.sh",
+      "log": "artifacts/apa_sp3/build_protocol2.log",
+      "log_sha256": "3ef7b7a60d88ed51464b8f312cf59a875eeaec3cbf47c5c473ee6736d61d4f39",
+      "manifest_sha256": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1"
+    }
+  },
+  "protocol_guards": "Forged amendment, stale amendment, wrong file/raw stream SHA and semantic rejection tests all rerun unchanged.",
+  "fingerprint": {
+    "scripts/apa_sp3_build.sh": "c9b28b49872d515deff42ba6ecf5c840f5ffab6c516533025f435208e0054c66",
+    "scripts/apa_sp3_common.py": "2365412261effca3a0dbe4d80ee1b9b730510a3d50b52c826375a0c65cb261d5",
+    "scripts/apa_sp3_control.py": "485cd771a747ec07b5f258be7b22c3c25608a2242d4b212542c5350e468ff734",
+    "scripts/apa_sp3_diag_bindings.cpp": "e3612f50d4cc9456e79ab063889bc62071b2f3fa365e0890902bebe232d24f17",
+    "scripts/apa_sp3_gpu.py": "9a680340294b9d0dcac3ca9fc731cb91304ae7f9253f597e43649707bdd33a09",
+    "scripts/apa_sp3_lead_gpu.sh": "e5f970e7a29bee103f82c82bc0acf4318fd6087c76979ead4266ef60209fed86",
+    "scripts/apa_sp3_make_diag.py": "2b01cb3c58434d88cc08f51797eb89fa101e527a1b093b3867cb26f99fd010ef",
+    "scripts/apa_sp3_metrics.py": "26e9b9e13f15baae7069e981dea064939c8b232f8b43e3517625f44792c178a3",
+    "scripts/apa_sp3_model.py": "c3635831bb776b9bc3d9a94507db588d670a305e72a083d2124a01abce6dcee6",
+    "scripts/apa_sp3_mutations.py": "affc907439e27b2c71d334093d9be819fb78d4eb4add0e0a2982f8a0b1cfb2c0",
+    "scripts/apa_sp3_peak.cpp": "fb439af92e0e968ff2d09b7a53f58ddb69a32e442953ca455c89506615acb7bc",
+    "scripts/apa_sp3_protocol2.py": "f585a942aae501f2efeac8469531ee315a3c09bee98853433aa1de7335c93899",
+    "scripts/apa_sp3_report.py": "5c5e475cf62c9c4348b340488cc7c066ddc09062ce0676c9c773a8a1fb1b9b50",
+    "artifacts/apa_sp3/build/manifest.json": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1",
+    "artifacts/apa_sp3/registration.json": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "artifacts/apa_sp3/weight_identity.json": "16d121d485ad7a21fdeb8cf2b881b8ecc1bb1532185e6fd425a8cbcdc8356ead",
+    "artifacts/apa_sp3/adapter_import_cpu.json": "89f6369bbf700eff2209abc07b337775a59259c7abd465fa19be5072e9e6a490",
+    "artifacts/apa_sp3/amendment_001_execution.json": "c680b376073a9790c7fb995c73d8ce9bbbc46512381133b0fae6e8861f9897b5",
+    "artifacts/apa_sp3/amendment_002_native_bulk.json": "622b55b4b66a580fe38dd6f25e2471da5abb8dc7b76c590176a1b5618ffd1ba4",
+    "artifacts/apa_sp3/amendment_003_B_native_scores.json": "b2689d07f8f70481d1f0740de256975a7be93cd902a4eb07831f94fd43bf00d5",
+    "artifacts/apa_sp3/amendment_004_capture_dtype.json": "c221a5c91dd27459a6a7f37194b2c7a6d9779325c8933eae7919a171247f947d"
+  },
+  "supersedes": "CPU_GATES_PROTOCOL2.json for current source; earlier CPU and mutation receipts retained as historical evidence.",
+  "GPU": "RED: no device; fixed native capture not rerun. Existing GPU receipt bytes unchanged, all ten fingerprints stale.",
+  "model": "gpt-6-astra",
+  "reasoning_effort": "xhigh"
+}

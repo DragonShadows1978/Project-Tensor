@@ -1,0 +1,81 @@
+{
+  "job": "decode_pool_b8_B_32768",
+  "cell": {
+    "id": "decode_pool_b8_B_32768",
+    "kind": "decode_pool",
+    "bits": 8,
+    "arm": "B",
+    "S": 32768,
+    "estimate_s": null,
+    "depends": [
+      "g0",
+      "ppl_b4_D_1024",
+      "freeze_b8",
+      "decode_pool_b8_B_8192"
+    ],
+    "optional_secondary": true,
+    "worker_timeout_s": 290,
+    "job_ceiling_s": 590,
+    "estimate_scope": "S<=8192 unmeasured planning 60-280s; S32768 derived before lease from same-bit/arm decode_pool8192; no measurement means BLOCKED",
+    "steps": 32,
+    "alloc_pooling": true,
+    "estimate_from": "decode_pool_b8_B_8192"
+  },
+  "status": "PASS",
+  "registration_sha256": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+  "fingerprint": {
+    "artifacts/apa_sp3/adapter_import_cpu.json": "89f6369bbf700eff2209abc07b337775a59259c7abd465fa19be5072e9e6a490",
+    "artifacts/apa_sp3/amendment_009_decode_pool.json": "8f0809b8f00cf1db333048f63da30f1a10a907c2c9890b97733693efaa209bfc",
+    "artifacts/apa_sp3/build/manifest.json": "cc66365b0733abd6c17e21bd2ed32420003a038d3440b33c82f49e5ecbc063e1",
+    "artifacts/apa_sp3/registration.json": "d9b6511702a894f72174795141c72b2097b1bbe6110e810a1d4d8bfc3cd3498c",
+    "artifacts/apa_sp3/weight_identity.json": "16d121d485ad7a21fdeb8cf2b881b8ecc1bb1532185e6fd425a8cbcdc8356ead",
+    "scripts/apa_sp3_a4_provenance.py": "9a0128a350b1d3706965501cfdeb66b4f5c98af0b3818ddddc853fdf710ce00b",
+    "scripts/apa_sp3_a5_decode.py": "aa318e050d91115af366161b21d71ba1bdf3ab8b39a479cfec1d9659af8fc705",
+    "scripts/apa_sp3_a5_provenance.py": "24caecb9b392ba26c2c331cf0749591a24520c79dc549cc65503380362d2fd7d",
+    "scripts/apa_sp3_a5_registry.py": "024abce1939657eb2974609b77d7d548d056c7d91b6771e72d58ce6a7d1291fd",
+    "scripts/apa_sp3_common.py": "de8310b0c2349a10b2f83da99d1ecb7dd1dee5d817b2cd9a6ee59b24881c4ce4",
+    "scripts/apa_sp3_control.py": "0e45674552181b399a61745b6063f3320ba867f91cf62003d295a6bd6d4af9f6",
+    "scripts/apa_sp3_diag_bindings.cpp": "e3612f50d4cc9456e79ab063889bc62071b2f3fa365e0890902bebe232d24f17",
+    "scripts/apa_sp3_gpu.py": "4ecdc18f1d8442385e7dfefddb62ef9d83f56455996111ebae5e6128c6c8e7f9",
+    "scripts/apa_sp3_lead_gpu.sh": "ae1ba03e78dfde3bff57c36624ac85275cb50e52d18b24ebdcbeed588e9a4845",
+    "scripts/apa_sp3_make_diag.py": "2b01cb3c58434d88cc08f51797eb89fa101e527a1b093b3867cb26f99fd010ef",
+    "scripts/apa_sp3_model.py": "c3635831bb776b9bc3d9a94507db588d670a305e72a083d2124a01abce6dcee6",
+    "scripts/apa_sp3_peak.cpp": "fb439af92e0e968ff2d09b7a53f58ddb69a32e442953ca455c89506615acb7bc"
+  },
+  "fingerprint_schema": "apa_sp3_per_kind_v1",
+  "fingerprint_amendment_sha256": "a2a226e5cadd63c1357f8918b26a144c939d646cfee12cc43d1a8c1cc2363fa8",
+  "protocol_sha256": "db95e3ecb958ef6c31a105ee77be19c455ae8b210ed8a8082194389294843224",
+  "dependencies": {
+    "g0": "ca58e7c16a53b6ab717eefa009306d2d92d8c944f34f458ab26611235a895266",
+    "ppl_b4_D_1024": "ac43d2c4981a7e66e5c987a37181fd5b301ab9abb4a896488240e55f9399dbb4",
+    "freeze_b8": "78030f561cd5408d11c87f33b743a7e1b4c76f87c83ed5d543d3af26dfd63a5f",
+    "decode_pool_b8_B_8192": "369c598d4f1768dae7c6cef1517dfa4108caa887f8c9db7c02792e7427a51214"
+  },
+  "result": {
+    "fit": false,
+    "outcome": "NON_FIT_PLANNED_RAIL",
+    "estimate_s": 886.2879916499369,
+    "worker_timeout_s": 290,
+    "source": "decode_pool_b8_B_8192",
+    "source_sha256": "369c598d4f1768dae7c6cef1517dfa4108caa887f8c9db7c02792e7427a51214",
+    "source_times": {
+      "setup_s": 29.319143784232438,
+      "guard_s": 11.77777173789218,
+      "prefill_s": 42.9836523742415,
+      "decode_work_s": 35.61315953498706
+    },
+    "formula": "setup_s + guard_s + 16*prefill_s + 4*decode_work_s + 15",
+    "evidence_class": "registered/planned non-fit; no model execution or speed measurement",
+    "arm": "B",
+    "bits": 8,
+    "S": 32768,
+    "alloc_pooling": true,
+    "pool_state": "NOT_EXECUTED",
+    "steps": 0,
+    "tokens_s": null,
+    "ms_token": null,
+    "peak_resident_mib": null
+  },
+  "wall_s": 0,
+  "evidence_class": "planning/non-fit receipt; no GPU lease or worker launched"
+}

@@ -1,0 +1,189 @@
+--- a5/scripts/apa_sp3_a4_provenance.py
++++ a6/scripts/apa_sp3_a4_provenance.py
+@@ -17,11 +17,16 @@
+ 
+ def closure(cell):
+     kind = cell['kind']
++    if kind in ('decode_clean','decode_repro','decode_bisect'):
++        return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a6_decode.py',
++                          'scripts/apa_sp3_a5_decode.py','orders/APA_SP3_AMENDMENT_6.md']))
+     if kind == 'decode_pool':
+         return sorted(set(closure(dict(kind='decode')) + ['scripts/apa_sp3_a5_decode.py']))
+     names = ['common.py', 'gpu.py', 'control.py', 'lead_gpu.sh', 'a4_provenance.py']
+     paths = ['scripts/apa_sp3_' + n for n in names]
+     paths += ['artifacts/apa_sp3/registration.json']
++    paths += ['scripts/apa_sp3_a6_provenance.py','scripts/apa_sp3_a6_registry.py',
++              'artifacts/apa_sp3/amendment_011_decode_clean.json']
+     paths += ['scripts/apa_sp3_a5_provenance.py', 'scripts/apa_sp3_a5_registry.py',
+               'artifacts/apa_sp3/amendment_009_decode_pool.json']
+     if kind in ENGINE_KINDS:
+@@ -71,7 +76,8 @@
+         identity = hashlib.sha256((identity+sha(ART/FOLLOWUP)).encode()).hexdigest()
+     m['effective_sha256'] = identity
+     from apa_sp3_a5_provenance import extend_bridge
+-    return extend_bridge(m)
++    from apa_sp3_a6_provenance import extend_bridge as extend_a6
++    return extend_a6(extend_bridge(m))
+ 
+ 
+ def current_fingerprint(cell):
+@@ -90,6 +96,18 @@
+     except FileNotFoundError:
+         return False
+     old = j.get('fingerprint', {})
++    if 'a6_transition' in m:
++        if (j.get('fingerprint_schema')=='apa_sp3_per_kind_v1' and old==now
++            and j.get('fingerprint_amendment_sha256')==m['effective_sha256']):
++            return True
++        if kind in ('decode_clean','decode_repro','decode_bisect'):
++            return False
++        from apa_sp3_a6_provenance import previous_current as previous_a6
++        previous=previous_a6(cell,now,m['a6_transition'])
++        if previous is None:return False
++        parent={k:v for k,v in m.items() if k not in ('a6_transition','a6_parent_effective_sha256')}
++        parent['effective_sha256']=m['a6_parent_effective_sha256']
++        return compatible(j,current=previous,amendment=parent)
+     if 'a5_transition' in m:
+         if (j.get('fingerprint_schema') == 'apa_sp3_per_kind_v1' and old == now
+                 and j.get('fingerprint_amendment_sha256') == m['effective_sha256']):
+--- a5/scripts/apa_sp3_build.sh
++++ a6/scripts/apa_sp3_build.sh
+@@ -5,7 +5,7 @@
+   exec timeout --signal=TERM --kill-after=5s 570s env APA_SP3_BUILD_BOUNDED=1 bash "$0"
+ fi
+ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
++[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a6 ]] || exit 64
+ cd "$ROOT"
+ BUILD="$ROOT/artifacts/apa_sp3/build"
+ mkdir -p "$BUILD"
+--- a5/scripts/apa_sp3_control.py
++++ a6/scripts/apa_sp3_control.py
+@@ -27,6 +27,11 @@
+         protocol()
+     for d in c['depends']:
+         require_pass(d)
++    if c['kind'] in ('decode_clean','decode_repro','decode_bisect'):
++        from apa_sp3_a6_decode import preflight as clean_preflight
++        outcome=clean_preflight(c)
++        if outcome:
++            return outcome
+     if c['kind'] == 'decode_pool':
+         from apa_sp3_a5_decode import preflight as pool_preflight
+         outcome = pool_preflight(c)
+@@ -44,7 +49,8 @@
+         required=required_space(c['S'],c['layer_start'])
+         if shutil.disk_usage(ART).free < required:
+             raise Red(f'CAPTURE_DISK_OOM: need {required} free bytes before GPU lease')
+-    if c['kind'] != 'torch_reference' and not (ART/'build/libapa_sp3_peak.so').exists():
++    from apa_sp3_a6_registry import needs_interposer
++    if needs_interposer(c) and not (ART/'build/libapa_sp3_peak.so').exists():
+         raise Red('missing built observer')
+ 
+ 
+@@ -85,6 +91,9 @@
+         elif mode=='idle':idle()
+         elif mode=='timeout':print(validate(sys.argv[2])['worker_timeout_s'])
+         elif mode=='kind':print(validate(sys.argv[2])['kind'])
++        elif mode=='interposer':
++            from apa_sp3_a6_registry import needs_interposer
++            print('1' if needs_interposer(validate(sys.argv[2])) else '0')
+         elif mode=='finish':finish(sys.argv[2],int(sys.argv[3]),sys.argv[4])
+         else:raise Red('invalid action')
+     except Exception as e:
+--- a5/scripts/apa_sp3_gpu.py
++++ a6/scripts/apa_sp3_gpu.py
+@@ -112,7 +112,8 @@
+ 
+ def cells():
+     from apa_sp3_a5_registry import overlay as overlay_a5
+-    return overlay_a5(overlay(base_cells()))
++    from apa_sp3_a6_registry import overlay as overlay_a6
++    return overlay_a6(overlay_a5(overlay(base_cells())))
+ 
+ 
+ def g0_guard(model, ids):
+@@ -220,6 +221,9 @@
+ 
+ def execute(cell):
+     kind, bits = cell['kind'], cell.get('bits',4)
++    if kind in ('decode_clean','decode_repro','decode_bisect'):
++        from apa_sp3_a6_decode import execute as clean_execute
++        return clean_execute(cell)
+     if kind == 'decode_pool':
+         from apa_sp3_a5_decode import execute as execute_a5
+         return execute_a5(cell)
+@@ -389,7 +393,7 @@
+                           'protocol':proto,'cells':cells()},indent=2))
+         return 0
+     if a.next:
+-        from apa_sp3_a5_registry import default_cells
++        from apa_sp3_a6_registry import default_cells
+         for c in default_cells(cells(), a.include_32k_captures):
+             if c.get('bits',4)!=a.bits:
+                 continue
+--- a5/scripts/apa_sp3_lead_gpu.sh
++++ a6/scripts/apa_sp3_lead_gpu.sh
+@@ -3,7 +3,7 @@
+ # runner discipline. SP3 adapts to one full-model or one captured-layer job.
+ set -euo pipefail
+ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+-[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 ]] || exit 64
++[[ "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a4 || "$ROOT" == /mnt/ForgeRealm/Project-Tensor-wt-apa-sp3-a6 ]] || exit 64
+ cd "$ROOT"
+ export PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+ export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
+@@ -45,7 +45,8 @@
+     timeout 10s python3 scripts/apa_sp3_control.py idle
+     export APA_SP3_LEASE=1
+     kind=$(timeout 10s python3 scripts/apa_sp3_control.py kind "$job")
+-    if [[ "$kind" != torch_reference ]]; then
++    observer=$(timeout 10s python3 scripts/apa_sp3_control.py interposer "$job")
++    if [[ "$observer" == 1 ]]; then
+       export LD_PRELOAD="$ROOT/artifacts/apa_sp3/build/libapa_sp3_peak.so"
+     else
+       unset LD_PRELOAD
+--- a5/scripts/apa_sp3_report.py
++++ a6/scripts/apa_sp3_report.py
+@@ -113,7 +113,7 @@
+         for name,pred in r[key].items():
+             state='HISTORICAL PREMISE RETIRED by lead amendment 2; retained verbatim' if key=='seat_predictions' and name=='S1' else 'UNASSESSED; P2 uses fresh B; requires applicable model receipts'
+             if key == 'lead_predictions' and name == 'P5':
+-                from apa_sp3_a5_report import prediction
++                from apa_sp3_a6_report import prediction
+                 state = json.dumps(prediction(jobs), sort_keys=True)
+             text.append(f'| {owner} | {name} | {pred} | {state} |')
+     text.append('| Lead amendment 2 | B-A | Fresh B-A within +/-0.3 at bulk4, prediction only | '+str(get('g0').get('B_minus_A_prediction_within_0_3','UNASSESSED'))+' |')
+@@ -187,6 +187,10 @@
+     extra,a5=render_a5(ART,jobs,cells(),os.environ.get('APA_SP3_INCLUDE_32K_CAPTURES')=='1')
+     with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
+     combined['a5']=a5
++    from apa_sp3_a6_report import render as render_a6
++    extra,a6=render_a6(ART,jobs,cells())
++    with (ART/'RESULTS.md').open('a') as f:f.write('\n'+'\n'.join(extra)+'\n')
++    combined['a6']=a6
+     (ART/'results.json').write_text(json.dumps(combined,indent=2)+'\n')
+     print(json.dumps({'report':str(ART/'RESULTS.md'),'gpu_receipts':len(jobs),'primary_G2_rows':len(bc),'cells':len(cells())}))
+ 
+--- a5/tensor_cuda/tests/test_apa_sp3_a4.py
++++ a6/tensor_cuda/tests/test_apa_sp3_a4.py
+@@ -25,7 +25,7 @@
+ 
+ 
+ def test_a4_registered_dag_ranges_bounds_and_grid():
+-    cells = [c for c in driver.cells() if c['kind'] != 'decode_pool']
++    cells = [c for c in driver.cells() if c['kind'] not in ('decode_pool','decode_clean','decode_repro','decode_bisect')]
+     base = driver.base_cells()
+     assert len(cells) == len(base)+167 == 859
+     by = {c['id']: c for c in cells}
+--- a5/tensor_cuda/tests/test_apa_sp3_a5.py
++++ a6/tensor_cuda/tests/test_apa_sp3_a5.py
+@@ -25,7 +25,7 @@
+ 
+ 
+ def test_a5_registration_preserves_all_prior_cells_and_rails():
+-    cells = driver.cells()
++    cells = [c for c in driver.cells() if c['kind'] not in ('decode_clean','decode_repro','decode_bisect')]
+     before = common.read(common.ART/'a5_before.json')
+     by = {c['id']:c for c in cells}
+     assert len(cells) == len(by) == 877

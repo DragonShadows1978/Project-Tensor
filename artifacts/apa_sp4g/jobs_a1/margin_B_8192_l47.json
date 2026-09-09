@@ -1,0 +1,41 @@
+{
+  "cell": {
+    "id": "margin_B_8192_l47",
+    "kind": "margin_layer",
+    "depends": [
+      "capture_B_8192"
+    ],
+    "bits": 4,
+    "apa_min_context": 0,
+    "worker_s": 285,
+    "estimate_s": [
+      60,
+      270
+    ],
+    "arm": "B",
+    "S": 8192,
+    "layer": 47
+  },
+  "status": "RED",
+  "registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "fingerprint_schema": "apa_sp4g_per_kind_v1",
+  "fingerprint": {
+    "scripts/apa_sp4g_a1_provenance.py": "17661973e40f3b18b54bb2d567a8a133c8e28d12487906a8cbb2ee5cb7ff0e01",
+    "scripts/apa_sp4g_common.py": "bb9596243cb2d843dae4e8156a18e8beab20a94a7d4664bb28af65e98956938c",
+    "scripts/apa_sp4g_gpu.py": "14bfb78b92657babbadac35856ec3e22325be32935d3d475fdb302f1e58db02e",
+    "scripts/apa_sp4g_metrics.py": "2e2551023e93f2487498104ab25702e4a4888a0a66bd9f5f788943da2afe4a2d",
+    "scripts/apa_sp4g_registry.py": "ed2d62ca38f7bc42ea4f5add22b6325bd328af5c8d7efc518301f0b47cc22c89",
+    "scripts/apa_sp4g_lead_gpu.sh": "dd61744eb30ce3374bee5f4f92fe85bda412968810f86b7262d9404de3ec82b7",
+    "artifacts/apa_sp4g/registration.json": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+    "artifacts/apa_sp4g/build/manifest.json": "9dadd8332a94ab53c40d34f2f591e40edab160a6f1498bfb68842a6a518e3e4e",
+    "artifacts/apa_sp4g/CPU_GATES.json": "362f26ec3f25f67624c9e9caee6e4274739bdf5928b6efc7ad2f70cd52de4239",
+    "artifacts/apa_sp4g/amendment_002_a1_execution.json": "9ca10fb4a72df664022d1aaf00a741216ed3c057ac5db77180c3c2914f45f90f"
+  },
+  "dependencies": {
+    "capture_B_8192": "51c615b2ba5bc4388526bb025501e6944f2cbb0f11f27f465b6dcca42d178daa"
+  },
+  "result": {},
+  "error": "Red: NATIVE_REPLAY_NOT_BITWISE",
+  "evidence_class": "kernel sweep",
+  "traceback": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_gpu.py\", line 169, in main\n    try:r=execute(c);j=make_receipt(c,'PASS',r)\n          ^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_gpu.py\", line 77, in execute\n    return {'margin_layer':whole_layer,'margin_band':band,'margin_summary':summarize,'eq':eq_result}[kind](c)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_metrics.py\", line 94, in whole_layer\n    rows.append(band(tile,context))\n                ^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp4g/scripts/apa_sp4g_metrics.py\", line 57, in band\n    if not np.array_equal(out.float().numpy(),expected):raise Red('NATIVE_REPLAY_NOT_BITWISE')\n                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\napa_sp4g_common.Red: NATIVE_REPLAY_NOT_BITWISE\n"
+}

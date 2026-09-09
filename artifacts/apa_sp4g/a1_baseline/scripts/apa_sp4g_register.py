@@ -1,0 +1,57 @@
+"""Immutable preparation, BEFORE gates. Prior art: SP3 registration/Arrow
+protocol (2026), SHA-256 (NIST 2001), standard preregistration. New Gemma wiring.
+"""
+import os, json, hashlib, datetime
+from pathlib import Path
+import numpy as np
+R=Path(__file__).resolve().parents[1]; A=R/'artifacts/apa_sp4g'
+def sha(p):
+    h=hashlib.sha256()
+    with Path(p).open('rb') as f:
+        for b in iter(lambda:f.read(8<<20),b''):h.update(b)
+    return h.hexdigest()
+def put(p,j):
+    with p.open('x') as f:json.dump(j,f,indent=2,allow_nan=False);f.write('\n')
+if __name__=='__main__':
+    if (A/'registration.json').exists():raise RuntimeError('immutable registration already exists')
+    os.environ.update(HF_HUB_OFFLINE='1',HF_DATASETS_OFFLINE='1',TOKENIZERS_PARALLELISM='false')
+    from datasets import Dataset
+    from transformers import AutoTokenizer
+    corpus=Path('/home/vader/.cache/huggingface/datasets/wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-test.arrow')
+    model=Path('/mnt/ForgeRealm/models/gemma-4-12B-it')
+    weight=Path('/mnt/ForgeRealm/models/gemma-4-12B-it-qat/gemma-4-12b-it-qat-q4_0.gguf')
+    ds=Dataset.from_file(str(corpus)); txt='\n'.join(r['text'] for r in ds)
+    tok=AutoTokenizer.from_pretrained(str(model),local_files_only=True,trust_remote_code=False)
+    ids=np.asarray(tok(txt,return_tensors='np').input_ids[0],dtype='<i8')
+    with (A/'tokens.npy').open('xb') as f:np.save(f,ids,allow_pickle=False)
+    source=list((R/'tensor_cuda/src').glob('*'))+list((R/'tensor_cuda/include/tc').glob('*'))+list((R/'tensor_cuda/tensor_cuda').rglob('*.py'))+list((R/'scripts').glob('apa_sp3_*'))
+    ext=Path('/mnt/ForgeRealm/GraftRepository')
+    inputs=[corpus,model/'tokenizer.json',model/'tokenizer_config.json',model/'config.json',Path('/mnt/Shared/HOUSE_RULES.md'),Path('/mnt/Shared/APA_SP_Prior_Art_Comparison_2026-09-06.md')]
+    inputs += list((ext/'core').glob('*.py'))
+    inputs += [ext/p for p in ['tests/gemma4_bulkbits_floor.py','tests/gemma4_kv_quant_apa_ppl.py','docs/GEMMA4_PORT_LEDGER.md','docs/GEMMA4_APA_AUDIT_A1.md']]
+    parent=json.loads((R/'artifacts/apa_sp3/registration.json').read_text())['parent_registrations']
+    parent['artifacts/apa_sp3/registration.json']=sha(R/'artifacts/apa_sp3/registration.json')
+    stat=weight.stat(); identity={'path':str(weight),'sha256':sha(weight),'stat':{k:getattr(stat,k) for k in ('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns')}}
+    r=dict(schema='apa_sp4g_registration_v1',immutable=True,registered_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+      order={'path':'orders/APA_SP4G_GEMMA4_MODEL_TEST.md','sha256':sha(R/'orders/APA_SP4G_GEMMA4_MODEL_TEST.md')},
+      execution={'model_id':'GPT-6 (system-provided family; exact serving variant not exposed)','reasoning_effort':'not exposed in this seat; no invented runtime identifier','gpu_seat':False},
+      parent_registrations=parent,parent_evidence='SP3 JSON verified locally; SP1/SP1.1 SHAs inherited from SP3; SP2 JSON available read-only in sibling',
+      source_sha256={str(p.relative_to(R)):sha(p) for p in sorted(source) if p.is_file()},input_sha256={str(p):sha(p) for p in inputs},
+      weight=identity,model={'id':'google/gemma-4-12B-it','tokenizer':str(model),'weights':'QAT q4_0 exact symmetric-8 group32 via load_weights_qat','compute_dtype':'bfloat16','reference':'A engine QAT INT4; no torch/bf16 model reference','layers':48,'global_layers':list(range(5,48,6)),'global_geometry':[16,1,512,512],'trained_window':262144},
+      protocol={'corpus':str(corpus),'rows':len(ds),'join':'newline exactly as June get_text; no fallback','text_sha256':hashlib.sha256(txt.encode()).hexdigest(),'token_count':len(ids),'token_sha256':hashlib.sha256(ids.tobytes()).hexdigest(),'tokens_file_sha256':sha(A/'tokens.npy'),'token_dtype':'<i8','tokenizer_call':'tok(text, return_tensors=np), defaults, no chat template/per-window BOS','first_tokens':ids[:8].tolist(),'bos_token_id':tok.bos_token_id,'window':2048,'scored':1024,'n_windows':4,'window_starts':[0,2048,4096,6144],'long_S':[8192,16384,32768],'long_scored':512,'long_start':0,'nll_dtype':'float64','feeding':'cached prefix of S-scored-1 tokens (adapter adaptive PREFILL_CHUNK=512); then 64-query blocks scoring ids[pos+1:pos+n+1]; no caches across windows','targets':'last scored targets strictly within input; 4096 short total','floor_deviation':'June loop starts at 1024 and scores 1023 targets; start at 1023 to meet ordered 1024; fp64 mandated'},
+      adapter={'apa_min_context':0,'threshold_reason':'strict S > threshold; force 0 for ALL B/C/D/E cells to engage even short chunks','fast_max_seq':0,'path':'GEMMA4_APA_INT4=0 GEMMA4_APA_GEMM=0 GEMMA4_APA_DECODE_FUSED=1; fused reconstructed-kq call at gemma4_tc.py:609/712','parity':'B/C/D/E receive identical ABI tensors q[B,16,L,512], k/kq/v[B,1,S,512], scale=1, same dtype/layout; later hidden activations may differ by arm','kv_storage':'bf16 K/V; GEMMA4_QUANT_V=0 GEMMA4_QUANT_KV4=0','decode_quantization':'KVRing.quantized_keys uses [kq_count:count), chunk512 cold start, one newly appended key thereafter; not MiniCPM3 whole-cache requantization','clean':'pool before load; fused GEMV, RMSNorm, softmax June flags; no attention class wrapper/interposer; C binding dispatch only; scalar device argmax host copy','chunking':'June adaptive prefill enabled for EVERY arm including ceilings; no dense full-S substitution'},
+      arms={'A':'standard QAT engine reference','B':'fused two-pass reconstructed bulk4 r=.15','C':'SP frozen one global delta from native fraction on prefix0 S2048 across all eight global layers; pair-weighted abs difference <=.01 to B; same delta all windows/lengths','D':'SP finite FLT_MAX delta refine all; |PPL(D)-PPL(A)|<=.005','E':'SP log(100)+2*eq, round delta upward float32; eq maximum native SP-bulk vs float64 exact real-key error over B/C G2 S2048 AND8192; finite calibration, conditional only'},
+      calibration={'S':2048,'prefix':0,'target':'B actual native selected/eligible pairs, all global layers/all causal rows','bracket':[0,32],'first_delta':4,'max_trials':12,'rule':'first trial passing <=.01 freezes; otherwise bracket bisection; failure terminal RED, no per-layer deltas','short_eval_fraction':'report independently; no silent rematching on scored windows'},
+      g2={'S':[2048,8192],'arms':['B','C'],'layers':list(range(5,48,6)),'queries':'ALL causal query/key pairs; replay 128-row bands, no sampling; full-context native mask replay output must equal captured output bitwise','metrics':['error mean/p99/p99.9/max','mean unrefined exact softmax mass','max skipped exp(exact-max_exact)','pair-weighted fraction'],'exact':'float64 real Q @ K.T at scale1; actual native FP32 bulk, not reconstructed NumPy selection','percentile':'nearest rank on float64 errors; full population, no percentile averaging'},
+      ceilings={'grid':[4096,8192,16384,24576,32768],'arms':list('ABCDE'),'status':'FIT only completed synced prefill; OOM only explicit allocation error; timeout=RAIL unknown fit','resident':'NVML own-PID resident snapshots after load/prefill/at failure; no peak claim; pool high-water separately labelled'},
+      decode={'S':[2048,8192,32768],'arms':list('ABC'),'steps':32,'feeding':'greedy device argmax','warmup':'none; first step included (mutable KVRing cannot be discarded/reused safely)','timing':'synchronize before/after model forward and scalar argmax; no other per-step host tensor copies','rail32k':'requires same-arm 8192 clean result: setup+16*prefill+4*decode+15 <285; otherwise planned rail unknown fit'},
+      predictions_lead={'P1':'D equals A within 0.005 ppl at D=512/MQA.','P2':'C <= B + .02 short bulk4; B-C < .118.','P3':'every global layer: B unrefined mass >= .8; C <= .3 at matched fraction.','P4':'E fraction >= .95 and real-key eq >= .5.','P5':'SP ceiling >= B >= A; A fails by16384.'},
+      predictions_seat={'S1':'D/A short difference <=.005; BF16 summation risk remains.','S2':'C <= B+.02 and abs(B-C)<.118 on short protocol.','S3':'C average unrefined mass < B, but lead universal per-layer thresholds likely fail for at least one layer.','S4':'eq>=.5 and E fraction>=.95 likely, even qk-normalized 512 keys.','S5':'standard may fit16384 on12GB with June adaptive chunks; lead A-fails prediction likely false; no strict ceiling ordering assumed.'},
+      gates={'cpu':'no skips; source/threshold/callsite/D512 MQA dense independent pins, compiled host guards, scoring boundaries, receipt dependency/stale/create-only negatives, registry all cells dependency order, mutation >=.80 non-error mutants after passing baseline','gpu_kernel':'fp32 allclose rtol=.001 atol=.001; bf16 .02/.02; D512 MQA causal prefill & splitK S4097 refine-all; no numerical GPU claim from host compile','native_diagnostic':'bitwise output parity before any fraction/margin accepted','model_exactness':.005,'stops':'source drift, stale receipt, invalid protocol, lease busy, foreign compute PID, timeout, OOM, failed matching -> RED/BLOCKED; no retry overwrite'},
+      safety={'lease':'/tmp/forge-gpu.lock --wait20 exclusive','worker_term_s':285,'own_child_grace_s':5,'worker_hard_max_s':290,'outer_term_s':585,'outer_grace_s':3,'outer_max_s':588,'cooldown_s':30,'no_foreign_signals':True,'no_git':True,'no_subagents':True,'no_background_waits':True,'receipt_policy':'atomic create-only, per-kind source closure + dependency hashes; unknown changes reject'},
+      planning={'qat_load_seconds':[30,120],'load_basis':'unmeasured estimate for 7GB GGUF read/repack/upload plus per-layer gc; not a timing receipt','model_worker_seconds':[60,285],'margin_band_seconds':[5,120],'aggregate_seconds':[1,120],'kernel_seconds':[2,45],'ceiling_worker_seconds':[60,285],'32k_risk':'adaptive chunking reduces transient memory but quadratic attention and model load may hit time rail; no fit claims'},
+      prior_art={'Gemma June 2026':'port ledger and floor script: model/caches/flags/feeding reused; new experiment harness','SP3 2026':'calibration, provenance, receipts, clean decode lesson; new architecture wiring','BLASST Yuan et al. 2025/2026':'https://arxiv.org/abs/2512.12087; running-max comparison; APA refines keys and retains denominator','ThriftAttention Sharratt 2026':'https://arxiv.org/abs/2605.23081; precision-selection/softmax-weight motivation; no FP4 implementation port','FlashAttention-2 Dao 2023':'https://arxiv.org/abs/2307.08691; existing online softmax/work partition; no new kernel','TurboQuant Zandieh et al. 2025':'https://arxiv.org/abs/2504.19874; existing rotated scalar-codebook reconstructed BF16 kq; no QJL residual','SP2 2026':'conditional delta log(1/epsilon)+2eq reused; empirical finite max not universal proof','standard methods':'NLL Shannon1948, nearest-rank statistics, bisection, content hashing NIST2001, leases, Make Feldman1979 dependency invalidation; no novelty claimed'},
+      literature_status='arXiv abstract pages verified using web tool this seat; comparator detail also checked in lead prior-art comparison; no external benchmark reproduced',bulk8='secondary deferred unless lead requests additive registered cells after bulk4; no bulk8 quality claim')
+    put(A/'registration.json',r)
+    with (A/'registration.sha256').open('x') as f:f.write(sha(A/'registration.json')+'\n')
+    print(json.dumps({'registration_sha256':sha(A/'registration.json'),'token_count':len(ids),'token_sha256':r['protocol']['token_sha256'],'weight_sha256':identity['sha256']},indent=2))

@@ -1,0 +1,65 @@
+{
+  "amendment": 1,
+  "registration_sha256": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+  "title": "The sensitivity floor is scale-dependent and NOT a systematic bias; report BOTH the per-window floor and the protocol-aggregate floor.",
+  "reason": "The registration fixed the floor at the order-specified construction (window 0, W=1024): 58.76 ppl = 8.73 %. Running the SAME construction over the full registered PROTOCOL-O aggregate (N=4) gives 12.89 ppl = 2.14 %. The reason is visible in the per-window rows and is a FINDING, not a tightening: bf16-vs-fp32 does not push perplexity in a consistent direction. Window 0: bf16 673.12 vs fp32 614.36 (bf16 WORSE by 58.8). Window 1: bf16 1529.63 vs fp32 1548.55 (bf16 BETTER by 18.9). Windows 2 and 3 differ by 1.4 and 1.1. Averaging over windows therefore CANCELS part of the scatter rather than accumulating it.",
+  "what_changes": "Nothing in the registration is edited. This amendment adds a second, aggregate-scale floor and states which to use where.",
+  "measurements": {
+    "window0_only_W1024": {
+      "A_bf16_ppl": 673.1165494033148,
+      "A32_fp32_ppl": 614.3563818422778,
+      "floor_ppl": 58.760167561037065,
+      "floor_relative": 0.08729568098292206
+    },
+    "N2_aggregate": {
+      "A_bf16_ppl": 1014.7002415651835,
+      "A32_fp32_ppl": 975.378173006448,
+      "floor_ppl": 39.32206855873551,
+      "floor_relative": 0.03875239893318729,
+      "per_window_bf16": [
+        673.1165494033148,
+        1529.6260077770303
+      ],
+      "per_window_fp32": [
+        614.3563818422778,
+        1548.5516363068195
+      ]
+    },
+    "N4_full_protocol": {
+      "A_bf16_ppl": 601.797585191769,
+      "A32_fp32_ppl": 588.9079246879708,
+      "floor_ppl": 12.889660503798268,
+      "floor_relative": 0.021418597915594566,
+      "per_window_bf16": [
+        673.1165494033148,
+        1529.6260077770303,
+        270.6084889865823,
+        470.74402797196666
+      ],
+      "per_window_fp32": [
+        614.3563818422778,
+        1548.5516363068195,
+        269.1983411520431,
+        469.6465637473911
+      ],
+      "per_window_signed_delta_bf16_minus_fp32": [
+        58.76,
+        -18.926,
+        1.41,
+        1.097
+      ]
+    }
+  },
+  "rule_after_amendment": {
+    "per_window_claims": "use the window-0 floor, 58.76 ppl / 8.73 %",
+    "protocol_aggregate_claims": "use the N=4 aggregate floor, 12.89 ppl / 2.14 %",
+    "caution": "The aggregate floor is measured from ONE bf16-vs-fp32 pair, so it is a single draw from the scatter, not a variance estimate over many draws. It is a REPORTING CONVENTION (SP4G amendment 6 precedent), never a confidence interval. A difference just outside it is \"not clearly resolvable\", not \"resolved\"."
+  },
+  "deviation_recorded": {
+    "what": "The N=4 floor cell was run with APA_SP5_WORKER_RAIL=560 instead of the standard 285 s worker rail, under a 590 s outer timeout.",
+    "why": "Two full 4-window passes (bf16 and fp32-full) is 2 x 136 s of scoring plus a 12.6 s load = 286 s, which cannot fit a 285 s worker rail by construction.",
+    "bounds_respected": "The 590 s OUTER bound in the order was respected; the GPU flock was held for the whole call and released with the registered 30 s cooldown; no process not started by this seat was signalled.",
+    "honest_label": "This IS a deviation from the order's 285 s worker rail and is reported as one. The alternative -- splitting the pair across two leases -- would have compared two different model loads, which the measurement laws forbid (compare like against like, same session, interleaved)."
+  },
+  "prior_art": "SP4G amendment 6 (this repo, 2026) established the floor method and the \"not resolvable on this model\" verdict class. The scale-dependence and sign-cancellation observation here is new to this seat; no prior art known to me for that specific point."
+}

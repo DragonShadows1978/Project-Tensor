@@ -1,0 +1,94 @@
+{
+  "schema": "apa_sp4g_a2_hypotheses_v1",
+  "immutable": true,
+  "created_utc": "2026-09-07T22:05:45.531302+00:00",
+  "order_path": "orders/APA_SP4G_AMENDMENT_2.md",
+  "order_sha256": "cc3f52a8e63d71daf8d96385a962cf42b99d35c00ce93a96ecac191217f97c0b",
+  "before_sha256": "7a6678c945f67e5022419cd10e3aa43fd968bf238f6cb3b31a776b220ddc5dc6",
+  "registration_sha256": "099a8bd9e1bb94909a81c110521d2d3a9d642d5fac27d49f6820b97cb3fbbd1e",
+  "hypotheses": [
+    {
+      "cell_id": "diag_a2_source_2048",
+      "hypothesis": "a",
+      "description": "A vs D K/V source: standard cache versus reconstructed/quantized K or V. Inspect identities and values at same-state fork. Conditional AP standard over precisely APA exact K/V; quantify AP-A.",
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        285
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    },
+    {
+      "cell_id": "diag_a2_scale_2048",
+      "hypothesis": "b",
+      "description": "Scale 1.0 and attention-logit softcap parity at global call sites; same-state native standard and D output comparison.",
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        285
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    },
+    {
+      "cell_id": "diag_a2_value_2048",
+      "hypothesis": "c",
+      "description": "Per-global-layer shared K=V projection and post-normalization V actually passed to both routes.",
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        285
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    },
+    {
+      "cell_id": "diag_a2_rope_2048",
+      "hypothesis": "d",
+      "description": "p-RoPE and qk-norm order before fork; compare query/key tensors at same-state standard and APA calls.",
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        285
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    },
+    {
+      "cell_id": "diag_a2_fp32_2048_w0",
+      "hypothesis": "e",
+      "description": "Attention-only FP32 treatment for one registered window if supported; quantify output and PPL against bf16. Do not attribute 4.14 PPL to rounding without treatment evidence.",
+      "worker_s": 285,
+      "estimate_s": [
+        60,
+        285
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    },
+    {
+      "cell_id": "diag_a2_replay_B_8192_l05",
+      "hypothesis": "replay",
+      "description": "Original capture call shape/prefix/K/Kq/V and causal mask versus 128-band reshaping; repeated original-shape native calls distinguish context bug from nondeterminism. No tolerance replay authorized until cause measured.",
+      "worker_s": 285,
+      "estimate_s": [
+        5,
+        90
+      ],
+      "decision": "Evidence only; PASS cell completion does not prove parity"
+    }
+  ],
+  "gate_policy": "Original abs(D-A)<=0.005 PPL unchanged and RED. Name cause before proposing model-specific reference/tolerance. If storage cause confirmed, conditional AP uses same exact K/V at APA entry and abs(D-AP)<=0.005; AP-A separately reported. No gate widening.",
+  "replay_policy": "Keep bitwise; first restore exact original call context. Require same native selection as the measured PPL call, preserve masks with call metadata. Tolerance only by separate evidence-backed registration.",
+  "rail_policy": "No retry of ppl_*_16384 and ceiling_*_{16384,24576,32768}; RAIL non-fits by lead directive, distinguish measured terminations from administratively deferred rows; defer other >=16384 model jobs pending long lease.",
+  "cpu_gates": [
+    "All existing CPU tests without relaxed assertions",
+    "Cause-specific same-state routing and replay-context boundary tests",
+    "Unknown fingerprint transition and RED reuse rejection",
+    "Rail exclusion from run/resume",
+    "Source/build preservation",
+    "Copied-source mutation baseline >=0.80 after passing suite"
+  ],
+  "prior_art": "Reuse June Gemma port/floor (2026), SP3 same-tensor reference/replay and per-kind provenance (2026), standard controlled same-state comparisons; no novel algorithm. Existing BLASST, ThriftAttention, FA2 and TurboQuant annotations retained. No new tolerance or selector proposed at registration.",
+  "seat": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "evidence": "logs/apa_sp4g_a2_r1.log"
+  }
+}

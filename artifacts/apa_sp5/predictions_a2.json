@@ -1,0 +1,43 @@
+{
+  "amendment": "APA_SP5_AMENDMENT_2",
+  "amendment_sha256": "dc2ccc76bdab0c2211bb8833fae7b8b53479d6502ce1e4d0b32182796c730f87",
+  "registration_sha256": "3cc3b3e112479ad71077a98a221fd5af521013d16ce423d52afe308e9ae58159",
+  "recorded": "BEFORE any amendment-2 cell touches the card",
+  "lease": "David-authorized for THIS amendment only: 1,500 s worker / 1,560 s outer per cell, one cell per lease, flock --wait, foreground, no kills, 30 s cooldown. NOT generalized.",
+  "lead_prediction": {
+    "text": "16,384 FITS both arms (~525 s); 24,576 OOMs both arms at roughly 17.5-18.5K completed tokens; single-pass at the same or a slightly later token than two-pass.",
+    "owner": "lead"
+  },
+  "seat_prediction": {
+    "A2S1": {
+      "text": "16,384 FITS both arms, but only just, and this is the part of the lead's prediction I would flag. The a1 cache line is 53.6 MiB per 1K tokens and is consistent from BOTH anchors (735 MiB free at 4,096 and 543 MiB free at 7,680 both extrapolate to zero free at 17,816 tokens). 16,384 therefore completes with only about (17816-16384)*0.0536 = 77 MiB of headroom. That is inside the noise of a 512-token chunk transient, so I put FIT at 16,384 at roughly 70-75 % rather than near-certain, and an OOM in the last few chunks of the 16,384 rung would NOT refute the cache line -- it would confirm it with the wall one rung earlier than the round number suggests.",
+      "confidence": "medium"
+    },
+    "A2S2": {
+      "text": "24,576 OOMs both arms, and the completed-token count at failure is the real measurement of this amendment. I predict the OOM lands at 17,000-18,000 completed tokens, i.e. at or just below the 17,816 line, NOT in the lead's 17.5-18.5K band centred slightly higher. Reason: the line predicts where FREE reaches zero, but the allocator needs a contiguous block for the next chunk's transient, so failure comes a little EARLY, not late.",
+      "sharp_form": "first OOM at completed tokens in [16896, 18432] for both arms",
+      "confidence": "medium-high"
+    },
+    "A2S3": {
+      "text": "On the lead's tie-break (single-pass at the same or a slightly later token than two-pass): I predict they OOM at the SAME completed-token count, within one 512-token chunk. The a1 ceiling receipts already showed B and C with identical min-free to 1 MiB at both 4,096 (735/735) and 8,192 (544/543). Both arms store the same K, V and quantized-K tensors and both fused kernels are O(L) in score memory; the ONLY difference is the selection rule inside the kernel, which allocates nothing. So there is no mechanism for a memory difference between them.",
+      "confidence": "high"
+    },
+    "A2S4": {
+      "text": "Walls: 16,384 takes 550-700 s per arm, not 525 s. The a1 points give 31.9 ms/token at 7,680, but prefill on the 12 full-attention layers is superlinear in S (each chunk walks every prior key), so the per-token cost rises with S. Linear scaling of the 7,680 point gives 523 s; a ~1.15x superlinearity gives ~600 s. Both fit the 1,500 s rail comfortably.",
+      "confidence": "medium"
+    },
+    "A2S5": {
+      "text": "STREAMED MODE, item 2 -- I expect to report this BLOCKED, and I have already read the code that blocks it. The ladder drives gpt_oss20b_stream_forward_smoke.py as a SUBPROCESS with --attention-mode {standard,apa_selective} (context_ladder.py parse_setting only emits those two); the smoke sets block.self_attn.attention_mode from that flag; and the port's sole apa_selective branch is hard-wired to the two-pass entry at core/gpt_oss20b_tc.py:744 -- attn = tc.apa_selective_attention_sink(q, k, kq, v, self.sinks, self.scaling, float(z), True) -- which takes a z-score percentile and has no delta parameter at all. There is NO single-pass seam anywhere in ladder, smoke or port (grep for apa_selective_attention_sp in all three returns nothing). A third mode cannot be added without editing the READ-ONLY port. THE ONE ROUTE THAT DOES NOT EDIT ANY OWNED FILE: the smoke IMPORTS the port module rather than exec-ing it, so GptOssAttentionTC.__call__ is patchable in-process, and a sitecustomize.py placed on the subprocess PYTHONPATH can install exactly the patch my a1 harness already uses (accepted as deviation 2). I will attempt that route, and if it works I will label the result clearly as \"same construction, SP entry injected in-process\" rather than claiming the ladder natively supports it.",
+      "confidence": "high on the blocking analysis; medium on the injection route"
+    },
+    "A2S6": {
+      "text": "If the streamed 16K rung runs, B reproduces the H4 record within about 20 % on wall (H4: 1,016 s) and peak (H4: 2.0 GB), and C lands within 10 % of B on BOTH. Streamed mode holds one layer at a time, so peak is dominated by the single resident layer plus the KV cache -- identical between the arms -- and the ~2.0 GB H4 peak against this 12 GB card is why streamed mode reaches 16K where resident mode is about to hit its wall. NOTE the H4 record used bulk_bits 8, not the 4 used everywhere else in SP5; to be comparable to the July record I must match bulk 8 and will say so.",
+      "confidence": "medium"
+    }
+  },
+  "non_fits_registered_in_advance": {
+    "rule": "ascending, stop an arm at its first OOM; every higher rung for that arm becomes a REGISTERED NON-FIT and is not run",
+    "streamed_32k_plus": "ladder_stream_{B,C}_{32768,65536} are long-lease-only cells needing a SEPARATE authorization (H4 wall implies ~37 min at 32K and ~93 min at 64K, both over the 1,500 s rail granted here)"
+  },
+  "prior_art": "No new algorithm. Ceiling ascent = SP4G a7 / SP5 a1; streamed ladder construction = GraftRepository H4 (July 2026). The running-max rule remains BLASST (Yuan et al., arXiv 2512.12087) applied to precision, not sparsity. No prior art known to me for the sitecustomize injection route as such -- it is ordinary Python monkey-patching, named here only so the lead can judge it."
+}

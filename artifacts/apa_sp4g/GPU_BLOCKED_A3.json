@@ -1,0 +1,94 @@
+{
+  "status": "BLOCKED_GPU_UNRUN",
+  "reason": {
+    "cudaGetDeviceCount": 100,
+    "device_count": 0,
+    "error": "no CUDA-capable device is detected",
+    "GPU_workers_started": 0,
+    "model_loads_started": 0,
+    "evidence_class": "sandbox device visibility only"
+  },
+  "registration_sha256": "d2da08a10e08413887bced5da9829cbfbca0e1ffb5545f1cdae3f63db5e46852",
+  "fingerprint_amendment_sha256": "fdd3cf12deea588373c6b3e804255bb2c53dd0a9985c31022f9e4e115e8cbcb1",
+  "cpu_gate_sha256": "203a7abf9e815b18d75aec0a9c425778c629c3a0d2f0d82b243a072f829e916f",
+  "cells": [
+    {
+      "id": "diag_a3_call_l05_c0",
+      "kind": "call",
+      "arm": "A",
+      "S": 2048,
+      "window": 0,
+      "layer": 5,
+      "call_index": 0,
+      "L": 512,
+      "S_all": 512,
+      "position_offset": 0,
+      "depends": [
+        "kernel512"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        250
+      ]
+    },
+    {
+      "id": "diag_a3_call_l05_c1",
+      "kind": "call",
+      "arm": "A",
+      "S": 2048,
+      "window": 0,
+      "layer": 5,
+      "call_index": 1,
+      "L": 511,
+      "S_all": 1023,
+      "position_offset": 512,
+      "depends": [
+        "kernel512"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        90,
+        250
+      ]
+    },
+    {
+      "id": "diag_a3_sweep_l05",
+      "kind": "sweep",
+      "arm": "D",
+      "S": 2048,
+      "layer": 5,
+      "depends": [
+        "diag_a3_call_l05_c0",
+        "diag_a3_call_l05_c1"
+      ],
+      "worker_s": 285,
+      "estimate_s": [
+        30,
+        270
+      ]
+    }
+  ],
+  "next_command": "bash scripts/apa_sp4g_a3_lead_gpu.sh run diag_a3_call_l05_c0",
+  "lead_commands": "artifacts/apa_sp4g/lead_commands.txt",
+  "estimates": "call90-250s incl30-120s load (historically75-85s); sweep30-270s no model; unmeasured",
+  "rails": {
+    "worker_s": 285,
+    "hard_s": 290,
+    "outer_s": 588,
+    "lease_wait_s": 20,
+    "cooldown_s": 30
+  },
+  "RED": [
+    "D/A exactness; no culprit established",
+    "No harness fix / A-prime adopted; original0.005 unchanged",
+    "C/E calibration/PPL/margins blocked",
+    "No >=16384 retries; memory capacity unknown"
+  ],
+  "safety": "No git/subagents/background jobs or waits/signals/kills/services/model writes/product or kernel edits; zero GPU workers/model loads, all actual calls foreground<10min",
+  "identity": {
+    "model": "gpt-6-astra",
+    "effort": "xhigh",
+    "source": "logs/apa_sp4g_a3_r1.log"
+  }
+}

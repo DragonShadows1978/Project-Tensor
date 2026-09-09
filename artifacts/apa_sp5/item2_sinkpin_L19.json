@@ -1,0 +1,62 @@
+{
+  "layer": 19,
+  "L": 256,
+  "S": 256,
+  "dtype": "bfloat16",
+  "delta": 3.16,
+  "sinks_abs_mean": 2.1900634765625,
+  "sinks_min": 1.109375,
+  "sinks_max": 4.15625,
+  "token_sha256": "6b0ac3850d9fe65af588188ae37dd2172e77562dedb026260704777546ef2670",
+  "arms": {
+    "A": {
+      "sink_site": "concatenated as an extra score column, softmax over S+1, sink column sliced off before the value matmul (denominator only)",
+      "on_vs_off": {
+        "max_abs": 9.625,
+        "rel_frobenius": 0.47577359570631145,
+        "bitwise": false
+      },
+      "selection_mask": "n/a \u2014 standard refines every key"
+    },
+    "B": {
+      "sink_site": "folded inside the fused two-pass sink kernel at the end of the key loop; the z-score threshold is computed on |bulk| over real keys only, so the sink is not a selection candidate",
+      "on_vs_off": {
+        "max_abs": 9.03125,
+        "rel_frobenius": 0.4105707928371614,
+        "bitwise": false
+      },
+      "selection_mask": "not exposed by this entry"
+    },
+    "C": {
+      "delta": 3.16,
+      "sink_site": "folded into the running max AFTER the key loop (kernels.cu apa_selective_sp_kernel: \"if (sinks) {...}\" runs once, after every key has been decided) \u2014 denominator + accumulator rescale only",
+      "on_vs_off": {
+        "max_abs": 9.6875,
+        "rel_frobenius": 0.47583652440649915,
+        "bitwise": false
+      },
+      "selection_mask_identical": true,
+      "selection_differing_entries": 0,
+      "refined_fraction_on": 0.4000334387159533,
+      "refined_fraction_off": 0.4000334387159533
+    },
+    "D": {
+      "delta": 1000000000.0,
+      "sink_site": "folded into the running max AFTER the key loop (kernels.cu apa_selective_sp_kernel: \"if (sinks) {...}\" runs once, after every key has been decided) \u2014 denominator + accumulator rescale only",
+      "on_vs_off": {
+        "max_abs": 9.6875,
+        "rel_frobenius": 0.4757663171607151,
+        "bitwise": false
+      },
+      "selection_mask_identical": true,
+      "selection_differing_entries": 0,
+      "refined_fraction_on": 1.0,
+      "refined_fraction_off": 1.0
+    }
+  },
+  "pin": {
+    "claim": "The learned sink changes every arm's OUTPUT (it is in the denominator) but does NOT change the single-pass SELECTION (it is folded after the key loop and is not a key).",
+    "verdict": "CONFIRMED",
+    "status": "PASS"
+  }
+}
