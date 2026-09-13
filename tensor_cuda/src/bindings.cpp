@@ -13,6 +13,8 @@
 #include "tc/ops.h"
 
 namespace tc {
+void bp_kernel_3_profile(bool);
+std::vector<float> bp_kernel_3_halves();
 void bp_kernel_2_set_variant(const std::string&);
 std::string bp_kernel_2_get_variant();
 std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
@@ -927,6 +929,9 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("axpy_", [](Tensor& p, Tensor& o, double a) { tc::axpy_(p.data(), o.data(), a); });
 
   // Prior art: Project-Tensor explicit dispatch (2026); ours: opt-in census selection.
+  // Prior art: CUDA events (NVIDIA 2007+), taken; opt-in half reporting ours.
+  m.def("bp_kernel_3_profile", &tc::bp_kernel_3_profile);
+  m.def("bp_kernel_3_halves", &tc::bp_kernel_3_halves);
   m.def("bp_kernel_2_set_variant", &tc::bp_kernel_2_set_variant);
   m.def("bp_kernel_2_get_variant", &tc::bp_kernel_2_get_variant);
   // BP-CENSUS-1: no timer is enabled merely by importing the extension.

@@ -1,0 +1,2074 @@
+{
+  "arm_starts": [
+    {
+      "arm": "f",
+      "config": {
+        "checkpoint_blocks": true,
+        "compute_dtype": "bfloat16",
+        "d_model": 16,
+        "n_layers": 2,
+        "vocab": 32,
+        "window": 8
+      },
+      "kind": "arm_start",
+      "label": "control",
+      "lr": 0.0003,
+      "optimizer_t": 0,
+      "variant": "f"
+    },
+    {
+      "arm": "g",
+      "config": {
+        "checkpoint_blocks": true,
+        "compute_dtype": "bfloat16",
+        "d_model": 16,
+        "n_layers": 2,
+        "vocab": 32,
+        "window": 8
+      },
+      "kind": "arm_start",
+      "label": "CPU plumbing only",
+      "lr": 0.0003,
+      "optimizer_t": 0,
+      "variant": "g1"
+    }
+  ],
+  "budget": {
+    "cards": 1,
+    "cells": 2,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "checkpoint": {
+    "metadata": {
+      "data_index": 220497,
+      "extra": {
+        "loader": {
+          "corpus_phase": "copy_bridge",
+          "sample_i": 220497
+        },
+        "step": 1200
+      },
+      "refine": 0.15
+    },
+    "path": "checkpoints/grapa_mla_w12288_r015_bf16_train.ckpt",
+    "sha256": "54ba75133917a46613c019af3819b7c88a008c24b773fdd7d6b10f8068d987cf",
+    "step": 1200
+  },
+  "component_mean_ms": {
+    "f": {
+      "adam_update": 1.3858290389180183,
+      "backward_graph_and_checkpoint_dispatch": 3.060314152389765,
+      "checkpoint_replay": 2.9833986423909664,
+      "cleanup": 0.03281794488430023,
+      "dense_leaf_gradient_accumulation": 0.0,
+      "initial_forward": 3.0015011318027973,
+      "input_and_zero_grad": 0.022753234952688217,
+      "intermediate_gradient_accumulation": 0.0,
+      "linear_map_vjps": 0.0,
+      "native_apa_backward": 0.0,
+      "other_vjps": 0.0,
+      "pointwise_loss_vjps": 0.0,
+      "step_dispatch": 0.02786600962281227
+    },
+    "g": {
+      "adam_update": 1.3795130886137486,
+      "backward_graph_and_checkpoint_dispatch": 2.929847314953804,
+      "checkpoint_replay": 2.9591898433864117,
+      "cleanup": 0.028447527438402176,
+      "dense_leaf_gradient_accumulation": 0.0,
+      "initial_forward": 2.9000517912209034,
+      "input_and_zero_grad": 0.021408405154943466,
+      "intermediate_gradient_accumulation": 0.0,
+      "linear_map_vjps": 0.0,
+      "native_apa_backward": 0.0,
+      "other_vjps": 0.0,
+      "pointwise_loss_vjps": 0.0,
+      "step_dispatch": 0.023811403661966324
+    }
+  },
+  "config": {
+    "adam_dtype": "float32",
+    "arm_order": [
+      "f",
+      "g"
+    ],
+    "batch": 1,
+    "checkpoint_blocks": true,
+    "compute_dtype": "bfloat16",
+    "fixed_tokens": true,
+    "lr": 0.0003,
+    "measured_steps": 5,
+    "optimizer_state": "checkpoint.load restores FP32 Adam moments/t/lr as train.py resume",
+    "parameter_dtype": "float32",
+    "refine": 0.15,
+    "seed": 1720,
+    "sequence": 2048,
+    "warmup_steps": 2
+  },
+  "elapsed_seconds": 2.4205060773529112,
+  "engine_binary": null,
+  "error": null,
+  "evidence_class": "CPU plumbing only",
+  "experiment": "BP-CENSUS-3",
+  "f_reproduces_within_10_percent": false,
+  "gate_source": {
+    "eligible": false,
+    "kernel_verdict": "MISSING",
+    "label": "CPU plumbing only",
+    "receipt_sha256": null,
+    "route": "g1"
+  },
+  "largest_g_component": "checkpoint_replay",
+  "mean_wall_ms": {
+    "f": 10.518784262239933,
+    "g": 10.24519456550479
+  },
+  "mode": "dry-run",
+  "off_control": {
+    "evidence": "artifacts/bp_census_1/receipt.json.gz",
+    "parent_overhead_percent": 1.3,
+    "repeated": false
+  },
+  "registration_sha256": "6c8b473d9188b9cb0e93ab08132058db336a6dac909e28f312cd04881dff53f5",
+  "residuals": [
+    "OFF control not repeated; BP-CENSUS-1 overhead was 1.3%.",
+    "Kernel gate uses seeded inputs; does not validate checkpoint gradients or training quality.",
+    "Boundary allocation samples are not exact high-water measurements.",
+    "Canonical GRAPA has four source changes from the historical parent; see registration. Same checkpoint/tokens/config, f reproduction is required."
+  ],
+  "schema_version": 1,
+  "steps": {
+    "f": [
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.3749320060014725,
+            "share_non_replay_backward": 0.4673719087487596,
+            "share_whole_step": 0.13367579227509765
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9418370686471462,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.28601588964337266
+          },
+          "checkpoint_replay": {
+            "ms": 2.9624649323523045,
+            "share_non_replay_backward": 1.0070118987638714,
+            "share_whole_step": 0.2880214041064106
+          },
+          "cleanup": {
+            "ms": 0.030046794563531876,
+            "share_non_replay_backward": 0.010213616139302169,
+            "share_whole_step": 0.002921256506558419
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.928060945123434,
+            "share_non_replay_backward": 0.9953171697812457,
+            "share_whole_step": 0.2846765257923068
+          },
+          "input_and_zero_grad": {
+            "ms": 0.021010171622037888,
+            "share_non_replay_backward": 0.00714185426717047,
+            "share_whole_step": 0.002042683801928079
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.024254899471998215,
+            "share_non_replay_backward": 0.008244814007715337,
+            "share_whole_step": 0.0023581478133608428
+          }
+        },
+        "device_ms": null,
+        "index": 2,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3749320060014725,
+          "backward": 2.9418370686471462,
+          "checkpoint_replay": 2.9624649323523045,
+          "cleanup": 0.030046794563531876,
+          "initial_forward": 2.928060945123434,
+          "input_and_zero_grad": 0.021010171622037888,
+          "step": 0.024254899471998215
+        },
+        "non_replay_backward_ms": 2.9418370686471462,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.021010171622037888,
+            "inclusive_ms": 0.021010171622037888,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.928060945123434,
+            "inclusive_ms": 2.928060945123434,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.473447773605585,
+            "inclusive_ms": 1.473447773605585,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4890171587467194,
+            "inclusive_ms": 1.4890171587467194,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9418370686471462,
+            "inclusive_ms": 5.904302000999451,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3749320060014725,
+            "inclusive_ms": 1.3749320060014725,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.030046794563531876,
+            "inclusive_ms": 0.030046794563531876,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.024254899471998215,
+            "inclusive_ms": 10.282606817781925,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.2855721488595,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.3717669062316418,
+            "share_non_replay_backward": 0.4705587592449392,
+            "share_whole_step": 0.13358510854081707
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9151872731745243,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2838861373129434
+          },
+          "checkpoint_replay": {
+            "ms": 2.9651396907866,
+            "share_non_replay_backward": 1.017135234525664,
+            "share_whole_step": 0.2887505928543854
+          },
+          "cleanup": {
+            "ms": 0.030557159334421158,
+            "share_non_replay_backward": 0.010482057058771943,
+            "share_whole_step": 0.0029757106895086393
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.9395921155810356,
+            "share_non_replay_backward": 1.0083716207981162,
+            "share_whole_step": 0.28626272440436923
+          },
+          "input_and_zero_grad": {
+            "ms": 0.019818078726530075,
+            "share_non_replay_backward": 0.0067982180455079195,
+            "share_whole_step": 0.0019299198615503905
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.023834872990846634,
+            "share_non_replay_backward": 0.008176103542360555,
+            "share_whole_step": 0.002321082452911411
+          }
+        },
+        "device_ms": null,
+        "index": 3,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3717669062316418,
+          "backward": 2.9151872731745243,
+          "checkpoint_replay": 2.9651396907866,
+          "cleanup": 0.030557159334421158,
+          "initial_forward": 2.9395921155810356,
+          "input_and_zero_grad": 0.019818078726530075,
+          "step": 0.023834872990846634
+        },
+        "non_replay_backward_ms": 2.9151872731745243,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.019818078726530075,
+            "inclusive_ms": 0.019818078726530075,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.9395921155810356,
+            "inclusive_ms": 2.9395921155810356,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4840676449239254,
+            "inclusive_ms": 1.4840676449239254,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4810720458626747,
+            "inclusive_ms": 1.4810720458626747,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9151872731745243,
+            "inclusive_ms": 5.880326963961124,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3717669062316418,
+            "inclusive_ms": 1.3717669062316418,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.030557159334421158,
+            "inclusive_ms": 0.030557159334421158,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.023834872990846634,
+            "inclusive_ms": 10.2658960968256,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.268860962241888,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.4099390245974064,
+            "share_non_replay_backward": 0.430484941235616,
+            "share_whole_step": 0.13238890043206455
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 3.2752342522144318,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.30753433570073374
+          },
+          "checkpoint_replay": {
+            "ms": 2.968336921185255,
+            "share_non_replay_backward": 0.9062975935777177,
+            "share_whole_step": 0.27871762838809694
+          },
+          "cleanup": {
+            "ms": 0.042300205677747726,
+            "share_non_replay_backward": 0.012915169548299627,
+            "share_whole_step": 0.003971858087498671
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.898534294217825,
+            "share_non_replay_backward": 0.8849853387610628,
+            "share_whole_step": 0.27216337826077225
+          },
+          "input_and_zero_grad": {
+            "ms": 0.020178966224193573,
+            "share_non_replay_backward": 0.006161075718645251,
+            "share_whole_step": 0.001894742328335488
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.03228941932320595,
+            "share_non_replay_backward": 0.00985865951462086,
+            "share_whole_step": 0.0030318763047286444
+          }
+        },
+        "device_ms": null,
+        "index": 4,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.4099390245974064,
+          "backward": 3.2752342522144318,
+          "checkpoint_replay": 2.968336921185255,
+          "cleanup": 0.042300205677747726,
+          "initial_forward": 2.898534294217825,
+          "input_and_zero_grad": 0.020178966224193573,
+          "step": 0.03228941932320595
+        },
+        "non_replay_backward_ms": 3.2752342522144318,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.020178966224193573,
+            "inclusive_ms": 0.020178966224193573,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.898534294217825,
+            "inclusive_ms": 2.898534294217825,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4693806879222393,
+            "inclusive_ms": 1.4693806879222393,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4989562332630157,
+            "inclusive_ms": 1.4989562332630157,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 3.2752342522144318,
+            "inclusive_ms": 6.243571173399687,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.4099390245974064,
+            "inclusive_ms": 1.4099390245974064,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.042300205677747726,
+            "inclusive_ms": 0.042300205677747726,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.03228941932320595,
+            "inclusive_ms": 10.646813083440065,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.64997911453247,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.3871751725673676,
+            "share_non_replay_backward": 0.4579084830483372,
+            "share_whole_step": 0.12785310834365252
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 3.029372077435255,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2792110499733988
+          },
+          "checkpoint_replay": {
+            "ms": 3.0296416953206062,
+            "share_non_replay_backward": 1.000089001244634,
+            "share_whole_step": 0.27923590010436194
+          },
+          "cleanup": {
+            "ms": 0.03029732033610344,
+            "share_non_replay_backward": 0.010001188220416271,
+            "share_whole_step": 0.0027924422640040144
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 3.303829114884138,
+            "share_non_replay_backward": 1.090598655573945,
+            "share_whole_step": 0.3045071957223783
+          },
+          "input_and_zero_grad": {
+            "ms": 0.032039824873209,
+            "share_non_replay_backward": 0.010576391428396193,
+            "share_whole_step": 0.002953045355652156
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.03436580300331116,
+            "share_non_replay_backward": 0.011344200093243792,
+            "share_whole_step": 0.003167426019142927
+          }
+        },
+        "device_ms": null,
+        "index": 5,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3871751725673676,
+          "backward": 3.029372077435255,
+          "checkpoint_replay": 3.0296416953206062,
+          "cleanup": 0.03029732033610344,
+          "initial_forward": 3.303829114884138,
+          "input_and_zero_grad": 0.032039824873209,
+          "step": 0.03436580300331116
+        },
+        "non_replay_backward_ms": 3.029372077435255,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.032039824873209,
+            "inclusive_ms": 0.032039824873209,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 3.303829114884138,
+            "inclusive_ms": 3.303829114884138,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.5066098421812057,
+            "inclusive_ms": 1.5066098421812057,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.5230318531394005,
+            "inclusive_ms": 1.5230318531394005,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 3.029372077435255,
+            "inclusive_ms": 6.059013772755861,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3871751725673676,
+            "inclusive_ms": 1.3871751725673676,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.03029732033610344,
+            "inclusive_ms": 0.03029732033610344,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.03436580300331116,
+            "inclusive_ms": 10.84672100841999,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.849757120013237,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.3853320851922035,
+            "share_non_replay_backward": 0.44119697996580143,
+            "share_whole_step": 0.13143877481367036
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 3.1399400904774666,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.29791404017284656
+          },
+          "checkpoint_replay": {
+            "ms": 2.9914099723100662,
+            "share_non_replay_backward": 0.9526965120710903,
+            "share_whole_step": 0.28382166696967764
+          },
+          "cleanup": {
+            "ms": 0.03088824450969696,
+            "share_non_replay_backward": 0.009837208233167284,
+            "share_whole_step": 0.0029306424487644555
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.937489189207554,
+            "share_non_replay_backward": 0.935523960509983,
+            "share_whole_step": 0.2787057227540316
+          },
+          "input_and_zero_grad": {
+            "ms": 0.02071913331747055,
+            "share_non_replay_backward": 0.006598575998410196,
+            "share_whole_step": 0.0019658084350739563
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.024585053324699402,
+            "share_non_replay_backward": 0.007829784204883011,
+            "share_whole_step": 0.002332602646158237
+          }
+        },
+        "device_ms": null,
+        "index": 6,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3853320851922035,
+          "backward": 3.1399400904774666,
+          "checkpoint_replay": 2.9914099723100662,
+          "cleanup": 0.03088824450969696,
+          "initial_forward": 2.937489189207554,
+          "input_and_zero_grad": 0.02071913331747055,
+          "step": 0.024585053324699402
+        },
+        "non_replay_backward_ms": 3.1399400904774666,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.02071913331747055,
+            "inclusive_ms": 0.02071913331747055,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.937489189207554,
+            "inclusive_ms": 2.937489189207554,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4974428340792656,
+            "inclusive_ms": 1.4974428340792656,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4939671382308006,
+            "inclusive_ms": 1.4939671382308006,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 3.1399400904774666,
+            "inclusive_ms": 6.131350062787533,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3853320851922035,
+            "inclusive_ms": 1.3853320851922035,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.03088824450969696,
+            "inclusive_ms": 0.03088824450969696,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.024585053324699402,
+            "inclusive_ms": 10.530363768339157,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.539751965552568,
+        "warmup": false
+      }
+    ],
+    "g": [
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.3859830796718597,
+            "share_non_replay_backward": 0.4733452502878517,
+            "share_whole_step": 0.1349818693180481
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.928059548139572,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2851657838247297
+          },
+          "checkpoint_replay": {
+            "ms": 2.9577072709798813,
+            "share_non_replay_backward": 1.0101253824769878,
+            "share_whole_step": 0.2880531964553051
+          },
+          "cleanup": {
+            "ms": 0.0281529501080513,
+            "share_non_replay_backward": 0.009614883046329811,
+            "share_whole_step": 0.0027418356602897454
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.9197349213063717,
+            "share_non_replay_backward": 0.9971569475632797,
+            "share_whole_step": 0.2843550425481575
+          },
+          "input_and_zero_grad": {
+            "ms": 0.021259766072034836,
+            "share_non_replay_backward": 0.007260701403952951,
+            "share_whole_step": 0.002070503606975559
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.024036504328250885,
+            "share_non_replay_backward": 0.008209021685888588,
+            "share_whole_step": 0.0023409321034906228
+          }
+        },
+        "device_ms": null,
+        "index": 2,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3859830796718597,
+          "backward": 2.928059548139572,
+          "checkpoint_replay": 2.9577072709798813,
+          "cleanup": 0.0281529501080513,
+          "initial_forward": 2.9197349213063717,
+          "input_and_zero_grad": 0.021259766072034836,
+          "step": 0.024036504328250885
+        },
+        "non_replay_backward_ms": 2.928059548139572,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.021259766072034836,
+            "inclusive_ms": 0.021259766072034836,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.9197349213063717,
+            "inclusive_ms": 2.9197349213063717,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4807023108005524,
+            "inclusive_ms": 1.4807023108005524,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.477004960179329,
+            "inclusive_ms": 1.477004960179329,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.928059548139572,
+            "inclusive_ms": 5.885766819119453,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3859830796718597,
+            "inclusive_ms": 1.3859830796718597,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.0281529501080513,
+            "inclusive_ms": 0.0281529501080513,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.024036504328250885,
+            "inclusive_ms": 10.264934040606022,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.267920326441526,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.3711750507354736,
+            "share_non_replay_backward": 0.46789083686976796,
+            "share_whole_step": 0.13420810420095847
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9305447824299335,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.28683635930727525
+          },
+          "checkpoint_replay": {
+            "ms": 2.9493914917111397,
+            "share_non_replay_backward": 1.0064311282305602,
+            "share_whole_step": 0.28868104071516737
+          },
+          "cleanup": {
+            "ms": 0.028483569622039795,
+            "share_non_replay_backward": 0.009719547639337536,
+            "share_whole_step": 0.0027879196589812006
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.8905998915433884,
+            "share_non_replay_backward": 0.986369465798293,
+            "share_whole_step": 0.28292662650144434
+          },
+          "input_and_zero_grad": {
+            "ms": 0.020178034901618958,
+            "share_non_replay_backward": 0.006885421107568894,
+            "share_whole_step": 0.0019749891227925287
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.02345489338040352,
+            "share_non_replay_backward": 0.0080035949360089,
+            "share_whole_step": 0.0022957220328149374
+          }
+        },
+        "device_ms": null,
+        "index": 3,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3711750507354736,
+          "backward": 2.9305447824299335,
+          "checkpoint_replay": 2.9493914917111397,
+          "cleanup": 0.028483569622039795,
+          "initial_forward": 2.8905998915433884,
+          "input_and_zero_grad": 0.020178034901618958,
+          "step": 0.02345489338040352
+        },
+        "non_replay_backward_ms": 2.9305447824299335,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.020178034901618958,
+            "inclusive_ms": 0.020178034901618958,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.8905998915433884,
+            "inclusive_ms": 2.8905998915433884,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4767441898584366,
+            "inclusive_ms": 1.4767441898584366,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.472647301852703,
+            "inclusive_ms": 1.472647301852703,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9305447824299335,
+            "inclusive_ms": 5.879936274141073,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3711750507354736,
+            "inclusive_ms": 1.3711750507354736,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.028483569622039795,
+            "inclusive_ms": 0.028483569622039795,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.02345489338040352,
+            "inclusive_ms": 10.213827714323997,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.216782800853252,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.3734190724790096,
+            "share_non_replay_backward": 0.47016899107978205,
+            "share_whole_step": 0.13421216497412405
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9211179353296757,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.28545516084736827
+          },
+          "checkpoint_replay": {
+            "ms": 2.953919116407633,
+            "share_non_replay_backward": 1.0112289821240152,
+            "share_whole_step": 0.28866053174573125
+          },
+          "cleanup": {
+            "ms": 0.028513837605714798,
+            "share_non_replay_backward": 0.009761275729696529,
+            "share_whole_step": 0.002786406533496035
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.9097460210323334,
+            "share_non_replay_backward": 0.9961069992553865,
+            "share_whole_step": 0.2843438836936357
+          },
+          "input_and_zero_grad": {
+            "ms": 0.019717030227184296,
+            "share_non_replay_backward": 0.006749823411343727,
+            "share_whole_step": 0.0019267719275764556
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.02391589805483818,
+            "share_non_replay_backward": 0.008187241523385822,
+            "share_whole_step": 0.0023370903459543524
+          }
+        },
+        "device_ms": null,
+        "index": 4,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3734190724790096,
+          "backward": 2.9211179353296757,
+          "checkpoint_replay": 2.953919116407633,
+          "cleanup": 0.028513837605714798,
+          "initial_forward": 2.9097460210323334,
+          "input_and_zero_grad": 0.019717030227184296,
+          "step": 0.02391589805483818
+        },
+        "non_replay_backward_ms": 2.9211179353296757,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.019717030227184296,
+            "inclusive_ms": 0.019717030227184296,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.9097460210323334,
+            "inclusive_ms": 2.9097460210323334,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.481092069298029,
+            "inclusive_ms": 1.481092069298029,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4728270471096039,
+            "inclusive_ms": 1.4728270471096039,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9211179353296757,
+            "inclusive_ms": 5.8750370517373085,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3734190724790096,
+            "inclusive_ms": 1.3734190724790096,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.028513837605714798,
+            "inclusive_ms": 0.028513837605714798,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.02391589805483818,
+            "inclusive_ms": 10.230348911136389,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.233193635940552,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.3819262385368347,
+            "share_non_replay_backward": 0.47338034706791576,
+            "share_whole_step": 0.1348942596539407
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.919272519648075,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2849595689585893
+          },
+          "checkpoint_replay": {
+            "ms": 2.970812376588583,
+            "share_non_replay_backward": 1.017655034462737,
+            "share_whole_step": 0.2899905399690399
+          },
+          "cleanup": {
+            "ms": 0.028533395379781723,
+            "share_non_replay_backward": 0.009774145848919061,
+            "share_whole_step": 0.002785236388046361
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.8973929584026337,
+            "share_non_replay_backward": 0.9925051323238301,
+            "share_whole_step": 0.28282383469618627
+          },
+          "input_and_zero_grad": {
+            "ms": 0.019797123968601227,
+            "share_non_replay_backward": 0.006781526505441778,
+            "share_whole_step": 0.0019324608698719377
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.023855362087488174,
+            "share_non_replay_backward": 0.008171680419327207,
+            "share_whole_step": 0.0023285985299588254
+          }
+        },
+        "device_ms": null,
+        "index": 5,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3819262385368347,
+          "backward": 2.919272519648075,
+          "checkpoint_replay": 2.970812376588583,
+          "cleanup": 0.028533395379781723,
+          "initial_forward": 2.8973929584026337,
+          "input_and_zero_grad": 0.019797123968601227,
+          "step": 0.023855362087488174
+        },
+        "non_replay_backward_ms": 2.919272519648075,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.019797123968601227,
+            "inclusive_ms": 0.019797123968601227,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.8973929584026337,
+            "inclusive_ms": 2.8973929584026337,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4908011071383953,
+            "inclusive_ms": 1.4908011071383953,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4800112694501877,
+            "inclusive_ms": 1.4800112694501877,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.919272519648075,
+            "inclusive_ms": 5.890084896236658,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3819262385368347,
+            "inclusive_ms": 1.3819262385368347,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.028533395379781723,
+            "inclusive_ms": 0.028533395379781723,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.023855362087488174,
+            "inclusive_ms": 10.241589974611998,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.244514793157578,
+        "warmup": false
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.385062001645565,
+            "share_non_replay_backward": 0.4694740636871417,
+            "share_whole_step": 0.1349494551702454
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9502417892217636,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.28744815871271634
+          },
+          "checkpoint_replay": {
+            "ms": 2.9641189612448215,
+            "share_non_replay_backward": 1.0047037405794184,
+            "share_whole_step": 0.28880024028133244
+          },
+          "cleanup": {
+            "ms": 0.028553884476423264,
+            "share_non_replay_backward": 0.009678489600662669,
+            "share_whole_step": 0.0027820640148306574
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.88278516381979,
+            "share_non_replay_backward": 0.9771352213745952,
+            "share_whole_step": 0.28087572019746987
+          },
+          "input_and_zero_grad": {
+            "ms": 0.026090070605278015,
+            "share_non_replay_backward": 0.008843366906601998,
+            "share_whole_step": 0.002542009534123715
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.02379436045885086,
+            "share_non_replay_backward": 0.00806522385581404,
+            "share_whole_step": 0.00231833374695962
+          }
+        },
+        "device_ms": null,
+        "index": 6,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.385062001645565,
+          "backward": 2.9502417892217636,
+          "checkpoint_replay": 2.9641189612448215,
+          "cleanup": 0.028553884476423264,
+          "initial_forward": 2.88278516381979,
+          "input_and_zero_grad": 0.026090070605278015,
+          "step": 0.02379436045885086
+        },
+        "non_replay_backward_ms": 2.9502417892217636,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.026090070605278015,
+            "inclusive_ms": 0.026090070605278015,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.88278516381979,
+            "inclusive_ms": 2.88278516381979,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4820541255176067,
+            "inclusive_ms": 1.4820541255176067,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4820648357272148,
+            "inclusive_ms": 1.4820648357272148,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9502417892217636,
+            "inclusive_ms": 5.914360750466585,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.385062001645565,
+            "inclusive_ms": 1.385062001645565,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.028553884476423264,
+            "inclusive_ms": 0.028553884476423264,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.02379436045885086,
+            "inclusive_ms": 10.260646231472492,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.263561271131039,
+        "warmup": false
+      }
+    ]
+  },
+  "tokens_sha256": "b2d169104b7b1b499fc380ff5a8acfc7a9fbc52f6befe36b70afa284da90545c",
+  "verdict": "DRY_RUN",
+  "warmups": {
+    "f": [
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.4869337901473045,
+            "share_non_replay_backward": 0.4386829260786945,
+            "share_whole_step": 0.0012391437249664845
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 3.389541059732437,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.0028246910269404853
+          },
+          "checkpoint_replay": {
+            "ms": 3.148996736854315,
+            "share_non_replay_backward": 0.9290333650960079,
+            "share_whole_step": 0.002624232210115017
+          },
+          "cleanup": {
+            "ms": 0.03331294283270836,
+            "share_non_replay_backward": 0.009828157336243629,
+            "share_whole_step": 2.776150783904668e-05
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 1191.8473420664668,
+            "share_non_replay_backward": 351.62499024589147,
+            "share_whole_step": 0.9932319547956052
+          },
+          "input_and_zero_grad": {
+            "ms": 0.016279984265565872,
+            "share_non_replay_backward": 0.004803005474390382,
+            "share_whole_step": 1.356700646585654e-05
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.035958364605903625,
+            "share_non_replay_backward": 0.010608623401287872,
+            "share_whole_step": 2.99660833298087e-05
+          }
+        },
+        "device_ms": null,
+        "index": 0,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.4869337901473045,
+          "backward": 3.389541059732437,
+          "checkpoint_replay": 3.148996736854315,
+          "cleanup": 0.03331294283270836,
+          "initial_forward": 1191.8473420664668,
+          "input_and_zero_grad": 0.016279984265565872,
+          "step": 0.035958364605903625
+        },
+        "non_replay_backward_ms": 3.389541059732437,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.016279984265565872,
+            "inclusive_ms": 0.016279984265565872,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 1191.8473420664668,
+            "inclusive_ms": 1191.8473420664668,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.6138828359544277,
+            "inclusive_ms": 1.6138828359544277,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.535113900899887,
+            "inclusive_ms": 1.535113900899887,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 3.389541059732437,
+            "inclusive_ms": 6.538537796586752,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.4869337901473045,
+            "inclusive_ms": 1.4869337901473045,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.03331294283270836,
+            "inclusive_ms": 0.03331294283270836,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.035958364605903625,
+            "inclusive_ms": 1199.958364944905,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 1199.9687850475311,
+        "warmup": true
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "f",
+        "components": {
+          "adam_update": {
+            "ms": 1.3915840536355972,
+            "share_non_replay_backward": 0.46992301726529195,
+            "share_whole_step": 0.13355913753734783
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.961302176117897,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2842149301700365
+          },
+          "checkpoint_replay": {
+            "ms": 2.9840865172445774,
+            "share_non_replay_backward": 1.0076940277525306,
+            "share_whole_step": 0.28640168773044833
+          },
+          "cleanup": {
+            "ms": 0.030126888304948807,
+            "share_non_replay_backward": 0.01017352722323106,
+            "share_whole_step": 0.002891468329333581
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.9961587861180305,
+            "share_non_replay_backward": 1.0117707035375325,
+            "share_whole_step": 0.2875603398540085
+          },
+          "input_and_zero_grad": {
+            "ms": 0.027070753276348114,
+            "share_non_replay_backward": 0.009141503185546695,
+            "share_whole_step": 0.00259815168952932
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.025599729269742966,
+            "share_non_replay_backward": 0.008644754147752254,
+            "share_whole_step": 0.0024569681964405404
+          }
+        },
+        "device_ms": null,
+        "index": 1,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3915840536355972,
+          "backward": 2.961302176117897,
+          "checkpoint_replay": 2.9840865172445774,
+          "cleanup": 0.030126888304948807,
+          "initial_forward": 2.9961587861180305,
+          "input_and_zero_grad": 0.027070753276348114,
+          "step": 0.025599729269742966
+        },
+        "non_replay_backward_ms": 2.961302176117897,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.027070753276348114,
+            "inclusive_ms": 0.027070753276348114,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.9961587861180305,
+            "inclusive_ms": 2.9961587861180305,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.4883968979120255,
+            "inclusive_ms": 1.4883968979120255,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.495689619332552,
+            "inclusive_ms": 1.495689619332552,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.961302176117897,
+            "inclusive_ms": 5.945388693362474,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3915840536355972,
+            "inclusive_ms": 1.3915840536355972,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.030126888304948807,
+            "inclusive_ms": 0.030126888304948807,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.025599729269742966,
+            "inclusive_ms": 10.415928903967142,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.419235099107027,
+        "warmup": true
+      }
+    ],
+    "g": [
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.4084349386394024,
+            "share_non_replay_backward": 0.4795048557818984,
+            "share_whole_step": 0.13662575922246947
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9372693970799446,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.2849309189991047
+          },
+          "checkpoint_replay": {
+            "ms": 2.9675038531422615,
+            "share_non_replay_backward": 1.0102933888503296,
+            "share_whole_step": 0.2878638237438442
+          },
+          "cleanup": {
+            "ms": 0.033223070204257965,
+            "share_non_replay_backward": 0.011310869284678596,
+            "share_whole_step": 0.0032228163799622182
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.917911857366562,
+            "share_non_replay_backward": 0.9934096818859629,
+            "share_whole_step": 0.28305313360237566
+          },
+          "input_and_zero_grad": {
+            "ms": 0.013686250895261765,
+            "share_non_replay_backward": 0.004659515027415533,
+            "share_whole_step": 0.0013276398988516464
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.026569701731204987,
+            "share_non_replay_backward": 0.009045714961528206,
+            "share_whole_step": 0.0025774038769921827
+          }
+        },
+        "device_ms": null,
+        "index": 0,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.4084349386394024,
+          "backward": 2.9372693970799446,
+          "checkpoint_replay": 2.9675038531422615,
+          "cleanup": 0.033223070204257965,
+          "initial_forward": 2.917911857366562,
+          "input_and_zero_grad": 0.013686250895261765,
+          "step": 0.026569701731204987
+        },
+        "non_replay_backward_ms": 2.9372693970799446,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.013686250895261765,
+            "inclusive_ms": 0.013686250895261765,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.917911857366562,
+            "inclusive_ms": 2.917911857366562,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 1.48423807695508,
+            "inclusive_ms": 1.48423807695508,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4832657761871815,
+            "inclusive_ms": 1.4832657761871815,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9372693970799446,
+            "inclusive_ms": 5.904773250222206,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.4084349386394024,
+            "inclusive_ms": 1.4084349386394024,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.033223070204257965,
+            "inclusive_ms": 0.033223070204257965,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.026569701731204987,
+            "inclusive_ms": 10.304599069058895,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 10.308707132935524,
+        "warmup": true
+      },
+      {
+        "allocation": {
+          "allocator_retention": "pool_reserved minus pool_used is retention only within the CUDA default pool; raw allocations excluded",
+          "exact_peak_owner": null,
+          "fidelity": "CPU unavailable",
+          "reason": "No engine-wide unique-storage/reserved counter; transient intra-scope peaks can be missed.",
+          "reserved_bytes_high_water": null,
+          "sampled_peak": null,
+          "sampled_peak_owner": null,
+          "unique_live_bytes_high_water": null
+        },
+        "arm": "g",
+        "components": {
+          "adam_update": {
+            "ms": 1.3952911831438541,
+            "share_non_replay_backward": 0.47010416967375357,
+            "share_whole_step": 0.12410876551382867
+          },
+          "backward_graph_and_checkpoint_dispatch": {
+            "ms": 2.9680468142032623,
+            "share_non_replay_backward": 1.0,
+            "share_whole_step": 0.26400269029725604
+          },
+          "checkpoint_replay": {
+            "ms": 3.9027882739901543,
+            "share_non_replay_backward": 1.3149348774802976,
+            "share_whole_step": 0.3471463452204913
+          },
+          "cleanup": {
+            "ms": 0.02909405156970024,
+            "share_non_replay_backward": 0.009802423408712372,
+            "share_whole_step": 0.002587866151332866
+          },
+          "dense_leaf_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "initial_forward": {
+            "ms": 2.9001780785620213,
+            "share_non_replay_backward": 0.9771335359953008,
+            "share_whole_step": 0.2579658822824301
+          },
+          "input_and_zero_grad": {
+            "ms": 0.020207837224006653,
+            "share_non_replay_backward": 0.0068084631035144946,
+            "share_whole_step": 0.001797452576117432
+          },
+          "intermediate_gradient_accumulation": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "linear_map_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "native_apa_backward": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "other_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "pointwise_loss_vjps": {
+            "ms": 0.0,
+            "share_non_replay_backward": 0.0,
+            "share_whole_step": 0.0
+          },
+          "step_dispatch": {
+            "ms": 0.023904722183942795,
+            "share_non_replay_backward": 0.008054024643260129,
+            "share_whole_step": 0.002126284173541072
+          }
+        },
+        "device_ms": null,
+        "index": 1,
+        "kind": "step",
+        "named_scopes_ms": {
+          "adam_update": 1.3952911831438541,
+          "backward": 2.9680468142032623,
+          "checkpoint_replay": 3.9027882739901543,
+          "cleanup": 0.02909405156970024,
+          "initial_forward": 2.9001780785620213,
+          "input_and_zero_grad": 0.020207837224006653,
+          "step": 0.023904722183942795
+        },
+        "non_replay_backward_ms": 2.9680468142032623,
+        "raw_scopes": [
+          {
+            "exclusive_ms": 0.020207837224006653,
+            "inclusive_ms": 0.020207837224006653,
+            "name": "input_and_zero_grad"
+          },
+          {
+            "exclusive_ms": 2.9001780785620213,
+            "inclusive_ms": 2.9001780785620213,
+            "name": "initial_forward"
+          },
+          {
+            "exclusive_ms": 2.4043829180300236,
+            "inclusive_ms": 2.4043829180300236,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 1.4984053559601307,
+            "inclusive_ms": 1.4984053559601307,
+            "name": "checkpoint_replay"
+          },
+          {
+            "exclusive_ms": 2.9680468142032623,
+            "inclusive_ms": 6.870835088193417,
+            "name": "backward"
+          },
+          {
+            "exclusive_ms": 1.3952911831438541,
+            "inclusive_ms": 1.3952911831438541,
+            "name": "adam_update"
+          },
+          {
+            "exclusive_ms": 0.02909405156970024,
+            "inclusive_ms": 0.02909405156970024,
+            "name": "cleanup"
+          },
+          {
+            "exclusive_ms": 0.023904722183942795,
+            "inclusive_ms": 11.239510960876942,
+            "name": "step"
+          }
+        ],
+        "wall_ms": 11.242487002164125,
+        "warmup": true
+      }
+    ]
+  }
+}

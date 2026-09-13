@@ -1,0 +1,14 @@
+$ PYTHONDONTWRITEBYTECODE=1 pytest -q tests/test_bp_kernel_3.py -p no:cacheprovider
+........................................................                 [100%]
+56 passed in 0.86s
+
+$ python artifacts/bp_kernel_3/build_driver.py
+Return code: 0
+Build stdout last line: [100%] Built target _tensor_cuda
+Combined stdout/stderr last line: Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+$ PYTHONDONTWRITEBYTECODE=1 python scripts/bp_kernel_3.py --dry-run
+DRY_RUN /mnt/ForgeRealm/wt/pt-bk3/artifacts/bp_kernel_3/dry_kernel_c3b4dbbbc080499fadf4ebb9ded32397/receipt.json
+
+$ PYTHONDONTWRITEBYTECODE=1 python scripts/bp_census_3.py --dry-run
+DRY_RUN /mnt/ForgeRealm/wt/pt-bk3/artifacts/bp_kernel_3/census/dry_c73e455ce17a44e9b3f1d65653a2f84c/receipt.json

@@ -1,0 +1,175 @@
+{
+  "budget": {
+    "cards": 1,
+    "cells": 2,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "budget_enforcement": "Create-only claims for two cells; inherited foreground 300 s child timeout under exclusive nonblocking flock; <=590 s lease; incomplete => INCONCLUSIVE.",
+  "engine_binary": {
+    "bytes": 9299496,
+    "path": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "6d027b86106fc74551be3dc2e4d6e591587994f7db85997a5f1c671be20415a7"
+  },
+  "experiment": "BP-KERNEL-3",
+  "falsifier": "> 0.35 \u00d7 f \u2192 report which of tiling / MMA / selection-gather is the residual (per-kernel timing of the query-owned and key-owned halves is REQUIRED in the receipt).",
+  "forward_state": {
+    "path": "artifacts/bp_kernel_1/forward_state.npz",
+    "sha256": "77afc01e8a912e3ad49b3f2e232ca5bcbe21b0338e336af6ae383ec99c53f5c0"
+  },
+  "g2_built": true,
+  "half_protocol": {
+    "names": [
+      "query_owned",
+      "key_owned"
+    ],
+    "samples": 10,
+    "scope": "Separate diagnostic interleaved launches; timers disabled for whole-op timings.",
+    "variants": [
+      "f",
+      "g1",
+      "g2"
+    ],
+    "warmups": 3
+  },
+  "input": {
+    "path": "artifacts/bp_kernel_1/inputs.npz",
+    "sha256": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a"
+  },
+  "interleaved_order": [
+    "a",
+    "f",
+    "g1",
+    "g2"
+  ],
+  "pins": {
+    "artifacts/bp_kernel_1/forward_state.npz": "77afc01e8a912e3ad49b3f2e232ca5bcbe21b0338e336af6ae383ec99c53f5c0",
+    "artifacts/bp_kernel_1/inputs.npz": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a",
+    "artifacts/bp_kernel_2/reference.npz": "43f6d06a21090adefe09da676e24cc1b785f7be07d9aae44b6e3fa06b19ad4d3",
+    "artifacts/bp_kernel_3/build.log": "d6d7ce52e2ae9f66565dd760e5c9af89b80f533ed6f4c8d1a12847b6d5333723",
+    "artifacts/bp_kernel_3/build_driver.py": "536eac0a1e0a13be64d78b60e2f2c75ab413b65463b1d07afb25a2e688924729",
+    "artifacts/bp_kernel_3/diff_stat.json": "5c922b629527435b64240042b5e9655f505230991c54edea56902eeecb4b3c19",
+    "artifacts/bp_kernel_3/engine_build_receipt.json": "a287f46e8879b4d42db09b9bde754626c8fc1b3f68980522570d49d5cedb478d",
+    "artifacts/bp_kernel_3/lead_commands.txt": "08d1e330376eebe770d5a89b63fb7b49ffff211d574b3898dd1e3681e6b808c3",
+    "artifacts/bp_kernel_3/register.py": "462ee6045f63d8bce4bc81a2b24d0a252f53d1b7e339d236b8f3f70b87324ddc",
+    "artifacts/bp_kernel_3/source.patch": "a7dba7c84d9f6312783bcfe7db28ecee060cc2162eac7b5b4e9aa4210f516739",
+    "orders/BP_KERNEL_3_TILED_TENSOR_CORE.md": "67cfc01dccb3530225a1041b057c5f5c6e1a5c4ea5f27f879eb914f801c3d497",
+    "scripts/bp_census_3.py": "3e6359924dbafd45f05c6edaa1909155a0a0d2a04b6da16b1f946373dadc514f",
+    "scripts/bp_kernel_1.py": "1cffffe95a4f5a76714aaeaa90fe0860e637071d456b2499cd062fda579b6899",
+    "scripts/bp_kernel_2.py": "a048b8ecade052ec382ed42dadab071ce0a826a6fd4f690250b3a6acb963ce73",
+    "scripts/bp_kernel_3.py": "a396390d661c2a56de25797201178b2ffb0386d605bb10a9f2006d258807310a",
+    "tensor_cuda/CMakeLists.txt": "66a62a42a8c439dbdc1cb16940f98905cee85f5bd21605b08e63182b549b170c",
+    "tensor_cuda/include/tc/autograd.h": "22c5bc0123e40e506181302fa091cad0861b0a05b202d428c253421866a6b32c",
+    "tensor_cuda/include/tc/bp_op_timing.h": "fcdcd19bcbb5e2935c8cbb898bd47a802456d1da65f1d0748fa955124932b5da",
+    "tensor_cuda/include/tc/core.h": "6f34346b29305466f091fba4999adf2c4897314b1b76d66bd3a0c357f6ebca79",
+    "tensor_cuda/include/tc/ops.h": "dd0ef60f15573d6ceec98828e76ee79846da18aedf63916db2d9e0aab12f437e",
+    "tensor_cuda/src/apa_sp1_1.cuh": "74248ccb1579efd10d2c7a64473030b1358166875a753cc9f1339829f8afe48a",
+    "tensor_cuda/src/apa_sp2.cuh": "f186c255c7f1aec743e83c884d1ed8eb558630116cdbb5e7295352c6c26aa5ad",
+    "tensor_cuda/src/autograd.cpp": "833bbf8c6aa9b308b655dbc54e6908a79fe5db5702c5bb7f207f9f860487e188",
+    "tensor_cuda/src/bindings.cpp": "049129624c354cd34c9cf13d496d13c59c68c7a9f8ba3ee2a62c8e6fb1f502d3",
+    "tensor_cuda/src/conv.cu": "1cda2a6e147dc3dd599ea57e89b3423ff68464de8c837f51ed8d433dc18fe0a8",
+    "tensor_cuda/src/dda.cu": "58289183587f1aa936321d85de232d03e71922845851cead862c8a526974d6d1",
+    "tensor_cuda/src/gemm_apa.cu": "4827910cc9383b4c6cf7505b12da99eb6e54cc8792a3a43d492a58de8eee25f6",
+    "tensor_cuda/src/kernels.cu": "223b098d9957c08b9224175fb5621c67ec5204958a6e9ed5b2e3e8e77c93f6b4",
+    "tensor_cuda/src/matmul.cu": "426d9901da12936fe41c003176d3d43d5412ecfa9de0613d62348a60ce52a15e",
+    "tensor_cuda/src/ops.cpp": "f38adb00c436b38d91a6e1ff591c797e3642bde2d56740f344e7436e4d63892e",
+    "tensor_cuda/src/paint_bake.cu": "5c5ea305df2da870b03dedd44d698728d6a13ecdf1d07e8ef1f7bcd8c4d13f50",
+    "tensor_cuda/src/paint_inpaint.cu": "77fd450425aeec42b5d0dbb29069dfbd4c50aef067382c48801cae9c3b33cce7",
+    "tensor_cuda/src/paint_raster.cu": "cd6da34283999d2624087d81420c00f427f143ebadb163f3baad158dc199cab7",
+    "tensor_cuda/src/terrain.cu": "11bd7c7b3f6d0a80a6b627e48dede0e68869ffc03af8d20d7112e68b56f97d73",
+    "tensor_cuda/src/terrain_objects.cu": "401b56b58f747878106b0b333d2b589be72fa32cb1f7824046653e0a27b267a0",
+    "tensor_cuda/tensor_cuda/__init__.py": "2aa0435a1157ae2b10965575248dc215e4961ba1ed7d1ceaa127cc1dfca58fc9",
+    "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "6d027b86106fc74551be3dc2e4d6e591587994f7db85997a5f1c671be20415a7",
+    "tensor_cuda/tensor_cuda/apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
+    "tensor_cuda/tensor_cuda/functional.py": "418ee285bdeefacbd9d5a1ccaf39700b8e83ea339377230c79f1d4480a1e3d9c",
+    "tensor_cuda/tensor_cuda/nn.py": "4659cdfa382c0166543a555ef5101e0e3b7ceb8d930bb822be95a0324263517d",
+    "tensor_cuda/tensor_cuda/optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
+    "tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a",
+    "tensor_cuda/tensor_cuda/quantization/__init__.py": "d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f",
+    "tensor_cuda/tensor_cuda/quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943",
+    "tests/test_bp_kernel_3.py": "19ddc07c2f3f356d706c46174339f7216ee05108be59d7511251e6610a2b6a9a"
+  },
+  "prediction": "best green g \u2264 0.35 \u00d7 f (\u2264 ~46 ms at f \u2248 131).",
+  "prior_art": [
+    "FlashAttention-2 / Dao 2023: ownership, tiling and backward structure taken; APA selective tile integration ours.",
+    "NVIDIA CUDA WMMA 2017 / BF16 2020 and CUDA events 2007+: taken fragment API and timing.",
+    "FlashAttention 2022 output-dot VJP, BP-KERNEL-2 reference/gate and supervisor, BP-CENSUS-1 model driver: taken.",
+    "Unverified \u2014 lead to check these titles/authors; no network."
+  ],
+  "red_rule": "Collect all timing samples; RED timings do not count. No green g => cell 2 f vs g1 TIMING-ONLY.",
+  "reference": {
+    "path": "artifacts/bp_kernel_2/reference.npz",
+    "sha256": "43f6d06a21090adefe09da676e24cc1b785f7be07d9aae44b6e3fa06b19ad4d3"
+  },
+  "residual_rule": "Report both halves and g1/g2 comparison; halves alone cannot causally separate tiling from MMA. No attribution beyond these measurements.",
+  "rowdot_route": "output-dot, fixed; no fallback",
+  "samples": 10,
+  "schema_version": 1,
+  "seat": "Codex Astra gpt-6-astra, reasoning high (order-specified)",
+  "secondary_prediction": "g1 \u2264 g2 (selection still pays on tensor cores); if g2 < g1, say so plainly.",
+  "shape": {
+    "B": 1,
+    "D": 96,
+    "H": 16,
+    "KVH": 16,
+    "L": 2048,
+    "S": 2048,
+    "VD": 64,
+    "causal": true,
+    "dtype": "bfloat16",
+    "refine": 0.15,
+    "scale": 0.10206207261596577,
+    "zthr": 1.0364333894937898
+  },
+  "sources": {
+    "tensor_cuda/src/bindings.cpp": {
+      "after_sha256": "049129624c354cd34c9cf13d496d13c59c68c7a9f8ba3ee2a62c8e6fb1f502d3",
+      "baseline": "artifacts/bp_kernel_3/baseline/bindings.cpp",
+      "before_sha256": "28355f79badb72072e3fbe4398d266f4cbf4a20683b8d66fafd90227ff178659"
+    },
+    "tensor_cuda/src/kernels.cu": {
+      "after_sha256": "223b098d9957c08b9224175fb5621c67ec5204958a6e9ed5b2e3e8e77c93f6b4",
+      "baseline": "artifacts/bp_kernel_3/baseline/kernels.cu",
+      "before_sha256": "6c0628f3083aa27c8c4d9fd39b15e2b3452405a4ece829c3e23360588d961b96"
+    },
+    "tensor_cuda/src/ops.cpp": {
+      "after_sha256": "f38adb00c436b38d91a6e1ff591c797e3642bde2d56740f344e7436e4d63892e",
+      "baseline": "artifacts/bp_kernel_3/baseline/ops.cpp",
+      "before_sha256": "a3abf474726febae50a07b438d6c404be63c3dd87c78a4e51c3e4e73626c49fe"
+    }
+  },
+  "status": "CPU preparation only; no native correctness or performance claimed",
+  "step_falsifier": "> 2.5 s \u2192 report the census component table; f outside 10 % \u2192 reproduction failed.",
+  "step_prediction": "whole step \u2264 2.5 s with g (f-arm reproduces \u2248 5.0 s within 10 %).",
+  "tile": {
+    "accumulate": "FP32",
+    "input": "BF16",
+    "key": 16,
+    "max_D": 128,
+    "max_VD": 128,
+    "padded_width": 128,
+    "query": 16,
+    "threads": 128,
+    "wmma": [
+      16,
+      16,
+      16
+    ]
+  },
+  "tolerance_rule": "For each of dQ/dK/dV and each metric (max-abs, relative-L2), tolerance = 2 \u00d7 |a \u2212 reference|; fresh GPU a; zero distance means zero tolerance, no epsilon.",
+  "variant_a_region": {
+    "end_byte_exclusive": 111834,
+    "line_end": 2629,
+    "line_start": 2523,
+    "sha256": "e7adc1e3442732b2fa221513ad75e2bdf665f62703f74b8b9c7410e0fb090a95",
+    "start_byte": 107888
+  },
+  "variants": [
+    "a",
+    "f",
+    "g1",
+    "g2"
+  ],
+  "warmups": 3
+}
