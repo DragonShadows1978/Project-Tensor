@@ -1,0 +1,170 @@
+{
+  "base": "main 754dc1c (order attestation; no git invoked); pre-edit files byte-compared to live Project-Tensor main source",
+  "budget": {
+    "cells": 1,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "budget_enforcement": "nonblocking flock; create-only cell_claim; foreground child subprocess timeout 300 seconds, no retry; parent retains lock; self-owned child only",
+  "correctness_order": "a1, a2, b, d, compare, then all warmups and timing; RED timings ineligible",
+  "date": "2026-09-13",
+  "effective_config": {
+    "checkpoint_blocks": true,
+    "compute_dtype": "bfloat16",
+    "d_model": 1024,
+    "n_layers": 24,
+    "vocab": 8192,
+    "window": 2048
+  },
+  "engine_binary": {
+    "bytes": 15070624,
+    "path": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "bf6e25bd8d31bf9253b696dbde6d8d2a556c4cacd214cef748267431d955b16d"
+  },
+  "experiment": "BP-KERNEL-1",
+  "falsifier": "< 50 % promotes the scalar dot loops (tiling / tensor cores, variant e) as the first target.",
+  "forward_state_registration": {
+    "amendment_path": "artifacts/bp_kernel_1/forward_state_registration.json",
+    "deviation": "Real-forward arrays cannot be included in pre-run inputs.npz here; pinned separately before gates. Explicit two-stage input pinning; lead review required, not hidden as fulfilled.",
+    "path": "artifacts/bp_kernel_1/forward_state.npz",
+    "reason": "No GPU authorized in dispatched seat; cannot produce real lse/thr/output on CPU.",
+    "rule": "Within the only GPU cell, real apa_selective_fwd_train produces out/lse/thr once; create-only NPZ and sha256 amendment before any backward gate. Original registration and inputs.npz never rewritten.",
+    "status": "PENDING_LEAD_GPU_CELL"
+  },
+  "geometry_evidence": {
+    "attention.py": "refine .15 => _norm_ppf(1-clamp(refine))=_norm_ppf(.85); thr=mean(abs(bulk))+zthr*sqrt(max(E(abs(bulk)^2)-mean^2,0)) over visible keys",
+    "attention_mla.py": "kv_b expands all H heads; shared k_pe expanded to H => KVH=H=16; scale=1/sqrt(96); is_causal=True",
+    "kernels.cu": "training real forward determines lse and thr; d uses saved BF16 O",
+    "model_mla.py": "MLAConfig200: H=16, qk_nope_dim=64 + qk_rope_dim=32 => D=96; v_head_dim=64"
+  },
+  "input": {
+    "arrays": {
+      "dO": {
+        "device_dtype": "bfloat16",
+        "shape": [
+          1,
+          16,
+          2048,
+          64
+        ],
+        "storage_dtype": "float32"
+      },
+      "k": {
+        "device_dtype": "bfloat16",
+        "shape": [
+          1,
+          16,
+          2048,
+          96
+        ],
+        "storage_dtype": "float32"
+      },
+      "kq": {
+        "device_dtype": "bfloat16",
+        "shape": [
+          1,
+          16,
+          2048,
+          96
+        ],
+        "storage_dtype": "float32"
+      },
+      "q": {
+        "device_dtype": "bfloat16",
+        "shape": [
+          1,
+          16,
+          2048,
+          96
+        ],
+        "storage_dtype": "float32"
+      },
+      "v": {
+        "device_dtype": "bfloat16",
+        "shape": [
+          1,
+          16,
+          2048,
+          64
+        ],
+        "storage_dtype": "float32"
+      }
+    },
+    "generator": "NumPy default_rng PCG64, standard_normal float32; BF16 RNE stored as exact float32",
+    "kq": "bf16(k + 0.125 * normal); synthetic detached key approximation, not the real quantizer or captured model inputs",
+    "path": "artifacts/bp_kernel_1/inputs.npz",
+    "seed": 20260913,
+    "sha256": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a"
+  },
+  "interleaved_order": "a b c d repeated for 3 warmup rounds then 10 measured rounds",
+  "pins": {
+    "/mnt/ForgeRealm/Project-Tensor/tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/receipt.json": "04b804a08af47aa47654dd120bafabcbe23fad0e8f59d92e0abb279b759e4bd9",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/attention.py": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/attention_mla.py": "5225b737c25f91df8a669e140b8de0d882d965921d9e28ba45c380941e52e349",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/model_mla.py": "05eae14ea15912e797df898ef519431f2947454863a3c448e6cbbe1e5bb5cc42",
+    "artifacts/bp_kernel_1/baseline_pins.json": "9cefeb8490d8bd2289303f349d90d06094b242d16838edeff378014a37167889",
+    "artifacts/bp_kernel_1/engine_build_receipt.json": "43cb95281ef1d6495cc2190d55985b3d9aa0adffb81f2581de2fed4706b5da57",
+    "artifacts/bp_kernel_1/inputs.npz": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a",
+    "artifacts/bp_kernel_1/lead_commands.txt": "9b0b3b95ed1f4eaa056b37ec73d498aeccf35fc03a663283525ddfe284ff9fee",
+    "scripts/bp_kernel_1.py": "1cffffe95a4f5a76714aaeaa90fe0860e637071d456b2499cd062fda579b6899",
+    "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "bf6e25bd8d31bf9253b696dbde6d8d2a556c4cacd214cef748267431d955b16d",
+    "tests/test_bp_kernel_1.py": "41a616965f4cf4e63fc9f986b07f2432a4196eb59a0b5010f5bc14b060ef2e11"
+  },
+  "prediction": "time(a) \u2212 time(c) \u2265 50 % of time(a) \u2014 the atomics own the kernel.",
+  "prior_art": [
+    "Dao et al., FlashAttention 2022: softmax VJP/recomputation and output-dot identity; ours is APA integration.",
+    "NVIDIA CUDA atomicAdd/events, year unverified: wider accumulation and timing, no novelty claim.",
+    "Key-parallel attention backward avoids dK/dV atomics (FlashAttention 2022 work partitioning); NOT implemented: c is deletion only.",
+    "NumPy PCG64 2019 / ONeill PCG 2014, IEEE RNE, pytest Krekel 2004: fixture/testing infrastructure.",
+    "All external attribution unverified \u2014 lead to check; no network."
+  ],
+  "samples": 10,
+  "schema_version": 1,
+  "seat": "Codex Astra gpt-6-astra, reasoning high (order-specified)",
+  "secondary": "d \u2264 0.6 \u00d7 a if the prediction holds and d is green.",
+  "shape": {
+    "B": 1,
+    "D": 96,
+    "H": 16,
+    "KVH": 16,
+    "L": 2048,
+    "S": 2048,
+    "VD": 64,
+    "causal": true,
+    "dtype": "bfloat16",
+    "refine": 0.15,
+    "scale": 0.10206207261596577,
+    "zthr": 1.0364333894937898
+  },
+  "sources": {
+    "bindings.cpp": {
+      "after_sha256": "cbb03a0e1f0a9139d55741c196e2e59a1be281d615f23fb22d91dab7f72aa5a3",
+      "before_sha256": "efbebeab32be240fa640e98de3f477ddd74ec937c12c519c6ccdaa843f70c1c1"
+    },
+    "kernels.cu": {
+      "after_sha256": "19ffa8af01816f72c0b3a7b0de08f7e7dd5d2ceadd404a262d8001f81b8f9763",
+      "before_sha256": "93bd157bfa9ce58b9d9386a12b06d8a99a91542ea3a4022fffc7fe1b49c24b59"
+    },
+    "ops.cpp": {
+      "after_sha256": "19bb95f63a420ed396fac8add7022ff0145dc8483324c41505771d5980826dd5",
+      "before_sha256": "f08f8dec223f9555f95af3eb9fcac96d9730d366bc37f4a55c87bda25a215fbf"
+    }
+  },
+  "tolerance_rule": "For each of dQ/dK/dV, max_abs and relative_L2(candidate,a1) must each be <= 2 * the same metric(a2,a1). No additional absolute or relative tolerance. a1/a2 and their spreads must be finite; zero spread gives zero tolerance. relative_L2 = ||x-ref||_2 / ||ref||_2; zero/zero=0, nonzero/zero is nonfinite and RED.",
+  "variant_a_region": {
+    "end_byte_exclusive": 111834,
+    "line_end": 2629,
+    "line_start": 2523,
+    "sha256": "e7adc1e3442732b2fa221513ad75e2bdf665f62703f74b8b9c7410e0fb090a95",
+    "start_byte": 107888
+  },
+  "variants": {
+    "a": "unaltered original kernel/default binding",
+    "b": "FP32 dK/dV atomics into scratch then one cast to T",
+    "c": "no dK/dV writes; timing only, not a gradient; same output allocation/zeroing as a",
+    "d": "b plus rowdot=dO dot saved BF16 output from real forward; Pass A removed"
+  },
+  "warmups": 3
+}

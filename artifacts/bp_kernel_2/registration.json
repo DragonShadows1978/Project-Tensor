@@ -1,0 +1,136 @@
+{
+  "budget": {
+    "cards": 1,
+    "cells": 2,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "budget_enforcement": "Two distinct create-only cell claims; each foreground child timeout 300 s under nonblocking flock, parent retains lock through termination. Incomplete => INCONCLUSIVE. No shape/sample shortening.",
+  "default": "Original kernel and launcher prefix byte-identical; original default VJP body preserved. Explicit thread-local engine setter opt-in; no env dispatch.",
+  "engine_binary": {
+    "bytes": 16819752,
+    "path": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "6fd610a50af29bac17ad2f4407d1301dc855c6354639eff4852bce9dff536cb4"
+  },
+  "experiment": "BP-KERNEL-2",
+  "falsifier": "f green but > 0.35 \u00d7 a \u2192 the scalar dot loops are the next target (tiling / tensor cores); f RED \u2192 fix before any timing.",
+  "forward_state": {
+    "path": "artifacts/bp_kernel_1/forward_state.npz",
+    "sha256": "77afc01e8a912e3ad49b3f2e232ca5bcbe21b0338e336af6ae383ec99c53f5c0"
+  },
+  "implementation": "Reuse c query pass, save one FP32 rowdot per query; key-owned register/shared reduction writes dK/dV once. No atomics in f. No dK/dV global scratch.",
+  "input": {
+    "path": "artifacts/bp_kernel_1/inputs.npz",
+    "sha256": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a"
+  },
+  "interleaved_order": "a b f d",
+  "pins": {
+    "artifacts/bp_kernel_1/forward_state.npz": "77afc01e8a912e3ad49b3f2e232ca5bcbe21b0338e336af6ae383ec99c53f5c0",
+    "artifacts/bp_kernel_1/inputs.npz": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a",
+    "artifacts/bp_kernel_2/build_driver.py": "9b4d06b34ab82e47618167628c667b8210cdcc246616a90f5b9d8a11d3e041ee",
+    "artifacts/bp_kernel_2/diff_stat.json": "ed78187f446cbb902d40d32071794ba5a612ab3e05200231edb6ef374732c20b",
+    "artifacts/bp_kernel_2/engine_build_receipt.json": "887b83923bc878eddddf47a8c459fa5b2fe7509686fde00633a320bce95b0476",
+    "artifacts/bp_kernel_2/lead_commands.txt": "b4e6353782fd6d268f5d00a3bc8870012cf55fa50e64da30730cb2fc5c153925",
+    "artifacts/bp_kernel_2/reference.npz": "43f6d06a21090adefe09da676e24cc1b785f7be07d9aae44b6e3fa06b19ad4d3",
+    "artifacts/bp_kernel_2/reference_receipt.json": "533c1293ec38fa6114717a3a42f06b3ddc1efd4ca68bd15462566def3c517e83",
+    "artifacts/bp_kernel_2/reference_registration.json": "1b72ffdb2bde43224e48f3020d98c04ab370f29b7cccba44c11b1df905378a8e",
+    "artifacts/bp_kernel_2/register.py": "532069070bb4450ed92f52a26ea187031d3ea27e33e58bb7d21d21f6661f53fe",
+    "artifacts/bp_kernel_2/source.patch": "46f6c9cda0bdf29e5f4ab481f168abf659725f028fddaf10a39d61e651a26c03",
+    "artifacts/bp_kernel_2/timing_hook_copy.json": "ad866a24de91311bd070e093ed3d732f0f81815d66b4073cc7b2cb7f3a09dea9",
+    "orders/BP_KERNEL_2_ATOMICS_FREE_DKDV.md": "d5bcc5c56b166f22c036fa8fc18189b1f7266773a3b1815a773ef557544c33a5",
+    "scripts/bp_census_2.py": "5e8c3ab7fe969286c782eb34b673c17c93d1b9f022a3fbff57526556aa84fa9e",
+    "scripts/bp_kernel_1.py": "1cffffe95a4f5a76714aaeaa90fe0860e637071d456b2499cd062fda579b6899",
+    "scripts/bp_kernel_2.py": "a048b8ecade052ec382ed42dadab071ce0a826a6fd4f690250b3a6acb963ce73",
+    "tensor_cuda/CMakeLists.txt": "66a62a42a8c439dbdc1cb16940f98905cee85f5bd21605b08e63182b549b170c",
+    "tensor_cuda/include/tc/autograd.h": "22c5bc0123e40e506181302fa091cad0861b0a05b202d428c253421866a6b32c",
+    "tensor_cuda/include/tc/bp_op_timing.h": "fcdcd19bcbb5e2935c8cbb898bd47a802456d1da65f1d0748fa955124932b5da",
+    "tensor_cuda/include/tc/core.h": "6f34346b29305466f091fba4999adf2c4897314b1b76d66bd3a0c357f6ebca79",
+    "tensor_cuda/include/tc/ops.h": "dd0ef60f15573d6ceec98828e76ee79846da18aedf63916db2d9e0aab12f437e",
+    "tensor_cuda/src/autograd.cpp": "833bbf8c6aa9b308b655dbc54e6908a79fe5db5702c5bb7f207f9f860487e188",
+    "tensor_cuda/src/bindings.cpp": "28355f79badb72072e3fbe4398d266f4cbf4a20683b8d66fafd90227ff178659",
+    "tensor_cuda/src/conv.cu": "1cda2a6e147dc3dd599ea57e89b3423ff68464de8c837f51ed8d433dc18fe0a8",
+    "tensor_cuda/src/dda.cu": "58289183587f1aa936321d85de232d03e71922845851cead862c8a526974d6d1",
+    "tensor_cuda/src/gemm_apa.cu": "4827910cc9383b4c6cf7505b12da99eb6e54cc8792a3a43d492a58de8eee25f6",
+    "tensor_cuda/src/kernels.cu": "6c0628f3083aa27c8c4d9fd39b15e2b3452405a4ece829c3e23360588d961b96",
+    "tensor_cuda/src/matmul.cu": "426d9901da12936fe41c003176d3d43d5412ecfa9de0613d62348a60ce52a15e",
+    "tensor_cuda/src/ops.cpp": "a3abf474726febae50a07b438d6c404be63c3dd87c78a4e51c3e4e73626c49fe",
+    "tensor_cuda/src/paint_bake.cu": "5c5ea305df2da870b03dedd44d698728d6a13ecdf1d07e8ef1f7bcd8c4d13f50",
+    "tensor_cuda/src/paint_inpaint.cu": "77fd450425aeec42b5d0dbb29069dfbd4c50aef067382c48801cae9c3b33cce7",
+    "tensor_cuda/src/paint_raster.cu": "cd6da34283999d2624087d81420c00f427f143ebadb163f3baad158dc199cab7",
+    "tensor_cuda/src/terrain.cu": "11bd7c7b3f6d0a80a6b627e48dede0e68869ffc03af8d20d7112e68b56f97d73",
+    "tensor_cuda/src/terrain_objects.cu": "401b56b58f747878106b0b333d2b589be72fa32cb1f7824046653e0a27b267a0",
+    "tensor_cuda/tensor_cuda/__init__.py": "2aa0435a1157ae2b10965575248dc215e4961ba1ed7d1ceaa127cc1dfca58fc9",
+    "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "6fd610a50af29bac17ad2f4407d1301dc855c6354639eff4852bce9dff536cb4",
+    "tensor_cuda/tensor_cuda/apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
+    "tensor_cuda/tensor_cuda/functional.py": "418ee285bdeefacbd9d5a1ccaf39700b8e83ea339377230c79f1d4480a1e3d9c",
+    "tensor_cuda/tensor_cuda/nn.py": "4659cdfa382c0166543a555ef5101e0e3b7ceb8d930bb822be95a0324263517d",
+    "tensor_cuda/tensor_cuda/optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
+    "tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a",
+    "tests/test_bp_kernel_2.py": "4cf09a65853885bc5a9412930b8d20d910f86def817406e37afb16db301851a5"
+  },
+  "prediction": "f \u2264 0.35 \u00d7 a (\u2264 ~144 ms at a \u2248 411) with dQ, dK, dV all inside the reference tolerance.",
+  "prior_art": [
+    "FlashAttention-2 backward / Tri Dao 2023: key ownership/recomputation taken; APA selection belongs to project, integration ours.",
+    "FlashAttention / Dao et al. 2022: output-dot identity and softmax VJP taken; BF16 rounding is explicitly gated.",
+    "NVIDIA CUDA reductions/events, NumPy, SHA-256, POSIX flock, BP-KERNEL-1 and BP-CENSUS-1: existing infrastructure taken.",
+    "Unverified \u2014 lead to check these titles/authors; no network."
+  ],
+  "red_f_rule": "No f micro-timing when RED. Census f runs anyway labelled TIMING-ONLY / NOT A VALID STEP.",
+  "reference": {
+    "path": "artifacts/bp_kernel_2/reference.npz",
+    "sha256": "43f6d06a21090adefe09da676e24cc1b785f7be07d9aae44b6e3fa06b19ad4d3"
+  },
+  "rowdot_rule": "Probe f output-dot dQ against reference tolerance. If RED on dQ, use f_pass_a for all f correctness/timing and the census. No route selected by timing.",
+  "samples": 10,
+  "schema_version": 1,
+  "seat": "Codex Astra gpt-6-astra, reasoning high (order-specified)",
+  "shape": {
+    "B": 1,
+    "D": 96,
+    "H": 16,
+    "KVH": 16,
+    "L": 2048,
+    "S": 2048,
+    "VD": 64,
+    "causal": true,
+    "dtype": "bfloat16",
+    "refine": 0.15,
+    "scale": 0.10206207261596577,
+    "zthr": 1.0364333894937898
+  },
+  "sources": {
+    "tensor_cuda/src/autograd.cpp": {
+      "after_sha256": "833bbf8c6aa9b308b655dbc54e6908a79fe5db5702c5bb7f207f9f860487e188",
+      "baseline": "artifacts/bp_kernel_2/baseline/autograd.cpp",
+      "before_sha256": "ad24a0a9853e9c173ac69e1c3bb0a1077cb96b88297f1b9b26c1ee58b7a36377"
+    },
+    "tensor_cuda/src/bindings.cpp": {
+      "after_sha256": "28355f79badb72072e3fbe4398d266f4cbf4a20683b8d66fafd90227ff178659",
+      "baseline": "artifacts/bp_kernel_2/baseline/bindings.cpp",
+      "before_sha256": "cbb03a0e1f0a9139d55741c196e2e59a1be281d615f23fb22d91dab7f72aa5a3"
+    },
+    "tensor_cuda/src/kernels.cu": {
+      "after_sha256": "6c0628f3083aa27c8c4d9fd39b15e2b3452405a4ece829c3e23360588d961b96",
+      "baseline": "artifacts/bp_kernel_2/baseline/kernels.cu",
+      "before_sha256": "19ffa8af01816f72c0b3a7b0de08f7e7dd5d2ceadd404a262d8001f81b8f9763"
+    },
+    "tensor_cuda/src/ops.cpp": {
+      "after_sha256": "a3abf474726febae50a07b438d6c404be63c3dd87c78a4e51c3e4e73626c49fe",
+      "baseline": "artifacts/bp_kernel_2/baseline/ops.cpp",
+      "before_sha256": "19bb95f63a420ed396fac8add7022ff0145dc8483324c41505771d5980826dd5"
+    }
+  },
+  "status": "CPU preparation; GPU results pending lead",
+  "step_falsifier": "> 5.0 s \u2192 the census component table says what remains.",
+  "step_prediction": "whole step with f \u2264 5.0 s (a-arm reproduces \u2248 11.8 s within 10 %).",
+  "tolerance_rule": "For each of dQ/dK/dV and each metric (max-abs, relative-L2), tolerance = 2 \u00d7 |a \u2212 reference|; fresh GPU a; zero distance means zero tolerance, no epsilon.",
+  "variant_a_region": {
+    "end_byte_exclusive": 111834,
+    "line_end": 2629,
+    "line_start": 2523,
+    "sha256": "e7adc1e3442732b2fa221513ad75e2bdf665f62703f74b8b9c7410e0fb090a95",
+    "start_byte": 107888
+  },
+  "warmups": 3
+}

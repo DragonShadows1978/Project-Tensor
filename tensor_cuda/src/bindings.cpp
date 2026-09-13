@@ -9,7 +9,21 @@
 #include <vector>
 
 #include "tc/autograd.h"
+#include "tc/bp_op_timing.h"
 #include "tc/ops.h"
+
+namespace tc {
+void bp_kernel_2_set_variant(const std::string&);
+std::string bp_kernel_2_get_variant();
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
+}
 
 namespace py = pybind11;
 using namespace tc;
@@ -94,6 +108,8 @@ Tensor checkpoint_py(py::function fn, std::vector<Tensor> inputs) {
         set_grad_enabled(true);
         py::object replay_obj;
         try {
+          // Prior art: CUDA event scopes (NVIDIA; see bp_op_timing.h).
+          bp::Scope replay_scope("checkpoint_replay");
           replay_obj = fn(*tensor_args(replay_inputs));
         } catch (...) {
           set_grad_enabled(prev);
@@ -843,6 +859,19 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                           Tensor::make(std::get<2>(r), false));
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"), py::arg("dO"),
      py::arg("lse"), py::arg("thr"), py::arg("scale"), py::arg("is_causal") = false);
+  // BP-KERNEL-1 opt-in bare op. Prior art: Project-Tensor bindings (2026);
+  // ours: explicit census dispatch, no default binding/autograd change.
+  m.def("apa_selective_bwd_variant", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
+          Tensor& dO, Tensor& lse, Tensor& thr, Tensor& out,
+          double scale, bool is_causal, const std::string& variant) {
+    auto r = tc::apa_selective_bwd_variant(q.data(),k.data(),kq.data(),v.data(),
+        dO.data(),lse.data(),thr.data(),out.data(),(float)scale,is_causal,variant);
+    return py::make_tuple(Tensor::make(std::get<0>(r),false),
+                         Tensor::make(std::get<1>(r),false),
+                         Tensor::make(std::get<2>(r),false));
+  }, py::arg("q"),py::arg("k"),py::arg("kq"),py::arg("v"),py::arg("dO"),
+     py::arg("lse"),py::arg("thr"),py::arg("out"),py::arg("scale"),
+     py::arg("is_causal"),py::arg("variant"));
   // Fused APA blend+softmax over precomputed bulk/rank score matrices.
   // Phase 3.1 (board item 4a): Lq<=0 (default) is the legacy sentinel path —
   // causal/window masking must already be baked into bulk/rank as
@@ -897,6 +926,31 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("scale_", [](Tensor& t, double s) { tc::scale_(t.data(), s); });
   m.def("axpy_", [](Tensor& p, Tensor& o, double a) { tc::axpy_(p.data(), o.data(), a); });
 
+  // Prior art: Project-Tensor explicit dispatch (2026); ours: opt-in census selection.
+  m.def("bp_kernel_2_set_variant", &tc::bp_kernel_2_set_variant);
+  m.def("bp_kernel_2_get_variant", &tc::bp_kernel_2_get_variant);
+  // BP-CENSUS-1: no timer is enabled merely by importing the extension.
+  m.def("bp_source_pin", []() { return std::string(bp::source_pin); });
+  m.def("bp_wall_begin", &bp::wall_begin);
+  m.def("bp_wall_end", &bp::wall_end);
+  m.def("bp_configure", &bp::configure);
+  m.def("bp_begin", &bp::begin);
+  m.def("bp_end", &bp::end);
+  m.def("bp_rows", []() {
+    py::list out;
+    auto sample_dict = [](const bp::Sample& s) {
+      py::dict d; d["device_used_bytes"] = s.used; d["device_total_bytes"] = s.total;
+      d["pool_used_bytes"] = s.pool_used; d["pool_reserved_bytes"] = s.pool_reserved;
+      return d;
+    };
+    for (const auto& row : bp::rows) {
+      py::dict d; d["name"] = row.name;
+      d["inclusive_ms"] = row.inclusive_ms; d["exclusive_ms"] = row.exclusive_ms;
+      d["before"] = sample_dict(row.before); d["after"] = sample_dict(row.after);
+      out.append(d);
+    }
+    return out;
+  });
   // grad mode
   m.def("is_grad_enabled", &grad_enabled);
   m.def("set_grad_enabled", &set_grad_enabled);

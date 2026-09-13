@@ -1,6 +1,7 @@
 // autograd.cpp: Tensor construction and the reverse-mode backward engine.
 
 #include "tc/autograd.h"
+#include "tc/bp_op_timing.h"
 
 #include <unordered_set>
 #include <vector>
@@ -12,6 +13,9 @@ bool grad_enabled() { return g_grad_enabled; }
 void set_grad_enabled(bool e) { g_grad_enabled = e; }
 
 void Variable::accumulate_grad(const NDArray& g) {
+  // Prior art: CUDA event scopes / gprof exclusive accounting (see header).
+  bp::Scope scope(bp::enabled ? (op == "leaf" ? "dense_leaf_gradient_accumulation"
+                                                   : "intermediate_gradient_accumulation") : "");
   NDArray gr = reduce_to(g, data.shape);  // handle broadcasting (no-op if equal)
   if (!grad.defined()) grad = gr;
   else grad = ew_binary(grad, gr, /*add=*/0);
@@ -73,7 +77,12 @@ void Tensor::backward(const NDArray& seed) {
   v->accumulate_grad(seed);
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     Variable* node = *it;
+    if (bp::enabled && node->grad_fn && node->grad.defined()) {
+      bp::Scope scope(std::string("vjp:") + node->op);
+      node->grad_fn(node->grad);
+    } else {
     if (node->grad_fn && node->grad.defined()) node->grad_fn(node->grad);
+    }
     // An op node's grad is consumed exactly once — by the grad_fn call
     // above (post-order guarantees it was fully accumulated first). Freeing
     // it here keeps backward's live set to one grad wave instead of the

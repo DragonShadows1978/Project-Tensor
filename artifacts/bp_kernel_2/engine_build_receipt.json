@@ -1,0 +1,39 @@
+{
+  "evidence_class": "CPU compilation only; no GPU execution",
+  "commands": [
+    {
+      "argv": [
+        "cmake",
+        "-S",
+        "tensor_cuda",
+        "-B",
+        "tensor_cuda/build-bk2",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CUDA_ARCHITECTURES=89",
+        "-DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.6/bin/nvcc",
+        "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+      ],
+      "rc": 0
+    },
+    {
+      "argv": [
+        "cmake",
+        "--build",
+        "tensor_cuda/build-bk2",
+        "-j4"
+      ],
+      "rc": 0
+    }
+  ],
+  "elapsed_seconds": 59.41800695192069,
+  "rc": 0,
+  "last_build_line": "[100%] Built target _tensor_cuda",
+  "binaries": [
+    {
+      "path": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+      "sha256": "6fd610a50af29bac17ad2f4407d1301dc855c6354639eff4852bce9dff536cb4",
+      "bytes": 16819752
+    }
+  ]
+}

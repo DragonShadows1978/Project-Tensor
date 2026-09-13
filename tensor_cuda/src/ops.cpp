@@ -12,6 +12,20 @@
 #include <vector>
 
 namespace tc {
+// BP-KERNEL-2 explicit engine control; default a does not capture saved O.
+// Prior art: Project-Tensor opt-in variant dispatch (2026), taken; ours:
+// capture dispatch choice per forward graph so replay uses the selected arm.
+static thread_local std::string bk2_variant = "a";
+void bp_kernel_2_set_variant(const std::string& v) {
+  if (v!="a" && v!="b" && v!="d" && v!="f" && v!="f_pass_a")
+    throw std::runtime_error("BP-KERNEL-2: invalid training variant");
+  bk2_variant=v;
+}
+std::string bp_kernel_2_get_variant() { return bk2_variant; }
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
 namespace ops {
 
 // NDArray-level helpers used inside backward closures.
@@ -741,6 +755,16 @@ Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
   NDArray thr = std::get<2>(r);
   // capture detached NDArrays (q/k/kq/v data + saved stats) for the backward.
   NDArray qd = q.data(), kd = k.data(), kqd = kq.data(), vd = v.data();
+  if (tc::bp_kernel_2_get_variant() != "a") {
+    const std::string variant=tc::bp_kernel_2_get_variant();
+    return Tensor::from_op(out, {q,k,v}, "apa_selective_train",
+        [q,k,v,qd,kd,kqd,vd,lse,thr,out,scale,is_causal,variant](const NDArray& g) {
+          auto d=tc::apa_selective_bwd_variant(qd,kd,kqd,vd,g,lse,thr,out,scale,is_causal,variant);
+          q.v->accumulate_grad(std::get<0>(d));
+          k.v->accumulate_grad(std::get<1>(d));
+          v.v->accumulate_grad(std::get<2>(d));
+        });
+  }
   return Tensor::from_op(out, {q, k, v}, "apa_selective_train",
       [q, k, v, qd, kd, kqd, vd, lse, thr, scale, is_causal](const NDArray& g) {
         auto d = tc::apa_selective_bwd(qd, kd, kqd, vd, g, lse, thr,
@@ -1062,3 +1086,53 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
 
 }  // namespace ops
 }  // namespace tc
+
+// BP-KERNEL-1 opt-in validation; no default autograd closure is changed.
+// Prior art: existing Project-Tensor NDArray dispatch (2026); ours: explicit
+// micro-census variant selection and input guards. No new gradient algorithm.
+namespace tc {
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
+}
+
+namespace tc {
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    const NDArray& dO, const NDArray& lse, const NDArray& thr, const NDArray& out,
+    float scale, bool is_causal, const std::string& variant) {
+  if (variant!="a" && variant!="b" && variant!="c" && variant!="d" && variant!="f" && variant!="f_pass_a")
+    throw std::runtime_error("BP-KERNEL-1: expected explicit variant a/b/c/d/f/f_pass_a");
+  if (q.ndim()!=4 || k.ndim()!=4 || v.ndim()!=4 || kq.shape!=k.shape)
+    throw std::runtime_error("BP-KERNEL-1: invalid q/k/kq/v rank or shape");
+  const auto B=q.shape[0], H=q.shape[1], L=q.shape[2], D=q.shape[3];
+  const auto KVH=k.shape[1], S=k.shape[2], VD=v.shape[3];
+  if (B<=0 || H<=0 || L<=0 || S<L || D<=0 || VD<=0 || KVH<=0 || H%KVH ||
+      D>512 || VD>512 || B*H*L>2147483647 || S>2147483647 ||
+      k.shape!=Shape{B,KVH,S,D} || v.shape!=Shape{B,KVH,S,VD} ||
+      dO.shape!=Shape{B,H,L,VD} || out.shape!=dO.shape ||
+      lse.shape!=Shape{B,H,L} || thr.shape!=lse.shape)
+    throw std::runtime_error("BP-KERNEL-1: invalid attention geometry");
+  if (q.dtype!=DType::Float32 && q.dtype!=DType::Float16 && q.dtype!=DType::BFloat16)
+    throw std::runtime_error("BP-KERNEL-1: expected floating dtype");
+  for (const NDArray* x : {&q,&k,&kq,&v,&dO,&out,&lse,&thr}) {
+    if (!x->device.is_cuda() || x->device.index!=q.device.index || !x->defined())
+      throw std::runtime_error("BP-KERNEL-1: expected same CUDA device");
+    const DType expected=(x==&lse || x==&thr)?DType::Float32:q.dtype;
+    if (x->dtype!=expected) throw std::runtime_error("BP-KERNEL-1: dtype mismatch");
+  }
+  if (variant=="a") return apa_selective_bwd(q,k,kq,v,dO,lse,thr,scale,is_causal);
+  if (variant=="f" || variant=="f_pass_a")
+    return apa_selective_bwd_bk2_cuda(q,k,kq,v,dO,lse,thr,out,scale,is_causal,variant);
+  return apa_selective_bwd_bk1_cuda(q,k,kq,v,dO,lse,thr,out,scale,is_causal,variant);
+}
+}
