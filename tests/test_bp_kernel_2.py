@@ -13,7 +13,39 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import numpy as np
 import pytest
 import bp_kernel_2 as k
-import bp_census_2 as c
+
+# BP-H1 --------------------------------------------------------------------
+# `import bp_census_2` evaluates BP-CENSUS-2's binding AT IMPORT TIME:
+# scripts/bp_census_2.py line 30 is
+#     GRAPA=Path('/mnt/ForgeRealm/wt/grapa-bp1')
+# and it exec's GRAPA/'scripts/bp_census_1.py' at module scope. That worktree
+# has been pruned, so the import raises FileNotFoundError during COLLECTION and
+# aborts the entire run ("Interrupted: 1 error during collection") -- not just
+# this module. A function-level mark cannot reach that: the import never
+# completes. So the module declares itself a receipt at import (the
+# campaign_receipt_module + paired-MODULE shape ported from GraftRepository
+# GRM-H2), and tests/test_bp_kernel_2_receipt.py carries the ONE collectable
+# campaign_receipt-marked test that reproduces this binding under the gate.
+#
+# The three campaign_receipt marks below cannot be COLLECTED while this import
+# fails -- they are kept so that a tree which restores the binding inherits a
+# correctly-classified module rather than a wall of unexplained failures. Each
+# was still classified by reproducing its binding in isolation (bp_census_2
+# loaded with GRAPA redirected to the canonical /mnt/ForgeRealm/GRAPA-Native-
+# LLM); see docs/TESTS_CAMPAIGN_RECEIPTS.md for the method and the evidence.
+#
+# The import is attempted for real first: if a tree ever carries grapa-bp1
+# again, this resolves and the module runs normally. Nothing is hard-coded to
+# skip. scripts/ is outside BP-H1's writable target, so the path is reported,
+# not repaired -- see docs/TESTS_CAMPAIGN_RECEIPTS.md.
+try:
+    import bp_census_2 as c
+except FileNotFoundError as exc:                                  # pragma: no cover
+    from conftest import campaign_receipt_module
+    campaign_receipt_module(
+        registration='artifacts/bp_kernel_2/census/registration.json',
+        reason='scripts/bp_census_2.py resolves the pruned worktree '
+               '/mnt/ForgeRealm/wt/grapa-bp1 at module scope (%s)' % exc)
 
 
 def dense_oracle(x,state,s):
@@ -123,6 +155,19 @@ def test_f_has_key_ownership_and_reuses_c_without_atomics():
     assert 'group*count' in block
 
 
+# BP-H1: binary-bound receipt. k.verify_registration() walks 42 registration
+# pins; reproduced in isolation, EXACTLY ONE is unsatisfiable --
+#   tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so
+# pinned at 6fd610a5..., the engine BP-KERNEL-2 built on the pt-bk2 worktree.
+# `*.so` is gitignored so the file is absent here, and the canonical build at
+# /mnt/ForgeRealm/Project-Tensor is a DIFFERENT build (ff330c8a...), so this
+# pin cannot be satisfied by provisioning -- only by rebuilding the campaign's
+# exact binary. All 41 other pins and all four source before/after sha pairs
+# still verify on this tree. Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_2/registration.json',
+    reason='pins the pt-bk2 engine .so fingerprint 6fd610a5...; gitignored '
+           'and a different build here (canonical is ff330c8a...)')
 def test_registration_and_fail_closed(monkeypatch):
     r=k.verify_registration()
     assert r['input']['sha256'].startswith('53c38919')
@@ -148,6 +193,18 @@ def test_schema_rejects_incomplete_or_cpu_claim():
     with pytest.raises(ValueError): k.validate_receipt(r)
 
 
+# BP-H1: worktree-path AND binary-bound receipt. Not collectable while the
+# import above fails (the companion tests/test_bp_kernel_2_receipt.py carries
+# that half); classified anyway by reproducing it directly -- loading
+# bp_census_2 with GRAPA redirected to the canonical /mnt/ForgeRealm/GRAPA-
+# Native-LLM: c.verify() still raises, now on the absent pt-bk2 engine .so.
+# So this test is bound twice over -- to the pruned grapa-bp1 worktree AND to
+# the campaign's engine binary; repairing either alone would not free it.
+# Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_2/census/registration.json',
+    reason='c.verify() needs both the pruned /mnt/ForgeRealm/wt/grapa-bp1 '
+           'parent artifacts and the pt-bk2 engine .so')
 def test_census_registration_and_fixed_protocol():
     r=c.verify()
     assert r['config']['arm_order']==['a','f']
@@ -156,6 +213,20 @@ def test_census_registration_and_fixed_protocol():
     assert r['tokens_sha256']==k.sha(c.PARENT_ART/'tokens.npy')
 
 
+# BP-H1: worktree-path receipt, marked for the IMPORT binding ONLY. Its
+# own body PASSES. Replayed by hand against a bp_census_2 loaded with GRAPA
+# redirected to the canonical repo, all three summarize() calls give the
+# registered verdicts (TIMING_ONLY_NOT_A_VALID_STEP / CONFIRMED /
+# INCONCLUSIVE). It is marked so the module-level skip does not convert a
+# live receipt into silence once the import is repaired -- the precedent's
+# rule. If scripts/bp_census_2.py is ever re-pinned to a repo-relative GRAPA
+# path, this mark RETIRES and the test should pass outright; check that before
+# assuming otherwise.
+# Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_2/census/registration.json',
+    reason='body passes; bound only by the module import resolving the pruned '
+           '/mnt/ForgeRealm/wt/grapa-bp1 worktree')
 def test_census_red_gate_timing_only_and_incomplete():
     reg=json.loads(c.REG.read_text())
     gate=dict(eligible=False,route='f_pass_a',label='TIMING-ONLY / NOT A VALID STEP')

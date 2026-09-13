@@ -24,6 +24,18 @@ def good_gate():
 def times(a=10.,b=7.,c=5.,d=6.): return {v:[t]*10 for v,t in zip('abcd',(a,b,c,d))}
 
 
+# BP-H1: worktree-path receipt. verify_registration() walks registration
+# pins, four of which are absolute paths inside the pruned campaign worktree
+# /mnt/ForgeRealm/wt/grapa-bp1 (bp_census_1/receipt.json, grapa/attention.py,
+# grapa/attention_mla.py, grapa/model_mla.py). It raises FileNotFoundError on
+# the first, before reaching any assertion here. Also binary-bound (the
+# registration pins the pt-bk1 engine .so, absent and unbuildable here) and
+# sha-bound (kernels.cu/ops.cpp/bindings.cpp after_sha256 moved when
+# BP-KERNEL-2 landed on main). Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_1/registration.json',
+    reason='pins absolute paths in the pruned /mnt/ForgeRealm/wt/grapa-bp1 '
+           'worktree, the pt-bk1 engine .so, and pre-BP-KERNEL-2 source shas')
 def test_registration_and_immutability(tmp_path):
     r=m.verify_registration()
     assert r['shape']==m.SHAPE
@@ -41,6 +53,15 @@ def test_registration_and_immutability(tmp_path):
     with pytest.raises(RuntimeError,match='protocol drift'):m.verify_registration(path)
 
 
+# BP-H1: worktree-path receipt, same binding as above. The test rewrites one
+# source pin to prove 'source drift' closes, but verify_registration() walks
+# the pins FIRST and dies on /mnt/ForgeRealm/wt/grapa-bp1/artifacts/
+# bp_census_1/receipt.json, so the source-drift branch is never reached.
+# Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_1/registration.json',
+    reason='verify_registration() dies on the pruned '
+           '/mnt/ForgeRealm/wt/grapa-bp1 pins before the source-drift branch')
 def test_source_drift_closed(tmp_path):
     r=json.loads(m.REG.read_text());path=tmp_path/'registration.json'
     r['sources']['kernels.cu']['after_sha256']='0'*64
@@ -48,6 +69,18 @@ def test_source_drift_closed(tmp_path):
     with pytest.raises(RuntimeError,match='source drift'):m.verify_registration(path)
 
 
+# BP-H1: sha-bound receipt. BP-KERNEL-1 registered ops.cpp as a byte-identical
+# prefix of the live file ("only appended wrapper"); BP-KERNEL-2 then INSERTED
+# its engine-control block at byte 438, mid-file, so the startswith() at line
+# ~65 below is false. Reproduced in isolation: the kernels.cu region sha, the
+# kernels.cu prefix and the bindings.cpp slice all still PASS -- only the
+# ops.cpp prefix moved, and it moved because a later campaign landed, not
+# because this tree regressed. Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_1/baseline_pins.json + '
+                 'artifacts/bp_kernel_1/baseline/ops.cpp',
+    reason='BP-KERNEL-2 inserted at ops.cpp byte 438; BP-KERNEL-1 registered '
+           'the live file as an append-only extension of its baseline')
 def test_default_regions_unchanged_vs_pinned_main():
     pins=json.loads((m.ART/'baseline_pins.json').read_text())
     pin=pins['variant_a_region']
@@ -161,6 +194,17 @@ def test_cpu_shared_protocol_and_schema(tmp_path):
     with pytest.raises(ValueError):m.validate_receipt(r)
 
 
+# BP-H1: worktree-path receipt. The child process runs scripts/bp_kernel_1.py
+# --run --dry-run, which calls its own verify_registration() and FAILS CLOSED
+# with the same pruned-worktree FileNotFoundError, exiting 2:
+#   FAIL_CLOSED FileNotFoundError: [Errno 2] No such file or directory:
+#   '/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/receipt.json'
+# Failing closed is the script behaving CORRECTLY; the receipt is that its
+# registration cannot be satisfied off the campaign tree. Assertions unchanged.
+@pytest.mark.campaign_receipt(
+    registration='artifacts/bp_kernel_1/registration.json',
+    reason='the dry-run child fails closed on the pruned '
+           '/mnt/ForgeRealm/wt/grapa-bp1 registration pins')
 def test_dry_run_subprocess_precedence_and_schema(tmp_path):
     out=tmp_path/'dry'
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',CUDA_VISIBLE_DEVICES='')
