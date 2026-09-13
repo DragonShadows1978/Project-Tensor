@@ -11,17 +11,6 @@
 #include "tc/autograd.h"
 #include "tc/ops.h"
 
-namespace tc {
-std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
-    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
-    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
-    float, bool, const std::string&);
-std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
-    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
-    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
-    float, bool, const std::string&);
-}
-
 namespace py = pybind11;
 using namespace tc;
 
@@ -854,19 +843,6 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                           Tensor::make(std::get<2>(r), false));
   }, py::arg("q"), py::arg("k"), py::arg("kq"), py::arg("v"), py::arg("dO"),
      py::arg("lse"), py::arg("thr"), py::arg("scale"), py::arg("is_causal") = false);
-  // BP-KERNEL-1 opt-in bare op. Prior art: Project-Tensor bindings (2026);
-  // ours: explicit census dispatch, no default binding/autograd change.
-  m.def("apa_selective_bwd_variant", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
-          Tensor& dO, Tensor& lse, Tensor& thr, Tensor& out,
-          double scale, bool is_causal, const std::string& variant) {
-    auto r = tc::apa_selective_bwd_variant(q.data(),k.data(),kq.data(),v.data(),
-        dO.data(),lse.data(),thr.data(),out.data(),(float)scale,is_causal,variant);
-    return py::make_tuple(Tensor::make(std::get<0>(r),false),
-                         Tensor::make(std::get<1>(r),false),
-                         Tensor::make(std::get<2>(r),false));
-  }, py::arg("q"),py::arg("k"),py::arg("kq"),py::arg("v"),py::arg("dO"),
-     py::arg("lse"),py::arg("thr"),py::arg("out"),py::arg("scale"),
-     py::arg("is_causal"),py::arg("variant"));
   // Fused APA blend+softmax over precomputed bulk/rank score matrices.
   // Phase 3.1 (board item 4a): Lq<=0 (default) is the legacy sentinel path —
   // causal/window masking must already be baked into bulk/rank as
