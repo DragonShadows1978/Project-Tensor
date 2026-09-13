@@ -1,0 +1,106 @@
+{
+  "budget": {
+    "cards": 1,
+    "cells": 2,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "checkpoint": {
+    "metadata": {
+      "data_index": 220497,
+      "extra": {
+        "loader": {
+          "corpus_phase": "copy_bridge",
+          "sample_i": 220497
+        },
+        "step": 1200
+      },
+      "refine": 0.15
+    },
+    "path": "/mnt/ForgeRealm/wt/grapa-bp1/checkpoints/grapa_mla_w12288_r015_bf16_train.ckpt",
+    "sha256": "54ba75133917a46613c019af3819b7c88a008c24b773fdd7d6b10f8068d987cf",
+    "step": 1200
+  },
+  "config": {
+    "adam_dtype": "float32",
+    "arm_order": [
+      "a",
+      "f"
+    ],
+    "batch": 1,
+    "checkpoint_blocks": true,
+    "compute_dtype": "bfloat16",
+    "fixed_tokens": true,
+    "lr": 0.0003,
+    "measured_steps": 5,
+    "optimizer_state": "checkpoint.load restores FP32 Adam moments/t/lr as train.py resume",
+    "parameter_dtype": "float32",
+    "refine": 0.15,
+    "seed": 1720,
+    "sequence": 2048,
+    "warmup_steps": 2
+  },
+  "engine_binary": {
+    "bytes": 16819752,
+    "path": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "6fd610a50af29bac17ad2f4407d1301dc855c6354639eff4852bce9dff536cb4"
+  },
+  "experiment": "BP-CENSUS-2",
+  "falsifier": "> 5.0 s \u2192 the census component table says what remains.",
+  "gate_rule": "f kernel gate RED or incomplete => run f arm TIMING-ONLY / NOT A VALID STEP; no valid-step prediction claim.",
+  "kernel_registration_sha256": "18adcb9fa30aeba70e3e170f91135fd5f26013e3dfde75d4b5935d6264765854",
+  "off_control": {
+    "evidence": "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/receipt.json",
+    "parent_overhead_percent": 1.3,
+    "repeated": false
+  },
+  "pins": {
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/engine_hook.patch": "697218dd8ef729369f1f918c7f65ba76875571e6da108fb7c370a38491b0c205",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/engine_patch/include/tc/bp_op_timing.h": "fcdcd19bcbb5e2935c8cbb898bd47a802456d1da65f1d0748fa955124932b5da",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/engine_patch/src/autograd.cpp": "833bbf8c6aa9b308b655dbc54e6908a79fe5db5702c5bb7f207f9f860487e188",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/engine_patch/src/bindings.cpp": "71d3b38af79ca839b7105d3acee40da0bd4728b8523d1edd5e559aa0437c9d06",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/engine_patch_manifest.json": "ed41a830d0b9295c156ec4031cd87d917428fd90ff2bec458adcc72ea4574043",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/receipt.json": "04b804a08af47aa47654dd120bafabcbe23fad0e8f59d92e0abb279b759e4bd9",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/registration.json": "ae350f1759b093f36b3751bbedd0e778a459e7ab92218903c63818ac813e4899",
+    "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/tokens.npy": "b2d169104b7b1b499fc380ff5a8acfc7a9fbc52f6befe36b70afa284da90545c",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/__init__.py": "12330a8f29ab58bc5d6da5e0d2a42fd3fc7b5d4d8213a7d4f44e31aa6b8cb88a",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/audit_reports/tokenizer_8k.json": "01b3f0662e1a90329ad64de9979351e94d48a9fe76cedfc79a53eec78c862583",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/blocklist.py": "99facfbbc17363823d8554926b615dcdf1b29ca903c83d3da6b44b9c1e5b0666",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/entities.py": "e550952a14a42e2994bb66117442bd1235abc19d52db13d32d4da9ddb0ec4678",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/export_stream.py": "1218a5e075bfaa623ceaa9f26f2f1ca07908e1ed5036dbe32107bddde1891644",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/factory.py": "6ef018953052218c6a1fe1da5025d93a0cd252296c3c99d7b7cb1fcfa72101cc",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/inventories.py": "72af5385d3f66146662f201abd87d808fa64ff17372112aff5343a9bcdb1fd34",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/prng.py": "59e95f05005f0684094160857f3dc562212e006d3e52e6efa69286c416c29a7e",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/relations.py": "e8726dbfedb3e40dee47c493e220228e25249b593f8501219e0f7a6d080c0fe5",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/template_lib.py": "d9b22e1b7989bad1a02113833bba98b0c088ae806154258a2bb31af9bced1053",
+    "/mnt/ForgeRealm/wt/grapa-bp1/corpus/templates/library.jsonl": "6b6e4166728459bf9cea5f0b108d0f55ea3e2b470042831c32328f408d276dc3",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/__init__.py": "de0fc97cd38421868d8efc106d211f10f510c77411146580db88b3c84d6108a1",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/attention.py": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/attention_mla.py": "5225b737c25f91df8a669e140b8de0d882d965921d9e28ba45c380941e52e349",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/checkpoint.py": "b4f3b303cc50528b74f8e3a2bd0f2e6f8f2908989c76e2b718579e8b7e3ae53e",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/codebooks.py": "e7c8c90905f95cf5c19d93da2915103b9568309e792d689bb2e74c090c9f9af7",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/evaluate.py": "785cc0f90e75fffdd59deb8dbdbbc9c338e8d881823104c90fd0e137e1518325",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/loss.py": "8431182b5b370d5ea803bde2c3165491f5e2cecf10a9c3859ba7abb08a7ac5c4",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/model.py": "c180d04cf531fa1ee280892b4cba9b2b3ccc35f599d270217244160f35e43389",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/model_mla.py": "05eae14ea15912e797df898ef519431f2947454863a3c448e6cbbe1e5bb5cc42",
+    "/mnt/ForgeRealm/wt/grapa-bp1/grapa/train.py": "36e4698cfe7e80953a30488a53d36e8b5c1c0ec1e9e0cb4f7488bfec61ed3b70",
+    "/mnt/ForgeRealm/wt/grapa-bp1/scripts/bp_census_1.py": "5fb0a252a6ec4300b6217b798810ad8d7eceee6f1ff0656209ecd62b6e3fcab1",
+    "/mnt/ForgeRealm/wt/grapa-bp1/scripts/bp_census_1_cpu.py": "951d9c4fb83b6662c42b554887ec5e0ff77f65dc0e1c9a7a088ff6f3d2a49281",
+    "/mnt/ForgeRealm/wt/grapa-bp1/scripts/bp_census_1_prepare.py": "ff1913c10a567b7611527f81936cae26869e9180ac0c257851d754d27f21af77",
+    "/mnt/ForgeRealm/wt/grapa-bp1/scripts/bp_census_1_stage_hook.py": "19c5f08cb73b9fae688e8a5a6a308df2f9e1c5dbeb66b733c348714f9cc96d85",
+    "/mnt/ForgeRealm/wt/grapa-bp1/tests/test_bp_census_1.py": "009ecdeac62367e4dd364f48b1de6efed05970e6f7182f3475b1648be4d5bc1d"
+  },
+  "prediction": "whole step with f \u2264 5.0 s (a-arm reproduces \u2248 11.8 s within 10 %).",
+  "rowdot_rule": "Use cell 1 recorded f route; if missing due to incomplete cell use f_pass_a, TIMING-ONLY / NOT A VALID STEP.",
+  "schema_version": 1,
+  "scope": "same checkpoint/tokens/config as parent; 2 warmups + 5 measured per arm; a then f",
+  "tokenizer": {
+    "path": "/mnt/ForgeRealm/wt/grapa-bp1/corpus/audit_reports/tokenizer_8k.json",
+    "provenance": "checkpoint tokenizer_path if present; otherwise train.py TOK_PATH (legacy metadata)",
+    "sha256": "01b3f0662e1a90329ad64de9979351e94d48a9fe76cedfc79a53eec78c862583",
+    "vocab": 8192
+  },
+  "tokens_path": "/mnt/ForgeRealm/wt/grapa-bp1/artifacts/bp_census_1/tokens.npy",
+  "tokens_sha256": "b2d169104b7b1b499fc380ff5a8acfc7a9fbc52f6befe36b70afa284da90545c"
+}

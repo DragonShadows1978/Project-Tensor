@@ -2725,7 +2725,7 @@ __global__ void apa_selective_bwd_bk1_kernel(
     const float* lse, const float* thr_in,
     T* dq, float* dk, float* dv, const T* out,
     int B, int H, int L, int S, int D, int VD, float scale,
-    int is_causal, int KVH, int group) {
+    int is_causal, int KVH, int group, float* saved_rowdot = nullptr) {
   int row = blockIdx.x;
   int i = row % L;
   int bh = row / L;
@@ -2783,6 +2783,8 @@ __global__ void apa_selective_bwd_bk1_kernel(
   red[tid] = partial; __syncthreads();
   for (int off = nt/2; off>0; off>>=1){ if(tid<off) red[tid]+=red[tid+off]; __syncthreads(); }
   float rowdot = red[0]; __syncthreads();
+  // BP-KERNEL-2: expose the existing c/d row reduction to the key pass.
+  if (saved_rowdot && tid == 0) saved_rowdot[row] = rowdot;
 
   // Pass B: per-key gradients. dScore_j = p_j * (dO.v_j - rowdot).
   // dV_j += p_j * dO ; dQ += dScore_j*scale * (k_j or kq_j) ; dK_j += dScore_j*scale*q (selected).
@@ -2876,6 +2878,123 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
   cuda_check_last("apa_selective_bwd_bk1");
   if (write_kv) return {dq, dk.astype(q.dtype), dv.astype(q.dtype)};
   return {dq, dk, dv};
+}
+
+
+// BP-KERNEL-2 f: one owner block per (batch, kv-head, key); no atomics.
+// Prior art: FlashAttention-2 backward, Tri Dao (2023): key ownership and
+// query recomputation (taken). Warp/shared reductions: NVIDIA CUDA (2007+).
+// Output-dot identity: Dao et al., FlashAttention (2022), taken in reused
+// query pass above. APA mixed-score selection is the project's contribution;
+// ours here is its integration with key ownership and the registered fallback.
+// Unverified — lead to check: "FlashAttention-2 backward Dao 2023 dK dV"
+// and "FlashAttention 2022 Di dO O". No tensor-core/tiling claim.
+template <typename T, int DMAX>
+__global__ void apa_selective_bwd_bk2_kv_kernel(
+    const T* q, const T* k, const T* kq, const T* v, const T* dO,
+    const float* lse, const float* thr, const float* rowdot, T* dk, T* dv,
+    int H, int L, int S, int D, int VD, float scale, int causal,
+    int KVH, int group) {
+  int j = blockIdx.x % S, kvbh = blockIdx.x / S;
+  int b = kvbh / KVH, kh = kvbh % KVH;
+  int tid = threadIdx.x, lane = tid & 31, warp = tid >> 5;
+  __shared__ float ks[DMAX], kqs[DMAX], vs[DMAX];
+  for (int d=tid; d<D; d+=128) {
+    ks[d]=ld<T>(k, (int64_t)kvbh*S*D+(int64_t)j*D+d);
+    kqs[d]=ld<T>(kq, (int64_t)kvbh*S*D+(int64_t)j*D+d);
+  }
+  for (int d=tid; d<VD; d+=128)
+    vs[d]=ld<T>(v, (int64_t)kvbh*S*VD+(int64_t)j*VD+d);
+  __syncthreads();
+  float ak[DMAX], av[DMAX];
+  for (int d=0; d<D; ++d) ak[d]=0.f;
+  for (int d=0; d<VD; ++d) av[d]=0.f;
+  const int first = causal ? max(0, j-(S-L)) : 0;
+  const int count = L-first;
+  // Flatten grouped query heads so one block owns all contributions to K/V.
+  for (int t=tid; t<group*count; t+=128) {
+    int h=kh*group+t/count, i=first+t%count;
+    int64_t row=((int64_t)b*H+h)*L+i;
+    const T* qi=q+row*D; const T* doi=dO+row*VD;
+    float bulk=0.f;
+    for (int d=0; d<D; ++d) bulk+=ld<T>(qi,d)*kqs[d];
+    bulk*=scale;
+    bool selected=fabsf(bulk)>=thr[row];
+    float score=bulk;
+    if (selected) {
+      float exact=0.f;
+      for (int d=0; d<D; ++d) exact+=ld<T>(qi,d)*ks[d];
+      score=exact*scale;
+    }
+    float prob=__expf(score-lse[row]), dov=0.f;
+    for (int d=0; d<VD; ++d) dov+=ld<T>(doi,d)*vs[d];
+    float ds=prob*(dov-rowdot[row])*scale;
+    for (int d=0; d<VD; ++d) av[d]+=prob*ld<T>(doi,d);
+    if (selected) for (int d=0; d<D; ++d) ak[d]+=ds*ld<T>(qi,d);
+  }
+  __shared__ float wk[4][DMAX], wv[4][DMAX];
+  for (int d=0; d<D; ++d) {
+    float x=ak[d];
+    for (int off=16; off>0; off>>=1) x+=__shfl_down_sync(0xffffffffu,x,off);
+    if (lane==0) wk[warp][d]=x;
+  }
+  for (int d=0; d<VD; ++d) {
+    float x=av[d];
+    for (int off=16; off>0; off>>=1) x+=__shfl_down_sync(0xffffffffu,x,off);
+    if (lane==0) wv[warp][d]=x;
+  }
+  __syncthreads();
+  for (int d=tid; d<D; d+=128) {
+    float x=0.f; for (int w=0; w<4; ++w) x+=wk[w][d];
+    st<T>(dk, (int64_t)kvbh*S*D+(int64_t)j*D+d, x);
+  }
+  for (int d=tid; d<VD; d+=128) {
+    float x=0.f; for (int w=0; w<4; ++w) x+=wv[w][d];
+    st<T>(dv, (int64_t)kvbh*S*VD+(int64_t)j*VD+d, x);
+  }
+}
+
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
+    const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
+    const NDArray& dO, const NDArray& lse, const NDArray& thr, const NDArray& out,
+    float scale, bool is_causal, const std::string& variant) {
+  const int B=q.shape[0], H=q.shape[1], L=q.shape[2], D=q.shape[3];
+  const int S=k.shape[2], VD=v.shape[3], KVH=k.shape[1], group=H/KVH;
+  NDArray dq(q.shape,q.dtype,q.device), dk(k.shape,k.dtype,k.device), dv(v.shape,v.dtype,v.device);
+  NDArray rowdot(lse.shape,DType::Float32,q.device);
+  const int cap=D>VD?D:VD;
+  DISPATCH_FLOAT(q.dtype, T, {
+    auto launch=[&](auto tag, auto dot_tag) {
+      constexpr int DMAX=decltype(tag)::value;
+      constexpr bool DOT=decltype(dot_tag)::value;
+      // Reuse c's dQ implementation, f's pre-pass fused into that query launch.
+      // false WRITE_KV eliminates both atomicAdd sites at compile time.
+      apa_selective_bwd_bk1_kernel<T,DMAX,false,DOT><<<B*H*L,128>>>(
+        static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+        static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+        static_cast<T*>(dO.data_ptr()),static_cast<float*>(lse.data_ptr()),
+        static_cast<float*>(thr.data_ptr()),static_cast<T*>(dq.data_ptr()),nullptr,nullptr,
+        static_cast<T*>(out.data_ptr()),B,H,L,S,D,VD,scale,is_causal?1:0,KVH,group,
+        static_cast<float*>(rowdot.data_ptr()));
+      apa_selective_bwd_bk2_kv_kernel<T,DMAX><<<B*KVH*S,128>>>(
+        static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+        static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+        static_cast<T*>(dO.data_ptr()),static_cast<float*>(lse.data_ptr()),
+        static_cast<float*>(thr.data_ptr()),static_cast<float*>(rowdot.data_ptr()),
+        static_cast<T*>(dk.data_ptr()),static_cast<T*>(dv.data_ptr()),
+        H,L,S,D,VD,scale,is_causal?1:0,KVH,group);
+    };
+    auto pick=[&](auto tag) {
+      if (variant=="f") launch(tag,std::true_type{});
+      else launch(tag,std::false_type{});
+    };
+    if (cap<=64) pick(std::integral_constant<int,64>{});
+    else if (cap<=128) pick(std::integral_constant<int,128>{});
+    else if (cap<=256) pick(std::integral_constant<int,256>{});
+    else pick(std::integral_constant<int,512>{});
+  });
+  cuda_check_last("apa_selective_bwd_bk2");
+  return {dq,dk,dv};
 }
 
 // ----------------------------------------------- APA blend+softmax (post-matmul)
