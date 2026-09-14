@@ -1,0 +1,30 @@
+{
+  "evidence": [
+    {
+      "fact": "checkpoint_py initial invocation wraps fn in NoGradGuard; replay re-enables grad",
+      "line": 90,
+      "path": "tensor_cuda/src/bindings.cpp",
+      "sha256": "5058b907c6d737dc10f130e0087b772836b5d9bd52714150aa0f45bedea915e4"
+    },
+    {
+      "fact": "checkpoint_blocks uses tc.checkpoint for each block",
+      "line": 100,
+      "path": "grapa/model_mla.py",
+      "root": "/mnt/ForgeRealm/GRAPA-Native-LLM",
+      "sha256": "05eae14ea15912e797df898ef519431f2947454863a3c448e6cbbe1e5bb5cc42"
+    },
+    {
+      "fact": "grad enabled routes to apa_selective_train; no-grad routes to apa_selective_attention",
+      "line": 68,
+      "path": "grapa/attention.py",
+      "root": "/mnt/ForgeRealm/GRAPA-Native-LLM",
+      "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791"
+    }
+  ],
+  "evidence_class": "source inspection and reasoning; not GPU observation",
+  "finding": "The order premise that initial forward and checkpoint replay both use the training forward does not match current canonical source. h applies to replay; checkpointed initial forward uses unchanged inference.",
+  "implication": "The initial training-forward share may be zero; that is not evidence that inference APA consumes zero time. Whole initial_forward remains in the component table. Combined <=250 ms prediction remains unchanged and may be falsified by unchanged initial forward alone.",
+  "registration_sha256": "763db7c30f0b02d735a92f830e2e55fb884e7bd560bcbaf860d1ca7b095c04e4",
+  "scope": "All apa_forward_ms/apa_share fields in BK4 census measure TRAINING forward only; inference forward is outside this order.",
+  "successor": "Inference APA tiling is explicitly out of scope; lead decision required for a successor, no inference edits made."
+}

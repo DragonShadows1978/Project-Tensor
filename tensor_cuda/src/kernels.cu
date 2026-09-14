@@ -2881,6 +2881,8 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk1_cuda(
 }
 
 
+// BP-KERNEL-3 opt-in diagnostics; prior art: NVIDIA CUDA events (2007+), taken.
+namespace bk3 { extern thread_local bool profile; extern thread_local std::vector<float> halves; }
 // BP-KERNEL-2 f: one owner block per (batch, kv-head, key); no atomics.
 // Prior art: FlashAttention-2 backward, Tri Dao (2023): key ownership and
 // query recomputation (taken). Warp/shared reductions: NVIDIA CUDA (2007+).
@@ -2963,6 +2965,13 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
   NDArray dq(q.shape,q.dtype,q.device), dk(k.shape,k.dtype,k.device), dv(v.shape,v.dtype,v.device);
   NDArray rowdot(lse.shape,DType::Float32,q.device);
   const int cap=D>VD?D:VD;
+  cudaEvent_t events[3]{};
+  auto event_check=[](cudaError_t e) {if(e!=cudaSuccess) throw std::runtime_error(cudaGetErrorString(e));};
+  try {
+  if(bk3::profile) {
+    for(auto& e:events) event_check(cudaEventCreate(&e));
+    event_check(cudaEventRecord(events[0]));
+  }
   DISPATCH_FLOAT(q.dtype, T, {
     auto launch=[&](auto tag, auto dot_tag) {
       constexpr int DMAX=decltype(tag)::value;
@@ -2976,6 +2985,7 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
         static_cast<float*>(thr.data_ptr()),static_cast<T*>(dq.data_ptr()),nullptr,nullptr,
         static_cast<T*>(out.data_ptr()),B,H,L,S,D,VD,scale,is_causal?1:0,KVH,group,
         static_cast<float*>(rowdot.data_ptr()));
+      if(bk3::profile) event_check(cudaEventRecord(events[1]));
       apa_selective_bwd_bk2_kv_kernel<T,DMAX><<<B*KVH*S,128>>>(
         static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
         static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
@@ -2994,6 +3004,216 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
     else pick(std::integral_constant<int,512>{});
   });
   cuda_check_last("apa_selective_bwd_bk2");
+  if(bk3::profile) {
+    event_check(cudaEventRecord(events[2]));event_check(cudaEventSynchronize(events[2]));
+    bk3::halves.resize(2);
+    for(int i=0;i<2;++i) event_check(cudaEventElapsedTime(&bk3::halves[i],events[i],events[i+1]));
+  }
+  } catch(...) {for(auto e:events) if(e) cudaEventDestroy(e);throw;}
+  for(auto e:events) if(e) cudaEventDestroy(e);
+  return {dq,dk,dv};
+}
+
+// BP-KERNEL-3 g1/g2. Prior art: FlashAttention-2 (Tri Dao, 2023), taken:
+// owner tiles, shared-memory reuse, recomputation, FP32 running accumulators.
+// NVIDIA CUDA WMMA (2017; BF16 support 2020), taken: 16x16x16 fragments.
+// Ours: APA selected/unselected coefficient tiles; g1 masked shared scalar
+// exact scores versus g2 dense exact MMA. Unverified — lead to check:
+// "Dao 2023 FlashAttention-2 backward", "CUDA WMMA BF16 16 16 16".
+// Precision: p and dS are rounded to BF16 for outer-product MMA; FP32
+// accumulators persist across ALL reduction tiles and grouped query heads.
+namespace bk3 {
+using namespace nvcuda;
+using BF = __nv_bfloat16;
+using AF = wmma::fragment<wmma::matrix_a,16,16,16,BF,wmma::row_major>;
+using BR = wmma::fragment<wmma::matrix_b,16,16,16,BF,wmma::row_major>;
+using BC = wmma::fragment<wmma::matrix_b,16,16,16,BF,wmma::col_major>;
+using CF = wmma::fragment<wmma::accumulator,16,16,16,float>;
+constexpr int P=128, T=16;
+
+// All 32 lanes participate; row-major B is viewed as column-major B^T.
+__device__ void scores(const BF* a, const BF* b, float* dst, int width) {
+  AF af; BC bf; CF cf; wmma::fill_fragment(cf,0.f);
+  for (int d=0; d<width; d+=16) {
+    wmma::load_matrix_sync(af,a+d,P); wmma::load_matrix_sync(bf,b+d,P);
+    wmma::mma_sync(cf,af,bf,cf);
+  }
+  wmma::store_matrix_sync(dst,cf,T,wmma::mem_row_major);
+}
+__device__ void outer(const BF* a, const BF* b, int col, CF& c) {
+  AF af; BR bf;
+  wmma::load_matrix_sync(af,a,T); wmma::load_matrix_sync(bf,b+col,P);
+  wmma::mma_sync(c,af,bf,c);
+}
+
+template<bool KEY, bool DENSE>
+__global__ void backward(const BF* q, const BF* k, const BF* kq, const BF* v,
+    const BF* dout, const BF* out, const float* lse, const float* thr,
+    BF* dq, BF* dk, BF* dv, int H,int KVH,int L,int S,int D,int VD,
+    float scale,bool causal) {
+  // Four warps own disjoint gradient columns. Warp 0 forms dense scores;
+  // all threads stage inputs and evaluate selected scores / softmax VJP.
+  int tid=threadIdx.x, warp=tid/32, lane=tid%32, group=H/KVH;
+  int owner=blockIdx.x*T, bh=blockIdx.y;
+  int b=bh/(KEY?KVH:H), kh=KEY?bh%KVH:(bh%H)/group;
+  __shared__ __align__(32) BF qs[T*P], dos[T*P], ks[T*P], kqs[T*P], vs[T*P];
+  __shared__ __align__(32) BF sel[T*T], bulkds[T*T], prob[T*T];
+  __shared__ __align__(32) float bulk[T*T], dov[T*T], exact[T*T], scratch[T*P];
+  __shared__ float rd[T];
+  CF accum[2], accumv[2];
+  for(int n=0;n<2;++n) {wmma::fill_fragment(accum[n],0.f);wmma::fill_fragment(accumv[n],0.f);}
+  // Owner input is loaded once per block, never once per pair.
+  for(int z=tid;z<T*P;z+=128) {
+    int r=z/P,d=z%P, pos=owner+r;
+    if constexpr(KEY) {
+      int64_t row=((int64_t)b*KVH+kh)*S+pos;
+      ks[z]=(pos<S && d<D)?k[row*D+d]:__float2bfloat16(0.f);
+      kqs[z]=(pos<S && d<D)?kq[row*D+d]:__float2bfloat16(0.f);
+      vs[z]=(pos<S && d<VD)?v[row*VD+d]:__float2bfloat16(0.f);
+    } else {
+      int64_t row=(int64_t)bh*L+pos;
+      qs[z]=(pos<L && d<D)?q[row*D+d]:__float2bfloat16(0.f);
+      dos[z]=(pos<L && d<VD)?dout[row*VD+d]:__float2bfloat16(0.f);
+    }
+  }
+  __syncthreads();
+  int heads=KEY?group:1;
+  for(int gh=0;gh<heads;++gh) {
+    int h=KEY?kh*group+gh:bh%H;
+    int limit=KEY?L:S;
+    // Skip wholly invisible tiles only; partial tiles use per-pair visibility.
+    int first=(KEY && causal)?max(0,owner-(S-L))/T*T:0;
+    if(!KEY && causal) limit=min(S,S-L+owner+T);
+    for(int start=first;start<limit;start+=T) {
+      int qi=KEY?start:owner, kj=KEY?owner:start;
+      for(int z=tid;z<T*P;z+=128) {
+        int r=z/P,d=z%P;
+        if constexpr(KEY) {
+          int64_t row=((int64_t)b*H+h)*L+qi+r;
+          qs[z]=(qi+r<L && d<D)?q[row*D+d]:__float2bfloat16(0.f);
+          dos[z]=(qi+r<L && d<VD)?dout[row*VD+d]:__float2bfloat16(0.f);
+        } else {
+          int64_t row=((int64_t)b*KVH+kh)*S+kj+r;
+          ks[z]=(kj+r<S && d<D)?k[row*D+d]:__float2bfloat16(0.f);
+          kqs[z]=(kj+r<S && d<D)?kq[row*D+d]:__float2bfloat16(0.f);
+          vs[z]=(kj+r<S && d<VD)?v[row*VD+d]:__float2bfloat16(0.f);
+        }
+      }
+      __syncthreads();
+      if(tid<T) {
+        float dot=0.f;
+        if(qi+tid<L) {
+          int64_t row=((int64_t)b*H+h)*L+qi+tid;
+          for(int d=0;d<VD;++d) dot+=__bfloat162float(dos[tid*P+d])*__bfloat162float(out[row*VD+d]);
+        }
+        rd[tid]=dot;
+      }
+      if(warp==0) {
+        scores(qs,kqs,bulk,D); scores(dos,vs,dov,VD);
+        if constexpr(DENSE) scores(qs,ks,exact,D);
+      }
+      __syncthreads();
+      for(int z=tid;z<T*T;z+=128) {
+        int i=z/T,j=z%T; int64_t row=((int64_t)b*H+h)*L+qi+i;
+        bool visible=qi+i<L && kj+j<S && (!causal || kj+j<=S-L+qi+i);
+        float sc=bulk[z]*scale, p=0.f, ds=0.f;
+        bool selected=visible && fabsf(sc)>=thr[row];
+        if(selected) {
+          if constexpr(DENSE) sc=exact[z]*scale;
+          else {
+            float dot=0.f;
+            for(int d=0;d<D;++d) dot+=__bfloat162float(qs[i*P+d])*__bfloat162float(ks[j*P+d]);
+            sc=dot*scale;
+          }
+        }
+        if(visible) {p=__expf(sc-lse[row]); ds=p*(dov[z]-rd[i])*scale;}
+        int dst=KEY?j*T+i:z;
+        sel[dst]=__float2bfloat16(selected?ds:0.f);
+        bulkds[dst]=__float2bfloat16(selected?0.f:ds);
+        prob[dst]=__float2bfloat16(p);
+      }
+      __syncthreads();
+      for(int n=0;n<2;++n) {
+        int col=(warp+4*n)*16;
+        if(col<D) {
+          outer(sel,KEY?qs:ks,col,accum[n]);
+          if constexpr(!KEY) outer(bulkds,kqs,col,accum[n]);
+        }
+        if constexpr(KEY) if(col<VD) outer(prob,dos,col,accumv[n]);
+      }
+      __syncthreads();
+    }
+  }
+  for(int n=0;n<2;++n) {
+    int col=(warp+4*n)*16;
+    if(col<D) wmma::store_matrix_sync(scratch+col,accum[n],P,wmma::mem_row_major);
+  }
+  __syncthreads();
+  for(int z=tid;z<T*D;z+=128) {
+    int r=z/D,d=z%D;
+    if(owner+r<(KEY?S:L)) {
+      int64_t row=KEY?((int64_t)b*KVH+kh)*S+owner+r:(int64_t)bh*L+owner+r;
+      (KEY?dk:dq)[row*D+d]=__float2bfloat16(scratch[r*P+d]);
+    }
+  }
+  if constexpr(KEY) {
+    __syncthreads();
+    for(int n=0;n<2;++n) {
+      int col=(warp+4*n)*16;
+      if(col<VD) wmma::store_matrix_sync(scratch+col,accumv[n],P,wmma::mem_row_major);
+    }
+    __syncthreads();
+    for(int z=tid;z<T*VD;z+=128) {
+      int r=z/VD,d=z%VD;
+      if(owner+r<S) dv[(((int64_t)b*KVH+kh)*S+owner+r)*VD+d]=__float2bfloat16(scratch[r*P+d]);
+    }
+  }
+}
+// Prior art: NVIDIA CUDA events (2007+), taken. Ours: opt-in half timings;
+// disabled for all ordinary ops and interleaved whole-op measurements.
+thread_local bool profile=false;
+thread_local std::vector<float> halves;
+}
+void bp_kernel_3_profile(bool enabled) {bk3::profile=enabled;bk3::halves.clear();}
+std::vector<float> bp_kernel_3_halves() {return bk3::halves;}
+std::tuple<NDArray,NDArray,NDArray> apa_selective_bwd_bk3_cuda(
+    const NDArray& q,const NDArray& k,const NDArray& kq,const NDArray& v,
+    const NDArray& dO,const NDArray& lse,const NDArray& thr,const NDArray& out,
+    float scale,bool causal,const std::string& variant) {
+  if(q.dtype!=DType::BFloat16 || q.shape[3]>128 || v.shape[3]>128)
+    throw std::runtime_error("BP-KERNEL-3 requires BF16 and D/VD <= 128");
+  int B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3];
+  int KVH=k.shape[1],S=k.shape[2],VD=v.shape[3];
+  NDArray dq(q.shape,q.dtype,q.device),dk(k.shape,k.dtype,k.device),dv(v.shape,v.dtype,v.device);
+  cudaEvent_t events[3]{};
+  auto check=[](cudaError_t e) {if(e!=cudaSuccess) throw std::runtime_error(cudaGetErrorString(e));};
+  try {
+    if(bk3::profile) {
+      for(auto& e:events) check(cudaEventCreate(&e));
+      check(cudaEventRecord(events[0]));
+    }
+    auto launch=[&](auto dense) {
+      constexpr bool DT=decltype(dense)::value;
+      auto half=[&](auto key) {
+        constexpr bool KY=decltype(key)::value;
+        bk3::backward<KY,DT><<<dim3(((KY?S:L)+15)/16,B*(KY?KVH:H)),128>>>(
+          (bk3::BF*)q.data_ptr(),(bk3::BF*)k.data_ptr(),(bk3::BF*)kq.data_ptr(),(bk3::BF*)v.data_ptr(),
+          (bk3::BF*)dO.data_ptr(),(bk3::BF*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),
+          (bk3::BF*)dq.data_ptr(),(bk3::BF*)dk.data_ptr(),(bk3::BF*)dv.data_ptr(),H,KVH,L,S,D,VD,scale,causal);
+        cuda_check_last("apa_selective_bwd_bk3");
+      };
+      half(std::false_type{});
+      if(bk3::profile) check(cudaEventRecord(events[1]));
+      half(std::true_type{});
+    };
+    if(variant=="g1") launch(std::false_type{}); else launch(std::true_type{});
+    if(bk3::profile) {
+      check(cudaEventRecord(events[2]));check(cudaEventSynchronize(events[2]));
+      bk3::halves.resize(2);
+      for(int i=0;i<2;++i) check(cudaEventElapsedTime(&bk3::halves[i],events[i],events[i+1]));
+    }
+  } catch(...) {for(auto e:events) if(e) cudaEventDestroy(e);throw;}
+  for(auto e:events) if(e) cudaEventDestroy(e);
   return {dq,dk,dv};
 }
 
@@ -7790,4 +8010,181 @@ NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
 }
 #include "apa_sp2.cuh"
 // APA_SP1_ADDITION_END kernel_and_launcher
+
+// BP-KERNEL-4 BEGIN: appended so all historical byte offsets stay fixed.
+// Prior art: FlashAttention (Dao et al. 2022), FA-2 (Dao 2023): taken
+// query-owned tiles, two-pass recomputation and online softmax rescaling.
+// NVIDIA WMMA (2017; BF16 2020): taken 16x16x16 fragment API, via bk3.
+// Ours: APA z-score statistics over visible |bulk| and masked exact tile.
+// Unverified — lead to check "FlashAttention 2022", "FlashAttention-2 2023",
+// "CUDA WMMA BF16". No order-statistic percentile or local tile threshold.
+namespace bk4 {
+using namespace bk3;
+// Diagnostic specialization alone reads clocks/writes masks. clock64 cycles
+// are CTA elapsed phase work, NOT additive wall time across resident CTAs.
+// Prior art: NVIDIA clock64 instrumentation (CUDA 2007+), taken; phase split ours.
+template<bool DIAG>
+__global__ void forward(const BF* q,const BF* k,const BF* kq,const BF* v,
+    BF* out,float* lse,float* thr,unsigned char* selected,float* cycles,
+    int H,int KVH,int L,int S,int D,int VD,float scale,float zthr,bool causal) {
+  int tid=threadIdx.x,warp=tid/32,qi=blockIdx.x*16,bh=blockIdx.y;
+  int kh=(bh/H)*KVH+(bh%H)/(H/KVH);
+  int64_t qb=(int64_t)bh*L*D,kb=(int64_t)kh*S*D,vb=(int64_t)kh*S*VD;
+  __shared__ __align__(32) BF qs[16*128],ks[16*128],kqs[16*128],vs[16*128],ps[256];
+  __shared__ __align__(32) float score[256],acc[16*128],tmp[16*128];
+  __shared__ float sums[16],squares[16],th[16],m[16],den[16],corr[16];
+  unsigned long long tick=0;float phase[7]={0,0,0,0,0,0,0};
+  if constexpr(DIAG) {if(tid==0)tick=clock64();}
+  for(int n=tid;n<16*128;n+=128) {
+    int i=n/128,d=n%128;
+    qs[n]=(qi+i<L && d<D)?q[qb+(int64_t)(qi+i)*D+d]:__float2bfloat16(0.f);
+    acc[n]=0.f;
+  }
+  if(tid<16) {sums[tid]=squares[tid]=den[tid]=0.f;m[tid]=-1e30f;}
+  __syncthreads();
+  if constexpr(DIAG) {if(tid==0){phase[0]+=float(clock64()-tick);tick=clock64();}}
+  int limit=causal?min(S,S-L+qi+16):S;
+  for(int pass=0;pass<2;++pass) {
+    for(int kj=0;kj<limit;kj+=16) {
+      for(int n=tid;n<16*128;n+=128) {
+        int j=kj+n/128,d=n%128;
+        kqs[n]=(j<S && d<D)?kq[kb+(int64_t)j*D+d]:__float2bfloat16(0.f);
+        if(pass) {
+          ks[n]=(j<S && d<D)?k[kb+(int64_t)j*D+d]:__float2bfloat16(0.f);
+          vs[n]=(j<S && d<VD)?v[vb+(int64_t)j*VD+d]:__float2bfloat16(0.f);
+        }
+      }
+      __syncthreads();
+      if constexpr(DIAG) {if(tid==0){phase[0]+=float(clock64()-tick);tick=clock64();}}
+      if(warp==0) scores(qs,kqs,score,D);
+      __syncthreads();
+      if constexpr(DIAG) {if(tid==0){phase[1]+=float(clock64()-tick);tick=clock64();}}
+      if(!pass) {
+        if(tid<16 && qi+tid<L) {
+          int count=causal?S-L+qi+tid+1:S;
+          for(int j=0;j<16 && kj+j<count;++j) {
+            float a=fabsf(score[tid*16+j]*scale);
+            sums[tid]+=a;squares[tid]+=a*a;
+          }
+        }
+        __syncthreads();
+        if constexpr(DIAG) {if(tid==0){phase[2]+=float(clock64()-tick);tick=clock64();}}
+      } else {
+        for(int n=tid;n<256;n+=128) {
+          int i=n/16,j=n%16,count=causal?S-L+qi+i+1:S;
+          bool visible=qi+i<L && kj+j<count;
+          float bulk=score[n]*scale;
+          bool sel=visible && fabsf(bulk)>=th[i];
+          if constexpr(DIAG) {
+            if(qi+i<L && kj+j<S) selected[((int64_t)bh*L+qi+i)*S+kj+j]=sel;
+          }
+          float ex=0.f;
+          if(sel) for(int d=0;d<D;++d) ex+=__bfloat162float(qs[i*128+d])*__bfloat162float(ks[j*128+d]);
+          score[n]=visible?(sel?ex*scale:bulk):-1e30f;
+        }
+        __syncthreads();
+        if constexpr(DIAG) {if(tid==0){phase[3]+=float(clock64()-tick);tick=clock64();}}
+        if(tid<16) {
+          int count=causal?S-L+qi+tid+1:S;
+          float nm=m[tid];
+          for(int j=0;j<16;++j) nm=fmaxf(nm,score[tid*16+j]);
+          float c=__expf(m[tid]-nm),total=0.f;
+          for(int j=0;j<16;++j) {
+            float p=(qi+tid<L && kj+j<count)?__expf(score[tid*16+j]-nm):0.f;
+            total+=p;ps[tid*16+j]=__float2bfloat16_rn(p);
+          }
+          corr[tid]=c;den[tid]=den[tid]*c+total;m[tid]=nm;
+        }
+        __syncthreads();
+        if constexpr(DIAG) {if(tid==0){phase[4]+=float(clock64()-tick);tick=clock64();}}
+        for(int col=warp*16;col<128;col+=64) {
+          CF frag;wmma::fill_fragment(frag,0.f);
+          outer(ps,vs,col,frag);
+          wmma::store_matrix_sync(tmp+col,frag,128,wmma::mem_row_major);
+        }
+        __syncthreads();
+        for(int n=tid;n<16*128;n+=128) acc[n]=acc[n]*corr[n/128]+tmp[n];
+        __syncthreads();
+        if constexpr(DIAG) {if(tid==0){phase[5]+=float(clock64()-tick);tick=clock64();}}
+      }
+    }
+    if(!pass) {
+      if(tid<16 && qi+tid<L) {
+        float count=float(causal?S-L+qi+tid+1:S),mean=sums[tid]/count;
+        th[tid]=mean+zthr*sqrtf(fmaxf(squares[tid]/count-mean*mean,0.f));
+        thr[(int64_t)bh*L+qi+tid]=th[tid];
+      }
+      // Padded rows have no visible pairs; initialize their threshold too.
+      if(tid<16 && qi+tid>=L)th[tid]=0.f;
+      __syncthreads();
+      if constexpr(DIAG) {if(tid==0){phase[2]+=float(clock64()-tick);tick=clock64();}}
+    }
+  }
+  for(int n=tid;n<16*128;n+=128) {
+    int i=n/128,d=n%128;
+    if(qi+i<L && d<VD) out[((int64_t)bh*L+qi+i)*VD+d]=__float2bfloat16_rn(acc[n]/den[i]);
+  }
+  if(tid<16 && qi+tid<L)lse[(int64_t)bh*L+qi+tid]=m[tid]+logf(fmaxf(den[tid],1e-30f));
+  __syncthreads();
+  if constexpr(DIAG) {
+    if(tid==0) {
+      phase[6]+=float(clock64()-tick);
+      for(int p=0;p<7;++p)cycles[((int64_t)bh*gridDim.x+blockIdx.x)*7+p]=phase[p];
+    }
+  }
+}
+// Shipped a uses WCOOP for L>1 (and pinned D=96). Match its warp reduction
+// exactly for the selection receipt; tiny decode uses the shipped serial dot.
+// Prior art: CUDA warp shuffle reduction (NVIDIA 2013), taken from shipped a.
+__global__ void a_mask(const BF* q,const BF* kq,const float* thr,unsigned char* mask,
+    int H,int KVH,int L,int S,int D,float scale,bool causal,bool wcoop) {
+  int row=blockIdx.x,lane=threadIdx.x%32,warp=threadIdx.x/32,i=row%L;
+  int kh=(row/L/H)*KVH+(row/L%H)/(H/KVH);
+  for(int j=warp;j<S;j+=4) {
+    float dot=0.f;
+    if(wcoop) {
+      for(int d=lane;d<D;d+=32) dot+=__bfloat162float(q[(int64_t)row*D+d])*__bfloat162float(kq[((int64_t)kh*S+j)*D+d]);
+      for(int off=16;off>0;off>>=1)dot+=__shfl_down_sync(0xffffffff,dot,off);
+    } else if(lane==0) {
+      for(int d=0;d<D;++d)dot+=__bfloat162float(q[(int64_t)row*D+d])*__bfloat162float(kq[((int64_t)kh*S+j)*D+d]);
+    }
+    if(lane==0)mask[(int64_t)row*S+j]=(!causal || j<S-L+i+1) && fabsf(dot*scale)>=thr[row];
+  }
+}
+} // bk4
+std::tuple<NDArray,NDArray,NDArray,NDArray,NDArray> apa_selective_fwd_bk4(
+    const NDArray& q,const NDArray& k,const NDArray& kq,const NDArray& v,
+    float scale,float zthr,bool causal,const std::string& variant,bool diagnostic) {
+  if(variant!="a" && variant!="h")throw std::runtime_error("BP-KERNEL-4: expected a/h");
+  if(q.ndim()!=4 || k.ndim()!=4 || v.ndim()!=4 || kq.shape!=k.shape)throw std::runtime_error("BP-KERNEL-4: rank/shape");
+  int64_t B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3],KVH=k.shape[1],S=k.shape[2],VD=v.shape[3];
+  if(B<=0 || H<=0 || KVH<=0 || H%KVH || L<=0 || S<L || D<=0 || VD<=0 || D>128 || VD>128 || B*H*L>2147483647 || S>2147483647 || B*H>65535 ||
+      k.shape!=Shape{B,KVH,S,D} || v.shape!=Shape{B,KVH,S,VD} || !std::isfinite(scale) || !std::isfinite(zthr))throw std::runtime_error("BP-KERNEL-4: geometry/scalar");
+  for(auto x:{&q,&k,&kq,&v})if(!x->defined() || !x->device.is_cuda() || x->device.index!=q.device.index || x->dtype!=DType::BFloat16)throw std::runtime_error("BP-KERNEL-4: same CUDA BF16 required");
+  NDArray out,lse,thr,mask,cycles;
+  if(diagnostic) {
+    mask=NDArray::zeros({B,H,L,S},DType::Uint8,q.device);
+    cycles=NDArray::zeros({B,H,(L+15)/16,7},DType::Float32,q.device);
+  }
+  if(variant=="a") {
+    std::tie(out,lse,thr)=apa_selective_fwd_train(q,k,kq,v,scale,zthr,causal);
+    if(diagnostic)bk4::a_mask<<<B*H*L,128>>>((bk4::BF*)q.data_ptr(),(bk4::BF*)kq.data_ptr(),(float*)thr.data_ptr(),(unsigned char*)mask.data_ptr(),H,KVH,L,S,D,scale,causal,!((D>VD?D:VD)<=64 && apa_selective_decode_shaped(B*H*L,L)));
+  } else {
+    out=NDArray({B,H,L,VD},q.dtype,q.device);lse=NDArray({B,H,L},DType::Float32,q.device);thr=NDArray({B,H,L},DType::Float32,q.device);
+    auto launch=[&](auto tag){constexpr bool DIAG=decltype(tag)::value;
+      bk4::forward<DIAG><<<dim3((L+15)/16,B*H),128>>>((bk4::BF*)q.data_ptr(),(bk4::BF*)k.data_ptr(),(bk4::BF*)kq.data_ptr(),(bk4::BF*)v.data_ptr(),(bk4::BF*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),DIAG?(unsigned char*)mask.data_ptr():nullptr,DIAG?(float*)cycles.data_ptr():nullptr,H,KVH,L,S,D,VD,scale,zthr,causal);
+    };
+    if(diagnostic)launch(std::true_type{});else launch(std::false_type{});
+  }
+  cuda_check_last("apa_selective_fwd_bk4");
+  return {out,lse,thr,mask,cycles};
+}
+std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
+    const NDArray& q,const NDArray& k,const NDArray& kq,const NDArray& v,
+    float scale,float zthr,bool causal,const std::string& variant) {
+  if(variant=="a")return apa_selective_fwd_train(q,k,kq,v,scale,zthr,causal);
+  auto r=apa_selective_fwd_bk4(q,k,kq,v,scale,zthr,causal,variant,false);
+  return {std::get<0>(r),std::get<1>(r),std::get<2>(r)};
+}
+// BP-KERNEL-4 END
 }  // namespace tc

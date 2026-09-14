@@ -6,6 +6,7 @@
 // NEVER the output Tensor.
 
 #include "tc/ops.h"
+#include "tc/bp_op_timing.h"
 
 #include <stdexcept>
 #include <utility>
@@ -17,7 +18,7 @@ namespace tc {
 // capture dispatch choice per forward graph so replay uses the selected arm.
 static thread_local std::string bk2_variant = "a";
 void bp_kernel_2_set_variant(const std::string& v) {
-  if (v!="a" && v!="b" && v!="d" && v!="f" && v!="f_pass_a")
+  if (v!="a" && v!="b" && v!="d" && v!="f" && v!="f_pass_a" && v!="g1" && v!="g2")
     throw std::runtime_error("BP-KERNEL-2: invalid training variant");
   bk2_variant=v;
 }
@@ -26,6 +27,15 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
     float, bool, const std::string&);
+// Prior art: BP-KERNEL-2 (2026) thread-local opt-in dispatch, taken; independent forward switch ours.
+static thread_local std::string bk4_variant="a";
+void bp_kernel_4_set_variant(const std::string& v) {
+  if(v!="a" && v!="h")throw std::runtime_error("BP-KERNEL-4: expected a/h");
+  bk4_variant=v;
+}
+std::string bp_kernel_4_get_variant(){return bk4_variant;}
+std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
+    const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const std::string&);
 namespace ops {
 
 // NDArray-level helpers used inside backward closures.
@@ -748,8 +758,19 @@ Tensor mxfp4_linear_expert(const Tensor& x, const Tensor& blocks,
 Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
                            const Tensor& v, float scale, float zthr,
                            bool is_causal) {
+  auto r = [&]() {
+    // Prior art: CUDA events/gprof nested scopes (2007+/1982), taken via bp.
+    // Ours: isolate APA forward inside initial forward and checkpoint replay.
+    bool replay=false;
+    if(tc::bp::enabled)for(auto i:tc::bp::stack)
+      if(tc::bp::rows[i].name=="checkpoint_replay")replay=true;
+    tc::bp::Scope scope(replay?"bk4_apa_replay":"bk4_apa_initial");
+    if(tc::bp_kernel_4_get_variant()!="a")
+      return tc::apa_selective_fwd_train_variant(q.data(),k.data(),kq.data(),v.data(),scale,zthr,is_causal,tc::bp_kernel_4_get_variant());
   auto r = tc::apa_selective_fwd_train(q.data(), k.data(), kq.data(), v.data(),
                                        scale, zthr, is_causal);
+    return r;
+  }();
   NDArray out = std::get<0>(r);
   NDArray lse = std::get<1>(r);
   NDArray thr = std::get<2>(r);
@@ -1091,6 +1112,10 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
 // Prior art: existing Project-Tensor NDArray dispatch (2026); ours: explicit
 // micro-census variant selection and input guards. No new gradient algorithm.
 namespace tc {
+std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk3_cuda(
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    const NDArray&, const NDArray&, const NDArray&, const NDArray&,
+    float, bool, const std::string&);
 std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_bk2_cuda(
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
@@ -1110,7 +1135,7 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
     const NDArray& q, const NDArray& k, const NDArray& kq, const NDArray& v,
     const NDArray& dO, const NDArray& lse, const NDArray& thr, const NDArray& out,
     float scale, bool is_causal, const std::string& variant) {
-  if (variant!="a" && variant!="b" && variant!="c" && variant!="d" && variant!="f" && variant!="f_pass_a")
+  if (variant!="a" && variant!="b" && variant!="c" && variant!="d" && variant!="f" && variant!="f_pass_a" && variant!="g1" && variant!="g2")
     throw std::runtime_error("BP-KERNEL-1: expected explicit variant a/b/c/d/f/f_pass_a");
   if (q.ndim()!=4 || k.ndim()!=4 || v.ndim()!=4 || kq.shape!=k.shape)
     throw std::runtime_error("BP-KERNEL-1: invalid q/k/kq/v rank or shape");
@@ -1131,6 +1156,9 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
     if (x->dtype!=expected) throw std::runtime_error("BP-KERNEL-1: dtype mismatch");
   }
   if (variant=="a") return apa_selective_bwd(q,k,kq,v,dO,lse,thr,scale,is_causal);
+  // Prior art: Project-Tensor explicit dispatch (2026), taken; g opt-in ours.
+  if (variant=="g1" || variant=="g2")
+    return apa_selective_bwd_bk3_cuda(q,k,kq,v,dO,lse,thr,out,scale,is_causal,variant);
   if (variant=="f" || variant=="f_pass_a")
     return apa_selective_bwd_bk2_cuda(q,k,kq,v,dO,lse,thr,out,scale,is_causal,variant);
   return apa_selective_bwd_bk1_cuda(q,k,kq,v,dO,lse,thr,out,scale,is_causal,variant);

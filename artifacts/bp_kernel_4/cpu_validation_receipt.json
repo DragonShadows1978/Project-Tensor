@@ -1,0 +1,42 @@
+{
+  "build": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python artifacts/bp_kernel_4/build_driver.py",
+    "last_lines": [
+      "[100%] Built target _tensor_cuda",
+      "BUILD_RC=0"
+    ],
+    "rc": 0
+  },
+  "dry_census": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES='' python scripts/bp_census_4.py --run --dry-run",
+    "last_line": "DRY_RUN /mnt/ForgeRealm/wt/pt-bk4/artifacts/bp_kernel_4/census/dry_da0c7c465fdf4898a0ce6d9150796718/receipt.json",
+    "rc": 0
+  },
+  "dry_kernel": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES='' python scripts/bp_kernel_4.py --run --dry-run",
+    "last_line": "DRY_RUN /mnt/ForgeRealm/wt/pt-bk4/artifacts/bp_kernel_4/dry_kernel_7ef6ed587d314f59a9256db1aa484b31/receipt.json",
+    "rc": 0
+  },
+  "evidence_class": "CPU author validation, no CUDA execution",
+  "mutation": {
+    "last_line": "MUTATIONS 11/11 non-error killed; errors=0; source unchanged=True",
+    "receipt": "artifacts/bp_kernel_4/mutation_receipt.json"
+  },
+  "pytest": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES='' pytest -q -p no:cacheprovider tests/test_bp_kernel_4.py",
+    "last_lines": [
+      ".....                         [100%]",
+      "48 passed in 3.90s"
+    ],
+    "rc": 0
+  },
+  "reference": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES='' python scripts/bp_kernel_4.py --reference",
+    "last_line": "FP64_REFERENCE /mnt/ForgeRealm/wt/pt-bk4/artifacts/bp_kernel_4/reference.npz sha256=b46c7767b4c9c2e1ef9b45a92c6b4cf125636e5bdd05b6f0783a8628cbd503a3",
+    "rc": 0
+  },
+  "sass": {
+    "last_line": "SASS: h normal and diagnostic both contain HMMA",
+    "receipt": "artifacts/bp_kernel_4/mma_build_inspection.json"
+  }
+}

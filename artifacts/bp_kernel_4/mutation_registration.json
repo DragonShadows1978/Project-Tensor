@@ -1,0 +1,64 @@
+{
+  "before_gate": true,
+  "evidence_class": "author mutation test registration",
+  "minimum_kill_fraction": 0.8,
+  "mutants": [
+    {
+      "after": "ab=np.where(visible,bulk,0.)",
+      "before": "ab=np.where(visible,np.abs(bulk),0.)",
+      "name": "omit_abs"
+    },
+    {
+      "after": "/count+mean*mean,0.",
+      "before": "/count-mean*mean,0.",
+      "name": "variance_plus"
+    },
+    {
+      "after": "threshold=mean+0*",
+      "before": "threshold=mean+zthr*",
+      "name": "omit_z"
+    },
+    {
+      "after": "np.abs(bulk)>threshold[:,None]",
+      "before": "np.abs(bulk)>=threshold[:,None]",
+      "name": "strict_selection"
+    },
+    {
+      "after": "np.arange(lo,hi)[:,None]+2",
+      "before": "np.arange(lo,hi)[:,None]+1",
+      "name": "off_by_one_causal"
+    },
+    {
+      "after": "sel=visible & (np.abs(bulk)<threshold[:,None])",
+      "before": "sel=visible & (np.abs(bulk)>=threshold[:,None])",
+      "name": "invert_selection"
+    },
+    {
+      "after": "(p@x['v'][b,kh])",
+      "before": "(p@x['v'][b,kh])/den[:,None]",
+      "name": "skip_normalization"
+    },
+    {
+      "after": "m-np.log(den)",
+      "before": "m+np.log(den)",
+      "name": "lse_wrong_sign"
+    },
+    {
+      "after": "m:3*distance[n][m]",
+      "before": "m:2*distance[n][m]",
+      "name": "loosen_forward"
+    },
+    {
+      "after": "passes=float(diff.mean())<=.01",
+      "before": "passes=float(diff.mean())<=.005",
+      "name": "loosen_flips"
+    },
+    {
+      "after": "",
+      "before": " and bg['candidates']['h']['verdict']=='GREEN'",
+      "name": "ignore_downstream"
+    }
+  ],
+  "source_sha256": "f979c15838633f38dcaaa8e288248374c6f374b6970cdc36fc707a1d52113db2",
+  "tests_sha256": "188afdc83cbf0ab08c03a5576b9e774f03daf733e13f874e6c722ac9071dbc1c"
+}
