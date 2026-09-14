@@ -140,7 +140,72 @@ def campaign_receipt_module(registration, reason):
         allow_module_level=True)
 
 
+# --------------------------------------------------------------- BP-H2 -----
+# Campaign receipts in a module the campaign PINS BY SHA.
+#
+# BP-KERNEL-4's registration pins its own test module:
+# ``artifacts/bp_kernel_4/registration.json`` carries
+# ``pins['tests/test_bp_kernel_4.py'] = 188afdc8...``, and
+# ``verify_registration()`` walks that ``pins`` dict (scripts/bp_kernel_4.py:60)
+# BEFORE it reaches the engine-binary check (line 72).  So writing ANY byte
+# into the module -- including a ``@pytest.mark.campaign_receipt`` decorator
+# and a comment, which change no assertion -- makes the test fail with
+# ``ValueError: pin drift: tests/test_bp_kernel_4.py`` INSTEAD of the
+# binary-bound ``FileNotFoundError`` it exists to record.  Marking in place
+# would destroy the very receipt the mark is supposed to preserve, and would
+# silently re-label the binding.
+#
+# This is the same shape as BP-H1's import-time case (``campaign_receipt_module``):
+# a binding that a function-level decorator cannot reach.  BP-H1's answer there
+# was a PAIR, because the import aborted collection.  Here collection is fine
+# and only the file's bytes are frozen, so the answer is simpler and stricter:
+# apply the marker from OUTSIDE the pinned file, by node id, from
+# ``tests/conftest.py`` -- which is pinned by no BP registration (checked all
+# seven: bp_kernel_1..4 and the three census registrations).  The module stays
+# byte-identical to its pin, the receipt reproduces its REAL binding under
+# ``-m campaign_receipt``, and no assertion is touched.
+#
+# An entry here is a mark, not a skip: it is added as the real
+# ``campaign_receipt`` marker, so ``-m campaign_receipt`` SELECTS it and
+# ``--campaign-receipts`` runs it exactly like an in-file mark.  Keep this
+# table minimal -- it is only for modules a campaign froze by sha.
+#
+# Prior art: ``pytest_collection_modifyitems`` adding markers by ``item.nodeid``
+# is the canonical pytest idiom for marking tests you cannot edit (pytest-dev,
+# "Working with custom markers"; the same mechanism third-party plugins use to
+# mark vendored suites) -- taken as an idiom, nothing about it is ours.  The
+# campaign-receipt framing, the marker and the class vocabulary are BP-H1's
+# (this house, 2026-09-13), itself a port of GraftRepository GRM-H1/H2
+# (2026-09-11) -- taken unchanged.  Ours in BP-H2: the observation that a
+# registration pinning its OWN test module makes in-file marking
+# self-defeating, and marking from the unpinned conftest as the remedy.
+# Unverified -- lead to check; no network in this seat.  Search terms:
+# "pytest add marker by nodeid conftest", "mark test in unmodifiable module",
+# "self-referential test file hash pin".
+PINNED_MODULE_RECEIPTS = {
+    "tests/test_bp_kernel_4.py::test_registration_pins_and_protocol": dict(
+        registration="artifacts/bp_kernel_4/registration.json",
+        reason="binary-bound: the engine .so BP-KERNEL-4 built is pinned "
+               "eaec08ed... in artifacts/bp_kernel_4/engine_build_receipt.json; "
+               "*.so is gitignored so it is absent here, and the canonical "
+               "build is b6022d3d... -- a DIFFERENT build, so the pin is not "
+               "satisfiable by provisioning, only by rebuilding BP-KERNEL-4's "
+               "exact binary. Marked from conftest because the registration "
+               "also pins this test module's own sha (188afdc8...), so editing "
+               "the file in place would convert the receipt into 'pin drift'."),
+}
+
+
+def _apply_pinned_module_marks(items):
+    """Attach campaign_receipt markers to tests in sha-pinned modules."""
+    for item in items:
+        spec = PINNED_MODULE_RECEIPTS.get(item.nodeid)
+        if spec is not None and item.get_closest_marker(MARKER) is None:
+            item.add_marker(pytest.mark.campaign_receipt(**spec))
+
+
 def pytest_collection_modifyitems(config, items):
+    _apply_pinned_module_marks(items)
     if _requested(config):
         return
     for item in items:
