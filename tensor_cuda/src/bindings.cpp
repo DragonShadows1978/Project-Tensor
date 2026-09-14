@@ -13,6 +13,14 @@
 #include "tc/ops.h"
 
 namespace tc {
+// Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
+void bp_kernel_4_set_variant(const std::string&);
+std::string bp_kernel_4_get_variant();
+std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
+    const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const std::string&);
+std::tuple<NDArray,NDArray,NDArray,NDArray,NDArray> apa_selective_fwd_bk4(
+    const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const std::string&,bool);
+
 void bp_kernel_3_profile(bool);
 std::vector<float> bp_kernel_3_halves();
 void bp_kernel_2_set_variant(const std::string&);
@@ -930,6 +938,16 @@ PYBIND11_MODULE(_tensor_cuda, m) {
 
   // Prior art: Project-Tensor explicit dispatch (2026); ours: opt-in census selection.
   // Prior art: CUDA events (NVIDIA 2007+), taken; opt-in half reporting ours.
+  m.def("bp_kernel_4_set_variant", &tc::bp_kernel_4_set_variant);
+  m.def("bp_kernel_4_get_variant", &tc::bp_kernel_4_get_variant);
+  m.def("apa_selective_fwd_train_variant", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
+    auto r=tc::apa_selective_fwd_train_variant(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant);
+    return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false));
+  });
+  m.def("bp_kernel_4_diagnostic", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
+    auto r=tc::apa_selective_fwd_bk4(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant,true);
+    return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false),Tensor::make(std::get<3>(r),false),Tensor::make(std::get<4>(r),false));
+  });
   m.def("bp_kernel_3_profile", &tc::bp_kernel_3_profile);
   m.def("bp_kernel_3_halves", &tc::bp_kernel_3_halves);
   m.def("bp_kernel_2_set_variant", &tc::bp_kernel_2_set_variant);

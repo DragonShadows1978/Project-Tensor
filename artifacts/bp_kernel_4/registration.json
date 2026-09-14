@@ -1,0 +1,145 @@
+{
+  "budget": {
+    "cards": 1,
+    "cells": 2,
+    "lease_seconds": 590,
+    "lock": "/tmp/forge-gpu.lock",
+    "work_seconds": 300
+  },
+  "budget_enforcement": "Two create-only cell claims; exclusive nonblocking flock, foreground child timeout 300 s; lease <=590 s; incomplete => INCONCLUSIVE.",
+  "diagnostic_protocol": {
+    "phases": [
+      "shared_load",
+      "bulk_mma",
+      "threshold_statistics",
+      "masked_exact",
+      "online_softmax",
+      "pv_mma_and_rescale",
+      "output_store"
+    ],
+    "samples": 10,
+    "scope": "Separate h diagnostic specialization; clock64 CTA elapsed cycles, sum/mean/max per phase, not GPU wall milliseconds. Native selection mask replay for shipped a.",
+    "warmups": 3
+  },
+  "downstream_rule": "unchanged g1 on h O/lse/thr versus pinned BP-KERNEL-2 FP64 reference; tolerances from fresh a-backward on pinned state",
+  "downstream_tolerance_rule": "For each of dQ/dK/dV and each metric (max-abs, relative-L2), tolerance = 2 \u00d7 |a \u2212 reference|; fresh GPU a; zero distance means zero tolerance, no epsilon.",
+  "engine_completion": "engine_build_receipt.json create-only, binds all registered engine sources and binary digest",
+  "experiment": "BP-KERNEL-4",
+  "falsifier": "> 0.20 \u00d7 \u2192 report which of tiling / MMA / threshold derivation is the residual (per-phase timing inside the kernel or per-half diagnostics REQUIRED in the receipt).",
+  "flip_ceiling": 0.005,
+  "flip_denominator": "all B*H*L*S pairs, masked pairs unselected; also report visible-pair rate",
+  "h2_built": false,
+  "interleaved_order": [
+    "a",
+    "h"
+  ],
+  "pins": {
+    "artifacts/bp_kernel_1/forward_state.npz": "77afc01e8a912e3ad49b3f2e232ca5bcbe21b0338e336af6ae383ec99c53f5c0",
+    "artifacts/bp_kernel_1/inputs.npz": "53c38919ad77f3f8359ac2187b39c069f867d27ed495598cac3fc8d1715e749a",
+    "artifacts/bp_kernel_2/reference.npz": "43f6d06a21090adefe09da676e24cc1b785f7be07d9aae44b6e3fa06b19ad4d3",
+    "artifacts/bp_kernel_4/baseline/bindings.cpp": "049129624c354cd34c9cf13d496d13c59c68c7a9f8ba3ee2a62c8e6fb1f502d3",
+    "artifacts/bp_kernel_4/baseline/kernels.cu": "223b098d9957c08b9224175fb5621c67ec5204958a6e9ed5b2e3e8e77c93f6b4",
+    "artifacts/bp_kernel_4/baseline/ops.cpp": "f38adb00c436b38d91a6e1ff591c797e3642bde2d56740f344e7436e4d63892e",
+    "artifacts/bp_kernel_4/baseline_regions.json": "660f2c69555cec31d7157ba654115c55069ab6db3aacbc19a20d45ccc9501208",
+    "artifacts/bp_kernel_4/build_driver.py": "3c9edf1ff8aeda50fb5105f8e02570fd8ad6a8d888e2ddf9bffc9daa081a0a2a",
+    "artifacts/bp_kernel_4/lead_commands.txt": "31690f5d24ff8c8f8b6649d06b580045e2b97ca15dfaca2bc9f3e47103448503",
+    "artifacts/bp_kernel_4/register.py": "eae5e7f6b1d184abb94af77504af6a2c8fde7e099ed370aae4e364f68c63af9c",
+    "orders/BP_KERNEL_4_FORWARD_TENSOR_CORE.md": "e5d7ba3efed76522b274dd4ed8357479800867421cc11d6ce102d0d748795b9f",
+    "scripts/bp_census_4.py": "6709db0a62ca0e9dd82ebbcb9f4d92a278b92071d769c798c5bba19f80d90e43",
+    "scripts/bp_kernel_1.py": "1cffffe95a4f5a76714aaeaa90fe0860e637071d456b2499cd062fda579b6899",
+    "scripts/bp_kernel_2.py": "a048b8ecade052ec382ed42dadab071ce0a826a6fd4f690250b3a6acb963ce73",
+    "scripts/bp_kernel_3.py": "e25eac3a9b2b3d5093012fa072a24a6bc176804ac43de3643704a5322460755b",
+    "scripts/bp_kernel_4.py": "f979c15838633f38dcaaa8e288248374c6f374b6970cdc36fc707a1d52113db2",
+    "tensor_cuda/CMakeLists.txt": "66a62a42a8c439dbdc1cb16940f98905cee85f5bd21605b08e63182b549b170c",
+    "tensor_cuda/include/tc/autograd.h": "22c5bc0123e40e506181302fa091cad0861b0a05b202d428c253421866a6b32c",
+    "tensor_cuda/include/tc/bp_op_timing.h": "fcdcd19bcbb5e2935c8cbb898bd47a802456d1da65f1d0748fa955124932b5da",
+    "tensor_cuda/include/tc/core.h": "6f34346b29305466f091fba4999adf2c4897314b1b76d66bd3a0c357f6ebca79",
+    "tensor_cuda/include/tc/ops.h": "dd0ef60f15573d6ceec98828e76ee79846da18aedf63916db2d9e0aab12f437e",
+    "tensor_cuda/src/apa_sp1_1.cuh": "74248ccb1579efd10d2c7a64473030b1358166875a753cc9f1339829f8afe48a",
+    "tensor_cuda/src/apa_sp2.cuh": "f186c255c7f1aec743e83c884d1ed8eb558630116cdbb5e7295352c6c26aa5ad",
+    "tensor_cuda/src/autograd.cpp": "833bbf8c6aa9b308b655dbc54e6908a79fe5db5702c5bb7f207f9f860487e188",
+    "tensor_cuda/src/bindings.cpp": "5058b907c6d737dc10f130e0087b772836b5d9bd52714150aa0f45bedea915e4",
+    "tensor_cuda/src/conv.cu": "1cda2a6e147dc3dd599ea57e89b3423ff68464de8c837f51ed8d433dc18fe0a8",
+    "tensor_cuda/src/dda.cu": "58289183587f1aa936321d85de232d03e71922845851cead862c8a526974d6d1",
+    "tensor_cuda/src/gemm_apa.cu": "4827910cc9383b4c6cf7505b12da99eb6e54cc8792a3a43d492a58de8eee25f6",
+    "tensor_cuda/src/kernels.cu": "196beae9e04e8297df52835eee692e0c7f2865c484db4838eea6ca7267097ceb",
+    "tensor_cuda/src/matmul.cu": "426d9901da12936fe41c003176d3d43d5412ecfa9de0613d62348a60ce52a15e",
+    "tensor_cuda/src/ops.cpp": "a1a3adb06308ee5a0596c8277bb50772ec80097a7e401bc856c11a4fa83fa60c",
+    "tensor_cuda/src/paint_bake.cu": "5c5ea305df2da870b03dedd44d698728d6a13ecdf1d07e8ef1f7bcd8c4d13f50",
+    "tensor_cuda/src/paint_inpaint.cu": "77fd450425aeec42b5d0dbb29069dfbd4c50aef067382c48801cae9c3b33cce7",
+    "tensor_cuda/src/paint_raster.cu": "cd6da34283999d2624087d81420c00f427f143ebadb163f3baad158dc199cab7",
+    "tensor_cuda/src/terrain.cu": "11bd7c7b3f6d0a80a6b627e48dede0e68869ffc03af8d20d7112e68b56f97d73",
+    "tensor_cuda/src/terrain_objects.cu": "401b56b58f747878106b0b333d2b589be72fa32cb1f7824046653e0a27b267a0",
+    "tensor_cuda/tensor_cuda/__init__.py": "2aa0435a1157ae2b10965575248dc215e4961ba1ed7d1ceaa127cc1dfca58fc9",
+    "tensor_cuda/tensor_cuda/apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
+    "tensor_cuda/tensor_cuda/functional.py": "418ee285bdeefacbd9d5a1ccaf39700b8e83ea339377230c79f1d4480a1e3d9c",
+    "tensor_cuda/tensor_cuda/nn.py": "4659cdfa382c0166543a555ef5101e0e3b7ceb8d930bb822be95a0324263517d",
+    "tensor_cuda/tensor_cuda/optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
+    "tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a",
+    "tensor_cuda/tensor_cuda/quantization/__init__.py": "d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f",
+    "tensor_cuda/tensor_cuda/quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943",
+    "tests/test_bp_kernel_4.py": "188afdc83cbf0ab08c03a5576b9e774f03daf733e13f874e6c722ac9071dbc1c"
+  },
+  "prediction": "h \u2264 0.20 \u00d7 a-forward with all gates green.",
+  "red_rule": "Forward or downstream RED: stop before timing; no timing counts. Cell 2 requires completed cell 1; RED cell 2 timing-only.",
+  "reference_completion": "reference_receipt.json create-only after CPU computation, binds this registration and array digest",
+  "regions": {
+    "bp_kernel_1": {
+      "end_byte_exclusive": 111834,
+      "line_end": 2629,
+      "line_start": 2523,
+      "sha256": "e7adc1e3442732b2fa221513ad75e2bdf665f62703f74b8b9c7410e0fb090a95",
+      "start_byte": 107888
+    },
+    "forward_kernel": {
+      "end_byte_exclusive": 107438,
+      "sha256": "980f4ea882d728e7fa4af87ae6b6b31ea9c74107ab9ead0d0619e52a7e0c2517",
+      "start_byte": 100965
+    },
+    "forward_launcher": {
+      "end_byte_exclusive": 114336,
+      "sha256": "219c2bf1a1b01bedac235dd2b4b2bc6d482a0933ca5ee8420b3ab702e979eb85",
+      "start_byte": 111834
+    }
+  },
+  "samples": 10,
+  "schema_version": 1,
+  "seat": "Codex Astra gpt-6-astra, reasoning high (order-specified)",
+  "shape": {
+    "B": 1,
+    "D": 96,
+    "H": 16,
+    "KVH": 16,
+    "L": 2048,
+    "S": 2048,
+    "VD": 64,
+    "causal": true,
+    "dtype": "bfloat16",
+    "refine": 0.15,
+    "scale": 0.10206207261596577,
+    "zthr": 1.0364333894937898
+  },
+  "status": "Registered before CPU build/reference/tests and all GPU gates",
+  "step_falsifier": "the census component table says what remains (if the APA forward turns out to be less than half of the forward, say so with the numbers \u2014 that is a legitimate outcome, not a failure of the seat).",
+  "step_prediction": "initial forward + checkpoint replay \u2264 0.25 s combined (from 0.90) and whole step \u2264 1.3 s.",
+  "threshold_rule": "mean(abs(bulk)) + float32(zthr)*sqrt(max(mean(abs(bulk)^2)-mean(abs(bulk))^2,0)); visible keys only, abs(bulk)>=thr",
+  "tile": {
+    "accumulator": "FP32",
+    "inputs": "BF16",
+    "key": 16,
+    "query": 16,
+    "threads": 128,
+    "width": 128,
+    "wmma": [
+      16,
+      16,
+      16
+    ]
+  },
+  "tolerance_rule": "For O and lse, each max_abs and relative_L2 tolerance = 2 \u00d7 |a-forward \u2212 FP64 reference|; zero means zero, no epsilon.",
+  "variants": [
+    "a",
+    "h"
+  ],
+  "warmups": 3
+}

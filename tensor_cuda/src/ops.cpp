@@ -6,6 +6,7 @@
 // NEVER the output Tensor.
 
 #include "tc/ops.h"
+#include "tc/bp_op_timing.h"
 
 #include <stdexcept>
 #include <utility>
@@ -26,6 +27,15 @@ std::tuple<NDArray, NDArray, NDArray> apa_selective_bwd_variant(
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
     const NDArray&, const NDArray&, const NDArray&, const NDArray&,
     float, bool, const std::string&);
+// Prior art: BP-KERNEL-2 (2026) thread-local opt-in dispatch, taken; independent forward switch ours.
+static thread_local std::string bk4_variant="a";
+void bp_kernel_4_set_variant(const std::string& v) {
+  if(v!="a" && v!="h")throw std::runtime_error("BP-KERNEL-4: expected a/h");
+  bk4_variant=v;
+}
+std::string bp_kernel_4_get_variant(){return bk4_variant;}
+std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
+    const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const std::string&);
 namespace ops {
 
 // NDArray-level helpers used inside backward closures.
@@ -748,8 +758,19 @@ Tensor mxfp4_linear_expert(const Tensor& x, const Tensor& blocks,
 Tensor apa_selective_train(const Tensor& q, const Tensor& k, const Tensor& kq,
                            const Tensor& v, float scale, float zthr,
                            bool is_causal) {
+  auto r = [&]() {
+    // Prior art: CUDA events/gprof nested scopes (2007+/1982), taken via bp.
+    // Ours: isolate APA forward inside initial forward and checkpoint replay.
+    bool replay=false;
+    if(tc::bp::enabled)for(auto i:tc::bp::stack)
+      if(tc::bp::rows[i].name=="checkpoint_replay")replay=true;
+    tc::bp::Scope scope(replay?"bk4_apa_replay":"bk4_apa_initial");
+    if(tc::bp_kernel_4_get_variant()!="a")
+      return tc::apa_selective_fwd_train_variant(q.data(),k.data(),kq.data(),v.data(),scale,zthr,is_causal,tc::bp_kernel_4_get_variant());
   auto r = tc::apa_selective_fwd_train(q.data(), k.data(), kq.data(), v.data(),
                                        scale, zthr, is_causal);
+    return r;
+  }();
   NDArray out = std::get<0>(r);
   NDArray lse = std::get<1>(r);
   NDArray thr = std::get<2>(r);
