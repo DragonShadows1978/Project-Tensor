@@ -12,7 +12,12 @@ sys.dont_write_bytecode=True
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import numpy as np
 import pytest
-import pt_tf32_2 as t
+# PT-TF32-3 uses the same assertions/tolerances against its own immutable seal.
+# Prior art: PT-TF32-2 versioned registration (2026), taken; no gate suppression.
+if os.environ.get('PT_TF32_GENERATION')=='3':
+    import pt_tf32_3 as t
+else:
+    import pt_tf32_2 as t
 
 
 @pytest.fixture(scope='module')

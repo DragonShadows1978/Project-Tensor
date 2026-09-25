@@ -55,7 +55,10 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   out_shape.push_back(M); out_shape.push_back(N);
   bool b_batched = (ndb == nda);
 
-  NDArray out(out_shape, a.dtype, a.device);
+  // PT-TF32-3. Prior art: NVIDIA stream-ordered allocation (2021), taken.
+  // Ours: opt-in TF32 outputs only; all default/BF16/FP16 allocation is intact.
+  NDArray out=(a.dtype==DType::Float32 && get_tf32_gemm())
+      ? tf32_gemm_output(out_shape,a.device) : NDArray(out_shape,a.dtype,a.device);
   int64_t strideA = M * K, strideB = Kb * N, strideC = M * N;
   // b may be a 2D operand broadcast across the batch: stride 0 reuses it (cuBLAS
   // strided-batched supports a zero stride). Collapse the former per-batch loop

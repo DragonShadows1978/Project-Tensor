@@ -953,6 +953,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("get_tf32_gemm", &tc::get_tf32_gemm);
   // NVIDIA cuBLASLt (2024) capability receipt; PT-TF32-2 thread-local adapter.
   m.def("get_tf32_gemm_info", &tc::get_tf32_gemm_info);
+  // PT-TF32-3. Prior art: NVIDIA Lt host introspection (2024), taken;
+  // ours: expose descriptor-only CPU checks and actual last-dispatch readback.
+  m.def("get_tf32_gemm_dispatch", &tc::get_tf32_gemm_dispatch);
+  m.def("tf32_gemm_self_check", &tc::tf32_gemm_self_check,
+        py::arg("M"), py::arg("N"), py::arg("K"), py::arg("trans_b"),
+        py::arg("select_on_device") = false);
   m.def("bp_kernel_4_get_variant", &tc::bp_kernel_4_get_variant);
   m.def("apa_selective_fwd_train_variant", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
     if(variant=="h_tf32") {

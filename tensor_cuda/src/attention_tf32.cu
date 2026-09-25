@@ -182,6 +182,12 @@ __global__ void backward(const float* q, const float* k, const float* kq, const 
           outer(sel,KEY?qs:ks,col,accum[n]);
           if constexpr(!KEY) outer(bulkds,kqs,col,accum[n]);
         }
+        // PT-TF32-3 edge-case attribution: NVIDIA TF32 (2020), Higham (2002).
+        // RN_TF32(p) is discontinuous: an FP32-score/exp error around a
+        // midpoint changes dV by one bin * RN_TF32(dO). This can exceed a
+        // componentwise near-zero tolerance while aggregate FP64 error passes.
+        // CPU witnesses/unchanged legacy assertions are in PT_TF32_3_LEDGER.md;
+        // no full-FP32-product or native legacy-test-pass claim is made here.
         if constexpr(KEY) if(col<VD) outer(prob,dos,col,accumv[n]);
       }
       __syncthreads();
@@ -228,7 +234,15 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
   __shared__ __align__(32) float score[256],acc[16*128];
   // KQ is dead after bulk scores. Reuse it for P@V, after the barrier.
   float* tmp=kqs;
-  __shared__ float sums[16],squares[16],th[16],m[16],den[16],corr[16];
+  // PT-TF32-3. Prior art: Higham (2002), wider-precision reduction, taken.
+  // Ours: protect the *saved predicate threshold*, not only Q.K or P.V.
+  // FP32 sequential moment sums drift O(S*u32); rare mask flips inject whole
+  // dK contributions even when out/LSE and the global flip-rate gate pass.
+  // FP64 moment accumulation removes that length-dependent rounding site;
+  // round once to the public FP32 state before BOTH forward/backward compare.
+  // Residual score/threshold rounding remains, so this is not exact FP64 APA.
+  __shared__ double sums[16],squares[16];
+  __shared__ float th[16],m[16],den[16],corr[16];
   unsigned long long tick=0;float phase[7]={0,0,0,0,0,0,0};
   if constexpr(DIAG) {if(tid==0)tick=clock64();}
   for(int n=tid;n<16*128;n+=128) {
@@ -259,7 +273,7 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
         if(tid<16 && qi+tid<L) {
           int count=causal?S-L+qi+tid+1:S;
           for(int j=0;j<16 && kj+j<count;++j) {
-            float a=fabsf(score[tid*16+j]*scale);
+            double a=double(fabsf(score[tid*16+j]*scale));
             sums[tid]+=a;squares[tid]+=a*a;
           }
         }
@@ -308,10 +322,10 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
     }
     if(!pass) {
       if(tid<16 && qi+tid<L) {
-        float count=float(causal?S-L+qi+tid+1:S),mean=sums[tid]/count;
+        double count=double(causal?S-L+qi+tid+1:S),mean=sums[tid]/count;
         // Population variance of one sample is exactly zero. FP32 FMA can
         // otherwise leave a positive cancellation residual (PT-TF32-2).
-        th[tid]=count==1.f?mean:mean+zthr*sqrtf(fmaxf(squares[tid]/count-mean*mean,0.f));
+        th[tid]=float(count==1.?mean:mean+double(zthr)*sqrt(fmax(squares[tid]/count-mean*mean,0.)));
         thr[(int64_t)bh*L+qi+tid]=th[tid];
       }
       // Padded rows have no visible pairs; initialize their threshold too.
