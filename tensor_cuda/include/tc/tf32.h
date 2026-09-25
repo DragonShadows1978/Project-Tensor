@@ -7,6 +7,10 @@ namespace tc {
 // Ours: thread-local FP32 mode, initialized once/thread by TC_TF32_GEMM=1.
 void set_tf32_gemm(bool enabled);
 bool get_tf32_gemm();
+// PT-TF32-2: NVIDIA cuBLASLt (2024) algorithms/capability flags, taken.
+// Ours: most recent thread-local dispatch receipt: algo ID, flags, workspace.
+std::tuple<int,uint64_t,size_t> get_tf32_gemm_info();
+void matmul_tf32(const NDArray&,const NDArray&,NDArray&,float,bool);
 struct TF32GemmGuard {
   bool previous;
   explicit TF32GemmGuard(bool enabled) : previous(get_tf32_gemm()) {

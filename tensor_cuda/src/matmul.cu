@@ -73,13 +73,9 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
 
   if (a.dtype == DType::Float32) {
     if (get_tf32_gemm()) {
-      const auto status = cublasGemmStridedBatchedEx(
-          handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
-          &alpha, bp, CUDA_R_32F, ldb, sB, ap, CUDA_R_32F, (int)K, strideA,
-          &beta, cp, CUDA_R_32F, (int)N, strideC, (int)batch,
-          CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT);
-      if (status != CUBLAS_STATUS_SUCCESS)
-        throw std::runtime_error("TF32 GEMM cuBLAS status " + std::to_string(int(status)));
+      // PT-TF32-2: NVIDIA cuBLASLt (2024), taken heuristic/workspace API.
+      // Ours: require a reported TF32 HMMA implementation on model shapes.
+      matmul_tf32(a,b,out,alpha,trans_b);
     } else {
     cublasSgemmStridedBatched(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,

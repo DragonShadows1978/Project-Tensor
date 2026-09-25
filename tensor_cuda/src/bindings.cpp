@@ -951,6 +951,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // Prior art: cuBLAS TF32 (NVIDIA 2020); ours: explicit engine opt-in API.
   m.def("set_tf32_gemm", &tc::set_tf32_gemm, py::arg("enabled"));
   m.def("get_tf32_gemm", &tc::get_tf32_gemm);
+  // NVIDIA cuBLASLt (2024) capability receipt; PT-TF32-2 thread-local adapter.
+  m.def("get_tf32_gemm_info", &tc::get_tf32_gemm_info);
   m.def("bp_kernel_4_get_variant", &tc::bp_kernel_4_get_variant);
   m.def("apa_selective_fwd_train_variant", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
     if(variant=="h_tf32") {

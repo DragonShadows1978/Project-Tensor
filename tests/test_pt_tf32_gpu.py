@@ -1,7 +1,8 @@
 """Lead-only GPU unit suite; collection is CPU-only, execution requires a slot.
 Prior art: BP-KERNEL-2/3/4 reference tests (2026), NumPy/pytest, taken.
 Ours: TF32 dtype, precision, saved-mode, checkpoint and boundary regressions.
-These small 3e-3 sanity bounds DO NOT replace the strict registered 2x gates.
+PT-TF32-2 retains all tolerances. Its corrected CPU operand model and new
+source seal are used; independent FP64 certification is a separate gate.
 """
 import os
 from pathlib import Path
@@ -11,7 +12,7 @@ sys.dont_write_bytecode=True
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import numpy as np
 import pytest
-import pt_tf32_1 as t
+import pt_tf32_2 as t
 
 
 @pytest.fixture(scope='module')
@@ -134,6 +135,9 @@ def test_tf32_batched_gemm_strides_broadcast_alpha(c,broadcast,trans_b):
     c.set_tf32_gemm(True)
     try:
         got=c.matmul(A,B,alpha,trans_b).numpy()
+        # PT-TF32-2 ragged WMMA dispatch (NVIDIA WMMA, 2020); numeric
+        # thresholds below are unchanged from the original regression.
+        assert c.get_tf32_gemm_info()==(-2,0x40202,0)
         b64=b.astype(np.float64)
         ref=alpha*(a.astype(np.float64)@(b64.swapaxes(-2,-1) if trans_b else b64))
         assert got.dtype==np.float32 and got.shape==(2,17,13)

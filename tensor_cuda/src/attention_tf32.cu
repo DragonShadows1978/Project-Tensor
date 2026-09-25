@@ -34,20 +34,50 @@ template<class F> __device__ void round_fragment(F& f) {
   #pragma unroll
   for(int i=0;i<F::num_elements;++i) f.x[i]=wmma::__float_to_tf32(f.x[i]);
 }
+// PT-TF32-2. Prior art: Ootomo & Yokota (2022), arXiv:2203.03341,
+// residual decomposition for tensor-core products. Taken: hi/lo operands;
+// ours: three products at APA predicate and cancellation sites, with a
+// separate FP32 correction accumulator. Not full FP32/SGEMM equivalence.
+// A*B ~= Ah*Bh + Ah*Bl + Al*Bh; omitted Al*Bl is O(u_tf32^2).
+template<class F> __device__ void split_fragment(F& hi,F& lo) {
+  #pragma unroll
+  for(int i=0;i<F::num_elements;++i) {
+    float original=hi.x[i];
+    hi.x[i]=wmma::__float_to_tf32(original);
+    lo.x[i]=wmma::__float_to_tf32(original-hi.x[i]);
+  }
+}
 __device__ void scores(const float* a,const float* b,float* dst,int width) {
-  AF af; BC bf; CF cf; wmma::fill_fragment(cf,0.f);
+  AF af,al; BC bf,bl; CF cf,correction;
+  wmma::fill_fragment(cf,0.f); wmma::fill_fragment(correction,0.f);
   for(int d=0;d<width;d+=8) {
     wmma::load_matrix_sync(af,a+d,P); wmma::load_matrix_sync(bf,b+d,P);
-    round_fragment(af); round_fragment(bf); wmma::mma_sync(cf,af,bf,cf);
+    split_fragment(af,al); split_fragment(bf,bl);
+    wmma::mma_sync(cf,af,bf,cf);
+    wmma::mma_sync(correction,af,bl,correction);
+    wmma::mma_sync(correction,al,bf,correction);
   }
+  #pragma unroll
+  for(int n=0;n<CF::num_elements;++n) cf.x[n]+=correction.x[n];
   wmma::store_matrix_sync(dst,cf,T,wmma::mem_row_major);
 }
+template<bool PRECISE=false>
 __device__ void outer(const float* a,const float* b,int col,CF& c) {
-  AF af; BR bf;
+  AF af,al; BR bf,bl; CF correction;
+  if constexpr(PRECISE) wmma::fill_fragment(correction,0.f);
   #pragma unroll
   for(int k=0;k<T;k+=8) {
     wmma::load_matrix_sync(af,a+k,T); wmma::load_matrix_sync(bf,b+k*P+col,P);
-    round_fragment(af); round_fragment(bf); wmma::mma_sync(c,af,bf,c);
+    if constexpr(PRECISE) {
+      split_fragment(af,al); split_fragment(bf,bl);
+      wmma::mma_sync(correction,af,bl,correction);
+      wmma::mma_sync(correction,al,bf,correction);
+    } else {round_fragment(af); round_fragment(bf);}
+    wmma::mma_sync(c,af,bf,c);
+  }
+  if constexpr(PRECISE) {
+    #pragma unroll
+    for(int n=0;n<CF::num_elements;++n) c.x[n]+=correction.x[n];
   }
 }
 #endif
@@ -125,7 +155,10 @@ __global__ void backward(const float* q, const float* k, const float* kq, const 
         int i=z/T,j=z%T; int64_t row=((int64_t)b*H+h)*L+qi+i;
         bool visible=qi+i<L && kj+j<S && (!causal || kj+j<=S-L+qi+i);
         float sc=bulk[z]*scale, p=0.f, ds=0.f;
-        bool selected=visible && fabsf(sc)>=thr[row];
+        // Prior art: singleton softmax derivative is zero (standard calculus).
+        // Ours: enforce the exact identity rather than subtract rounded dP/D.
+        const bool singleton=(causal?S-L+qi+i+1:S)==1;
+        bool selected=visible && (singleton || fabsf(sc)>=thr[row]);
         if(selected) {
           {
             float dot=0.f;
@@ -133,7 +166,10 @@ __global__ void backward(const float* q, const float* k, const float* kq, const 
             sc=dot*scale;
           }
         }
-        if(visible) {p=__expf(sc-lse[row]); ds=p*(dov[z]-rd[i])*scale;}
+        if(visible) {
+          p=singleton?1.f:__expf(sc-lse[row]);
+          ds=singleton?0.f:p*(dov[z]-rd[i])*scale;
+        }
         int dst=KEY?j*T+i:z;
         sel[dst]=(selected?ds:0.f);
         bulkds[dst]=(selected?0.f:ds);
@@ -234,7 +270,7 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
           int i=n/16,j=n%16,count=causal?S-L+qi+i+1:S;
           bool visible=qi+i<L && kj+j<count;
           float bulk=score[n]*scale;
-          bool sel=visible && fabsf(bulk)>=th[i];
+          bool sel=visible && (count==1 || fabsf(bulk)>=th[i]);
           if constexpr(DIAG) {
             if(qi+i<L && kj+j<S) selected[((int64_t)bh*L+qi+i)*S+kj+j]=sel;
           }
@@ -259,7 +295,9 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
         if constexpr(DIAG) {if(tid==0){phase[4]+=float(clock64()-tick);tick=clock64();}}
         for(int col=warp*16;col<128;col+=64) {
           CF frag;wmma::fill_fragment(frag,0.f);
-          outer(ps,vs,col,frag);
+          // Correct P@V as well: its saved output feeds D_i=dO_i.out_i.
+          // The same residual-decomposition prior art is cited above.
+          outer<true>(ps,vs,col,frag);
           wmma::store_matrix_sync(tmp+col,frag,128,wmma::mem_row_major);
         }
         __syncthreads();
@@ -271,7 +309,9 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
     if(!pass) {
       if(tid<16 && qi+tid<L) {
         float count=float(causal?S-L+qi+tid+1:S),mean=sums[tid]/count;
-        th[tid]=mean+zthr*sqrtf(fmaxf(squares[tid]/count-mean*mean,0.f));
+        // Population variance of one sample is exactly zero. FP32 FMA can
+        // otherwise leave a positive cancellation residual (PT-TF32-2).
+        th[tid]=count==1.f?mean:mean+zthr*sqrtf(fmaxf(squares[tid]/count-mean*mean,0.f));
         thr[(int64_t)bh*L+qi+tid]=th[tid];
       }
       // Padded rows have no visible pairs; initialize their threshold too.
@@ -282,7 +322,10 @@ __global__ void forward(const float* q,const float* k,const float* kq,const floa
   }
   for(int n=tid;n<16*128;n+=128) {
     int i=n/128,d=n%128;
-    if(qi+i<L && d<VD) out[((int64_t)bh*L+qi+i)*VD+d]=(acc[n]/den[i]);
+    if(qi+i<L && d<VD) {
+      const int count=causal?S-L+qi+i+1:S;
+      out[((int64_t)bh*L+qi+i)*VD+d]=count==1?v[vb+d]:acc[n]/den[i];
+    }
   }
   if(tid<16 && qi+tid<L)lse[(int64_t)bh*L+qi+tid]=m[tid]+logf(fmaxf(den[tid],1e-30f));
   __syncthreads();
