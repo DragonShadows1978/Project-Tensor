@@ -6,21 +6,35 @@
 // with a simple per-batch loop (strided-batched is a later optimization).
 
 #include "tc/core.h"
+#include "tc/tf32.h"
 
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <stdexcept>
+#include <cstdlib>
+#include <cstring>
 
 namespace tc {
 
 namespace {
+// Prior art: NVIDIA Ampere TF32 (2020), CUDA 11 cuBLAS FAST_TF32, taken.
+// https://docs.nvidia.com/cuda/archive/13.0.2/cublas/index.html
+// Ours: default-off, thread-local switch; do not mutate the shared handle's
+// math mode (which would also affect the unchanged BF16/FP16 branches).
+thread_local bool tf32_gemm = [] {
+  const char* value = std::getenv("TC_TF32_GEMM");
+  return value && std::strcmp(value, "1") == 0;
+}();
 cublasHandle_t g_handle = nullptr;
 cublasHandle_t handle() {
   if (!g_handle) cublasCreate(&g_handle);
   return g_handle;
 }
 }  // namespace
+
+void set_tf32_gemm(bool enabled) { tf32_gemm = enabled; }
+bool get_tf32_gemm() { return tf32_gemm; }
 
 NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   int nda = a.ndim(), ndb = b.ndim();
@@ -58,11 +72,21 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   int ldb = trans_b ? (int)K : (int)N;
 
   if (a.dtype == DType::Float32) {
+    if (get_tf32_gemm()) {
+      const auto status = cublasGemmStridedBatchedEx(
+          handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+          &alpha, bp, CUDA_R_32F, ldb, sB, ap, CUDA_R_32F, (int)K, strideA,
+          &beta, cp, CUDA_R_32F, (int)N, strideC, (int)batch,
+          CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT);
+      if (status != CUBLAS_STATUS_SUCCESS)
+        throw std::runtime_error("TF32 GEMM cuBLAS status " + std::to_string(int(status)));
+    } else {
     cublasSgemmStridedBatched(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
         &alpha, reinterpret_cast<const float*>(bp), ldb, sB,
         reinterpret_cast<const float*>(ap), (int)K, strideA,
         &beta, reinterpret_cast<float*>(cp), (int)N, strideC, (int)batch);
+    }
   } else if (a.dtype == DType::Float16) {
     cublasGemmStridedBatchedEx(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,

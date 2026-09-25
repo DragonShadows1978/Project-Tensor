@@ -11,6 +11,7 @@
 #include "tc/autograd.h"
 #include "tc/bp_op_timing.h"
 #include "tc/ops.h"
+#include "tc/tf32.h"
 
 namespace tc {
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
@@ -739,6 +740,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
 // APA_SP1_ADDITION_END binding
   m.def("apa_selective_attention", [](Tensor& q, Tensor& k, Tensor& kq, Tensor& v,
                                       double scale, double zthr, bool is_causal) {
+    // PT-TF32-1. Taken: BP-KERNEL-4 / FA-2 forward. Ours: the explicit TF32
+    // switch also covers checkpoint initial no-grad forwards. Defaults and
+    // BF16 inference still run the original code below, byte-for-byte.
+    if (tc::bp_kernel_4_get_variant()=="h_tf32") {
+      auto r=tc::apa_selective_fwd_tf32(q.data(),k.data(),kq.data(),v.data(),
+                                       float(scale),float(zthr),is_causal,"h_tf32");
+      return Tensor::make(std::get<0>(r),false);
+    }
     return Tensor::make(
         tc::apa_selective_attention(q.data(), k.data(), kq.data(), v.data(),
                                     (float)scale, (float)zthr, is_causal),
@@ -939,12 +948,23 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // Prior art: Project-Tensor explicit dispatch (2026); ours: opt-in census selection.
   // Prior art: CUDA events (NVIDIA 2007+), taken; opt-in half reporting ours.
   m.def("bp_kernel_4_set_variant", &tc::bp_kernel_4_set_variant);
+  // Prior art: cuBLAS TF32 (NVIDIA 2020); ours: explicit engine opt-in API.
+  m.def("set_tf32_gemm", &tc::set_tf32_gemm, py::arg("enabled"));
+  m.def("get_tf32_gemm", &tc::get_tf32_gemm);
   m.def("bp_kernel_4_get_variant", &tc::bp_kernel_4_get_variant);
   m.def("apa_selective_fwd_train_variant", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
+    if(variant=="h_tf32") {
+      auto r=tc::apa_selective_fwd_tf32(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant);
+      return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false));
+    }
     auto r=tc::apa_selective_fwd_train_variant(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant);
     return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false));
   });
   m.def("bp_kernel_4_diagnostic", [](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double zthr,bool causal,const std::string& variant) {
+    if(variant=="h_tf32" || (variant=="a" && q.dtype()==DType::Float32)) {
+      auto r=tc::apa_selective_fwd_tf32(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant,true);
+      return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false),Tensor::make(std::get<3>(r),false),Tensor::make(std::get<4>(r),false));
+    }
     auto r=tc::apa_selective_fwd_bk4(q.data(),k.data(),kq.data(),v.data(),float(scale),float(zthr),causal,variant,true);
     return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false),Tensor::make(std::get<3>(r),false),Tensor::make(std::get<4>(r),false));
   });

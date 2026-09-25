@@ -50,6 +50,7 @@ pybind11_add_module(_tensor_cuda
   src/terrain.cu
   src/terrain_objects.cu
   src/matmul.cu
+  src/attention_tf32.cu
   src/gemm_apa.cu
   src/conv.cu
   src/autograd.cpp
