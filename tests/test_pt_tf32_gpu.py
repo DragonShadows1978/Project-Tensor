@@ -14,7 +14,9 @@ import numpy as np
 import pytest
 # PT-TF32-3 uses the same assertions/tolerances against its own immutable seal.
 # Prior art: PT-TF32-2 versioned registration (2026), taken; no gate suppression.
-if os.environ.get('PT_TF32_GENERATION')=='3':
+if os.environ.get('PT_TF32_GENERATION')=='4':
+    import pt_tf32_4 as t
+elif os.environ.get('PT_TF32_GENERATION')=='3':
     import pt_tf32_3 as t
 else:
     import pt_tf32_2 as t
@@ -50,9 +52,21 @@ def test_native_padding_grouped_heads_and_fp32_storage(c,causal,lengths,widths):
         assert t.back.metric(actual[n],ref[n])['relative_L2']<=3e-3
     g=c.apa_selective_bwd_variant(*args,d['dO'],f[1],f[2],f[0],s['scale'],causal,'g1_tf32')
     expected=t.tiled_backward_model(x,actual,s)
+    # PT-TF32-4 prior art: NVIDIA TF32 (2020), CUDA 12.6 __expf (2024),
+    # Higham (2002) interval/accumulation bounds. Taken rounding model;
+    # ours: input-only per-element dV allowance at probability midpoints.
+    # Applies to every padding case, never to chosen failing coordinates.
+    # All older generation invocations retain their historical assertions.
+    dv_model=t.num.edge_dv_budget(x,actual,s,t.registration()) if os.environ.get('PT_TF32_GENERATION')=='4' else None
     for n,v in zip(t.NAMES,g):
         assert v.dtype=='float32'
-        np.testing.assert_allclose(v.numpy(),expected[n],rtol=3e-3,atol=2e-5)
+        if n=='dV' and dv_model is not None:
+            # Also bind the interval center to the independent legacy model.
+            np.testing.assert_allclose(dv_model['reference'],expected[n],rtol=2e-14,atol=2e-14)
+            result=t.num.edge_dv_gate(v.numpy(),dv_model)
+            assert result['verdict']=='GREEN',result
+        else:
+            np.testing.assert_allclose(v.numpy(),expected[n],rtol=3e-3,atol=2e-5)
 
 
 def test_native_rejects_dtype_mixes_and_bad_geometry(c):

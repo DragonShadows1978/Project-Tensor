@@ -3,6 +3,7 @@ Prior art: FP64 dense VJP, Higham (2002) TF32 rounding budget, NVIDIA Lt
 (2024), taken. Ours: complete saved-state edge and actual dispatch receipts.
 """
 from pathlib import Path
+import os
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import numpy as np
@@ -36,4 +37,8 @@ def test_dispatch_records_actual_pointer_alignment_and_stream_ordered_output(c,t
         assert r['numerical_flags']&0x40202==0x40202
         assert min(r['alignment_a'],r['alignment_b'],r['alignment_c'])>=16
         if r['mathmode_query_status']==0:assert r['mathmode_impl']==1
+        if os.environ.get('PT_TF32_GENERATION')=='4':
+            import pt_tf32_4
+            assert pt_tf32_4.dispatch_ok(r,128,64,256,tb)
+            assert r['mathmode_query_status']==-1 and r['mathmode_query_attempted']==0
     finally:c.set_tf32_gemm(False)
