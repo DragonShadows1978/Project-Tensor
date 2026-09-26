@@ -30,7 +30,7 @@ GATES=('gemm_fp64','gemm_tensor_core_dispatch','attention_forward_fp64',
        'attention_backward_same_native_state_fp64',
        'attention_selection','attention_speed','gpu_unit_tests','memcheck','racecheck',
        'synccheck','model_noise_floor','model_onset','model_healthy','model_control',
-       'model_step_time','blind_lead_verification')
+       'model_step_time','pt_det_1_repro','blind_lead_verification')
 
 
 def registration():
@@ -71,6 +71,13 @@ def seal():
 
 
 def verify_manifest():
+    # Prior art: immutable receipt chains (PT-TF32/CC46, 2026), taken.
+    # PT-DET-1's additive manifest binds the new engine without rewriting the
+    # historical PT-TF32-4 manifest. Activated only by the certification runner.
+    if os.environ.get('PT_DET_1_CERTIFICATION') == '1':
+        import pt_det_1
+        m=pt_det_1.verify_manifest()
+        return dict(m,registration_sha256=sha(REG),pt_det_1_registration_sha256=m['registration_sha256'])
     registration();p=ART/'SOURCE_MANIFEST.json'
     if sha(p)!=p.with_suffix('.sha256').read_text().strip():raise ValueError('manifest drift')
     m=json.loads(p.read_text())
@@ -256,6 +263,9 @@ def main():
                 registration_sha256=sha(REG),manifest_sha256=sha(ART/'SOURCE_MANIFEST.json'),binary=m['binary'],
                 command=args.command,case=args.case,elapsed_seconds=time.monotonic()-start,
                 evidence_class='GPU kernel gate; no model quality claim')
+    if os.environ.get('PT_DET_1_CERTIFICATION')=='1':
+        import pt_det_1
+        result['implementation_manifest_sha256']=sha(pt_det_1.ART/pt_det_1.MANIFEST_NAME)
     create_json(args.out/'summary.json',result);print(json.dumps(result,indent=2));return 0 if good else 1
 
 

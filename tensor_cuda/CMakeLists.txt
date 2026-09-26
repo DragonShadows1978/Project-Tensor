@@ -43,6 +43,7 @@ FetchContent_MakeAvailable(pybind11)
 
 pybind11_add_module(_tensor_cuda
   src/kernels.cu
+  src/embed_deterministic.cu
   src/paint_raster.cu
   src/paint_bake.cu
   src/paint_inpaint.cu

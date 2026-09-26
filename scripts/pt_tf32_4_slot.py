@@ -16,9 +16,10 @@ import sys
 import time
 import pt_tf32_4 as t
 import pt_tf32_3_storage as storage
+import pt_det_1 as det
 
 
-def sequence(out,keep_grads=False,include_model=False):
+def sequence(out,keep_grads=False,include_model=False,det_repro=None):
     py=[sys.executable,'-B']
     tests=['-m','pytest','-q','tests/test_pt_tf32_gpu.py','tests/test_pt_tf32_2_gpu.py','tests/test_pt_tf32_3_gpu.py',
            '-p','no:cacheprovider']
@@ -44,6 +45,11 @@ def sequence(out,keep_grads=False,include_model=False):
     if keep_grads:
         for name,_,argv in rows:
             if name in ('noise_floor','onset','healthy','control','step_time'):argv.append('--keep-grads')
+    # Prior art: required certification receipts (CC46/PT-TF32, 2026), taken.
+    # Replays run in their own <=1500 s slot; this lane revalidates the exact
+    # source/build receipt before any GPU work and has no additional GPU budget.
+    rows.append(('pt_det_1_repro',0,py+['scripts/pt_det_1.py','verify-repro']+
+                 (['--receipt',str(det_repro)] if det_repro is not None else [])))
     return rows
 
 
@@ -110,24 +116,37 @@ def main():
     p.add_argument('--lead-gpu',action='store_true');p.add_argument('--out',type=Path,required=True)
     p.add_argument('--print-sequence',action='store_true')
     p.add_argument('--include-model',action='store_true',help='Rerun unchanged model lanes within the same 1200-second deadline')
+    p.add_argument('--det-repro',type=Path,help='Required GREEN PT-DET-1 repro/summary.json for this exact source and engine')
     p.add_argument('--keep-grads',action='store_true');args=p.parse_args()
     out=args.out.resolve()
     if not out.is_relative_to(t.ART):p.error('out must be a fresh PT-TF32-4 artifact directory')
     if args.print_sequence:
-        rows=sequence(out,args.keep_grads,args.include_model)
+        rows=sequence(out,args.keep_grads,args.include_model,args.det_repro)
         print(json.dumps(dict(lanes=rows,lane_budget_seconds=sum(r[1] for r in rows),
             global_deadline_seconds=1200,storage=dump_estimate(args.keep_grads)),indent=2));return 0
     if not args.lead_gpu or not os.environ.get('CUDA_VISIBLE_DEVICES'):p.error('BLOCKED: lead-owned GPU slot required')
     if ',' in os.environ['CUDA_VISIBLE_DEVICES']:p.error('exactly one visible device required')
-    t.verify_manifest();out.mkdir(parents=True,exist_ok=False)
+    out.mkdir(parents=True,exist_ok=False)
+    try:
+        if args.det_repro is None:raise det.Blocked('required PT_DET_1 repro receipt missing (--det-repro)')
+        det.verify_repro(args.det_repro)
+        repro_lane=dict(status='GREEN',receipt=str(args.det_repro.resolve()),sha256=det.sha(args.det_repro))
+    except Exception as exc:
+        lanes={name:dict(status='BLOCKED',reason='required PT_DET_1 repro gate: '+str(exc))
+               for name,_,_ in sequence(out,args.keep_grads,args.include_model,args.det_repro)}
+        t.create_json(out/'SLOT_SUMMARY.json',dict(verdict='BLOCKED',lanes=lanes,gpu_executed=False))
+        print('SLOT BLOCKED: required PT_DET_1 repro gate:',str(exc));return 2
+    os.environ['PT_DET_1_CERTIFICATION']='1'
+    t.verify_manifest()
     temp=out/'tmp';temp.mkdir()
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PT_TF32_LEAD_GPU='1',PT_TF32_GENERATION='4',TC_TF32_GEMM='0',
              TMPDIR=str(temp),CUDA_CACHE_PATH=str(out/'cuda_cache'),OPENBLAS_NUM_THREADS='2',OMP_NUM_THREADS='2')
     deadline=start+1200;receipts={}
-    for name,budget,argv in sequence(out,args.keep_grads,args.include_model):
+    for name,budget,argv in sequence(out,args.keep_grads,args.include_model,args.det_repro):
         remaining=deadline-time.monotonic()-5
         space=storage.space_status(out)
-        if space['status']!='GREEN':row=dict(space,argv=argv)
+        if name=='pt_det_1_repro':row=dict(repro_lane,argv=argv)
+        elif space['status']!='GREEN':row=dict(space,argv=argv)
         elif remaining<=0:
             row=dict(status='BLOCKED',reason='global 1200-second deadline reached',argv=argv)
         elif name in ('healthy','control') and receipts.get('noise_floor',{}).get('status')!='GREEN':
@@ -152,6 +171,8 @@ def main():
         manifest_sha256=t.sha(t.ART/'SOURCE_MANIFEST.json'),
         keep_grads=args.keep_grads,include_model=args.include_model,total_dump_bytes=storage.dump_bytes(out),
         evidence_class='single sequential lead slot; blind review remains separate')
+    summary['implementation_manifest_sha256']=det.sha(det.ART/det.MANIFEST_NAME)
+    summary['required_repro']=repro_lane
     t.create_json(out/'SLOT_SUMMARY.json',summary)
     print('SLOT',summary['verdict'],'SECONDS',summary['elapsed_seconds']);return 0 if ok else 1
 

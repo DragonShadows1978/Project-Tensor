@@ -603,6 +603,11 @@ NDArray maxpool2d_bwd(const NDArray& g, const NDArray& argmax, const Shape& x_sh
 // Embedding: gather rows of `weight` (V, ...) by int64 `idx` (any shape).
 // Output shape = idx.shape ++ weight.shape[1:].
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx);
+// PT-DET-1: opt-in; see deterministic_embed.h for prior art and arithmetic.
+void set_deterministic_embed_bwd(bool enabled);
+bool get_deterministic_embed_bwd();
+NDArray embedding_backward_deterministic(const NDArray& grad, const NDArray& idx,
+                                         const Shape& weight_shape, DType weight_dtype);
 // Scatter-add `grad` back into a zeroed weight-shaped tensor (accumulated fp32).
 NDArray embedding_backward(const NDArray& grad, const NDArray& idx,
                            const Shape& weight_shape, DType weight_dtype);

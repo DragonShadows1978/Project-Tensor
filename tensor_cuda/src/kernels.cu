@@ -4688,6 +4688,10 @@ NDArray embedding_forward(const NDArray& weight, const NDArray& idx) {
 }
 NDArray embedding_backward(const NDArray& grad, const NDArray& idx,
                            const Shape& weight_shape, DType weight_dtype) {
+  // Prior art: PyTorch deterministic index_add (2021); optional routing only.
+  // PT-DET-1 preserves the original atomic kernel and default-OFF body below.
+  if (get_deterministic_embed_bwd())
+    return embedding_backward_deterministic(grad, idx, weight_shape, weight_dtype);
   int64_t V = weight_shape[0];
   int64_t row = numel_of(weight_shape) / V;
   int64_t nidx = idx.numel();

@@ -603,6 +603,16 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("cat", [](std::vector<Tensor> ts, int dim) { return ops::cat(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("stack", [](std::vector<Tensor> ts, int dim) { return ops::stack(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("embedding", &ops::embedding);
+  // Prior art: PyTorch (2021) opt-in deterministic indexing; engine-local scope.
+  m.def("set_deterministic_embed_bwd", &tc::set_deterministic_embed_bwd, py::arg("enabled"));
+  m.def("get_deterministic_embed_bwd", &tc::get_deterministic_embed_bwd);
+  // Raw VJP hook keeps the registered benchmark focused on the entire backward
+  // dispatch (including allocations/sort/cast), without autograd graph setup.
+  m.def("_embedding_backward", [](const Tensor& grad, const Tensor& idx,
+                                 const Shape& shape, const std::string& dtype) {
+    return Tensor::make(tc::embedding_backward(grad.data(), idx.data(), shape,
+                                               dtype_from_string(dtype)), false);
+  }, py::arg("grad"), py::arg("idx"), py::arg("weight_shape"), py::arg("weight_dtype") = "float32");
   m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });
