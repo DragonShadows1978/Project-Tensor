@@ -26,6 +26,8 @@ def main():
     reg = ART / 'REGISTRATION.json'
     if sha(reg) != (ART / 'REGISTRATION.sha256').read_text().strip():
         raise RuntimeError('registration drift')
+    from pt_det_2 import registration
+    registration()  # Additive registration; historical PT-DET-1 plan is unchanged.
     index = 1
     while (ART / f'build_{index:02d}').exists():
         index += 1
@@ -50,7 +52,8 @@ def main():
     ]
     sources = sorted((ROOT / 'tensor_cuda/src').glob('*'))
     sources += sorted((ROOT / 'tensor_cuda/include/tc').glob('*'))
-    sources += [ROOT / 'tensor_cuda/CMakeLists.txt', ROOT / 'tests/pt_det_1_host_contract.cpp']
+    sources += [ROOT / 'tensor_cuda/CMakeLists.txt', ROOT / 'tests/pt_det_1_host_contract.cpp',
+                ROOT / 'tests/pt_det_2_host_contract.cpp']
     pins = {str(p.relative_to(ROOT)): sha(p) for p in sources if p.is_file()}
     results = []
     start = time.monotonic()
@@ -75,22 +78,25 @@ def main():
         # contract executable against the same object files, including dlink.
         # Taken: CMake link recipe; ours: executable main instead of module.
         build = ROOT / 'tensor_cuda/build-tf32'
-        command = shlex.split((build / 'CMakeFiles/_tensor_cuda.dir/link.txt').read_text())
-        command.remove('-shared')
-        command[command.index('-o') + 1] = str(ART / 'pt_det_1_host_contract')
-        command += ['-std=c++17', '-I' + str(ROOT / 'tensor_cuda/include'),
-                    str(ROOT / 'tests/pt_det_1_host_contract.cpp'),
-                    '-L/usr/lib/x86_64-linux-gnu', '-lpython3.12']
-        with (receipt_dir / 'build.log').open('a') as log:
-            run = subprocess.run(command, cwd=build, env=env, stdout=log,
-                                 stderr=subprocess.STDOUT, timeout=60)
-        rc = run.returncode
-        results.append(dict(argv=command, returncode=rc))
+        for name in ('pt_det_1', 'pt_det_2'):
+            command = shlex.split((build / 'CMakeFiles/_tensor_cuda.dir/link.txt').read_text())
+            command.remove('-shared')
+            command[command.index('-o') + 1] = str(ROOT / f'artifacts/{name}/{name}_host_contract')
+            command += ['-std=c++17', '-pthread', '-I' + str(ROOT / 'tensor_cuda/include'),
+                        str(ROOT / f'tests/{name}_host_contract.cpp'),
+                        '-L/usr/lib/x86_64-linux-gnu', '-lpython3.12']
+            with (receipt_dir / 'build.log').open('a') as log:
+                run = subprocess.run(command, cwd=build, env=env, stdout=log,
+                                     stderr=subprocess.STDOUT, timeout=60)
+            rc = run.returncode
+            results.append(dict(argv=command, returncode=rc))
+            if rc: break
     unchanged = all(sha(ROOT / p) == h for p, h in pins.items())
     binaries = [dict(path=str(p.relative_to(ROOT)), sha256=sha(p), bytes=p.stat().st_size)
                 for p in (ROOT / 'tensor_cuda/tensor_cuda').glob('_tensor_cuda*.so')] if rc == 0 else []
     receipt = dict(evidence_class='CPU compilation only; no GPU use or engine import',
                    registration_sha256=sha(reg), commands=results, rc=rc,
+                   pt_det_2_registration_sha256=sha(ROOT/'artifacts/pt_det_2/REGISTRATION.json'),
                    elapsed_seconds=time.monotonic() - start, source_pins=pins,
                    sources_unchanged_during_build=unchanged, binaries=binaries)
     (receipt_dir / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')

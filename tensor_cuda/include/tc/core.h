@@ -155,6 +155,9 @@ NDArray gather_nd(const NDArray& a, int dim, const NDArray& index);
 // scatter-add `src` into a zeroed `shape` tensor along `dim` by `index` (gather bwd).
 NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim,
                        const NDArray& index, const NDArray& src);
+// PT-DET-2: sorted, fixed-order gather/top-k backward; see deterministic_gather.h.
+NDArray scatter_add_deterministic(const Shape& shape, DType dtype, int dim,
+                                   const NDArray& index, const NDArray& src);
 // reverse `a` along the given dims.
 NDArray flip_nd(const NDArray& a, const std::vector<int>& dims);
 // top-k along the last axis -> (values same dtype, indices int64), last dim = k.
@@ -603,7 +606,11 @@ NDArray maxpool2d_bwd(const NDArray& g, const NDArray& argmax, const Shape& x_sh
 // Embedding: gather rows of `weight` (V, ...) by int64 `idx` (any shape).
 // Output shape = idx.shape ++ weight.shape[1:].
 NDArray embedding_forward(const NDArray& weight, const NDArray& idx);
-// PT-DET-1: opt-in; see deterministic_embed.h for prior art and arithmetic.
+// PT-DET-2: opt-in family covers embedding and gather/top-k backward only.
+// Thread-local, sampled at backward dispatch. Legacy PT-DET-1 names are aliases.
+// See deterministic_embed.h / deterministic_gather.h for prior art/arithmetic.
+void set_deterministic(bool enabled);
+bool get_deterministic();
 void set_deterministic_embed_bwd(bool enabled);
 bool get_deterministic_embed_bwd();
 NDArray embedding_backward_deterministic(const NDArray& grad, const NDArray& idx,

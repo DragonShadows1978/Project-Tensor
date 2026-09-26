@@ -1,4 +1,147 @@
-# PT-DET-1 report
+# Deterministic backward family — PT-DET-1 / PT-DET-2
+
+**PT-DET-2 implemented and rebuilt in the fork; 116 final scoped CPU checks pass.
+GPU certification is BLOCKED.** The original training divergence and both GPU
+cost bars are **not claimed fixed**. No GPU work, git, subagents, live-engine
+changes or production-lock operations were performed.
+
+Plan: [immutable PT-DET-2 order](../orders/PT_DET_2_GATHER_BWD.md).
+Receipts: [ledger](PT_DET_2_LEDGER.md), [blocked report](../artifacts/pt_det_2/BLOCKED_REPORT.json),
+[build](../artifacts/pt_det_1/build_02/receipt.json),
+[final CPU tests](../artifacts/pt_det_2/final_cpu/receipt.json).
+This continues the PT-DET-1 narrative; its historical report is retained below.
+
+## PT-DET-2 implementation and scope
+
+`tensor_cuda/src/gather_deterministic.cu` forms flat **destination** offsets,
+then stable-sorts destination/original-position pairs with CUB. One thread at
+each segment start sums in ascending original position order using the shared
+PT-DET-1 FP64 scalar loop, and writes once in FP32 before the existing dtype
+conversion. Indices stay on-device. The host/CUDA destination mapping and CPU
+reference implementation are in `tensor_cuda/include/tc/deterministic_gather.h`.
+
+Enable with `TC_DETERMINISTIC=1` or `tc.set_deterministic(True)` (also exposed
+on `tc._C`). `TC_DET_EMBED_BWD`, `set_deterministic_embed_bwd` and its getter
+remain aliases controlling **both** embedding and gather/top-k backward.
+A present canonical environment variable takes precedence, even `0` or empty;
+otherwise the legacy variable supplies the initial value. Only exactly `1`
+enables it. Both setters override the same thread-local state, sampled at
+backward dispatch. Default is OFF. Other operations are outside this family.
+
+The original atomic kernel and OFF dispatch bodies are source-byte-identical,
+verified by tests against frozen baselines. `ops.cpp` is unchanged. This is not
+old/new SASS or GPU-output comparison evidence. Valid contiguous rank-1 through
+rank-8 gathers, negative dimensions, and non-axis subsets are supported, with
+CUB's INT_MAX item-count bound. CUDA compiles FP32/FP16/BF16 paths; actual CUDA
+dtype behavior is unmeasured. CPU execution supports FP32 only. Invalid device
+indices trap asynchronously; this error path is compiled but unexecuted here.
+
+**Premise correction (static source plus address reasoning):** the current
+`grapa/loss.py:22` uses one index per distinct `(batch, position)` row. Equal
+class IDs across rows have different full destinations. The existing PT-DET-1
+audit already said this. K=1 exercises that true loss use; K=4 repeats an index
+four times within each row to exercise actual collisions. This implementation
+cannot by itself establish that gather caused the observed training divergence.
+
+## CPU evidence and replay gates
+
+Evidence class: author CPU baseline only. Final suite: **116 passed in 4.60s**
+(108 PT-DET-1/2 checks plus 8 affected inherited certification checks). Coverage
+includes independent FP64 NumPy scatter comparison, empty/subset/non-last/rank-8
+shapes, cancellation, invalid inputs, compiled dispatch, environment/alias/TLS
+behavior, unchanged OFF sources, all four replay receipt structures, full-loss
+byte differences hidden by rounded text, negative gates and timeout ownership.
+
+| Batch | True loss K=1 rel-L2 | Colliding K=4 rel-L2 | Five CPU calls each |
+|---|---:|---:|---|
+| x_32055 | 0.0 | 2.280637833220592e-08 | byte-identical |
+| x_32083 | 0.0 | 2.284185215117462e-08 | byte-identical |
+| x_32110 | 0.0 | 2.179560985602261e-08 | byte-identical |
+
+
+All six cases use output shape `[1,4096,8192]`, FP32 synthetic upstream gradients,
+and real registered target tokens. K=4 has 75% duplicate destinations and
+cancellation rows. The full CPU receipt is
+[model-shape summary](../artifacts/pt_det_2/cpu_model_shapes/summary.json).
+CUDA timing, CUDA relative error and the <=2x ratio are all **unmeasured**.
+
+The replay uses two fresh 30-step processes per arm: v3 ON, BF16 ON, v3 OFF,
+BF16 OFF. ON must be bitwise and OFF must differ; a repeating OFF arm remains
+`NOT_RECURRED`. Each pair now compares all 30 FP32 loss dtype/shape/byte digests
+and exact hexadecimal values, full-precision gnorm probes, exact logged text,
+first-step gradients, and all saved model/Adam tensor bytes. The loss wrapper
+adds the same pre-backward synchronization to every arm (Amendment 001); only
+child-process memory is patched, never the trainer's files. Family start/end
+markers and both registrations are required. No replay was run on this seat.
+
+**Retained RED:** the broad initial run was `2 failed, 173 passed in 5.34s`.
+Both failures were historical certificate pins. The intended additive-manifest
+check now passes in the final suite. The old optional PT-TF32-4 model registration
+still rejects source drift and needs its own fresh registration; it was neither
+rewritten nor bypassed. The initial failure transcript remains
+[here](../artifacts/pt_det_2/cpu_tests_01/pytest.log).
+
+## Done
+
+Build receipt: `BUILD_RC=0 SOURCE_PINS_UNCHANGED=True`; build time
+67.968 s. Binary SHA256:
+`69b154cd2e9a5a7cbe288e1419d963697e5add57d2b4ee827c4c78a273ff2c5c`.
+The active additive seal is
+[SOURCE_MANIFEST_003.json](../artifacts/pt_det_1/SOURCE_MANIFEST_003.json), SHA256
+`792ed96fd492b80d314e695aaccaeb027d612cf12a93dd80909224e83b90d5ab`. Earlier plans, registrations, manifests and receipts remain.
+
+`PT_DET_2 FINAL_CPU_RC=0`; `PT_DET_2 CPU_MODEL_GATHER_RC=0`.
+Hidden-CUDA gather, embedding, repro and slot guards all returned expected code 2
+before descriptor inspection. Sequence/plan commands returned 0. Receipts:
+[handoff](../artifacts/pt_det_2/final_handoff/receipt.json).
+
+The lead runs this only in an authorized exclusive GPU slot, with the already-held
+lock inherited as FD 9 and a fresh output directory. The harness does not acquire,
+wait on, or release the lock. This seat never accessed it.
+
+```bash
+cd /mnt/ForgeRealm/wt/pt-tf32
+CUDA_VISIBLE_DEVICES=0 PYTHONDONTWRITEBYTECODE=1 \
+  python -B scripts/pt_det_1_slot.py --lead-gpu --lock-fd 9 \
+  --out artifacts/pt_det_1/lead_slot_det2_01
+```
+
+Sequential budgets: embedding **80 s**, gather **80 s**, all four paired 30-step
+replays **1320 s**, finalization reserve **20 s**; global cap **1500 s**. The
+first non-GREEN lane blocks every later lane. Nested trainers share the outer
+child's process group and inherit an earlier absolute deadline, so an outer
+timeout can clean up its descendants. No step-count reduction is permitted.
+This is a cap, not a measured completion estimate. The printed sequence is
+`artifacts/pt_det_2/final_handoff/sequence.log`.
+
+
+GPU five-call repeatability, <=1e-6 CUDA relative L2, both <=2x cost gates,
+all four complete training replay pairs, GPU autograd/dtype checks, sanitizers
+and blind verification remain unrun. This is an author implementation handoff.
+
+## Prior art
+
+- **CUB / Duane Merrill / NVIDIA (2011 onward; CUDA 12.6 used, 2024):** stable
+  radix sorting and sorted segmented scatter-add are taken. The installed primary
+  source `/usr/local/cuda-12.6/include/cub/device/device_radix_sort.cuh:109`
+  documents stability; 2024 identifies the toolkit, not invention.
+- **[PyTorch 1.9 (2021)](https://pytorch.org/blog/pytorch-1-9-released/):** opt-in
+  deterministic indexing policy is taken; the primary release page was verified.
+- **[Demmel and Nguyen, ARITH 2013](https://www.acsel-lab.com/arithmetic/arith21/papers/p54.pdf):**
+  reproducible-summation context only. Their order-independent accumulator is not
+  implemented. This code fixes original position order and uses ordinary FP64
+  addition followed by FP32 rounding; cross-toolchain/device/order invariance is
+  not claimed. The primary paper was verified.
+- **PT-DET-1 / CC46 / PT-TF32 (2026), SHA256 / NIST (2001), POSIX:** existing
+  shared scalar arithmetic, replay/digest/receipt and process-deadline mechanics
+  are reused. This change adds n-D full-destination grouping, one shared switch,
+  loss-byte capture and combined-slot integration. No new sorting or summation
+  algorithm is claimed. Code-site annotations identify these same boundaries.
+
+
+---
+
+## Historical PT-DET-1 report
 
 **Implemented and rebuilt in the fork; 59 final CPU checks passed. GPU
 certification is BLOCKED. An earlier compiler-scratch containment miss is

@@ -604,6 +604,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("stack", [](std::vector<Tensor> ts, int dim) { return ops::stack(ts, dim); }, py::arg("tensors"), py::arg("dim") = 0);
   m.def("embedding", &ops::embedding);
   // Prior art: PyTorch (2021) opt-in deterministic indexing; engine-local scope.
+  m.def("set_deterministic", &tc::set_deterministic, py::arg("enabled"));
+  m.def("get_deterministic", &tc::get_deterministic);
   m.def("set_deterministic_embed_bwd", &tc::set_deterministic_embed_bwd, py::arg("enabled"));
   m.def("get_deterministic_embed_bwd", &tc::get_deterministic_embed_bwd);
   // Raw VJP hook keeps the registered benchmark focused on the entire backward
@@ -613,6 +615,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     return Tensor::make(tc::embedding_backward(grad.data(), idx.data(), shape,
                                                dtype_from_string(dtype)), false);
   }, py::arg("grad"), py::arg("idx"), py::arg("weight_shape"), py::arg("weight_dtype") = "float32");
+  // PT-DET-2 uses the same full-dispatch measurement hook pattern as PT-DET-1.
+  m.def("_gather_backward", [](const Tensor& grad, const Tensor& idx, const Shape& shape,
+                              int dim, const std::string& dtype) {
+    return Tensor::make(tc::scatter_add_nd(shape, dtype_from_string(dtype), dim,
+                                          idx.data(), grad.data()), false);
+  }, py::arg("grad"), py::arg("idx"), py::arg("input_shape"), py::arg("dim"),
+     py::arg("input_dtype") = "float32");
   m.def("apa_quantize_gather", [](Tensor& r, Tensor& b, Tensor& c) {
     return Tensor::make(tc::apa_quantize_gather(r.data(), b.data(), c.data()), false);
   });

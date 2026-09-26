@@ -4864,6 +4864,10 @@ NDArray gather_nd(const NDArray& a, int dim, const NDArray& index) {
   return out;
 }
 NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim, const NDArray& index, const NDArray& src) {
+  // Prior art: sorted segmented scatter-add (CUB/NVIDIA; PyTorch 2021).
+  // PT-DET-2 integration; deterministic_gather.h records the taken/ours boundary.
+  // OFF retains the original atomic kernel and dispatch body byte-for-byte.
+  if (get_deterministic()) return scatter_add_deterministic(shape, dtype, dim, index, src);
   int nd = (int)shape.size();
   if (dim < 0) dim += nd;
   NDArray outf = NDArray::zeros(shape, DType::Float32, src.device);

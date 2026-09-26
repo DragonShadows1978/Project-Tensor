@@ -63,6 +63,7 @@ def test_cpu_rejects_out_of_range(cpu,ids):
 def test_compiled_engine_host_contract_environment_and_setter(value,expected):
     env=dict(os.environ,CUDA_VISIBLE_DEVICES='')
     env.pop('TC_DET_EMBED_BWD',None)
+    env.pop('TC_DETERMINISTIC',None)
     if value is not None:env['TC_DET_EMBED_BWD']=value
     r=subprocess.run([str(d.ART/'pt_det_1_host_contract'),str(int(expected))],env=env,
                      capture_output=True,text=True,timeout=10)
@@ -108,6 +109,7 @@ def digest(tmp_path,name,b):
 
 def run_record(tmp_path,name='a',blob=None):
     return dict(status='GREEN',rows=d.parse_rows(logs()),checkpoint=digest(tmp_path,name,ckpt() if blob is None else blob),
+                loss_steps=[d.loss_record(np.asarray(1.,np.float32),i) for i in range(1,31)],
                 probe_steps=[dict(n=i,gnorm_hex=(.25).hex(),coef_hex=(1.).hex(),**({'grad_sha256':['a']} if i==1 else {}))
                              for i in range(1,31)])
 
@@ -181,7 +183,7 @@ def test_gpu_guard_runs_before_descriptor_access(monkeypatch):
 
 def test_slot_budgets_and_mandatory_certification_lane():
     rows=slot.sequence(d.ART/'not_run',9)
-    assert [r[0] for r in rows]==['embedding','pt_det_1_repro']
+    assert [r[0] for r in rows]==['embedding','gather','pt_det_1_repro']
     assert sum(r[1] for r in rows)+20==1500
     assert 'pt_det_1_repro' in [r[0] for r in old_slot.sequence(ROOT/'not_run')]
     assert old_slot.sequence(ROOT/'not_run')[-1][1]==0
@@ -240,6 +242,7 @@ print('PT_DET_1 PYTHON_API: fork import and switches only; no CUDA calls')
 '''
     env=dict(os.environ,CUDA_VISIBLE_DEVICES='',TC_DET_EMBED_BWD=mode,
              PYTHONPATH=str(ROOT/'tensor_cuda'),PYTHONDONTWRITEBYTECODE='1')
+    env.pop('TC_DETERMINISTIC',None)
     r=subprocess.run([sys.executable,'-B','-c',code],env=env,capture_output=True,text=True,timeout=10)
     assert r.returncode==0,r.stdout+r.stderr
 
@@ -269,10 +272,14 @@ def replay_fixture(path,arm,changed=False):
                    for r in rows)
     (path/'logs/train.log').write_text(text+'\n')
     mode=int(arm.endswith('_on'));cc_arm='a' if arm.startswith('v3') else 'd'
-    m=dict(binary=dict(path='tensor_cuda/tensor_cuda/fake_test_only.so',sha256='fake_test_only'))
+    from pt_det_2 import REG_SHA
+    m=dict(binary=dict(path='tensor_cuda/tensor_cuda/fake_test_only.so',sha256='fake_test_only'),
+           pt_det_2_registration_sha256=REG_SHA)
     (path/'leg.stdout').write_text(
         f"ENGINE SO {d.ROOT/m['binary']['path']} SHA256 fake_test_only\n"
         f"PT_DET_1 MODE {mode}\nPT_DET_1 MODE_END {mode}\n"
+        f"PT_DETERMINISTIC MODE {mode} SITES embedding,gather_topk\n"
+        f"PT_DETERMINISTIC MODE_END {mode} SITES embedding,gather_topk\n"
         '| RESUMED from fixture: step 32055, sample_i 11584,\n'
         'CRUISE REPLAY step=32055 rule=rail_binding_cap fixture\n')
     b=ckpt();b['data_index']=rows[-1]['sample_i'];b['extra']['loader']['sample_i']=rows[-1]['sample_i']
@@ -285,6 +292,8 @@ def replay_fixture(path,arm,changed=False):
                   **({'grad_sha256':['fixture_grad']} if i==1 else {})) for i in range(1,31)]
     records.append(dict(kind='end',steps=30,arm=cc_arm,variants_end=['g1','h'],lt_info_end=[1 if cc_arm=='a' else -1]))
     (path/'probe.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in records))
+    (path/'loss.jsonl').write_text(''.join(json.dumps(d.loss_record(np.asarray(float(r['loss']),np.float32),i))+'\n'
+                                         for i,r in enumerate(rows,1)))
     schema=d.tensor_schema(d.checkpoint_digest(path/'replay.ckpt'))
     receipt=d.run_receipt(path,dict(status='GREEN',returncode=0),arm,schema,m)
     assert receipt['status']=='GREEN',receipt['checks']
@@ -317,6 +326,8 @@ def test_certificate_verifier_rederives_pairs_and_rejects_log_tampering(tmp_path
     monkeypatch.setattr(d,'verify_manifest',lambda:m)
     (tmp_path/d.MANIFEST_NAME).write_text('fictional CPU test manifest')
     result=dict(verdict='GREEN',registration_sha256=d.REG_SHA,binary=m['binary'],steps=30,
+                pt_det_2_registration_sha256=m['pt_det_2_registration_sha256'],
+                deterministic_sites=['embedding','gather_topk'],
                 manifest_sha256=d.sha(tmp_path/d.MANIFEST_NAME),
                 source_checkpoint_sha256=d.registration()['repro']['checkpoint']['sha256'],
                 pairs=pairs,receipt_sha256=hashes)

@@ -22,6 +22,13 @@ except ImportError:  # pragma: no cover
 Tensor = _C.Tensor
 ApaInt4Workspace = _C.ApaInt4Workspace
 
+# Prior art: PyTorch 1.9 (2021) opt-in policy; PT-DET-2 engine family covers
+# embedding and gather/top-k backward only. Both names address one TLS state.
+set_deterministic = _C.set_deterministic
+get_deterministic = _C.get_deterministic
+set_deterministic_embed_bwd = _C.set_deterministic_embed_bwd
+get_deterministic_embed_bwd = _C.get_deterministic_embed_bwd
+
 _NP_DTYPE = {
     "float32": np.float32,
     "float16": np.float16,

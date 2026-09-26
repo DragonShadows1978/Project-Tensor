@@ -4,7 +4,7 @@
 Prior art: CC46-B/C (GRAPA 2026) identical-checkpoint replay, cruise receipt
 replay, first-step gradient digests and full-precision norm records, reused.
 SHA256 (NIST 2001) content receipts and POSIX flock/process deadlines, reused.
-Ours: four embedding-mode arms, strict non-vacuous diff and required lane.
+Ours: four shared-family arms, strict non-vacuous diff and required lane.
 Reduction prior art: CUB/NVIDIA (2024), PyTorch (2021), Demmel/Nguyen (2013),
 with the precise taken/ours boundary in tc/deterministic_embed.h.
 """
@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ART = ROOT / 'artifacts/pt_det_1'
 REG = ART / 'REGISTRATION.json'
 REG_SHA = '0b1af9f61695c5cf14ae6b0ecedac255dfebc4f18ac9821ed250751d79d48033'
-MANIFEST_NAME = 'SOURCE_MANIFEST_002.json'
+MANIFEST_NAME = 'SOURCE_MANIFEST_003.json'
 CC = Path('/mnt/ForgeRealm/wt/grapa-cc46')
 ARMS = ('v3_on', 'bf16_on', 'v3_off', 'bf16_off')
 ROW_FIELDS = ('step', 'loss', 'gnorm', 'clip_coef', 'sample_i', 'lr', 'refine', 'clip')
@@ -67,6 +67,8 @@ def registration():
     r = json.loads(REG.read_text())
     if sha(r['order']['path']) != r['order']['sha256']:
         raise ValueError('PT_DET_1 immutable order drift')
+    from pt_det_2 import registration as registration_2
+    registration_2()  # Additive PT-DET-2 order, never rewrite PT-DET-1 registration.
     return r
 
 
@@ -82,10 +84,15 @@ def seal():
     binary = b['binaries'][0]
     if sha(ROOT / binary['path']) != binary['sha256']:
         raise ValueError('build binary drift')
-    paths = list((ROOT / 'scripts').glob('pt_det_1*.py'))
+    paths = list((ROOT / 'scripts').glob('pt_det_*.py'))
     paths += list((ROOT / 'scripts').glob('pt_tf32*.py'))
-    paths += list((ROOT / 'tests').glob('*pt_det_1*'))
+    paths += list((ROOT / 'tests').glob('*pt_det_*'))
     paths += list(ART.glob('AMENDMENT_*.json'))
+    art2 = ROOT / 'artifacts/pt_det_2'
+    paths += list(art2.glob('AMENDMENT_*.json'))
+    paths += [art2/'REGISTRATION.json', art2/'REGISTRATION.sha256',
+              ROOT/'orders/PT_DET_2_GATHER_BWD.md', ART/'pt_det_1_host_contract', art2/'pt_det_2_host_contract']
+    paths += [p for p in (art2/'baseline').rglob('*') if p.is_file()]
     paths += list((ROOT / 'tensor_cuda/tensor_cuda').glob('*.py'))
     paths += [ROOT / p for p in b['source_pins']]
     old_manifest = json.loads((ROOT / 'artifacts/pt_tf32_4/SOURCE_MANIFEST.json').read_text())
@@ -106,10 +113,12 @@ def seal():
             raise ValueError('CC46 ' + field + ' drift')
         dependencies[item['path']] = item['sha256']
     m = dict(registration_sha256=REG_SHA, binary=binary,
+             pt_det_2_registration_sha256=sha(art2/'REGISTRATION.json'),
              build_receipt=str(builds[-1].relative_to(ROOT)), build_receipt_sha256=sha(builds[-1]),
              pins={str(p.relative_to(ROOT)): sha(p) for p in sorted(set(paths)) if p.is_file()},
              dependencies=dependencies,
              prior_pt_det_1_manifest_sha256=sha(ART/'SOURCE_MANIFEST.json'),
+             prior_pt_det_1_manifest_002_sha256=sha(ART/'SOURCE_MANIFEST_002.json'),
              prior_tf32_manifest_sha256=sha(ROOT / 'artifacts/pt_tf32_4/SOURCE_MANIFEST.json'))
     create_json(ART / MANIFEST_NAME, m)
     with (ART / MANIFEST_NAME).with_suffix('.sha256').open('x') as f:
@@ -125,11 +134,14 @@ def verify_manifest():
     m = json.loads(p.read_text())
     if m['registration_sha256'] != REG_SHA:
         raise ValueError('manifest registration drift')
+    if m['pt_det_2_registration_sha256'] != sha(ROOT/'artifacts/pt_det_2/REGISTRATION.json'):
+        raise ValueError('manifest PT_DET_2 registration drift')
     pins = {str(ROOT / p): h for p, h in m['pins'].items()}
     pins.update(m['dependencies'])
     pins[str(ROOT / m['binary']['path'])] = m['binary']['sha256']
     pins[str(ROOT / m['build_receipt'])] = m['build_receipt_sha256']
     pins[str(ART / 'SOURCE_MANIFEST.json')] = m['prior_pt_det_1_manifest_sha256']
+    pins[str(ART / 'SOURCE_MANIFEST_002.json')] = m['prior_pt_det_1_manifest_002_sha256']
     pins[str(ROOT / 'artifacts/pt_tf32_4/SOURCE_MANIFEST.json')] = m['prior_tf32_manifest_sha256']
     for p, h in pins.items():
         if sha(p) != h:
@@ -160,6 +172,45 @@ def array_digest(a):
         raise ValueError('empty, nonnumeric or nonfinite saved tensor')
     return dict(dtype=a.dtype.str, shape=list(a.shape),
                 sha256=hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest())
+
+
+def loss_record(value, n):
+    a = np.asarray(value)
+    if a.size != 1 or a.dtype != np.dtype('float32'):
+        raise ValueError('loss probe requires one FP32 scalar')
+    return dict(n=n, value_hex=float(a.reshape(-1)[0]).hex(), **array_digest(a))
+
+
+def read_losses(path):
+    records = [json.loads(line) for line in Path(path).read_text().splitlines()]
+    if [r['n'] for r in records] != list(range(1, 31)):
+        raise ValueError('missing, duplicate or reordered full-precision losses')
+    for r in records:
+        # Reconstruct the scalar bytes independently from its exact hex value;
+        # reject forged hashes, nonfinite values, dtype or scalar-shape drift.
+        value = np.asarray(float.fromhex(r['value_hex']), dtype=r['dtype']).reshape(r['shape'])
+        if loss_record(value, r['n']) != r:
+            raise ValueError('full-precision loss scalar digest mismatch')
+    return records
+
+
+def install_loss_probe(module, record_path):
+    # Prior art: CC46 (2026) full-precision norm probes / NIST SHA256 (2001)
+    # receipts. Ours: record the FP32 loss bytes before backward, identically
+    # in all arms. The extra synchronization is registered in PT-DET-2 A001.
+    path = Path(record_path)
+    with path.open('x'): pass
+    original = module.nll_loss
+    count = 0
+    def observed(*args, **kwargs):
+        nonlocal count
+        value = original(*args, **kwargs)
+        count += 1
+        record = loss_record(value.numpy(), count)
+        with path.open('a') as stream:
+            stream.write(json.dumps(record, allow_nan=False) + '\n')
+        return value
+    module.nll_loss = observed
 
 
 def checkpoint_digest(path):
@@ -193,14 +244,18 @@ def compare_pair(a, b):
         return dict(measured=False, bitwise=None, status='RED', reason='incomplete row coverage')
     if not a['checkpoint']['model'] or not b['checkpoint']['model']:
         return dict(measured=False, bitwise=None, status='RED', reason='empty model')
+    if any([r['n'] for r in x.get('loss_steps', [])] != list(range(1, 31)) for x in (a, b)):
+        return dict(measured=False, bitwise=None, status='RED', reason='incomplete full-precision losses')
     fields = [s['step'] for s, t in zip(a['rows'], b['rows']) if s != t]
     weights = a['checkpoint']['model'] == b['checkpoint']['model']
     adam = all(a['checkpoint'][k] == b['checkpoint'][k] for k in ('adam_m', 'adam_v', 'meta'))
     probes = a.get('probe_steps') == b.get('probe_steps') and len(a.get('probe_steps', [])) == 30
     # Only numerical probe fields are recorded, no timestamps or allocator IDs.
-    equal = not fields and weights and adam and probes
+    losses = a['loss_steps'] == b['loss_steps']
+    equal = not fields and weights and adam and probes and losses
     return dict(status='GREEN', measured=True, bitwise=equal, differing_log_steps=fields,
-                weights_bitwise=weights, adam_and_meta_bitwise=adam, probe_bitwise=probes)
+                weights_bitwise=weights, adam_and_meta_bitwise=adam, probe_bitwise=probes,
+                losses_bitwise=losses)
 
 
 def assess_pairs(pairs):
@@ -408,11 +463,16 @@ from pathlib import Path
 assert Path(tc._C.__file__).resolve() == Path(os.environ['PT_DET_EXPECT_SO']).resolve()
 tc._C.bp_kernel_2_set_variant('g1')
 tc._C.bp_kernel_4_set_variant('h')
-mode = os.environ['TC_DET_EMBED_BWD'] == '1'
+mode = os.environ['TC_DETERMINISTIC'] == '1'
+assert tc._C.get_deterministic() == mode, 'family environment opt-in failed'
 assert tc._C.get_deterministic_embed_bwd() == mode, 'environment opt-in failed'
-tc._C.set_deterministic_embed_bwd(mode)
+tc._C.set_deterministic(mode)
 print('ENGINE SO', ident['so_path'], 'SHA256', ident['so_sha256'], flush=True)
 print('PT_DET_1 MODE', int(mode), flush=True)
+print('PT_DETERMINISTIC MODE', int(mode), 'SITES embedding,gather_topk', flush=True)
+import grapa.loss as loss_module
+from pt_det_1 import install_loss_probe
+install_loss_probe(loss_module, os.environ['PT_DET_LOSS_RECORD'])
 from scripts.cc46_determinism import install_probe, finish_probe
 install_probe(os.environ['CC46_REGISTRATION'], os.environ['CC46_TRACE_CKPT'],
               os.environ['CC46B_ARM'], os.environ['CC46B_RECORD'])
@@ -426,28 +486,35 @@ if os.environ['CC46B_ARM'] == 'a':
 sys.argv = sys.argv[1:]
 runpy.run_path('grapa/train.py', run_name='__main__')
 finish_probe()
-assert tc._C.get_deterministic_embed_bwd() == mode, 'embedding mode changed during training'
+assert tc._C.get_deterministic() == mode, 'family mode changed during training'
+assert tc._C.get_deterministic_embed_bwd() == mode, 'alias mode changed during training'
 print('PT_DET_1 MODE_END', int(mode), flush=True)
+print('PT_DETERMINISTIC MODE_END', int(mode), 'SITES embedding,gather_topk', flush=True)
 '''
 
 
-def run_process(argv, cwd, env, log_path, seconds, stdin=None, pass_fds=()):
+def run_process(argv, cwd, env, log_path, seconds, stdin=None, pass_fds=(), new_process_group=True):
     if seconds <= 0: return dict(status='BLOCKED_TIMEOUT', returncode=None, seconds=0.)
     storage.require_space(log_path.parent)
     start = time.monotonic()
     with log_path.open('x') as log:
         p = subprocess.Popen(argv, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-                             text=True, start_new_session=True, pass_fds=pass_fds)
+                             text=True, start_new_session=new_process_group, pass_fds=pass_fds)
         try:
             p.communicate(stdin, timeout=seconds)
             status = 'GREEN' if p.returncode == 0 else 'RED'
         except subprocess.TimeoutExpired:
-            # Signal only the child process group created immediately above.
-            os.killpg(p.pid, signal.SIGTERM)
+            # Prior art: POSIX owned child groups / PT-TF32 deadlines. PT-DET-2
+            # nested trainers join the outer slot group so its timeout cannot
+            # orphan them; this inner owner signals only its own child PID.
+            if new_process_group: os.killpg(p.pid, signal.SIGTERM)
+            else: p.terminate()
             try: p.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                os.killpg(p.pid, signal.SIGKILL); p.wait(timeout=2)
+                if new_process_group: os.killpg(p.pid, signal.SIGKILL)
+                else: p.kill()
+                p.wait(timeout=2)
             status = 'BLOCKED_TIMEOUT'
     return dict(status=status, returncode=p.returncode, seconds=time.monotonic()-start,
                 argv=argv, log=str(log_path))
@@ -459,6 +526,7 @@ def run_receipt(run_dir, result, arm, source_schema, m):
     rows = parse_rows((run_dir / 'logs/train.log').read_text())
     text = (run_dir / 'leg.stdout').read_text()
     digest = checkpoint_digest(run_dir / 'replay.ckpt')
+    losses = read_losses(run_dir / 'loss.jsonl')
     records = [json.loads(ln) for ln in (run_dir / 'probe.jsonl').read_text().splitlines()]
     steps = [s for s in records if s['kind'] == 'step']; ends = [s for s in records if s['kind'] == 'end']
     mode = int(arm.endswith('_on')); cc_arm = 'd' if arm.startswith('bf16') else 'a'
@@ -474,6 +542,8 @@ def run_receipt(run_dir, result, arm, source_schema, m):
         precision=(digest['meta']['blocks'], digest['meta']['kernels']) == ((None, None) if cc_arm == 'd' else ('0-10', 'tf32')),
         grad_clip=digest['meta']['grad_clip'] == 1.,
         modes=f'PT_DET_1 MODE {mode}\n' in text and f'PT_DET_1 MODE_END {mode}\n' in text,
+        family_modes=all(text.count(f'PT_DETERMINISTIC {tag} {mode} SITES embedding,gather_topk\n') == 1
+                         for tag in ('MODE', 'MODE_END')),
         engine=f"ENGINE SO {ROOT / m['binary']['path']} SHA256 {m['binary']['sha256']}" in text,
         resumed=len(re.findall(r'\| RESUMED from .*: step 32055, sample_i 11584,', text)) == 1,
         cruise=len(re.findall(r'^CRUISE REPLAY step=32055 rule=rail_binding_cap ', text, re.M)) == 1,
@@ -489,12 +559,24 @@ def run_receipt(run_dir, result, arm, source_schema, m):
             raise ValueError('nonfinite full-precision norm')
         normalized.append({k: s[k] for k in ('n', 'gnorm_hex', 'coef_hex', 'grad_sha256') if k in s})
     return dict(result, status='GREEN' if all(checks.values()) else 'RED', checks=checks, rows=rows,
-                checkpoint=digest, probe_steps=normalized,
-                files={str(p.relative_to(run_dir)): sha(p) for p in (run_dir/'logs/train.log', run_dir/'leg.stdout', run_dir/'probe.jsonl')})
+                checkpoint=digest, probe_steps=normalized, loss_steps=losses,
+                files={str(p.relative_to(run_dir)): sha(p) for p in
+                       (run_dir/'logs/train.log', run_dir/'leg.stdout', run_dir/'probe.jsonl', run_dir/'loss.jsonl')})
+
+
+def family_environment(arm):
+    if arm not in ARMS: raise ValueError('unregistered arm')
+    mode = str(int(arm.endswith('_on')))
+    return dict(TC_DETERMINISTIC=mode, TC_DET_EMBED_BWD=mode)
 
 
 def repro(out, lock_fd, seconds=1400, keep_ckpts=False):
     deadline = time.monotonic() + min(seconds, 1400)
+    slot_deadline = os.environ.get('PT_DET_SLOT_LANE_DEADLINE')
+    if slot_deadline is not None:
+        inherited = float(slot_deadline)
+        if not math.isfinite(inherited): raise ValueError('invalid slot deadline')
+        deadline = min(deadline, inherited - 5)
     m = verify_manifest(); r = registration()['repro']; source = Path(r['checkpoint']['path'])
     if sha(source) != r['checkpoint']['sha256']: raise ValueError('source checkpoint drift')
     initial_source_stat = source.stat()
@@ -508,8 +590,9 @@ def repro(out, lock_fd, seconds=1400, keep_ckpts=False):
                    ('PYTHONPATH', 'TC_TF32_GEMM', 'NVIDIA_TF32_OVERRIDE', 'CUDA_LAUNCH_BLOCKING', 'CUBLAS_WORKSPACE_CONFIG')}
             env.update(PYTHONPATH=str(ROOT/'tensor_cuda'), PYTHONDONTWRITEBYTECODE='1',
                        GRAPA_ENGINE_PATH=str(ROOT/'tensor_cuda'), GRAPA_ENGINE_SHA256=m['binary']['sha256'],
-                       PT_DET_EXPECT_SO=str(ROOT/m['binary']['path']), TC_DET_EMBED_BWD=str(int(arm.endswith('_on'))),
+                       PT_DET_EXPECT_SO=str(ROOT/m['binary']['path']), **family_environment(arm),
                        PT_DET_HARNESS_PATH=str(ROOT/'scripts'),
+                       PT_DET_LOSS_RECORD=str(run_dir/'loss.jsonl'),
                        CC46_REGISTRATION=r['cc46_registration']['path'], CC46_TRACE_CKPT=str(run_dir/'replay.ckpt'),
                        CC46B_ARM='d' if arm.startswith('bf16') else 'a', CC46B_RECORD=str(run_dir/'probe.jsonl'),
                        TMPDIR=str(out/'tmp'), CUDA_CACHE_PATH=str(out/'cuda_cache'),
@@ -522,7 +605,8 @@ def repro(out, lock_fd, seconds=1400, keep_ckpts=False):
                 st = source.stat()
                 if (st.st_ino, st.st_size, st.st_mtime_ns) != (initial_source_stat.st_ino, initial_source_stat.st_size, initial_source_stat.st_mtime_ns):
                     raise ValueError('source checkpoint changed between replay runs')
-                result = run_process(argv, CC, env, run_dir/'leg.stdout', remaining, PREAMBLE, (lock_fd,))
+                result = run_process(argv, CC, env, run_dir/'leg.stdout', remaining, PREAMBLE, (lock_fd,),
+                                     new_process_group=slot_deadline is None)
                 receipt = run_receipt(run_dir, result, arm, source_schema, m)
             except Exception as exc:
                 receipt = dict(status='BLOCKED' if isinstance(exc, (Blocked, storage.StorageBlocked)) else 'RED', error=repr(exc))
@@ -533,6 +617,8 @@ def repro(out, lock_fd, seconds=1400, keep_ckpts=False):
     verdict = assess_pairs(pairs)
     verify_manifest()  # Recheck trainer/config/engine bytes after all runs.
     result = dict(verdict=verdict, registration_sha256=REG_SHA, binary=m['binary'], steps=30,
+                  pt_det_2_registration_sha256=m['pt_det_2_registration_sha256'],
+                  deterministic_sites=['embedding', 'gather_topk'],
                   manifest_sha256=sha(ART/MANIFEST_NAME), source_checkpoint_sha256=r['checkpoint']['sha256'],
                   pairs=pairs, runs=runs, seconds=time.monotonic()-start, keep_ckpts=keep_ckpts,
                   evidence_class='two fresh-process 30-step runs per arm, saved tensor bytes and exact text',
@@ -547,6 +633,8 @@ def verify_repro(path):
     if not p.is_relative_to(ART): raise ValueError('repro receipt must be under PT-DET-1 artifacts')
     result = json.loads(p.read_text())
     if (result.get('registration_sha256') != REG_SHA or result.get('binary') != m['binary'] or
+        result.get('pt_det_2_registration_sha256') != m['pt_det_2_registration_sha256'] or
+        result.get('deterministic_sites') != ['embedding', 'gather_topk'] or
         result.get('manifest_sha256') != sha(ART/MANIFEST_NAME) or result.get('steps') != 30 or
         result.get('source_checkpoint_sha256') != registration()['repro']['checkpoint']['sha256']):
         raise ValueError('repro provenance mismatch')
@@ -562,6 +650,8 @@ def verify_repro(path):
                 if sha(file.parent / name) != digest: raise ValueError('repro log drift')
             if parse_rows((file.parent/'logs/train.log').read_text()) != rec['rows']:
                 raise ValueError('repro rows differ from logged text')
+            if read_losses(file.parent/'loss.jsonl') != rec.get('loss_steps'):
+                raise ValueError('repro losses differ from full-precision record')
             rr.append(rec)
         pairs[arm] = compare_pair(*rr)
     if pairs != result.get('pairs') or assess_pairs(pairs) != 'GREEN' or result.get('verdict') != 'GREEN':
@@ -589,9 +679,11 @@ def main():
         if args.receipt is None: p.error('required PT_DET_1 repro receipt missing')
         verify_repro(args.receipt); print('PT_DET_1 REQUIRED_REPRO GREEN'); return 0
     if args.command == 'plan':
+        from pt_det_2 import registration as registration_2
         base = (args.out or ART/'lead_slot/repro').resolve()
         print(json.dumps(dict(arms={a: [trainer_argv(a, base/f'{a}_{i}') for i in (1, 2)] for a in ARMS},
-                              predictions=registration()['repro']['arms'], slot=registration()['slot']), indent=2)); return 0
+                              family_environments={a: family_environment(a) for a in ARMS},
+                              predictions=registration()['repro']['arms'], slot=registration_2()['slot']), indent=2)); return 0
     out = (args.out or ART / ('cpu' if args.command == 'cpu' else args.command)).resolve()
     if not out.is_relative_to(ART) or out == ART: p.error('out must be a fresh PT-DET-1 artifact subdirectory')
     out.mkdir(parents=True, exist_ok=False)
