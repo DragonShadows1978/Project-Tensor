@@ -12,6 +12,8 @@
 #include "tc/bp_op_timing.h"
 #include "tc/ops.h"
 #include "tc/tf32.h"
+#include "tc/async_copy.h"
+#include "tc/copy_contract.h"
 
 namespace tc {
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
@@ -40,6 +42,116 @@ namespace py = pybind11;
 using namespace tc;
 
 namespace {
+
+// PT-RING-1. Prior art: pybind11 (Jakob, 2015) buffer owners and GIL scopes;
+// PyTorch (2016 onward) in-place copy_ / foreach-copy API. Taken: binding idioms.
+// All Python conversion and the global no_grad check happen WITH the GIL;
+// validation/enqueue/waits then release it. No Python references enter CUDA work.
+std::vector<NDArray> ring_arrays(const std::vector<Tensor>& tensors) {
+  std::vector<NDArray> arrays;
+  arrays.reserve(tensors.size());
+  for (const auto& t : tensors) {
+    if (!t.defined()) throw std::invalid_argument("copy: undefined Tensor");
+    arrays.push_back(t.data());
+  }
+  return arrays;
+}
+void ring_no_grad() {
+  if (grad_enabled()) throw std::runtime_error("copy_: in-place copy requires no_grad()");
+}
+py::dtype ring_numpy_dtype(DType dt) {
+  // NumPy's native bf16 representation is intentionally raw uint16, no cast.
+  return py::dtype(dt == DType::BFloat16 ? "uint16" : dtype_name(dt));
+}
+py::buffer_info ring_buffer_info(ring::PinnedBuffer& b) {
+  auto strides = contiguous_strides(b.shape);
+  for (auto& s : strides) s *= dtype_size(b.dtype);
+  std::string format;
+  switch (b.dtype) {
+    case DType::Float32: format = "f"; break;
+    case DType::Float16: format = "e"; break;
+    case DType::BFloat16: format = "H"; break;
+    case DType::Int64: format = "q"; break;
+    case DType::Bool: format = "?"; break;
+    case DType::Uint8: format = "B"; break;
+  }
+  return py::buffer_info(b.ptr, dtype_size(b.dtype), format, b.shape.size(),
+                        std::vector<py::ssize_t>(b.shape.begin(), b.shape.end()),
+                        std::vector<py::ssize_t>(strides.begin(), strides.end()));
+}
+
+void bind_ring(py::module_& m) {
+  py::class_<ring::PinnedBuffer, std::shared_ptr<ring::PinnedBuffer>>(m, "PinnedBuffer", py::buffer_protocol())
+      .def_buffer(&ring_buffer_info)
+      .def_property_readonly("shape", [](const ring::PinnedBuffer& b) { return py::tuple(py::cast(b.shape)); })
+      .def_property_readonly("dtype", [](const ring::PinnedBuffer& b) { return std::string(dtype_name(b.dtype)); })
+      .def_readonly("nbytes", &ring::PinnedBuffer::nbytes)
+      .def("numpy", [](const std::shared_ptr<ring::PinnedBuffer>& b) {
+        const auto info = ring_buffer_info(*b);
+        // Base owner keeps the allocation alive after the PinnedBuffer name is
+        // dropped. Empty arrays have no storage and trivially share zero bytes.
+        return py::array(ring_numpy_dtype(b->dtype), info.shape, info.strides, b->ptr, py::cast(b));
+      });
+  m.def("pinned_empty", [](Shape shape, const std::string& dtype) {
+    const auto dt = dtype_from_string(dtype);
+    py::gil_scoped_release release;
+    ring::collect_async_copies(false);
+    return std::make_shared<ring::PinnedBuffer>(std::move(shape), dt);
+  }, py::arg("shape"), py::arg("dtype") = "float32");
+  py::class_<ring::Stream, std::shared_ptr<ring::Stream>>(m, "Stream")
+      .def(py::init([](bool nb) { py::gil_scoped_release release; return std::make_shared<ring::Stream>(nb); }),
+           py::arg("non_blocking") = true)
+      .def_property_readonly("non_blocking", [](const ring::Stream& s) { return s.non_blocking; })
+      .def("wait", &ring::Stream::wait, py::arg("event"), py::call_guard<py::gil_scoped_release>())
+      .def("synchronize", &ring::Stream::synchronize, py::call_guard<py::gil_scoped_release>());
+  py::class_<ring::Event, std::shared_ptr<ring::Event>>(m, "Event")
+      .def(py::init([](bool timing) { py::gil_scoped_release release; return std::make_shared<ring::Event>(timing); }),
+           py::arg("enable_timing") = false)
+      .def("record", [](std::shared_ptr<ring::Event> e, std::shared_ptr<ring::Stream> s) {
+        py::gil_scoped_release release; e->record(s); return e;
+      }, py::arg("stream") = nullptr)
+      .def("query", &ring::Event::query, py::call_guard<py::gil_scoped_release>())
+      .def("synchronize", &ring::Event::synchronize, py::call_guard<py::gil_scoped_release>())
+      .def("elapsed_time", &ring::Event::elapsed_time, py::arg("end"), py::call_guard<py::gil_scoped_release>());
+  m.def("legacy_stream", &ring::legacy_stream, py::call_guard<py::gil_scoped_release>());
+  m.def("pinned_bytes", &ring::pinned_bytes, py::call_guard<py::gil_scoped_release>());
+  m.def("pinned_memory_limit", &ring::pinned_memory_limit, py::call_guard<py::gil_scoped_release>());
+  m.def("set_pinned_memory_limit", &ring::set_pinned_memory_limit, py::arg("nbytes"), py::call_guard<py::gil_scoped_release>());
+  m.def("mem_get_info", &ring::mem_get_info, py::call_guard<py::gil_scoped_release>());
+  m.def("empty_like", [](const Tensor& source) {
+    auto arrays = ring_arrays({source}); py::gil_scoped_release release;
+    return Tensor::make(ring::empty_like(arrays[0]), false);
+  }, py::arg("source"));
+  m.def("collect_async_copies", &ring::collect_async_copies, py::arg("wait") = false, py::call_guard<py::gil_scoped_release>());
+  m.def("copy_to_host_async", [](const std::vector<Tensor>& tensors,
+          std::vector<std::shared_ptr<ring::PinnedBuffer>> buffers,
+          std::shared_ptr<ring::Stream> stream, std::shared_ptr<ring::Event> after) {
+    auto arrays = ring_arrays(tensors);
+    py::gil_scoped_release release;
+    return ring::copy_to_host_async(std::move(arrays), std::move(buffers), std::move(stream), std::move(after));
+  }, py::arg("tensors"), py::arg("buffers"), py::arg("stream"), py::arg("after") = nullptr);
+  m.def("copy_many_", [](const std::vector<Tensor>& dsts, const std::vector<Tensor>& srcs, const std::string& method) {
+    ring_no_grad(); auto d = ring_arrays(dsts), s = ring_arrays(srcs);
+    py::gil_scoped_release release; return ring::copy_many(std::move(d), std::move(s), method);
+  }, py::arg("dsts"), py::arg("srcs"), py::arg("method") = "memcpy");
+  // Gate-only raw loader preserves adversarial NaN payloads / raw bf16 bits.
+  // Existing tensor()/numpy() conversion semantics are intentionally untouched.
+  m.def("_ring_from_bytes", [](py::bytes raw, Shape shape, const std::string& dtype) {
+    const auto dt = dtype_from_string(dtype); const std::string bytes = raw;
+    if (ring::checked_bytes(shape, dt) != bytes.size()) throw std::invalid_argument("raw tensor byte count mismatch");
+    py::gil_scoped_release release;
+    return Tensor::make(NDArray::from_host(bytes.data(), shape, dt, Device{}), false);
+  });
+  m.def("_ring_empty", [](Shape shape, const std::string& dtype) {
+    const auto dt = dtype_from_string(dtype); ring::checked_bytes(shape, dt);
+    py::gil_scoped_release release; return Tensor::make(NDArray::empty(shape, dt, Device{}), false);
+  });
+  m.def("_ring_delay", &ring::test_delay, py::arg("milliseconds"), py::arg("stream") = nullptr,
+        py::call_guard<py::gil_scoped_release>());
+  m.def("_ring_compute", [](const Tensor& out, unsigned iterations) {
+    const auto a = out.data(); py::gil_scoped_release release; ring::test_compute(a, iterations);
+  }, py::arg("out"), py::arg("iterations"));
+}
 
 DType numpy_dtype(const py::array& a) {
   auto dt = a.dtype();
@@ -218,6 +330,7 @@ std::vector<TerrainRenderObject> terrain_objects_from_python(
 
 PYBIND11_MODULE(_tensor_cuda, m) {
   m.doc() = "Project Tensor — standalone CUDA tensor engine (no PyTorch).";
+  bind_ring(m);
 
   py::class_<Tensor>(m, "Tensor")
       .def_property_readonly("shape", [](Tensor& t) {
@@ -231,6 +344,11 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                     [](Tensor& t, bool r) { t.set_requires_grad(r); })
       .def_property_readonly("grad", &grad_of)
       .def("numpy", &tensor_to_numpy)
+      .def("copy_", [](Tensor& dst, const Tensor& src) -> Tensor& {
+        ring_no_grad(); auto d = ring_arrays({dst}), s = ring_arrays({src});
+        py::gil_scoped_release release; ring::copy_many(std::move(d), std::move(s), "memcpy");
+        return dst;
+      }, py::arg("src"), py::return_value_policy::reference_internal)
       .def("backward", [](Tensor& t) { t.backward(); })
       .def("zero_grad", &Tensor::zero_grad)
       .def("reshape", [](Tensor& t, std::vector<int64_t> s) { return ops::reshape(t, s); })

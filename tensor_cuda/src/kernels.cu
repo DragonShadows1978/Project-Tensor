@@ -8196,3 +8196,340 @@ std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
 }
 // BP-KERNEL-4 END
 }  // namespace tc
+
+// PT-RING-1 BEGIN (additive: all pre-existing kernels above are unchanged).
+// Prior art: NVIDIA CUDA 12.6 (2024), cudaHostAlloc/cudaMemcpyAsync and event
+// dependencies; PyTorch record_stream (2016 onward) completion-bound lifetime;
+// NVIDIA Apex multi_tensor_apply (2018 onward) chunked pointer-list kernels.
+// Taken: the mechanisms, byte copying and batching. Ours: checked contracts and
+// explicit legacy-stream integration. References: docs/PT_RING_1_API.md.
+#include "tc/async_copy.h"
+#include "tc/copy_contract.h"
+#include <algorithm>
+
+namespace tc::ring {
+namespace {
+std::recursive_mutex ring_mutex;
+std::mutex pin_mutex;
+size_t held_pinned = 0;
+size_t pin_limit = size_t{12} << 30;
+
+void check(cudaError_t err, const char* op) {
+  if (err != cudaSuccess)
+    throw std::runtime_error(std::string("PT-RING-1 ") + op + ": " + cudaGetErrorString(err));
+}
+void device_zero() {
+  int device = -1;
+  check(cudaGetDevice(&device), "cudaGetDevice");
+  // Device::from_string currently only describes logical device zero. Do not
+  // pretend cross-device/context lifetime is supported by that metadata.
+  if (device != 0) throw std::invalid_argument("PT-RING-1 supports logical CUDA device 0 only");
+}
+void require_recorded(const Event& event) {
+  if (!event.recorded) throw std::invalid_argument("Event has not been recorded");
+}
+struct Pending {
+  std::shared_ptr<Event> done;
+  std::shared_ptr<Stream> stream;
+  std::vector<NDArray> sources, destinations;
+  std::vector<std::shared_ptr<PinnedBuffer>> host;
+};
+struct PendingQueue {
+  std::vector<std::shared_ptr<Pending>> entries;
+  ~PendingQueue() {
+    // No Python objects, callbacks or background threads. At normal shutdown,
+    // drain before Storage/cudaFreeHost can release outstanding copy operands.
+    for (const auto& p : entries) {
+      auto err = cudaStreamSynchronize(p->stream->handle);
+      if (err != cudaSuccess) std::fprintf(stderr, "PT-RING-1 shutdown drain: %s\n", cudaGetErrorString(err));
+    }
+  }
+};
+PendingQueue& pending() { static PendingQueue queue; return queue; }
+size_t collect_locked(bool wait) {
+  auto& entries = pending().entries;
+  for (auto it = entries.begin(); it != entries.end();) {
+    auto& event = (*it)->done;
+    if (!event->recorded) { ++it; continue; } // failed submission; retained fail-closed
+    const auto err = wait ? cudaEventSynchronize(event->handle) : cudaEventQuery(event->handle);
+    if (err == cudaSuccess) it = entries.erase(it);
+    else if (err == cudaErrorNotReady) ++it;
+    else check(err, "copy completion");
+  }
+  return entries.size();
+}
+size_t validate_array(const NDArray& array) {
+  const auto bytes = checked_bytes(array.shape, array.dtype);
+  if (!array.defined() || !array.device.is_cuda() || !array.storage->device.is_cuda() ||
+      array.device.index != 0 || array.offset < 0)
+    throw std::invalid_argument("copy: expected defined contiguous CUDA tensor on logical device 0");
+  const auto item = dtype_size(array.dtype);
+  if (static_cast<uint64_t>(array.offset) > SIZE_MAX / item)
+    throw std::overflow_error("copy: offset overflow");
+  const auto offset = static_cast<size_t>(array.offset) * item;
+  if (offset > array.storage->nbytes || bytes > array.storage->nbytes - offset)
+    throw std::invalid_argument("copy: tensor range exceeds its storage");
+  return bytes;
+}
+// Register ownership before the first enqueue; even allocation/record errors
+// must not free an operand that the GPU has already begun using.
+template <typename Enqueue>
+std::shared_ptr<Event> submit(const std::shared_ptr<Pending>& request, Enqueue enqueue) {
+  auto& entries = pending().entries;
+  entries.push_back(request);
+  try {
+    enqueue();
+    request->done->record(request->stream);
+  } catch (...) {
+    // Exceptional path only. If drain itself fails, retain operands until
+    // shutdown instead of guessing that failed submission means no DMA ran.
+    if (cudaStreamSynchronize(request->stream->handle) == cudaSuccess)
+      entries.erase(std::find(entries.begin(), entries.end(), request));
+    throw;
+  }
+  return request->done;
+}
+
+constexpr size_t copy_chunk = 64 * 1024;
+struct CopyDescriptor {
+  const unsigned char* source;
+  unsigned char* destination;
+  size_t bytes;
+  uint32_t first_block, end_block;
+};
+__global__ void copy_list_kernel(const CopyDescriptor* descriptors, unsigned count) {
+  // Apex-style chunk scheduling; binary search a prefix of chunk counts.
+  // Bitwise uint4 transport when aligned; byte tail, including bool/bf16 bits.
+  unsigned lo = 0, hi = count;
+  while (lo < hi) {
+    const unsigned mid = lo + (hi-lo)/2;
+    if (descriptors[mid].end_block <= blockIdx.x) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo == count) return;
+  const auto d = descriptors[lo];
+  const size_t begin = static_cast<size_t>(blockIdx.x-d.first_block)*copy_chunk;
+  const size_t end = min(d.bytes, begin + copy_chunk);
+  if (((reinterpret_cast<uintptr_t>(d.source) | reinterpret_cast<uintptr_t>(d.destination)) & 15) == 0) {
+    for (size_t i = begin/16 + threadIdx.x; i < end/16; i += blockDim.x)
+      reinterpret_cast<uint4*>(d.destination)[i] = reinterpret_cast<const uint4*>(d.source)[i];
+    for (size_t i = end/16*16 + threadIdx.x; i < end; i += blockDim.x) d.destination[i] = d.source[i];
+  } else {
+    for (size_t i = begin + threadIdx.x; i < end; i += blockDim.x) d.destination[i] = d.source[i];
+  }
+}
+}  // namespace
+
+PinnedBuffer::PinnedBuffer(Shape s, DType dt)
+    : shape(std::move(s)), dtype(dt), nbytes(checked_bytes(shape, dtype)) {
+  std::lock_guard<std::mutex> lock(pin_mutex);
+  if (nbytes > pin_limit - held_pinned)
+    throw std::runtime_error("pinned_empty: pinned memory limit exceeded (no allocation attempted)");
+  if (!nbytes) return;
+  device_zero();
+  // Default flags suffice for this single logical device/context API.
+  // Portable is needed only for multi-context use, which is not supported here.
+  check(cudaHostAlloc(&ptr, nbytes, cudaHostAllocDefault), "cudaHostAlloc (no retry/pageable fallback)");
+  held_pinned += nbytes;
+}
+PinnedBuffer::~PinnedBuffer() {
+  if (!ptr) return;
+  std::lock_guard<std::mutex> lock(pin_mutex);
+  const auto err = cudaFreeHost(ptr);
+  if (err == cudaSuccess) held_pinned -= nbytes;
+  else std::fprintf(stderr, "PT-RING-1 cudaFreeHost failed; bytes remain accounted: %s\n", cudaGetErrorString(err));
+}
+size_t pinned_bytes() { std::lock_guard<std::mutex> lock(pin_mutex); return held_pinned; }
+size_t pinned_memory_limit() { std::lock_guard<std::mutex> lock(pin_mutex); return pin_limit; }
+void set_pinned_memory_limit(size_t limit) {
+  std::lock_guard<std::mutex> lock(pin_mutex);
+  if (limit < held_pinned) throw std::invalid_argument("pinned limit is below currently held bytes");
+  pin_limit = limit;
+}
+Stream::Stream(bool nb, bool legacy) : non_blocking(nb && !legacy), owned(!legacy) {
+  device_zero();
+  if (owned) check(cudaStreamCreateWithFlags(&handle, nb ? cudaStreamNonBlocking : cudaStreamDefault), "cudaStreamCreateWithFlags");
+  else handle = cudaStreamLegacy;  // explicit legacy, independent of caller PTDS flags
+}
+Stream::~Stream() { if (owned) cudaStreamDestroy(handle); }
+std::shared_ptr<Stream> legacy_stream() {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero();
+  static auto stream = std::make_shared<Stream>(false, true);
+  return stream;
+}
+void Stream::wait(const std::shared_ptr<Event>& event) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero();
+  if (!event) throw std::invalid_argument("Stream.wait requires an Event");
+  require_recorded(*event);
+  check(cudaStreamWaitEvent(handle, event->handle, 0), "cudaStreamWaitEvent");
+}
+void Stream::synchronize() {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero();
+  check(cudaStreamSynchronize(handle), "cudaStreamSynchronize");
+  collect_locked(false);
+}
+Event::Event(bool enable_timing) : timing(enable_timing) {
+  device_zero();
+  check(cudaEventCreateWithFlags(&handle, timing ? cudaEventDefault : cudaEventDisableTiming), "cudaEventCreateWithFlags");
+}
+Event::~Event() { cudaEventDestroy(handle); }
+void Event::record(const std::shared_ptr<Stream>& stream) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero();
+  if (recorded) throw std::invalid_argument("Event is one-shot; create a new Event to record again");
+  check(cudaEventRecord(handle, stream ? stream->handle : cudaStreamLegacy), "cudaEventRecord");
+  recorded = true;
+}
+bool Event::query() {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero(); require_recorded(*this);
+  auto err = cudaEventQuery(handle);
+  if (err == cudaErrorNotReady) return false;
+  check(err, "cudaEventQuery"); collect_locked(false); return true;
+}
+void Event::synchronize() {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero(); require_recorded(*this);
+  check(cudaEventSynchronize(handle), "cudaEventSynchronize"); collect_locked(false);
+}
+float Event::elapsed_time(const std::shared_ptr<Event>& end) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  device_zero(); require_recorded(*this);
+  if (!end || !timing || !end->timing) throw std::invalid_argument("elapsed_time requires two timing-enabled Events");
+  require_recorded(*end);
+  float ms = 0; check(cudaEventElapsedTime(&ms, handle, end->handle), "cudaEventElapsedTime"); return ms;
+}
+size_t collect_async_copies(bool wait) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  if (!pending().entries.empty()) device_zero();
+  return collect_locked(wait);
+}
+std::pair<size_t, size_t> mem_get_info() {
+  device_zero(); size_t free = 0, total = 0;
+  check(cudaMemGetInfo(&free, &total), "cudaMemGetInfo"); return {free, total};
+}
+NDArray empty_like(const NDArray& source) {
+  // Prior art: PyTorch empty_like (2016 onward), allocation-only API. This
+  // supplies device staging without an intermediate pageable NumPy allocation.
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  validate_array(source); device_zero(); collect_locked(false);
+  return NDArray::empty(source.shape, source.dtype, source.device);
+}
+
+std::shared_ptr<Event> copy_to_host_async(std::vector<NDArray> sources,
+    std::vector<std::shared_ptr<PinnedBuffer>> buffers,
+    std::shared_ptr<Stream> stream, std::shared_ptr<Event> after) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  if (!stream || !stream->non_blocking) throw std::invalid_argument("copy_to_host_async requires a non-blocking side Stream");
+  if (sources.size() != buffers.size()) throw std::invalid_argument("copy_to_host_async: list lengths differ");
+  std::vector<Range> writes;
+  for (size_t i = 0; i < sources.size(); ++i) {
+    const auto bytes = validate_array(sources[i]);
+    if (!buffers[i] || buffers[i]->shape != sources[i].shape || buffers[i]->dtype != sources[i].dtype)
+      throw std::invalid_argument("copy_to_host_async: pinned destination shape/dtype mismatch");
+    writes.push_back(range(buffers[i]->ptr, bytes, i));
+  }
+  validate_aliases(writes, {});
+  device_zero(); collect_locked(false);
+  auto request = std::make_shared<Pending>();
+  request->sources = std::move(sources); request->host = std::move(buffers); request->stream = std::move(stream);
+  request->done = std::make_shared<Event>();
+  // Omitted `after` safely records the legacy producer stream, including pooled
+  // allocations. Callers still own write ordering after this snapshot point.
+  if (!after) { after = std::make_shared<Event>(); after->record(legacy_stream()); }
+  require_recorded(*after);
+  return submit(request, [&] {
+    request->stream->wait(after);
+    for (size_t i = 0; i < request->sources.size(); ++i) {
+      const auto bytes = request->host[i]->nbytes;
+      if (bytes) check(cudaMemcpyAsync(request->host[i]->ptr, request->sources[i].data_ptr(), bytes,
+                                      cudaMemcpyDeviceToHost, request->stream->handle), "cudaMemcpyAsync D2H");
+    }
+  });
+}
+
+std::shared_ptr<Event> copy_many(std::vector<NDArray> destinations,
+    std::vector<NDArray> sources, const std::string& method) {
+  std::lock_guard<std::recursive_mutex> lock(ring_mutex);
+  if (method != "memcpy" && method != "kernel") throw std::invalid_argument("copy_many_: method must be memcpy or kernel");
+  if (destinations.size() != sources.size()) throw std::invalid_argument("copy_many_: list lengths differ");
+  std::vector<Range> writes, reads;
+  std::vector<CopyDescriptor> descriptors;
+  uint64_t blocks = 0;
+  for (size_t i = 0; i < sources.size(); ++i) {
+    const auto bytes = validate_array(sources[i]); validate_array(destinations[i]);
+    if (sources[i].shape != destinations[i].shape || sources[i].dtype != destinations[i].dtype)
+      throw std::invalid_argument("copy_many_: shape/dtype mismatch");
+    const void* src = bytes ? sources[i].data_ptr() : nullptr;
+    void* dst = bytes ? destinations[i].data_ptr() : nullptr;
+    writes.push_back(range(dst, bytes, i)); reads.push_back(range(src, bytes, i));
+    if (bytes && src != dst) {
+      const auto next = blocks + (bytes + copy_chunk - 1) / copy_chunk;
+      if (next > INT32_MAX) throw std::overflow_error("copy_many_: batch too large for kernel grid");
+      descriptors.push_back({static_cast<const unsigned char*>(src), static_cast<unsigned char*>(dst), bytes,
+                             static_cast<uint32_t>(blocks), static_cast<uint32_t>(next)});
+      blocks = next;
+    }
+  }
+  validate_aliases(writes, reads); device_zero(); collect_locked(false);
+  auto request = std::make_shared<Pending>();
+  request->destinations = std::move(destinations); request->sources = std::move(sources);
+  request->stream = legacy_stream(); request->done = std::make_shared<Event>();
+  if (method == "kernel" && !descriptors.empty()) {
+    auto host = std::make_shared<PinnedBuffer>(Shape{static_cast<int64_t>(descriptors.size()*sizeof(CopyDescriptor))}, DType::Uint8);
+    std::memcpy(host->ptr, descriptors.data(), host->nbytes); request->host.push_back(std::move(host));
+  }
+  auto done = submit(request, [&] {
+    // Invalidate derived caches even if a later enqueue fails after earlier
+    // destinations have already been written. Validation above is all-or-none;
+    // CUDA runtime failures cannot promise transactional rollback.
+    for (const auto& destination : request->destinations) destination.mark_modified();
+    if (method == "memcpy") {
+      for (const auto& d : descriptors)
+        check(cudaMemcpyAsync(d.destination, d.source, d.bytes, cudaMemcpyDeviceToDevice, cudaStreamLegacy), "cudaMemcpyAsync D2D");
+    } else if (!descriptors.empty()) {
+      CopyDescriptor* device = nullptr;
+      check(cudaMallocAsync(reinterpret_cast<void**>(&device), request->host[0]->nbytes, cudaStreamLegacy), "copy descriptor allocation");
+      try {
+        check(cudaMemcpyAsync(device, request->host[0]->ptr, request->host[0]->nbytes, cudaMemcpyHostToDevice, cudaStreamLegacy), "copy descriptors H2D");
+        copy_list_kernel<<<static_cast<unsigned>(blocks), 256, 0, cudaStreamLegacy>>>(device, descriptors.size());
+        check(cudaGetLastError(), "copy_list_kernel");
+      } catch (...) { cudaFreeAsync(device, cudaStreamLegacy); throw; }
+      check(cudaFreeAsync(device, cudaStreamLegacy), "copy descriptor release");
+    }
+  });
+  return done;
+}
+
+namespace {
+// Prior art: NVIDIA CUDA clock64 and synthetic dependent instruction loops
+// (CUDA samples, 2010 onward). Test instrumentation only, no training dispatch.
+__global__ void ring_delay_kernel(unsigned long long ticks) {
+  const auto start = clock64(); while (clock64() - start < ticks) {}
+}
+__global__ void ring_compute_kernel(uint8_t* out, size_t bytes, unsigned iterations) {
+  const auto i = static_cast<size_t>(blockIdx.x)*blockDim.x + threadIdx.x;
+  unsigned value = i + 1;
+  for (unsigned j = 0; j < iterations; ++j) value = (value ^ (value >> 13))*1664525u + 1013904223u;
+  if (i < bytes) out[i] = static_cast<uint8_t>(value);
+}
+}
+void test_delay(unsigned milliseconds, const std::shared_ptr<Stream>& stream) {
+  if (milliseconds > 1000) throw std::invalid_argument("test delay is bounded to 1000 ms");
+  device_zero(); int khz = 0; check(cudaDeviceGetAttribute(&khz, cudaDevAttrClockRate, 0), "clock rate");
+  ring_delay_kernel<<<1, 1, 0, stream ? stream->handle : cudaStreamLegacy>>>(static_cast<unsigned long long>(khz)*milliseconds);
+  check(cudaGetLastError(), "test delay");
+}
+void test_compute(const NDArray& out, unsigned iterations) {
+  const auto bytes = validate_array(out);
+  if (out.dtype != DType::Uint8 || bytes < 256 || iterations > 10000000)
+    throw std::invalid_argument("test compute requires uint8 >=256 bytes and <=10000000 iterations");
+  device_zero();
+  ring_compute_kernel<<<std::min<size_t>(bytes/256, 4096), 256, 0, cudaStreamLegacy>>>(static_cast<uint8_t*>(out.data_ptr()), bytes, iterations);
+  check(cudaGetLastError(), "test compute");
+}
+}  // namespace tc::ring
+// PT-RING-1 END

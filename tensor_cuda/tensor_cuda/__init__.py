@@ -22,6 +22,24 @@ except ImportError:  # pragma: no cover
 Tensor = _C.Tensor
 ApaInt4Workspace = _C.ApaInt4Workspace
 
+# PT-RING-1. Prior art: NVIDIA CUDA 12.6 (2024) pinned memory and stream/event
+# dependencies, PyTorch pin_memory/foreach-copy/record_stream (2016 onward).
+# Taken: mechanisms/API shape. Ours: this engine's explicit legacy-stream recipe.
+# See docs/PT_RING_1_API.md for lifetime, no_grad, raw bf16 and staging rules.
+PinnedBuffer = _C.PinnedBuffer
+Stream = _C.Stream
+Event = _C.Event
+pinned_empty = _C.pinned_empty
+legacy_stream = _C.legacy_stream
+copy_to_host_async = _C.copy_to_host_async
+copy_many_ = _C.copy_many_
+pinned_bytes = _C.pinned_bytes
+pinned_memory_limit = _C.pinned_memory_limit
+set_pinned_memory_limit = _C.set_pinned_memory_limit
+collect_async_copies = _C.collect_async_copies
+mem_get_info = _C.mem_get_info
+empty_like = _C.empty_like
+
 # Prior art: PyTorch 1.9 (2021) opt-in policy; PT-DET-2 engine family covers
 # embedding and gather/top-k backward only. Both names address one TLS state.
 set_deterministic = _C.set_deterministic
@@ -1254,6 +1272,9 @@ __all__ = [
     "swap_row_pairs_with_rope", "evict_row_pairs",
     "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "apa_refine_stats", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
     "synchronize", "empty_cache", "set_alloc_pooling", "no_grad", "is_grad_enabled", "nn", "optim", "functional",
+    "PinnedBuffer", "Stream", "Event", "pinned_empty", "legacy_stream",
+    "copy_to_host_async", "copy_many_", "pinned_bytes", "pinned_memory_limit",
+    "set_pinned_memory_limit", "collect_async_copies", "mem_get_info", "empty_like",
     "quant", "quantization", "apa_quant_attention", "save_checkpoint", "load_checkpoint",
     "weight_tie", "checkpoint", "einsum", "int4_linear", "int4_linear_fused",
     "w8a16_matmul",
