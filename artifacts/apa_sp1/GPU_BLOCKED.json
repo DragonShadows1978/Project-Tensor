@@ -1,0 +1,44 @@
+{
+  "status": "BLOCKED_NO_CUDA_DEVICE",
+  "evidence_class": "CPU environment/suite receipt; GPU gates NOT RUN",
+  "registration_sha256": "12059d49f39abe9450b34989f06ac5ca8a736d80e3127c9d41c1ed97e650c9fe",
+  "environment_error": "RuntimeError: cudaMalloc failed: no CUDA-capable device is detected",
+  "environment_receipt": "artifacts/apa_sp1/g1_selector_1788656790462101850.log",
+  "G1": {
+    "CPU": "32 passed in 0.46s",
+    "legacy": "49 failed, 1 passed, 48 skipped in 12.80s",
+    "legacy_status": "BLOCKED; neither failure-as-regression nor skip-as-pass claimed"
+  },
+  "G2": {
+    "status": "BLOCKED",
+    "scope": "full registered fp32 outputs versus own CPU emulator; additional sink/VD/ragged/MQA-cap boundary dtype tests",
+    "commands": [
+      "bash scripts/apa_sp1_lead_gpu.sh run boundary",
+      "bash scripts/apa_sp1_lead_gpu.sh run legacy",
+      "bash scripts/apa_sp1_lead_gpu.sh run selector",
+      "bash scripts/apa_sp1_lead_gpu.sh run prefill_s512_d64_c0_h4_kv4"
+    ]
+  },
+  "G3": {
+    "status": "BLOCKED",
+    "scope": "48 registered shapes; matched fractions, full dense fp32 output deviations, interleaved CUDA-event timing and structural memory shapes",
+    "commands": [
+      "bash scripts/apa_sp1_lead_gpu.sh list",
+      "bash scripts/apa_sp1_lead_gpu.sh resume",
+      "bash scripts/apa_sp1_lead_gpu.sh summary"
+    ],
+    "note": "Each resume invocation runs one next pending class only. Repeat as lead chooses. Summary retains failures and unmatched/missing rows; nothing about model quality."
+  },
+  "build_command": "timeout 540s bash scripts/apa_sp1_build.sh > artifacts/apa_sp1/build_lead.log 2>&1",
+  "lease": {
+    "path": "/tmp/forge-gpu.lock",
+    "wait_seconds": 5,
+    "worker_timeout_seconds": 510,
+    "outer_timeout_seconds": 590,
+    "kill_grace_seconds": 5,
+    "cooldown_seconds": 30,
+    "single_gpu": "APA_SP1_GPU numeric index (default 0), one CUDA_VISIBLE_DEVICES entry"
+  },
+  "process_safety": "Only timeout-owned worker descendants may receive timeout signals. No foreign process killed. Lock held through cooldown; busy GPU aborts. No background sleep or GPU work by implementation seat.",
+  "predictions": "GPU-dependent P3 and A4/A5 remain unscored. CPU summary scores theory and holdout tail predictions separately."
+}

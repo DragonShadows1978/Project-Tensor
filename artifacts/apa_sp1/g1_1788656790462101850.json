@@ -1,0 +1,63 @@
+{
+  "evidence_class": "CPU pytest suite run; legacy CUDA gates attempted and blocked",
+  "status": "CPU_PASS_LEGACY_BLOCKED",
+  "runtime_module": "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/artifacts/apa_sp1/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+  "source_pins": {
+    "test_apa_selective.py": "4ee3785af6b38e67e4ed423481e2c046bd05d61aef049c51065b004910d7d748",
+    "test_apa_selective_splitk.py": "2df1b90d1622fbf3565357785d7c6dd1697bf45d4211d4f400488751ff0ac77e",
+    "test_apa_selective_int4.py": "41fb9a17e5b430dc8fa2ed6f2c3ce77702f5d5d1483298b64b93e8a5fb46188b",
+    "test_apa_value_dim.py": "581c0e99798ed46cf48ecc87802bbee032ab773ae5561d627f783039b4857a5e",
+    "test_apa_phase6.py": "0e01d13f5e636ef9a043331df3293d90a8c0d3d0b3b7d031ea0b158f2b82b963",
+    "test_qtile_attention.py": "982b8d5b10c7c655b9373a20db2077af844bddacccfa875cfd1d949a4de35f92",
+    "test_apa_int4_sdpa_noncausal.py": "f4975b0b7cd7868670402b3ab186b045923c0e43d2e5bbf39ea082eb9c5269f6",
+    "test_selector_accuracy.py": "54af6d2f2404a029fdda29acad87ae2d51623d33674a9028a2972e14bbc1ac57"
+  },
+  "results": {
+    "cpu": {
+      "returncode": 0,
+      "log": "artifacts/apa_sp1/g1_cpu_1788656790462101850.log",
+      "command": [
+        "/usr/bin/python3",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_sp1_reference.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_sp1_host.py"
+      ],
+      "summary": "32 passed in 0.46s"
+    },
+    "legacy": {
+      "returncode": 1,
+      "log": "artifacts/apa_sp1/g1_legacy_1788656790462101850.log",
+      "command": [
+        "/usr/bin/python3",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_selective.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_selective_splitk.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_selective_int4.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_value_dim.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_phase6.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_qtile_attention.py",
+        "/mnt/ForgeRealm/Project-Tensor-wt-apa-sp1/tensor_cuda/tests/test_apa_int4_sdpa_noncausal.py"
+      ],
+      "summary": "49 failed, 1 passed, 48 skipped in 12.80s"
+    },
+    "selector": {
+      "returncode": 1,
+      "log": "artifacts/apa_sp1/g1_selector_1788656790462101850.log",
+      "summary": "RuntimeError: cudaMalloc failed: no CUDA-capable device is detected",
+      "transform": "Only hard-coded sys.path changed in memory to this worktree."
+    }
+  },
+  "registration_sha256": "12059d49f39abe9450b34989f06ac5ca8a736d80e3127c9d41c1ed97e650c9fe",
+  "reference_sha256": "aadbaaa1ff8385a612d73fb764b72f3a13a6b06da87bcca9860219062a3964aa",
+  "driver_sha256": "1468790c125ee3f4290fd7de7ceb66c4254e70db12aa0fd8465db0e50ba0c0fd"
+}

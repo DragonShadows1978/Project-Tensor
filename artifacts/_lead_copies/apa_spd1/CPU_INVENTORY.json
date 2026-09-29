@@ -1,0 +1,113 @@
+{
+  "evidence_class": "CPU import/source inspection; GPU availability untested per backend",
+  "torch_version": "2.11.0+cu130",
+  "torch_cuda_build": "13.0",
+  "cuda_available": true,
+  "runtime": "/mnt/ForgeRealm/Project-Tensor-wt-apa-spd1/artifacts/apa_sp1/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+  "runtime_sha256": "ed87a2add3f1c4d1baad02e84aaa4080a6000cb72220f64f7d630a98e854db6b",
+  "engine_entries": {
+    "matmul": true,
+    "causal_softmax": true,
+    "apa_selective_attention": true,
+    "apa_selective_attention_sp": true,
+    "set_alloc_pooling": true
+  },
+  "sdpa_enums": {
+    "MATH": true,
+    "EFFICIENT_ATTENTION": true,
+    "FLASH_ATTENTION": true
+  },
+  "flash_attn_importable": false,
+  "sp2_frozen_files": [],
+  "contenders": [
+    {
+      "id": "engine_dense_fp32",
+      "dtype": "float32",
+      "owner": "engine",
+      "entry": "tensor_cuda.matmul -> causal_softmax / Tensor.softmax -> matmul",
+      "required": true
+    },
+    {
+      "id": "torch_math_fp32",
+      "dtype": "float32",
+      "owner": "torch",
+      "entry": "torch.nn.functional.scaled_dot_product_attention; sdpa_kernel(MATH)",
+      "backend": "MATH",
+      "required": true
+    },
+    {
+      "id": "apa_two_pass_fp32",
+      "dtype": "float32",
+      "owner": "engine",
+      "entry": "tensor_cuda.apa_selective_attention; apa_selective_kernel family",
+      "required": true
+    },
+    {
+      "id": "apa_sp_fp32",
+      "dtype": "float32",
+      "owner": "engine",
+      "entry": "tensor_cuda._C.apa_selective_attention_sp; prefill / split-K decode; TC_APA_SP=1",
+      "required": true
+    },
+    {
+      "id": "engine_dense_bf16",
+      "dtype": "bfloat16",
+      "owner": "engine",
+      "entry": "tensor_cuda.matmul -> causal_softmax / Tensor.softmax -> matmul",
+      "required": true
+    },
+    {
+      "id": "torch_math_bf16",
+      "dtype": "bfloat16",
+      "owner": "torch",
+      "entry": "torch.nn.functional.scaled_dot_product_attention; sdpa_kernel(MATH)",
+      "backend": "MATH",
+      "required": true
+    },
+    {
+      "id": "apa_two_pass_bf16",
+      "dtype": "bfloat16",
+      "owner": "engine",
+      "entry": "tensor_cuda.apa_selective_attention; apa_selective_kernel family",
+      "required": true
+    },
+    {
+      "id": "apa_sp_bf16",
+      "dtype": "bfloat16",
+      "owner": "engine",
+      "entry": "tensor_cuda._C.apa_selective_attention_sp; prefill / split-K decode; TC_APA_SP=1",
+      "required": true
+    },
+    {
+      "id": "torch_efficient_bf16",
+      "dtype": "bfloat16",
+      "owner": "torch",
+      "entry": "torch.nn.functional.scaled_dot_product_attention; sdpa_kernel(EFFICIENT_ATTENTION)",
+      "backend": "EFFICIENT_ATTENTION",
+      "required": false
+    },
+    {
+      "id": "torch_flash_bf16",
+      "dtype": "bfloat16",
+      "owner": "torch",
+      "entry": "torch.nn.functional.scaled_dot_product_attention; sdpa_kernel(FLASH_ATTENTION)",
+      "backend": "FLASH_ATTENTION",
+      "required": false
+    },
+    {
+      "id": "flash_attn_bf16",
+      "dtype": "bfloat16",
+      "owner": "torch",
+      "entry": "flash_attn.flash_attn_func (optional, version recorded)",
+      "required": false
+    },
+    {
+      "id": "apa_sp2_fp32",
+      "dtype": "float32",
+      "owner": "engine",
+      "entry": "actual SP2 launcher through hashed adapter; epsilon=1e-3 (optional)",
+      "required": false
+    }
+  ],
+  "note": "sm_89 backend support requires a forced call on each real shape/dtype; CPU enum presence is not support"
+}

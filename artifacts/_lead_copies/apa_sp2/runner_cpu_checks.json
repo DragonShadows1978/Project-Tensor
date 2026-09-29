@@ -1,0 +1,72 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "command": [
+        "bash",
+        "-n",
+        "scripts/apa_sp2_lead_gpu.sh",
+        "scripts/apa_sp2_build.sh",
+        "scripts/apa_sp2_cpu.sh"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/apa_sp2_lead_gpu.sh",
+        "list"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "output": "1_h8_kv2_e5\nsweep_b4_decode_s32768_d64_c1_h8_kv2_e6\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e0\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e1\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e2\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e3\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e4\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e5\nsweep_b4_decode_s32768_d128_c0_h4_kv4_e6\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e0\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e1\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e2\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e3\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e4\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e5\nsweep_b4_decode_s32768_d128_c0_h8_kv2_e6\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e0\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e1\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e2\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e3\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e4\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e5\nsweep_b4_decode_s32768_d128_c1_h4_kv4_e6\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e0\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e1\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e2\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e3\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e4\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e5\nsweep_b4_decode_s32768_d128_c1_h8_kv2_e6\n"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/apa_sp2_gpu.py",
+        "next"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "output": "eq_b2_prefill_s2048_d64_c0_h4_kv4\n"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/apa_sp2_lead_gpu.sh",
+        "run",
+        "unregistered"
+      ],
+      "returncode": 1,
+      "expected": 1,
+      "output": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_gpu.py\", line 273, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_gpu.py\", line 247, in main\n    if args.mode=='validate':decode_target(args.target,reg);return\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_common.py\", line 104, in decode_target\n    raise ValueError('unregistered target; use list')\nValueError: unregistered target; use list\n"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/apa_sp2_lead_gpu.sh",
+        "run",
+        "freeze"
+      ],
+      "returncode": 1,
+      "expected": 1,
+      "output": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_gpu.py\", line 273, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_gpu.py\", line 251, in main\n    if args.mode=='freeze':freeze();return\n                           ^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor-wt-apa-sp2/scripts/apa_sp2_gpu.py\", line 111, in freeze\n    raise RuntimeError(f'BLOCKED: G2 missing/failed {target}')\nRuntimeError: BLOCKED: G2 missing/failed eq_b2_prefill_s2048_d64_c0_h4_kv4\n"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/apa_sp2_lead_gpu.sh",
+        "summary"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "output": "BLOCKED_INCOMPLETE 0/448 {\"P1\": \"BLOCKED_G2\", \"P2\": \"BLOCKED_G3\", \"P3\": \"BLOCKED_G3\", \"P4\": \"BLOCKED_INCOMPLETE\"}\n"
+    }
+  ],
+  "registered_gpu_commands": 512,
+  "gpu_work_started": false,
+  "initial_verification_failure": "AssertionError in ad hoc commands-file check: text search included comment ending checkout. as a GPU target. Diagnostic set difference was registered-listed=set(), listed-registered={checkout.}. Corrected checker parses timeout command lines only; runner/commands did not change."
+}

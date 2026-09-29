@@ -1,0 +1,118 @@
+{
+  "status": "BLOCKED_NO_GPU",
+  "evidence_class": "dispatch resource constraint; no GPU execution attempted by seat",
+  "reason": "Lead explicitly dispatched a no-GPU sandbox; G2 calibration and G3 runtime/curve require leased GPU lead execution.",
+  "registration_sha256": "3b8df8bfdd6e3d351395f96ca654bfe9070a26bfaed390d73cc620546a7ff027",
+  "eq_rule": {
+    "statistic": "maximum_over_all_registered_G2_valid_scores",
+    "pool_by": [
+      "bulk_bits",
+      "D"
+    ],
+    "report": [
+      "max",
+      "p99_9",
+      "mean",
+      "count"
+    ],
+    "percentile": "numpy.quantile(method=linear), pooled exact values",
+    "rounding": "nextafter float32 maximum toward +infinity",
+    "draws_per_shape": 2,
+    "query_rows_per_prefill_draw": 32,
+    "query_rows": "floor(linspace(0,L-1,min(32,L))) includes first and last; decode uses its one full row",
+    "measurement_seed": 2026090602,
+    "distribution": "independent standard-normal fp32 q,K; all S keys; existing GPU TurboQuant quantizer; exact target FP64 dot of FP32 inputs times the actual FP32 scale, diagnostic bulk in kernel FMA/shuffle order",
+    "freeze": "all 64 bit/shape measurements required; create-only e_q_table.json plus sha256 before any G3 use; later changes require separate amendment/table identity",
+    "validity": "finite calibration maximum, NOT universal bound; G3 checks all held-out logits for exceedances without retuning; breach marks conditional guarantee RED but raw curve remains reported"
+  },
+  "eq_table": [
+    {
+      "bulk_bits": 2,
+      "D": 64,
+      "max": null,
+      "p99_9": null,
+      "mean": null,
+      "count": null,
+      "e_q": null,
+      "status": "BLOCKED_NO_GPU"
+    },
+    {
+      "bulk_bits": 2,
+      "D": 128,
+      "max": null,
+      "p99_9": null,
+      "mean": null,
+      "count": null,
+      "e_q": null,
+      "status": "BLOCKED_NO_GPU"
+    },
+    {
+      "bulk_bits": 4,
+      "D": 64,
+      "max": null,
+      "p99_9": null,
+      "mean": null,
+      "count": null,
+      "e_q": null,
+      "status": "BLOCKED_NO_GPU"
+    },
+    {
+      "bulk_bits": 4,
+      "D": 128,
+      "max": null,
+      "p99_9": null,
+      "mean": null,
+      "count": null,
+      "e_q": null,
+      "status": "BLOCKED_NO_GPU"
+    }
+  ],
+  "G2": {
+    "status": "BLOCKED_NO_GPU",
+    "expected_classes": 64,
+    "observed_classes": 0
+  },
+  "G3": {
+    "status": "BLOCKED_NO_GPU",
+    "expected_epsilon_rows": 448,
+    "observed_rows": 0
+  },
+  "exact_commands_file": "artifacts/apa_sp2/lead_commands.txt",
+  "commands_sha256": "02b01f0c88e667f1db5475cb0720de286c75efa91aa5f7805b026ff878cbc4b3",
+  "minimal_sequence": [
+    "cd /mnt/ForgeRealm/Project-Tensor-wt-apa-sp2",
+    "timeout --signal=TERM --kill-after=5s 590s bash scripts/apa_sp2_lead_gpu.sh run eq_b2_prefill_s2048_d64_c0_h4_kv4",
+    "# Then the remaining 63 G2 classes from lead_commands.txt.",
+    "timeout 60s bash scripts/apa_sp2_lead_gpu.sh run freeze",
+    "timeout --signal=TERM --kill-after=5s 590s bash scripts/apa_sp2_lead_gpu.sh run sweep_b2_prefill_s2048_d64_c0_h4_kv4_e0",
+    "# Then the remaining 447 G3 rows from lead_commands.txt.",
+    "timeout 60s bash scripts/apa_sp2_lead_gpu.sh summary"
+  ],
+  "bounds": {
+    "lock": "/tmp/forge-gpu.lock",
+    "lock_wait_s": 5,
+    "worker_timeout_s": 510,
+    "outer_timeout_s": 590,
+    "kill_grace_s": 5,
+    "cooldown_s": 30,
+    "single_gpu": true,
+    "foreign_pids": "refuse, never kill",
+    "no_background": true
+  },
+  "predictions": {
+    "P1": "BLOCKED_GPU_UNMEASURED",
+    "P2": "BLOCKED_GPU_UNMEASURED",
+    "P3": "BLOCKED_GPU_UNMEASURED",
+    "P4": "BLOCKED_GPU_UNMEASURED"
+  },
+  "epsilon_selected": null,
+  "epsilon_recommended": null,
+  "scope_note": "kernel sweep; this establishes nothing about model quality",
+  "residuals": [
+    "Finite maximum is not a universal bound; unseen inputs can exceed it. G3 checks every held-out eligible score without retuning.",
+    "No GPU diagnostic, actual epsilon/direct-delta parity, output comparison or speed measurement was run here.",
+    "At N=32768 and epsilon=1e-3, N*epsilon=32.768; worst-case probability mass bound caps at 1 and is useless.",
+    "New table covers fp32 TurboQuant at scale=1/sqrt(D); no fp16/bf16 calibrated table or packed low-bit SP implementation.",
+    "Blind adversarial verification is lead-owned; CPU tests are author baseline."
+  ]
+}

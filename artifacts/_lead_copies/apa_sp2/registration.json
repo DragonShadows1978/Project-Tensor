@@ -1,0 +1,1291 @@
+{
+  "order": "APA-SP2",
+  "evidence_class": "kernel sweep; this establishes nothing about model quality",
+  "dispatch_base": "cd87939 per latest dispatch; embedded order says 62a982e; not git-verified; no git used",
+  "parent_registrations": {
+    "artifacts/apa_sp1/registration.json": "12059d49f39abe9450b34989f06ac5ca8a736d80e3127c9d41c1ed97e650c9fe",
+    "artifacts/apa_sp1/registration_sp1_1.json": "382194c1f9d94c146bddcf533b7becadee60fe7d212a2029fabf133243c683b4"
+  },
+  "epsilon_grid": [
+    0.1,
+    0.03,
+    0.01,
+    0.003,
+    0.001,
+    0.0003,
+    0.0001
+  ],
+  "epsilon_recommendation": null,
+  "bits": [
+    2,
+    4
+  ],
+  "quantizer": {
+    "id": "turboquant_lloyd_max_rotated_fp32",
+    "source": "tensor_cuda/tensor_cuda/quant.py:_tables,_quantize_keys",
+    "bits_evidence": "tensor_cuda/tests/test_apa_phase6.py:test_apa_bits",
+    "rotation": true,
+    "rotation_seed": "kv_head*1337+42",
+    "dtype": "float32",
+    "scale": "float32(1/sqrt(D))",
+    "note": "dequantized floating Kq, no packed INT4/INT8 kernels; GQA shares each KV head rotation"
+  },
+  "eq_rule": {
+    "statistic": "maximum_over_all_registered_G2_valid_scores",
+    "pool_by": [
+      "bulk_bits",
+      "D"
+    ],
+    "report": [
+      "max",
+      "p99_9",
+      "mean",
+      "count"
+    ],
+    "percentile": "numpy.quantile(method=linear), pooled exact values",
+    "rounding": "nextafter float32 maximum toward +infinity",
+    "draws_per_shape": 2,
+    "query_rows_per_prefill_draw": 32,
+    "query_rows": "floor(linspace(0,L-1,min(32,L))) includes first and last; decode uses its one full row",
+    "measurement_seed": 2026090602,
+    "distribution": "independent standard-normal fp32 q,K; all S keys; existing GPU TurboQuant quantizer; exact target FP64 dot of FP32 inputs times the actual FP32 scale, diagnostic bulk in kernel FMA/shuffle order",
+    "freeze": "all 64 bit/shape measurements required; create-only e_q_table.json plus sha256 before any G3 use; later changes require separate amendment/table identity",
+    "validity": "finite calibration maximum, NOT universal bound; G3 checks all held-out logits for exceedances without retuning; breach marks conditional guarantee RED but raw curve remains reported"
+  },
+  "shapes": [
+    {
+      "id": "prefill_s2048_d64_c0_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 2048,
+      "S": 2048,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "prefill_s2048_d64_c0_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 2048,
+      "S": 2048,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "prefill_s2048_d64_c1_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 2048,
+      "S": 2048,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "prefill_s2048_d64_c1_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 2048,
+      "S": 2048,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "prefill_s2048_d128_c0_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 2048,
+      "S": 2048,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "prefill_s2048_d128_c0_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 2048,
+      "S": 2048,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "prefill_s2048_d128_c1_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 2048,
+      "S": 2048,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "prefill_s2048_d128_c1_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 2048,
+      "S": 2048,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "prefill_s8192_d64_c0_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 8192,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "prefill_s8192_d64_c0_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 8192,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "prefill_s8192_d64_c1_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 8192,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "prefill_s8192_d64_c1_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 8192,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "prefill_s8192_d128_c0_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 8192,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "prefill_s8192_d128_c0_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 8192,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "prefill_s8192_d128_c1_h4_kv4",
+      "kind": "prefill",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 8192,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "prefill_s8192_d128_c1_h8_kv2",
+      "kind": "prefill",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 8192,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "decode_s8192_d64_c0_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "decode_s8192_d64_c0_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "decode_s8192_d64_c1_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "decode_s8192_d64_c1_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 8192,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "decode_s8192_d128_c0_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "decode_s8192_d128_c0_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "decode_s8192_d128_c1_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "decode_s8192_d128_c1_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 8192,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "decode_s32768_d64_c0_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 32768,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "decode_s32768_d64_c0_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 32768,
+      "D": 64,
+      "VD": 64,
+      "causal": false
+    },
+    {
+      "id": "decode_s32768_d64_c1_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 32768,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "decode_s32768_d64_c1_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 32768,
+      "D": 64,
+      "VD": 64,
+      "causal": true
+    },
+    {
+      "id": "decode_s32768_d128_c0_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 32768,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "decode_s32768_d128_c0_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 32768,
+      "D": 128,
+      "VD": 128,
+      "causal": false
+    },
+    {
+      "id": "decode_s32768_d128_c1_h4_kv4",
+      "kind": "decode",
+      "B": 1,
+      "H": 4,
+      "KVH": 4,
+      "L": 1,
+      "S": 32768,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    },
+    {
+      "id": "decode_s32768_d128_c1_h8_kv2",
+      "kind": "decode",
+      "B": 1,
+      "H": 8,
+      "KVH": 2,
+      "L": 1,
+      "S": 32768,
+      "D": 128,
+      "VD": 128,
+      "causal": true
+    }
+  ],
+  "baseline": {
+    "refine_percentile": 0.15,
+    "zthr": 1.0364333894937898,
+    "source": "artifacts/apa_sp1/registration.json",
+    "path": "existing dequantized-K two-pass auto dispatch; same Kq as SP"
+  },
+  "sweep": {
+    "seed": 2026090603,
+    "epsilon_independent_data": false,
+    "same_data_all_bits": true,
+    "draws_per_shape": 1,
+    "full_output": true,
+    "chunk_queries": 32,
+    "warmups": 3,
+    "repetitions": 10,
+    "timing": "interleaved old/SP pairs, order alternates; CUDA events plus wall latency; diagnostics and quantization excluded for both",
+    "dense_timing": "omitted to bound resource use; full dense fp32 output deviation mandatory",
+    "fraction": "GPU SP selected mask; baseline diagnostic recomputes exact same CUDA stats and dot order, gated against actual baseline output",
+    "gates": {
+      "atol": 0.001,
+      "rtol": 0.001,
+      "diagnostic_vs_plain": "bit identical",
+      "epsilon_vs_direct_delta": "bit identical",
+      "SP_mask": "exact vs CUDA diagnostic bulk prefix/partition rule",
+      "baseline": "actual kernel vs materialized CUDA diagnostic decisions, unchanged tolerance"
+    },
+    "crossings": "grid traversed descending epsilon; first strict relative-Frobenius improvement; also first max-abs improvement separately; first speed<1.0. NOT_OBSERVED only with complete grid; otherwise BLOCKED_INCOMPLETE; nonmonotonicity reported",
+    "per_invocation": "one measurement class or one bit/shape/epsilon sweep row; resume executes one then returns"
+  },
+  "predictions": {
+    "P1": "e_q at 2 bits on D=128 >=0.05 scaled-logit units",
+    "P2": "at epsilon=1e-3 SP fraction strictly below z on causal long-S (prefill8192,decode32768), strictly above on noncausal short-S (prefill2048,decode8192); all relevant bit/shape rows; causal label alone does not establish peakedness",
+    "P3": "at each grid epsilon <=1e-2, SP relative-Frobenius deviation strictly below baseline on >=75% of 64 bit/shape classes; max-abs scored separately",
+    "P4": "all prefill8192/decode32768 rows at grid epsilons>=1e-3 have speed>=1.0 vs baseline"
+  },
+  "G1": {
+    "seed": 2026090601,
+    "random_draws": 10000,
+    "max_keys": 128,
+    "known_errors": [
+      0,
+      0.05,
+      0.5,
+      2,
+      8
+    ],
+    "monotone": "prefix extension, random ordered partitions, epsilon nesting",
+    "entry_parity": "host scalar real extension + CPU emulators for both paths; actual device parity additionally G3",
+    "mutations": [
+      "drop_2eq",
+      "negative_log",
+      "omit_log",
+      "strict_refine_boundary",
+      "halve_eq"
+    ],
+    "mutation_kill_fraction_min": 0.8
+  },
+  "runner": {
+    "lock": "/tmp/forge-gpu.lock",
+    "lock_wait_s": 5,
+    "worker_timeout_s": 510,
+    "outer_timeout_s": 590,
+    "kill_grace_s": 5,
+    "cooldown_s": 30,
+    "single_gpu": true,
+    "foreign_pids": "refuse, never kill",
+    "no_background": true
+  },
+  "kernel_body_pins": {
+    "tensor_cuda/src/conv.cu": [
+      {
+        "signature": "__global__ void im2col_kernel(const T* x, T* cols, ConvDims d, int64_t n)",
+        "sha256": "300b2c557e3d6da59efd67facdcb8a062c69dad64f709b7e5da4d5d3a5b9a566"
+      },
+      {
+        "signature": "__global__ void col2im_kernel(const T* cols, float* xg, ConvDims d, int64_t n)",
+        "sha256": "4a711dcc721116124c6a7da4fae1e08cd5e71300232a44e31c6d90ad5ea08ce7"
+      },
+      {
+        "signature": "__global__ void avgpool_kernel(const T* x, T* out, ConvDims d, int64_t n)",
+        "sha256": "d37ca88264f2beabddd841fe3eab665b43fd477fd936d51daa5907788c0bc585"
+      },
+      {
+        "signature": "__global__ void avgpool_bwd_kernel(const T* g, float* xg, ConvDims d, int64_t n)",
+        "sha256": "fc6ca18ea0890e9114ef8bfe1732a8aaa6a5052799640dd26c15a0a93d72376f"
+      },
+      {
+        "signature": "__global__ void maxpool_kernel(const T* x, T* out, int64_t* argmax, ConvDims d, int64_t n)",
+        "sha256": "6b0f25ba06fb6a64aad26ed6572551ae8b1522e15f3ead011a4f36fda336ed5b"
+      },
+      {
+        "signature": "__global__ void maxpool_bwd_kernel(const T* g, const int64_t* argmax, float* xg, int64_t n)",
+        "sha256": "66b624a1712a47aaaa88a0744df0c69ec8b891bc40676892ebb93387ca9e31c2"
+      }
+    ],
+    "tensor_cuda/src/dda.cu": [
+      {
+        "signature": "__global__ void dda_raycast_kernel(\n    const uint8_t* __restrict__ grid, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, const float* __restrict__ origins,\n    const float* __restrict__ directions, int64_t ray_count, int max_steps,\n    uint8_t* __restrict__ hit, uint8_t* __restrict__ material,\n    int64_t* __restrict__ voxel, int64_t* __restrict__ face_axis,\n    int64_t* __restrict__ face_sign, float* __restrict__ distance)",
+        "sha256": "89df9d050204c4e7bfcdb60c271c073ddd5874e44bde1bfa24d9b50460bd31c7"
+      }
+    ],
+    "tensor_cuda/src/gemm_apa.cu": [
+      {
+        "signature": "__global__ void quantize_bf16_rows(const __nv_bfloat16* src, uint8_t* codes,\n                                   float* scales, int rows, int D)",
+        "sha256": "8a48af2bf7b5343898f04ec039b1c89941c24ca38edc2a54f5d9222db5f7a4c7"
+      },
+      {
+        "signature": "__global__ void scale_stats_count(const int32_t* accum,\n                                  const float* qscales,\n                                  const float* kscales, float* scores,\n                                  float* thresholds, int* counts, SbShape s,\n                                  float attn_scale, float zthr,\n                                  int is_causal, int64_t row0, int window)",
+        "sha256": "fc4afac2b8d8625e1a5889d08ad929d636f0f453f55cd5d127ad848fa3af24f3"
+      },
+      {
+        "signature": "__global__ void compact_pairs_bounded(\n    const float* scores, const float* thresholds,\n    int* pair_rows, int* pair_keys, unsigned long long* counters, int capacity,\n    int clamp_overflow, SbShape s, int is_causal, int64_t row0, int window)",
+        "sha256": "66f0423acc8b256a9d8721a9ec4ae88e76f8448fb18793e1d45420616a1b8d43"
+      },
+      {
+        "signature": "__global__ void gather_selected_bf16(\n    const __nv_bfloat16* q, const __nv_bfloat16* k,\n    const int* pair_rows, const int* pair_keys, int pair0, int pairs,\n    const unsigned long long* chunk_attempted,\n    __nv_bfloat16* qg, __nv_bfloat16* kg, SbShape s)",
+        "sha256": "1a8b8ce5d631dbe023eef0b68afefac1d8526e852e6e1c5d5124e29c4bbd7854"
+      },
+      {
+        "signature": "__global__ void scatter_refined(float* scores, const float* exact,\n                                const int* pair_rows, const int* pair_keys,\n                                int pair0, int pairs,\n                                const unsigned long long* chunk_attempted,\n                                int rows, int S)",
+        "sha256": "96a0955b10260541cfc5e73fbfbfc2dd83f74064c6097fa5bb81972acbb74028"
+      },
+      {
+        "signature": "__global__ void copy_query_chunk(const __nv_bfloat16* q,\n                                 __nv_bfloat16* qchunk, int B, int H,\n                                 int full_L, int chunk_L, int D, int q0)",
+        "sha256": "9a4bca1dde49dfae1bb315da7c8c65071ca3f4b8bc96532bb0e368901518f566"
+      },
+      {
+        "signature": "__global__ void copy_output_chunk(const __nv_bfloat16* chunk,\n                                  __nv_bfloat16* out, int B, int H,\n                                  int full_L, int chunk_L, int VD, int q0)",
+        "sha256": "a131c6c0caf976ffc4899fa9daadbf80a8bf9ff3805e1868c6019e9f095399f7"
+      },
+      {
+        "signature": "__global__ void blend_dense_exact(float* scores, const float* exact,\n                                  const float* thresholds, SbShape s,\n                                  int is_causal, int64_t row0, int window)",
+        "sha256": "5295bfd5ba9cf99994de3b873b271ce671ec4674f2d6d13e0a5c30309ca1c330"
+      },
+      {
+        "signature": "__global__ void fp32_score_softmax_bf16(const float* scores,\n                                        __nv_bfloat16* probs, SbShape s,\n                                        int is_causal, int64_t row0,\n                                        int window)",
+        "sha256": "31e024a1e17761bed0eb7152de16593af1345fdef096c27fa4803729aa1f9465"
+      },
+      {
+        "signature": "__global__ void widen_accum_and_mask(const int32_t* accum,\n                                     const float* scores,\n                                     const float* thresholds,\n                                     int64_t* wide, uint8_t* selected,\n                                     SbShape s, int is_causal,\n                                     int64_t row0, int window)",
+        "sha256": "8f83831b19e6e7f85394412a39905a7f881aa05424910f550311a350a1ca06b3"
+      }
+    ],
+    "tensor_cuda/src/kernels.cu": [
+      {
+        "signature": "__global__ void fill_kernel(T* p, int64_t n, float v)",
+        "sha256": "f80d23af8dd65ed3b2ffa7b0f5a1f7c32059718f4d98d20864acfe98a4868ebb"
+      },
+      {
+        "signature": "__global__ void cast_kernel(const SrcT* s, DstT* d, int64_t n)",
+        "sha256": "394418aeab32572a53190ac82182ed427a66101d9b46d673462c762b7fabf5c7"
+      },
+      {
+        "signature": "__global__ void cast_to_u8_kernel(const T* s, uint8_t* d, int64_t n)",
+        "sha256": "e69e2eaef909c01371b1cf60bbd372dff90f0198a7e2d58d8292e8d0bfa4201d"
+      },
+      {
+        "signature": "__global__ void cast_from_u8_kernel(const uint8_t* s, T* d, int64_t n)",
+        "sha256": "b0ec6167d9c38d1317e48e31c1c30c65dc30ec223fabff366fd0fd32fecfb586"
+      },
+      {
+        "signature": "__global__ void binary_kernel(const T* a, const T* b, T* out, DimSpec s,\n                              int64_t n, int op)",
+        "sha256": "3780581ee18dc5fda57aa5e9e681b11c07d7d6fd3b45d8e057b47b34fc6062b0"
+      },
+      {
+        "signature": "__global__ void scalar_kernel(const T* a, T* out, int64_t n, float s, int op, int lhs)",
+        "sha256": "6c47bedccc70f0f489689d70f5418f3907d5212ec63729ab56fde48561a0131d"
+      },
+      {
+        "signature": "__global__ void unary_kernel(const T* a, T* out, int64_t n, int op)",
+        "sha256": "d88056fda8c89c6608c317108f74a16a710b392210ff9860148eaae4135bd035"
+      },
+      {
+        "signature": "__global__ void nan_to_num_kernel(const T* a, T* out, int64_t n, float nan, float pinf, float ninf)",
+        "sha256": "645733959b35bd078666ca8ab8318f247b220970d02905ab994409280d4efa72"
+      },
+      {
+        "signature": "__global__ void clamp_kernel(const T* a, T* out, int64_t n, float lo, float hi)",
+        "sha256": "5916302032186c485a46cb24522cc68c2e374151dd1d0d1dc23952cca4d7c56f"
+      },
+      {
+        "signature": "__global__ void ge_kernel(const T* a, T* out, int64_t n, float s)",
+        "sha256": "6e6d3505baa4dc3697e8d2ead7f2fcefce0e49b5707c184113751a2faf88a142"
+      },
+      {
+        "signature": "__global__ void reduce_lastdim_kernel(const T* __restrict__ in,\n                                      T* __restrict__ out,\n                                      int64_t R, int64_t n_rows)",
+        "sha256": "822a05528efdfe338efdf26b18a6633d7d82705dd1e501e2f5869a5b4cfd1ab1"
+      },
+      {
+        "signature": "__global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n)",
+        "sha256": "074c46c4d806578f3e0145cf91014897a97b7da62ae924d17bc906fbf9721cac"
+      },
+      {
+        "signature": "__global__ void permute_kernel(const T* in, T* out, PermSpec s, int64_t n)",
+        "sha256": "6985f371755084a6d77e631497331f0710e26fb2d060745bda9f3fb6582abc6f"
+      },
+      {
+        "signature": "__global__ void pow_kernel(const T* a, T* out, int64_t n, float p)",
+        "sha256": "3cb3fee0ce7b0b838e57cb774f581ae10ca3ca78d84e085ab1c974faffc3b4de"
+      },
+      {
+        "signature": "__global__ void compare_kernel(const T* a, const T* b, T* out, DimSpec s, int64_t n, int op)",
+        "sha256": "740254709a018b715fdf197960bef01afe7e00257a4ac32a9e1e18964ed4f967"
+      },
+      {
+        "signature": "__global__ void compare_scalar_kernel(const T* a, T* out, int64_t n, float s, int op)",
+        "sha256": "8768ffa956d8f64a3174a97ee31b3fb7204e2c85b7daf1a7f0ce0096cf33e54d"
+      },
+      {
+        "signature": "__global__ void where_kernel(const T* c, const T* x, const T* y, T* out, Dim3Spec s, int64_t n)",
+        "sha256": "d2f77c49eabebf395a6e6466e465afe0c7388632a39fabcb0ee33dcf6244de35"
+      },
+      {
+        "signature": "__global__ void dimcopy_kernel(const T* small_in, T* small_out, const T* big_in, T* big_out, DimCopySpec s, int64_t n)",
+        "sha256": "438d8405e280e8336818c2132a975e691edac23cd05c0a5d01eb7d7c6647ca5e"
+      },
+      {
+        "signature": "__global__ void embed_fwd_kernel(const T* w, const int64_t* idx, T* out, int64_t row, int64_t n)",
+        "sha256": "7d3a2d2339240fce765896c94c0db1edbf015e3fa4b4bdea95f8a50290086347"
+      },
+      {
+        "signature": "__global__ void embed_bwd_kernel(const T* grad, const int64_t* idx, float* gWf, int64_t row, int64_t n)",
+        "sha256": "f5370ad03063efce6a09a5b8e1e878b5165eb9f2dc6d2289c8d3c6d5b2baff83"
+      },
+      {
+        "signature": "__global__ void sgd_kernel(T* p, const T* g, T* buf, int64_t n, float lr, float mom, float wd)",
+        "sha256": "7a8fc11bbb3bfb9a0723da0fc11144c9b76384c7b60e0f132d0b51e9736d80a5"
+      },
+      {
+        "signature": "__global__ void adam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,\n                            float b1, float b2, float eps, float bc1, float bc2,\n                            float wd, int decoupled)",
+        "sha256": "b7aa0c8feea81e0d62e575888586d3d84b24f589ceefbaab6de0b6ac84993ae6"
+      },
+      {
+        "signature": "__global__ void lion_kernel(T* p, const T* g, T* m, int64_t n, float lr,\n                            float b1, float b2, float wd)",
+        "sha256": "27434406da8f60f65552170fa0da9ca514f75b172e72c7dc5ab177afc8170b0a"
+      },
+      {
+        "signature": "__global__ void radam_kernel(T* p, const T* g, T* m, T* v, int64_t n, float lr,\n                             float b1, float b2, float eps, float bc1, float bc2,\n                             float rect, int rectified, float wd, int decoupled)",
+        "sha256": "9d68d9370264bacd71cc9de1e5f88aa825c76f5ce79985b38346fe5b3da05513"
+      },
+      {
+        "signature": "__global__ void rmsprop_kernel(T* p, const T* g, T* sq, int64_t n, float lr,\n                               float alpha, float eps, float wd)",
+        "sha256": "dc1313c4ac52b74aa292327e039d6b0e7706d1b511da0a004fe46854e0ddefb0"
+      },
+      {
+        "signature": "__global__ void adagrad_kernel(T* p, const T* g, T* acc, int64_t n, float lr, float eps, float wd)",
+        "sha256": "1100c8d3ead2d76092e25db36b5122139f8e8f5da101e2beebcec3aa02f7da3c"
+      },
+      {
+        "signature": "__global__ void scale_kernel(T* p, int64_t n, float s)",
+        "sha256": "879231ed4e464732d64fa8353f73ef30d379dcd58260404a53c7b9c6b4f872f6"
+      },
+      {
+        "signature": "__global__ void apa_qg_kernel(const T* rotated, const T* boundaries, const T* codebook,\n                              T* out, int nb, int64_t n)",
+        "sha256": "c539027c943e93f7cbfd8872c2a648c962e1220bef5686cb2e6818f42caf27d1"
+      },
+      {
+        "signature": "__global__ void apa_selective_kernel(\n    const T* q, const T* k, const T* kq, const T* v, T* out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "1033c4c25658ddbbe02121ad3afa31525c505ff44de82303e4b169c1113f8217"
+      },
+      {
+        "signature": "__global__ void apa_selective_stats_kernel(\n    const T* q, const T* kq, float* thr_out,\n    int B, int H, int L, int S, int D, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "2b5467dafe3d8c51c0a29385e77bbcea7d7e03beefa569e88d5eaa799c7484d3"
+      },
+      {
+        "signature": "__global__ void apa_selective_split_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const float* thr_in,\n    float* part_m, float* part_l, float* part_acc,\n    int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group, int num_parts, int part_keys)",
+        "sha256": "af452e695db264a04be731e6ad5f2f7f7cc89cdb5c34f6ccc0687bf19f9d0825"
+      },
+      {
+        "signature": "__global__ void apa_selective_merge_kernel(\n    const float* part_m, const float* part_l, const float* part_acc,\n    const T* sinks, T* out, int H, int VD, int num_parts, int use_sink)",
+        "sha256": "1ee6dd2eed23e561b60d94af5c68e79fdc1991e0018d94ed9b5f8e221ec1256a"
+      },
+      {
+        "signature": "__global__ void apa_selective_sink_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* sinks, T* out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "61ebea5ff1c99b15785f119d86f6ab469fa8fd0ce023acc729e24957cc812823"
+      },
+      {
+        "signature": "__global__ void apa_selective_fwd_train_kernel(\n    const T* q, const T* k, const T* kq, const T* v, T* out,\n    float* lse_out, float* thr_out,\n    int B, int H, int L, int S, int D, int VD, float scale, float zthr,\n    int is_causal, int KVH, int group)",
+        "sha256": "18336e2874687f235076b00d683030e54829b406bccbaae3278ab211f58393e8"
+      },
+      {
+        "signature": "__global__ void apa_selective_bwd_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* dO,\n    const float* lse, const float* thr_in,\n    T* dq, T* dk, T* dv,\n    int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group)",
+        "sha256": "20771a1d712f6fd183600fb95d2f42517e4073264ec655a42240d5ab3a4af245"
+      },
+      {
+        "signature": "__global__ void apa_blend_softmax_kernel2(const T* bulk, const T* rank, T* out,\n                                          int S, float zthr,\n                                          int Lchunk, int Lq, int64_t row0,\n                                          int window)",
+        "sha256": "30d168ae2811bb29f77dfa95ea7f7a1f718fa6497f9fdaa55cac4005f5a73567"
+      },
+      {
+        "signature": "__global__ void apa_blend_softmax_sink_kernel(const T* bulk, const T* rank,\n                                              const T* sinks, T* out,\n                                              int H, int L, int S,\n                                              float zthr,\n                                              int Lq, int64_t row0, int window)",
+        "sha256": "5f099ab10ce1824770644d4f66748b50073c68cf2c85c8f6d5ed7b134a1c0860"
+      },
+      {
+        "signature": "__global__ void int4_dequant_t_kernel(const uint8_t* packed, const __half* scales,\n                                      const __half* zeros, T* out_kn,\n                                      int64_t N, int64_t K, int group_size,\n                                      int64_t G, int64_t n)",
+        "sha256": "e747d524d653af6ad347e06baeb5b75a43df70509d8ca12fc30e749098484477"
+      },
+      {
+        "signature": "__global__ void int4_gemm_fused_kernel(\n    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,\n    T* y, int M, int N, int K, int group_size, int G)",
+        "sha256": "073990ed99339e28881daca985ba51cefc42dbbbdd780b447e940042c135c3c7"
+      },
+      {
+        "signature": "__global__ void int4_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ packed,\n    const __half* __restrict__ scales, const __half* __restrict__ zeros,\n    T* __restrict__ y, int N, int K, int group_size, int G)",
+        "sha256": "3ae649a12e2d1e333c984722735cd2b4c1d4867b88912844e5024b9fb597831b"
+      },
+      {
+        "signature": "__global__ void intn_dequant_t_kernel(const uint8_t* packed,\n                                      const __half* scales,\n                                      const __half* zeros, T* out_kn,\n                                      int64_t N, int64_t K,\n                                      int64_t bytes_per_row, int bits,\n                                      int group_size, int64_t G, int64_t n)",
+        "sha256": "c8b9faa30b27da7fe76e69e9836fb740a0cac15cef5391c729939dc58508f56d"
+      },
+      {
+        "signature": "__global__ void intn_gemm_fused_kernel(\n    const T* x, const uint8_t* packed, const __half* scales, const __half* zeros,\n    T* y, int M, int N, int K, int bytes_per_row, int bits, int group_size,\n    int G)",
+        "sha256": "cba81482eef7f5f269b02124172c1c2d3d3f0d9afc62739ee32fc5c9a2334863"
+      },
+      {
+        "signature": "__global__ void intn_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ packed,\n    const __half* __restrict__ scales, const __half* __restrict__ zeros,\n    T* __restrict__ y, int N, int K, int bytes_per_row, int bits,\n    int group_size, int G)",
+        "sha256": "a13a8f4fe398e37afba6ca7d5d9a62ae584838ac425fd9da06a705d35b4216a6"
+      },
+      {
+        "signature": "__global__ void mxfp4_gemm_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ blocks,\n    const uint8_t* __restrict__ scales, T* __restrict__ y,\n    int M, int N, int K, int G)",
+        "sha256": "6242a8dc08201633d3c315d7505bf7b65a2c63c6e1ff74a9f67695eba9bc3db4"
+      },
+      {
+        "signature": "__global__ void mxfp4_gemv_kernel(\n    const T* __restrict__ x, const uint8_t* __restrict__ blocks,\n    const uint8_t* __restrict__ scales, T* __restrict__ y,\n    int N, int K, int G)",
+        "sha256": "3ee4cee63b69cf4d1e6b5ec8ac03da2147fa4a21ac1c8ff90747b1b2827acb41"
+      },
+      {
+        "signature": "__global__ void kv_int4_pack_kernel(const T* __restrict__ x,\n                                    const T* __restrict__ scales,\n                                    uint8_t* __restrict__ packed,\n                                    int64_t D, int group, int64_t G,\n                                    int64_t nbytes)",
+        "sha256": "0d72a66328bda7fb74491a6f2683baafa2569a4c7afe140ea6b842da7fc3ce4a"
+      },
+      {
+        "signature": "__global__ void kv_int4_unpack_kernel(const uint8_t* __restrict__ packed,\n                                      const T* __restrict__ scales,\n                                      T* __restrict__ out,\n                                      int64_t BKV, int64_t S, int64_t D,\n                                      int group, int64_t G, int64_t lo,\n                                      int64_t n_out, int64_t total)",
+        "sha256": "7d6307caf0f63d9a3ac54b5dea34c964f60c41337aa89b1be6d77d45373c9f42"
+      },
+      {
+        "signature": "__global__ void arg_kernel(const T* a, int64_t* out, int64_t outer, int64_t A, int64_t inner, int is_max)",
+        "sha256": "88d2d98200673fabfffb1e1f75f0d0659e0fbaa5f2219ad3fa62ef87d62a697a"
+      },
+      {
+        "signature": "__global__ void cumsum_kernel(const T* a, T* out, int64_t outer, int64_t A, int64_t inner)",
+        "sha256": "f55dc6dcbaa49e211fa3af579c1470e145e7a6824912d737e60e65307937c278"
+      },
+      {
+        "signature": "__global__ void gather_kernel(const T* a, const int64_t* index, T* out, GatherSpec s, int64_t n)",
+        "sha256": "b16f893d448e4c3e19310720451613bf36d4fd5bb3473a622ad506e67ef83ad4"
+      },
+      {
+        "signature": "__global__ void scatter_add_kernel(const T* src, const int64_t* index, float* out, GatherSpec s, int64_t n)",
+        "sha256": "896337e2af04e55cbca04b90e9de091e9e110a665f164f3e8dd32d37746416cd"
+      },
+      {
+        "signature": "__global__ void flip_kernel(const T* a, T* out, FlipSpec s, int64_t n)",
+        "sha256": "f03135995688141009a81b8251de0ec656d650258c466efc6f8fe20e3db122db"
+      },
+      {
+        "signature": "__global__ void topk_kernel(const T* a, T* vals, int64_t* idxs,\n                            int64_t outer, int64_t S, int k, int largest)",
+        "sha256": "0b01e332fd4e5a03ab2c03baf7d3005e0f598e023f49737ced8ce553a573caf1"
+      },
+      {
+        "signature": "__global__ void argmax_last_axis_kernel(const T* a, int64_t* out, int64_t N)",
+        "sha256": "5848ad755dac88cb0dfbbae7e2ec7055366ea2a5ebc225deaf1a85f88c60dd2a"
+      },
+      {
+        "signature": "__global__ void fused_sdpa_noncausal_kernel(\n    const T* q, const T* k, const T* v, T* out,\n    int Lq, int Lk, int D, float scale)",
+        "sha256": "cebc419da3b74afe9e4affab88fd66156dd5b31a4cc6235a046b02787a122f45"
+      },
+      {
+        "signature": "__global__ void apa_int4_pack_kernel(const T* __restrict__ k,\n                                     uint8_t* __restrict__ codes,\n                                     float* __restrict__ kscale,\n                                     int64_t nkeys, int D)",
+        "sha256": "1120a163dcf321faf3cc50db88f9b8883c20a620b46501e39cdb6ce2c17d4348"
+      },
+      {
+        "signature": "__global__ void apa_int4_pack_rows_kernel(\n    const T* __restrict__ k, uint8_t* __restrict__ codes,\n    float* __restrict__ kscale, int64_t batch_kv, int src_s, int dst_s,\n    int row0, int nrows, int D)",
+        "sha256": "c9ec8f9b780356d5d16836b1e693d476a1306382878df74eb9d2a7b33c9ff3f1"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_kernel(\n    const T* q, const T* k, const uint8_t* codes, const float* kscale,\n    const T* v, T* out, int B, int H, int L, int S, int D, int VD,\n    float scale, float zthr, int is_causal, int KVH, int group,\n    int packed_d, int code_s)",
+        "sha256": "3e218f51f1c2a2683e89f00d89fa5ef56e5d23010a5532110e683301fecf36b9"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_splitk_kernel(\n    const T* q, const uint8_t* codes, const float* kscale,\n    float* partial_sum, float* partial_sumsq, float* bulk_cache,\n    int B, int H, int L, int S, int D, float scale, int is_causal, int KVH,\n    int group, int packed_d, int code_s, int stats_parts,\n    int stats_part_keys)",
+        "sha256": "520927c0ca1b89b3f7d816d5ae08fc4528b93491699e52fd1bf03a7848af495f"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_reduce_kernel(\n    const float* partial_sum, const float* partial_sumsq, float* thr_out,\n    int L, int S, float zthr, int is_causal, int stats_parts)",
+        "sha256": "c4c9f90425f70d60bfd135127fe2dc837e9afb20296efce1b79b2e477657bf16"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_stats_kernel(\n    const T* q, const uint8_t* codes, const float* kscale, float* thr_out,\n    float* bulk_cache,\n    int B, int H, int L, int S, int D, float scale, float zthr,\n    int is_causal, int KVH, int group, int packed_d, int code_s)",
+        "sha256": "e62bcc917174dc2f0d40aa5b1c4e7d14f73895337a5087f96c93e2fb721e68cc"
+      },
+      {
+        "signature": "__global__ void apa_selective_int4_split_kernel(\n    const T* q, const T* k, const uint8_t* codes, const float* kscale,\n    const T* v, const float* thr_in, const float* bulk_cache,\n    float* part_m, float* part_l,\n    float* part_acc, int B, int H, int L, int S, int D, int VD, float scale,\n    int is_causal, int KVH, int group, int packed_d, int code_s,\n    int num_parts, int part_keys)",
+        "sha256": "60dae96d11c41fb7b95f5565830791a434ee1a6717be18c67d078bc93dd1e7d7"
+      },
+      {
+        "signature": "__global__ void apa_int4_sdpa_noncausal_kernel(\n    const T* __restrict__ q, const T* __restrict__ k,\n    const uint8_t* __restrict__ codes, const float* __restrict__ kscale,\n    const T* __restrict__ v, T* __restrict__ out,\n    int Lq, int Lk, int D, float scale, float zthr, float inv_cnt,\n    int refine_all)",
+        "sha256": "717b8185918962c04a8ac9c9370172d84cc2d96a61f4f875d486d10df0ed6e6f"
+      },
+      {
+        "signature": "__global__ void __launch_bounds__(kThreads)\nattn_noncausal_f16_kernel(const __half* __restrict__ q,\n                          const __half* __restrict__ k,\n                          const uint8_t* __restrict__ codes,\n                          const float* __restrict__ kscale,\n                          const __half* __restrict__ v,\n                          __half* __restrict__ out, int Lq, int Lk, int D,\n                          int num_qtiles, float scale, float zthr,\n                          float inv_cnt,\n                          unsigned long long* __restrict__ refine_count)",
+        "sha256": "3b66e5eff6a5b3b3bec8d61222b463fe5a196058bcaf3a6a2ae4eb6456c76be1"
+      },
+      {
+        "signature": "__global__ void rms_norm_kernel(const XT* x, const float* w, OT* o,\n                                int64_t D, float inv_d, float eps)",
+        "sha256": "a465885e10c4633b82c99e9655e09d84fef96aee5ed0b7a415a24ea1c866b36b"
+      },
+      {
+        "signature": "__global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S)",
+        "sha256": "c37a33bd460d96e95cb80c8e756ad0af644c7167aad79361127adfefa8d25643"
+      },
+      {
+        "signature": "__global__ void write_rows_kernel(T* __restrict__ buf,\n                                  const T* __restrict__ src,\n                                  int64_t CAP, int64_t L, int64_t D,\n                                  int64_t start, int64_t n)",
+        "sha256": "b25a6f095399bd405abc43bc4ae8725f8953c0671bffa2a7b51f76b4e41ec1b8"
+      },
+      {
+        "signature": "__global__ void splice_rows_bytes_kernel(\n    uint8_t* __restrict__ out, const uint8_t* __restrict__ old_cache,\n    const uint8_t* __restrict__ insert, int64_t old_seq, int64_t insert_seq,\n    int64_t out_seq, int64_t row_bytes, int64_t head_tokens,\n    int64_t tail_start, int64_t nbytes)",
+        "sha256": "419538a092b6208359e1464446016b1a69e41003b21fd8ea7a5f89277681a952"
+      },
+      {
+        "signature": "__global__ void export_rows_bytes_kernel(\n    uint8_t* __restrict__ out, const uint8_t* __restrict__ cache,\n    int64_t old_seq, int64_t out_seq, int64_t row_bytes,\n    int64_t start, int64_t nbytes)",
+        "sha256": "0722b8e5404046648d23097129ffef9c020ce7c271e4db9335ea5fc927d9ea7b"
+      },
+      {
+        "signature": "__global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,\n                            const T* __restrict__ sn, T* __restrict__ y,\n                            int64_t pos0, int64_t L, int64_t D, int64_t n,\n                            float sin_sign, int pair_swap)",
+        "sha256": "8087a7e063550fd8aca128bcf3d904c3f3f7027bc90c6907e2dbf8d845507a2c"
+      },
+      {
+        "signature": "__global__ void export_rope_rows_kernel(\n    const T* __restrict__ cache, const T* __restrict__ cs,\n    const T* __restrict__ sn, T* __restrict__ out, int64_t old_seq,\n    int64_t out_seq, int64_t D, int64_t start, int64_t pos0,\n    int64_t n, float sin_sign, int pair_swap)",
+        "sha256": "1b901cfed854fd441190aa59105441b5b8418a02951ebf0e795268903b504d34"
+      },
+      {
+        "signature": "__global__ void gated_delta_step_kernel(\n    const float* __restrict__ q, const float* __restrict__ k,\n    const float* __restrict__ v, const float* __restrict__ a,\n    const float* __restrict__ b, const float* __restrict__ A_neg,\n    const float* __restrict__ dtb, const float* __restrict__ state_in,\n    float* __restrict__ state_out, float* __restrict__ out,\n    int H, int Hk, int Dk, int Dv)",
+        "sha256": "f07b1a4ee0f486bdb1a3f9e1d44a9165d7ed5b27f17a20b2619f461d711b6709"
+      },
+      {
+        "signature": "__global__ void apa_selective_sp_kernel(\n    const T* q, const T* k, const T* kq, const T* v, const T* sinks,\n    T* out, uint8_t* selected, int H, int L, int S, int D, int VD,\n    int KVH, int group, float scale, float delta, bool causal)",
+        "sha256": "5d887b9034876620955800aad02ecefb1ca3ad0c8ab6931e1338d2abe336560a"
+      }
+    ],
+    "tensor_cuda/src/matmul.cu": [],
+    "tensor_cuda/src/paint_bake.cu": [
+      {
+        "signature": "__global__ void bake_back_project_kernel(\n    const float* __restrict__ atlas_positions_h, int64_t sample_count,\n    const float* __restrict__ view, int side, int channels,\n    const float* __restrict__ view_depth,\n    const uint8_t* __restrict__ view_reliable,\n    const float* __restrict__ view_cosine,\n    const float* __restrict__ world_to_camera,\n    const float* __restrict__ image_projection, float depth_threshold,\n    uint8_t* __restrict__ output_valid,\n    float* __restrict__ output_colors,\n    float* __restrict__ output_cosine,\n    float* __restrict__ output_depth_delta)",
+        "sha256": "8c1c8cc16298cf2466737ff8de57cc5bf9fc00abb96e045e497aaaed07bfa722"
+      },
+      {
+        "signature": "__global__ void bake_cosine_blend_fixed_kernel(\n    const float* __restrict__ view_colors,\n    const float* __restrict__ view_cosine,\n    const uint8_t* __restrict__ view_valid,\n    const float* __restrict__ view_weights,\n    const uint8_t* __restrict__ view_enabled, int views,\n    int64_t sample_count, float* __restrict__ output_texture,\n    float* __restrict__ output_trust,\n    uint8_t* __restrict__ output_valid)",
+        "sha256": "b6e0626730e08ff53f4e75c6bb18a2fced1ed6348f473530dde80db094888625"
+      },
+      {
+        "signature": "__global__ void bake_cosine_blend_dynamic_kernel(\n    const float* __restrict__ view_colors,\n    const float* __restrict__ view_cosine,\n    const uint8_t* __restrict__ view_valid,\n    const float* __restrict__ view_weights,\n    const uint8_t* __restrict__ view_enabled, int views,\n    int64_t sample_count, int channels, float* __restrict__ output_texture,\n    float* __restrict__ output_trust,\n    uint8_t* __restrict__ output_valid)",
+        "sha256": "f4046e3766e6efc4d7d4996b2fb495eeb5d061f03f3b63225dc1a53bbf80f463"
+      }
+    ],
+    "tensor_cuda/src/paint_inpaint.cu": [
+      {
+        "signature": "__global__ void inpaint_island_passes_kernel(\n    const float* __restrict__ positions,\n    float* __restrict__ vertex_colors,\n    float* __restrict__ vertex_mask,\n    const int64_t* __restrict__ neighbor_offsets,\n    const int64_t* __restrict__ neighbors,\n    const int64_t* __restrict__ island_offsets,\n    const int64_t* __restrict__ island_occurrences,\n    int64_t island_count, int pass_count_cap,\n    int64_t* __restrict__ island_uncolored)",
+        "sha256": "d0ebabe1cd2902660a0ad641c6feb1c88f855eaf201e331083a3845a7d5db10b"
+      }
+    ],
+    "tensor_cuda/src/paint_raster.cu": [
+      {
+        "signature": "__global__ void packed_winner_scatter_min_kernel(\n    const int64_t* __restrict__ pixel_indices,\n    const int64_t* __restrict__ depth_keys,\n    const int64_t* __restrict__ face_ids, int64_t candidate_count,\n    int64_t pixel_count, uint64_t* __restrict__ winners)",
+        "sha256": "fe6c2d8c8a7b6fb808921e3e42840cf52947b623afc4c12571c70c9aec5e6162"
+      },
+      {
+        "signature": "__global__ void triangle_winner_kernel(\n    const float* __restrict__ clip_positions,\n    const int64_t* __restrict__ faces, int64_t face_count, int height,\n    int width, uint64_t* __restrict__ winners)",
+        "sha256": "0e8448ef9e4fb0333fc3c7968913364bada8552f61465e6a57ef6634a7805f4c"
+      },
+      {
+        "signature": "__global__ void unpack_winners_kernel(\n    const uint64_t* __restrict__ winners, int64_t pixel_count,\n    int64_t* __restrict__ depth_keys, int64_t* __restrict__ face_ids)",
+        "sha256": "8b8b2185d2378309f685baab99db239e3ebcc0eeae1d417d18b7029cfe9ecdca"
+      },
+      {
+        "signature": "__global__ void winner_resolve_kernel(\n    const float* __restrict__ clip_positions,\n    const int64_t* __restrict__ faces, int64_t face_count,\n    const int64_t* __restrict__ winner_faces, int height, int width,\n    int64_t pixel_count, int64_t* __restrict__ resolved_depth,\n    float* __restrict__ barycentric_output)",
+        "sha256": "058cd8138917d37ce317aea5c47291f5da524bd600c9b02d31814ff1da5940a0"
+      }
+    ],
+    "tensor_cuda/src/terrain.cu": [
+      {
+        "signature": "__global__ void terrain_render_grounding_kernel(\n    int64_t dim_x, int64_t dim_y, int64_t dim_z,\n    TerrainRenderCamera camera, TerrainRenderLight light, float z_horizon,\n    float fog_start, float fog_full, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "e1ff7db24fa049692e8c9789d69def7691a829e75c4dc1e8c56b66a2ee789a3b"
+      },
+      {
+        "signature": "__global__ void terrain_render_blocky_kernel(\n    const uint8_t* __restrict__ materials, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "7e82086848996ce6d176eaa9554a694d3d300712ee21323afb0393ecdbe41043"
+      },
+      {
+        "signature": "__global__ void terrain_render_smooth_kernel(\n    const uint8_t* __restrict__ materials, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "247167dde3f99b43768c7a9c0dff33b3865f46da4e13825fad4cf617b8daf76d"
+      },
+      {
+        "signature": "__global__ void terrain_render_cached_smooth_kernel(\n    const uint8_t* __restrict__ materials,\n    const uint8_t* __restrict__ density_field, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    int support_radius, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "1ebfc3dc18179fe458752c7b0aa5b2c7ddd10755e875edf6586e74dbac492ad6"
+      },
+      {
+        "signature": "__global__ void terrain_render_detail_kernel(\n    const uint8_t* __restrict__ materials,\n    const uint8_t* __restrict__ density_field, int64_t dim_x, int64_t dim_y,\n    int64_t dim_z, TerrainRenderCamera camera, TerrainRenderLight light,\n    const uint8_t* __restrict__ palette, int64_t palette_rows, int max_steps,\n    int support_radius, uint8_t* __restrict__ rgb,\n    float* __restrict__ depth)",
+        "sha256": "bd627b3e09b3bc62d5b5db8e64fce4c83816bd586fb268edbdc1a754208ca87c"
+      },
+      {
+        "signature": "__global__ void terrain_filter_axis_kernel(\n    const uint8_t* __restrict__ input, uint8_t* __restrict__ output,\n    int64_t dim_x, int64_t dim_y, int64_t dim_z, int axis,\n    int filter_level, bool occupancy_input)",
+        "sha256": "0714ba127096f5f7b0b36307280fe4a54d9f7fc9084917f7ca9d3a972e134705"
+      }
+    ],
+    "tensor_cuda/src/terrain_objects.cu": [
+      {
+        "signature": "__global__ void terrain_render_objects_overlay_kernel(\n    TerrainRenderCamera camera, TerrainRenderLight light,\n    TerrainObjectKernelList objects, int max_steps,\n    uint8_t* __restrict__ rgb, float* __restrict__ depth)",
+        "sha256": "2064e2d1206b2226c60a3c0fc01dd13814f6af79d26f8c70f34aedc2b85fe0bf"
+      }
+    ],
+    "tensor_cuda/src/apa_sp1_1.cuh": [
+      {
+        "signature": "__global__ void apa_selective_sp_splitk_kernel(\n    const T* q, const T* k, const T* kq, const T* v, uint8_t* selected,\n    float* part_m, float* part_l, float* part_acc,\n    int H, int S, int D, int VD, float scale, float delta,\n    int KVH, int group, int num_parts, int part_keys)",
+        "sha256": "bf00743cd160856d2f900eb88acc70c28d8ca4859c75f4e9137ec83c07594a53"
+      },
+      {
+        "signature": "__global__ void apa_sp1_1_baseline_mask_kernel(\n    const float* q, const float* kq, const float* thr, uint8_t* mask)",
+        "sha256": "1b9567b9b37bdf9e11822a922e8ebdba0968e61627ae58d88e661a3e25151c64"
+      }
+    ]
+  },
+  "source_before_sha256": {
+    "tensor_cuda/src/kernels.cu": "6c416ece5cac153b761c7af6d0ff1cf8baf8f7e6d3bd9e04e32f3fd536d7d192",
+    "tensor_cuda/src/apa_sp1_1.cuh": "74248ccb1579efd10d2c7a64473030b1358166875a753cc9f1339829f8afe48a",
+    "tensor_cuda/src/bindings.cpp": "7d3f6edb65dd465f39f8885a41d8267d0c5c2edcaef54edfc509403f2da01e12",
+    "tensor_cuda/include/tc/ops.h": "7d8d9d95ab91f4356c71d424dacb73b3b99a6989e20b83ed1a68665f77896b84",
+    "tensor_cuda/tensor_cuda/__init__.py": "8483866432159c4c2b8f7ec6429f33de174c37ba1ff64c157c2e7b2e9a1a0c0d",
+    "tensor_cuda/tensor_cuda/quant.py": "f5ceea6a862d7950217441c8aae3b5b957c99c922412ef9489f464f62c72b00a"
+  },
+  "receipt_pins": {
+    "artifacts/apa_sp1/sp1_1_g1_1788661849576949668.log": "3e82f83bf3dfac3ec511c46236d54dcd55c56383a87cc672d159698db45d3f49",
+    "artifacts/apa_sp1/sp1_1_cpu_initial.log": "fbb0ac79dd74d83c8975cdd7f0748fbf28c8a9f45477c04eefc34780c22038f6",
+    "artifacts/apa_sp1/gpu_summary_sp1_final.json": "e4acd59e0cf85a0700eb6e9ea6e7811e6d5da7c2aa6739a76a93691b2f6e21f1",
+    "artifacts/apa_sp1/CPU_REPORT.md": "a2a0bb4b7e9a0ba75b9b47eb0e257559653f4acaa5b3727e91ff8c5c7a0e8c78",
+    "artifacts/apa_sp1/registration.json": "12059d49f39abe9450b34989f06ac5ca8a736d80e3127c9d41c1ed97e650c9fe",
+    "artifacts/apa_sp1/g1_cpu_tests_r2.log": "d6e56c881c99cd169d90550745dc8fa09048a2a02da346241c84ba31b8b655f6",
+    "artifacts/apa_sp1/sp1_1_scoring.log": "f37fc55fb92fdc3f7f845ca4bbe49492fe59da6b3c970c1a9d359d9b46d68fdd",
+    "artifacts/apa_sp1/cpu_prefill_d128.log": "20fbdeb587fa56e7774a9027e1be9b3887a6b38f78aa82ec265a6ae6e8f45cca",
+    "artifacts/apa_sp1/g1_cpu_final.log": "5cf74d460f1242c6a1169d9fbd585ce4333d2c49627c34b7f81e8340cdbe015b",
+    "artifacts/apa_sp1/calibration.log": "71189fe5d5e5d159f2173752270435f9b71ec0cdfe5b28d2d627235d1f67e520",
+    "artifacts/apa_sp1/sp1_1_build_final.log": "3b01069428d2d26746b881f652c26735f86cfc0bf75443ff7ac3b1588b210f2d",
+    "artifacts/apa_sp1/sp1_1_gpu_summary.json": "40c73354594b584aed0c45325132ddf4d37eb7097ca83127928693fd51205a40",
+    "artifacts/apa_sp1/harness_cpu.log": "4e8b6c5a89da44bf05d17100903172be04033067c113a6831bdfafbd42b7da52",
+    "artifacts/apa_sp1/sp1_1_gpu_summary.log": "7f0dac193add207defbc626d85ba9d35449ac1fbbb4f473f4a69f4cef7774c48",
+    "artifacts/apa_sp1/source_additions_sp1_1.patch": "77bf7abeaeab032c83667102fbb2cf9294390368adf4c94517eae8a1d5bddbb6",
+    "artifacts/apa_sp1/g1_1788656790462101850.json": "13f60137d59110e2643f2d79208ea4ad264813152c78a3d3f324dec28ac71aa4",
+    "artifacts/apa_sp1/gpu_shape_list.txt": "016ad6a5d14c78fe31848e361a0a75868a462233611702a8ee898fcdd79fa893",
+    "artifacts/apa_sp1/sp1_matching_explanations.json": "839bb0d62ad39476b5b4f57cea0af0ad16c87ff89af94d4e8f87bb30f67d600e",
+    "artifacts/apa_sp1/cpu_decode_first.log": "3a35c5f8ca6121cfb08db608b7dc61ce85f031256ae64bb63ef618f4a4af8b83",
+    "artifacts/apa_sp1/build.log": "de2f9f06b5fc91ad52940c14661a55add80abd9fb64b3fc7232c2b7248b43987",
+    "artifacts/apa_sp1/sp1_1_summary_command.log": "43db8ae8cd3e214cbd09a47556f49d291d042405b1b47670e76df865359bc90f",
+    "artifacts/apa_sp1/sp1_1_g1_1788661437075136419.log": "c0516ffaaced3262914c8c96e873a568ff6859dfdc7d924f5f5f6fc20c8c6fbe",
+    "artifacts/apa_sp1/calibration.sha256": "b0215af7d193762efbda93e861b087bff82c28dc40368b37ddee784e9a6bf72d",
+    "artifacts/apa_sp1/g1_cpu_final_r3.log": "613c2188a47b956213944c92a1873fa646d5b08a48bce79b892bdb9e32460467",
+    "artifacts/apa_sp1/sp1_1_splitk_summary_command.log": "7f0dac193add207defbc626d85ba9d35449ac1fbbb4f473f4a69f4cef7774c48",
+    "artifacts/apa_sp1/source_additions.patch": "15cb88adbf9edd600260a995148abecc0273e9733ab2a7d89b28e8acfc6ffd03",
+    "artifacts/apa_sp1/sp1_1_compiler_resources.json": "d512b78f461ad155b3e29b19673e2aff970384a3400ecc07eca0149087ec760b",
+    "artifacts/apa_sp1/GPU_BLOCKED.json": "085515600abc74c40e0fad5290188a26ae77f9a7d2fdd8e51265d40564072419",
+    "artifacts/apa_sp1/sp1_1_g1_cpu.log": "5612d12c677c275beb1ab1b27c4cea42472833210314d68b2fa51e3463cc3cc5",
+    "artifacts/apa_sp1/sp1_1_lead_commands.txt": "94d2f991db50d9e0b103f838605b87a909c62750bf367896803198e54e26fc49",
+    "artifacts/apa_sp1/cpu_prefill_d64.log": "1b552b2d7f2844474d7d227a385e4c3abbd8308f173bffd30715c2ee710948e2",
+    "artifacts/apa_sp1/sp1_1_g1_1788661437075136419.json": "b47b00941dff63c2bf5cc1a6e3fd041fccf7614068ccfbc53b3f7c210b45a6ef",
+    "artifacts/apa_sp1/amendment_sp1_1_001.json": "a4506868b665308d6cc57b251da29b815d02a3b14fed0c68d50ae0001fd3c489",
+    "artifacts/apa_sp1/tensor_cuda__src__bindings.cpp.before": "cd77659935b17074b5f2e1676efe386f5e75622cfc06ff18fe9494cae2fc3aa1",
+    "artifacts/apa_sp1/gpu_summary.md": "aec5fe30116c4706f2bac72c12a5ce706e9da655394de9ef4e38ff5b4b35f451",
+    "artifacts/apa_sp1/G1_FINAL.json": "3b10941279a0dfc98555025981d979604757e8b5b18dd4febb0e6f8eaef36926",
+    "artifacts/apa_sp1/tensor_cuda__src__kernels.cu.before": "989cc0c9e37808853bbdef3e204838b8cdb2a3e9ac5628c5227bbaedc3361885",
+    "artifacts/apa_sp1/g1_cpu_1788656790462101850.log": "74e8a2ac6d2ebc55822cb0e4c22856769ff4d4b507a66461aa811b5952aaf32f",
+    "artifacts/apa_sp1/FINAL_AUDIT.json": "b2920fb1de62cbea224e7b20d983a7bc1226f8ce08e463c084bf3f7183befd36",
+    "artifacts/apa_sp1/tensor_cuda__include__tc__ops.h.before": "fcdc802cb80a2a188c77c81753634e058ffa7824a8a852435fd4c52859c425d7",
+    "artifacts/apa_sp1/execution_metadata_sp1_1.json": "9f01c09afc9eed55b6981ec1dc0b167dcd8b0e2bdd85a4402015af9d0b8824ce",
+    "artifacts/apa_sp1/G1_SP1_1_FINAL.json": "7a79816ca59effb2ed05d3cb43acc38e9561838b979d2dff016f2c1cf7101d69",
+    "artifacts/apa_sp1/cpu_decode_d64.log": "b24c9c2c5a8d5b98d313e5071b40cd3f930036d9904b4ef29edc21973a72da03",
+    "artifacts/apa_sp1/execution_metadata.json": "25da14cc60a1443d404f07e4b8c0441828de39082dabfefb4784f446b7698296",
+    "artifacts/apa_sp1/runner_input_guard.json": "4b7acc1b7ffbd689b636b2c90ee8c6ba068e809d9ea56fd836b206ddec00cc4c",
+    "artifacts/apa_sp1/gpu_pending_summary.log": "a2db5e9d6e7247474fd6f12272ccd3c38c45bf94286cedb58f29dcbcc1ff5b00",
+    "artifacts/apa_sp1/g1_driver.log": "986dd2797f19bfa737ea9e43b14ebe7efe3585f6d4059f44dc886d2e8fa8a815",
+    "artifacts/apa_sp1/sp1_1_runner_guard.json": "ad98d283bba97b94d7e7ff121de7f7e1bf31ce423e9ea2f9ecfbcb5dc8531f75",
+    "artifacts/apa_sp1/sp1_1_baseline_sass.txt": "d5cb2d56481a734492d7de5bb03a38c5a92263ec33aba8590c8d1cbba93f6260",
+    "artifacts/apa_sp1/registration.sha256": "e229eb034e209ac1f5752f3007096fb3d998798ba446ebfb1eb825b80b698d66",
+    "artifacts/apa_sp1/mutations.json": "14be101fd359d1fc363f19cf0bd2e18a39384fb26d55ff3093660abfc4ad70bd",
+    "artifacts/apa_sp1/ptxas_sp1.txt": "0a1d2c23deced1d426bf8ba0316cab2eb8771a13ae600d88840a8c4ee7c15196",
+    "artifacts/apa_sp1/sp1_1_g1_1788661849576949668.json": "4d4305baee1fdf5cf018c3ae68399f40fd6c58f2981ea6343b0ae31fd4348c78",
+    "artifacts/apa_sp1/g1_selector_1788656790462101850.log": "b74007f606248532bae6759585d69b05db31c80f36aa89460a2b18d3784b2f9c",
+    "artifacts/apa_sp1/registration_sp1_1.json": "382194c1f9d94c146bddcf533b7becadee60fe7d212a2029fabf133243c683b4",
+    "artifacts/apa_sp1/sp1_1_g1_final_driver.log": "b47b00941dff63c2bf5cc1a6e3fd041fccf7614068ccfbc53b3f7c210b45a6ef",
+    "artifacts/apa_sp1/g1_cpu_tests.log": "51963bee96c2c41596333499a186d0b56e45eb1d728b4f4b3ac9159d17ce24cd",
+    "artifacts/apa_sp1/cpu_summary.log": "27bee5510dba67e5ed0676ac723e6b57a23279b672de93854c9cee2a53034f74",
+    "artifacts/apa_sp1/registration_sp1_1.sha256": "5c28222f2f3b8193c58b279ba07cca219519dec9a204543ebffb7e9617a066e3",
+    "artifacts/apa_sp1/GPU_BLOCKED_SP1_1.json": "12fd1f1c68f40b2cdc9dc6f479572a351c95d6369394134693663e56b630c5a5",
+    "artifacts/apa_sp1/cpu_shard_first.log": "d3e589d14218a0ff7d9fffc308066298e998127aa698aa51dcda6012d63783b0",
+    "artifacts/apa_sp1/cpu_decode_d128.log": "e2f586aa64fb62d11cad770ccc1aaa854c3365e7ef452bfd833ad5e3a35713e2",
+    "artifacts/apa_sp1/sp1_1_build.log": "73f14cdd1a673dac73452bf0682b8f67ca6ce2b1c9b5d32b1ec41b12e60a6e9e",
+    "artifacts/apa_sp1/calibration.json": "49a561b807b95ce621cfcc97ee9bcc30a4c7dbe827715db650d38f47fa9d9991",
+    "artifacts/apa_sp1/g1_cpu_final_r2.log": "405ac465259cf0aa508038603f446962fa9d05b3080b0c9034f753287e5687b0",
+    "artifacts/apa_sp1/sp1_1_diagnosis.1788660692574177856.json": "4783ddd2ec39f36385350041d007a36f2d9b35038f9de35802738775ceb60588",
+    "artifacts/apa_sp1/cpu_summary.json": "204c3b769b63b057660d5026740387fc8f0ad97ffb877f1e9ed01db9d08071df",
+    "artifacts/apa_sp1/sp1_matching_explanations.md": "681c7753b96f7800841b2f1c3a264a00dcf475dedbd734dc607b3f4d973271d2",
+    "artifacts/apa_sp1/g1_reference_initial.log": "9cd8ed5985521bdaab22bee5053bc7e634bde6fb78526f59384bb6640281a033",
+    "artifacts/apa_sp1/gpu_pending_summary_final.log": "a2db5e9d6e7247474fd6f12272ccd3c38c45bf94286cedb58f29dcbcc1ff5b00",
+    "artifacts/apa_sp1/sp1_1_diagnosis.log": "a5535ba2c9bf6b5787aa25ea6ee596935f85dc15d208bf6631ecc190d461a152",
+    "artifacts/apa_sp1/compiler_resources.json": "1e02186916147701ad353f73b839cec1f3306698a03ab11ac1aff25315a4a097",
+    "artifacts/apa_sp1/amendment_001.json": "cfb1336467ba4035c4d0a707639bad47eff129368d83260c2a72e3fbb0aada6f",
+    "artifacts/apa_sp1/THEORY.md": "3263f83d6270548f51489041a08f51d53411147ddb8c9fe2fb4b0286b824305c",
+    "artifacts/apa_sp1/mutations.log": "ccc11fdc81ec181259aabfb8e9101a0bca47654c88f89dddfc57616d239d34d9",
+    "artifacts/apa_sp1/g1_legacy_1788656790462101850.log": "e8f152fe380aac77c99e703258eeb1080b8050fd4116daa0709378e271dd71cd",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_13.json": "340e79f9b935737e3301b04013d8182e7945892153790299b14adcb4b04d74b3",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_02.json": "bcae4ab8e37447cf50dc65991fd31a7a0b1306090b91d1332be6ad5a47a8e83e",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_07.json": "68ee864c5a2857ad30703dad009c5fe9213c9fff5530980a66830bdb20f9fb48",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_16.json": "982ed7265d5a791b57015b9487f0b17e8e7162b68481daca61f14276999f4d9b",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_15.json": "277da9a89aeb816bfe42c93dd56c34bbe4abb3145bf01407a427f2f9d3156ddc",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_17.json": "e8599cc23372522e060c68893f39bd60eced22550ca5a52aa24e5c50543f1b57",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_12.json": "36016dadb78d7f1e80cd985bbc19c6933019872c6df7ac6c4df688216444d392",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_17.json": "c152e558120e3c052bc6c7899d483332a8710c2f0ba28be6bb02569beb33d086",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_03.json": "1796cfdd31371d7d4f2692a60908e3e2d364002f4c3a18c44da6ef4f457e3e58",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_18.json": "06cd31eb175842a9e0296f97a5de509c3f1f3f188da149f62bdb251ee7bb676c",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_11.json": "5fdac72fed39ce07b51afb2988198d70ed92fee9673a2726d8803586b8ac4ecc",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_08.json": "9b7d4fa71b5ad25920567fcbbab3d527a8e87d39ddec6eb3d9d682280f93825a",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_00.json": "5f0cad9bed2947efcad9c6f4765ae3288539d25349c15b3ac116b469dc8543f6",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_12.json": "ed9a2103b476ea380339ccd92a9c73e11989a9e81ad399b49786f9a96fa254e1",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_07.json": "ed98734951b0c732f79396e51c7c8ae21ee5d6543c3953d73ff575aa81cb2934",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_14.json": "302482e653db23ecd1c78476f9afb9821939d4fbf512e95b2bdce92d314e8296",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_00.json": "8815cb0955adc6f151205fb045faffff26ae28620bf12106c58d4bf9e120798f",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_19.json": "94a5755e9be8521c786c63dba724d6abc58a7329e9e9c4312341384e037c53ac",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_16.json": "8ee4dccaa1dffd23ea19334fba9056c87b2efa2e6dc53cff84fe8e6576723152",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_10.json": "e47427cd764dc1a392b258fd1908802966b8f34a9b64a271bc94e4a305a2a634",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_16.json": "c4e215ff48740515c14ea33a40013a017c3f4cb88bb515575848e5191c0066bd",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_18.json": "3f878750a8573067ae36b0585b21996e421340e253b51a7c184cafbef10fa3af",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_06.json": "cfaaa62b3b3a5bc5fff9b05b86e767da8d05241fd91c88d06fecb6b0118083d8",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_01.json": "275c14f3a68f1dc5c02561ea542a61393555cc516cab063d0d53112511c0d106",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_01.json": "ddb3260294993c8901e0014d6b5c863d2ae9153304f120442051286dfd95ce07",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_07.json": "71a8525a2bbd05cde67681f7f602bd7622c186cbaed8ab7e3d87eb226d830cba",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_11.json": "44fd0c1a6cfb95f9bbd70f5a278a424f398e76784c47b6f36bb722ac68d7ba95",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_09.json": "1fa2da31391126fbfdd7213acedc0a1deda539fa5bdb8cfc294c0f77961a725e",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_16.json": "5ac9419cf2ffd6d7569cc9dc33506c8fce7b6840412481ca7ba460761bdddd6c",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_15.json": "b5f6e3a382164dc9242f3fa191043a28802f60178b1d8a2d0d9d8819a4871d89",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_05.json": "a86075950a6478ff06ed3e0a626bc53bce50f497510b40d708cae800d6736bd9",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_17.json": "38d0111051b99ac4d88b8c451feb25fcf6beb2b39c244d717a4c3e7cdaf7355f",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_01.json": "7c5019d7cef05cd2ee59a82c4a3346e9478626cb0c902df6f4d61b8c1ca68365",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_15.json": "85e524aa2c7a1dd8052b42b36d6b7b4ea92b382de121b6cd2f21b72910322d76",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_06.json": "e34f4904528ca9419722b19388e4812d02dd97a9b2af4ac5a4150fb3d9138999",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_09.json": "8fa0c3627ae7299db6f6191b05c3fbd19d7f2a2646b9e609f1a326a087dbd487",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_19.json": "85ef1a12e4af5ced6c77268e7a1503dde6578e952c7a6f833e4969a46749e86f",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_09.json": "b27771e3058c9cb30019ececc4710a54da55b7ffa612fd038e6c02559c9a67ed",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_13.json": "3bf1da736f5d515ee97bce1687169fa99d8c5104968c04e48d92fa4725c85a3a",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_08.json": "d37f59bd4b38d0e39e43f9771fdd005e748b7a9d6a1b37843f444588a4f2c27a",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_13.json": "d2be42ce8b2fa7cf39646977d315faeded6aac48061f5864b36afc2658e686c8",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_06.json": "eb72e496a327c07a47c0665c34bdcb3641030acd92b4476663941247a21d23a3",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_15.json": "882c019b7f7a21f537c0bb77fbab473e606c74912d642bc3a1fde9e80d703813",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_11.json": "c144d9d5eceb17c23884c9a40efdeaac69bf36a1dfbc7ef117f0bcf5e8f09401",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_01.json": "b56675a6960162ffe1e813bc82832580eca0f0e7a99312c80786b979a42b4724",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_18.json": "57286ff2ecd0141a78f5fcab5f92e1a2d0fd96b79e5cd769f7a0aa0185a1d07d",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_04.json": "ae2e0d7eac8b71dc56d0e0eda695e92bf3ab9df9764293acfdb49d58d731bfa2",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_19.json": "1fcbfbbbf3305d0d4f621c2a9f58e7f6794108acecb5fed4e7881ea959bc6125",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_07.json": "dd17a048685c104dd706125e070fc01a8474270ac8772465c654116fffd16fec",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_00.json": "aab6f15e6292b7f5925016aa4dec4781bb78e25f8840032b737ccfc29a7e57e8",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_02.json": "994e22bc9971ba022a920d112a597a0b01c08585baba77b9ef3c582e6da35327",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_00.json": "fbc9244b405f966c74580a63cf19bab888ca4f09ab11261bc509912df0d134c9",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_04.json": "e0c07c08ed04648557114d506f09537f06ed2c0007d5ad4ef86da1127458ab7c",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_10.json": "8beba46e1333343605da1122422250ae195c92220585f170aecd9451988a2060",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_03.json": "80003d288577073edb4981ff331854984239ad553ed4f59de922a5b4fc297b4f",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_14.json": "40ad069098c1a1c54f070c2d45716992e28f3fd826eab518c0b31330f0ff26ac",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_13.json": "420ebd0425a3696653ff948d46a28ccc14ee742ee3127e2b35a7bddeeddd9200",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_05.json": "5caffc02d8082a3eaa86d11301783422c0181c32afa3b7ff893e7ea3fec29eac",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_10.json": "3361a7140ef1676d40f828648a8e3846e64a719b6b4032df2dc50f3ca54a07e3",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_19.json": "e5e15f38849cc897a3f1dd30cad1c349a09990b80ebf83c3e6da59ccbcc056dd",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_12.json": "8747f3572aac23353b8da8626e5a978268f8feb84fc7c7884c69d8348fbaadb1",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_02.json": "0afc872d20308535c759289ea15c83d87b17f81d4b92dc18b0effca566c002d2",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_05.json": "c03cdd9d89f9f7747650faec5a137632abbdccccca8c23fb31566d1014bac855",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_11.json": "d0deb794904d8443c6b5fdf8cd6e95cb406fabb0de72752a630d0ddc38b243bf",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_17.json": "1e10c8d23b85c5d8901bf68bab196e3f48fdd7bf46b7a3596df78151be58c173",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_10.json": "763acf7540a3916a47403e3cc4fd3923a01b70b645d9bd462323c14482546757",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_02.json": "265b52be1530a92703b9071182e45f7f11880c2dc0128b05ca4047164b07baef",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_04.json": "f67c6f917593071dc32c38a66c5f467016f628021815e77640087da21daf5d78",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_05.json": "3ecb858c4aea6b70379afa7decfd2fc3d3260b019575bfa289fc309ac50072ff",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_04.json": "30ac17517d7de443aec9898183b74e97c43d8234f8f599f8e7d2116a7a08df43",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_08.json": "eda0588c824ba4e5ef14242ce07d899719663e6b562f3526dc8731b5325b0969",
+    "artifacts/apa_sp1/cpu_shards/prefill_d128_09.json": "01cd738cb93aaf79ed1d4353b1df90661dad32d80dbf5806c257cd4d4807a5b5",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_06.json": "0cecce4393750875a870804a65480c8c0019996e852a1ce1c15c3ee1c54817aa",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_03.json": "abb86190180d877b5706998b9f6e8cf95e227c2bdeea60438cd916538691fddc",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_14.json": "6fc00de8ccd1b4c311179bb5beb41195e0950b74e8301f440cbcf4c2db7defdb",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_12.json": "1dc05e92a0b4b52d431a52998312d1b3f28be765ebf4909a3c8009443584befa",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_14.json": "fcb626fd4e0f522e62e724417e58d868deae63ee77fdfe4860ce15e8dbfc4740",
+    "artifacts/apa_sp1/cpu_shards/decode_d64_18.json": "6529a3129815aa9c48c4ad413857788a1bd52f8d8930a4934934eb7cb81a65b3",
+    "artifacts/apa_sp1/cpu_shards/prefill_d64_08.json": "3bd2c26f4813390cf3669739300c7652e556c02edb8822ef3601e925693cb5dc",
+    "artifacts/apa_sp1/cpu_shards/decode_d128_03.json": "6d239adae6931f100b990534b7afb7463b09e7417a493e6edb6cfd6cac04060c",
+    "artifacts/apa_sp1/sp1_1_before/tensor_cuda__src__kernels.cu": "4bbed70fac86f696961f8f2b317ed9f0413816c0acd725104fa0f0be21fae53c",
+    "artifacts/apa_sp1/sp1_1_before/tensor_cuda__tests__apa_sp1_reference.py": "aadbaaa1ff8385a612d73fb764b72f3a13a6b06da87bcca9860219062a3964aa",
+    "artifacts/apa_sp1/sp1_1_before/scripts__apa_sp1_lead_gpu.sh": "8e9fa24437f19126e651588a5d12a27deef3ae0daf927a9783b7cc72bd5bf8cc",
+    "artifacts/apa_sp1/sp1_1_before/tensor_cuda__include__tc__ops.h": "64f579f8e42947f49e9f6f37e4578d582608c958afb1dc8bc40d769dac47de1d",
+    "artifacts/apa_sp1/sp1_1_before/scripts__apa_sp1_gpu.py": "f66f921a19826a8d15fae90b3e355a7cbbda59426c39cb8fe9439a32c13c5265",
+    "artifacts/apa_sp1/sp1_1_before/tensor_cuda__src__bindings.cpp": "75889d6ed0bfef638a22930041c2c49d3f3c3594dd861990b5509371441367ae",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c1_h8_kv2.1788658883735062741.log": "7254fcee8a4f12ca816f4707750b9f9db9448eceb650312e6a156fea6959f61e",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c1_h4_kv4.1788662490236049517.json": "d97304ed602c15c611a01042127b13113d91baf6c952ffefaa95eba426212b1a",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c1_h4_kv4.1788659308375105980.json": "1f891895827f369d8fd90f5499589009428b4b3694e3c85549681e38bf23b360",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c1_h4_kv4.1788659975189026227.log": "acb68fec470ec5c7fd9298cc42942514eff27969711c00abd3c6f9ffd396705a",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c1_h4_kv4.1788662236168326921.log": "2c927859338ae24f3282745797ddddac1112f5d81fb562a8debeea05d7330504",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c0_h8_kv2.1788658403647746911.log": "908d49ba9fbead22cfafd23dd601983fdd1e8b76c1fc443bf1ac9dd1fc304b05",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c0_h4_kv4.1788658373320011973.json": "bddfe0294bfc3021b02915a7a171784f8ad709af92bf40d1b7482eb6a85e08e4",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c0_h4_kv4.1788658935584449484.json": "3daa7d7990e6a2e07512ba99efb6038ed40780830c2dfeba9e60d0195d8593ff",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c0_h8_kv2.1788659569216005436.json": "cc514260d1303546aed967b20c1b2c76538945318073e9a7ca78f09216f61913",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c0_h4_kv4.1788659912716829238.log": "365d53ce872669b0fe987a9ab6337fb4def73eb30da49130e07911c0444e1822",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c0_h4_kv4.1788659661243080633.log": "e230dc44ee9538f5576c30203dab83d5e5e81b7e5b60ad9daf5fc09050f45c40",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c0_h4_kv4.1788662052193115804.log": "cc0cff742834392f0aab5220f7c6a660a64ba100b042d5ec55568cc631f6dbb2",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c1_h8_kv2.1788662021980736444.json": "1d99e399590b1d57d3ddf17ca87b7582be200318e8370040e4ec1d74f0314225",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c0_h8_kv2.1788658654704887742.json": "23b71361e15a55bceaa974c1d383044bc8b5fa6b08082de7a184f19466c99c6c",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c1_h8_kv2.1788658589582006095.json": "416e1392fa29f8daa58ee6f4b00f656056257c8f9d788c82f46718b78b696724",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c0_h4_kv4.1788658752001094785.json": "0a3ca5001e7e7971b8b5944f8e1dda284053e859d506eaeaef9a3783016e114a",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c0_h4_kv4.1788662298059365359.json": "e92ddfa7729b97c7f61dae2170ca2d9364d505dcaf33428861b79b7c025bf239",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c1_h8_kv2.1788658465361843369.log": "7a436ccc5fe0aeb236d3194f45cb66b1e56304088d9ac1d696aedfc276f6e9e5",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c1_h8_kv2.1788659111715187990.json": "4a357ddf61005bafe7f909bbf3175116294f92bc1a849074f3e3def2331e5753",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c1_h4_kv4.1788659476719702668.json": "720553ca39a9b8bbffe022ea18e8f3e78ae171b3ff6063637d99f8ebfb3c71f9",
+    "artifacts/apa_sp1/gpu/legacy.1788658258211490644.log": "a7b51845eadc58f4ca2b9e389a2d64dbc4edfd415f9b906dea43172499a5d9bf",
+    "artifacts/apa_sp1/gpu/boundary.1788658221190445777.json": "e90a2a9e2a89242da6174f1e29813190550209dfcc31e59da156e89e9ae7a717",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c1_h4_kv4.1788662489528092763.log": "308016573fb21fe958b5141156f0fd5d404f3542a0f2c48dc8b07850f1fbe875",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c1_h4_kv4.1788658851440823786.log": "7694932770ea2cb20443502f0e4ad1dac119e8deea254a3788bfdfbb30285a54",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c0_h4_kv4.1788658496244629515.log": "c44104ebb27acec9d2ea514e598303dbf66a1ca5ee2cfd8e7b717eda54105475",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c1_h8_kv2.1788662521036884907.json": "c0c89b905b430c5f055c2ae1ebdd778aa67b7af038df3581a594d10175696190",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c0_h4_kv4.1788659538005102976.log": "d284a792ad936e761b5aa65ee747de5a3d4be224c8da9e9b45a367bd67071296",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c0_h8_kv2.1788658786030154073.json": "4d0401c54f1423fe08472d598e21ca06f1b254c8665f3e506e38617c1be112f6",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c0_h8_kv2.1788659248447001989.json": "e61518a0ee3f38477f7c2f6bbe3527e9880fbda29ba31f67998546a32071f8a9",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c0_h8_kv2.1788658651899385533.log": "20cb41e6ca89878098cadcbee72330c5ae1aa85b75caf251ec80e9ad3d1cac2b",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c0_h8_kv2.1788659445490273746.log": "465400922c466e3dd21406870a1cb3191219cac5b2d996927637a3b236f9c510",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c1_h8_kv2.1788659507547752099.json": "2dbdaf2c84fd7205d7441fc91b0a0206491f4e0843bbc378efd2522b4de91b0f",
+    "artifacts/apa_sp1/gpu/selector.1788658325109953499.json": "a208e88bbf1f144431f9be296b3ce936e128629b8fffd26008a9a88c9772f7f1",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c1_h8_kv2.1788659384374522322.json": "2df9a10c5610258608ee5b0e9fd03c188cfb4dda55c49a73922e75fe7786eeff",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c0_h8_kv2.1788658966020292899.log": "897d033da91a019cd71386948b3b2198c855a6da24d89e50d1848a16b9c60619",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c1_h4_kv4.1788662113489989764.log": "9792a473d2ccab0cbb298b591a2e3d3a7958d3ed46976d798e9398980d20e30e",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c0_h4_kv4.1788658917476385869.log": "a2cbbe851cba3b37c16db9854016f789a9d96be6054a3aed191d5568b08462e0",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c0_h8_kv2.1788662582497002556.log": "2ddfec2a0f9bb768bcee05f9f735c49f9584de95c5360844418960f115e3c4d0",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c0_h4_kv4.1788662052625300920.json": "0d8d4db9df79e371b2ac28c51fc568d89180a5d358d70e78cce98c01600e3b83",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c1_h8_kv2.1788662021583209249.log": "10385a2643deed3aa38a90e4c86dd66aae63e1e4cc3e932d456191640d9ee7c9",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c1_h8_kv2.1788659507140202846.log": "1934dd7da1df02f2ef85b1e8946f2f7a500dddb6f186678b3f69aa3622bb22b3",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c1_h8_kv2.1788659881806925686.log": "85686cf1bc65dd0f33ec18dea15a358c0bd43102b93b48498482307deb4a8cea",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c1_h4_kv4.1788659599563236254.log": "b264efa16afb6e718a8fb901e8b0beea3f7b68c329957df94a142514d7c3c4ed",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c0_h8_kv2.1788658782350664418.log": "07b1f80896b33d7cb06543baace3a20807e41fcd041160abbcfce563e3fd42c1",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c1_h8_kv2.1788660132809548698.log": "db8a25a361058638865f2ff0ddf8db14a074987eb009b18ab77456beafa6e010",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c0_h8_kv2.1788662459300658848.json": "a7c997cf1541fd389eea88d37a2049f7a9d438398ded7a53bfba96eb54f3e366",
+    "artifacts/apa_sp1/gpu/partb.1788662702615594993.json": "92b005a9d9d8407cb861ef4333d410a9adfe6984590e28c0528c21b4a9428269",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c1_h8_kv2.1788660007297424630.json": "52ba147f056fc502cfd31b7964a5da8d56c0bbc38d09d14e1a0033af87183c63",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c1_h8_kv2.1788662267286751940.json": "f7bd7842908c64a59dd8ff56fde37f2477334d519a9c81484ec62a0b46827155",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c1_h4_kv4.1788660102442343804.json": "cda506b2e7652eca0be92f4483cf1220293dbf66fb2ce7b3499d8743cd65c0cf",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c1_h8_kv2.1788662644730952129.log": "d9041d4019d2ee6a94d7f861d3a1fc6802eea0d507ac7aaf49ce22a9660e93c8",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c1_h4_kv4.1788659600011674911.json": "22cabd6eb72588af566652540a5e23deb279a6696ba7d2caf05565c7768a2b6b",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c1_h4_kv4.1788658853383000022.json": "eb411264551309b55a54b37ac8f2b986d08b04239fecb10568b8fdcb7e116006",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c0_h4_kv4.1788662552265421222.json": "4ae02bfd754235bfefe2fbcc51b72a0077cf03929df39ebb43827feae3a4860c",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c0_h4_kv4.1788662428504034354.json": "2fe889e417f3e3a7f891a38d4bebe5c57c706c8625dc53f60b1a7de06ffca313",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c0_h8_kv2.1788658527136014894.log": "9facdb2255686240c7d06c2923659107c8bd492c099dd8578f42d540d30f7225",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c1_h4_kv4.1788662614487864817.json": "8b4908c38abec8296ac2792f8be6dd82f770279d931c79627a7c68852cbe32b2",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c0_h8_kv2.1788659820499466113.json": "e1671abb70d614cf4d2ad08e96ecd3676fdb0129f82f50da81ec5a13f785abf0",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c0_h8_kv2.1788658527778752233.json": "614f375fa9d4d5acfc78dc2cd686fd975998725025b9bca51b9b1f6b21c0073b",
+    "artifacts/apa_sp1/gpu/splitk_boundary.1788661890896295763.log": "93ffec488c1d0ff325393d241c0a8306269e94c36696bbee2685dfe592b214e3",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c0_h8_kv2.1788659944058571999.log": "806a039ad24cf76af76ab13b54efab2527874661fad05170f46170c65693217d",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c0_h4_kv4.1788662175293236922.json": "f71596a009d0bf55ccd93a01169aac39f0b14bfa4b8aa54cd0b2d6e3f2d7c4e9",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c0_h4_kv4.1788659415156212037.json": "8aef08b530fd1133e6e48d5568a7da01426ef2cb00bb9b61120b64c6456c26e5",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c0_h4_kv4.1788661929690038927.log": "e5d5bbc414f113746181e7e1f8c5f289ccd064cc89bb606483ca341f3bfcadb8",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c1_h4_kv4.1788659727729097862.json": "7c1d2e2c43d6095c0bab6e379b558029885c62e0228763ec2d81d712392374bb",
+    "artifacts/apa_sp1/gpu/partb.1788662682506124938.log": "246f42d156fd18ec96302b1d6deabf2ab0d91578b78df085fee28096645fa949",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c0_h8_kv2.1788659445903989047.json": "0ae3c58b35390f702632c231c0a7bf42645125807e63f8c86cdf8963e6f6e38e",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c0_h4_kv4.1788659167660095496.json": "329239354cd462afa7159154f9c0e72fc7ff72a6cf57eda26eeea54de2ce1e67",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c0_h8_kv2.1788662328775658903.json": "76657467a3cf867ce3734b66e2eb61090ea2b7070ee0e70a25238229e9a91720",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c1_h8_kv2.1788659758620586857.json": "9a05eba372991336e4679598af56e99299dbc946fe6e77d97bbc5266d5c362b3",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c1_h4_kv4.1788662366314092263.log": "5a7cdd73f44e3f8983663bd946da466ae314f5d31bc03399b88ff2d1eaecb315",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c1_h8_kv2.1788658719547661021.json": "60334b54e374da62237c353a7df24c6ed3aaed49cdfd3a9d92815312a13da6de",
+    "artifacts/apa_sp1/gpu/legacy.1788658284832378924.json": "fa44521d7bf7cf1d7245461f159feaf9c5c2fb24647580d82bf4e32a88fe4179",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c0_h4_kv4.1788659414741753913.log": "167bf3128b33f7ae3d1c50e7689285a7c47799a348c55f63d879f874f4c502bc",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c1_h4_kv4.1788662613472281497.log": "957500e89569133ade4d2c183516a497393ab2a956fc83c95f49287e7195a6e1",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c0_h8_kv2.1788660070650132533.json": "a0a7fe80724b7240f3cdb3636e0b3dd12d4fc287ed04385ca56da138207e05a2",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c0_h8_kv2.1788659692085096903.log": "a2fc6b58f95f17bb3718b969acfaca3035165ca1daebdd3dd3c52c2aabe3cff9",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c0_h4_kv4.1788658619942454701.log": "ed63165b6d6c63f111219ce8ff515d8b9c40ce681f1c596712024cbbf8ebcba4",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c1_h8_kv2.1788660006543231786.log": "70979070b99422a31ecfd601664d0c3a5070deb7f64094accac51af0dd24a7fc",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c0_h4_kv4.1788658372834405405.log": "b0eb5afc4364ee202ea6b7f3287b12a9acb217c9541c7f3bb5e290a43c7c7c8b",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c1_h8_kv2.1788659630356179908.log": "ec586ee96bd5053cc3b83abae0926d45474618b54f17c56ebe33366a3038ba23",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c1_h8_kv2.1788658887140128695.json": "0e9d72b4bea2aac13e9e5ceaee4501cb9ae2e9cf6e8ecb8e32597111ef04e3ab",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c1_h8_kv2.1788662144575237598.json": "fe9db348aa8e87af6e92ce11a972bfdf7c1eb9aa87c7fa9384fd72887fda4993",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c1_h8_kv2.1788662144153804523.log": "1787bfad95502309ef053e1a9fd7aadeaa030761b3e804700ad60c47e9acfacc",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c0_h8_kv2.1788659568793834408.log": "831ec558a6dd3edce2c237f39c5aefb9d5a03db87fa4aa28a0785af86a9805fb",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c1_h4_kv4.1788658435020845703.json": "45e0e2b1743e33f6301c9f868be72e94446595985fc21e5f2a3ef29ecc979d48",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c1_h8_kv2.1788659630780892826.json": "b5ea899488f13e88252f3cdc8543ccb876eb2028701c3e4b7181a0c132a78b8c",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c0_h4_kv4.1788662427813034389.log": "2028695a1759996bddf6986be9c3e6d1d536b9a5a66e4c10741aae33b750a2d1",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c0_h8_kv2.1788662328286414922.log": "2fe61db29b8f95ca42ce7d15a5694f0713130d58d675fe97bda917ae6e6cde9d",
+    "artifacts/apa_sp1/gpu/splitk_boundary.1788661892232302341.json": "230836d63516dd62b73132544db9971105bd52b25fbf65b7a9d217ea7a19dd14",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c0_h4_kv4.1788659661741945323.json": "edae74029e1ba3b725db7443298db580a65e20e62d2bed647668f45c8da95428",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c1_h4_kv4.1788661991370190726.json": "5c66f5f1e7eea0f0a28e8f31f9fdf01701ec99ea356e0d1b78b623cc5dffb492",
+    "artifacts/apa_sp1/gpu/boundary.1788658220671091548.log": "b4ede58c33dc3c33d4c20c68a4487e088b278702a2034e674f59bef9c7d0f7de",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c0_h4_kv4.1788662551253343907.log": "9acc241e580b06584447a932f26cbb5044a956347ddb22c9410e6bb06e5a9223",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c0_h4_kv4.1788662297511161536.log": "ff45c330897e111d0b95ef4f92a4517c276dd58f2cc60c0830ecc731a9be8ab1",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c0_h8_kv2.1788662205524545003.log": "289ddc44984c5c29da6135622c979714e43fac23e9efdbc579e462c9a2a17175",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c0_h4_kv4.1788658621565108174.json": "ee0bd246678646c0b510aa72188a2a6975f28a9f181762cf0ead79d7fb9a2dc1",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c0_h4_kv4.1788660037697110793.log": "f9ff98d867af68b3ebe371737f2cdef72fd13e60aa77d6d668ea95504abd0ac3",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c1_h4_kv4.1788658558637676947.json": "750e312a4aa58edebcd3ed922334c93a8730306dc274d03864c7717ac4d44fa8",
+    "artifacts/apa_sp1/gpu/selector.1788658321036111446.log": "7b5fef03773bd505c4ad815ef1f9d53a9f248e8cb0004366b60b1bd7f1632fa4",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c1_h4_kv4.1788659850847316576.log": "7273f3051886a759d3ee08657b19ef433facb326a7e81c59f6f1b1b8d344489c",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c1_h4_kv4.1788659048821707382.json": "d73105940a095cbd36475e74b450fad30e0d2a538e535eb17bd3f55f4ebb6229",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c1_h4_kv4.1788662236634436662.json": "1b492c688eb4a22683160ac53f06ca39db5b049e1aeb6ab2d5fd41ffb2373e83",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c1_h4_kv4.1788658685097393521.log": "83c86eb5bd473c5040918c05dc3d76dbbfb00a834abbed4ea88391b23b47fbef",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c0_h8_kv2.1788659001723280669.json": "c88802cfd5d03fd2da886ebfe1d2b3a59b6092264debf37d8558726bbec1af51",
+    "artifacts/apa_sp1/gpu/decode_s2048_d128_c0_h4_kv4.1788659538446487677.json": "ac161f15897aef96d2dc07dbc3eee4a22ffcc462373645245580a3b89b671613",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c0_h4_kv4.1788659142150054584.log": "3b9253017a9cdfb5ce365a29e0f60b9330ed747a4e0a744681951efcff73ba18",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c1_h4_kv4.1788658558124603757.log": "78b5407d1957587c3048ce328228bf0e68432a9bddecc98a4ee6ffd53f8aacf5",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c0_h4_kv4.1788661930099836787.json": "e1845742654fac15179360a908d7ad9f5a63bc1916a8486440dc44e76873c677",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c0_h8_kv2.1788662583254364772.json": "e4bf9f522f9068c751f04ff1e94a59250ffb1383db2497497c544d88e8bc548c",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c0_h4_kv4.1788660039127098326.json": "f16047da8ec1b73026fe9c8b149dfd88cd8708e7a70437d89c9a2284347f1a65",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c0_h4_kv4.1788662174826698878.log": "82c9eaa263a4343dd539c7835d19e3889aa9fb493a5c42bbc3d71f7954c010e1",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c1_h4_kv4.1788659727223997610.log": "81dddffee31475f05c3b90dbb58669ac4f1608f2798780ae9c6ddeaf4df20051",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c1_h8_kv2.1788658716916641069.log": "4c07a545ee180ef747dd231bf6c6812cdd3d44f4238a0bf1c8f7a66c04d2b242",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c1_h4_kv4.1788659976199661258.json": "9849c25436d7beb485fd97ac044a389dce4fe5d90093a88225277de3aa33b5aa",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c0_h8_kv2.1788662083259413672.json": "f50cb0b8c8ddb775699bb14c8aa514eb73d160beff3d210beecb2b22bb63a584",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c0_h8_kv2.1788659944842680974.json": "fccb937603608bc05f37cee6b731f56e5a51db3d189c3938c2ea875c70f6918f",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c1_h4_kv4.1788662366879221365.json": "8dd5835c37ea2392e1a2a9a93bba07bd078ca5922f5b797b66cc7b33d0c678b6",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c1_h4_kv4.1788662113932053321.json": "8b1e3ecfe5e2c24f9078ccc1fa5698910d7135a4bfc50a5e4ed50f57ac31d322",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c0_h8_kv2.1788661960338688122.log": "e523e29ef38097ad5d6bd21f0a27fc8a33f6206c94b6a15f869b2e1b18fb1db3",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c1_h8_kv2.1788662397103334059.log": "8a0ac1a28fb7cab55256e7658f09fbef391aebb6102d35ba1881dd3c549899f0",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c1_h8_kv2.1788659079180155382.log": "0cf27f8219da8a350ec8152a84d8e0c3e24c4808faed95376cc15373fe6c01fb",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c1_h8_kv2.1788658465925582127.json": "bb62a39b65679c01682bf088f340933dbde9e09a80619f7ebaa41e86838a36e1",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c1_h8_kv2.1788659338731804069.log": "b0ab985cf4bb8550d4fde8c33c66dd3e60d355c9ada699f11bbbd1178b8072c2",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c1_h8_kv2.1788658588967143282.log": "b48c1f23b4f5807a28eb6ae49948938bdf5716a75e3f2e7e8fd14a2a6a221824",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c1_h8_kv2.1788659758142506198.log": "4064d79f273748284cce2c59e884cb2847c1b5a09c1d77b0a9692873f1e01f6f",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d128_c1_h8_kv2.1788662397602554324.json": "e13c4bd06b75b628d6bbd430c9c453290d5c98e1b8a15abe9cf1bd42456e6c99",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d64_c1_h4_kv4.1788658686528778890.json": "fd6e8a8476d8e4799d9bffbc16ddbdec303af17fbb223fde460939a6849fdb35",
+    "artifacts/apa_sp1/gpu/decode_s2048_d64_c1_h4_kv4.1788659476303910104.log": "53265c65acf973c88917785a837f32c9bb5ba2aa1fad688a6127097a624b5809",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c1_h8_kv2.1788662520454165945.log": "4202cb86512fd1f37dedec2c9e65a0416f5e9bc018735f99cff95a5fcf3816f0",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c0_h4_kv4.1788659789012005321.log": "6bd1dac8a50af315056aa6ec11e894482b12f8259a79608aa375bb04c3cb1b8b",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c0_h8_kv2.1788661960747938954.json": "97f637ac47dcfbf03872e6cfee1a269134bfc0fa3607b6c05c4e75b11028813b",
+    "artifacts/apa_sp1/gpu/decode_s8192_d64_c0_h8_kv2.1788659692563049358.json": "dc4de72b66084893b23df90d7fc0b5de72d105fadffa8b73f1e960cb446f9b2c",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c1_h8_kv2.1788662266850322982.log": "816ca067f8339684e66f45044977d01aeb7dcb70c596adcad4a22db4d5c731fb",
+    "artifacts/apa_sp1/gpu/splitk_decode_s8192_d64_c0_h8_kv2.1788662205954086216.json": "7fff163c4840faa31a33a7e70b49fcf789068f75eb81b5990b6ac92222c66251",
+    "artifacts/apa_sp1/gpu/decode_s32768_d64_c0_h4_kv4.1788659913705961193.json": "96943407a90e235ade0836d0537c68734c0084551fd009631adf1ddb6d00e42b",
+    "artifacts/apa_sp1/gpu/prefill_s2048_d128_c0_h4_kv4.1788658749930606503.log": "98341988df801f3a1e08ba7d4ff6f5c38955cfa06a612ec8d9b01f942fb3fde0",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d64_c1_h4_kv4.1788659032081638693.log": "4d24dcc440147ad81c0e334b763d5517e1fe8cf791bf5dd298ed0e2bb23ca2e7",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d64_c1_h4_kv4.1788661990961527138.log": "cd7b83750d175b29265c1096fc1f073d4df8338d97286f768311f0b94a5ed5da",
+    "artifacts/apa_sp1/gpu/prefill_s512_d128_c0_h4_kv4.1788658496772203286.json": "1a5bd550ca20222a153074d3c73c6bdb64f7be3dd1c1393fa015bdfdcc41b65a",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c1_h8_kv2.1788660133929549361.json": "564d45f175928fff0a922ece5ec9fcd332ab9d7120e9326f299effb1f69747c2",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d128_c1_h8_kv2.1788662645503997418.json": "bd853233e438647cf3f9dda6e62eef906f2035a8e900169709d7bf174cdeb07c",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c0_h4_kv4.1788659789614153109.json": "a9e54d1412287163e2fb1c7182d0d51522a7943bb0c806d14fc75516a714e7a3",
+    "artifacts/apa_sp1/gpu/splitk_decode_s2048_d128_c0_h8_kv2.1788662082844443732.log": "fcb387bc1485b111df28ce2f5656cd7a601138dc49b5d343db7af6a49829f79e",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c1_h4_kv4.1788659284721617994.log": "121fe19df35f91341bdc1a6322a2a6db9c02260723aec632f581c90d9b0ccba7",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c0_h8_kv2.1788659819970395797.log": "9806aa9dc1880ca958b315599c7a00adb910ea7bcf96c810a8925ba0339a8291",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c1_h4_kv4.1788660100998670908.log": "91b9b0791d4bd4f37aa726d76446a0bcc1b511c6421bca09f8670c0b169335f0",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c1_h4_kv4.1788658434540029250.log": "eccc92391c11e58d8612205c05681dd98507595a71964bd2fd38e20f856d40a1",
+    "artifacts/apa_sp1/gpu/splitk_decode_s32768_d64_c0_h8_kv2.1788662458716562711.log": "00e8a5e32ced71acb0551a6313247eda6420f3c1a36ff5dece27ee58ae867151",
+    "artifacts/apa_sp1/gpu/decode_s32768_d128_c0_h8_kv2.1788660069526160303.log": "272cda1f55357f98d3a0cc0aeb89eacef3006ba3072baae6d7e4a7a2688fc8b4",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c1_h8_kv2.1788659882344236395.json": "c49b0f12e4047bdbc9b08ddf7d699a3ba8fd884ae16348334397ef0d473ff25f",
+    "artifacts/apa_sp1/gpu/prefill_s8192_d128_c0_h8_kv2.1788659198012369872.log": "45ce07bd7b2ce3aaedba3707ce5c1375d7fad4bf8ce8111b624fcda404184319",
+    "artifacts/apa_sp1/gpu/decode_s8192_d128_c1_h4_kv4.1788659851454274137.json": "6a84a373af6a8b67fef8b10ff359dbe6bc847efb535acca92c0ce763719f5bfb",
+    "artifacts/apa_sp1/gpu/prefill_s512_d64_c0_h8_kv2.1788658404224966130.json": "5679d2183b00c0d35943bd19ccbddd4f797e9758e4e6e7546cf90ec471722c3f"
+  },
+  "model": {
+    "id": "gpt-6-astra",
+    "effort": "xhigh",
+    "source": "logs/apa_sp2_astra_r1.log:5-12"
+  }
+}
