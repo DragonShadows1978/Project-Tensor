@@ -34,8 +34,12 @@ from tensor_cuda import quant
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BEFORE_FUNCTIONAL = os.path.join(ROOT, "artifacts/apa_mf2/before/mf1_AB/tensor_cuda__tensor_cuda__functional.py")
+# APA-MF2.1: the refine-0.15 arm's selection moved to the definition (MF2.1 item 3), so
+# its "before" is now the MF2.1 quant.py with only the mask application reverted to the
+# additive form (artifacts/apa_mf2_1/variants/quant_defn_additive_mask.py); MF2's
+# variants/quant_item1.py carried MF2's one-pass selection. Same isolation as before.
 BEFORE_QUANT = {1.0: os.path.join(ROOT, "artifacts/apa_mf2/before/mf1_AB/tensor_cuda__tensor_cuda__quant.py"),
-                0.15: os.path.join(ROOT, "artifacts/apa_mf2/variants/quant_item1.py")}
+                0.15: os.path.join(ROOT, "artifacts/apa_mf2_1/variants/quant_defn_additive_mask.py")}
 DTYPES = ("float32", "bfloat16", "float16")
 
 

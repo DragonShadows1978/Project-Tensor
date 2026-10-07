@@ -136,7 +136,7 @@ _SEL_CACHE = {}
 
 
 def _bk4_rows(L, S, dev, is_causal):
-    """Cached (count (L,1), visible 0/1 (L,S) or None) fp32 tensors for the BK4 rule."""
+    """Cached (count (L,1), visible 0/1 (L,S) or None) fp32 tensors for the selection."""
     key = (L, S, dev, bool(is_causal))
     t = _SEL_CACHE.get(key)
     if t is None:
@@ -154,27 +154,35 @@ def _bk4_rows(L, S, dev, is_causal):
     return t
 
 
-def _bk4_selection(qf, kqf, scale, z, is_causal, bulk32=None):
-    """APA-MF2: the fused BK4 refine selection, composed from engine ops.
+def _definition_selection(qf, kqf, scale, z, is_causal, bulk32=None):
+    """APA-MF2.1 item 3: the refine selection IS the definition, composed from engine ops.
 
-    Rule (kernels.cu bk4::forward :8064-8077 and :8112-8114), transcribed literally:
-      b    = fl32(q . kq * scale)   the UNROUNDED fp32 dot (B1; never the bf16/fp16-stored bulk)
-      a    = |b| over VISIBLE keys only; count = S-L+i+1 (causal) or S
-      mean = sum(a) / count; var = max(sum(a^2) / count - mean^2, 0)   population
-             one-pass moments with the kernel's clamp, in BOTH branches (B2), IEEE div
-      th   = mean + z * sqrt(var)                                      IEEE sqrt
-      sel  = visible && a >= th                                        (B3; >=)
+    Definition (orders/APA_MF2_1_REVIEW_FIXES.md, Measures 3):
+      b    = fp32 bulk dot q . kq * scale   (B1: never the 16-bit stored bulk)
+      a    = |b|; visible = bottom-right causal (j <= S-L+i) or all S; cnt = #visible
+      mean = sum_vis(a) / cnt                                  population
+      var  = sum_vis((a - mean)^2) / cnt                       CENTERED two-pass
+      thr  = mean + z * sqrt(var)
+      sel  = visible && a >= thr                               (B3; >=)
     qf/kqf: fp32 (B,H,L,D)/(B,H,S,D), no grad. bulk32: optional precomputed fp32 b.
     Returns the fp32 0/1 selection (B,H,L,S).
 
-    Not bit-exact by construction (APA-MF2 probe P0, logs/apa_mf2_p0_probe_*.log):
-    BK4's dot is a bf16 WMMA accumulation (bk3::scores), this one is cuBLAS SGEMM
-    (R1); BK4 sums sequentially with FFMA squares and fuses var/th with FFMA (R2/R3).
-    The residual is an ulp-band tie at the threshold, measured in the MF2 receipts.
+    MF2 transcribed BK4's ONE-PASS moments (sum a^2/cnt - mean^2, clamped). The MF2
+    review (F2) showed that form cancels catastrophically on near-ties (constant |b|
+    rows: fp32 var > 0, threshold 5.5e-3 above every key, 0 of 2048 selected); the
+    centered form gives var = 0 exactly there. BK4 'h'/'a' keep their one-pass FMA
+    statistics (not changed here); their deviation from this definition is reported.
+    The deviation d is zeroed off the visible set by a 0/1 product (finite d), and the
+    stats-mask masked_fill on |b| stays the helper's last masked_fill (MF1 tests
+    observe it). Remaining difference to the fp64 definition: fp32 SGEMM dot and
+    reduction rounding (tie band, MF2.1 receipts).
 
-    Prior art: kernels.cu BK4 (Project-Tensor 2026), the rule matched; GRAPA
-    attention.py _visible_counts (visible-count statistics); FlashAttention-2
-    (Dao 2023) / 63960a4 bottom-right visibility. Engine-op composition: mine.
+    Prior art: centered two-pass variance (textbook); Chan, Golub & LeVeque (1983,
+    "Algorithms for computing the sample variance") analyse the one-pass cancellation
+    this removes; Welford (1962) is the one-pass stable alternative, not used here --
+    unverified, lead to check. Visible-count statistics: GRAPA attention.py
+    _visible_counts; bottom-right visibility: FlashAttention-2 (Dao 2023) / 63960a4.
+    Engine-op composition: mine.
     """
     from . import functional as F
     B, H, L, _ = qf.shape
@@ -189,12 +197,18 @@ def _bk4_selection(qf, kqf, scale, z, is_causal, bulk32=None):
         # bottom-right mask (fp32, nonzero == masked) is the predicate
         absb = absb.masked_fill(F._causal_mask(L, S, dev, "float32"), 0.0)
     mean = absb.sum([-1], True) / cnt
-    var = ((absb * absb).sum([-1], True) / cnt - mean * mean).relu()
+    dev_ = absb - mean
+    if vis is not None:
+        dev_ = dev_ * vis                    # invisible deviations -> 0 (0/1 product)
+    var = (dev_ * dev_).sum([-1], True) / cnt
     thr = mean + var.sqrt() * z
     sel = absb.ge(thr)
     if vis is not None:
         sel = sel * vis                      # visible && (0/1 product, never NaN)
     return sel
+
+
+_bk4_selection = _definition_selection      # MF2 name, kept for MF2 tests / review probes
 
 
 def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.15,
@@ -234,21 +248,20 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
         # Selection criterion must match the fused kernel, which thresholds on
         # |bulk| (the cheap quantized scores) and refines the keys it picks — you
         # cannot legitimately peek at the expensive |ranking| to decide whether to
-        # compute it. APA-MF2: the rule is the fused BK4 kernel's, transcribed in
-        # _bk4_selection (MF1 fix A's bottom-right stats mask and fix B's visible
-        # counts are kept; B1 fp32 unrounded dot, B2 one-pass moments in the
-        # non-causal branch too, B3 the visible predicate are added). In bf16/fp16
-        # the stored bulk is rounded, so the fp32 dot is recomputed from the exact
-        # fp32 upcasts of the SAME operands (query, key_quant) — the kernel's own.
+        # compute it. APA-MF2.1: the rule is the DEFINITION (_definition_selection:
+        # visible-count population mean/std, centered two-pass, of the fp32 |bulk|;
+        # visible && >=), not BK4's one-pass arithmetic (MF2 review F2). In
+        # bf16/fp16 the stored bulk is rounded, so the fp32 dot is recomputed from
+        # the exact fp32 upcasts of the SAME operands (query, key_quant).
         # The 0/1 mask is cast back to the operand dtype: tc.where dispatches on
         # the operand dtype and reads the condition buffer as that dtype.
         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
         if query.dtype == "float32":
-            mask = _bk4_selection(query, key_quant, scale, z, is_causal,
-                                  bulk32=bulk_raw.detach())
+            mask = _definition_selection(query, key_quant, scale, z, is_causal,
+                                         bulk32=bulk_raw.detach())
         else:
-            mask = _bk4_selection(query.detach().float(), key_quant.float(), scale, z,
-                                  is_causal)
+            mask = _definition_selection(query.detach().float(), key_quant.float(), scale, z,
+                                         is_causal)
         if bulk.dtype != "float32":
             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
         scores = tc.where(mask, ranking, bulk)
