@@ -33,7 +33,9 @@ def _ref(q, k, v, bits, pct, causal):
     bulk = np.einsum("bhld,bhsd->bhls", q, recon) * scale
     ranking = np.einsum("bhld,bhsd->bhls", q, k) * scale
     if causal:
-        cm = np.triu(np.full((q.shape[2], S), -1e9, np.float32), 1)
+        # APA-MF2.1 (review F9): BOTTOM-RIGHT like the engine and the statistics below
+        # (row i of L sees j <= S-L+i); was triu(k=1), top-left on S > L.
+        cm = np.triu(np.full((q.shape[2], S), -1e9, np.float32), 1 + (S - q.shape[2]))
         bulk = bulk + cm; ranking = ranking + cm
     if pct >= 1.0:
         scores = ranking
