@@ -557,8 +557,13 @@ __global__ void reduce_lastdim_kernel(const T* __restrict__ in,
   int64_t row = blockIdx.x;
   if (row >= n_rows) return;
   const T* p = in + row * R;
+  // APA-MF2.1 item 2 (review F1): max/min start at their identities -inf/+inf (was
+  // -3.4e38f/3.4e38f, which beat any row whose values all lie beyond it, e.g. a visible
+  // score -3.402e38 next to -inf masked entries -> softmax 0/0). Only the start value
+  // changed: the result is unchanged whenever the row max >= -3.4e38f (min <= 3.4e38f).
+  // Prior art: PyTorch amax / FlashAttention-2 (Dao 2023) running max m = -inf.
   float acc = MODE == 0 ? 0.f
-            : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
+            : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
   for (int64_t i = threadIdx.x; i < R; i += blockDim.x) {
     float v = ld<T>(p, i);
     if (MODE == 0) acc += v;
@@ -597,7 +602,8 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
     coord[d] = s.reduced[d] ? 0 : c;
     base += coord[d] * s.in_str[d];
   }
-  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
+  // APA-MF2.1 item 2: -inf/+inf identities (was -3.4e38f/3.4e38f); see reduce_lastdim_kernel.
+  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
   for (int64_t r = 0; r < s.red_size; ++r) {
     int64_t rr = r, off = 0;
     for (int d = s.ndim - 1; d >= 0; --d) {
@@ -5058,7 +5064,10 @@ __global__ void fused_sdpa_noncausal_kernel(
   // Each warp walks every nwarp-th key and maintains its own online-softmax
   // numerator/denominator. m and l are intentionally replicated across a
   // warp; each lane owns only values d=lane, lane+32, ... .
-  float m = -3.0e38f;
+  // APA-MF2.1 item 2: running max starts at -inf (was -3.0e38f; a fp32 score below it
+  // gave weight 0 to every key). Lk >= 1 is enforced by the launcher, so gmax is finite
+  // and an empty warp's rescale exp(-inf - gmax) = 0, as before.
+  float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
   float acc[ACCN];
@@ -5090,7 +5099,7 @@ __global__ void fused_sdpa_noncausal_kernel(
   // Merge the four warp-local online-softmax partials. Only lane zero owns
   // each warp's m/l state; output accumulators are already lane-disjoint.
   __shared__ float red[128];
-  red[tid] = lane == 0 ? m : -3.0e38f;
+  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
   __syncthreads();
   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
@@ -6173,7 +6182,7 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
 
   // Pass 2: blend + online softmax + V accumulation (fused_sdpa_noncausal
   // streaming state); bulk scores come from the shared cache.
-  float m = -3.0e38f;
+  float m = -INFINITY;  // APA-MF2.1 item 2: max identity (was -3.0e38f); Lk >= 1 enforced
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
   float acc[ACCN];
@@ -6215,7 +6224,7 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
 
   // Merge the four warp-local online-softmax partials (fused_sdpa_noncausal
   // merge, including the r2 barrier between the max and denom reductions).
-  red[tid] = lane == 0 ? m : -3.0e38f;
+  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
   __syncthreads();
   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
@@ -7222,7 +7231,12 @@ __global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S) {
   const T* xr = x + row * S;
   T* orow = o + row * S;
 
-  float mx = -3.0e38f;
+  // APA-MF2.1 item 2 (review F1): max starts at -inf (was -3.0e38f: a visible score
+  // below it -- fp32 -3.3e38, bf16 -3.38e38 -- left m at the sentinel, every exp
+  // underflowed and inv = 1/0 gave 0*inf = NaN). Unchanged for every row whose visible
+  // max >= -3.0e38f. A row whose visible entries are all -inf stays NaN (as before).
+  // Prior art: FlashAttention-2 (Dao 2023) m = -inf; PyTorch softmax -inf identity.
+  float mx = -INFINITY;
   for (int64_t c = threadIdx.x; c < visible; c += blockDim.x)
     mx = fmaxf(mx, ld<T>(xr, c));
   shm[threadIdx.x] = mx;

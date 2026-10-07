@@ -47,8 +47,9 @@ def _causal_mask(L, S, device, dtype):
         # fp16/bf16). A finite bias lets a large enough score win: masked score s
         # leaks once s - 1e4 approaches the visible max (review N1: K7 = 80008 e0
         # gave row 0 = 0.2797, not 0). -inf is exact zero weight for every finite
-        # score in every dtype; the engine softmaxes (ops.cpp softmax: max init
-        # -3.4e38; kernels.cu causal_softmax: max init -3e38) give exp(-inf) = 0
+        # score in every dtype; the engine softmaxes (ops.cpp softmax via reduce_max,
+        # kernels.cu causal_softmax; both start their max at -inf since APA-MF2.1 --
+        # were -3.4e38 / -3e38, review F1) give exp(-inf) = 0 for ANY finite visible max
         # and no NaN as long as the row has one visible key, i.e. for every S >= L
         # row. APA-MF2.1: S < L (rows with no visible key) is rejected with a
         # ValueError before any compute (_check_causal_lengths; was NaN under MF2,
