@@ -5065,8 +5065,13 @@ __global__ void fused_sdpa_noncausal_kernel(
   // numerator/denominator. m and l are intentionally replicated across a
   // warp; each lane owns only values d=lane, lane+32, ... .
   // APA-MF2.1 item 2: running max starts at -inf (was -3.0e38f; a fp32 score below it
-  // gave weight 0 to every key). Lk >= 1 is enforced by the launcher, so gmax is finite
-  // and an empty warp's rescale exp(-inf - gmax) = 0, as before.
+  // gave weight 0 to every key). APA-MF2.2 (re-review N1): Lk >= 1 does NOT make every
+  // score finite -- finite operands can overflow to a -inf score (fp32 1e20 * -1e20; a
+  // huge scale). The per-key step below is therefore guarded (FlashAttention-2 Check_inf):
+  // while the running max is still -inf, the exponent reference is 0, so corr and w are
+  // exp(-inf) = 0, never exp(-inf - -inf) = NaN. Whenever the row has a finite score,
+  // gmax is finite and a -inf-only or empty warp merges with rescale exp(-inf - gmax) = 0.
+  // A fully blocked row (every score -inf) is outside this guard (policy unchanged).
   float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
@@ -5084,8 +5089,15 @@ __global__ void fused_sdpa_noncausal_kernel(
     const float score = __shfl_sync(FULL, dot, 0) * scale;
 
     const float m_new = fmaxf(m, score);
-    const float corr = expf(m - m_new);
-    const float w = expf(score - m_new);
+    // APA-MF2.2 (N1) guard: m_new == -inf only while every score seen so far is -inf
+    // (then m == -inf too); reference 0 gives corr = w = 0 with l, acc still 0. Any
+    // finite m_new is used unchanged, so finite rows keep the exact MF2/fd32b6d bytes.
+    // Prior art: FlashAttention-2 (Dao 2023) softmax rescale "max == -inf ? 0 : max"
+    // (Check_inf); Milakov & Gimelshein (2018) online normalizer. Unverified -- lead to
+    // check. Taken: the guard; mine: its placement in this warp-streaming recurrence.
+    const float m_ref = m_new == -INFINITY ? 0.f : m_new;
+    const float corr = expf(m - m_ref);
+    const float w = expf(score - m_ref);
     l = l * corr + w;
     const T* vj = vbase + (int64_t)j * D;
     #pragma unroll
@@ -6182,7 +6194,10 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
 
   // Pass 2: blend + online softmax + V accumulation (fused_sdpa_noncausal
   // streaming state); bulk scores come from the shared cache.
-  float m = -INFINITY;  // APA-MF2.1 item 2: max identity (was -3.0e38f); Lk >= 1 enforced
+  // APA-MF2.1 item 2: max identity (was -3.0e38f). APA-MF2.2 (N1): Lk >= 1 does not make
+  // every score finite (fp32 overflow of finite operands; the fp16 bulk store rounds
+  // |score| > 65504 to -inf), so the per-key step is guarded as in fused_sdpa_noncausal.
+  float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
   float acc[ACCN];
@@ -6210,8 +6225,12 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
     }
 
     const float m_new = fmaxf(m, score);
-    const float corr = expf(m - m_new);
-    const float w = expf(score - m_new);
+    // APA-MF2.2 (N1) guard, FlashAttention-2 Check_inf (Dao 2023; unverified -- lead to
+    // check): reference 0 while the running max is -inf, so a -inf first score gives
+    // corr = w = 0 instead of NaN; finite m_new is used unchanged (bytes as MF2/fd32b6d).
+    const float m_ref = m_new == -INFINITY ? 0.f : m_new;
+    const float corr = expf(m - m_ref);
+    const float w = expf(score - m_ref);
     l = l * corr + w;
     const T* vj = vbase + (int64_t)j * D;
     #pragma unroll
