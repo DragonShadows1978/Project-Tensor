@@ -181,3 +181,97 @@ carry-overs (BK4 'h'/'a' statistics, −1e30 fused APA starts, argmax/topk start
 - flock(1)/timeout(1) — launchers.
 - Mine: the −inf-first sweep and its operand constructions, the range sweep patterns, mixed-magnitude/zero/near-tie-spread
   witnesses, the four-engine harnesses, the adjudication switches.
+
+---
+
+# Amendment 1 (`orders/APA_MF2_2_AMENDMENT_1.md`, sha256 `fda2447a…5238f`): fully blocked rows, special-row census
+
+Base: apa-mf2 86f0a18 content (kernels.cu `17c89f3c…`, quant.py `3ff09e9b…`, checked). Registration
+`artifacts/apa_mf2_2a/registration.json`, sha256 `1e4facbd51dcb8cd02375097c10d78845772db81c947bc4694918ab4a2e03d18`, hashed 19:25:47
+before any GPU command (its `registered_at` text says 19:26). Verdict `artifacts/apa_mf2_2a/verdict.json`.
+
+## A1. Pre-fix census (19:26–19:27)
+
+`scripts/apa_mf2_2a_census.{py,sh}`: one process per engine, 2376 cells per engine (paths × {all_blocked, all_masked,
+neg_inf_first, single_visible} × fp32/fp16/bf16 × D{64,96,128} × Lq{1,3} × S{1,2,33,1025}; score-input paths at D 64).
+Blocked scores are made from finite operands by overflow (attention paths) or literal −inf (softmax paths).
+`logs/apa_mf2_2a_census_compare_prefix.log`: fd32b6d finite / chain non-finite = 72 (MF2), 468 (MF2.1), 252 (MF2.2).
+- MF2.2's 252 = 180 fused-kernel fully blocked cells (144 all_blocked + 36 S=1 neg_inf_first, fp32/fp16; bf16 is rejected by
+  both kernels; fd32b6d gives 0 on all) + the 72 below. The 180 fused cells are item 3's target.
+- **72 cells, a second class found by the census:** causal paths (`sdpa_infer_causal`, `sdpa_grad_causal`, `apa_quant_attention`
+  p1.0/p0.15 causal), single_visible at Lq=3, S ∈ {33,1025}: rows 0–1 see only blocked keys. fd32b6d's finite output equals
+  V[S-1], a FUTURE key (checked: `0.9362, -0.6765, -0.5241, 0.4423` == V[32][:4]) — its finite additive mask leaked the masked key
+  (F4). NaN since MF2 66287b1 (predicate −inf mask). Outside the two fused kernels; reported, not fixed (registered rail).
+
+## A2. Tests first (19:28)
+
+`tensor_cuda/tests/test_apa_mf2_2a_blocked.py` (fully blocked rows = 0, a blocked row among ordinary rows,
+large-magnitude finite rows ±150/±300). `logs/apa_mf2_2a_testsfirst_mf2_2.log:976` "39 failed, 8 passed, 12 skipped" on the
+original MF2.2 engine (bc7ed2a9). 4 of the 39 were invalid: int4_partial with literal −inf keys is a NaN row (INT4 packer:
+amax inf → NaN codes), NaN on fd32b6d and MF2 as well (`logs/apa_mf2_2a_literal_inf_check.log`); that construction is now
+skipped with the receipt cited. v2 (MF2.2 rebuild): `logs/apa_mf2_2a_testsfirst_mf2_2_v2.log:1036` "35 failed, 8 passed, 16 skipped".
+
+## A3. Item 3 (`artifacts/apa_mf2_2a/item3.patch`, 19:29)
+
+Merge only, both kernels: `const float g_ref = gmax == -INFINITY ? 0.f : gmax; const float rescale = expf(m - g_ref);`
+(`kernels.cu:5131-5132`, `:6263-6264`), non-comment +4 −2. The item-1 comment now points to the merge. The final normalizer was
+already guarded (`inv_denom = red[0] > 0.f ? 1.f / red[0] : 0.f`). Start −inf and the N1 guard unchanged.
+`logs/apa_mf2_2a_patch.log:2` "ITEM3 PATCH REPRODUCES TREE: True (base 17c89f3c -> d9d9851818f2b410)".
+After engine `artifacts/apa_mf2_2a/build` `ccc9f8d2…` (`logs/apa_mf2_2a_build.log`).
+`logs/apa_mf2_2a_tests_after_v2.log:4` "146 passed, 16 skipped" (item-3 tests + MF2.2 N1 tests).
+
+Prior art: FlashAttention-2 (Dao 2023) split-KV combine / `Check_inf` guard (max == −inf → 0). Unverified — lead to check
+("flash-attention combine lse -inf guard", "softmax.h Check_inf"). Taken: the guard. Mine: its placement in this warp merge.
+
+## A4. SEAT ERROR: the MF2.2 engine binary was overwritten (19:29)
+
+In the same command as the after build I ran a stray `bash scripts/apa_mf2_2_build.sh` with no `APA_MF2_2_BUILD_DIR`, which
+rebuilt the default `artifacts/apa_mf2_2/build` from the item-3 sources (module `da897f7e…`), destroying the MF2.2 engine
+`bc7ed2a9…`. That directory is outside this amendment's writable list. No copy survived (searched the fork and /tmp). Builds
+here are not byte-reproducible (identical item-3 sources gave `da897f7e` and `ccc9f8d2`), so `bc7ed2a9` cannot be recreated.
+- Receipts made with `bc7ed2a9` predate it: MF2.2 census arm (mtime 19:27:00), item-3 tests-first (19:28:10), and every MF2.2
+  receipt of the main order.
+- Remediation: the mis-built dir → `/mnt/ForgeRealm/DELETE_ME/20261007-193132_apa-mf2-2a_build` (delete-me, session apa-mf2-2a;
+  manifest copy `logs/apa_mf2_2a_misbuild_manifest.json`); MF2.2 sources rebuilt from a scratch root (18 sources == MF2.1
+  manifest, kernels.cu == `17c89f3c`, asserted) into `artifacts/apa_mf2_2/build` → `320932d9…` (`logs/apa_mf2_2a_rebuild_mf2_2.log`).
+- Equivalence: the rebuild's census equals the original `bc7ed2a9` census on 2376/2376 cells; G3 compares after against BOTH
+  the original's recorded identity arm and a fresh rebuild arm.
+- `artifacts/apa_mf2_2/verdict.json` still names `bc7ed2a9` for that path; not edited (outside the writable list) — lead to annotate.
+
+## A5. Census with after; G2 (19:33)
+
+`logs/apa_mf2_2a_census_compare.log`; `artifacts/apa_mf2_2a/census/compare_20261007T2327Z.json:843-845` "fd32b6d_finite_after_nonfinite":
+{"count": 72, …} → **G2 RED**; `:1077-1079` "fd32b6d_nonfinite_after_differs_from_mf2_2": {"count": 0} (forbidden-change check holds);
+`:1083` "equal": 216 (fused all_blocked incl. the noncausal SDPA route, after == fd32b6d bytes).
+`artifacts/apa_mf2_2a/census_table.md:1-2` "Fused fully-blocked cells (all_blocked + S=1 neg_inf_first): 180; after bytes ==
+fd32b6d: 180", "after differs from MF2.2 on any other cell: 0 []". Condensed table: `artifacts/apa_mf2_2a/census_condensed.md`.
+The 72 RED cells are exactly the causal class of §A1 (18 per path), unchanged since MF2.
+
+## A6. G3 identity (19:34)
+
+`artifacts/apa_mf2_2a/identity/g3_20261007T233445Z.json:25,30` "equal": 882 / "equal": 522 vs the original MF2.2 arm (bc7ed2a9),
+`:35,40` the same vs the rebuild, `:44` "n1_witnesses_exactly_one": true, `:108` "G3_pass": true. Observations on after: F1 fused
+rows 1.0, fully blocked overflow rows 0.0 (were NaN).
+
+## A7. G1 (19:35–19:37)
+
+`logs/apa_mf2_2a_g1_compare.log:2` "37 failed, 1694 passed, 46 skipped, 2 warnings, 15 errors", `:3` "baseline ids 52 now ids 52",
+`:7` "G1 PASS". Side effect: 17 `artifacts/wo*.ppm` regenerated.
+
+## A8. Mutation (19:38–19:40)
+
+`scripts/apa_mf2_2a_mutation.py`, scratch `/tmp/claude-1000/apa_mf2_2a_mut`, baseline "146 passed, 16 skipped"
+(`logs/apa_mf2_2a_mutation_baseline.log`). A1/A2 guard removed, A3/A4 constant reference 0, A5 N1 guard removed, A6 start
+−3.0e38f: all KILLED; `artifacts/apa_mf2_2a/mutation/summary.json:5` "rate": 1.0. Prior art: DeMillo, Lipton & Sayward (1978) — unverified.
+
+## A9. Open items for David (amendment)
+
+- G2 RED class: causal rows whose every visible key is blocked — fd32b6d leaked a future key, the chain gives NaN since MF2.
+  Choose (a) NaN as the documented policy or (b) 0 (FlashAttention-2 convention): zero the weights of rows whose visible max is
+  −inf in `functional.scaled_dot_product_attention` (causal composed + grad) and `quant.apa_quant_attention` — outside this
+  amendment's scope. Restoring fd32b6d's value would re-open F4.
+- NaN rows where fd32b6d is also NaN are recorded and unchanged (eager/causal softmax, composed SDPA, apa_quant on all −inf rows;
+  additive all-masked rows; int4_partial with −inf key components; +inf/NaN scores).
+
+Scratch (all /tmp): `/tmp/claude-1000/apa_mf2_2_rebuild_src`, `/tmp/claude-1000/apa_mf2_2a_mut`, `/tmp/claude-1000/apa_mf2_2a_patchchk`,
+`/tmp/claude-1000/apa_mf2_2a_literal_check.py`.

@@ -1,0 +1,1036 @@
+FFFFFFFFFFFFFFFFFsFsFsFsFsFsFsFsFsFsFsFsFsFsFsFsFFF........              [100%]
+=================================== FAILURES ===================================
+___________ test_fully_blocked_row_is_zero[float32-sdpa-1-overflow] ____________
+
+dt = 'float32', op = 'sdpa', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d74379fa50>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d74379fa50> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+____________ test_fully_blocked_row_is_zero[float32-sdpa-1-literal] ____________
+
+dt = 'float32', op = 'sdpa', S = 1, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=1 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2da70>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2da70> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float32-sdpa-2-overflow] ____________
+
+dt = 'float32', op = 'sdpa', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2db90>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2db90> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+____________ test_fully_blocked_row_is_zero[float32-sdpa-2-literal] ____________
+
+dt = 'float32', op = 'sdpa', S = 2, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=2 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2e4f0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2e4f0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float32-sdpa-33-overflow] ___________
+
+dt = 'float32', op = 'sdpa', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2ea30>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2ea30> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float32-sdpa-33-literal] ____________
+
+dt = 'float32', op = 'sdpa', S = 33, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=33 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2eeb0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2eeb0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+__________ test_fully_blocked_row_is_zero[float32-sdpa-1025-overflow] __________
+
+dt = 'float32', op = 'sdpa', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2efd0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2efd0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+__________ test_fully_blocked_row_is_zero[float32-sdpa-1025-literal] ___________
+
+dt = 'float32', op = 'sdpa', S = 1025, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 sdpa S=1025 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2f4b0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2f4b0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float32-int4_all-1-overflow] __________
+
+dt = 'float32', op = 'int4_all', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2fab0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2fab0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+__________ test_fully_blocked_row_is_zero[float32-int4_all-1-literal] __________
+
+dt = 'float32', op = 'int4_all', S = 1, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=1 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2fed0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2fed0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float32-int4_all-2-overflow] __________
+
+dt = 'float32', op = 'int4_all', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2ebb0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2ebb0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+__________ test_fully_blocked_row_is_zero[float32-int4_all-2-literal] __________
+
+dt = 'float32', op = 'int4_all', S = 2, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=2 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2e8b0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2e8b0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float32-int4_all-33-overflow] _________
+
+dt = 'float32', op = 'int4_all', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2dcb0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2dcb0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float32-int4_all-33-literal] __________
+
+dt = 'float32', op = 'int4_all', S = 33, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=33 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d74379fb10>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d74379fb10> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+________ test_fully_blocked_row_is_zero[float32-int4_all-1025-overflow] ________
+
+dt = 'float32', op = 'int4_all', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b64450>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b64450> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+________ test_fully_blocked_row_is_zero[float32-int4_all-1025-literal] _________
+
+dt = 'float32', op = 'int4_all', S = 1025, how = 'literal'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_all S=1025 D=64 Lq=1 literal: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b64870>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b64870> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float32-int4_partial-1-overflow] ________
+
+dt = 'float32', op = 'int4_partial', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_partial S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b64cf0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b64cf0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float32-int4_partial-2-overflow] ________
+
+dt = 'float32', op = 'int4_partial', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_partial S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b65110>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b65110> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float32-int4_partial-33-overflow] _______
+
+dt = 'float32', op = 'int4_partial', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_partial S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2dad0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2dad0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+______ test_fully_blocked_row_is_zero[float32-int4_partial-1025-overflow] ______
+
+dt = 'float32', op = 'int4_partial', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float32 int4_partial S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2e3d0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2e3d0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float16-sdpa-1-overflow] ____________
+
+dt = 'float16', op = 'sdpa', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 sdpa S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2e910>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2e910> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float16-sdpa-2-overflow] ____________
+
+dt = 'float16', op = 'sdpa', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 sdpa S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2e610>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2e610> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+___________ test_fully_blocked_row_is_zero[float16-sdpa-33-overflow] ___________
+
+dt = 'float16', op = 'sdpa', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 sdpa S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b2fbd0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b2fbd0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+__________ test_fully_blocked_row_is_zero[float16-sdpa-1025-overflow] __________
+
+dt = 'float16', op = 'sdpa', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 sdpa S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b66010>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b66010> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float16-int4_all-1-overflow] __________
+
+dt = 'float16', op = 'int4_all', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_all S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b661f0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b661f0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float16-int4_all-2-overflow] __________
+
+dt = 'float16', op = 'int4_all', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_all S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b65110>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b65110> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________ test_fully_blocked_row_is_zero[float16-int4_all-33-overflow] _________
+
+dt = 'float16', op = 'int4_all', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_all S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b649f0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b649f0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+________ test_fully_blocked_row_is_zero[float16-int4_all-1025-overflow] ________
+
+dt = 'float16', op = 'int4_all', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_all S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b64510>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b64510> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float16-int4_partial-1-overflow] ________
+
+dt = 'float16', op = 'int4_partial', S = 1, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_partial S=1 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b667f0>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b667f0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float16-int4_partial-2-overflow] ________
+
+dt = 'float16', op = 'int4_partial', S = 2, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_partial S=2 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b66c10>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b66c10> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_______ test_fully_blocked_row_is_zero[float16-int4_partial-33-overflow] _______
+
+dt = 'float16', op = 'int4_partial', S = 33, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_partial S=33 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b66e50>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b66e50> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+______ test_fully_blocked_row_is_zero[float16-int4_partial-1025-overflow] ______
+
+dt = 'float16', op = 'int4_partial', S = 1025, how = 'overflow'
+
+    @pytest.mark.parametrize("how", ["overflow", "literal"])
+    @pytest.mark.parametrize("S", [1, 2, 33, 1025])
+    @pytest.mark.parametrize("op", OPS)
+    @pytest.mark.parametrize("dt", ["float32", "float16"])
+    def test_fully_blocked_row_is_zero(dt, op, S, how):
+        if how == "literal" and dt == "float16":
+            pytest.skip("literal -inf operands: fp32 only (fp16 overflow construction covers fp16)")
+        if how == "literal" and op == "int4_partial":
+            # A -inf key component makes the INT4 packer's scale inf and its codes NaN: the bulk score is
+            # NaN, not -inf -- a NaN row, not a blocked row. fd32b6d and MF2 return NaN there too
+            # (logs/apa_mf2_2a_literal_inf_check.log); such outputs are recorded, not changed.
+            pytest.skip("literal -inf K -> NaN INT4 codes (NaN on fd32b6d too); overflow construction covers int4_partial")
+        for D in (64, 96, 128):
+            for Lq in (1, 3):
+                q, k, v, scale = _blocked(dt, S, D, Lq, how, S + D + Lq)
+                o = _run(op, *[tc.tensor(x, dtype=dt) for x in (q, k, v)], scale).float().numpy()
+>               assert np.isfinite(o).all() and np.all(o == 0.0), f"{dt} {op} S={S} D={D} Lq={Lq} {how}: {o.reshape(-1)[:4]}"
+E               AssertionError: float16 int4_partial S=1025 D=64 Lq=1 overflow: [nan nan nan nan]
+E               assert (np.False_)
+E                +  where np.False_ = <built-in method all of numpy.ndarray object at 0x73d725b67270>()
+E                +    where <built-in method all of numpy.ndarray object at 0x73d725b67270> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]).all
+E                +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ... False, False, False, False, False, False, False,\n          False, False, False, False, False, False, False, False]]]]) = <ufunc 'isfinite'>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32))
+E                +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:72: AssertionError
+_________________ test_blocked_row_next_to_ordinary_rows[sdpa] _________________
+
+op = 'sdpa'
+
+    @pytest.mark.parametrize("op", OPS)
+    def test_blocked_row_next_to_ordinary_rows(op):
+        """One fully blocked query row among ordinary rows: the others stay correct (fp64 oracle)."""
+        D, S = 64, 33
+        rng = np.random.default_rng(3)
+        q = rng.normal(0, 1, (1, 1, 3, D)).astype(np.float32); q[0, 0, 1] = 0; q[0, 0, 1, 0] = 1e20
+        k = rng.normal(0, 0.3, (1, 1, S, D)).astype(np.float32); k[..., 0] = -1e20 if op != "int4_partial" else 0.0
+        if op == "int4_partial":
+            k = np.zeros_like(k); k[..., 0] = -1e20; q = np.zeros_like(q); q[0, 0, 0, 1] = 1; q[0, 0, 2, 1] = 1
+            q[0, 0, 1, 0] = 1e20
+        v = rng.normal(0, 1, (1, 1, S, D)).astype(np.float32)
+        o = _run(op, *[tc.tensor(x) for x in (q, k, v)], 1.0).numpy()[0, 0]
+>       assert np.all(o[1] == 0.0), o[1, :4]
+E       AssertionError: array([nan, nan, nan, nan], dtype=float32)
+E       assert np.False_
+E        +  where np.False_ = <function all at 0x73d7441a1070>(array([nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan,... nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],\n      dtype=float32) == 0.0)
+E        +    where <function all at 0x73d7441a1070> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:87: AssertionError
+_______________ test_blocked_row_next_to_ordinary_rows[int4_all] _______________
+
+op = 'int4_all'
+
+    @pytest.mark.parametrize("op", OPS)
+    def test_blocked_row_next_to_ordinary_rows(op):
+        """One fully blocked query row among ordinary rows: the others stay correct (fp64 oracle)."""
+        D, S = 64, 33
+        rng = np.random.default_rng(3)
+        q = rng.normal(0, 1, (1, 1, 3, D)).astype(np.float32); q[0, 0, 1] = 0; q[0, 0, 1, 0] = 1e20
+        k = rng.normal(0, 0.3, (1, 1, S, D)).astype(np.float32); k[..., 0] = -1e20 if op != "int4_partial" else 0.0
+        if op == "int4_partial":
+            k = np.zeros_like(k); k[..., 0] = -1e20; q = np.zeros_like(q); q[0, 0, 0, 1] = 1; q[0, 0, 2, 1] = 1
+            q[0, 0, 1, 0] = 1e20
+        v = rng.normal(0, 1, (1, 1, S, D)).astype(np.float32)
+        o = _run(op, *[tc.tensor(x) for x in (q, k, v)], 1.0).numpy()[0, 0]
+>       assert np.all(o[1] == 0.0), o[1, :4]
+E       AssertionError: array([nan, nan, nan, nan], dtype=float32)
+E       assert np.False_
+E        +  where np.False_ = <function all at 0x73d7441a1070>(array([nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan,... nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],\n      dtype=float32) == 0.0)
+E        +    where <function all at 0x73d7441a1070> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:87: AssertionError
+_____________ test_blocked_row_next_to_ordinary_rows[int4_partial] _____________
+
+op = 'int4_partial'
+
+    @pytest.mark.parametrize("op", OPS)
+    def test_blocked_row_next_to_ordinary_rows(op):
+        """One fully blocked query row among ordinary rows: the others stay correct (fp64 oracle)."""
+        D, S = 64, 33
+        rng = np.random.default_rng(3)
+        q = rng.normal(0, 1, (1, 1, 3, D)).astype(np.float32); q[0, 0, 1] = 0; q[0, 0, 1, 0] = 1e20
+        k = rng.normal(0, 0.3, (1, 1, S, D)).astype(np.float32); k[..., 0] = -1e20 if op != "int4_partial" else 0.0
+        if op == "int4_partial":
+            k = np.zeros_like(k); k[..., 0] = -1e20; q = np.zeros_like(q); q[0, 0, 0, 1] = 1; q[0, 0, 2, 1] = 1
+            q[0, 0, 1, 0] = 1e20
+        v = rng.normal(0, 1, (1, 1, S, D)).astype(np.float32)
+        o = _run(op, *[tc.tensor(x) for x in (q, k, v)], 1.0).numpy()[0, 0]
+>       assert np.all(o[1] == 0.0), o[1, :4]
+E       AssertionError: array([nan, nan, nan, nan], dtype=float32)
+E       assert np.False_
+E        +  where np.False_ = <function all at 0x73d7441a1070>(array([nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan,... nan, nan, nan, nan, nan, nan,\n       nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan],\n      dtype=float32) == 0.0)
+E        +    where <function all at 0x73d7441a1070> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2a_blocked.py:87: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-1-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-2-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-33-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-sdpa-1025-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-1-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-2-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-33-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_all-1025-literal]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_partial-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_partial-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_partial-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float32-int4_partial-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-sdpa-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-sdpa-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-sdpa-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-sdpa-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_all-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_all-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_all-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_all-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_partial-1-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_partial-2-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_partial-33-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_fully_blocked_row_is_zero[float16-int4_partial-1025-overflow]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_blocked_row_next_to_ordinary_rows[sdpa]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_blocked_row_next_to_ordinary_rows[int4_all]
+FAILED tensor_cuda/tests/test_apa_mf2_2a_blocked.py::test_blocked_row_next_to_ordinary_rows[int4_partial]
+35 failed, 8 passed, 16 skipped in 0.62s
