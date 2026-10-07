@@ -1,0 +1,151 @@
+FFFF........F.F...........F.......................                       [100%]
+=================================== FAILURES ===================================
+___________ test_bf16_selection_equals_bk4_kernel_mask[1-1-64-True] ____________
+
+L = 1, S = 1, D = 64, causal = True
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 2 selection bits differ from BK4 'h' (L1 S1 D64 causal=True)
+E       assert 2 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+___________ test_bf16_selection_equals_bk4_kernel_mask[1-1-64-False] ___________
+
+L = 1, S = 1, D = 64, causal = False
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 2 selection bits differ from BK4 'h' (L1 S1 D64 causal=False)
+E       assert 2 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+___________ test_bf16_selection_equals_bk4_kernel_mask[1-1-128-True] ___________
+
+L = 1, S = 1, D = 128, causal = True
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 1 selection bits differ from BK4 'h' (L1 S1 D128 causal=True)
+E       assert 1 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+__________ test_bf16_selection_equals_bk4_kernel_mask[1-1-128-False] ___________
+
+L = 1, S = 1, D = 128, causal = False
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 1 selection bits differ from BK4 'h' (L1 S1 D128 causal=False)
+E       assert 1 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+___________ test_bf16_selection_equals_bk4_kernel_mask[3-3-64-True] ____________
+
+L = 3, S = 3, D = 64, causal = True
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 1 selection bits differ from BK4 'h' (L3 S3 D64 causal=True)
+E       assert 1 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+___________ test_bf16_selection_equals_bk4_kernel_mask[3-3-128-True] ___________
+
+L = 3, S = 3, D = 128, causal = True
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 1 selection bits differ from BK4 'h' (L3 S3 D128 causal=True)
+E       assert 1 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+__________ test_bf16_selection_equals_bk4_kernel_mask[64-64-128-True] __________
+
+L = 64, S = 64, D = 128, causal = True
+
+    @pytest.mark.parametrize("L,S,D,causal", CELLS)
+    def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
+        """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
+        q, k, v = bf16_operands(L, S, D)
+        qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
+        R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
+        kq = quant._quantize_keys(kt, R, CB, BND)
+        km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
+        sel, out = selection_of(qt, kt, vt, causal)
+        sel = np.broadcast_to(sel, km.shape)
+        mism = int((sel != km).sum())
+>       assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
+E       AssertionError: 2 selection bits differ from BK4 'h' (L64 S64 D128 causal=True)
+E       assert 2 == 0
+
+tensor_cuda/tests/test_apa_mf2_rule.py:100: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[1-1-64-True]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[1-1-64-False]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[1-1-128-True]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[1-1-128-False]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[3-3-64-True]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[3-3-128-True]
+FAILED tensor_cuda/tests/test_apa_mf2_rule.py::test_bf16_selection_equals_bk4_kernel_mask[64-64-128-True]
+7 failed, 43 passed in 3.87s

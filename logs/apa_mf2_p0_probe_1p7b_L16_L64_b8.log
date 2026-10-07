@@ -1,0 +1,40 @@
+{
+ "model": "Qwen3-1.7B",
+ "layer": 16,
+ "L": 64,
+ "S": 8192,
+ "bits": 8,
+ "kv_heads": 2,
+ "h_vs_a_mask_mismatch": 0,
+ "h_vs_a_thr_bits_differ": 124,
+ "sgemm_alpha_equals_fl32(dot*scale)": true,
+ "dots": {
+  "n": 1048576,
+  "abs_wmma_vs_abs_sgemm_bits_differ": 790965,
+  "abs_sgemm_vs_exact_rounded_differ": 644285,
+  "abs_wmma_vs_exact_rounded_differ": 869758
+ },
+ "transcription_wmma_dots": {
+  "thr_bits_differ_vs_h": 0,
+  "mask_mismatch_vs_h": 0,
+  "mask_mismatch_vs_a": 0
+ },
+ "transcription_sgemm_dots": {
+  "thr_bits_differ_vs_h": 110,
+  "mask_mismatch_vs_h": 0,
+  "mask_mismatch_vs_a": 0
+ },
+ "engine_candidates": {
+  "tree_sum_mulinv": {
+   "thr_bits_differ_vs_h": 123,
+   "mask_mismatch_vs_h": 1,
+   "max_rel_gap_of_mismatches": 1.13726707695605e-06
+  },
+  "cumsum_seq_noFMAsq_emuthr": {
+   "thr_bits_differ_vs_h": 106,
+   "mask_mismatch_vs_h": 0,
+   "max_rel_gap_of_mismatches": 0.0
+  }
+ },
+ "t_s": 1.4438092708587646
+}

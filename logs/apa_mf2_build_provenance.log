@@ -1,0 +1,8 @@
+# APA-MF2 build provenance vs MF1 (host build, no GPU)
+mf2 .so sha256 8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a ; mf1 8a13e5b33a86f9d8f70da26d9730ad27acdaf7746166fafe36ac99d3b97cc437 -> DIFFERENT
+source sha256: 19/19 identical (artifacts/apa_mf2/build/manifest.json vs wt_mf1 artifacts/apa_mf1/build/manifest.json)
+g++ objects autograd.o bindings.o ops.o: byte-identical; every nvcc -dc object differs
+matmul.o differing strings: nvcc module id _e3387997_9_matmul_cu_0a37d760 vs _50ac5454_9_matmul_cu_0a37d760; tmpxft_0037c02e vs tmpxft_00016fa3
+kernels.o SASS: raw diff 868 lines; after s/_[0-9a-f]{8}_[0-9]+_kernels_cu_[0-9a-f]{8}/MODID/: 0 lines
+matmul.o SASS diff lines: 0
+CONCLUSION: device code identical; .so hash differs only by nvcc per-compilation module-id/tmpxft strings (non-reproducible nvcc naming)

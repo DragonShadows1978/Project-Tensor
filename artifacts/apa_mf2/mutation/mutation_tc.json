@@ -1,0 +1,114 @@
+{
+ "mode": "tc",
+ "baseline": {
+  "tensor_cuda": {
+   "n": 258,
+   "passed": 251,
+   "failing_ids": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-1-128-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-1-128-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-1-64-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-1-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-3-128-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-3-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-64-128-True]"
+   ]
+  }
+ },
+ "mutants": {
+  "M1_bf16_bulk_for_stats": {
+   "verdict": "KILLED",
+   "killing_tests": 18,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-64-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-64-64-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-64-128-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-65-64-True]"
+   ],
+   "file": "quant.py"
+  },
+  "M2_visible_predicate_dropped": {
+   "verdict": "KILLED",
+   "killing_tests": 3,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[float32]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[bfloat16]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[float16]"
+   ],
+   "file": "quant.py"
+  },
+  "M3_sample_variance": {
+   "verdict": "KILLED",
+   "killing_tests": 31,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-9-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-9-64-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-3-64-False]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-3-128-False]"
+   ],
+   "file": "quant.py"
+  },
+  "M4_bias_back_to_minus_1e4": {
+   "verdict": "KILLED",
+   "killing_tests": 15,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_mask::test_causal_mask_is_zero_or_minus_inf_bottom_right[3-3-float32]",
+    "tensor_cuda.tests.test_apa_mf2_mask::test_causal_mask_is_zero_or_minus_inf_bottom_right[3-3-bfloat16]",
+    "tensor_cuda.tests.test_apa_mf2_mask::test_causal_mask_is_zero_or_minus_inf_bottom_right[3-3-float16]",
+    "tensor_cuda.tests.test_apa_mf2_mask::test_causal_mask_is_zero_or_minus_inf_bottom_right[3-4-float32]"
+   ],
+   "file": "functional.py"
+  },
+  "M6_count_off_by_one": {
+   "verdict": "KILLED",
+   "killing_tests": 20,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[1-9-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-4-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-4-128-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[3-17-128-True]"
+   ],
+   "file": "quant.py"
+  },
+  "M7_gt_instead_of_ge": {
+   "verdict": "KILLED",
+   "killing_tests": 4,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_bf16_selection_equals_bk4_kernel_mask[64-64-64-True]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[float32]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[bfloat16]",
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b3_zero_threshold_selects_only_visible[float16]"
+   ],
+   "file": "quant.py"
+  },
+  "M8_clamp_dropped": {
+   "verdict": "KILLED",
+   "killing_tests": 1,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b2_noncausal_population_one_pass_moments"
+   ],
+   "file": "quant.py"
+  },
+  "M9_noncausal_centered": {
+   "verdict": "KILLED",
+   "killing_tests": 1,
+   "error_tests": 0,
+   "examples": [
+    "tensor_cuda.tests.test_apa_mf2_rule::test_b2_noncausal_population_one_pass_moments"
+   ],
+   "file": "quant.py"
+  }
+ },
+ "killed": 8,
+ "survived": 0,
+ "error": 0,
+ "kill_rate_non_error": 1.0,
+ "gate_ge_0_80": true
+}

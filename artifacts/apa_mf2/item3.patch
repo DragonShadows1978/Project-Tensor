@@ -1,0 +1,177 @@
+--- a/apa_cuda/csrc/apa.cpp
++++ b/apa_cuda/csrc/apa.cpp
+@@ -182,14 +182,22 @@
+ }
+ 
+ // Apply causal + additive attn_mask to a (B,H,rows,S) score tensor in place
+-// of the caller's choosing. row_base is the global index of the first row.
++// of the caller's choosing. row_base is the global index of the first row
++// among the L query rows of the call.
++// APA-MF2 item 3: BOTTOM-RIGHT causal. The L queries are the LAST L of the S
++// positions, so query row r (0..L-1) sits at absolute position S-L+r and sees
++// keys j <= S-L+r (S == L: the usual j <= r). Was ri = row_base..row_base+rows,
++// i.e. TOP-LEFT: on S > L every row was blind to the prefix (review M1: L3 S9,
++// Q=K=0, V_j=j gave [0,.5,1], not [3,3.5,4]). Same convention as
++// tensor_cuda functional._causal_mask (k = 1 + S - L). Prior art: 63960a4;
++// FlashAttention-2 v2.1 bottom-right causal (Dao 2023).
+ at::Tensor apply_masks(at::Tensor scores, bool is_causal,
+                        const c10::optional<at::Tensor>& attn_mask,
+-                       int64_t row_base, int64_t rows, int64_t S,
++                       int64_t row_base, int64_t rows, int64_t S, int64_t L,
+                        c10::optional<at::Tensor>* out_causal_mask) {
+   if (is_causal) {
+     auto dev = scores.device();
+-    auto ri = at::arange(row_base, row_base + rows,
++    auto ri = at::arange(row_base + (S - L), row_base + (S - L) + rows,
+                          at::TensorOptions().dtype(at::kLong).device(dev))
+                   .view({rows, 1});
+     auto ci = at::arange(0, S, at::TensorOptions().dtype(at::kLong).device(dev))
+@@ -263,8 +271,8 @@
+     auto bulk = at::matmul(query, kq_t) * scale;     // (B,H,L,S)
+     auto ranking = at::matmul(query, k_t) * scale;
+     c10::optional<at::Tensor> causal_mask;
+-    bulk = apply_masks(bulk, is_causal, attn_mask, 0, L, S, &causal_mask);
+-    ranking = apply_masks(ranking, is_causal, attn_mask, 0, L, S, nullptr);
++    bulk = apply_masks(bulk, is_causal, attn_mask, 0, L, S, L, &causal_mask);
++    ranking = apply_masks(ranking, is_causal, attn_mask, 0, L, S, L, nullptr);
+ 
+     if (adaptive) {
+       auto conc = per_head_concentration(bulk);
+@@ -299,8 +307,8 @@
+       auto bulk = at::matmul(Qi, kq_t) * scale;       // (B,H,bl,S)
+       auto ranking = at::matmul(Qi, k_t) * scale;
+       c10::optional<at::Tensor> causal_mask;
+-      bulk = apply_masks(bulk, is_causal, attn_mask, i, bl, S, &causal_mask);
+-      ranking = apply_masks(ranking, is_causal, attn_mask, i, bl, S, nullptr);
++      bulk = apply_masks(bulk, is_causal, attn_mask, i, bl, S, L, &causal_mask);
++      ranking = apply_masks(ranking, is_causal, attn_mask, i, bl, S, L, nullptr);
+ 
+       if (adaptive && i == 0) {
+         auto conc = per_head_concentration(bulk);
+@@ -370,7 +378,7 @@
+ 
+     auto scores = at::matmul(Qi, k_t) * scale;  // (B,H,bl,S)
+     c10::optional<at::Tensor> causal_mask;
+-    scores = apply_masks(scores, is_causal, attn_mask, i, end_i - i, S, &causal_mask);
++    scores = apply_masks(scores, is_causal, attn_mask, i, end_i - i, S, L, &causal_mask);
+ 
+     auto attn_w = at::softmax(scores, -1);
+     // grad_v += attn_w^T @ dO
+--- /dev/null
++++ b/apa_cuda/tests/test_apa_mf2_extension.py
+@@ -0,0 +1,115 @@
++"""APA-MF2 item 3: apa_attention_cuda's causal mask is BOTTOM-RIGHT (row i of L
++queries sees keys j <= S-L+i), on the full path, the tiled forward and backward.
++
++Was apa.cpp:186-191 `ri = arange(row_base, row_base+rows); cmask = (ci > ri)`:
++TOP-LEFT, so rectangular calls were blind to the prefix (review M1: L3 S9, Q=K=0,
++V_j=j gave [0, .5, 1] instead of [3, 3.5, 4]).
++
++Module under test: the in-place build of apa_cuda (setup.py build_ext --inplace)
++if importable; otherwise, when APA_MF2_EXT_DIR is set, the APA-MF2 stub harness
++(the shipped csrc/apa.cpp compiled as a C++ torch extension with apa_kernels.cu
++replaced by an ATen transcription -- scripts/apa_mf2_ext_stub_kernels.cpp). The
++harness exercises apa.cpp's own mask code; it is NOT the shipped extension.
++
++Prior art: 63960a4 and FlashAttention-2 (Dao 2023) bottom-right convention. Closed
++forms (mean of visible V for Q=K=0) and the harness: mine.
++"""
++import os
++import sys
++
++import numpy as np
++import pytest
++
++torch = pytest.importorskip("torch")
++HERE = os.path.dirname(os.path.abspath(__file__))
++PKG = os.path.dirname(HERE)
++if os.environ.get("APA_MF2_EXT_DIR"):
++    sys.path.insert(0, os.environ["APA_MF2_EXT_DIR"])
++sys.path.insert(0, PKG)
++try:
++    import apa_attention_cuda  # noqa: F401
++except ImportError as exc:  # environment, not a pass: reported by the gate as not-run
++    pytest.skip(f"apa_attention_cuda not importable ({exc}); build it or set APA_MF2_EXT_DIR",
++                allow_module_level=True)
++if not torch.cuda.is_available():
++    pytest.skip("CUDA not available", allow_module_level=True)
++from apa_attention import apa_quant_attention  # noqa: E402
++
++
++def _t(a, grad=False):
++    return torch.tensor(a, device="cuda", requires_grad=grad)
++
++
++def _oracle(q, k, v, scale):
++    """fp64 exact attention, bottom-right causal, by explicit enumeration."""
++    q, k, v = (x.astype(np.float64) for x in (q, k, v))
++    L, S = q.shape[-2], k.shape[-2]
++    s = np.einsum("bhld,bhsd->bhls", q, k) * scale
++    vis = np.arange(S)[None, :] <= (S - L + np.arange(L))[:, None]
++    s = np.where(vis, s, -np.inf)
++    w = np.exp(s - s.max(-1, keepdims=True))
++    w /= w.sum(-1, keepdims=True)
++    return np.einsum("bhls,bhsd->bhld", w, v)
++
++
++def test_reviewer_m1_case():
++    L, S, D = 3, 9, 64
++    q = np.zeros((1, 1, L, D), np.float32); k = np.zeros((1, 1, S, D), np.float32)
++    v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 1, S, D)).copy()
++    out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
++    out = out.detach().cpu().numpy()
++    np.testing.assert_allclose(out[0, 0, :, 0], [3.0, 3.5, 4.0], atol=2e-5)
++    np.testing.assert_allclose(out[0, 0], np.broadcast_to(out[0, 0, :, :1], (L, D)), atol=0)
++
++
++@pytest.mark.parametrize("L,S", [(1, 7), (3, 9), (5, 5), (17, 40), (64, 200)])
++def test_rectangular_exact_path_matches_fp64(L, S):
++    rng = np.random.default_rng(L * 1000 + S)
++    q, k, v = (rng.standard_normal((1, 2, n, 32)).astype(np.float32) for n in (L, S, S))
++    out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
++    ref = _oracle(q, k, v, 32 ** -0.5)
++    err = np.abs(out.detach().cpu().numpy() - ref).max()
++    assert err <= 2e-5 + 2e-5 * np.abs(ref).max(), err
++
++
++@pytest.mark.parametrize("p", [1.0, 0.15])
++@pytest.mark.parametrize("L,S", [(3, 9), (40, 300)])
++def test_zero_scores_give_mean_of_visible_values(L, S, p):
++    """Q=K=0: every visible score is 0, so row i = mean_{j<=S-L+i} V_j whatever is refined."""
++    D = 32
++    q = np.zeros((1, 2, L, D), np.float32); k = np.zeros((1, 2, S, D), np.float32)
++    v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 2, S, D)).copy()
++    out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=p, is_causal=True)
++    expected = (S - L + np.arange(L)) / 2.0
++    np.testing.assert_allclose(out.detach().cpu().numpy()[0, :, :, 0],
++                               np.broadcast_to(expected, (2, L)), rtol=1e-6, atol=1e-5)
++
++
++def test_tiled_forward_and_backward_rectangular_closed_form():
++    """B*H*L*S*4 > 256 MiB selects the tiled path (apa.cpp use_tiled)."""
++    B, H, L, S, D = 1, 64, 513, 2057, 16
++    assert B * H * L * S * 4 > 256 * 1024 * 1024
++    q = _t(np.zeros((B, H, L, D), np.float32), grad=True)
++    k = _t(np.zeros((B, H, S, D), np.float32), grad=True)
++    vv = np.broadcast_to((np.arange(S, dtype=np.float32) / S)[None, None, :, None], (B, H, S, D)).copy()
++    v = _t(vv, grad=True)
++    out = apa_quant_attention(q, k, v, refine_percentile=1.0, is_causal=True)
++    rows = S - L + np.arange(L)
++    np.testing.assert_allclose(out.detach().cpu().numpy()[0, 0, :, 0], rows / (2.0 * S), rtol=1e-5, atol=1e-6)
++    out.sum().backward()
++    # dL/dV_j = sum_i w_ij = sum over rows i that see j of 1/(S-L+i+1)
++    w = 1.0 / (rows + 1.0)
++    gv = np.array([w[rows >= j].sum() for j in range(S)])
++    np.testing.assert_allclose(v.grad.detach().cpu().numpy()[0, 0, :, 0], gv, rtol=1e-4, atol=1e-6)
++
++
++def test_masked_keys_exactly_zero_on_partial_refine():
++    """V nonzero only on keys row 0 cannot see (j > S-L): row 0 output must be exactly 0."""
++    L, S, D = 5, 300, 32
++    rng = np.random.default_rng(3)
++    q, k = (rng.standard_normal((1, 2, n, D)).astype(np.float32) for n in (L, S))
++    v = np.zeros((1, 2, S, D), np.float32); v[:, :, S - L + 1:, :] = 1.0
++    out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=0.15, is_causal=True)
++    o = out.detach().cpu().numpy()
++    assert np.all(o[:, :, 0, :] == 0.0)
++    assert np.isfinite(o).all()

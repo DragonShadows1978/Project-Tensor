@@ -1,0 +1,288 @@
+........................................................................ [ 60%]
+.............................FFF.FFFFFFF.......                          [100%]
+=================================== FAILURES ===================================
+____________________________ test_reviewer_m1_case _____________________________
+
+    def test_reviewer_m1_case():
+        L, S, D = 3, 9, 64
+        q = np.zeros((1, 1, L, D), np.float32); k = np.zeros((1, 1, S, D), np.float32)
+        v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 1, S, D)).copy()
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
+        out = out.detach().cpu().numpy()
+>       np.testing.assert_allclose(out[0, 0, :, 0], [3.0, 3.5, 4.0], atol=2e-5)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-07, atol=2e-05
+E       
+E       Mismatched elements: 3 / 3 (100%)
+E       Mismatch at indices:
+E        [0]: 0.0 (ACTUAL), 3.0 (DESIRED)
+E        [1]: 0.5 (ACTUAL), 3.5 (DESIRED)
+E        [2]: 1.0 (ACTUAL), 4.0 (DESIRED)
+E       Max absolute difference among violations: 3.
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([0. , 0.5, 1. ], dtype=float32)
+E        DESIRED: array([3. , 3.5, 4. ])
+
+apa_cuda/tests/test_apa_mf2_extension.py:61: AssertionError
+________________ test_rectangular_exact_path_matches_fp64[1-7] _________________
+
+L = 1, S = 7
+
+    @pytest.mark.parametrize("L,S", [(1, 7), (3, 9), (5, 5), (17, 40), (64, 200)])
+    def test_rectangular_exact_path_matches_fp64(L, S):
+        rng = np.random.default_rng(L * 1000 + S)
+        q, k, v = (rng.standard_normal((1, 2, n, 32)).astype(np.float32) for n in (L, S, S))
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
+        ref = _oracle(q, k, v, 32 ** -0.5)
+        err = np.abs(out.detach().cpu().numpy() - ref).max()
+>       assert err <= 2e-5 + 2e-5 * np.abs(ref).max(), err
+E       AssertionError: np.float64(2.3960911061847954)
+E       assert np.float64(2.3960911061847954) <= (2e-05 + (2e-05 * np.float64(1.4639838431900094)))
+E        +  where np.float64(1.4639838431900094) = <built-in method max of numpy.ndarray object at 0x7079e777e130>()
+E        +    where <built-in method max of numpy.ndarray object at 0x7079e777e130> = array([[[[0.1978428 , 0.24861667, 0.09232098, 0.95504299, 0.07632969,\n          0.48981692, 0.05852309, 0.59694789, 0....0.85683594,\n          0.25935715, 0.38076455, 0.0921129 , 0.25766947, 0.01605111,\n          0.94384917, 0.47116168]]]]).max
+E        +      where array([[[[0.1978428 , 0.24861667, 0.09232098, 0.95504299, 0.07632969,\n          0.48981692, 0.05852309, 0.59694789, 0....0.85683594,\n          0.25935715, 0.38076455, 0.0921129 , 0.25766947, 0.01605111,\n          0.94384917, 0.47116168]]]]) = <ufunc 'absolute'>(array([[[[-0.1978428 , -0.24861667, -0.09232098,  0.95504299,\n           0.07632969, -0.48981692, -0.05852309,  0.5969...   0.85683594,  0.25935715,  0.38076455,  0.0921129 ,\n           0.25766947, -0.01605111, -0.94384917, -0.47116168]]]]))
+E        +        where <ufunc 'absolute'> = np.abs
+
+apa_cuda/tests/test_apa_mf2_extension.py:72: AssertionError
+________________ test_rectangular_exact_path_matches_fp64[3-9] _________________
+
+L = 3, S = 9
+
+    @pytest.mark.parametrize("L,S", [(1, 7), (3, 9), (5, 5), (17, 40), (64, 200)])
+    def test_rectangular_exact_path_matches_fp64(L, S):
+        rng = np.random.default_rng(L * 1000 + S)
+        q, k, v = (rng.standard_normal((1, 2, n, 32)).astype(np.float32) for n in (L, S, S))
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
+        ref = _oracle(q, k, v, 32 ** -0.5)
+        err = np.abs(out.detach().cpu().numpy() - ref).max()
+>       assert err <= 2e-5 + 2e-5 * np.abs(ref).max(), err
+E       AssertionError: np.float64(1.760534609336938)
+E       assert np.float64(1.760534609336938) <= (2e-05 + (2e-05 * np.float64(1.0708359429248022)))
+E        +  where np.float64(1.0708359429248022) = <built-in method max of numpy.ndarray object at 0x7079e736a850>()
+E        +    where <built-in method max of numpy.ndarray object at 0x7079e736a850> = array([[[[0.06894599, 0.43751916, 1.07083594, 0.51538917, 0.07524897,\n          0.2363898 , 0.05879682, 0.08344508, 0....0.17533048,\n          0.24157766, 0.00865128, 0.52510424, 0.00505759, 0.29841878,\n          0.68359148, 0.87748497]]]]).max
+E        +      where array([[[[0.06894599, 0.43751916, 1.07083594, 0.51538917, 0.07524897,\n          0.2363898 , 0.05879682, 0.08344508, 0....0.17533048,\n          0.24157766, 0.00865128, 0.52510424, 0.00505759, 0.29841878,\n          0.68359148, 0.87748497]]]]) = <ufunc 'absolute'>(array([[[[-0.06894599,  0.43751916,  1.07083594,  0.51538917,\n           0.07524897,  0.2363898 ,  0.05879682, -0.0834...   0.17533048, -0.24157766,  0.00865128, -0.52510424,\n          -0.00505759,  0.29841878, -0.68359148, -0.87748497]]]]))
+E        +        where <ufunc 'absolute'> = np.abs
+
+apa_cuda/tests/test_apa_mf2_extension.py:72: AssertionError
+_______________ test_rectangular_exact_path_matches_fp64[17-40] ________________
+
+L = 17, S = 40
+
+    @pytest.mark.parametrize("L,S", [(1, 7), (3, 9), (5, 5), (17, 40), (64, 200)])
+    def test_rectangular_exact_path_matches_fp64(L, S):
+        rng = np.random.default_rng(L * 1000 + S)
+        q, k, v = (rng.standard_normal((1, 2, n, 32)).astype(np.float32) for n in (L, S, S))
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
+        ref = _oracle(q, k, v, 32 ** -0.5)
+        err = np.abs(out.detach().cpu().numpy() - ref).max()
+>       assert err <= 2e-5 + 2e-5 * np.abs(ref).max(), err
+E       AssertionError: np.float64(2.369535697521258)
+E       assert np.float64(2.369535697521258) <= (2e-05 + (2e-05 * np.float64(1.0384908860926831)))
+E        +  where np.float64(1.0384908860926831) = <built-in method max of numpy.ndarray object at 0x7079e736ab50>()
+E        +    where <built-in method max of numpy.ndarray object at 0x7079e736ab50> = array([[[[0.17081187, 0.17705918, 0.01290743, ..., 0.00548989,\n          0.19533337, 0.11234756],\n         [0.21247334...      [0.24238106, 0.06217098, 0.05175378, ..., 0.11293876,\n          0.3622031 , 0.19512388]]]], shape=(1, 2, 17, 32)).max
+E        +      where array([[[[0.17081187, 0.17705918, 0.01290743, ..., 0.00548989,\n          0.19533337, 0.11234756],\n         [0.21247334...      [0.24238106, 0.06217098, 0.05175378, ..., 0.11293876,\n          0.3622031 , 0.19512388]]]], shape=(1, 2, 17, 32)) = <ufunc 'absolute'>(array([[[[ 0.17081187,  0.17705918,  0.01290743, ..., -0.00548989,\n          -0.19533337,  0.11234756],\n         [ 0.2...[-0.24238106,  0.06217098, -0.05175378, ..., -0.11293876,\n          -0.3622031 , -0.19512388]]]], shape=(1, 2, 17, 32)))
+E        +        where <ufunc 'absolute'> = np.abs
+
+apa_cuda/tests/test_apa_mf2_extension.py:72: AssertionError
+_______________ test_rectangular_exact_path_matches_fp64[64-200] _______________
+
+L = 64, S = 200
+
+    @pytest.mark.parametrize("L,S", [(1, 7), (3, 9), (5, 5), (17, 40), (64, 200)])
+    def test_rectangular_exact_path_matches_fp64(L, S):
+        rng = np.random.default_rng(L * 1000 + S)
+        q, k, v = (rng.standard_normal((1, 2, n, 32)).astype(np.float32) for n in (L, S, S))
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=1.0, is_causal=True)
+        ref = _oracle(q, k, v, 32 ** -0.5)
+        err = np.abs(out.detach().cpu().numpy() - ref).max()
+>       assert err <= 2e-5 + 2e-5 * np.abs(ref).max(), err
+E       AssertionError: np.float64(2.6155522163403484)
+E       assert np.float64(2.6155522163403484) <= (2e-05 + (2e-05 * np.float64(0.7256858561073245)))
+E        +  where np.float64(0.7256858561073245) = <built-in method max of numpy.ndarray object at 0x7079e736b390>()
+E        +    where <built-in method max of numpy.ndarray object at 0x7079e736b390> = array([[[[0.14548205, 0.05737448, 0.0510243 , ..., 0.20571701,\n          0.02111558, 0.00653976],\n         [0.06012522...      [0.11703917, 0.07138606, 0.09353168, ..., 0.06234673,\n          0.04123142, 0.20897112]]]], shape=(1, 2, 64, 32)).max
+E        +      where array([[[[0.14548205, 0.05737448, 0.0510243 , ..., 0.20571701,\n          0.02111558, 0.00653976],\n         [0.06012522...      [0.11703917, 0.07138606, 0.09353168, ..., 0.06234673,\n          0.04123142, 0.20897112]]]], shape=(1, 2, 64, 32)) = <ufunc 'absolute'>(array([[[[-0.14548205, -0.05737448, -0.0510243 , ..., -0.20571701,\n          -0.02111558, -0.00653976],\n         [ 0.0...[-0.11703917, -0.07138606, -0.09353168, ...,  0.06234673,\n           0.04123142, -0.20897112]]]], shape=(1, 2, 64, 32)))
+E        +        where <ufunc 'absolute'> = np.abs
+
+apa_cuda/tests/test_apa_mf2_extension.py:72: AssertionError
+____________ test_zero_scores_give_mean_of_visible_values[3-9-1.0] _____________
+
+L = 3, S = 9, p = 1.0
+
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("L,S", [(3, 9), (40, 300)])
+    def test_zero_scores_give_mean_of_visible_values(L, S, p):
+        """Q=K=0: every visible score is 0, so row i = mean_{j<=S-L+i} V_j whatever is refined."""
+        D = 32
+        q = np.zeros((1, 2, L, D), np.float32); k = np.zeros((1, 2, S, D), np.float32)
+        v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 2, S, D)).copy()
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=p, is_causal=True)
+        expected = (S - L + np.arange(L)) / 2.0
+>       np.testing.assert_allclose(out.detach().cpu().numpy()[0, :, :, 0],
+                                   np.broadcast_to(expected, (2, L)), rtol=1e-6, atol=1e-5)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-06, atol=1e-05
+E       
+E       Mismatched elements: 6 / 6 (100%)
+E       First 5 mismatches are at indices:
+E        [0, 0]: 0.0 (ACTUAL), 3.0 (DESIRED)
+E        [0, 1]: 0.5 (ACTUAL), 3.5 (DESIRED)
+E        [0, 2]: 1.0 (ACTUAL), 4.0 (DESIRED)
+E        [1, 0]: 0.0 (ACTUAL), 3.0 (DESIRED)
+E        [1, 1]: 0.5 (ACTUAL), 3.5 (DESIRED)
+E       Max absolute difference among violations: 3.
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([[0. , 0.5, 1. ],
+E              [0. , 0.5, 1. ]], dtype=float32)
+E        DESIRED: array([[3. , 3.5, 4. ],
+E              [3. , 3.5, 4. ]])
+
+apa_cuda/tests/test_apa_mf2_extension.py:84: AssertionError
+____________ test_zero_scores_give_mean_of_visible_values[3-9-0.15] ____________
+
+L = 3, S = 9, p = 0.15
+
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("L,S", [(3, 9), (40, 300)])
+    def test_zero_scores_give_mean_of_visible_values(L, S, p):
+        """Q=K=0: every visible score is 0, so row i = mean_{j<=S-L+i} V_j whatever is refined."""
+        D = 32
+        q = np.zeros((1, 2, L, D), np.float32); k = np.zeros((1, 2, S, D), np.float32)
+        v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 2, S, D)).copy()
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=p, is_causal=True)
+        expected = (S - L + np.arange(L)) / 2.0
+>       np.testing.assert_allclose(out.detach().cpu().numpy()[0, :, :, 0],
+                                   np.broadcast_to(expected, (2, L)), rtol=1e-6, atol=1e-5)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-06, atol=1e-05
+E       
+E       Mismatched elements: 6 / 6 (100%)
+E       First 5 mismatches are at indices:
+E        [0, 0]: 0.0 (ACTUAL), 3.0 (DESIRED)
+E        [0, 1]: 0.5 (ACTUAL), 3.5 (DESIRED)
+E        [0, 2]: 1.0 (ACTUAL), 4.0 (DESIRED)
+E        [1, 0]: 0.0 (ACTUAL), 3.0 (DESIRED)
+E        [1, 1]: 0.5 (ACTUAL), 3.5 (DESIRED)
+E       Max absolute difference among violations: 3.
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([[0. , 0.5, 1. ],
+E              [0. , 0.5, 1. ]], dtype=float32)
+E        DESIRED: array([[3. , 3.5, 4. ],
+E              [3. , 3.5, 4. ]])
+
+apa_cuda/tests/test_apa_mf2_extension.py:84: AssertionError
+___________ test_zero_scores_give_mean_of_visible_values[40-300-1.0] ___________
+
+L = 40, S = 300, p = 1.0
+
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("L,S", [(3, 9), (40, 300)])
+    def test_zero_scores_give_mean_of_visible_values(L, S, p):
+        """Q=K=0: every visible score is 0, so row i = mean_{j<=S-L+i} V_j whatever is refined."""
+        D = 32
+        q = np.zeros((1, 2, L, D), np.float32); k = np.zeros((1, 2, S, D), np.float32)
+        v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 2, S, D)).copy()
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=p, is_causal=True)
+        expected = (S - L + np.arange(L)) / 2.0
+>       np.testing.assert_allclose(out.detach().cpu().numpy()[0, :, :, 0],
+                                   np.broadcast_to(expected, (2, L)), rtol=1e-6, atol=1e-5)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-06, atol=1e-05
+E       
+E       Mismatched elements: 80 / 80 (100%)
+E       First 5 mismatches are at indices:
+E        [0, 0]: 0.0 (ACTUAL), 130.0 (DESIRED)
+E        [0, 1]: 0.5 (ACTUAL), 130.5 (DESIRED)
+E        [0, 2]: 1.0 (ACTUAL), 131.0 (DESIRED)
+E        [0, 3]: 1.5 (ACTUAL), 131.5 (DESIRED)
+E        [0, 4]: 2.0 (ACTUAL), 132.0 (DESIRED)
+E       Max absolute difference among violations: 130.00000191
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([[ 0.      ,  0.5     ,  1.      ,  1.5     ,  2.      ,  2.5     ,
+E                3.      ,  3.5     ,  4.      ,  4.5     ,  5.      ,  5.5     ,
+E                6.      ,  6.5     ,  7.000001,  7.5     ,  8.      ,  8.5     ,...
+E        DESIRED: array([[130. , 130.5, 131. , 131.5, 132. , 132.5, 133. , 133.5, 134. ,
+E               134.5, 135. , 135.5, 136. , 136.5, 137. , 137.5, 138. , 138.5,
+E               139. , 139.5, 140. , 140.5, 141. , 141.5, 142. , 142.5, 143. ,...
+
+apa_cuda/tests/test_apa_mf2_extension.py:84: AssertionError
+__________ test_zero_scores_give_mean_of_visible_values[40-300-0.15] ___________
+
+L = 40, S = 300, p = 0.15
+
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("L,S", [(3, 9), (40, 300)])
+    def test_zero_scores_give_mean_of_visible_values(L, S, p):
+        """Q=K=0: every visible score is 0, so row i = mean_{j<=S-L+i} V_j whatever is refined."""
+        D = 32
+        q = np.zeros((1, 2, L, D), np.float32); k = np.zeros((1, 2, S, D), np.float32)
+        v = np.broadcast_to(np.arange(S, dtype=np.float32)[None, None, :, None], (1, 2, S, D)).copy()
+        out = apa_quant_attention(_t(q), _t(k), _t(v), refine_percentile=p, is_causal=True)
+        expected = (S - L + np.arange(L)) / 2.0
+>       np.testing.assert_allclose(out.detach().cpu().numpy()[0, :, :, 0],
+                                   np.broadcast_to(expected, (2, L)), rtol=1e-6, atol=1e-5)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-06, atol=1e-05
+E       
+E       Mismatched elements: 80 / 80 (100%)
+E       First 5 mismatches are at indices:
+E        [0, 0]: 0.0 (ACTUAL), 130.0 (DESIRED)
+E        [0, 1]: 0.5 (ACTUAL), 130.5 (DESIRED)
+E        [0, 2]: 1.0 (ACTUAL), 131.0 (DESIRED)
+E        [0, 3]: 1.5 (ACTUAL), 131.5 (DESIRED)
+E        [0, 4]: 2.0 (ACTUAL), 132.0 (DESIRED)
+E       Max absolute difference among violations: 130.00000191
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([[ 0.      ,  0.5     ,  1.      ,  1.5     ,  2.      ,  2.5     ,
+E                3.      ,  3.5     ,  4.      ,  4.5     ,  5.      ,  5.5     ,
+E                6.      ,  6.5     ,  7.000001,  7.5     ,  8.      ,  8.5     ,...
+E        DESIRED: array([[130. , 130.5, 131. , 131.5, 132. , 132.5, 133. , 133.5, 134. ,
+E               134.5, 135. , 135.5, 136. , 136.5, 137. , 137.5, 138. , 138.5,
+E               139. , 139.5, 140. , 140.5, 141. , 141.5, 142. , 142.5, 143. ,...
+
+apa_cuda/tests/test_apa_mf2_extension.py:84: AssertionError
+___________ test_tiled_forward_and_backward_rectangular_closed_form ____________
+
+    def test_tiled_forward_and_backward_rectangular_closed_form():
+        """B*H*L*S*4 > 256 MiB selects the tiled path (apa.cpp use_tiled)."""
+        B, H, L, S, D = 1, 64, 513, 2057, 16
+        assert B * H * L * S * 4 > 256 * 1024 * 1024
+        q = _t(np.zeros((B, H, L, D), np.float32), grad=True)
+        k = _t(np.zeros((B, H, S, D), np.float32), grad=True)
+        vv = np.broadcast_to((np.arange(S, dtype=np.float32) / S)[None, None, :, None], (B, H, S, D)).copy()
+        v = _t(vv, grad=True)
+        out = apa_quant_attention(q, k, v, refine_percentile=1.0, is_causal=True)
+        rows = S - L + np.arange(L)
+>       np.testing.assert_allclose(out.detach().cpu().numpy()[0, 0, :, 0], rows / (2.0 * S), rtol=1e-5, atol=1e-6)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-05, atol=1e-06
+E       
+E       Mismatched elements: 513 / 513 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: 0.0 (ACTUAL), 0.37530384054448224 (DESIRED)
+E        [1]: 0.00024307244166266173 (ACTUAL), 0.37554691298006804 (DESIRED)
+E        [2]: 0.00048614488332532346 (ACTUAL), 0.37578998541565384 (DESIRED)
+E        [3]: 0.00072921731043607 (ACTUAL), 0.3760330578512397 (DESIRED)
+E        [4]: 0.0009722897666506469 (ACTUAL), 0.3762761302868255 (DESIRED)
+E       Max absolute difference among violations: 0.37530384
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([0.      , 0.000243, 0.000486, 0.000729, 0.000972, 0.001215,
+E              0.001458, 0.001702, 0.001945, 0.002188, 0.002431, 0.002674,
+E              0.002917, 0.00316 , 0.003403, 0.003646, 0.003889, 0.004132,...
+E        DESIRED: array([0.375304, 0.375547, 0.37579 , 0.376033, 0.376276, 0.376519,
+E              0.376762, 0.377005, 0.377248, 0.377491, 0.377735, 0.377978,
+E              0.378221, 0.378464, 0.378707, 0.37895 , 0.379193, 0.379436,...
+
+apa_cuda/tests/test_apa_mf2_extension.py:98: AssertionError
+=========================== short test summary info ============================
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_reviewer_m1_case - Asse...
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_rectangular_exact_path_matches_fp64[1-7]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_rectangular_exact_path_matches_fp64[3-9]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_rectangular_exact_path_matches_fp64[17-40]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_rectangular_exact_path_matches_fp64[64-200]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_zero_scores_give_mean_of_visible_values[3-9-1.0]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_zero_scores_give_mean_of_visible_values[3-9-0.15]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_zero_scores_give_mean_of_visible_values[40-300-1.0]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_zero_scores_give_mean_of_visible_values[40-300-0.15]
+FAILED apa_cuda/tests/test_apa_mf2_extension.py::test_tiled_forward_and_backward_rectangular_closed_form
+10 failed, 109 passed in 52.44s
+rc=1
