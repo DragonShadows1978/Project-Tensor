@@ -106,7 +106,8 @@ def reference_forward(q, k, v, *, bulk_bits=2, refine_percentile=0.15,
     ranking = np.einsum("bhld,bhsd->bhls", q, k) * scale
     cmask = None
     if is_causal:
-        cmask = np.triu(np.ones((L, S), dtype=bool), k=1)
+        # bottom-right (APA-MF1): row i sees cols <= S-L+i; triu(k=1) was top-left
+        cmask = np.triu(np.ones((L, S), dtype=bool), k=1 + (S - L))
         bulk = np.where(cmask, -1e9, bulk)
         ranking = np.where(cmask, -1e9, ranking)
     if attn_mask is not None:
@@ -150,7 +151,8 @@ def reference_backward(grad_out, q, k, v, key_quant, mask, *, scale=None,
     scores = np.einsum("bhld,bhsd->bhls", q, k) * scale
     cmask = None
     if is_causal:
-        cmask = np.triu(np.ones((L, S), dtype=bool), k=1)
+        # bottom-right (APA-MF1): row i sees cols <= S-L+i; triu(k=1) was top-left
+        cmask = np.triu(np.ones((L, S), dtype=bool), k=1 + (S - L))
         scores = np.where(cmask, -1e9, scores)
     if attn_mask is not None:
         scores = scores + attn_mask

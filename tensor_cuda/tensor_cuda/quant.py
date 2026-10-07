@@ -171,8 +171,14 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
         # fp32 mask against fp16 operands would be read as garbage.
         absr_f = bulk.abs().float()
         if is_causal:
-            cmask = np.triu(np.ones((L, S), np.float32), 1)
-            absr_f = absr_f.masked_fill(tc.tensor(cmask, device=dev), 0.0)
+            # APA-MF1 fix A: zero the stats at exactly the positions the SCORES
+            # mask — the shared F._causal_mask (BOTTOM-RIGHT, k = 1 + S - L,
+            # 63960a4). masked_fill/where test cond != 0, so the fp32 view of
+            # that additive bias (-1e4 masked, 0 visible) is the boolean. The old
+            # inline np.triu(.., 1) was TOP-LEFT: on S > L it zeroed visible cols
+            # (i, S-L+i], which could then never be refined. S == L unchanged.
+            # Prior art: FlashAttention-2 bottom-right causal (Dao, 2023).
+            absr_f = absr_f.masked_fill(causal_add.float(), 0.0)
         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
         thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
         mask = absr_f.ge(thr)          # detached 0/1, fp32 comparison
