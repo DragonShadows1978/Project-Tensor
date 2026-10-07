@@ -1,0 +1,99 @@
+{
+ "K1": {
+  "kernels_sha256": "41fcb11d638ef0ad09ee8422d2ec3e9bd5772d06ade2daa68a289b03f84fb5aa",
+  "replace": [
+   "    const float m_ref = m_new == -INFINITY ? 0.f : m_new;\n",
+   "    const float m_ref = m_new;\n"
+  ],
+  "kernel": 0
+ },
+ "K2": {
+  "kernels_sha256": "80796339a200846a301c0c64a60198bdcd3d82317f85aca6f78f308a9169b786",
+  "replace": [
+   "    const float m_ref = m_new == -INFINITY ? 0.f : m_new;\n",
+   "    const float m_ref = m_new;\n"
+  ],
+  "kernel": 1
+ },
+ "K3": {
+  "kernels_sha256": "e5eeb842cda0ead7c00e645f6fbeb029c10ba86df40a278712277c5424df9d59",
+  "replace": [
+   "  float m = -INFINITY;\n  float l = 0.f;\n",
+   "  float m = -3.0e38f;\n  float l = 0.f;\n"
+  ],
+  "kernel": 0
+ },
+ "K4": {
+  "kernels_sha256": "169e2585398b3a3090af712563068f0ca9a063c720da585ee3783dcc7e5d1a3d",
+  "replace": [
+   "  float m = -INFINITY;\n  float l = 0.f;\n",
+   "  float m = -3.0e38f;\n  float l = 0.f;\n"
+  ],
+  "kernel": 1
+ },
+ "K5": {
+  "kernels_sha256": "448adc10202b91aba86e875514e9f2fd92be1d63539218014a50751435e71b9b",
+  "replace": [
+   "    const float m_ref = m_new == -INFINITY ? 0.f : m_new;\n",
+   "    const float m_ref = m == -INFINITY ? 0.f : m_new;\n"
+  ],
+  "kernel": 0
+ },
+ "K6": {
+  "kernels_sha256": "241524251f3d4314b132155a2f61764ae5d287711c766d1e1289fcf124faa7e2",
+  "replace": [
+   "    const float m_ref = m_new == -INFINITY ? 0.f : m_new;\n",
+   "    const float m_ref = m == -INFINITY ? 0.f : m_new;\n"
+  ],
+  "kernel": 1
+ },
+ "P1": {
+  "quant_sha256": "7730fcba27e324b44755ee93086e20ebb647619976f41df9d55d67dfe70ddcb4",
+  "replace": [
+   "    u = absb / amax                          # u in [0, 1]\n",
+   "    u = absb\n"
+  ]
+ },
+ "P2": {
+  "quant_sha256": "aa0b9ecc5f91cf5902ece4ad7886c447b1387c1b9f68ab201f750505d7cf5241",
+  "replace": [
+   "    amax = amax + (amax <= 0.0)              # all-zero row: divide by 1, never 0/0\n",
+   "    amax = amax\n"
+  ]
+ },
+ "P3": {
+  "quant_sha256": "a6a3ab079889a6b708cd2d90a6d4dc3e844a366e306f7acc877ce45a5b2decbb",
+  "replace": [
+   "    sel = u.ge(thr)                          # scaled-domain comparison\n",
+   "    sel = absb.ge(thr)\n"
+  ]
+ },
+ "P4": {
+  "quant_sha256": "c3657bfca1d87f8443898d38bc9a345644787b0623eb77f75280ea9e3d10e685",
+  "replace": [
+   "    amax = absb.max([-1], True)              # visible row max (invisible entries are 0)\n",
+   "    amax = absb.max([-2, -1], True)\n"
+  ]
+ },
+ "P5": {
+  "quant_sha256": "d1e1de328b68e5528415b22bd119851f3c763ba3318cb2bf1e74a0488c5922a2",
+  "replace": [
+   "    var = (dev_ * dev_).sum([-1], True) / cnt\n",
+   "    var = (u * u).sum([-1], True) / cnt - mean * mean\n"
+  ]
+ },
+ "P6": {
+  "quant_sha256": "41cf5ea71c23a0b6c0ff8e3cb8dcc99b2a77086ca591d00fc331f7f276a27fdf",
+  "replace": [
+   "        dev_ = dev_ * vis                    # invisible deviations -> 0 (0/1 product)\n",
+   "        dev_ = dev_\n"
+  ]
+ },
+ "P7": {
+  "quant_sha256": "5f16d156c39283c5311bb1ccd2bb225c5143c660584032d2bdc04c53efe7fd7c",
+  "replace": [
+   "    sel = u.ge(thr)                          # scaled-domain comparison\n",
+   "    sel = u.gt(thr)\n"
+  ]
+ }
+}

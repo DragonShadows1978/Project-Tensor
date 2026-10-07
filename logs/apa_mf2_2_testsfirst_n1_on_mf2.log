@@ -1,0 +1,221 @@
+........................................................................ [ 69%]
+...................FFFFFFFF....                                          [100%]
+=================================== FAILURES ===================================
+___ test_fused_extreme_negative_visible_score_keeps_weight[sdpa-1--3.3e+38] ____
+
+op = 'sdpa', S = 1, s = -3.3e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde768270>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde768270> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+__ test_fused_extreme_negative_visible_score_keeps_weight[sdpa-1--3.402e+38] ___
+
+op = 'sdpa', S = 1, s = -3.402e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde76b150>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde76b150> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+___ test_fused_extreme_negative_visible_score_keeps_weight[sdpa-5--3.3e+38] ____
+
+op = 'sdpa', S = 5, s = -3.3e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde76b510>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde76b510> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+__ test_fused_extreme_negative_visible_score_keeps_weight[sdpa-5--3.402e+38] ___
+
+op = 'sdpa', S = 5, s = -3.402e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde7050b0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde7050b0> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+_ test_fused_extreme_negative_visible_score_keeps_weight[int4_all-1--3.3e+38] __
+
+op = 'int4_all', S = 1, s = -3.3e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde7688d0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde7688d0> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+_ test_fused_extreme_negative_visible_score_keeps_weight[int4_all-1--3.402e+38] _
+
+op = 'int4_all', S = 1, s = -3.402e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde76bab0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde76bab0> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+_ test_fused_extreme_negative_visible_score_keeps_weight[int4_all-5--3.3e+38] __
+
+op = 'int4_all', S = 5, s = -3.3e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde76bed0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde76bed0> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+_ test_fused_extreme_negative_visible_score_keeps_weight[int4_all-5--3.402e+38] _
+
+op = 'int4_all', S = 5, s = -3.402e+38
+
+    @pytest.mark.parametrize("s", [-3.3e38, -3.402e38])
+    @pytest.mark.parametrize("S", [1, 5])
+    @pytest.mark.parametrize("op", ["sdpa", "int4_all"])
+    def test_fused_extreme_negative_visible_score_keeps_weight(op, S, s):
+        """Row max below the old -3.0e38f start: with m = -inf it gets weight 1 (output exactly
+        V0 = 1); a reverted -3.0e38f start gives l = 0 and output 0 (F1 re-opened)."""
+        D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1
+        k = np.zeros((1, 1, S, D), np.float32); k[0, 0, :, 0] = -FLT_MAX; k[0, 0, 0, 0] = s
+        v = np.zeros_like(k); v[0, 0, 0] = 1
+        o = _run(op, *[_t(x, "float32") for x in (q, k, v)], 1.0).numpy()
+>       assert np.isfinite(o).all() and np.all(o == 1.0), o[..., :4]
+E       AssertionError: array([[[[0., 0., 0., 0.]]]], dtype=float32)
+E       assert (np.True_ and np.False_)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7c5cde76aa30>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7c5cde76aa30> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+E        +  and   np.False_ = <function all at 0x7c5cf2dc1130>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0.... 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]], dtype=float32) == 1.0)
+E        +    where <function all at 0x7c5cf2dc1130> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2_n1.py:139: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[sdpa-1--3.3e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[sdpa-1--3.402e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[sdpa-5--3.3e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[sdpa-5--3.402e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[int4_all-1--3.3e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[int4_all-1--3.402e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[int4_all-5--3.3e+38]
+FAILED tensor_cuda/tests/test_apa_mf2_2_n1.py::test_fused_extreme_negative_visible_score_keeps_weight[int4_all-5--3.402e+38]
+8 failed, 95 passed in 1.03s

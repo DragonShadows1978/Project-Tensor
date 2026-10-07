@@ -1,0 +1,109 @@
+## N1 (G2): -inf-first rows, one engine per process (compare_20261007T225852Z.json)
+
+| class | rows | fd32b6d finite | MF2 finite | MF2.1 finite | MF2.2 finite | MF2.2 max abs err vs fp64 | MF2.2 bytes == MF2 / fd32b6d |
+|---|---|---|---|---|---|---|---|
+| witness/sdpa | 6 | 6 | 6 | 0 | 6 | 0 | 6/6 / 6/6 |
+| witness/int4_all | 6 | 6 | 6 | 0 | 6 | 0 | 6/6 / 6/6 |
+| witness/int4_partial_fp16 | 6 | 6 | 6 | 0 | 6 | 0 | 6/6 / 6/6 |
+| sweep/float32/sdpa | 72 | 72 | 72 | 0 | 72 | 1e-06 | 72/72 / 72/72 |
+| sweep/float32/int4_all | 72 | 72 | 72 | 0 | 72 | 1e-06 | 72/72 / 72/72 |
+| sweep/float32/int4_partial | 72 | 72 | 72 | 0 | 72 | 1.99e-07 | 72/72 / 72/72 |
+| sweep/float16/sdpa | 72 | 72 | 72 | 0 | 72 | 0.000488 | 72/72 / 72/72 |
+| sweep/float16/int4_all | 72 | 72 | 72 | 0 | 72 | 0.000488 | 72/72 / 72/72 |
+| sweep/float16/int4_partial | 72 | 72 | 72 | 0 | 72 | 0.000488 | 72/72 / 72/72 |
+
+Identity census (finite non-overflow): MF2.2 vs fd32b6d: 882/882 equal; MF2.2 vs mf2: 882/882 equal; MF2.2 vs mf2_1: 882/882 equal
+Engines: fd32b6d eeeaf8f6be6b; mf2 bc7ed2a9fa68; mf2_1 b5837bfe92c1; mf2_2 bc7ed2a9fa68
+
+Observations (not gated): F1/sdpa/-3.3e+38: fd32b6d=finite 0.0, mf2=finite 1.0, mf2_1=finite 1.0, mf2_2=finite 1.0; F1/sdpa/-3.402e+38: fd32b6d=finite 0.0, mf2=finite 1.0, mf2_1=finite 1.0, mf2_2=finite 1.0; fully_blocked_overflow/sdpa: fd32b6d=finite 0.0, mf2=NaN, mf2_1=NaN, mf2_2=NaN; F1/int4_all/-3.3e+38: fd32b6d=finite 0.0, mf2=finite 1.0, mf2_1=finite 1.0, mf2_2=finite 1.0; F1/int4_all/-3.402e+38: fd32b6d=finite 0.0, mf2=finite 1.0, mf2_1=finite 1.0, mf2_2=finite 1.0; fully_blocked_overflow/int4_all: fd32b6d=finite 0.0, mf2=NaN, mf2_1=NaN, mf2_2=NaN
+bf16: fd32b6d: raised: fused_sdpa_noncausal supports float16/float32 only; mf2: raised: fused_sdpa_noncausal supports float16/float32 only; mf2_1: raised: fused_sdpa_noncausal supports float16/float32 only; mf2_2: raised: fused_sdpa_noncausal supports float16/float32 only
+
+## N2 (G3): isolated statistics, |bulk| row-max scale x 6 patterns x S {1,2,3,256,2048} x causal/non-causal
+
+| row max scale | cells | visible entries | MF2.1 out-of-band | MF2.1 constant rows all selected | MF2.2 mismatches (in band) | MF2.2 out-of-band | MF2.2 constant rows all selected |
+|---|---|---|---|---|---|---|---|
+| 1e-38 | 60 | 110724 | 14099 | False | 6 (6) | 0 | True |
+| 1e-37 | 60 | 110724 | 14014 | True | 6 (6) | 0 | True |
+| 1e-30 | 60 | 110724 | 14014 | False | 6 (6) | 0 | True |
+| 1e-20 | 60 | 110724 | 0 | False | 6 (6) | 0 | True |
+| 1e-10 | 60 | 110724 | 0 | False | 6 (6) | 0 | True |
+| 0.001 | 60 | 110724 | 0 | True | 6 (6) | 0 | True |
+| 1 | 60 | 110724 | 0 | True | 6 (6) | 0 | True |
+| 1000 | 60 | 110724 | 0 | True | 6 (6) | 0 | True |
+| 1e+10 | 60 | 110724 | 0 | False | 6 (6) | 0 | True |
+| 1e+20 | 60 | 110724 | 10559 | True | 6 (6) | 0 | True |
+| 1e+30 | 60 | 110724 | 10559 | False | 6 (6) | 0 | True |
+| 1e+37 | 60 | 110724 | 10559 | False | 6 (6) | 0 | True |
+| 3e+38 | 60 | 110724 | 10559 | False | 6 (6) | 0 | True |
+| mixed_rows | 2 | 2046 | 525 | - | 0 (0) | 0 | - |
+
+Full API apa_quant_attention (Q = mag*N(0,1), K,V ~ N(0,1), bits 4, p .15, scale 1, S {3,256,2048}, causal/non-causal):
+
+| dtype/mag | cells | MF2.1 out-of-band | MF2.2 mismatches (in band) | MF2.2 out-of-band | MF2.2 output finite |
+|---|---|---|---|---|---|
+| float32/1e-30 | 6 | 3714 | 0 (0) | 0 | True |
+| float32/1e-20 | 6 | 0 | 0 (0) | 0 | True |
+| float32/1e-10 | 6 | 0 | 0 (0) | 0 | True |
+| float32/1 | 6 | 0 | 0 (0) | 0 | True |
+| float32/1e+10 | 6 | 0 | 0 (0) | 0 | True |
+| float32/1e+20 | 6 | 2158 | 0 (0) | 0 | True |
+| float32/1e+30 | 6 | 2158 | 0 (0) | 0 | True |
+| bfloat16/1e-30 | 6 | 3729 | 0 (0) | 0 | True |
+| bfloat16/1e-20 | 6 | 0 | 0 (0) | 0 | True |
+| bfloat16/1e-10 | 6 | 0 | 0 (0) | 0 | True |
+| bfloat16/1 | 6 | 0 | 0 (0) | 0 | True |
+| bfloat16/1e+10 | 6 | 0 | 0 (0) | 0 | True |
+| bfloat16/1e+20 | 6 | 2156 | 0 (0) | 0 | True |
+| bfloat16/1e+30 | 6 | 2158 | 0 (0) | 0 | True |
+
+Review N2 witnesses (isolated, bulk = Q.K): 1e+20/D64: MF2.1 [False, False, False] oob 1 / MF2.2 [False, False, True] oob 0; 1e+20/D96: MF2.1 [False, False, False] oob 1 / MF2.2 [False, False, True] oob 0; 1e+20/D128: MF2.1 [False, False, False] oob 1 / MF2.2 [False, False, True] oob 0; 1e-30/D64: MF2.1 [False, True, True] oob 1 / MF2.2 [False, False, True] oob 0; 1e-30/D96: MF2.1 [False, True, True] oob 1 / MF2.2 [False, False, True] oob 0; 1e-30/D128: MF2.1 [False, True, True] oob 1 / MF2.2 [False, False, True] oob 0
+Zero rows all-visible selected: MF2.1 True, MF2.2 True
+Real captures mf2_1: {"cells": 36, "oracle_fp32bulk.mismatch": 80, "oracle_fp32bulk.in_band": 80, "oracle_fp32bulk.out_of_band": 0, "oracle_fp32bulk.invisible_selected": 0, "oracle_mf2_1_gemm.mismatch": 102, "oracle_mf2_1_gemm.in_band": 102, "oracle_mf2_1_gemm.out_of_band": 0, "oracle_mf2_1_gemm.invisible_selected": 0, "visible": 1849617408, "finite": 36}
+Real captures mf2_2: {"cells": 36, "oracle_fp32bulk.mismatch": 59, "oracle_fp32bulk.in_band": 59, "oracle_fp32bulk.out_of_band": 0, "oracle_fp32bulk.invisible_selected": 0, "oracle_mf2_1_gemm.mismatch": 87, "oracle_mf2_1_gemm.in_band": 87, "oracle_mf2_1_gemm.out_of_band": 0, "oracle_mf2_1_gemm.invisible_selected": 0, "visible": 1849617408, "finite": 36}
+
+## G4 adjudication: every RED row of the lead's re-review logs, same probe (copy) per engine, one process each
+
+| cell | row(s) | lead MF2.1 | MF2.1 rerun | MF2 (048949d) | fd32b6d | MF2.2 | MF2.2 with real bf16 leaf |
+|---|---|---|---|---|---|---|---|
+| sentinel | F1/bfloat16/-3.38e+38/grad | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED:  | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R1/trailingFalse | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R2/trailingFalse | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R7/trailingFalse | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R300/trailingFalse | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R1025/trailingFalse | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R1/trailingTrue | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R2/trailingTrue | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R7/trailingTrue | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R300/trailingTrue | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| reductions | reduce/bfloat16/R1025/trailingTrue | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | RED: 'NoneType' object has no attribute 'floa | PASS |
+| training | GRAPA_native_train/bfloat16/D64/8x8 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| training | GRAPA_native_train/bfloat16/D64/3x9 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| training | GRAPA_native_train/bfloat16/D96/8x8 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| training | GRAPA_native_train/bfloat16/D96/3x9 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| training | GRAPA_native_train/bfloat16/D128/8x8 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| training | GRAPA_native_train/bfloat16/D128/3x9 | RED:  | RED:  | RED:  | RED:  | RED:  | PASS |
+| masks | geometry/2048x2048 | RED:  Not equal to tolerance rtol=0, atol=0.0 | RED:  Not equal to tolerance rtol=0, atol=0.0 | RED:  Not equal to tolerance rtol=0, atol=0.0 | RED:  Not equal to tolerance rtol=0, atol=0.0 | RED:  Not equal to tolerance rtol=0, atol=0.0 | - |
+| fused_overflow | N1/sdpa/D64/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D64/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D64/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/sdpa/D64/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D64/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D64/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/sdpa/D96/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D96/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D96/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/sdpa/D96/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D96/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D96/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/sdpa/D128/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D128/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D128/S2 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/sdpa/D128/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_all/D128/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| fused_overflow | N1/int4_partial_fp16/D128/S5 | RED: [[[[nan nan nan nan nan nan nan nan nan  | RED: [[[[nan nan nan nan nan nan nan nan nan  | PASS | PASS | PASS | - |
+| definition | N2/large/D64 | RED: {'actual': array([[[[0., 0., 0.]]]], dty | RED: {'actual': array([[[[0., 0., 0.]]]], dty | n/a | n/a | PASS | - |
+| definition | N2/tiny/D64 | RED: {'actual': array([[[[0., 1., 1.]]]], dty | RED: {'actual': array([[[[0., 1., 1.]]]], dty | n/a | n/a | PASS | - |
+| definition | N2/large/D96 | RED: {'actual': array([[[[0., 0., 0.]]]], dty | RED: {'actual': array([[[[0., 0., 0.]]]], dty | n/a | n/a | PASS | - |
+| definition | N2/tiny/D96 | RED: {'actual': array([[[[0., 1., 1.]]]], dty | RED: {'actual': array([[[[0., 1., 1.]]]], dty | n/a | n/a | PASS | - |
+| definition | N2/large/D128 | RED: {'actual': array([[[[0., 0., 0.]]]], dty | RED: {'actual': array([[[[0., 0., 0.]]]], dty | n/a | n/a | PASS | - |
+| definition | N2/tiny/D128 | RED: {'actual': array([[[[0., 1., 1.]]]], dty | RED: {'actual': array([[[[0., 1., 1.]]]], dty | n/a | n/a | PASS | - |
