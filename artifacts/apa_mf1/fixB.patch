@@ -1,0 +1,25 @@
+--- a/tensor_cuda/tensor_cuda/quant.py
++++ b/tensor_cuda/tensor_cuda/quant.py
+@@ -180,7 +180,21 @@
+             # Prior art: FlashAttention-2 bottom-right causal (Dao, 2023).
+             absr_f = absr_f.masked_fill(causal_add.float(), 0.0)
+         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
+-        thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
++        if is_causal:
++            # APA-MF1 fix B: population mean/std over the VISIBLE keys only, the
++            # fused kernel's rule (kernels.cu bk4 forward: count = S-L+qi+tid+1,
++            # one-pass E[x^2]-E[x]^2 clamped at 0). Row i sees S-L+i+1 keys; the
++            # masked entries are already 0, so the row sums are visible-only.
++            # Dividing by S instead (old mean/std) diluted the threshold.
++            # max(count, 1) keeps out-of-contract S < L rows finite.
++            # Prior art: kernels.cu bk4 forward; GRAPA attention.py _visible_counts.
++            cnt = np.maximum(np.arange(S - L + 1, S + 1, dtype=np.float32), 1.0)
++            inv = tc.tensor((1.0 / cnt)[:, None], device=dev)
++            mean = absr_f.sum([-1], True) * inv
++            var = ((absr_f * absr_f).sum([-1], True) * inv - mean * mean).relu()
++            thr = mean + var.pow(0.5) * z
++        else:
++            thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
+         mask = absr_f.ge(thr)          # detached 0/1, fp32 comparison
+         if bulk.dtype != "float32":
+             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype

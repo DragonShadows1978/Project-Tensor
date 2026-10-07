@@ -1,0 +1,60 @@
+{
+  "order": "APA-MF1 rectangular causal masks",
+  "registration_sha256": "8129cfbadc7daa7c3c31885720196b1cbfd8ddf5e7d6052cca43e29fca6cefec",
+  "engine_so_sha256": "8a13e5b33a86f9d8f70da26d9730ad27acdaf7746166fafe36ac99d3b97cc437",
+  "tree_sha256": {
+    "tensor_cuda/tensor_cuda/quant.py": "74420d2b444ab7471400ba036d43921e2bb1610ce8bb57f8b41f9ff2dcad13f0",
+    "tensor_gpu_v2/_core.py": "50f733f8b1fcfa9e298aefafb0422f46920e23f7081890591cc0341c50748ccd",
+    "apa_cuda/tests/test_parity.py": "671901a6f43cd668536e2e0108a06ea2cd97f405dfaf07e5f7204e9d57fd6055"
+  },
+  "fix_A": "GREEN",
+  "fix_B": "implemented; G3 GREEN; promotion is David's call; changes square selection by design",
+  "gates": {
+    "G1_build": "GREEN",
+    "G1_suite_A_only": {"verdict": "GREEN", "changed_baseline_ids": 0, "baseline_ids": 789, "receipt": "logs/apa_mf1_g1_after_A.log:1821"},
+    "G1_suite_A_plus_B": {"verdict": "RED", "changed_baseline_ids": 1,
+                          "changed": {"tensor_cuda.tests.test_apa_phase6::test_apa_causal": ["passed", "failure"]},
+                          "cause": "test_apa_phase6._ref (square-only, L=S=48) encodes the pre-B diluted stats (absr.mean/std over all S with masked zeros); fix B removes that rule by design; file outside the writable list",
+                          "receipt": "logs/apa_mf1_g1_after_AB.log:1783,1848"},
+    "G1_apa_cuda": {"verdict": "GREEN", "before": "6 failed (ModuleNotFoundError apa_attention_cuda)", "after": "6 failed (same)", "receipt": "logs/apa_mf1_g1_apa_cuda.log:164,330"},
+    "G2_fix_A": {"verdict": "GREEN",
+                 "quant_A_max_rel": {"float32": 1.231e-06, "bfloat16": 1.068e-02},
+                 "quant_AB_max_rel": {"float32": 1.477e-06, "bfloat16": 1.045e-02},
+                 "tgv2_max_rel_after": 1.351e-06, "tgv2_cells": 68,
+                 "tgv2_before_rect_min_max_rel": 0.910, "tgv2_before_rect_cells": 51,
+                 "square_byte_identical": "12 quant + 17 tensor_gpu_v2 tests passed at state A",
+                 "before_receipt": "logs/apa_mf1_before.log:6609 108 failed, 70 passed",
+                 "after_A_receipt": "logs/apa_mf1_after_A.log:156 178 passed"},
+    "G3_fix_B": {"verdict": "GREEN", "min_agreement_AB_synthetic": 1.0, "min_agreement_AB_real": 0.9999998467416039,
+                 "agreement_range_synthetic": {"before": [0.714286, 1.0], "A": [0.885028, 1.0], "AB": [1.0, 1.0]}, "before_agreement_range_real": [0.7653, 0.8499],
+                 "A_agreement_range_real": [0.9734, 0.9995],
+                 "kernel_diag_AB_vs_kernel_range": [0.998671, 0.999466],
+                 "kernel_vs_fp64_rule_min": 0.999997367272226,
+                 "receipt": "logs/apa_mf1_after_AB.log:156 166 passed, 12 skipped; artifacts/apa_mf1/real/*.json"},
+    "G4": {"verdict": "GREEN", "real_cells": 108, "grm": ["artifacts/apa_mf1/grm/chunked.json", "artifacts/apa_mf1/grm/control_4096.json"],
+           "grm_control_len": 4096, "grm_control_note": "8192 unchunked does not fit 12 GiB in the composed apa path (registered)"},
+    "mutation": {"verdict": "GREEN", "killed": 13, "total": 13, "ratio": 1.0, "restores_verified": true, "receipt": "logs/apa_mf1_mutation.log"}
+  },
+  "grm": {
+    "chunked_8192_kl_mean": {"before": 0.004613615391351758, "A": 0.003696650224044462, "AB": 0.0040902930915223575},
+    "chunked_top1": {"before": "31/32", "A": "31/32", "AB": "32/32"},
+    "control_4096_kl_mean": {"before": 0.005746524828290589, "A": 0.005746524828290589, "AB": 0.007567690031718641},
+    "control_before_equals_A_bytes": true,
+    "standard_repeat_bytes_equal": true
+  },
+  "predictions": {"P1": "held", "P2": "held (absolute, 18/18); relative bulk-8 change 5-46%", "P3": "held", "P4": "held",
+                  "P5": "held", "P6": "held", "P7": "held", "P8": "held"},
+  "deviations": [
+    "G1 unchanged-tree baseline run (11:28) preceded registration (11:36); pinned by sha in the registration",
+    "first fix-B Edit blocked by AfterImage hook; parallel run hit state A; receipts renamed *.INVALID_* (kept)",
+    "eligible_frac print in test check() under-reported by H in the before receipt; print-only fix, no assertion changed",
+    "GRM control 4096 unchunked (registered fallback reason: memory)",
+    "docs/APA_MF1_REPORT.md not written: harness refused report-file writes by subagents; report delivered as the final message"
+  ],
+  "open_items": [
+    "David: promote fix B or not",
+    "if B promoted: test_apa_phase6._ref needs visible-count stats",
+    "apa_cuda/csrc/apa.cpp:186-191 still top-left (extension not built here)",
+    "tensor_gpu_v2 APA and apa_cuda compute_threshold keep diluted stats on |ranking|"
+  ]
+}
