@@ -42,13 +42,23 @@ def _ref(q, k, v, bits, pct, causal):
         # apa_selective_kernel: APA picks which keys to refine using only the
         # signal it already has, never the expensive |ranking| it is deciding
         # whether to compute. (kernels.cu apa_selective_kernel.)
-        absr = np.abs(bulk)
-        if causal:
-            absr = np.where(np.triu(np.ones((q.shape[2], S), bool), 1), 0.0, absr)
+        # APA-MF2: the fused BK4 kernel's rule (kernels.cu bk4::forward :8064-8077,
+        # :8112-8114): population one-pass moments over the VISIBLE keys only
+        # (row i of L sees j <= S-L+i, count S-L+i+1; all S when non-causal),
+        # clamped variance, th = mean + z*sqrt(var), sel = visible && |bulk| >= th.
+        # The old reference diluted mean/std by S. Prior art: BK4 (Project-Tensor
+        # 2026); FlashAttention-2 bottom-right (Dao 2023).
+        Lq = q.shape[2]
+        vis = (np.arange(S)[None, :] <= (S - Lq + np.arange(Lq))[:, None]) if causal \
+            else np.ones((Lq, S), bool)
+        absr = np.where(vis, np.abs(bulk), 0.0)
         from tensor_cuda.quant import _norm_ppf
         z = _norm_ppf(1.0 - pct)
-        thr = absr.mean(-1, keepdims=True) + z * absr.std(-1, keepdims=True)
-        mask = absr >= thr
+        cnt = vis.sum(-1, keepdims=True)
+        mean = absr.sum(-1, keepdims=True) / cnt
+        var = np.maximum((absr * absr).sum(-1, keepdims=True) / cnt - mean * mean, 0.0)
+        thr = mean + z * np.sqrt(var)
+        mask = vis & (absr >= thr)
         scores = np.where(mask, ranking, bulk)
     scores = scores - scores.max(-1, keepdims=True)
     w = np.exp(scores); w /= w.sum(-1, keepdims=True)
