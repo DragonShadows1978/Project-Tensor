@@ -5071,7 +5071,7 @@ __global__ void fused_sdpa_noncausal_kernel(
   // while the running max is still -inf, the exponent reference is 0, so corr and w are
   // exp(-inf) = 0, never exp(-inf - -inf) = NaN. Whenever the row has a finite score,
   // gmax is finite and a -inf-only or empty warp merges with rescale exp(-inf - gmax) = 0.
-  // A fully blocked row (every score -inf) is outside this guard (policy unchanged).
+  // A fully blocked row (every score -inf) is handled in the merge below (Amendment 1).
   float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
@@ -5122,7 +5122,14 @@ __global__ void fused_sdpa_noncausal_kernel(
   // must finish loading the max before thread 0 can overwrite red[0]; without
   // this barrier, later warps can use warp 0's scaled denominator as gmax.
   __syncthreads();
-  const float rescale = expf(m - gmax);
+  // APA-MF2.2 Amendment 1 (item 3): a fully blocked row (every score -inf) has gmax == -inf
+  // and every warp m == -inf, l == 0, acc == 0; expf(-inf - -inf) would be NaN. Reference 0
+  // gives rescale = 0, the guarded normalizer below gives inv_denom = 0 and the output is 0
+  // -- fd32b6d's value for that row (its -3.0e38f start gave gmax = -3e38, l = 0 -> 0).
+  // Any finite gmax is used unchanged (MF2.2 bytes). Prior art: FlashAttention-2 (Dao 2023)
+  // combine/Check_inf guard (max == -inf -> 0); unverified -- lead to check. Mine: placement.
+  const float g_ref = gmax == -INFINITY ? 0.f : gmax;
+  const float rescale = expf(m - g_ref);
 
   red[tid] = lane == 0 ? l * rescale : 0.f;
   __syncthreads();
@@ -6251,7 +6258,10 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
   }
   const float gmax = red[0];
   __syncthreads();
-  const float rescale = expf(m - gmax);
+  // APA-MF2.2 Amendment 1 (item 3): fully blocked row -> reference 0, output 0 (fd32b6d's
+  // value), as in fused_sdpa_noncausal; finite gmax unchanged. FlashAttention-2 combine guard.
+  const float g_ref = gmax == -INFINITY ? 0.f : gmax;
+  const float rescale = expf(m - g_ref);
 
   red[tid] = lane == 0 ? l * rescale : 0.f;
   __syncthreads();
