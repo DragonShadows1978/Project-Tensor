@@ -240,6 +240,11 @@ std::vector<at::Tensor> apa_forward(
   const int64_t B = query.size(0), H = query.size(1), L = query.size(2),
                 D = query.size(3);
   const int64_t S = key.size(2);
+  // APA-MF2.1 item 1 (review F3): bottom-right causal row r sees keys j <= S-L+r, so
+  // S < L leaves rows without a key. Reject before any compute, like the engine's CUDA
+  // kernels and tensor_cuda functional._check_causal_lengths.
+  TORCH_CHECK(!is_causal || S >= L, "APA forward: causal attention requires S >= L "
+              "(bottom-right causal); got L=", L, " queries, S=", S, " keys");
   refine_percentile = std::max(0.0, std::min(1.0, refine_percentile));
   const int64_t refine_k = std::max<int64_t>(1, (int64_t)(S * refine_percentile));
 
@@ -363,6 +368,8 @@ std::vector<at::Tensor> apa_backward(
     int64_t block_size) {
   const int64_t B = query.size(0), H = query.size(1), L = query.size(2);
   const int64_t S = key.size(2);
+  TORCH_CHECK(!is_causal || S >= L, "APA backward: causal attention requires S >= L "
+              "(bottom-right causal); got L=", L, " queries, S=", S, " keys");  // APA-MF2.1
   auto mask_bool = refine_mask.to(at::kBool);
 
   auto grad_q = at::zeros_like(query);

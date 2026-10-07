@@ -207,6 +207,8 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
     from . import functional as F
     B, H, L, D = query.shape
     S = key.shape[-2]
+    if is_causal:
+        F._check_causal_lengths(L, S)    # APA-MF2.1: S < L raises before any matmul
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
     dev = query.device.split(":")[0]
     R, CB, BND = _tables(D, bulk_bits, H, apa_rotation, dev)

@@ -17,7 +17,23 @@ import tensor_cuda as tc
 _causal_cache = {}
 
 
+def _check_causal_lengths(L, S):
+    """APA-MF2.1 item 1 (review F3): bottom-right causal needs S >= L.
+
+    Query row i of L sees keys j <= S-L+i; with S < L rows 0..L-S-1 see no key, so
+    their softmax has no finite entry (NaN under the -inf mask). Rejected up front,
+    before any matmul, like the engine's CUDA kernels (kernels.cu causal_softmax:
+    "S < L (queries outnumber keys)"). Prior art: FlashAttention-2 v2.1 (Dao 2023)
+    defines the same bottom-right alignment (it returns zeros for such rows instead).
+    """
+    if S < L:
+        raise ValueError(
+            f"causal attention requires S >= L (bottom-right causal: query row i sees keys "
+            f"j <= S-L+i); got L={L} queries, S={S} keys, so rows 0..{L - S - 1} would see no key")
+
+
 def _causal_mask(L, S, device, dtype):
+    _check_causal_lengths(L, S)
     key = (L, S, device, dtype)
     m = _causal_cache.get(key)
     if m is None:
@@ -34,8 +50,9 @@ def _causal_mask(L, S, device, dtype):
         # score in every dtype; the engine softmaxes (ops.cpp softmax: max init
         # -3.4e38; kernels.cu causal_softmax: max init -3e38) give exp(-inf) = 0
         # and no NaN as long as the row has one visible key, i.e. for every S >= L
-        # row. Out-of-contract S < L rows have none and now give NaN (were a
-        # uniform average of masked keys). Consumers that ADD this bias keep
+        # row. APA-MF2.1: S < L (rows with no visible key) is rejected with a
+        # ValueError before any compute (_check_causal_lengths; was NaN under MF2,
+        # a uniform average of masked keys before). Consumers that ADD this bias keep
         # working; SDPA and apa_quant_attention apply it as a predicate
         # (masked_fill), so masked positions are -inf even if their score is not
         # finite. Prior art: FlashAttention-2 (Dao 2023) -inf predicate masking;
@@ -76,6 +93,8 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     """query/key/value: (B, H, L, D). Returns (B, H, L, D)."""
     D = query.shape[-1]
     L, S = query.shape[-2], key.shape[-2]
+    if is_causal:
+        _check_causal_lengths(L, S)      # APA-MF2.1: S < L raises before any matmul
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
     # HY3D DiT / VAE attention is non-causal, mask-free inference with D=64
     # or 128. Route it before the composed GEMM path so a [B,H,Lq,Lk] score

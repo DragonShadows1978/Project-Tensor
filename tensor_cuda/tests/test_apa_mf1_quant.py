@@ -158,10 +158,10 @@ def test_mf1_quant_square_byte_identical_to_before(L, dtype, bits):
     assert out_b.tobytes() == out_t.tobytes(), f"L={L} {dtype} bits={bits}: square output moved"
 
 
-def test_mf1_quant_s_less_than_l_is_finite():
-    """S < L is out of contract: record that it neither raises nor emits NaN."""
+def test_mf1_quant_s_less_than_l_raises():
+    """S < L is out of contract. APA-MF2.1 item 1 (review F3): bottom-right causal rows
+    0..L-S-1 see no key, so the call is REJECTED (ValueError naming S and L) before any
+    compute -- was 'finite' under MF1's -1e4 bias, NaN under MF2's -inf mask."""
     ts, _ = operands(8, 5, "float32", 7)
-    out = Q.apa_quant_attention(*ts, bulk_bits=8, refine_percentile=P, is_causal=True)
-    o = out.float().numpy()
-    print("S<L (L=8,S=5) finite:", bool(np.isfinite(o).all()))
-    assert np.isfinite(o).all()
+    with pytest.raises(ValueError, match=r"S >= L"):
+        Q.apa_quant_attention(*ts, bulk_bits=8, refine_percentile=P, is_causal=True)
