@@ -26,8 +26,20 @@ def _causal_mask(L, S, device, dtype):
         # ~500MB of cached masks that empty_cache() cannot reach
         if len(_causal_cache) >= 16:
             _causal_cache.clear()
-        # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
-        # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
+        # bf16 has no numpy dtype — build fp32 then cast on device.
+        # APA-MF2: masked entries are -inf (was -1e4, chosen to stay finite in
+        # fp16/bf16). A finite bias lets a large enough score win: masked score s
+        # leaks once s - 1e4 approaches the visible max (review N1: K7 = 80008 e0
+        # gave row 0 = 0.2797, not 0). -inf is exact zero weight for every finite
+        # score in every dtype; the engine softmaxes (ops.cpp softmax: max init
+        # -3.4e38; kernels.cu causal_softmax: max init -3e38) give exp(-inf) = 0
+        # and no NaN as long as the row has one visible key, i.e. for every S >= L
+        # row. Out-of-contract S < L rows have none and now give NaN (were a
+        # uniform average of masked keys). Consumers that ADD this bias keep
+        # working; SDPA and apa_quant_attention apply it as a predicate
+        # (masked_fill), so masked positions are -inf even if their score is not
+        # finite. Prior art: FlashAttention-2 (Dao 2023) -inf predicate masking;
+        # PyTorch SDPA boolean attn_mask semantics (masked -> -inf).
         # BOTTOM-RIGHT aligned (k = 1 + S - L): when S > L the L queries are the
         # LAST L positions of S keys (KV-cache decode, grafted/injected prefix),
         # so row i attends cols 0..(S-L)+i — prefix fully visible, causal among
@@ -35,7 +47,7 @@ def _causal_mask(L, S, device, dtype):
         # triu(k=1) on a rectangle is TOP-LEFT aligned and silently blinds the
         # queries to most of the prefix AND to each other (measured: predicted
         # ' briefing' from the first visible graft tokens instead of recall).
-        bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1 + (S - L))
+        bias = np.triu(np.full((L, S), -np.inf, dtype=np.float32), k=1 + (S - L))
         m = tc.tensor(bias, device=device)
         if dtype in ("float16", "bfloat16"):
             m = m.astype(dtype)
@@ -85,11 +97,13 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
         # columns never read (inference-only; backward raises).
         return tc.matmul(tc.causal_softmax(scores), value)
     if is_causal:
-        scores = scores + _causal_mask(L, S, query.device.split(":")[0], query.dtype)
+        # APA-MF2: predicate mask (nonzero bias == masked) -> -inf, never an add
+        scores = scores.masked_fill(
+            _causal_mask(L, S, query.device.split(":")[0], query.dtype), float("-inf"))
     if attn_mask is not None:
         scores = scores + attn_mask
     # fused row softmax at inference: masks are already FOLDED INTO the
-    # scores above (-1e4 entries exp to ~0 exactly as in the composed
+    # scores above (-inf entries exp to exactly 0 as in the composed
     # path), so causal_softmax with L=1 rows == plain softmax(-1) in
     # one kernel. Measured 8x at sliding-window prefill shapes
     # (16,512,1535); the composed chain also paid the old pathological

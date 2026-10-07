@@ -31,7 +31,13 @@ std::tuple<at::Tensor, at::Tensor> mix_scores(const at::Tensor& ranking,
 
 namespace {
 
-constexpr double kNegInf = -1e9;  // matches the reference's masked fill value
+// APA-MF2 item 2 (audit of finite-bias causal masks in writable files): -inf, was
+// -1e9. A finite fill lets a masked score above 1e9 + the visible max leak weight;
+// -inf gives exact zero weight for every finite score (at::softmax / the tiled
+// online softmax give exp(-inf) = 0, no NaN while a row has a visible key: every
+// S >= L row). The Python reference's -1e9 still exps to exactly 0 for realistic
+// scores. Prior art: FlashAttention-2 (Dao 2023) -inf predicate masking.
+constexpr double kNegInf = -INFINITY;
 
 // Acklam's rational approximation to the inverse normal CDF. Matches
 // scipy.stats.norm.ppf to ~1e-9, which is the value the reference caches via

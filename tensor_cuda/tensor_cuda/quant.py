@@ -218,9 +218,13 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
 
     causal_add = None
     if is_causal:
+        # APA-MF2 item 2: the shared bottom-right mask (0 visible, -inf masked) as
+        # a PREDICATE: masked positions become -inf whatever their score, so a
+        # large (or overflowed) masked score can never leak weight. Prior art:
+        # FlashAttention-2 (Dao 2023) -inf predicate masking.
         causal_add = F._causal_mask(L, S, dev, query.dtype)
-        bulk = bulk + causal_add
-        ranking = ranking + causal_add
+        bulk = bulk.masked_fill(causal_add, float("-inf"))
+        ranking = ranking.masked_fill(causal_add, float("-inf"))
 
     if refine_percentile >= 1.0:
         scores = ranking
