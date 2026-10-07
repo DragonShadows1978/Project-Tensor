@@ -1,0 +1,240 @@
+diff -ruN a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+--- a/tensor_cuda/src/kernels.cu	2026-10-07 17:58:26.288947944 -0400
++++ b/tensor_cuda/src/kernels.cu	2026-10-07 17:58:26.290053051 -0400
+@@ -557,8 +557,13 @@
+   int64_t row = blockIdx.x;
+   if (row >= n_rows) return;
+   const T* p = in + row * R;
++  // APA-MF2.1 item 2 (review F1): max/min start at their identities -inf/+inf (was
++  // -3.4e38f/3.4e38f, which beat any row whose values all lie beyond it, e.g. a visible
++  // score -3.402e38 next to -inf masked entries -> softmax 0/0). Only the start value
++  // changed: the result is unchanged whenever the row max >= -3.4e38f (min <= 3.4e38f).
++  // Prior art: PyTorch amax / FlashAttention-2 (Dao 2023) running max m = -inf.
+   float acc = MODE == 0 ? 0.f
+-            : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
++            : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
+   for (int64_t i = threadIdx.x; i < R; i += blockDim.x) {
+     float v = ld<T>(p, i);
+     if (MODE == 0) acc += v;
+@@ -597,7 +602,8 @@
+     coord[d] = s.reduced[d] ? 0 : c;
+     base += coord[d] * s.in_str[d];
+   }
+-  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
++  // APA-MF2.1 item 2: -inf/+inf identities (was -3.4e38f/3.4e38f); see reduce_lastdim_kernel.
++  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
+   for (int64_t r = 0; r < s.red_size; ++r) {
+     int64_t rr = r, off = 0;
+     for (int d = s.ndim - 1; d >= 0; --d) {
+@@ -5058,7 +5064,10 @@
+   // Each warp walks every nwarp-th key and maintains its own online-softmax
+   // numerator/denominator. m and l are intentionally replicated across a
+   // warp; each lane owns only values d=lane, lane+32, ... .
+-  float m = -3.0e38f;
++  // APA-MF2.1 item 2: running max starts at -inf (was -3.0e38f; a fp32 score below it
++  // gave weight 0 to every key). Lk >= 1 is enforced by the launcher, so gmax is finite
++  // and an empty warp's rescale exp(-inf - gmax) = 0, as before.
++  float m = -INFINITY;
+   float l = 0.f;
+   constexpr int ACCN = (DMAX + 31) / 32;
+   float acc[ACCN];
+@@ -5090,7 +5099,7 @@
+   // Merge the four warp-local online-softmax partials. Only lane zero owns
+   // each warp's m/l state; output accumulators are already lane-disjoint.
+   __shared__ float red[128];
+-  red[tid] = lane == 0 ? m : -3.0e38f;
++  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
+   __syncthreads();
+   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+@@ -6173,7 +6182,7 @@
+ 
+   // Pass 2: blend + online softmax + V accumulation (fused_sdpa_noncausal
+   // streaming state); bulk scores come from the shared cache.
+-  float m = -3.0e38f;
++  float m = -INFINITY;  // APA-MF2.1 item 2: max identity (was -3.0e38f); Lk >= 1 enforced
+   float l = 0.f;
+   constexpr int ACCN = (DMAX + 31) / 32;
+   float acc[ACCN];
+@@ -6215,7 +6224,7 @@
+ 
+   // Merge the four warp-local online-softmax partials (fused_sdpa_noncausal
+   // merge, including the r2 barrier between the max and denom reductions).
+-  red[tid] = lane == 0 ? m : -3.0e38f;
++  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
+   __syncthreads();
+   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
+@@ -7222,7 +7231,12 @@
+   const T* xr = x + row * S;
+   T* orow = o + row * S;
+ 
+-  float mx = -3.0e38f;
++  // APA-MF2.1 item 2 (review F1): max starts at -inf (was -3.0e38f: a visible score
++  // below it -- fp32 -3.3e38, bf16 -3.38e38 -- left m at the sentinel, every exp
++  // underflowed and inv = 1/0 gave 0*inf = NaN). Unchanged for every row whose visible
++  // max >= -3.0e38f. A row whose visible entries are all -inf stays NaN (as before).
++  // Prior art: FlashAttention-2 (Dao 2023) m = -inf; PyTorch softmax -inf identity.
++  float mx = -INFINITY;
+   for (int64_t c = threadIdx.x; c < visible; c += blockDim.x)
+     mx = fmaxf(mx, ld<T>(xr, c));
+   shm[threadIdx.x] = mx;
+diff -ruN a/tensor_cuda/tensor_cuda/functional.py b/tensor_cuda/tensor_cuda/functional.py
+--- a/tensor_cuda/tensor_cuda/functional.py	2026-10-07 17:58:26.288633310 -0400
++++ b/tensor_cuda/tensor_cuda/functional.py	2026-10-07 17:58:26.289734009 -0400
+@@ -47,8 +47,9 @@
+         # fp16/bf16). A finite bias lets a large enough score win: masked score s
+         # leaks once s - 1e4 approaches the visible max (review N1: K7 = 80008 e0
+         # gave row 0 = 0.2797, not 0). -inf is exact zero weight for every finite
+-        # score in every dtype; the engine softmaxes (ops.cpp softmax: max init
+-        # -3.4e38; kernels.cu causal_softmax: max init -3e38) give exp(-inf) = 0
++        # score in every dtype; the engine softmaxes (ops.cpp softmax via reduce_max,
++        # kernels.cu causal_softmax; both start their max at -inf since APA-MF2.1 --
++        # were -3.4e38 / -3e38, review F1) give exp(-inf) = 0 for ANY finite visible max
+         # and no NaN as long as the row has one visible key, i.e. for every S >= L
+         # row. APA-MF2.1: S < L (rows with no visible key) is rejected with a
+         # ValueError before any compute (_check_causal_lengths; was NaN under MF2,
+diff -ruN a/tensor_cuda/tests/test_apa_mf2_1_sentinel.py b/tensor_cuda/tests/test_apa_mf2_1_sentinel.py
+--- a/tensor_cuda/tests/test_apa_mf2_1_sentinel.py	1969-12-31 19:00:00.000000000 -0500
++++ b/tensor_cuda/tests/test_apa_mf2_1_sentinel.py	2026-10-07 17:58:26.290540652 -0400
+@@ -0,0 +1,140 @@
++"""APA-MF2.1 item 2 (review F1): softmax / max reductions start at -inf, so a row with ANY
++visible finite score is finite, whatever its magnitude.
++
++Before: kernels.cu reduce MODE 1 started at -3.4e38f (MODE 2 at 3.4e38f) and
++causal_softmax at -3.0e38f. A visible score below the start (fp32 -3.3e38 / -3.402e38,
++bf16 -3.38e38) left the running max at the sentinel, every exp underflowed to 0 and the
++row became 0/0 = NaN once its masked entries were -inf (reviewer `negative` cell RED:
++artifacts/apa_mf2rev/gpu_negative_20261007T210327Z_183525.json on apa-mf2rev).
++After: -INFINITY / +INFINITY, the identities of max / min -- only the start value moved.
++
++Witness (review F1): B=H=1, L=S=2, D=64, Q = e0 on both rows, K0 = s*e0, K1 = 0, V0 = 1,
++V1 = 0, scale 1, causal. Row 0 sees key 0 only -> output exactly 1; row 1 sees scores
++(s, 0) -> output exactly 0 (exp(s) underflows).
++
++Prior art: FlashAttention-2 (Dao 2023) initialises its running max m = -inf; PyTorch's
++amax / softmax use -inf as the max identity. Unverified -- lead to check
++("flash attention 2 algorithm 1 m_i = -inf"). Witness from the review; tests: mine.
++"""
++import contextlib
++
++import numpy as np
++import pytest
++
++import tensor_cuda as tc
++from tensor_cuda import functional as F
++from tensor_cuda import quant as Q
++
++FLT_MAX = float(np.finfo(np.float32).max)
++FP32_SCORES = (-3.0e38, -3.3e38, -3.39e38, -3.402e38, -FLT_MAX)
++BF16_SCORES = (-3.0e38, -3.38e38)
++
++
++def _witness(s, dtype):
++    q = np.zeros((1, 1, 2, 64), np.float32); q[..., 0] = 1
++    k = np.zeros_like(q); k[0, 0, 0, 0] = s
++    v = np.zeros_like(q); v[0, 0, 0] = 1
++    return [tc.tensor(a, dtype=dtype) for a in (q, k, v)]
++
++
++def _sdpa(path, q, k, v):
++    saved = F.USE_FUSED_SOFTMAX
++    F.USE_FUSED_SOFTMAX = path == "fused"
++    try:
++        ctx = contextlib.nullcontext() if path == "grad" else tc.no_grad()
++        with ctx:
++            return F.scaled_dot_product_attention(q, k, v, is_causal=True, scale=1.0)
++    finally:
++        F.USE_FUSED_SOFTMAX = saved
++
++
++@pytest.mark.parametrize("path", ["infer", "fused", "grad"])
++@pytest.mark.parametrize("dtype,s", [("float32", s) for s in FP32_SCORES] + [("bfloat16", s) for s in BF16_SCORES])
++def test_sdpa_extreme_negative_visible_score_is_finite(dtype, s, path):
++    q, k, v = _witness(s, dtype)
++    o = _sdpa(path, q, k, v).float().numpy()[0, 0]
++    assert np.isfinite(o).all(), f"NaN/Inf for visible score {s} ({dtype}, {path})"
++    assert np.all(o[0] == 1.0), f"row 0 (one visible key) {o[0, :4]}"
++    assert np.all(o[1] == 0.0), f"row 1 {o[1, :4]}"
++
++
++def test_sdpa_grad_extreme_negative_backward_finite():
++    qq = np.zeros((1, 1, 2, 64), np.float32); qq[..., 0] = 1
++    kk = np.zeros_like(qq); kk[0, 0, 0, 0] = -3.402e38
++    vv = np.zeros_like(qq); vv[0, 0, 0] = 1
++    leaves = [tc.tensor(a, requires_grad=True) for a in (qq, kk, vv)]
++    o = F.scaled_dot_product_attention(*leaves, is_causal=True, scale=1.0)
++    o.sum().backward()
++    assert np.all(o.numpy()[0, 0, 0] == 1.0)
++    for x in leaves:
++        assert np.isfinite(x.grad.numpy()).all()
++
++
++@pytest.mark.parametrize("s", FP32_SCORES)
++def test_apa_quant_full_refine_extreme_negative(s):
++    q, k, v = _witness(s, "float32")
++    o = Q.apa_quant_attention(q, k, v, bulk_bits=8, refine_percentile=1.0, is_causal=True, scale=1.0).numpy()[0, 0]
++    assert np.isfinite(o).all() and np.all(o[0] == 1.0) and np.all(o[1] == 0.0), o[:, :3]
++
++
++@pytest.mark.parametrize("s", FP32_SCORES)
++def test_apa_quant_partial_refine_extreme_negative_supplied_kq(s):
++    """refine 0.15 with the supplied finite Kq = K (the quantizer's |k|^2 overflows
++    above ~1.8e19 -- out of scope, review F4 isolation)."""
++    q, k, v = _witness(s, "float32")
++    orig = Q._quantize_keys
++    Q._quantize_keys = lambda *a, **kw: k
++    try:
++        o = Q.apa_quant_attention(q, k, v, bulk_bits=8, refine_percentile=0.15, is_causal=True,
++                                  scale=1.0).numpy()[0, 0]
++    finally:
++        Q._quantize_keys = orig
++    assert np.isfinite(o).all() and np.all(o[0] == 1.0) and np.all(o[1] == 0.0), o[:, :3]
++
++
++@pytest.mark.parametrize("dtype,s", [("float32", s) for s in FP32_SCORES] + [("bfloat16", s) for s in BF16_SCORES])
++def test_causal_softmax_kernel_direct(dtype, s):
++    x = tc.tensor(np.array([[[[s, 123.0], [s, 0.0]]]], np.float32), dtype=dtype)
++    with tc.no_grad():
++        w = tc.causal_softmax(x).float().numpy()[0, 0]
++    np.testing.assert_array_equal(w, [[1.0, 0.0], [0.0, 1.0]])
++
++
++def test_causal_softmax_minus_inf_entry():
++    with tc.no_grad():
++        w = tc.causal_softmax(tc.tensor(np.array([[-np.inf, 0.0]], np.float32))).numpy()
++    np.testing.assert_array_equal(w, [[0.0, 1.0]])
++
++
++@pytest.mark.parametrize("s", FP32_SCORES)
++def test_eager_softmax_direct(s):
++    x = tc.tensor(np.array([[s, -np.inf, -np.inf], [s, s, -np.inf]], np.float32))
++    w = x.softmax(-1).numpy()
++    np.testing.assert_array_equal(w, [[1.0, 0.0, 0.0], [0.5, 0.5, 0.0]])
++
++
++@pytest.mark.parametrize("R", [2, 7, 300, 1025])
++@pytest.mark.parametrize("trailing", [True, False])
++def test_reduce_max_min_start_is_the_identity(R, trailing):
++    """Rows entirely beyond the old +-3.4e38f start: the true max/min, never the start.
++    trailing=True takes reduce_lastdim_kernel (block per row), False the generic kernel."""
++    lo = np.full((3, R), -3.402e38, np.float32); lo[:, R // 2] = -3.4019e38
++    lo[1] = -np.inf                                   # all -inf row: max identity is -inf
++    hi = -lo; hi[1] = np.inf
++    for arr, op, want in ((lo, "max", [-3.4019e38, -np.inf, -3.4019e38]),
++                          (hi, "min", [3.4019e38, np.inf, 3.4019e38])):
++        a = arr if trailing else np.ascontiguousarray(arr.T)
++        t = tc.tensor(a)
++        got = getattr(t, op)([-1] if trailing else [0], False).numpy()
++        np.testing.assert_array_equal(got, np.array(want, np.float32))
++
++
++@pytest.mark.parametrize("dtype", ["float32", "bfloat16", "float16"])
++def test_reduce_max_min_finite_values_unchanged(dtype):
++    rng = np.random.default_rng(5)
++    a = (rng.normal(0, 1, (4, 333)) * np.array([1, 1e3, 1e30, 1e38])[:, None]).astype(np.float32)
++    a = np.clip(a, -3.3e38, 3.3e38) if dtype != "float16" else np.clip(a, -6e4, 6e4)
++    t = tc.tensor(a, dtype=dtype)
++    ref = t.float().numpy()
++    np.testing.assert_array_equal(t.max([-1], False).float().numpy(), ref.max(-1))
++    np.testing.assert_array_equal(t.min([-1], False).float().numpy(), ref.min(-1))
