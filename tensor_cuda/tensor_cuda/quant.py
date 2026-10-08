@@ -286,5 +286,6 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
         scores = tc.where(mask, ranking, bulk)
 
-    weights = scores.softmax(-1)
+    # APA-MF2.2 Amendment 2: a row whose every score is -inf returns 0, not NaN.
+    weights = F._guarded_softmax(scores, lambda s: s.softmax(-1))
     return tc.matmul(weights, value)
