@@ -113,8 +113,11 @@ def _guarded_softmax(scores, softmax, invisible=None):
     and MF2.1 tests observe apa_quant_attention's selection as the LAST masked_fill (stats mask)
     and the LAST tc.where (refine) of the call, and this guard runs after both.
     Prior art: FlashAttention-2 (Dao 2023) returns 0 for fully masked rows (its Check_inf / lse
-    guards); PyTorch SDPA returns NaN there. Unverified -- lead to check. Mine: the composed-op
-    form (select-then-zero, so the backward never sees NaN).
+    guards); so does PyTorch 2.11's scaled_dot_product_attention (measured on CPU, additive and
+    boolean masks: logs/apa_mf2_2c_v3_torch_check.log), while the softmax primitive returns NaN --
+    the same split as here (APA-MF2.2 Amendment 3, review V3: this line used to say PyTorch SDPA
+    returns NaN). Unverified beyond that measurement -- lead to check. Mine: the composed-op form
+    (select-then-zero, so the backward never sees NaN).
     """
     blocked = _blocked_rows(scores, invisible)
     weights = softmax(tc._C.where(blocked, _guard_const(0.0, scores), scores))

@@ -154,6 +154,42 @@ def _bk4_rows(L, S, dev, is_causal):
     return t
 
 
+_ROW_SUM_NATIVE_MAX = 8192   # rows up to this length: the engine's single-pass row sum
+_ROW_SUM_BLOCK = 4096        # longer rows: sums of 4096-key blocks, then of the partials
+
+
+def _row_sum(x):
+    """Sum over the last axis (keepdim) with a bounded fp32 accumulation depth.
+
+    APA-MF2.2 Amendment 3 (review V7): the engine's row sum (kernels.cu reduce_lastdim_kernel) runs
+    256 threads over S/256 sequential fp32 adds plus an 8-level tree, i.e. an accumulation depth of
+    S/256 + 7. At S = 2^20 that is 4103 roundings; on a tightly clustered row the mean drifted 4e-5
+    and moved the threshold outside the 2e-5 band. Rows with S <= 8192 keep that single-pass sum
+    (depth <= 39, so every shorter row keeps its exact bytes); longer rows are reshaped into
+    4096-key blocks, each block summed (depth <= 15 + 8), the partials summed the same way
+    (recursive), and the < 4096-key remainder summed natively and added once -- depth <= 32 for
+    S <= 2^20. Recursive-summation bound: |error| <= depth * 2^-24 * sum|x| (first order).
+    The engine has no float64 dtype (core.h DType), so this is the precision lever available here.
+    Memory: S % 4096 == 0 (incl. 2^20) -> reshape views + S/4096 partials per row; otherwise one
+    transient slice copy of the first nb*4096 keys.
+    Prior art: pairwise / blocked summation and its error analysis -- Higham (1993, "The accuracy of
+    floating point summation", SIAM J. Sci. Comput. 14(4)); Chan, Golub & LeVeque (1983) on pairwise
+    accumulation for the variance. Unverified -- lead to check. Mine: the two-level engine-op
+    composition and the 8192 / 4096 split.
+    """
+    S = x.shape[-1]
+    if S <= _ROW_SUM_NATIVE_MAX:
+        return x.sum([-1], True)
+    last = len(x.shape) - 1
+    nb, rem = divmod(S, _ROW_SUM_BLOCK)
+    main = x if rem == 0 else x.slice(last, 0, nb * _ROW_SUM_BLOCK)
+    part = main.reshape(list(x.shape[:-1]) + [nb, _ROW_SUM_BLOCK]).sum([-1], False)
+    total = _row_sum(part)
+    if rem:
+        total = total + x.slice(last, nb * _ROW_SUM_BLOCK, rem).sum([-1], True)
+    return total
+
+
 def _definition_selection(qf, kqf, scale, z, is_causal, bulk32=None):
     """APA-MF2.1 item 3: the refine selection IS the definition, composed from engine ops.
 
@@ -185,8 +221,12 @@ def _definition_selection(qf, kqf, scale, z, is_causal, bulk32=None):
     deviation (mean >= 1/cnt bounds the spacing of u - mean away from fp32's tiny range).
     The selection compares in the scaled domain, u >= mean_u + z*std_u: the definition is
     homogeneous of degree 1 in |b| (thr(c|b|) = c thr(|b|), c > 0), so the scaled predicate
-    is the definition's predicate; the only extra rounding is the one division per entry
-    (<= 2^-24 relative, far inside the 2e-5 tie band).
+    is the definition's predicate; the only extra rounding is the one division per entry,
+    |fl(a/M) - a/M| <= 2^-24 * (a/M) + 2^-150 -- i.e. <= 2^-24 relative to the row max (u <= 1),
+    not per entry when a/M underflows (review V6: [1e-30, 1e30] gives u = 0 for the small key,
+    selection unchanged); far inside the 2e-5 row-relative tie band.
+    APA-MF2.2 Amendment 3 (review V7): both moments are summed with _row_sum (bounded
+    accumulation depth); the definition is unchanged, only its summation precision.
     Prior art: scaling by the largest magnitude before squaring -- Blue (1978, ACM TOMS
     4(1), "A portable Fortran program to find the Euclidean norm of a vector") and the
     reference BLAS snrm2/dnrm2 scale/ssq form; centered two-pass variance, Chan, Golub &
@@ -216,11 +256,11 @@ def _definition_selection(qf, kqf, scale, z, is_causal, bulk32=None):
     amax = absb.max([-1], True)              # visible row max (invisible entries are 0)
     amax = amax + (amax <= 0.0)              # all-zero row: divide by 1, never 0/0
     u = absb / amax                          # u in [0, 1]
-    mean = u.sum([-1], True) / cnt
+    mean = _row_sum(u) / cnt                 # APA-MF2.2 Amendment 3 (V7): bounded-depth sums
     dev_ = u - mean
     if vis is not None:
         dev_ = dev_ * vis                    # invisible deviations -> 0 (0/1 product)
-    var = (dev_ * dev_).sum([-1], True) / cnt
+    var = _row_sum(dev_ * dev_) / cnt
     thr = mean + var.sqrt() * z
     sel = u.ge(thr)                          # scaled-domain comparison
     if vis is not None:
