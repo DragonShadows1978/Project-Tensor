@@ -439,3 +439,15 @@ V1 (GRAPA attention.py:114; GRM Gemma4/DeepSeek/MiniCPM3 direct primitive softma
 (`.ravel()` in the guards cell; bf16-aware tolerance in the real cell). `_row_sum` bound beyond S = 2^20 is reasoning only.
 Scratch (/tmp): `/tmp/claude-1000/apa_mf2_2c_mut`, `/tmp/claude-1000/apa_mf2_2c_patchchk`, `/tmp/claude-1000/apa_mf2_2c_before_tests`,
 `/tmp/claude-1000/apa_mf2_2c_m4_search.py`. G1 regenerated the 17 `artifacts/wo*.ppm` again.
+
+## Promotion record (lead)
+
+- **2026-10-07 ~22:10 EDT, David's verbatim approval of the promotion ticket:** "I approve the thing".
+- **Ticket scope, as presented:**
+  - **Promoted ref:** `apa-mf2` at 7813b48 (production fd32b6d plus the MF1–MF2.2 chain).
+  - **Not covered:** BK4/'a' kernel statistics; GRAPA/GRM direct primitive softmax; the apa_cuda CUDA 13 build; the
+    quantizer overflow; S beyond about 2^20.
+- **Review receipt:** `artifacts/apa_mf_promotion/review_receipt.json` (final Codex verdict APPROVE-WITH-NITS, no
+  blocking findings).
+- **Condition stated to David:** the final review's GPU probes must pass before the merge. They are pending because
+  APA-SPM2 holds the GPU.
