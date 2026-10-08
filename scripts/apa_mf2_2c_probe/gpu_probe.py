@@ -1,0 +1,520 @@
+"""Independent native GPU probes, launched only by the lead.
+
+Prior art: Dao 2023 FlashAttention-2 guarded/fully masked convention;
+Blue 1978 scaled norms; Chan/Golub/LeVeque 1983 centered variance;
+Milakov/Gimelshein 2018 online normalizer. Taken: definitions, not code.
+Mine: adversarial census and isolated historical processes. Content pins:
+SHA-256 (NIST FIPS 180-4, 2015), not a semantic proof.
+"""
+import ast
+import contextlib
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import traceback
+
+import numpy as np
+import oracle as O
+
+ROOT=Path(__file__).resolve().parents[2]
+ART=ROOT/'artifacts/apa_mf2_2c/probe'  # APA-MF2.2c copy: receipts + pins (adds arm 'after3')
+DT=('float32','float16','bfloat16')
+TOL={'float32':(2e-5,2e-6),'float16':(.03,.003),'bfloat16':(.06,.02)}
+Z=1.0364333894937898
+CELLS=('n1','n2','long_keys','guards','backward','paths','left_padding','geometry','identity','real','consumers','author_tests')
+ARM=os.environ.get('APA_MF22REV_ARM','a2e3ca1')
+RUN=os.environ.get('APA_MF22REV_RUN','manual')
+rows=[]
+
+
+def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def verify():
+    pins=json.loads((ART/'gpu_pins.json').read_text())[ARM]
+    engine=Path(pins['engine']);pkg=Path(pins['package'])
+    mf=json.loads((engine/'manifest.json').read_text())
+    assert mf['sources']==pins['engine_sources'],'build source drift'
+    for rel,digest in pins['python_sources'].items():assert sha(pkg/rel)==digest,'package drift: '+rel
+    for name,digest in pins['modules'].items():assert sha(engine/name)==digest,'module drift'
+    sys.path[:0]=[str(engine),str(pkg)]
+    import tensor_cuda as tc
+    from tensor_cuda import functional as F,quant as Q
+    assert Path(tc._C.__file__).resolve().parent==engine.resolve(),'wrong engine imported'
+    assert Path(tc.__file__).resolve().parent==(pkg/'tensor_cuda').resolve(),'wrong package imported'
+    assert sha(F.__file__)==pins['python_sources']['tensor_cuda/functional.py']
+    assert sha(Q.__file__)==pins['python_sources']['tensor_cuda/quant.py']
+    print(json.dumps({'provenance':ARM,'engine_sha256':sha(tc._C.__file__),
+                      'functional_sha256':sha(F.__file__),'quant_sha256':sha(Q.__file__),
+                      'build_sources_verified':len(mf['sources'])}),flush=True)
+    return tc,F,Q
+
+
+def mk(a,dt='float32',grad=False):
+    t=tc.tensor(np.asarray(a,np.float32),dtype=dt)
+    if grad:
+        # dtype conversion is an autograd operation. Detach AFTER conversion,
+        # then set requires_grad, so bf16 gradients are owned by the real leaf.
+        t=t.detach();t.requires_grad=True
+    return t
+
+
+def host(t):return t.float().numpy()
+
+
+def check(t,ref,dt,blocked=None):
+    got=host(t)
+    assert np.isfinite(got).all(),'nonfinite output'
+    if blocked is not None:assert (got[blocked]==0).all(),'blocked row not exactly zero'
+    rt,at=TOL[dt]
+    np.testing.assert_allclose(got,ref,rtol=rt,atol=at)
+    return {'max_abs_error':float(np.abs(got-ref).max(initial=0))}
+
+
+def gate(name,fn):
+    try:r={'name':name,'passed':True,'detail':fn()}
+    except Exception as ex:r={'name':name,'passed':False,'error':repr(ex),'traceback':traceback.format_exc()}
+    rows.append(r);print(json.dumps(r),flush=True)
+    (ART/'gpu'/f'{RUN}_{ARM}_receipt.json').write_text(json.dumps({'arm':ARM,'rows':rows},indent=2)+'\n')
+
+
+@contextlib.contextmanager
+def fused(flag):
+    old=F.USE_FUSED_SOFTMAX;F.USE_FUSED_SOFTMAX=flag
+    try:yield
+    finally:F.USE_FUSED_SOFTMAX=old
+
+
+def n1_case(op,dt,D,S,pattern,tile):
+    os.environ['TC_ATTN_QTILE']=tile
+    q=np.zeros((1,1,1,D),np.float32);k=np.zeros((1,1,S,D),np.float32);v=np.ones_like(k)
+    q[...,0]=2 if dt=='float16' else 1e20
+    ids=np.arange(S) if pattern=='all' else np.arange(min(4,S-1)) if pattern=='first4' else np.array([0])
+    k[...,ids,0]=-60000 if dt=='float16' else -1e20
+    v[...,ids,:]=0
+    scale=1. if op=='int4_partial' and dt=='float16' else 1e34 if dt=='float16' else 1.
+    xs=[mk(x,dt) for x in (q,k,v)]
+    with tc.no_grad():
+        if op=='sdpa':o=tc.fused_sdpa_noncausal(*xs,scale)
+        else:o=tc.apa_int4_sdpa_noncausal(*xs,scale,Z,op=='int4_all')
+    expected=np.zeros(q.shape) if pattern=='all' else np.ones(q.shape)
+    assert np.array_equal(host(o),expected),'expected literal 0 / 1 from overflowed negative-key score'
+    return {'expected':0 if pattern=='all' else 1,'qtile':tile,'finite_operands':all(np.isfinite(host(x)).all() for x in xs)}
+
+
+def n1():
+    for op in ['sdpa','int4_all','int4_partial']:
+        for dt in ['float32','float16']:
+            for D in [64,96,128]:
+                for S in [1,2,5,33,1025,2048]:
+                    for pat in ['all','first','first4']:
+                        if S==1 and pat!='all':continue
+                        for tile in ['0','1'] if dt=='float16' and D==64 else ['0']:
+                            gate(f'n1/{op}/{dt}/D{D}/S{S}/{pat}/tile{tile}',lambda op=op,dt=dt,D=D,S=S,pat=pat,tile=tile:n1_case(op,dt,D,S,pat,tile))
+    # F1 stays closed: a finite maximum below the old -3e38 sentinel
+    # remains a valid row, never classified as all -inf. Large V uses rtol.
+    for op in ['sdpa','int4_all']:
+        for D in [64,96,128]:
+            for S in [1,2,33,2048]:
+                def sentinel(op=op,D=D,S=S):
+                    q=np.zeros((1,1,1,D),np.float32);q[...,0]=1
+                    k=np.zeros((1,1,S,D),np.float32);k[...,0]=-np.finfo(np.float32).max;k[...,0,0]=-3.3e38
+                    v=np.zeros_like(k);v[...,0,:]=1e15
+                    os.environ['TC_ATTN_QTILE']='0'
+                    with tc.no_grad():
+                        xs=[mk(x) for x in [q,k,v]]
+                        o=tc.fused_sdpa_noncausal(*xs,1.) if op=='sdpa' else tc.apa_int4_sdpa_noncausal(*xs,1.,Z,True)
+                    return check(o,host(xs[2])[...,:1,:], 'float32')
+                gate(f'n1/F1_kept/{op}/D{D}/S{S}',sentinel)
+
+
+def n2_case(b,causal,z):
+    B,H,L,S=b.shape
+    q=mk(np.zeros((B,H,L,64)));k=mk(np.zeros((B,H,S,64)))
+    with tc.no_grad():sel=host(Q._definition_selection(q,k,1.,z,causal,bulk32=mk(b)))
+    err=O.selection_errors(sel,b,z,causal)
+    assert err['out_of_band']==0 and err['invisible_selected']==0,err
+    return err
+
+
+def n2():
+    rng=np.random.default_rng(215)
+    for S in [1,2,3,33,256,2048,2055]:
+        L=min(4,S)
+        for mag in [1e-45,1e-38,1e-30,1e-20,1.,1e20,1e30,3e38]:
+            for pat in ['random','constant','nearconstant','123']:
+                a=rng.uniform(0.,1.,(1,2,L,S)) if pat=='random' else np.ones((1,2,L,S)) if pat=='constant' else np.broadcast_to(1-(np.arange(S)%256)*2**-18,(1,2,L,S)) if pat=='nearconstant' else np.broadcast_to((1+np.arange(S)%3)/3,(1,2,L,S))
+                b=(a*mag).astype(np.float32)
+                for causal in [False,True]:
+                    gate(f'n2/S{S}/{mag}/{pat}/causal{causal}',lambda b=b,c=causal:n2_case(b,c,Z))
+    for D in [64,96,128]:
+        for mag in [1e20,1e-30]:
+            def witness(D=D,mag=mag):
+                q=np.zeros((1,1,1,D),np.float32);q[...,0]=mag
+                k=np.zeros((1,1,3,D),np.float32);k[...,0]=[1,2,3]
+                with tc.no_grad():
+                    qt,kt=mk(q),mk(k);b=tc.matmul(qt,kt,trans_b=True)
+                    sel=host(Q._definition_selection(qt,kt,1.,Z,False,bulk32=b))
+                assert np.array_equal(sel.ravel(),[0,0,1]),sel
+                return {'selection':sel.ravel().tolist()}
+            gate(f'n2/original_witness/D{D}/{mag}',witness)
+
+
+def long_keys():
+    # V7: registered operand S is unbounded above. Chan/Golub/LeVeque
+    # (1983) discuss accumulated rounding error; scaling protects squares,
+    # not a long serial fp32 mean reduction. This uses REAL finite q/kq
+    # operands and the actual quantizer, not injected bulk or mocked scores.
+    # Known remedy lead: pairwise/higher-precision accumulation (Chan et al.
+    # 1983); mine is the adversarial sorted-long-row probe, not a production fix.
+    def exact():
+        b=np.load(ART/'long_key_witness.npy')
+        S=len(b);D=64
+        q=np.zeros((1,1,1,D),np.float32);q[...,0]=1.
+        k=np.zeros((1,1,S,D),np.float32);k[...,0]=b
+        with tc.no_grad():
+            qt,kt=mk(q),mk(k)
+            bulk=tc.matmul(qt,kt,trans_b=True)
+            assert np.array_equal(host(bulk).ravel(),b),'one-hot dot not exact'
+            sel=host(Q._definition_selection(qt,kt,1.,Z,False))
+        err=O.selection_errors(sel,host(bulk),Z,False)
+        assert err['out_of_band']==0,err
+        return {'S':S,'D':D,**err}
+    gate('long_keys/exact_definition_operand_V7',exact)
+    def public_quantized_operand():
+        b=np.load(ART/'long_key_witness.npy')
+        S=len(b);D=64
+        q=np.zeros((1,1,1,D),np.float32);q[...,0]=1.
+        k=np.zeros((1,1,S,D),np.float32);k[...,0]=b
+        with tc.no_grad():
+            qt,kt=mk(q),mk(k)
+            r,cb,bnd=Q._tables(D,4,1,True,'cuda')
+            kq=Q._quantize_keys(kt,r,cb,bnd)
+            bulk=tc.matmul(qt,kq,trans_b=True)
+            sel=host(Q._definition_selection(qt,kq,1.,Z,False,bulk32=bulk))
+        assert np.isfinite(host(kq)).all(),'key quantization unexpectedly nonfinite'
+        err=O.selection_errors(sel,host(bulk),Z,False)
+        assert err['out_of_band']==0,err
+        return {'S':S,'D':D,'safe_key_norm':True,**err}
+    gate('long_keys/actual_public_quantizer_operand',public_quantized_operand)
+
+
+def guard_case(dt,S):
+    low={'float32':-np.finfo(np.float32).max,'float16':-65504.,'bfloat16':-3.3895313892515355e38}[dt]
+    data=np.full((1,2,7,S),-np.inf,np.float32)
+    for row,val in enumerate([low,0.,np.nan,np.inf,-0.,low],1):data[...,row,0]=val
+    scores=mk(data,dt)
+    got=host(F._blocked_rows(scores));ref=np.all(np.isneginf(host(scores)),-1,keepdims=True)
+    assert np.array_equal(got!=0,ref),'predicate is not iff all -inf'
+    if S>=7:
+        invisible=F._causal_mask(7,S,'cuda',dt)
+        effective=np.where(O.visible(7,S,True),host(scores),-np.inf)
+        assert np.array_equal(host(F._blocked_rows(scores,invisible))!=0,np.all(np.isneginf(effective),-1,keepdims=True))
+    return {'rows':14,'finite_min':float(low),'NaN_blocked':bool(got[0,0,3,0])}
+
+
+def guards():
+    for dt in DT:
+        for S in [1,2,3,4,5,31,32,33,128,1025,2048,2055]:
+            gate(f'guards/{dt}/S{S}',lambda dt=dt,S=S:guard_case(dt,S))
+        def nan_case(dt=dt):
+            data=np.full((1,1,3,9),-np.inf,np.float32)
+            data[...,1,0]=np.nan;data[...,2,0]=0
+            s=mk(data,dt)
+            with tc.no_grad():w=F._guarded_softmax(s,lambda x:x.softmax(-1))
+            got=host(w)
+            assert (got[...,0,:]==0).all() and np.isnan(got[...,1,:]).all()
+            assert np.array_equal(got[...,2,:],np.array([1]+[0]*8,np.float32))
+            return {'all_inf_row_zero':True,'NaN_row_not_zeroed':True,'partial_inf_row_correct':True}
+        gate(f'guards/{dt}/NaN_softmax_policy',nan_case)
+
+
+def backward_case(dt,L,S):
+    rng=np.random.default_rng(L+S)
+    data=rng.normal(0,.3,(2,2,L,S)).astype(np.float32);data[...,0,:]=-np.inf
+    if L>1:data[...,1,::2]=-np.inf
+    s=mk(data,dt,True);g=mk(rng.normal(0,.2,data.shape),dt)
+    w=F._guarded_softmax(s,lambda x:x.softmax(-1));(w*g).sum().backward()
+    p=O.weights(host(s));gg=host(g).astype(np.float64)
+    ref=p*(gg-(gg*p).sum(-1,keepdims=True))
+    check(w,p,dt);check(s.grad,ref,dt)
+    assert (host(w)[...,0,:]==0).all() and (host(s.grad)[...,0,:]==0).all()
+    # Masked softmax backward zero is exact, including bf16 real leaves.
+    return {'real_leaf':True,'blocked_score_gradient_zero':True}
+
+
+def backward():
+    for dt in DT:
+        for L,S in [(1,1),(1,33),(3,9),(33,65),(2048,2055)]:
+            gate(f'backward/{dt}/{L}x{S}',lambda dt=dt,L=L,S=S:backward_case(dt,L,S))
+
+
+def path_case(dt,D,L,S,kind,causal):
+    rng=np.random.default_rng(D+L+S)
+    q,k,v=[rng.normal(0,.2,(1,2,n,D)).astype(np.float32) for n in [L,S,S]]
+    grad=kind=='grad';mask=np.zeros((1,2,L,S),np.float32);mask[...,0,:]=-np.inf
+    if L>1:mask[...,1,:max(1,S//3)]=-np.inf
+    xs=[mk(x,dt,grad) for x in (q,k,v)];m=mk(mask,dt)
+    g=mk(rng.normal(0,.1,q.shape),dt)
+    with fused(kind=='fused_causal'),contextlib.nullcontext() if grad else tc.no_grad():
+        o=F.scaled_dot_product_attention(*xs,attn_mask=m,is_causal=causal)
+        if grad:(o*g).sum().backward()
+    ref=O.attention(*[host(x) for x in xs],D**-.5,causal,mask,host(g) if grad else None)
+    check(o,ref[0] if grad else ref,dt)
+    assert (host(o)[...,0,:]==0).all()
+    if grad:
+        for x,rg in zip(xs,ref[1]):check(x.grad,rg,dt)
+    return {'literal_zero_row':True,'fused_flag_actual_branch':'supplied attn_mask bypasses fused-causal branch; separate overflow probe reaches it'}
+
+
+def effective_causal(dt,D):
+    # NO attn_mask: explicitly exercises USE_FUSED_SOFTMAX branch and invisible handling.
+    q=np.zeros((1,1,3,D),np.float32);q[...,0]=2 if dt=='float16' else 1e20
+    k=np.zeros((1,1,9,D),np.float32);k[...,0]=-60000 if dt=='float16' else -1e20;k[...,-1,0]=0
+    v=np.ones_like(k);scale=1e34 if dt=='float16' else 1.
+    with fused(True),tc.no_grad():o=F.scaled_dot_product_attention(*[mk(x,dt) for x in [q,k,v]],is_causal=True,scale=scale)
+    ref=np.ones(q.shape);ref[...,:2,:]=0
+    assert np.array_equal(host(o),ref),host(o)[...,:3]
+    return {'fused_causal_branch_reached':True}
+
+
+def quant_case(dt,D,L,S,p,grad):
+    rng=np.random.default_rng(D+L+S+3)
+    xs=[mk(rng.normal(0,.1,(1,2,n,D)),dt,grad) for n in [L,S,S]]
+    with contextlib.nullcontext() if grad else tc.no_grad():
+        o=Q.apa_quant_attention(*xs,bulk_bits=4,refine_percentile=p,is_causal=True)
+        if grad:o.sum().backward()
+    assert np.isfinite(host(o)).all()
+    if grad:assert all(x.grad is not None and np.isfinite(host(x.grad)).all() for x in xs)
+    if p==1.:
+        ref=O.attention(*[host(x) for x in xs],D**-.5,True,upstream=np.ones(o.shape) if grad else None)
+        check(o,ref[0] if grad else ref,dt)
+        if grad:
+            for x,rg in zip(xs,ref[1]):check(x.grad,rg,dt)
+    else:
+        # Independent definition on actual fp32 bulk from the same input operands.
+        with tc.no_grad():
+            R,CB,BND=Q._tables(D,4,2,True,'cuda');kq=Q._quantize_keys(xs[1],R,CB,BND)
+            b=tc.matmul(xs[0].detach().float(),kq.float(),alpha=D**-.5,trans_b=True)
+            sel=host(Q._definition_selection(xs[0].detach().float(),kq.float(),D**-.5,Z,True,bulk32=b))
+        err=O.selection_errors(sel,host(b),Z,True)
+        assert err['out_of_band']==0 and err['invisible_selected']==0,err
+        # Numeric output/VJP oracle for the frozen routing decision. This uses
+        # independent fp64 dots and the actual detached quantized operand;
+        # selection has already been checked against its independent definition.
+        qe,ke,ve=[host(x).astype(np.float64) for x in xs]
+        kqe=host(kq).astype(np.float64)
+        exact=qe@ke.swapaxes(-1,-2)*D**-.5
+        cheap=qe@kqe.swapaxes(-1,-2)*D**-.5
+        scores=np.where(O.visible(L,S,True),np.where(sel!=0,exact,cheap),-np.inf)
+        weights=O.weights(scores)
+        check(o,weights@ve,dt)
+        if grad:
+            upstream=np.ones(o.shape,np.float64)
+            dw=upstream@ve.swapaxes(-1,-2)
+            ds=weights*(dw-(dw*weights).sum(-1,keepdims=True))
+            dsfull=ds*(sel!=0);dsbulk=ds*(sel==0)
+            refs=((dsfull@ke+dsbulk@kqe)*D**-.5,
+                  dsfull.swapaxes(-1,-2)@qe*D**-.5,
+                  weights.swapaxes(-1,-2)@upstream)
+            for x,rg in zip(xs,refs):check(x.grad,rg,dt)
+    return {'grad':grad,'refine_percentile':p}
+
+
+def paths():
+    os.environ['TC_FUSED_SDPA_NONCAUSAL']='0'
+    for dt in DT:
+        for D in [64,96,128]:
+            gate(f'paths/effective_causal/{dt}/D{D}',lambda dt=dt,D=D:effective_causal(dt,D))
+            for p in [1.,.15]:
+                def blocked_quant(dt=dt,D=D,p=p):
+                    q=np.zeros((1,1,3,D),np.float32);q[...,0]=2 if dt=='float16' else 1e30
+                    k=np.zeros((1,1,9,D),np.float32);k[...,0]=-60000 if dt=='float16' else -1e10;k[...,-1,0]=0
+                    v=np.ones_like(k)
+                    xs=[mk(x,dt,True) for x in [q,k,v]]
+                    o=Q.apa_quant_attention(*xs,bulk_bits=4,refine_percentile=p,is_causal=True,scale=1.)
+                    o.sum().backward()
+                    assert (host(o)[...,:2,:]==0).all() and np.isfinite(host(o)).all()
+                    assert all(np.isfinite(host(x.grad)).all() for x in xs),'blocked quant VJP nonfinite'
+                    assert (host(xs[0].grad)[...,:2,:]==0).all()
+                    return {'key_norm_square_finite':True,'real_leaves':True,'first_two_rows_zero':True}
+                gate(f'paths/quant_blocked_grad/{dt}/D{D}/p{p}',blocked_quant)
+            for L,S in [(1,33),(3,9),(33,65),(2048,2055)]:
+                for kind in ['inference','grad']:
+                    for causal in [False,True]:
+                        gate(f'paths/{dt}/D{D}/{L}x{S}/{kind}/c{causal}',lambda dt=dt,D=D,L=L,S=S,kind=kind,c=causal:path_case(dt,D,L,S,kind,c))
+                for p in [1.,.15]:
+                    for grad in [False,True]:
+                        gate(f'quant/{dt}/D{D}/{L}x{S}/p{p}/g{grad}',lambda dt=dt,D=D,L=L,S=S,p=p,g=grad:quant_case(dt,D,L,S,p,g))
+
+
+def left_case(dt,D,L,S):
+    rng=np.random.default_rng(D+L+S)
+    xs=[mk(rng.normal(0,.1,(2,2,n,D)),dt,True) for n in [L,S,S]]
+    mask=np.zeros((2,2,L,S),np.float32)
+    mask[0,...,:S-L+min(3,L)]=-np.inf;mask[1,...,:S-L+min(1,L)]=-np.inf
+    o=F.scaled_dot_product_attention(*xs,attn_mask=mk(mask,dt),is_causal=True)
+    o.sum().backward()
+    allowed=O.visible(L,S,True)&np.isfinite(mask)
+    blocked=~allowed.any(-1)
+    assert np.isfinite(host(o)).all() and all(np.isfinite(host(x.grad)).all() for x in xs)
+    assert (host(o)[blocked]==0).all() and (host(xs[0].grad)[blocked]==0).all()
+    ref=O.attention(*[host(x) for x in xs],D**-.5,True,mask)
+    check(o,ref,dt)
+    if L==S:
+        with tc.no_grad():h2=F.scaled_dot_product_attention(o,o,o,is_causal=True)
+        assert np.isfinite(host(h2)).all()
+    return {'rectangular':S>L,'two_layer_check':L==S,'blocked_rows':int(blocked.sum())}
+
+
+def left_padding():
+    for dt in DT:
+        for D in [64,96,128]:
+            for L,S in [(8,8),(3,9),(33,65),(2048,2055)]:
+                gate(f'left_padding/{dt}/D{D}/{L}x{S}',lambda dt=dt,D=D,L=L,S=S:left_case(dt,D,L,S))
+
+
+def geometry():
+    def exhaustive():
+        for L in range(1,2049):
+            S=L+7;m=host(F._causal_mask(L,S,'cuda','float32'))
+            for row in sorted({0,L//2,L-1}):assert np.array_equal(np.isneginf(m[row]),np.arange(S)>S-L+row)
+        for dt in DT:
+            for L,S in [(1,2048),(3,9),(2048,2048),(2048,2055)]:
+                assert np.array_equal(np.isneginf(host(F._causal_mask(L,S,'cuda',dt))),~O.visible(L,S,True))
+        return {'L':'1..2048','rectangles':'S=L+7','all_dtypes_representative':True}
+    gate('geometry/exhaustive',exhaustive)
+
+
+def identity_arm():
+    rng=np.random.default_rng(886)
+    arrays={}
+    for dt in DT:
+        for D in [64,96,128]:
+            for L,S in [(1,33),(3,9),(8,8),(33,65),(2048,2055)]:
+                inputs=[rng.normal(0,.1,(1,1,n,D)).astype(np.float32) for n in [L,S,S]]
+                g0=rng.normal(0,.1,inputs[0].shape).astype(np.float32)
+                for causal in [False,True]:
+                    for grad in [False,True]:
+                        with contextlib.nullcontext() if grad else tc.no_grad():
+                            xs=[mk(x,dt,grad) for x in inputs]
+                            o=F.scaled_dot_product_attention(*xs,is_causal=causal)
+                            if grad:(o*mk(g0,dt)).sum().backward()
+                        key=f'{dt}/D{D}/{L}x{S}/c{causal}/g{grad}'
+                        arrays[key+'/sdpa']=host(o)
+                        if grad:
+                            for n,x in zip('qkv',xs):arrays[key+'/d'+n]=host(x.grad)
+                    for p in [1.,.15]:
+                        with tc.no_grad():o=Q.apa_quant_attention(*[mk(x,dt) for x in inputs],bulk_bits=4,refine_percentile=p,is_causal=causal)
+                        arrays[key+f'/quant{p}']=host(o)
+    for dt in ['float32','float16']:
+        for D in [64,96,128]:
+            for S in [2,5,33,2048]:
+                xs=[mk(rng.normal(0,.1,(1,1,n,D)),dt) for n in [min(3,S),S,S]]
+                os.environ['TC_ATTN_QTILE']='0'
+                with tc.no_grad():
+                    arrays[f'fused/{dt}/{D}/{S}']=host(tc.fused_sdpa_noncausal(*xs,D**-.5))
+                    arrays[f'int4all/{dt}/{D}/{S}']=host(tc.apa_int4_sdpa_noncausal(*xs,D**-.5,Z,True))
+                    arrays[f'int4partial/{dt}/{D}/{S}']=host(tc.apa_int4_sdpa_noncausal(*xs,D**-.5,Z,False))
+    assert arrays and all(np.isfinite(a).all() for a in arrays.values()),'identity corpus has nonfinite output'
+    path=ART/'gpu'/f'{RUN}_{ARM}_identity.npz';np.savez(path,**arrays)
+    print(json.dumps({'identity_arm':ARM,'arrays':len(arrays),'path':str(path)}),flush=True)
+
+
+def identity():
+    arms=['fd32b6d','048949d','c5c468d','86f0a18','f3cde75','a2e3ca1']
+    for arm in arms:
+        env=os.environ.copy();env['APA_MF22REV_ARM']=arm
+        # Fresh imports in each foreground process. Launcher owns both locks.
+        subprocess.run([sys.executable,__file__,'_identity_arm'],env=env,check=True)
+    def compare():
+        data={a:np.load(ART/'gpu'/f'{RUN}_{a}_identity.npz') for a in arms}
+        keys=set(data[arms[0]].files)
+        assert all(set(d.files)==keys for d in data.values())
+        n=0;changes={a:0 for a in arms[:-1]}
+        for key in keys:
+            final=data['a2e3ca1'][key]
+            assert final.tobytes()==data['f3cde75'][key].tobytes(),'amendment2 nonblocked change: '+key
+            if key.startswith(('fused/','int4')):
+                assert final.tobytes()==data['86f0a18'][key].tobytes(),'amendment1 nonblocked change: '+key
+            for a in changes:changes[a]+=int(final.tobytes()!=data[a][key].tobytes())
+            n+=1
+        for d in data.values():d.close()
+        return {'arrays_compared':n,'amendment2_nonblocked_changes':0,'full_chain_byte_changes_observed':changes,
+                'identity_domain':'finite lossless fp32 host exports (injective for finite fp16/bf16); older selection changes are intentional, not failed identity'}
+    gate('identity/source_isolated',compare)
+
+
+def real():
+    cap=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_spq3/artifacts/apa_spq3/captures')
+    for model,layers in [('Qwen3-1.7B',['L00','L16','L27']),('Qwen3-4B',['L00','L21','L35'])]:
+        for layer in layers:
+            for dt in DT:
+                for L in [1,3]:
+                    def case(model=model,layer=layer,dt=dt,L=L):
+                        arrays=[np.load(cap/model/(layer+'_'+kind+'.npy'),mmap_mode='r') for kind in ['q','k','v']]
+                        def decode(a):
+                            assert a.dtype==np.uint16
+                            return (a.astype(np.uint32)<<16).view(np.float32)[None]
+                        q=decode(arrays[0][:1,-L:,:]);k=decode(arrays[1][:1]);v=decode(arrays[2][:1])
+                        xs=[mk(x,dt) for x in [q,k,v]];D=q.shape[-1]
+                        with tc.no_grad():
+                            o=F.scaled_dot_product_attention(*xs,is_causal=True)
+                            r,cb,bnd=Q._tables(D,4,1,True,'cuda');kq=Q._quantize_keys(xs[1],r,cb,bnd)
+                            bulk=tc.matmul(xs[0].float(),kq.float(),alpha=D**-.5,trans_b=True)
+                            sel=host(Q._definition_selection(xs[0].float(),kq.float(),D**-.5,Z,True,bulk32=bulk))
+                        err=O.selection_errors(sel,host(bulk),Z,True)
+                        assert err['out_of_band']==0 and err['invisible_selected']==0,err
+                        detail=check(o,O.attention(*[host(x) for x in xs],D**-.5,True),dt)
+                        return {'L':L,'S':k.shape[-2],'D':D,'selection':err,**detail}
+                    gate(f'real/{model}/{layer}/{dt}/L{L}',case)
+
+
+def consumers():
+    def grapa():
+        path=Path('/home/vader/ForgeRealm-cold/GRAPA-Native-LLM/grapa/attention.py')
+        tree=ast.parse(path.read_text());nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in ['apa_selective','_visible_counts']]
+        ns={'tc':tc,'F':F,'np':np,'_norm_ppf':Q._norm_ppf,'_vis_cache':{}}
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),ns)
+        q=np.zeros((1,1,3,64),np.float32);q[...,0]=1e20
+        k=np.zeros_like(q);k[...,0]=-1e20;k[...,-1,0]=0;v=np.ones_like(k)
+        xs=[mk(x,grad=True) for x in [q,k,v]]
+        o=ns['apa_selective'](*xs,None,1.,1.,True);o.sum().backward()
+        # This is a policy probe: known consumer gap reports RED, never hidden.
+        assert np.isfinite(host(o)).all() and (host(o)[...,:2,:]==0).all(),'GRAPA composed force-selective path bypasses guarded attention'
+        assert all(np.isfinite(host(x.grad)).all() for x in xs)
+        return {'source':str(path),'source_sha256':sha(path)}
+    gate('consumers/GRAPA_policy_gap',grapa)
+    def grm():
+        # Direct GRM absorbed/fast paths apply primitive causal_softmax.
+        # Score-input boundary faithfully represents their unguarded normalization.
+        s=mk(np.full((1,1,3,9),-np.inf,np.float32))
+        with tc.no_grad():o=tc.causal_softmax(s)
+        assert np.isfinite(host(o)).all() and (host(o)==0).all(),'GRM primitive attention callers are not covered by TC guarded helpers'
+        return {'sites':'consumer_census.json; not a whole-model execution'}
+    gate('consumers/GRM_policy_gap',grm)
+
+
+def author_tests():
+    # Original tests are run separately as supporting evidence, not our oracle.
+    paths=[ROOT/'tensor_cuda/tests'/name for name in ['test_apa_mf2_2_n1.py','test_apa_mf2_2_n2.py','test_apa_mf2_2a_blocked.py','test_apa_mf2_2b_blocked.py']]
+    pins=json.loads((ART/'gpu_pins.json').read_text())[ARM]
+    env=os.environ.copy();env['PYTHONPATH']=pins['engine']+':'+pins['package']
+    subprocess.run([sys.executable,'-m','pytest','-q','-p','no:cacheprovider',*[str(p) for p in paths]],cwd=ROOT,env=env,check=True)
+    gate('author_tests/native_suite',lambda:{'files':4})
+
+
+if __name__=='__main__':
+    cell=sys.argv[1] if len(sys.argv)>1 else '--help'
+    if cell=='--help':print('CELL: '+', '.join(CELLS));sys.exit(0)
+    if cell not in CELLS+('_identity_arm',):raise SystemExit('unknown CELL')
+    (ART/'gpu').mkdir(parents=True,exist_ok=True)
+    if cell=='identity':identity()
+    else:
+        tc,F,Q=verify()
+        globals()[cell.removeprefix('_')]() if cell=='_identity_arm' else globals()[cell]()
+    assert cell=='_identity_arm' or rows,'vacuous gate'
+    sys.exit(int(any(not r['passed'] for r in rows)))

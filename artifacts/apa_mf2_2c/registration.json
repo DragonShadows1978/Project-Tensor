@@ -1,0 +1,44 @@
+{
+  "order": "orders/APA_MF2_2_AMENDMENT_3.md",
+  "order_sha256": "cf8092cfaaedba5b02fe0a8f8682a9b3a9e6f83ac2e7e02303876a47ee25e725",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent), same seat",
+  "registered_at": "written ~20:53 EDT 2026-10-07 (hash time is authoritative), before any GPU command of this amendment",
+  "base": "apa-mf2 a2e3ca1 content (+ order aace603): functional.py 71f04556..., quant.py 2020e5be..., kernels.cu d9d98518..., test_apa_phase6.py c1e95bb2... (checked); before copies in artifacts/apa_mf2_2c/before",
+  "engine": "NO build planned (Python-only change). Arms: a2e3ca1 = artifacts/apa_mf2_2a/build (ccc9f8d2...) + before package snapshot; after3 = same engine + this tree's package. If a build were ever needed: artifacts/apa_mf2_2c/build only, with APA_MF2_2_BUILD_DIR passed explicitly.",
+  "item5_V7": {
+    "finding": "fp32 native row sums (kernels.cu reduce_lastdim_kernel: 256 threads x R/256 sequential adds + 8-level tree) give an accumulation depth of R/256 + 7; at R = 2^20 that is 4103 roundings (bound ~2.4e-4 relative), and the review's clustered witness drifts the mean by 4e-5 -> threshold outside the 2e-5 band.",
+    "fix": "quant._row_sum (statistics block only): rows with S <= 8192 keep the engine's single-pass row sum (depth <= 39, unchanged bytes); S > 8192 use a two-level blocked sum -- reshape to 4096-key blocks, sum each block (depth <= 23), then sum the partials with the same rule (recursive), plus the < 4096-key remainder summed natively and added once. Used for BOTH moments (mean of u, centered sum of squares). The definition is unchanged (same population mean, centered variance, threshold, >=); only the summation order/precision changes.",
+    "why_not_fp64": "the engine has no float64 dtype (tensor_cuda/include/tc/core.h:30 enum DType: Float32, Float16, Int64, Bool, Uint8, BFloat16); fp64 accumulation would need a kernel change (kernels.cu is not writable in this order).",
+    "bound_reasoning": "recursive-summation bound |err| <= gamma_k * sum|x| (Higham 2002 ch.4) with k = depth: S <= 8192: k <= 39 (2.3e-6); 8192 < S <= 2^20: k <= 23 + 8 + 1 = 32 (1.9e-6); for u >= 0 and z >= 0 the threshold error is <= ~6.3e-6 * thr in the worst case, inside the 2e-5 band. Reasoning, not measurement; the sweep is the measurement.",
+    "memory": "S % 4096 == 0 (incl. S = 2^20): reshape views only, plus B*H*L*S/4096 fp32 partials per moment (1 KiB per row at S = 2^20); otherwise one transient slice copy of the first nb*4096 keys per moment (<= 4*B*H*L*S bytes, freed before the next moment)."
+  },
+  "nits": {
+    "V3": "functional._guarded_softmax docstring: replace 'PyTorch SDPA returns NaN there' with the measured behaviour (installed torch SDPA returns 0 for a fully masked row; the softmax primitive returns NaN) -- quoted from the review's pytorch_policy receipt, not re-measured unless torch is importable in this env",
+    "V4": "identity-count wording: erratum in artifacts/apa_mf2_2c/ERRATUM_V4.md + ledger, with an independent recount of the Amendment-2 census 'identity' records into unsupported-error / non-finite / finite-equal (artifacts/apa_mf2_2b/verdict.json is not writable in this order)",
+    "V5": "test_apa_phase6._ref only: -inf predicate causal mask (not finite -1e9), centered two-pass fp64 statistics (not one-pass), fully blocked rows weight 0 (the lead's policy); the review's V5 witness becomes a test",
+    "V6": "quant.py docstring correction of the per-entry '<= 2^-24 relative' division claim (underflow case), written while editing the statistics docstring"
+  },
+  "gates": {
+    "G1": "full tensor_cuda suite on the a2e3ca1 engine + after3 package: FAILED/ERROR set == the 52 baseline ids, 0 new; test_apa_mf2_2c_* pass.",
+    "G2": "V7: 0 out-of-band mismatches, under BOTH the registered band (|a - thr64| <= 2e-5 |thr64|) and the review's band (2e-5 * visible row max), on: the review witness (exact operand and actual public-quantizer operand, via a copy of the review probe's long_keys cell) and the sweep S in {2^10, 2^14, 2^17, 2^20} (+ 2^17+3 for the remainder path) x cluster width w in {2^-20, 2^-16, 2^-10, 1} x patterns {sorted steps, unsorted steps, uniform random} (rows b_j = 1 - w*f_j) x causal (L=2) / non-causal (L=2), statistics in isolation (fp32 bulk), plus full-API apa_quant_attention fp32 and bf16 with one-hot keys (bulk = c * b_j) at S in {2^14, 2^17, 2^20}; fp64 oracle of my own.",
+    "G3": "no regression: N2 range sweep (scripts/apa_mf2_2_n2.py sweep) 0 out-of-band; near-tie set (test_apa_mf2_1_definition, test_apa_mf2_2_n2 incl. near-tie spread) passes; real captures (36 cells) 0 out-of-band; identity: the review identity corpus (702 arrays) after3 vs a2e3ca1 byte-identical; my census and fused identity sets after3 vs Amendment-2 recordings byte-identical. PREDICTION: all byte-identical because every identity/real row has S <= 8192 (unchanged native path); any difference is listed and bounded.",
+    "G4": "red rows adjudicated with evidence: guards/{float32,float16,bfloat16}/NaN_softmax_policy x3 and real/Qwen3-1.7B/L16/bfloat16/L3 x1, re-run with a probe copy on a2e3ca1/after3 and (where the probe's helpers exist) on fd32b6d; classified product defect (in scope -> fixed) or probe defect, with the cause named.",
+    "mutation": ">= 0.80 of non-error registered mutants killed by tensor_cuda/tests/test_apa_mf2_2c_*.py + test_apa_mf2_2_n2.py + test_apa_mf2_1_definition.py (baseline all pass first)."
+  },
+  "mutants": {
+    "M1": "fp32 native-order statistics restored (both moments use u.sum([-1], True))",
+    "M2": "blocked path drops the remainder keys",
+    "M3": "mean uses the native sum, variance blocked",
+    "M4": "variance uses the native sum, mean blocked",
+    "M5": "one-pass variance in the scaled domain (mean(u^2) - mean^2)"
+  },
+  "predictions": {
+    "P1": "M3 is killed by the V7 witness; M4 may survive (the variance drift moves the threshold by z*dstd, small next to the mean drift) -- reported either way",
+    "P2": "G3 byte-identical everywhere (S <= 8192 path unchanged)"
+  },
+  "rails": [
+    "the band is not widened; no witness special-casing; the definition is unchanged; no build outside artifacts/apa_mf2_2c/build (none planned); 595.84 never set",
+    "GRAPA/GRM (V1) read-only: report only",
+    "GPU: flock -w 900 /tmp/forge-gpu.lock timeout 600, foreground, native driver"
+  ]
+}

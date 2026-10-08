@@ -1,0 +1,46 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+___________ test_phase6_ref_v5_witness_matches_definition_and_engine ___________
+
+    def test_phase6_ref_v5_witness_matches_definition_and_engine():
+        q, k, v = _witness()
+        ref = _phase6()._ref(q, k, v, 4, 1.0, True)
+>       assert np.array_equal(ref[0, 0, :, 0], [1.0, 0.0, 0.0]), ref[0, 0, :, 0]
+E       AssertionError: array([0., 0., 0.])
+E       assert False
+E        +  where False = <function array_equal at 0x7e08ba76a230>(array([0., 0., 0.]), [1.0, 0.0, 0.0])
+E        +    where <function array_equal at 0x7e08ba76a230> = np.array_equal
+
+/tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py:39: AssertionError
+_____________ test_phase6_ref_partial_refine_on_witness_is_finite ______________
+
+    def test_phase6_ref_partial_refine_on_witness_is_finite():
+        q, k, v = _witness()
+        ref = _phase6()._ref(q, k, v, 4, 0.15, True)
+>       assert np.isfinite(ref).all() and ref[0, 0, 0, 0] == 1.0
+E       AssertionError: assert (np.True_ and np.float64(0.0) == 1.0)
+E        +  where np.True_ = <built-in method all of numpy.ndarray object at 0x7e089c523ab0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7e089c523ab0> = array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[ True,  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0....0., 0., 0., 0., 0.,\n          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n          0., 0., 0., 0.]]]]))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+/tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py:49: AssertionError
+__________ test_v3_guard_docstring_states_measured_pytorch_behaviour ___________
+
+    def test_v3_guard_docstring_states_measured_pytorch_behaviour():
+        doc = F._guarded_softmax.__doc__
+>       assert "PyTorch SDPA returns NaN there" not in doc and "scaled_dot_product_attention" in doc
+E       AssertionError: assert ('PyTorch SDP...ns NaN there' not in 'APA-MF2.2 A... NaN).\n    '
+E         
+E         'PyTorch SDPA returns NaN there' is contained here:
+E            guards); PyTorch SDPA returns NaN there. Unverified -- lead to check. Mine: the composed-op
+E         ?           ++++++++++++++++++++++++++++++
+E               form (select-then-zero, so the backward never sees NaN).
+E               )
+
+/tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py:54: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../../../tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py::test_phase6_ref_v5_witness_matches_definition_and_engine
+FAILED ../../../../../../../tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py::test_phase6_ref_partial_refine_on_witness_is_finite
+FAILED ../../../../../../../tmp/claude-1000/apa_mf2_2c_before_tests/test_apa_mf2_2c_nits.py::test_v3_guard_docstring_states_measured_pytorch_behaviour
+3 failed in 0.81s

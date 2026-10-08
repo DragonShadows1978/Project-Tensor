@@ -355,3 +355,87 @@ Matmul backward alpha overflow at S=1 (pre-existing). 12 fp16 grad neg_inf_first
 isolated). Blocked rows can be −0.0.
 
 Scratch (/tmp): `/tmp/claude-1000/apa_mf2_2b_mut`, `/tmp/claude-1000/apa_mf2_2b_where_check.py`, `/tmp/claude-1000/apa_mf2_2b_alpha_check.py`.
+
+---
+
+# Amendment 3 (`orders/APA_MF2_2_AMENDMENT_3.md`, sha256 `cf8092cf…25e725`): V7 long-key statistics, last red probes, nits
+
+Base: apa-mf2 a2e3ca1 (+ order aace603): functional.py `71f04556…`, quant.py `2020e5be…`, test_apa_phase6.py `c1e95bb2…`, kernels.cu
+`d9d98518…` (checked; before copies `artifacts/apa_mf2_2c/before`). Registration `artifacts/apa_mf2_2c/registration.json`, sha256
+`f0363a174099bb6fc4968f9afae5d4db414a8107b3cfb03fe772435fcfa71693`, hashed 20:50:47 before any GPU command (text says ~20:53).
+Verdict `artifacts/apa_mf2_2c/verdict.json`. **No build**: a2e3ca1 and after3 run `artifacts/apa_mf2_2a/build` (`ccc9f8d2…`); every
+build directory's .so predates this amendment and `artifacts/apa_mf2_2c/build` does not exist.
+
+## C1. Reading and the V7 mechanism
+
+Read the order, `apa-mf22rev` `docs/APA_MF2_2_REVIEW.md`, `artifacts/apa_mf22rev/verdict.json`, its probes and the lead's
+`logs/apa_mf22rev_gpu_*_20261008T*.log`. V7 mechanism (kernels.cu:567-582, 652): the row sum is 256 threads × S/256 sequential fp32
+adds + an 8-level tree, depth S/256 + 7 (4103 at S = 2^20). The engine has no float64 dtype (`core.h:30`), and kernels.cu is not
+writable here, so the lever is the summation ORDER composed from engine ops.
+
+## C2. Tests first
+
+`tensor_cuda/tests/test_apa_mf2_2c_longkeys.py` (review witness exact + public-quantizer operand; sweep S {2^10, 2^14, 2^17, 2^17+3,
+2^20} × widths {2^-20, 2^-16, 2^-12, 2^-10, 1} × 3 patterns × causal; full API fp32/bf16; `_row_sum` accuracy/coverage) and
+`test_apa_mf2_2c_nits.py`. The order's four widths do not reproduce V7 at all on a2e3ca1 (v1 receipt: only the witness and full-API
+fp32 S=2^20 failed); I added the witness width 2^-12 to the sweep. `logs/apa_mf2_2c_testsfirst_a2e3ca1_v2.log:327` "14 failed, 158 passed";
+nits on the before copies `logs/apa_mf2_2c_nits_testsfirst_before.log:46` "3 failed".
+
+## C3. Item 5 (`artifacts/apa_mf2_2c/item5.patch`; quant.py +44 −4, functional.py +5 −2, test_apa_phase6.py +17 −11)
+
+- **V7:** `quant._row_sum` — S ≤ 8192: engine single-pass sum (unchanged bytes, depth ≤ 39); S > 8192: 4096-key blocks summed, partials
+  summed recursively, the < 4096 remainder summed natively and added once (depth ≤ 32 at S ≤ 2^20; first-order bound depth × 2^-24 ×
+  Σ|x|). Both moments use it; the definition is unchanged. Memory at S = 2^20: views + 256 partials per row per moment (1 KiB/row);
+  for S not a multiple of 4096, one transient slice copy per moment. Time at S = 2^20, 2 rows: 0.034 ms vs 0.554 ms native.
+  Prior art: blocked/pairwise summation error analysis, Higham (1993, SIAM J. Sci. Comput. 14(4); 2002 ch. 4); Chan, Golub &
+  LeVeque (1983) on pairwise accumulation for the variance — unverified, lead to check. Mine: the two-level engine-op composition
+  and the 8192/4096 split.
+- **V6:** the docstring's per-entry "≤ 2^-24 relative" division claim corrected (underflow; row-relative bound).
+- **V3:** `_guarded_softmax` docstring now states the measured behaviour: torch 2.11.0 SDPA returns 0 for a fully masked row (additive
+  and boolean masks), `torch.softmax` returns NaN (`logs/apa_mf2_2c_v3_torch_check.log:2` "SDPA fully masked additive mask -> first values [0.0, 0.0, 0.0]").
+- **V5:** `test_apa_phase6._ref` uses a −inf predicate mask, centered fp64 statistics and 0 weight for all −inf rows; the review witness
+  gives [1,0,0] (was [0,0,0]). `logs/apa_mf2_2c_nits_after3.log:2` "8 passed" (nits + the 5 phase6 tests).
+- **V4:** `artifacts/apa_mf2_2c/v4_recount.json`: of the 1230 non-blocked Amendment-2 census records, 1092 are finite tensor records
+  byte-equal, 12 pre-existing non-finite gradient records, 126 the same unsupported-operand error with no tensor bytes. The corrected
+  wording replaces "bytes on all 1230 census cells" in `artifacts/apa_mf2_2b/verdict.json:19` (that file is outside this order's list).
+
+`logs/apa_mf2_2c_tests_after3.log:4` "172 passed"; `logs/apa_mf2_2c_patch.log:2` "ITEM5 PATCH REPRODUCES TREE: True".
+
+## C4. G2 (V7)
+
+Probe copy `scripts/apa_mf2_2c_probe/` (one edit: receipt/pin dir, `logs/apa_mf2_2c_probe_copy_edits.diff`; pins add arm `after3`;
+witness copied, sha `ce8cbe6c…` equal). `logs/apa_mf2_2c_probe_summary.log:1-2`: long_keys a2e3ca1 "failed=2", after3 "failed=0".
+`logs/apa_mf2_2c_v7_table.log:1-2`: a2e3ca1 163840 out-of-band (isolated; all at S=2^20, w=2^-12, sorted) and 163840 (full API fp32
+S=2^20), after3 0 and 0 under both bands. Table `artifacts/apa_mf2_2c/v7_table.txt`. **PASS.**
+
+## C5. G3 (no regression)
+
+N2 sweep: `logs/apa_mf2_2c_n2_sweep.log:1` all 0 out-of-band, every table == the MF2.2 recording. Real: `logs/apa_mf2_2c_real_compare.log:1`
+"real cells 36; out-of-band (both oracles) 0; selection bytes == MF2.2 recording: 36/36". Review identity corpus:
+`logs/apa_mf2_2c_identity_corpus.log:3` "702 arrays, after3 vs a2e3ca1 byte-different: 0". Census and fused identity:
+`logs/apa_mf2_2c_g3_census_identity.log:1-3` (2376/2376, 882/882, 522/522). **PASS** — no precision-only difference to list.
+
+## C6. G4 adjudication
+
+| Red row (lead log) | a2e3ca1 | after3 | Class | Evidence |
+|---|---|---|---|---|
+| guards/{fp32,fp16,bf16}/NaN_softmax_policy | RED | RED | probe defect | `np.array_equal` of shape (1,1,9) vs (9,) is False for equal values (numpy alone: `logs/apa_mf2_2c_nanpolicy_shape_check.log:1`); guard values correct in all dtypes (`logs/apa_mf2_2c_nanpolicy_diag_a2e3ca1.log`) |
+| real/Qwen3-1.7B/L16/bfloat16/L3 (2/384) | RED | RED | pre-existing bf16 precision; probe tolerance | output sha `ccace60b…` identical on fd32b6d / a2e3ca1 / after3; bf16-storage oracle within 0.0156 of the engine, itself 0.132 from fp64 (`artifacts/apa_mf2_2c/real/real_diag_*.json`) |
+
+No in-scope product defect; nothing fixed for G4. **PASS (adjudicated).**
+
+## C7. G1 and mutation
+
+`logs/apa_mf2_2c_g1_compare.log:2-7` "37 failed, 1925 passed, 46 skipped, 2 warnings, 15 errors", "baseline ids 52 now ids 52",
+"new failing ids: 0 []", "G1 PASS". Mutation (`scripts/apa_mf2_2c_mutation.py`, scratch `/tmp/claude-1000/apa_mf2_2c_mut`, baseline
+"537 passed"): M1 native restored, M2 remainder dropped, M3 mean native, M5 one-pass KILLED; M4 variance-only native SURVIVED —
+`artifacts/apa_mf2_2c/mutation/summary.json:5` "rate": 0.8 → PASS at the threshold. M4: a CPU search (90 patterns, S = 2^20) bounds
+the variance-only drift at 5.4e-6 relative, below the band (`logs/apa_mf2_2c_m4_search.log:1`): not distinguishable in the measured
+domain; named coverage gap. Prior art: DeMillo, Lipton & Sayward (1978) — unverified.
+
+## C8. Open items
+
+V1 (GRAPA attention.py:114; GRM Gemma4/DeepSeek/MiniCPM3 direct primitive softmax) — read-only, reported. M4 gap. Review-probe fixes
+(`.ravel()` in the guards cell; bf16-aware tolerance in the real cell). `_row_sum` bound beyond S = 2^20 is reasoning only.
+Scratch (/tmp): `/tmp/claude-1000/apa_mf2_2c_mut`, `/tmp/claude-1000/apa_mf2_2c_patchchk`, `/tmp/claude-1000/apa_mf2_2c_before_tests`,
+`/tmp/claude-1000/apa_mf2_2c_m4_search.py`. G1 regenerated the 17 `artifacts/wo*.ppm` again.
