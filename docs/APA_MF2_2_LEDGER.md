@@ -451,3 +451,10 @@ Scratch (/tmp): `/tmp/claude-1000/apa_mf2_2c_mut`, `/tmp/claude-1000/apa_mf2_2c_
   blocking findings).
 - **Condition stated to David:** the final review's GPU probes must pass before the merge. They are pending because
   APA-SPM2 holds the GPU.
+
+- **2026-10-08 15:13Z, lead run of the final review's GPU probes (apa-mf23rev):** 8/8 cells PASS on driver 595.99.02
+  (after the 10-08 reboot). Rows: selection 336, sums 108, long_keys 2, public_long 20, identity 112 arrays with 0
+  byte changes, guards 3, real 36 arrays × 3 engines (byte gate PASS; the absolute bf16 row is C08, byte-identical on
+  fd32b6d), m4 (mutant killed). Deviation: a lead copy of the launcher changes only the driver pin
+  (595.91.07 → NVML == kernel module). Receipts: apa-mf23rev 4f5a330 `artifacts/apa_mf23rev/gpu/LEAD_RUN_20261008.md`.
+  The promotion condition is met.
