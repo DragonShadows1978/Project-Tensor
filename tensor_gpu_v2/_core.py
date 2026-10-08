@@ -1603,6 +1603,23 @@ def einsum_cache_info() -> dict:
     }
 
 
+def _causal_mask_bool(xp, L, S, row_start=0, row_end=None):
+    """(rows, S) bool, True where MASKED, for query rows [row_start, row_end) of L.
+
+    BOTTOM-RIGHT aligned (APA-MF1; the 63960a4 convention of
+    tensor_cuda.functional._causal_mask, k = 1 + S - L): the L queries are the
+    LAST L of S positions, so row r sees key columns 0..(S-L)+r. Square
+    (S == L) reduces exactly to triu(ones, k=1). The old inline triu(k=1) /
+    `col > row` masks were TOP-LEFT and blinded rectangular queries to most of
+    the prefix. Prior art: FlashAttention-2 bottom-right causal (Dao, 2023).
+    """
+    if row_end is None:
+        row_end = L
+    rows = xp.arange(row_start, row_end).reshape(-1, 1) + (S - L)
+    cols = xp.arange(S).reshape(1, -1)
+    return cols > rows
+
+
 def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor,
                                   attn_mask: Optional[Tensor] = None,
                                   dropout_p: float = 0.0,
@@ -1657,7 +1674,7 @@ def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor,
 
     # Apply masks
     if is_causal:
-        causal_mask = xp.triu(xp.ones((L, S), dtype=xp.bool_), k=1)
+        causal_mask = _causal_mask_bool(xp, L, S)  # bottom-right (APA-MF1)
         scores.data = xp.where(causal_mask, -1e9, scores.data)
 
     if attn_mask is not None:
@@ -1749,10 +1766,9 @@ def flash_attention(query: Tensor, key: Tensor, value: Tensor,
 
         # Apply causal mask if needed
         if is_causal:
-            # For each query position i+k, mask out key positions > i+k
-            row_indices = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-            col_indices = xp.arange(S).reshape(1, 1, 1, -1)
-            causal_mask = col_indices > row_indices  # (1, 1, block, S)
+            # Query row r is absolute position (S-L)+r: mask key positions
+            # > (S-L)+r (bottom-right, APA-MF1)
+            causal_mask = _causal_mask_bool(xp, L, S, i, end_i)  # (block, S)
             scores = xp.where(causal_mask, xp.float32(-1e9), scores)
 
         # Online softmax update (numerically stable)
@@ -1818,9 +1834,7 @@ def flash_attention(query: Tensor, key: Tensor, value: Tensor,
             scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale
 
             if is_causal:
-                row_indices = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-                col_indices = xp.arange(S).reshape(1, 1, 1, -1)
-                causal_mask = col_indices > row_indices
+                causal_mask = _causal_mask_bool(xp, L, S, i, end_i)  # bottom-right (APA-MF1)
                 scores = xp.where(causal_mask, xp.float32(-1e9), scores)
 
             # Softmax (standard, since we need full attention weights for backward)
@@ -1971,9 +1985,8 @@ def apa_quant_attention(
             Qi = query_data[:, :, i:end_i]
             scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
             if is_causal:
-                ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-                ci = xp.arange(S).reshape(1, 1, 1, -1)
-                scores = xp.where(ci > ri, xp.float32(-1e9), scores)
+                scores = xp.where(_causal_mask_bool(xp, L, S, i, end_i),  # bottom-right (APA-MF1)
+                                  xp.float32(-1e9), scores)
             if attn_mask is not None:
                 amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
                 if amask.ndim == 2:
@@ -2006,9 +2019,7 @@ def apa_quant_attention(
                 dOi = grad_out[:, :, i:end_i]
                 scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
                 if is_causal:
-                    ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-                    ci = xp.arange(S).reshape(1, 1, 1, -1)
-                    cmask = ci > ri
+                    cmask = _causal_mask_bool(xp, L, S, i, end_i)  # bottom-right (APA-MF1)
                     scores = xp.where(cmask, xp.float32(-1e9), scores)
                 if attn_mask is not None:
                     amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
@@ -2060,7 +2071,7 @@ def apa_quant_attention(
     if not use_tiled:
         bulk_scores = xp.einsum('bhid,bhjd->bhij', query_data, key_quant_data) * scale_f
         if is_causal:
-            cmask = xp.triu(xp.ones((L, S), dtype=xp.bool_), k=1)
+            cmask = _causal_mask_bool(xp, L, S)  # bottom-right (APA-MF1)
             bulk_scores = xp.where(cmask, xp.float32(-1e9), bulk_scores)
         if attn_mask is not None:
             amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
@@ -2140,9 +2151,7 @@ def apa_quant_attention(
             block_len = end_i - i
 
             if is_causal:
-                ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-                ci = xp.arange(S).reshape(1, 1, 1, -1)
-                causal_mask = ci > ri
+                causal_mask = _causal_mask_bool(xp, L, S, i, end_i)  # bottom-right (APA-MF1)
 
             bulk_scores = xp.einsum('bhid,bhjd->bhij', Qi, key_quant_data) * scale_f
             if is_causal:
@@ -2246,7 +2255,7 @@ def apa_quant_attention(
             r_mask = stored_refine_masks[0]
             scores = xp.einsum('bhid,bhjd->bhij', query_data, key_data) * scale_f
             if is_causal:
-                cmask = xp.triu(xp.ones((L, S), dtype=xp.bool_), k=1)
+                cmask = _causal_mask_bool(xp, L, S)  # bottom-right (APA-MF1)
                 scores = xp.where(cmask, xp.float32(-1e9), scores)
             if attn_mask is not None:
                 amask = attn_mask.data if isinstance(attn_mask, Tensor) else attn_mask
@@ -2273,9 +2282,7 @@ def apa_quant_attention(
                 r_mask = stored_refine_masks[i]
 
                 if is_causal:
-                    ri = xp.arange(i, end_i).reshape(1, 1, -1, 1)
-                    ci = xp.arange(S).reshape(1, 1, 1, -1)
-                    cmask = ci > ri
+                    cmask = _causal_mask_bool(xp, L, S, i, end_i)  # bottom-right (APA-MF1)
 
                 scores = xp.einsum('bhid,bhjd->bhij', Qi, key_data) * scale_f
                 if is_causal:

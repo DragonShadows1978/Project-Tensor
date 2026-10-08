@@ -1,0 +1,46 @@
+--- a/tensor_cuda/tensor_cuda/quant.py	2026-10-07 18:46:40.785572595 -0400
++++ b/tensor_cuda/tensor_cuda/quant.py	2026-10-07 18:54:06.415162658 -0400
+@@ -177,6 +177,22 @@
+     observe it). Remaining difference to the fp64 definition: fp32 SGEMM dot and
+     reduction rounding (tie band, MF2.1 receipts).
+ 
++    APA-MF2.2 item 2 (re-review N2): squaring |b|-scale deviations in fp32 overflowed for
++    |b| ~1e20 (threshold +inf) and underflowed for |b| ~1e-30 (variance 0). The moments are
++    now taken of u = |b| / M, M = the row max of the visible |b| (invisible entries are
++    already 0; an all-zero row uses M = 1), so u, mean, |d| <= 1, d^2 <= 1, var <= 1 for
++    every finite fp32 |b| (1e-45 .. 3.4e38): no overflow, and no underflow of a nonzero
++    deviation (mean >= 1/cnt bounds the spacing of u - mean away from fp32's tiny range).
++    The selection compares in the scaled domain, u >= mean_u + z*std_u: the definition is
++    homogeneous of degree 1 in |b| (thr(c|b|) = c thr(|b|), c > 0), so the scaled predicate
++    is the definition's predicate; the only extra rounding is the one division per entry
++    (<= 2^-24 relative, far inside the 2e-5 tie band).
++    Prior art: scaling by the largest magnitude before squaring -- Blue (1978, ACM TOMS
++    4(1), "A portable Fortran program to find the Euclidean norm of a vector") and the
++    reference BLAS snrm2/dnrm2 scale/ssq form; centered two-pass variance, Chan, Golub &
++    LeVeque (1983). Unverified -- lead to check. Taken: scale-before-square; mine: the
++    per-row visible-max scaling of this selection and the scaled-domain comparison.
++
+     Prior art: centered two-pass variance (textbook); Chan, Golub & LeVeque (1983,
+     "Algorithms for computing the sample variance") analyse the one-pass cancellation
+     this removes; Welford (1962) is the one-pass stable alternative, not used here --
+@@ -196,13 +212,17 @@
+         # zero the invisible entries so the row sums are visible-only; the shared
+         # bottom-right mask (fp32, nonzero == masked) is the predicate
+         absb = absb.masked_fill(F._causal_mask(L, S, dev, "float32"), 0.0)
+-    mean = absb.sum([-1], True) / cnt
+-    dev_ = absb - mean
++    # APA-MF2.2 (N2): range-robust moments of u = |b| / rowmax (see the docstring).
++    amax = absb.max([-1], True)              # visible row max (invisible entries are 0)
++    amax = amax + (amax <= 0.0)              # all-zero row: divide by 1, never 0/0
++    u = absb / amax                          # u in [0, 1]
++    mean = u.sum([-1], True) / cnt
++    dev_ = u - mean
+     if vis is not None:
+         dev_ = dev_ * vis                    # invisible deviations -> 0 (0/1 product)
+     var = (dev_ * dev_).sum([-1], True) / cnt
+     thr = mean + var.sqrt() * z
+-    sel = absb.ge(thr)
++    sel = u.ge(thr)                          # scaled-domain comparison
+     if vis is not None:
+         sel = sel * vis                      # visible && (0/1 product, never NaN)
+     return sel

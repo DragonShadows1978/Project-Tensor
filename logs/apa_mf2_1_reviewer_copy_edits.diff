@@ -1,0 +1,82 @@
+5c5,6
+< apa_review_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+---
+> # MF2.1 edit: root = the MF2.1 worktree; probe dir, receipts and logs renamed.
+> apa_review_root=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2
+8c9
+<   leak|negative|identity|sliding|grapa|short|rule|census|extension) apa_review_cell="$1" ;;
+---
+>   leak|negative|identity|sliding|grapa|short|rule|census|extension|rule_definition) apa_review_cell="$1" ;;
+16,17c17,18
+< export APA_MF2REV_ENGINE_DIR="${APA_MF2REV_ENGINE_DIR:-$apa_review_root/artifacts/apa_mf2rev/build}"
+< export PYTHONPATH="$apa_review_root/tensor_cuda:$APA_MF2REV_ENGINE_DIR:$apa_review_root/tests/apa_mf2rev:$apa_review_root"
+---
+> export APA_MF2REV_ENGINE_DIR="${APA_MF2REV_ENGINE_DIR:-$apa_review_root/artifacts/apa_mf2_1/build}"
+> export PYTHONPATH="$apa_review_root/tensor_cuda:$APA_MF2REV_ENGINE_DIR:$apa_review_root/scripts/apa_mf2_1_reviewer:$apa_review_root"
+19,20c20,22
+< apa_review_log="$apa_review_root/logs/apa_mf2rev_gpu_${apa_review_cell}_${apa_review_stamp}.log"
+< apa_review_receipt="$apa_review_root/artifacts/apa_mf2rev/gpu_${apa_review_cell}_${apa_review_stamp}.json"
+---
+> mkdir -p "$apa_review_root/artifacts/apa_mf2_1/reviewer"
+> apa_review_log="$apa_review_root/logs/apa_mf2_1_reviewer_${apa_review_cell}_${apa_review_stamp}.log"
+> apa_review_receipt="$apa_review_root/artifacts/apa_mf2_1/reviewer/gpu_${apa_review_cell}_${apa_review_stamp}.json"
+22c24
+< python "$apa_review_root/tests/apa_mf2rev/gpu_probe.py" "$apa_review_cell" --receipt "$apa_review_receipt" 2>&1 | tee "$apa_review_log"
+---
+> python3 "$apa_review_root/scripts/apa_mf2_1_reviewer/gpu_probe.py" "$apa_review_cell" --receipt "$apa_review_receipt" 2>&1 | tee "$apa_review_log"
+2a3,10
+> APA-MF2.1 COPY (scripts/apa_mf2_1_reviewer/, originals pinned in
+> SHA256SUMS.orig_mf2rev_8100409 == the review's verdict.json evidence pins). Edits, all
+> marked "MF2.1 edit": (1) the before-arm pin file is read from the apa-mf2rev worktree
+> (read-only); (2) receipts carry run_by; (3) NEW cell `rule_definition`: the rule cell's
+> operands checked against the fp64 DEFINITION (centered two-pass, scripts/apa_mf2_1_defn.py)
+> instead of BK4 bit-exactness, which the MF2.1 order retired; kernel 'h'/'a' threshold
+> errors vs the definition are recorded (non-gating). The original cells are unchanged.
+> 
+88c96,97
+<     pins = json.loads((ROOT/"artifacts/apa_mf2rev/cpu_receipt.json").read_text())["baseline_provenance"]["pins"]
+---
+>     # MF2.1 edit (1): the pin file lives on the review branch (read-only)
+>     pins = json.loads(Path("/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2rev/artifacts/apa_mf2rev/cpu_receipt.json").read_text())["baseline_provenance"]["pins"]
+458a468,498
+> def rule_definition():
+>     # MF2.1 edit (3): definition-based variant of `rule` (same operands). Gate: composed vs
+>     # the fp64 definition, 0 mismatches outside |a-thr|<=2e-5|thr|, and (exact property)
+>     # every equal visible |b| selected. Kernel rows are observations (never asserted).
+>     sys.path.insert(0, str(ROOT/"scripts"))
+>     import apa_mf2_1_defn as DEF
+>     z = Q._norm_ppf(1.0 - 0.15)
+>     for D in (64,96,128):
+>         for L,S in ((1,1),(1,2),(1,256),(1,2048),(3,9)):
+>             for causal in (False,True):
+>                 def run():
+>                     q=np.zeros((1,1,L,D),np.float32);q[...,:3]=1
+>                     k=np.zeros((1,1,S,D),np.float32);k[...,:3]=[1,107/256,1/65536]
+>                     _,x=ts((q,k,np.zeros_like(k)),"bfloat16")
+>                     composed=host(Q._bk4_selection(x[0].float(),x[1].float(),1.,z,causal))!=0
+>                     b=host(x[0]).astype(np.float64)@host(x[1]).astype(np.float64).swapaxes(-1,-2)
+>                     ref,thr,a,vis=DEF.definition_fp64(b,causal,z)
+>                     c=DEF.compare(composed,ref,a,thr,vis)
+>                     obs={}
+>                     for var in ("h","a"):
+>                         r=tc._C.bp_kernel_4_diagnostic(x[0],x[1],x[1],x[2],1.,float(z),causal,var)
+>                         kt=r[2].numpy()[...,None].astype(np.float64)
+>                         obs[var]={**{k_:v for k_,v in DEF.compare(r[3].numpy()!=0,ref,a,thr,vis).items() if k_ in ("mismatch","out_of_band")},
+>                                   "thr_max_rel_err":float((np.abs(kt-thr)/np.abs(thr)).max())}
+>                     emit(name="rule_definition_observation",passed=c["out_of_band"]==0,D=D,L=L,S=S,causal=causal,
+>                          composed_vs_def=c,kernel_h=obs["h"],kernel_a=obs["a"])
+>                     assert c["out_of_band"]==0,"composed outside the definition tie band"
+>                     assert np.array_equal(composed[0,0],vis),"equal visible |b| must all be selected"
+>                 check("rule_definition",run,D=D,L=L,S=S,causal=causal)
+> 
+> 
+460c500,501
+<        "grapa":grapa,"short":short,"rule":rule,"census":census,"extension":extension}
+---
+>        "grapa":grapa,"short":short,"rule":rule,"census":census,"extension":extension,
+>        "rule_definition":rule_definition}
+476c517,518
+<                  "gpu_execution_attempted":GPU_ATTEMPTED,"rows":ROWS,"model":"gpt-6.1-sol","reasoning_effort":"high"}
+---
+>                  "gpu_execution_attempted":GPU_ATTEMPTED,"rows":ROWS,"model":"gpt-6.1-sol","reasoning_effort":"high",
+>                  "run_by":"apa-mf2-1 seat (Claude Opus 5.5), copy of the apa-mf2rev probe"}  # MF2.1 edit (2)

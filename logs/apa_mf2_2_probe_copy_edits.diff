@@ -1,0 +1,133 @@
+--- scripts/apa_mf2_2_probe/gpu_probe.py.orig	2026-10-07 19:05:42.007645636 -0400
++++ scripts/apa_mf2_2_probe/gpu_probe.py	2026-10-07 19:08:29.976246545 -0400
+@@ -20,7 +20,7 @@
+ import oracle as O
+ from provenance import ROOT,verify
+ 
+-ART=ROOT/'artifacts/apa_mf21rev'
++ART=ROOT/'artifacts/apa_mf2_2/probe'  # APA-MF2.2 copy: receipts land in this order's artifacts
+ ROWS=[]
+ TC=F=Q=None
+ INFO={}
+@@ -35,7 +35,13 @@
+     print(json.dumps(ROWS[-1]),flush=True)
+ 
+ 
+-def tensor(a,dt='float32',grad=False): return TC.tensor(np.asarray(a,np.float32),dtype=dt,requires_grad=grad)
++def tensor(a,dt='float32',grad=False):
++    # APA-MF2.2 adjudication switch (default OFF == reviewer behavior): tc.tensor(dtype='bfloat16',
++    # requires_grad=True) returns the .astype output of an fp32 leaf (a NON-leaf: .grad stays None).
++    # With APA_MF2_2_BF16_LEAF=1 a bf16 grad tensor is made a real leaf (detach + requires_grad).
++    if os.environ.get('APA_MF2_2_BF16_LEAF')=='1' and dt=='bfloat16' and grad:
++        t=TC.tensor(np.asarray(a,np.float32),dtype=dt).detach(); t.requires_grad=True; return t
++    return TC.tensor(np.asarray(a,np.float32),dtype=dt,requires_grad=grad)
+ def arr(t): return t.float().numpy()
+ 
+ 
+@@ -248,6 +254,43 @@
+     check('GRM/sliding_actual_helper',band)
+ 
+ 
++def masks_geometry_observe():
++    # APA-MF2.2 adjudication (observation, no assertion): same operands as masks/geometry;
++    # records output sha + abs/rel error vs the exact expected mean (S-L+i)/2.
++    for L,S in ((1,9),(3,9),(8,8),(64,97),(2048,2048)):
++        def run(L=L,S=S):
++            xs=zero_witness(L,S,64)
++            with TC.no_grad(): o=F.scaled_dot_product_attention(*xs,is_causal=True)
++            a=arr(o); col=a[0,0,:,0].astype(np.float64); expected=(S-L+np.arange(L))/2
++            err=np.abs(col-expected); rel=err/np.maximum(np.abs(expected),1e-30)
++            return {'observation_only':True,'output_sha256':hashlib.sha256(a.tobytes()).hexdigest(),
++                    'max_abs_err':float(err.max()),'max_rel_err':float(rel[expected>0].max()) if (expected>0).any() else 0.0,
++                    'n_abs_gt_2e-4':int((err>2e-4).sum()),'max_expected':float(expected.max())}
++        check(f'geometry_observe/{L}x{S}',run)
++
++
++def n2_full_api_before():
++    # APA-MF2.2 adjudication: the review N2 full-API witness through apa_quant_attention's own
++    # selection (last tc.where condition) -- runs on every revision (no _definition_selection hook).
++    for D in (64,96,128):
++        for label,mag in [('large',1e20),('tiny',1e-30)]:
++            def run(D=D,mag=mag):
++                q=np.zeros((1,1,1,D),np.float32); q[...,0]=mag
++                k=np.zeros((1,1,3,D),np.float32); k[0,0,:,0]=[1,2,3]
++                rec={}; old=TC.where; oldq=Q._quantize_keys
++                def wh(c,x,y): rec['sel']=arr(c); return old(c,x,y)
++                def qk(*a,**kw): r=oldq(*a,**kw); rec['kq']=r; return r
++                TC.where=wh; Q._quantize_keys=qk
++                try:
++                    with TC.no_grad(): Q.apa_quant_attention(tensor(q),tensor(k),tensor(np.ones_like(k)),bulk_bits=4,refine_percentile=.15,is_causal=False,scale=1.)
++                finally: TC.where=old; Q._quantize_keys=oldq
++                bulk=arr(TC.matmul(tensor(q),rec['kq'],alpha=1.,trans_b=True))
++                res=O.mismatch(rec['sel'],bulk,False)
++                assert res['out_of_band']==0,{'actual':rec['sel'],**res}
++                return res
++            check(f'N2_full_api/{label}/D{D}',run)
++
++
+ def reductions():
+     for dt in ('float32','bfloat16','float16'):
+         for trailing in (False,True):
+@@ -388,7 +431,11 @@
+                 put(key+'/causal_softmax',TC.causal_softmax(TC.matmul(*[tensor(x,dt) for x in raw[:2]],alpha=D**-.5,trans_b=True)))
+                 im=tensor(rng.normal(0,.2,(1,1,4,4)),dt)
+                 put(key+'/clamp',im.clamp(-.1,.1))
+-                put(key+'/pool',TC._C.max_pool2d(im,2,2,2,2,0,0))
++                # APA-MF2.2 adjudication switch (default OFF == reviewer behavior): the engine's
++                # max_pool2d takes fp32/fp16 only ('conv/pool: float32/float16 only'); with
++                # APA_MF2_2_SKIP_BF16_POOL=1 the bf16 pool key is not recorded on ANY arm.
++                if not (dt=='bfloat16' and os.environ.get('APA_MF2_2_SKIP_BF16_POOL')=='1'):
++                    put(key+'/pool',TC._C.max_pool2d(im,2,2,2,2,0,0))
+                 put(key+'/normalization',(im-im.mean([-1],True))/(im.var([-1],True)+1e-5).sqrt())
+                 codes,scales=TC.kv_int4_pack(tensor(raw[1],dt),32)
+                 put(key+'/kv_int4_codes',codes); put(key+'/kv_int4_scales',scales)
+@@ -416,19 +463,24 @@
+ 
+ def identity_driver(cell):
+     revs=['048949d','c5c468d'] if cell=='identity_mf2' else ['fd32b6d','048949d','c5c468d']
++    # APA-MF2.2 copy: APA_MF2_2_IDENTITY_REVS='a,b,...,after' overrides (last = after arm)
++    if os.environ.get('APA_MF2_2_IDENTITY_REVS'): revs=os.environ['APA_MF2_2_IDENTITY_REVS'].split(',')
++    AFTER=revs[-1]
+     results={}; engines={'048949d':os.environ['APA_MF21REV_BEFORE_ENGINE'],
+                         'fd32b6d':os.environ['APA_MF21REV_PRODUCTION_ENGINE'],
+-                        'c5c468d':os.environ['APA_MF21REV_AFTER_ENGINE']}
++                        'c5c468d':os.environ['APA_MF21REV_AFTER_ENGINE'],
++                        'mf2_2':os.environ.get('APA_MF2_2_ENGINE_MF2_2','')}
++    pkgs=json.loads(os.environ['APA_MF2_2_PKGS'])
+     for rev in revs:
+         env=os.environ.copy(); env['APA_MF21REV_REV']=rev; env['APA_MF21REV_ENGINE']=engines[rev]
+-        env['APA_MF21REV_PKG']=str(ART/'baselines'/rev/'pkg')
++        env['APA_MF21REV_PKG']=pkgs[rev]
+         env['PYTHONPATH']=engines[rev]+':'+env['APA_MF21REV_PKG']
+         p=subprocess.run([sys.executable,__file__,'_identity_arm'],env=env,timeout=180,check=False)
+         assert p.returncode==0,f'identity arm failed: {rev}, exit {p.returncode}'
+         results[rev]=json.loads((ART/f'gpu_identity_arm_{rev}_{env["APA_MF21REV_RUN"]}.json').read_text())
+-    after=results['c5c468d']
++    after=results[AFTER]
+     for rev in revs:
+-        if rev=='c5c468d': continue
++        if rev==AFTER: continue
+         before=results[rev]
+         assert before['provenance']['engine_sha256']!=after['provenance']['engine_sha256'],'same NEW engine used on both arms'
+         assert before['values'].keys()==after['values'].keys(),'unequal key coverage'
+--- scripts/apa_mf2_2_probe/provenance.py.orig	2026-10-07 19:05:42.009515570 -0400
++++ scripts/apa_mf2_2_probe/provenance.py	2026-10-07 19:06:06.351053868 -0400
+@@ -9,7 +9,7 @@
+ import os
+ import sys
+ 
+-ROOT=Path(__file__).resolve().parents[2]
++ROOT=Path(__file__).resolve().parents[2]  # APA-MF2.2 copy: scripts/apa_mf2_2_probe -> worktree root
+ 
+ 
+ def sha(path):
+@@ -20,7 +20,8 @@
+     rev=os.environ['APA_MF21REV_REV']
+     engine=Path(os.environ['APA_MF21REV_ENGINE']).resolve()
+     pkg=Path(os.environ['APA_MF21REV_PKG']).resolve()
+-    pins=json.loads((ROOT/'artifacts/apa_mf21rev/provenance_pins.json').read_text())[rev]
++    # APA-MF2.2 copy: reviewer pins + an 'mf2_2' entry (artifacts/apa_mf2_2/probe/provenance_pins.json)
++    pins=json.loads((ROOT/'artifacts/apa_mf2_2/probe/provenance_pins.json').read_text())[rev]
+     manifest=json.loads((engine/'manifest.json').read_text())
+     assert manifest['sources']==pins['engine_sources'], 'engine source pins differ from independent historical revision'
+     for rel,expected in pins['python_sources'].items():

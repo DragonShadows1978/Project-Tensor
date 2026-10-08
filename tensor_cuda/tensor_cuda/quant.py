@@ -132,6 +132,145 @@ def _quantize_keys(k, R, CB, BND):
     return recon
 
 
+_SEL_CACHE = {}
+
+
+def _bk4_rows(L, S, dev, is_causal):
+    """Cached (count (L,1), visible 0/1 (L,S) or None) fp32 tensors for the selection."""
+    key = (L, S, dev, bool(is_causal))
+    t = _SEL_CACHE.get(key)
+    if t is None:
+        if len(_SEL_CACHE) >= 16:
+            _SEL_CACHE.clear()
+        if is_causal:
+            # bottom-right: row i sees j <= S-L+i, count S-L+i+1 (kernels.cu:8064);
+            # max(., 1) only keeps out-of-contract S < L rows finite
+            cnt = np.maximum(np.arange(S - L + 1, S + 1, dtype=np.float32), 1.0)
+            vis = (np.arange(S)[None, :] <= (S - L + np.arange(L))[:, None]).astype(np.float32)
+            t = (tc.tensor(cnt[:, None], device=dev), tc.tensor(vis, device=dev))
+        else:
+            t = (tc.tensor(np.full((L, 1), S, np.float32), device=dev), None)
+        _SEL_CACHE[key] = t
+    return t
+
+
+_ROW_SUM_NATIVE_MAX = 8192   # rows up to this length: the engine's single-pass row sum
+_ROW_SUM_BLOCK = 4096        # longer rows: sums of 4096-key blocks, then of the partials
+
+
+def _row_sum(x):
+    """Sum over the last axis (keepdim) with a bounded fp32 accumulation depth.
+
+    APA-MF2.2 Amendment 3 (review V7): the engine's row sum (kernels.cu reduce_lastdim_kernel) runs
+    256 threads over S/256 sequential fp32 adds plus an 8-level tree, i.e. an accumulation depth of
+    S/256 + 7. At S = 2^20 that is 4103 roundings; on a tightly clustered row the mean drifted 4e-5
+    and moved the threshold outside the 2e-5 band. Rows with S <= 8192 keep that single-pass sum
+    (depth <= 39, so every shorter row keeps its exact bytes); longer rows are reshaped into
+    4096-key blocks, each block summed (depth <= 15 + 8), the partials summed the same way
+    (recursive), and the < 4096-key remainder summed natively and added once -- depth <= 32 for
+    S <= 2^20. Recursive-summation bound: |error| <= depth * 2^-24 * sum|x| (first order).
+    The engine has no float64 dtype (core.h DType), so this is the precision lever available here.
+    Memory: S % 4096 == 0 (incl. 2^20) -> reshape views + S/4096 partials per row; otherwise one
+    transient slice copy of the first nb*4096 keys.
+    Prior art: pairwise / blocked summation and its error analysis -- Higham (1993, "The accuracy of
+    floating point summation", SIAM J. Sci. Comput. 14(4)); Chan, Golub & LeVeque (1983) on pairwise
+    accumulation for the variance. Unverified -- lead to check. Mine: the two-level engine-op
+    composition and the 8192 / 4096 split.
+    """
+    S = x.shape[-1]
+    if S <= _ROW_SUM_NATIVE_MAX:
+        return x.sum([-1], True)
+    last = len(x.shape) - 1
+    nb, rem = divmod(S, _ROW_SUM_BLOCK)
+    main = x if rem == 0 else x.slice(last, 0, nb * _ROW_SUM_BLOCK)
+    part = main.reshape(list(x.shape[:-1]) + [nb, _ROW_SUM_BLOCK]).sum([-1], False)
+    total = _row_sum(part)
+    if rem:
+        total = total + x.slice(last, nb * _ROW_SUM_BLOCK, rem).sum([-1], True)
+    return total
+
+
+def _definition_selection(qf, kqf, scale, z, is_causal, bulk32=None):
+    """APA-MF2.1 item 3: the refine selection IS the definition, composed from engine ops.
+
+    Definition (orders/APA_MF2_1_REVIEW_FIXES.md, Measures 3):
+      b    = fp32 bulk dot q . kq * scale   (B1: never the 16-bit stored bulk)
+      a    = |b|; visible = bottom-right causal (j <= S-L+i) or all S; cnt = #visible
+      mean = sum_vis(a) / cnt                                  population
+      var  = sum_vis((a - mean)^2) / cnt                       CENTERED two-pass
+      thr  = mean + z * sqrt(var)
+      sel  = visible && a >= thr                               (B3; >=)
+    qf/kqf: fp32 (B,H,L,D)/(B,H,S,D), no grad. bulk32: optional precomputed fp32 b.
+    Returns the fp32 0/1 selection (B,H,L,S).
+
+    MF2 transcribed BK4's ONE-PASS moments (sum a^2/cnt - mean^2, clamped). The MF2
+    review (F2) showed that form cancels catastrophically on near-ties (constant |b|
+    rows: fp32 var > 0, threshold 5.5e-3 above every key, 0 of 2048 selected); the
+    centered form gives var = 0 exactly there. BK4 'h'/'a' keep their one-pass FMA
+    statistics (not changed here); their deviation from this definition is reported.
+    The deviation d is zeroed off the visible set by a 0/1 product (finite d), and the
+    stats-mask masked_fill on |b| stays the helper's last masked_fill (MF1 tests
+    observe it). Remaining difference to the fp64 definition: fp32 SGEMM dot and
+    reduction rounding (tie band, MF2.1 receipts).
+
+    APA-MF2.2 item 2 (re-review N2): squaring |b|-scale deviations in fp32 overflowed for
+    |b| ~1e20 (threshold +inf) and underflowed for |b| ~1e-30 (variance 0). The moments are
+    now taken of u = |b| / M, M = the row max of the visible |b| (invisible entries are
+    already 0; an all-zero row uses M = 1), so u, mean, |d| <= 1, d^2 <= 1, var <= 1 for
+    every finite fp32 |b| (1e-45 .. 3.4e38): no overflow, and no underflow of a nonzero
+    deviation (mean >= 1/cnt bounds the spacing of u - mean away from fp32's tiny range).
+    The selection compares in the scaled domain, u >= mean_u + z*std_u: the definition is
+    homogeneous of degree 1 in |b| (thr(c|b|) = c thr(|b|), c > 0), so the scaled predicate
+    is the definition's predicate; the only extra rounding is the one division per entry,
+    |fl(a/M) - a/M| <= 2^-24 * (a/M) + 2^-150 -- i.e. <= 2^-24 relative to the row max (u <= 1),
+    not per entry when a/M underflows (review V6: [1e-30, 1e30] gives u = 0 for the small key,
+    selection unchanged); far inside the 2e-5 row-relative tie band.
+    APA-MF2.2 Amendment 3 (review V7): both moments are summed with _row_sum (bounded
+    accumulation depth); the definition is unchanged, only its summation precision.
+    Prior art: scaling by the largest magnitude before squaring -- Blue (1978, ACM TOMS
+    4(1), "A portable Fortran program to find the Euclidean norm of a vector") and the
+    reference BLAS snrm2/dnrm2 scale/ssq form; centered two-pass variance, Chan, Golub &
+    LeVeque (1983). Unverified -- lead to check. Taken: scale-before-square; mine: the
+    per-row visible-max scaling of this selection and the scaled-domain comparison.
+
+    Prior art: centered two-pass variance (textbook); Chan, Golub & LeVeque (1983,
+    "Algorithms for computing the sample variance") analyse the one-pass cancellation
+    this removes; Welford (1962) is the one-pass stable alternative, not used here --
+    unverified, lead to check. Visible-count statistics: GRAPA attention.py
+    _visible_counts; bottom-right visibility: FlashAttention-2 (Dao 2023) / 63960a4.
+    Engine-op composition: mine.
+    """
+    from . import functional as F
+    B, H, L, _ = qf.shape
+    S = kqf.shape[-2]
+    dev = qf.device.split(":")[0]
+    if bulk32 is None:
+        bulk32 = tc.matmul(qf, kqf, alpha=scale, trans_b=True)
+    cnt, vis = _bk4_rows(L, S, dev, is_causal)
+    absb = bulk32.abs()
+    if is_causal:
+        # zero the invisible entries so the row sums are visible-only; the shared
+        # bottom-right mask (fp32, nonzero == masked) is the predicate
+        absb = absb.masked_fill(F._causal_mask(L, S, dev, "float32"), 0.0)
+    # APA-MF2.2 (N2): range-robust moments of u = |b| / rowmax (see the docstring).
+    amax = absb.max([-1], True)              # visible row max (invisible entries are 0)
+    amax = amax + (amax <= 0.0)              # all-zero row: divide by 1, never 0/0
+    u = absb / amax                          # u in [0, 1]
+    mean = _row_sum(u) / cnt                 # APA-MF2.2 Amendment 3 (V7): bounded-depth sums
+    dev_ = u - mean
+    if vis is not None:
+        dev_ = dev_ * vis                    # invisible deviations -> 0 (0/1 product)
+    var = _row_sum(dev_ * dev_) / cnt
+    thr = mean + var.sqrt() * z
+    sel = u.ge(thr)                          # scaled-domain comparison
+    if vis is not None:
+        sel = sel * vis                      # visible && (0/1 product, never NaN)
+    return sel
+
+
+_bk4_selection = _definition_selection      # MF2 name, kept for MF2 tests / review probes
+
+
 def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.15,
                         is_causal=False, scale=None, apa_rotation=True):
     """APA-Quant attention on the engine. query/key/value: (B, H, L, D).
@@ -142,6 +281,8 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
     from . import functional as F
     B, H, L, D = query.shape
     S = key.shape[-2]
+    if is_causal:
+        F._check_causal_lengths(L, S)    # APA-MF2.1: S < L raises before any matmul
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
     dev = query.device.split(":")[0]
     R, CB, BND = _tables(D, bulk_bits, H, apa_rotation, dev)
@@ -149,36 +290,42 @@ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.1
     key_quant = _quantize_keys(key, R, CB, BND)
     bulk = tc.matmul(query, key_quant, alpha=scale, trans_b=True)
     ranking = tc.matmul(query, key, alpha=scale, trans_b=True)
+    bulk_raw = bulk                      # unmasked; the fp32 rule's operand in fp32 mode
 
     causal_add = None
     if is_causal:
+        # APA-MF2 item 2: the shared bottom-right mask (0 visible, -inf masked) as
+        # a PREDICATE: masked positions become -inf whatever their score, so a
+        # large (or overflowed) masked score can never leak weight. Prior art:
+        # FlashAttention-2 (Dao 2023) -inf predicate masking.
         causal_add = F._causal_mask(L, S, dev, query.dtype)
-        bulk = bulk + causal_add
-        ranking = ranking + causal_add
+        bulk = bulk.masked_fill(causal_add, float("-inf"))
+        ranking = ranking.masked_fill(causal_add, float("-inf"))
 
     if refine_percentile >= 1.0:
         scores = ranking
     else:
-        # Selection criterion must match the fused apa_selective_kernel, which
-        # thresholds on |bulk| (the cheap quantized scores) and refines the keys
-        # it picks — you cannot legitimately peek at the expensive |ranking| to
-        # decide whether to compute it. (kernels.cu apa_selective_kernel:937-967.)
-        # Compute the mean/std stat in fp32 (chaining mean/var/std through fp16
-        # loses ~3 digits and diverges the Python mask from the fp32 kernel on
-        # top-percentile boundary keys), then compare in fp32 and cast the 0/1
-        # mask back to the operand dtype — tc.where dispatches on the operand
-        # dtype and reinterprets the condition buffer as that same dtype, so a
-        # fp32 mask against fp16 operands would be read as garbage.
-        absr_f = bulk.abs().float()
-        if is_causal:
-            cmask = np.triu(np.ones((L, S), np.float32), 1)
-            absr_f = absr_f.masked_fill(tc.tensor(cmask, device=dev), 0.0)
+        # Selection criterion must match the fused kernel, which thresholds on
+        # |bulk| (the cheap quantized scores) and refines the keys it picks — you
+        # cannot legitimately peek at the expensive |ranking| to decide whether to
+        # compute it. APA-MF2.1: the rule is the DEFINITION (_definition_selection:
+        # visible-count population mean/std, centered two-pass, of the fp32 |bulk|;
+        # visible && >=), not BK4's one-pass arithmetic (MF2 review F2). In
+        # bf16/fp16 the stored bulk is rounded, so the fp32 dot is recomputed from
+        # the exact fp32 upcasts of the SAME operands (query, key_quant).
+        # The 0/1 mask is cast back to the operand dtype: tc.where dispatches on
+        # the operand dtype and reads the condition buffer as that dtype.
         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
-        thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
-        mask = absr_f.ge(thr)          # detached 0/1, fp32 comparison
+        if query.dtype == "float32":
+            mask = _definition_selection(query, key_quant, scale, z, is_causal,
+                                         bulk32=bulk_raw.detach())
+        else:
+            mask = _definition_selection(query.detach().float(), key_quant.float(), scale, z,
+                                         is_causal)
         if bulk.dtype != "float32":
             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
         scores = tc.where(mask, ranking, bulk)
 
-    weights = scores.softmax(-1)
+    # APA-MF2.2 Amendment 2: a row whose every score is -inf returns 0, not NaN.
+    weights = F._guarded_softmax(scores, lambda s: s.softmax(-1))
     return tc.matmul(weights, value)

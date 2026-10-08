@@ -1,0 +1,73 @@
+{
+  "order": "orders/APA_MF2_1_REVIEW_FIXES.md",
+  "order_sha256": "bdeba41530af3e471715ba3daec32dd9b997466e204cea9d987988aa6cc4d6c1",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent)",
+  "registered_at": "2026-10-07T17:20-04:00, before any GPU gate (no GPU command has run in this seat)",
+  "before": {
+    "tree": "apa-mf2 HEAD 048949d; files copied to artifacts/apa_mf2_1/before/files (SHA256SUMS) and the python package to artifacts/apa_mf2_1/before/pkg/tensor_cuda",
+    "engine": "artifacts/apa_mf2/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so sha256 8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a; its manifest's 19 source pins equal the worktree sources at registration time (checked)",
+    "after_engine": "artifacts/apa_mf2_1/build (scripts/apa_mf2_1_build.sh, same flags as apa_mf2_build.sh)"
+  },
+  "items": {
+    "1": "causal S < L raises ValueError (Python) / c10::Error (apa.cpp TORCH_CHECK) before any matmul: functional.scaled_dot_product_attention (is_causal, every route incl. USE_FUSED_SOFTMAX and grad), functional._causal_mask (the shared mask helper; GRAPA attention.py:82 and GRM gemma4 :740 inherit it), quant.apa_quant_attention (is_causal), apa.cpp apa_forward/apa_backward. Message names S, L and 'S >= L'. MF1's S<L test expects the raise.",
+    "2": "kernels.cu: reduce_lastdim_kernel and reduce_kernel MODE 1/2 accumulator start -3.4e38f/3.4e38f -> -INFINITY/INFINITY; causal_softmax_kernel max start -3.0e38f -> -INFINITY. Every other max/min sentinel on an attention-softmax path is audited and changed ONLY if the start value alone can change (no other arithmetic) with no new NaN path; otherwise recorded unchanged with the reason.",
+    "3": "quant.apa_quant_attention refine selection = the definition, composed from engine ops in fp32: b = fp32 bulk dot (SGEMM of the call's own q and kq upcasts, alpha=scale; fp32 path reuses its bulk), a = |b|, visible = bottom-right causal (j <= S-L+i) or all, cnt = #visible, mean = sum_vis(a)/cnt, d = (a - mean)*visible, var = sum(d*d)/cnt (centered two-pass, population), thr = mean + z*sqrt(var), sel = visible && a >= thr. BK4 'h' and 'a' kernels are NOT changed; their deviation from the definition is measured and reported.",
+    "4": "Test gaps: F4 fp16 additive-reversion discriminators (SDPA predicate site; quant ranking and bulk sites isolated with supplied finite Kq), apa.cpp kNegInf-only reversion discriminator (visible score -2e9 below a finite -1e9 fill; source check + stand-in harness), count-divisor discriminator under the definition, F9 test_apa_phase6._ref score mask bottom-right with a rectangular discriminator."
+  },
+  "definition_oracle": {
+    "what": "fp64, written from the definition (scripts/apa_mf2_1_defn.py, my own): b64 = (q64 . kq64) * scale64 with q64/kq64 the exact fp64 upcasts of the call's own operands (kq captured from quant._quantize_keys inside the call, or supplied), z = quant._norm_ppf(1 - p) as a double (the call's own z parameter); centered two-pass population mean/var over visible keys; thr64 = mean + z*sqrt(var); sel64 = visible && |b64| >= thr64.",
+    "tie_band": "entry (i,j) is IN the tie band iff | |b64_ij| - thr64_i | <= 2e-5 * |thr64_i| (relative, no absolute floor). Justification: 2e-5 is the order's cap; the composed fp32 arithmetic (SGEMM fp32 dot, engine sum reductions with <= ~40 sequential+tree adds per row, IEEE div/sqrt) is bounded far below it at the magnitudes in the census; the measured max relative gap of every mismatch is reported. A mismatch outside the band is a G4 failure for the composed path; it is never moved into the band.",
+    "kernel_comparison": "bp_kernel_4_diagnostic variants 'h' and 'a' (bf16 operands only) vs the same oracle on the same operands: counts in/out of band, per-mismatch visible count; NON-gating, reported."
+  },
+  "census": {
+    "real": "captures in tensor_fork_apa_wt_spq3/artifacts/apa_spq3/captures (sha-pinned manifests): Qwen3-1.7B (28 layers, 16 q / 8 kv heads, D128) layers 0/16/27 and Qwen3-4B (36 layers, 32/8, D128) layers 0/21/35, S=8192 bf16; one q head per kv head; L in {64,512,2048} (last L rows), bulk_bits {4,8}, p 0.15 causal: 36 definition cells. Byte-identity arms use 1.7B L16 and 4B L21 with (L,S) in {(1,8192),(16,16),(64,8192),(512,8192)} in fp32/bf16/fp16.",
+    "synthetic": "L in {1,3,64,513} x S in {L, L+1, 4L+5} x D in {64,96,128} x dtype {fp32,bf16,fp16} x causal {T,F}, N(0,.5) operands, p 0.15, bulk 8 (216 cells; kernel columns only for bf16).",
+    "near_tie": "review F2 constructions: Q[:3]=1, Kq[:3]=[1,107/256,1/65536] (bf16-exact), D in {64,96,128}, (L,S) in {(1,1),(1,2),(1,256),(1,2048),(3,9)}, causal T/F, scale 1, z = Phi^-1(.85) (Acklam) -- 30 cells; plus B1 [.125 stored] / B2 [100,100.0009995] witnesses, Q=K=0 zero-score rows, constant-one visible rows.",
+    "softmax_sentinel": "visible finite scores in {-3.0e38, -3.3e38, -3.39e38, -3.402e38, -FLT_MAX} (fp32) and {-3.0e38, -3.38e38} (bf16) with masked -inf neighbours; SDPA infer/grad/USE_FUSED_SOFTMAX, eager softmax, causal_softmax, reduce_max/min."
+  },
+  "gates": {
+    "G1": "python3 -m pytest tensor_cuda/tests -q -p no:cacheprovider --ignore=tensor_cuda/tests/test_selector_accuracy.py -rfE on the after engine + tree: FAILED/ERROR id set == the 52 fd32b6d baseline ids (tensor_fork_apa_wt_mf1/logs/apa_mf1_g1_baseline_unchanged.log) exactly; every edited/new test passes. apa_cuda tests (no extension, and through the stand-in harness built from the after apa.cpp): pass/skip/fail counts equal or better than MF2 (no-ext 6 ModuleNotFound/101 passed/1 skipped; stub 119 passed), new MF2.1 apa_cuda tests pass through the stand-in.",
+    "G2": "S < L (L8/S5 plus L3/S2, L2/S1) causal raises on every writable path, in fp32/bf16/fp16, grad on and off, with a message containing 'S >= L'; tc.matmul call count == 0 at the raise (wrapped); apa.cpp: raise through the stand-in harness + source order (TORCH_CHECK precedes the first matmul/quantize in apa_forward and apa_backward). Non-causal S < L still computes. GRAPA's own helper (read-only) is observed and reported, not gated.",
+    "G3": "(a) reviewer 'negative' cell rows finite_negative_sentinel infer/fused/grad: before RED (receipt 20261007T210327Z), after PASS (row0 == 1 exactly, finite); (b) byte identity before vs after (separate processes: before = MF2 engine + before package; after = MF2.1 engine + tree) on: real captures SDPA infer + grad (out, dq, dk, dv), causal_softmax on real score tensors, apa_quant_attention p=1.0 (full arm) and p=0.15 (engine-isolation arm: before engine vs after engine, both with the after package; the MF2-vs-MF2.1 package difference at p=0.15 is item 3 by design and reported as a diagnostic), GRM Qwen3-1.7B standard logits on one wikitext-2 window (8192 prefill in 512 chunks + 32 steps), GRAPA GQAAttention forward/backward (MF2 script geometry), reduce_max/reduce_min sweep (trailing fast path and generic kernel, 3 dtypes, magnitudes up to +-3.39e38, rows mixing finite and +-inf); (c) no NaN/Inf on any row with >= 1 visible finite score across the leak/negative/census probes. Rows whose max is below the old sentinel (or all -inf) are expected to change and are reported separately, never counted in (b).",
+    "G4": "composed (apa_quant_attention / the selection helper) vs fp64 definition: 0 mismatches outside the registered tie band on every real (36), synthetic (216) and near-tie (30 + witnesses) cell. Kernel 'h'/'a' vs fp64 reported in a separate non-gating table.",
+    "G5": "mutation (single textual substitution per mutant in a scratch copy; sources and builds of the tree never edited): killed / non-error >= 0.80, with every F4 mutant (M1-M5) and both sentinel mutants (M6, M7) killed. Kill = a test passing on the unmutated baseline fails with AssertionError or pytest 'DID NOT RAISE'; any other failure only -> ERROR (excluded from the denominator, named).",
+    "sanity": "every anomaly explained in one line in the ledger/report."
+  },
+  "mutants": {
+    "M1_F4_sdpa_additive_reversion": "functional.py SDPA scores.masked_fill(mask, -inf) -> scores + mask",
+    "M2_F4_quant_ranking_additive": "quant.py ranking.masked_fill(causal_add, -inf) -> ranking + causal_add",
+    "M3_F4_quant_bulk_additive": "quant.py bulk.masked_fill(causal_add, -inf) -> bulk + causal_add",
+    "M4_F4_apacpp_kNegInf_only": "apa.cpp constexpr double kNegInf = -INFINITY -> -1e9 (stand-in harness rebuild)",
+    "M5_F4_count_divisor_S": "quant.py causal visible count -> S (cnt = S for every row)",
+    "M6_sentinel_reduce_max": "kernels.cu reduce_lastdim_kernel + reduce_kernel MODE1/2 start back to -3.4e38f/3.4e38f (engine rebuild)",
+    "M7_sentinel_causal_softmax": "kernels.cu causal_softmax_kernel mx start back to -3.0e38f (engine rebuild)",
+    "M8_one_pass_variance": "quant.py var = (sum a^2/cnt - mean^2).relu() (the MF2 rule)",
+    "M9_gt_instead_of_ge": "quant.py absb.ge(thr) -> absb.gt(thr)",
+    "M10_visible_predicate_dropped": "quant.py sel * vis removed",
+    "M11_sample_variance": "quant.py var divisor cnt -> cnt - 1",
+    "M12_deviation_unmasked": "quant.py d = (a - mean)*visible -> d = a - mean",
+    "M13_bf16_bulk_for_stats": "quant.py 16-bit path statistics on the stored 16-bit bulk (B1)",
+    "M14_sdpa_s_lt_l_check_removed": "functional.py SDPA S<L raise removed",
+    "M15_quant_s_lt_l_check_removed": "quant.py S<L raise removed",
+    "M16_causal_mask_s_lt_l_check_removed": "functional.py _causal_mask S<L raise removed",
+    "M17_apacpp_s_lt_l_check_removed": "apa.cpp TORCH_CHECK(S >= L) removed (stand-in harness rebuild)",
+    "M18_phase6_ref_top_left": "test_apa_phase6._ref score mask back to triu(k=1) (test-reference mutant; killed iff the F9 discriminator fails)"
+  },
+  "predictions": {
+    "P1_lead": "the sentinel change is byte-identical on all finite inputs (seat refinement S0: exact for every row whose max >= -3.4e38f (min <= 3.4e38f), resp. visible max >= -3.0e38f for causal_softmax; rows entirely below the old sentinel change BY DESIGN from the wrong sentinel to the true max)",
+    "P2_lead": "the composed path is at 0 out-of-band mismatches against the definition everywhere",
+    "P3_lead": "the kernels' out-of-band deviations concentrate on rows with <= 2 visible keys and on constructed near-ties (zero on real data)",
+    "P4_lead": "the GRM 'apa' KL is within noise of MF2",
+    "S1_seat": "composed in-band (raw) mismatches vs fp64 on real captures <= 1e-6 of visible entries",
+    "S2_seat": "the review's constant near-tie rows give 0 RAW composed mismatches (exact sums of equal 17-bit values; centered deviation 0)"
+  },
+  "rails": [
+    "If any finite-input byte-identity arm differs after a sentinel-only change: STOP item 2 and report; never change other reduction/softmax arithmetic to restore identity.",
+    "If the composed path shows an out-of-band mismatch: report RED with the operand; never widen the band or special-case the cell.",
+    "Never encode BK4 arithmetic (FMA one-pass moments) as the contract in a test; kernel deviations go in a non-gating observation test.",
+    "No change to any APA kernel's selection statistics, the quantizer, tensor_gpu_v2, or anything outside the order's writable list; apa.cpp gets the S<L check only.",
+    "A frozen golden moving -> STOP and report.",
+    "GPU: flock -w 900 /tmp/forge-gpu.lock timeout 600 ..., native driver, no 595.84 override; no git, no subagents, no deletes."
+  ],
+  "disclosed_pre_registration_work": "CPU-only reading and the before-file copies; no GPU command, no build, no test run before this file."
+}

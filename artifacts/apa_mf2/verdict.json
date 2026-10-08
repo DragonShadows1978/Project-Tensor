@@ -1,0 +1,127 @@
+{
+  "order": "orders/APA_MF2_EXACT_RULE_MASK_LEAK_EXTENSION.md",
+  "order_sha256": "9272c0149f7559d6166530c8812c15b298aef745e1cbde958fc4e64b28dcb90f",
+  "seat": "Claude Opus 5.5 high, Agent-tool subagent",
+  "registration": "artifacts/apa_mf2/registration.json",
+  "registration_sha256": "0f75c6d66b1be2c4caf424687db2903fc1ae33b4d37b5efb12ef70fc96e94ffc",
+  "status": "COMPLETE_WITH_RED_GATES",
+  "headline": "Item 2 (finite-bias leak) FIXED and byte-identical on every realistic arm. Item 3 (apa.cpp top-left) FIXED, source-verified plus labeled stub-harness execution; the extension cannot be built here (torch cu130 vs nvcc 12.x). Item 1: B1/B2/B3 FIXED; real-data agreement with BK4 'h' rises from 0.99868-0.99949 to 0.9999971-1.0. Bit-exactness is NOT reached (G2a RED): exact only in 5/36 real and 57/72 synthetic cells. The residual is (R1) BK4's bf16-WMMA dot bits, which no engine op reproduces, plus (R3) BK4's FFMA variance arithmetic, which at count-1 rows makes the kernel drop the row's only key. That is the registered stop-and-report rail.",
+  "engine": {
+    "so": "artifacts/apa_mf2/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a",
+    "matches_mf1_8a13e5b3_cc437": false,
+    "why": "19/19 sources identical; g++ objects byte-identical; nvcc -dc objects differ only by per-compile module-id/tmpxft strings; kernels.o and matmul.o SASS identical after normalizing module ids",
+    "receipt": "logs/apa_mf2_build_provenance.log"
+  },
+  "gates": {
+    "G1": {
+      "verdict": "RED",
+      "suite_line": "45 failed, 1029 passed, 30 skipped, 2 warnings, 15 errors in 131.84s (0:02:11)",
+      "receipt": "logs/apa_mf2_g1_full.log:1979; logs/apa_mf2_g1_compare.log",
+      "baseline_52_ids": "all 52 still fail, none newly passes",
+      "test_apa_phase6_test_apa_causal": "PASS",
+      "new_failing_ids": 8,
+      "new_failing_breakdown": {
+        "registered_exactness_tests_G2a_residual": 7,
+        "MF1_record_test_s_less_than_l_is_finite": "test_apa_mf1_quant.py::test_mf1_quant_s_less_than_l_is_finite: out-of-contract S<L rows with no visible key are now NaN (-inf mask) instead of finite. The order requires no NaN only for S>=L. Semantics decision for the lead; not changed (rail)."
+      },
+      "apa_cuda_tests": "no extension: 6 failed (ModuleNotFoundError, same as before and MF1), 101 passed, 1 skipped -> equal. Stub harness: before 10 failed / 109 passed, after 119 passed -> improved."
+    },
+    "G2": {
+      "verdict": "RED",
+      "G2a_fp32_exact_vs_h": {
+        "verdict": "RED",
+        "real": "5/36 cells exact; 1326 mismatches total, max 169 in a cell; agreement 0.9999971390-1.0 (before MF1 A+B: 0.99867630-0.99949397, 1546250 mismatches)",
+        "synthetic": "57/72 cells exact (before: 27/72); 19 mismatches in 15 cells; 14 of those cells have count-1 rows (the BK4 FFMA artifact), 1 is an ulp tie at count 514",
+        "receipts": "artifacts/apa_mf2/real/*.json; artifacts/apa_mf2/synth_item1.json; artifacts/apa_mf2/tables.md"
+      },
+      "G2b_band": {
+        "verdict": "RED (synthetic only)",
+        "real_bf16_vs_h_outside_band": 0,
+        "real_max_rel_gap": 1.12e-05,
+        "synthetic_bf16_vs_h_outside_band": 4,
+        "synthetic_out_of_band_cause": "all 4 are count-1 rows of square causal cells: BK4 computes var = fma(-a,a,RN(a^2)) = RN(a^2)-a^2 > 0, so th = a*(1+~1.4e-4) and it drops the row's only visible key; the definition (var=0) and the composed rule select it. Receipt logs/apa_mf2_count1_witness.log:1-2",
+        "synthetic_fp16_vs_fp64_outside_band": 0
+      },
+      "G2c_review_cases": {
+        "verdict": "GREEN",
+        "B1": "before [true,true] -> after [false,false] == BK4 h (thr 0.12549718)",
+        "B2": "before [false,false] -> after [false,true] == BK4 h (thr 100.00050354)",
+        "B3": "before 27 selected -> after 24 (fp32/bf16/fp16) == BK4 h 24"
+      },
+      "plumbing_helper_equals_bf16_call": "GREEN (36/36 real, 72/72 synthetic)",
+      "softmax_operand_difference_reported_not_matched": "BK4 softmaxes the unrounded fp32 bulk and fp32 exact dot (kernels.cu:8076,8082-8083); the composed path softmaxes bulk/ranking stored in the operand dtype (quant.py tc.matmul outputs). Outside the selection block; not changed."
+    },
+    "G3": {
+      "verdict": "RED by registered letter on 8 out-of-domain sub-cells; every in-domain criterion GREEN",
+      "reviewer_N1": "fd32b6d and MF1 A+B row0 = 0.27970806; after row0 = 0.0 exactly, rows 1-2 = 1.0",
+      "leak_sweep": "after: 160/160 in-domain cells give exactly 0.0 on blind rows and finite outputs. Before (fd32b6d, MF1 A+B): 144/168 cells leak (from M=9.9e3 in fp32).",
+      "out_of_domain": "8 refine-0.15 cells (fp32 M 1e20/1e30, bf16 M 1e30/3.3e38): blind rows still exactly 0, but rows that see the key are NaN because the quantizer's |k|^2 overflows fp32 (non-finite bulk score). MF1 A+B was already non-finite in all 8. Pre-existing; not caused by the mask.",
+      "byte_identity_real_captures": "72/72 bytewise equal (SDPA grad-off; SDPA grad-on output+dq/dk/dv; apa p1.0 vs MF1 quant.py; apa p0.15 vs item-1 snapshot) x fp32/bf16/fp16 x (64,8192),(512,8192),(512,512) x 1.7B L16 / 4B L21; all finite",
+      "GRM_standard_logits": "byte-identical before vs after (sha256 7209727e..., 3 standard arms incl. repeat)",
+      "GRAPA_forward": "12/12 bytewise equal (refine 1.0 SDPA and force_selective composed; grad on: out, dx, dWq), finite",
+      "additive_consumer_pattern_gemma4_740": "9/9 bytewise equal (p and d sc), finite",
+      "receipts": "artifacts/apa_mf2/item2_gate.json; artifacts/apa_mf2/grm/chunked.json; artifacts/apa_mf2/grapa.json; artifacts/apa_mf2/additive_consumer.json"
+    },
+    "G4": {
+      "verdict": "SOURCE-VERIFIED (build failure recorded verbatim); plus labeled stub-harness execution GREEN",
+      "build_error": "RuntimeError: ('The detected CUDA version (%s) mismatches the version that was used to compilePyTorch (%s). Please make sure to use the same CUDA versions.', '12.0', '13.0')  [and '12.6' with CUDA_HOME=/usr/local/cuda-12.6]",
+      "receipts": "logs/apa_mf2_ext_build_before.log:29,33; logs/apa_mf2_ext_build_after.log:2",
+      "stub_harness": "shipped apa.cpp compiled as a C++-only torch extension with apa_kernels.cu replaced by an ATen transcription (scripts/apa_mf2_ext_stub_kernels.cpp); NOT the shipped extension",
+      "red_extension_probe": "before [0,0,0,0] -> after [3,3,3,3] (stub)",
+      "apa_cuda_tests_stub": "before 10 failed/109 passed -> after 119 passed"
+    },
+    "mutation": {
+      "verdict": "GREEN",
+      "killed": 9,
+      "total": 9,
+      "errors": 0,
+      "rate": 1.0,
+      "rule": "killed = a baseline-passing test fails with AssertionError (baseline has 7 registered G2a failures)",
+      "receipts": "artifacts/apa_mf2/mutation/mutation_tc.json; artifacts/apa_mf2/mutation/mutation_ext.json"
+    }
+  },
+  "grm_apa_kl": {
+    "protocol": "Qwen3-1.7B, 8192 prefill in 512-token chunks + 32 teacher-forced steps, refine 0.15, bulk 8",
+    "mf1AB_kl_mean": 0.0040902930915223575,
+    "mf2_kl_mean": 0.004363996333650758,
+    "rel_change": 0.06691531291380681,
+    "top1": "MF1 A+B 32/32, MF2 31/32",
+    "paired_diff": "mean +0.000274, sd 0.006874, se 0.001215 (0.23 se); 17/32 steps higher; excluding the single largest step the mean diff is -0.000469",
+    "receipt": "artifacts/apa_mf2/grm/chunked.json"
+  },
+  "predictions": {
+    "P1": "MISSED: 0.9987-0.9995 -> 0.9999971-1.0, exactly 1.0 in 5/36 real cells only",
+    "P2": "HELD: byte-identical on 72/72 real cells, GRM standard logits, GRAPA 12/12, additive pattern 9/9",
+    "P3": "MISSED by the letter: +6.69% (> 5%); the paired difference is 0.23 se, so the 32-step window cannot resolve 5%",
+    "S1": "PARTLY MISSED: all real mismatches are in-band, but the agreement floor is 0.9999971 (< 0.999999); the synthetic count-1 BK4 artifact was not predicted",
+    "S2": "HELD",
+    "S3": "MISSED (as P3)",
+    "S4": "HELD"
+  },
+  "patches": {
+    "item1": "artifacts/apa_mf2/item1.patch sha256 e1b6667e61d81b31eb293fbf61852ec8ceee56a4b3eef180b055aad324f2bae2 (quant.py selection, test_apa_phase6._ref, new test_apa_mf2_rule.py)",
+    "item2": "artifacts/apa_mf2/item2.patch sha256 0ffbfc2f7128e9765d015e32e3b3f9a8e08dbf5d43a79ec750e4a42b63ebb868 (functional.py, quant.py mask application, apa.cpp kNegInf hunk, new test_apa_mf2_mask.py)",
+    "item3": "artifacts/apa_mf2/item3.patch sha256 1ae8c50825dffd03d3e5fd0a5597e53afb2d530013c6ffc5d31925fae0d77e99 (apa.cpp bottom-right, new apa_cuda/tests/test_apa_mf2_extension.py)",
+    "apply_check": "applied in order 1,2,3 to the before copies: all 7 files reproduce the tree byte-for-byte"
+  },
+  "deviations": [
+    "Pre-registration design probe P0 ran on the GPU before the registration; it is disclosed in the registration, and every threshold is the order's.",
+    "The quant.py mask-application lines (2) became predicate masked_fill, adjacent to the selection block, so that an inf/NaN masked score cannot poison a row. Item 2's 'where/masked_fill' remit.",
+    "apa.cpp kNegInf -1e9 -> -INFINITY (item-2 audit finding in a writable file), carried in item2.patch.",
+    "Reviewer probe copies (scripts/apa_mf2_reviewer/): the MF1-era source pin replaced by printed hashes, and the engine pin set to the MF2 build. Both diffs are recorded.",
+    "G4 adds a labeled stub-harness execution beyond 'source reasoning only'.",
+    "Test bug fixed in my own test before G1 (bf16 grad leaf); see the ledger."
+  ],
+  "open_items": [
+    "Exact BK4 parity needs an engine/kernel change: a selection op that reuses bk3::scores WMMA dots and BK4's sequential FADD/FFMA statistics (or exposes BK4's thr), or the lead accepts the in-band residual. Decision: lead/David.",
+    "BK4 count-1 artifact: kernel drops a row's only visible key when RN(a^2) > a^2 (cancellation in one-pass variance). Kernel finding; not edited.",
+    "BK4 'h' and the shipped 'a' kernel disagree with each other on 0-184 entries per real cell (1430 total), more than MF2 vs 'a' (364).",
+    "S<L out-of-contract rows are now NaN: decide whether test_mf1_quant_s_less_than_l_is_finite should be updated, or fully masked rows kept finite.",
+    "Quantizer overflow: |k| > ~1.8e19 (fp32 |k|^2) or a reconstructed fp16 key past 65504 gives a non-finite bulk score (pre-existing).",
+    "tensor_gpu_v2/_core.py (10+ sites) and apa_cuda/tests/test_parity.py reference still use a finite -1e9 fill: not writable, listed.",
+    "GRAPA scripts/cc39b_which_op.py:125 MASK_BIAS = -1e4 mirrors the old engine constant (now stale).",
+    "apa_cuda extension build needs a CUDA 13 toolkit (or a cu12 torch).",
+    "GRM apa KL at 5% resolution needs a longer or multi-window evaluation."
+  ]
+}

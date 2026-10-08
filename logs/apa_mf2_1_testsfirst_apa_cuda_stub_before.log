@@ -1,0 +1,79 @@
+FF.FFFF...                                                               [100%]
+=================================== FAILURES ===================================
+__________ test_s_less_than_l_check_precedes_any_matmul[apa_forward] ___________
+
+fn = 'apa_forward'
+
+    @pytest.mark.parametrize("fn", ["apa_forward", "apa_backward"])
+    def test_s_less_than_l_check_precedes_any_matmul(fn):
+        body = _body(open(SRC).read(), fn)
+        m = re.search(r"TORCH_CHECK\(\s*!is_causal\s*\|\|\s*S\s*>=\s*L", body)
+>       assert m, f"{fn}: no causal S >= L TORCH_CHECK"
+E       AssertionError: apa_forward: no causal S >= L TORCH_CHECK
+E       assert None
+
+apa_cuda/tests/test_apa_mf2_1_source.py:33: AssertionError
+__________ test_s_less_than_l_check_precedes_any_matmul[apa_backward] __________
+
+fn = 'apa_backward'
+
+    @pytest.mark.parametrize("fn", ["apa_forward", "apa_backward"])
+    def test_s_less_than_l_check_precedes_any_matmul(fn):
+        body = _body(open(SRC).read(), fn)
+        m = re.search(r"TORCH_CHECK\(\s*!is_causal\s*\|\|\s*S\s*>=\s*L", body)
+>       assert m, f"{fn}: no causal S >= L TORCH_CHECK"
+E       AssertionError: apa_backward: no causal S >= L TORCH_CHECK
+E       assert None
+
+apa_cuda/tests/test_apa_mf2_1_source.py:33: AssertionError
+________________ test_forward_causal_s_less_than_l_raises[8-5] _________________
+
+L = 8, S = 5
+
+    @pytest.mark.parametrize("L,S", [(8, 5), (3, 2), (2, 1)])
+    def test_forward_causal_s_less_than_l_raises(L, S):
+        q = torch.zeros((1, 1, L, 64), device="cuda"); k = torch.zeros((1, 1, S, 64), device="cuda")
+>       with pytest.raises(RuntimeError, match=r"S >= L"):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+apa_cuda/tests/test_apa_mf2_1_extension.py:50: Failed
+________________ test_forward_causal_s_less_than_l_raises[3-2] _________________
+
+L = 3, S = 2
+
+    @pytest.mark.parametrize("L,S", [(8, 5), (3, 2), (2, 1)])
+    def test_forward_causal_s_less_than_l_raises(L, S):
+        q = torch.zeros((1, 1, L, 64), device="cuda"); k = torch.zeros((1, 1, S, 64), device="cuda")
+>       with pytest.raises(RuntimeError, match=r"S >= L"):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+apa_cuda/tests/test_apa_mf2_1_extension.py:50: Failed
+________________ test_forward_causal_s_less_than_l_raises[2-1] _________________
+
+L = 2, S = 1
+
+    @pytest.mark.parametrize("L,S", [(8, 5), (3, 2), (2, 1)])
+    def test_forward_causal_s_less_than_l_raises(L, S):
+        q = torch.zeros((1, 1, L, 64), device="cuda"); k = torch.zeros((1, 1, S, 64), device="cuda")
+>       with pytest.raises(RuntimeError, match=r"S >= L"):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+apa_cuda/tests/test_apa_mf2_1_extension.py:50: Failed
+__________________ test_backward_causal_s_less_than_l_raises ___________________
+
+    def test_backward_causal_s_less_than_l_raises():
+        L, S = 8, 5
+        q = torch.zeros((1, 1, L, 64), device="cuda"); k = torch.zeros((1, 1, S, 64), device="cuda")
+        mask = torch.zeros((1, 1, L, S), dtype=torch.uint8, device="cuda")
+>       with pytest.raises(RuntimeError, match=r"S >= L"):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+apa_cuda/tests/test_apa_mf2_1_extension.py:60: Failed
+=========================== short test summary info ============================
+FAILED apa_cuda/tests/test_apa_mf2_1_source.py::test_s_less_than_l_check_precedes_any_matmul[apa_forward]
+FAILED apa_cuda/tests/test_apa_mf2_1_source.py::test_s_less_than_l_check_precedes_any_matmul[apa_backward]
+FAILED apa_cuda/tests/test_apa_mf2_1_extension.py::test_forward_causal_s_less_than_l_raises[8-5]
+FAILED apa_cuda/tests/test_apa_mf2_1_extension.py::test_forward_causal_s_less_than_l_raises[3-2]
+FAILED apa_cuda/tests/test_apa_mf2_1_extension.py::test_forward_causal_s_less_than_l_raises[2-1]
+FAILED apa_cuda/tests/test_apa_mf2_1_extension.py::test_backward_causal_s_less_than_l_raises
+6 failed, 4 passed in 1.66s

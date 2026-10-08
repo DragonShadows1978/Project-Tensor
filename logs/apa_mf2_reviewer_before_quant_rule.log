@@ -1,0 +1,21 @@
+PREFLIGHT(MF2 copy) sha256 tensor_cuda/tensor_cuda/quant.py 74420d2b444ab7471400ba036d43921e2bb1610ce8bb57f8b41f9ff2dcad13f0
+PREFLIGHT(MF2 copy) sha256 tensor_cuda/tensor_cuda/functional.py 418ee285bdeefacbd9d5a1ccaf39700b8e83ea339377230c79f1d4480a1e3d9c
+PREFLIGHT(MF2 copy) sha256 apa_cuda/csrc/apa.cpp 6c2379506d1549371dcfb669efbd3e9d00d8d50d1ca9788ab27208dbfced642d
+PREFLIGHT(MF2 copy) retired driver override absent
+ENGINE /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/artifacts/apa_mf2/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so 8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a
+RULE DIAGNOSTIC BF16 stored bulk [[[[0.125, 0.125]]]] BK4 threshold [[[0.12549717724323273]]] BK4 selection [[[[0, 0]]]] composed [[[[1.0, 1.0]]]]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_reviewer/probe_quant.py", line 189, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_reviewer/probe_quant.py", line 174, in main
+    if args.suite=='rule':rule_diagnostics(tc,Q);return
+                          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_reviewer/probe_quant.py", line 137, in rule_diagnostics
+    assert np.array_equal(t.ge(2.).numpy(),[0,1,1])
+                          ^^^^^^^^
+TypeError: ge(): incompatible function arguments. The following argument types are supported:
+    1. (self: _tensor_cuda.Tensor, arg0: _tensor_cuda.Tensor) -> _tensor_cuda.Tensor
+
+Invoked with: <_tensor_cuda.Tensor object at 0x71090e9349b0>, 2.0
+rc=1

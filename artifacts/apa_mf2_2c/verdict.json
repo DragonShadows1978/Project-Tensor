@@ -1,0 +1,51 @@
+{
+  "order": "orders/APA_MF2_2_AMENDMENT_3.md",
+  "order_sha256": "cf8092cfaaedba5b02fe0a8f8682a9b3a9e6f83ac2e7e02303876a47ee25e725",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent)",
+  "registration": "artifacts/apa_mf2_2c/registration.json",
+  "registration_sha256": "f0363a174099bb6fc4968f9afae5d4db414a8107b3cfb03fe772435fcfa71693",
+  "engine": "NO build: a2e3ca1 and after3 both run artifacts/apa_mf2_2a/build (ccc9f8d2...); no build directory written (all .so mtimes/hashes predate this amendment)",
+  "after_sources": {"quant.py": "9bb2093df1fa7510...", "functional.py": "ef8d1fa2aa2b4f7e...", "test_apa_phase6.py": "5525c32790a72316...", "kernels.cu": "d9d98518 (unchanged)"},
+  "item5": {
+    "V7": "quant._row_sum: S <= 8192 -> the engine's single-pass row sum (unchanged, depth <= 39); S > 8192 -> sums of 4096-key blocks, partials summed the same way (recursive), remainder (< 4096) summed natively and added once (depth <= 32 for S <= 2^20). Both moments (mean of u, centered sum of squares) use it. Definition unchanged; only summation order/precision. fp64 not available (engine DType has no Float64, core.h:30).",
+    "memory_at_S_2^20": "S % 4096 == 0: reshape views + S/4096 = 256 fp32 partials per row per moment (1 KiB per row); no copy of the (B,H,L,S) tensors. Otherwise (e.g. 2^17+3): one transient slice copy of nb*4096 keys per row per moment (<= 4*B*H*L*S bytes). Measured moment-sum time at S=2^20, 2 rows: 0.034 ms (blocked) vs 0.554 ms (native single-block-per-row).",
+    "V3": "functional._guarded_softmax docstring corrected to the measured behaviour (torch 2.11.0 SDPA returns 0 for a fully masked row, additive and boolean; torch.softmax returns NaN)",
+    "V4": "identity-count wording corrected here (artifacts/apa_mf2_2b/verdict.json is outside this order's writable list): 'after2 == after1 on all 1230 non-blocked census records: 1092 finite tensor records byte-equal, 12 pre-existing non-finite gradient records equal (canonical NaN), 126 records are the same unsupported-operand error (bf16 into the fp16/fp32-only fused kernels) and carry no tensor bytes' (artifacts/apa_mf2_2c/v4_recount.json)",
+    "V5": "test_apa_phase6._ref: -inf predicate causal mask (was finite -1e9), centered fp64 statistics (was one-pass), 0 weight for all -inf rows; the review witness gives [1,0,0] (was [0,0,0])",
+    "V6": "quant.py docstring: the per-entry '<= 2^-24 relative' division claim corrected (underflow case; row-relative bound)"
+  },
+  "gates": {
+    "G1": {"verdict": "PASS", "detail": "37 failed + 15 errors = 52 ids == baseline, 0 new; 1925 passed", "receipts": ["logs/apa_mf2_2c_g1_full.log", "logs/apa_mf2_2c_g1_compare.log"]},
+    "G2": {"verdict": "PASS", "detail": "0 out-of-band under BOTH bands (registered |a-thr64| <= 2e-5|thr64| and the review's 2e-5 x row max): review probe long_keys cell (exact + public-quantizer operand) RED on a2e3ca1, PASS on after3; sweep S {2^10, 2^14, 2^17, 2^17+3, 2^20} x widths {2^-20, 2^-16, 2^-12 (added: the witness width), 2^-10, 1} x 3 patterns x causal/non-causal: a2e3ca1 163840 out-of-band (all at S=2^20, w=2^-12, sorted), after3 0; full API fp32/bf16 S {2^14, 2^17, 2^20}: a2e3ca1 163840 (fp32 S=2^20), after3 0. The order's four widths alone do not discriminate (0 on both arms).",
+           "receipts": ["logs/apa_mf2_2c_probe_summary.log", "artifacts/apa_mf2_2c/v7/v7_a2e3ca1.json", "artifacts/apa_mf2_2c/v7/v7_after3.json", "artifacts/apa_mf2_2c/v7_table.txt", "logs/apa_mf2_2c_testsfirst_a2e3ca1_v2.log", "logs/apa_mf2_2c_tests_after3.log"]},
+    "G3": {"verdict": "PASS", "detail": "byte-identical to a2e3ca1 / earlier recordings everywhere measured (every row there has S <= 8192): N2 sweep tables == MF2.2 recording, 0 out-of-band; real captures 36/36 selection bytes == MF2.2 recording, 0 out-of-band (both oracles); review identity corpus 702/702 arrays byte-identical (after3 vs a2e3ca1, separate processes); census 2376/2376 == after2 recording; fused identity 882/882 + N1 522/522 == Amendment-1 recording; near-tie set (test_apa_mf2_1_definition + test_apa_mf2_2_n2) in G1. No precision-only difference to list.",
+           "receipts": ["logs/apa_mf2_2c_n2_sweep.log", "logs/apa_mf2_2c_real_compare.log", "logs/apa_mf2_2c_identity_corpus.log", "logs/apa_mf2_2c_g3_census_identity.log"]},
+    "G4": {"verdict": "PASS (all adjudicated; no in-scope product defect)",
+           "rows": {
+             "guards/{float32,float16,bfloat16}/NaN_softmax_policy": "PROBE DEFECT: np.array_equal(got[...,2,:], np.array([1]+[0]*8)) compares shape (1,1,9) with (9,) and returns False for identical values (numpy: array_equal(ones((1,1,9)), ones(9)) is False, engine-independent). Product values correct in all three dtypes: all -inf row 0, NaN row stays NaN, partial row [1,0,...] (logs/apa_mf2_2c_nanpolicy_diag_a2e3ca1.log, logs/apa_mf2_2c_nanpolicy_shape_check.log). Same RED on a2e3ca1 and after3. The helper does not exist before Amendment 2, so no older-engine run applies; the numpy evidence is engine-free.",
+             "real/Qwen3-1.7B/L16/bfloat16/L3 (2/384)": "PRE-EXISTING bf16 PRECISION, not a chain defect: SDPA output byte-identical on fd32b6d, a2e3ca1 and after3 (sha ccace60b...), 2/384 outside the review's fp64 tolerance on all three; an oracle emulating bf16 storage of scores and weights matches the engine within 0.0156 (about 2 bf16 ulps at |x| ~1-2) while itself differing from fp64 by 0.132. The review tolerance does not model bf16 score rounding at S=8192 (artifacts/apa_mf2_2c/real/real_diag_*.json)."
+           },
+           "receipts": ["logs/apa_mf2_2c_probe_summary.log", "artifacts/apa_mf2_2c/real/real_diag_fd32b6d.json", "artifacts/apa_mf2_2c/real/real_diag_a2e3ca1.json", "artifacts/apa_mf2_2c/real/real_diag_after3.json"]},
+    "mutation": {"verdict": "PASS at the threshold (4/5 = 0.80)", "detail": "M1 fp32 native-order statistics restored KILLED, M2 remainder dropped KILLED, M3 mean native KILLED, M5 one-pass variance KILLED; M4 variance-only native SURVIVED (predicted P1): a CPU search over 90 S=2^20 patterns found the native variance sum alone moves the threshold by <= 5.4e-6 relative, below the 2e-5 band, so it is not distinguishable within S <= 2^20 (logs/apa_mf2_2c_m4_search.log). Named coverage gap.",
+                 "receipts": ["artifacts/apa_mf2_2c/mutation/summary.json", "artifacts/apa_mf2_2c/mutation/mutants.json", "logs/apa_mf2_2c_mutation.log", "logs/apa_mf2_2c_mutation_baseline.log"]}
+  },
+  "tests": {
+    "new": ["tensor_cuda/tests/test_apa_mf2_2c_longkeys.py (172)", "tensor_cuda/tests/test_apa_mf2_2c_nits.py (3)"],
+    "failing_first": ["logs/apa_mf2_2c_testsfirst_a2e3ca1_v2.log:327 '14 failed, 158 passed' (a2e3ca1 package)", "logs/apa_mf2_2c_nits_testsfirst_before.log:46 '3 failed' (before copies)"],
+    "after": ["logs/apa_mf2_2c_tests_after3.log:4 '172 passed'", "logs/apa_mf2_2c_nits_after3.log:2 '8 passed' (nits + test_apa_phase6)"]
+  },
+  "patch": "artifacts/apa_mf2_2c/item5.patch: quant.py +44 -4, functional.py +5 -2, test_apa_phase6.py +17 -11 (logs/apa_mf2_2c_patch.log 'ITEM5 PATCH REPRODUCES TREE: True')",
+  "deviations": [
+    "Sweep width 2^-12 (the review witness width) added to the order's four widths: those four do not reproduce V7 at S <= 2^20 on either arm.",
+    "real_diag v1 crashed on my own indexing ([0] left a head axis); fixed to [0, 0], no JSON was written by v1.",
+    "V4 is corrected in this amendment's artifacts and the ledger, not in artifacts/apa_mf2_2b/verdict.json (outside the writable list).",
+    "registration registered_at text says ~20:53; hashed 20:50:47.",
+    "G1 regenerated the 17 artifacts/wo*.ppm test outputs again."
+  ],
+  "open_items_for_david": [
+    "V1 (report only): GRAPA attention.py:114 and the GRM direct primitive callers (Gemma4 :637/:737, DeepSeek :415/:436, MiniCPM3 :242) normalise with the primitive softmax and still return NaN for an all -inf row; read-only here.",
+    "Mutant M4 (variance-only native sum) is not distinguishable within S <= 2^20; at larger S it may become observable -- the blocked sum covers both moments regardless.",
+    "Probe-side: the review's guards cell needs .ravel() in its array_equal; its real cell needs a bf16-storage-aware tolerance at S=8192.",
+    "_row_sum depth grows by one level per factor 4096 in S: bound ~2e-6 (S <= 2^20), ~3e-6 (S <= 2^24), ~4e-6 (S <= 2^36) -- reasoning, only S <= 2^20 measured."
+  ]
+}

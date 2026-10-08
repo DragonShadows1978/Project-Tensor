@@ -1,0 +1,74 @@
+{
+  "order": "orders/APA_MF2_2_REVIEW_FIXES.md",
+  "order_sha256": "dde5a35f6c3e103e3d781cf1751b1f55948c852dfe56ea67b07292094389b0a0",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent)",
+  "registration": "artifacts/apa_mf2_2/registration.json",
+  "registration_sha256": "478f19d35a5adb30111f7d90997c686fc5a1f8b3942a7978c35089927f5a307b",
+  "engines": {
+    "fd32b6d": {"path": "artifacts/apa_mf2_2/build_fd32b6d", "sha256": "eeeaf8f6be6bebc07a771e13fcecbf861cf9dc2544e1bb81f38c06d1cf152907", "built_by": "this seat, 19 sources == reviewer fd32b6d pins (logs/apa_mf2_2_build_fd32b6d.log)"},
+    "mf2_048949d": {"path": "artifacts/apa_mf2/build", "sha256": "8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a"},
+    "mf2_1": {"path": "artifacts/apa_mf2_1/build", "sha256": "b5837bfe92c18efa19457e2a3a059e5eda19b186c4430d0b1cd961857a9459df"},
+    "mf2_2": {"path": "artifacts/apa_mf2_2/build", "sha256": "bc7ed2a9fa68822114a69bfbe05ffc60af554b82e30e9fac7ba787e42d8c698d"}
+  },
+  "after_sources": {"tensor_cuda/src/kernels.cu": "17c89f3c10708e3a7334055cc60c05c240c0d572018e891943762cddcc69b1e5",
+                    "tensor_cuda/tensor_cuda/quant.py": "3ff09e9b4a1d11faa44c55746c0d00ea2d044b74d5dd3c0bb98070a9c3a5b016"},
+  "gates": {
+    "G1": {
+      "verdict": "PASS",
+      "detail": "full tensor_cuda suite on the MF2.2 engine + tree: 37 failed + 15 errors = 52 ids == the fd32b6d baseline set (0 new, 0 removed); new test_apa_mf2_2_* all pass. Run twice (v1 before, v2 after the post-mutation test addition): v1 1641 passed, v2 1651 passed.",
+      "receipts": ["logs/apa_mf2_2_g1_full.log", "logs/apa_mf2_2_g1_compare.log", "logs/apa_mf2_2_g1_full_v2.log", "logs/apa_mf2_2_g1_compare_v2.log"]
+    },
+    "G2": {
+      "verdict": "PASS",
+      "detail": "(a) N1 on MF2.2: 18 review witnesses exactly 1; 432 -inf-first sweep rows (fp32/fp16 x sdpa/int4_all/int4_partial x S{2,5,33,1025} x 3 patterns x D{64,96,128} x Lq{1,3}) + 72 bf16-exact rows: 522/522 finite, max abs err vs fp64 1.0e-6 (fp32) / 4.9e-4 (fp16 output rounding); MF2.1 0/522 finite. pytest: tests-first 139 failed on MF2.1, 205 passed on MF2.2. (b) byte identity of both kernels on finite non-overflow inputs, one engine per process: 882/882 keys equal MF2.2 vs MF2 (048949d) and vs fd32b6d (and vs MF2.1). Prediction PN1 HOLDS: the 522 N1 rows are also byte-equal to MF2 and fd32b6d.",
+      "receipts": ["artifacts/apa_mf2_2/identity/compare_20261007T231830Z.json", "logs/apa_mf2_2_identity_v3.log", "logs/apa_mf2_2_testsfirst_mf2_1_v2.log", "logs/apa_mf2_2_tests_after.log", "artifacts/apa_mf2_2/tables.md"]
+    },
+    "G3": {
+      "verdict": "PASS",
+      "detail": "fp64 definition (fp64 statistics of the call's exact fp32 bulk), band 2e-5 relative unchanged: isolated sweep row-max 1e-38..3e38 (13 scales x 6 patterns x S{1,2,3,256,2048} x causal/non-causal + mixed-magnitude rows) 0 out-of-band (MF2.1: 84,888); full-API fp32/bf16 Q-magnitude 1e-30..1e30 0 out-of-band (MF2.1: 16,073); review N2 witnesses 6/6 [F,F,T] (MF2.1: 6 out-of-band); constant rows all selected at every scale (MF2.1: not at 1e-38,1e-30,1e-20,1e-10,1e10,1e30,1e37,3e38); zero rows all selected; real captures 36 cells (1,849,617,408 visible entries): 0 out-of-band under both oracles (MF2.2 87 in-band vs the MF2.1 GEMM oracle, MF2.1 102), 0 invisible selected, outputs finite.",
+      "receipts": ["logs/apa_mf2_2_n2_sweep.log", "artifacts/apa_mf2_2/n2/", "logs/apa_mf2_2_n2_real_mf2_2.log", "logs/apa_mf2_2_n2_real_mf2_1.log", "artifacts/apa_mf2_2/tables.md"]
+    },
+    "G4": {
+      "verdict": "PASS",
+      "detail": "every RED row of the lead's 7 re-review GPU logs re-run with a copy of the reviewer probe on fd32b6d, MF2, MF2.1 and MF2.2 (one process each) and classified; no unexplained red. N1 18 rows: NEW product regression of MF2.1 item 2 (RED only on MF2.1) -> fixed by item 1. N2 6 rows: PRE-EXISTING product range defect (full-API variant RED on fd32b6d 5/6, MF2 5/6, MF2.1 6/6) -> fixed by item 2. bf16 'NoneType'/'.grad is None' 17 rows: same error on all four engines; cause tensor_cuda/__init__.py tensor(dtype='bfloat16', requires_grad=True) returns the .astype output of an fp32 leaf (non-leaf, .grad None; file identical 2aa0435a in fd32b6d/048949d/c5c468d) -> pre-existing API limitation exercised by the probe; with a real bf16 leaf the rows PASS on MF2.1/MF2.2 (and training/reductions bf16 rows on all four); outside writable scope, not fixed. masks geometry/2048x2048: byte-identical output on all four engines (sha 49c33772...), max rel err 2.03e-6, abs 9.2e-4 at |expected| <= 1023.5 vs absolute atol 2e-4 -> probe tolerance defect, pre-existing. identity_mf2 exit 1: probe defect x2 (bf16 x.grad None at put(dq); latent: max_pool2d on bf16 raises 'conv/pool: float32/float16 only'); every arm exits 1 identically on all four engines; corrected harness: 361/361 equal fd32b6d->MF2.2, MF2->MF2.2, MF2->MF2.1.",
+      "receipts": ["artifacts/apa_mf2_2/tables.md", "logs/apa_mf2_2_probe_summary_mf2_2.log", "logs/apa_mf2_2_probe_summary_before.log", "logs/apa_mf2_2_probe_summary_leaf.log", "logs/apa_mf2_2_probe_summary_identity_orig.log", "logs/apa_mf2_2_probe_summary_identity_leaf.log", "logs/apa_mf2_2_probe_copy_edits.diff"]
+    },
+    "N5": {
+      "verdict": "ERRATUM WRITTEN",
+      "detail": "MF2.1 identity before vs after: 529 keys total; 526 equal; 3 differ (the 3 design keys); 419 keys finite on both arms (all equal); 110 keys have a non-finite output on an arm (107 +-inf reduce rows + 3 design rows). The per-class list in the same MF2.1 sentence sums to 526. '481/481' matches no count and is withdrawn. MF2.1 G3(c) 'No NaN or Inf for any row with a visible finite score' is withdrawn as universal: N1 rows (MF2.1 engine) are NaN with visible finite scores.",
+      "receipts": ["artifacts/apa_mf2_2/n5_recount.json", "logs/apa_mf2_2_n5_recount.log"]
+    },
+    "mutation": {
+      "verdict": "PASS",
+      "detail": "registered run: 12/13 non-error mutants killed (0.923), 0 build errors; K1-K6 (unguarded / reverted -3.0e38f start, which re-opens F1 / guard on the old max, both kernels) and P1-P4, P6, P7 killed; P5 (one-pass variance in the scaled domain) SURVIVED -- the near-constant witness spread sat inside the band. Added test_near_tie_spread_centered_moments afterwards: P5 killed (v2), 13/13.",
+      "receipts": ["artifacts/apa_mf2_2/mutation/summary.json", "artifacts/apa_mf2_2/mutation/P5_v2.json", "artifacts/apa_mf2_2/mutation/mutants.json", "logs/apa_mf2_2_mutation.log", "logs/apa_mf2_2_mutation_baseline.log"]
+    },
+    "sanity": {
+      "verdict": "PASS",
+      "detail": "claims are scoped to the census: N1 = the two streaming kernels (TC_ATTN_QTILE=0), fp32/fp16 operands, S{1..1025}, D{64,96,128}; N2 = z = Phi^-1(0.85) > 0, |bulk| rows 1e-38..3e38, S <= 2048 synthetic and S = 8192 real; z <= 0, the Q-tile kernel and fully blocked rows were not measured."
+    }
+  },
+  "predictions": {
+    "PN1": "HOLDS: 522/522 N1 rows byte-equal MF2 and fd32b6d",
+    "PN2": "HOLDS on the census: MF2.2 vs MF2.1 selections differ only on entries inside the band (0 out-of-band for both vs the same oracle on real; 21/36 real cells byte-equal selections)",
+    "PA": "HOLDS: bf16 rows reproduce on fd32b6d and MF2 with the same error; geometry 2048 reproduces with byte-identical output, rel err 2.03e-6"
+  },
+  "patches": ["artifacts/apa_mf2_2/item1.patch", "artifacts/apa_mf2_2/item2.patch"],
+  "patch_chain_reproduces_tree": true,
+  "deviations": [
+    "registration.json field registered_at reads '2026-10-07T19:05-04:00' but the file was written and hashed at 18:48 EDT (before any GPU gate); clerical error in a create-only file, left as is.",
+    "tests-first v1 log (logs/apa_mf2_2_testsfirst_mf2_1.log) included 4 failures from my own oracle bug (softmax64 einsum broadcast); fixed to a matmul and re-run as v2 (139 failed); v1 kept.",
+    "identity driver v1 (logs/apa_mf2_2_identity.log) failed before any arm ran (env assignment before `source` was not exported); fixed, v2 and v3 receipts; v3 adds the registered bf16-exact rows that v2 lacked.",
+    "tables v1 picked the MF2.2 arm file for the MF2 column (glob arm_mf2_* matched arm_mf2_2_*); the compare JSON was never affected (exact stamped names); tables re-rendered from stamped names with an engine-sha assertion.",
+    "a test (test_near_tie_spread_centered_moments) was added after the registered mutation run to kill the surviving P5; the registered result (12/13) is reported as the gate, v2 13/13 as follow-up; G1 re-run (v2) after the addition.",
+    "probe copy: 4 recorded edits (pins/receipt paths, engine/package map, two default-OFF adjudication switches, two observation cells); originals pinned in scripts/apa_mf2_2_probe/SHA256SUMS.orig_mf21rev_04b3e02.",
+    "G1 runs regenerated the 17 artifacts/wo*.ppm terrain-render outputs (test side effect outside the writable list, as in MF2.1); not restored (no git)."
+  ],
+  "open_items_for_david": [
+    "Fully blocked rows (every score -inf, e.g. all scores overflowing) in the two fused kernels: fd32b6d/MF2 output 0, MF2.1 and MF2.2 output NaN (the warp merge rescale exp(-inf - -inf)); order scope keeps the policy. Minimal fix if 0 is wanted: guard gmax == -inf in the merge the same way (FlashAttention-2 combine).",
+    "tensor_cuda/__init__.py tensor(dtype='bfloat16', requires_grad=True) returns a non-leaf (grad never populated) on every revision since fd32b6d. Minimal fix (outside scope): build the bf16 tensor with requires_grad=False, then set t.requires_grad = requires_grad on the cast result (a leaf).",
+    "Reviewer probe defects: masks/geometry absolute atol 2e-4 at magnitudes ~1e3 (needs a relative tolerance ~1e-5); identity arm reads bf16 .grad from non-leaves and calls max_pool2d on bf16.",
+    "Not measured: refine_percentile > 0.5 (z <= 0: thr = mean + z*std can cancel); the fp16 Q-tile kernel (TC_ATTN_QTILE default on, fp16 D<=64) with overflowing scores; scores of +inf / NaN (unchanged behavior).",
+    "Carried from MF2.1: BK4 'h'/'a' statistics deviation; -1e30 starts in the fused APA kernels; argmax/topk +-3.4e38 starts; quantizer |k|^2 overflow above ~1e19; official apa_cuda extension build (CUDA 13)."
+  ]
+}

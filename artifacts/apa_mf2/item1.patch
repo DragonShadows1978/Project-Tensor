@@ -1,0 +1,360 @@
+--- a/tensor_cuda/tensor_cuda/quant.py
++++ b/tensor_cuda/tensor_cuda/quant.py
+@@ -132,6 +132,71 @@
+     return recon
+ 
+ 
++_SEL_CACHE = {}
++
++
++def _bk4_rows(L, S, dev, is_causal):
++    """Cached (count (L,1), visible 0/1 (L,S) or None) fp32 tensors for the BK4 rule."""
++    key = (L, S, dev, bool(is_causal))
++    t = _SEL_CACHE.get(key)
++    if t is None:
++        if len(_SEL_CACHE) >= 16:
++            _SEL_CACHE.clear()
++        if is_causal:
++            # bottom-right: row i sees j <= S-L+i, count S-L+i+1 (kernels.cu:8064);
++            # max(., 1) only keeps out-of-contract S < L rows finite
++            cnt = np.maximum(np.arange(S - L + 1, S + 1, dtype=np.float32), 1.0)
++            vis = (np.arange(S)[None, :] <= (S - L + np.arange(L))[:, None]).astype(np.float32)
++            t = (tc.tensor(cnt[:, None], device=dev), tc.tensor(vis, device=dev))
++        else:
++            t = (tc.tensor(np.full((L, 1), S, np.float32), device=dev), None)
++        _SEL_CACHE[key] = t
++    return t
++
++
++def _bk4_selection(qf, kqf, scale, z, is_causal, bulk32=None):
++    """APA-MF2: the fused BK4 refine selection, composed from engine ops.
++
++    Rule (kernels.cu bk4::forward :8064-8077 and :8112-8114), transcribed literally:
++      b    = fl32(q . kq * scale)   the UNROUNDED fp32 dot (B1; never the bf16/fp16-stored bulk)
++      a    = |b| over VISIBLE keys only; count = S-L+i+1 (causal) or S
++      mean = sum(a) / count; var = max(sum(a^2) / count - mean^2, 0)   population
++             one-pass moments with the kernel's clamp, in BOTH branches (B2), IEEE div
++      th   = mean + z * sqrt(var)                                      IEEE sqrt
++      sel  = visible && a >= th                                        (B3; >=)
++    qf/kqf: fp32 (B,H,L,D)/(B,H,S,D), no grad. bulk32: optional precomputed fp32 b.
++    Returns the fp32 0/1 selection (B,H,L,S).
++
++    Not bit-exact by construction (APA-MF2 probe P0, logs/apa_mf2_p0_probe_*.log):
++    BK4's dot is a bf16 WMMA accumulation (bk3::scores), this one is cuBLAS SGEMM
++    (R1); BK4 sums sequentially with FFMA squares and fuses var/th with FFMA (R2/R3).
++    The residual is an ulp-band tie at the threshold, measured in the MF2 receipts.
++
++    Prior art: kernels.cu BK4 (Project-Tensor 2026), the rule matched; GRAPA
++    attention.py _visible_counts (visible-count statistics); FlashAttention-2
++    (Dao 2023) / 63960a4 bottom-right visibility. Engine-op composition: mine.
++    """
++    from . import functional as F
++    B, H, L, _ = qf.shape
++    S = kqf.shape[-2]
++    dev = qf.device.split(":")[0]
++    if bulk32 is None:
++        bulk32 = tc.matmul(qf, kqf, alpha=scale, trans_b=True)
++    cnt, vis = _bk4_rows(L, S, dev, is_causal)
++    absb = bulk32.abs()
++    if is_causal:
++        # zero the invisible entries so the row sums are visible-only; the shared
++        # bottom-right mask (fp32, nonzero == masked) is the predicate
++        absb = absb.masked_fill(F._causal_mask(L, S, dev, "float32"), 0.0)
++    mean = absb.sum([-1], True) / cnt
++    var = ((absb * absb).sum([-1], True) / cnt - mean * mean).relu()
++    thr = mean + var.sqrt() * z
++    sel = absb.ge(thr)
++    if vis is not None:
++        sel = sel * vis                      # visible && (0/1 product, never NaN)
++    return sel
++
++
+ def apa_quant_attention(query, key, value, *, bulk_bits=2, refine_percentile=0.15,
+                         is_causal=False, scale=None, apa_rotation=True):
+     """APA-Quant attention on the engine. query/key/value: (B, H, L, D).
+@@ -149,6 +214,7 @@
+     key_quant = _quantize_keys(key, R, CB, BND)
+     bulk = tc.matmul(query, key_quant, alpha=scale, trans_b=True)
+     ranking = tc.matmul(query, key, alpha=scale, trans_b=True)
++    bulk_raw = bulk                      # unmasked; the fp32 rule's operand in fp32 mode
+ 
+     causal_add = None
+     if is_causal:
+@@ -159,43 +225,24 @@
+     if refine_percentile >= 1.0:
+         scores = ranking
+     else:
+-        # Selection criterion must match the fused apa_selective_kernel, which
+-        # thresholds on |bulk| (the cheap quantized scores) and refines the keys
+-        # it picks — you cannot legitimately peek at the expensive |ranking| to
+-        # decide whether to compute it. (kernels.cu apa_selective_kernel:937-967.)
+-        # Compute the mean/std stat in fp32 (chaining mean/var/std through fp16
+-        # loses ~3 digits and diverges the Python mask from the fp32 kernel on
+-        # top-percentile boundary keys), then compare in fp32 and cast the 0/1
+-        # mask back to the operand dtype — tc.where dispatches on the operand
+-        # dtype and reinterprets the condition buffer as that same dtype, so a
+-        # fp32 mask against fp16 operands would be read as garbage.
+-        absr_f = bulk.abs().float()
+-        if is_causal:
+-            # APA-MF1 fix A: zero the stats at exactly the positions the SCORES
+-            # mask — the shared F._causal_mask (BOTTOM-RIGHT, k = 1 + S - L,
+-            # 63960a4). masked_fill/where test cond != 0, so the fp32 view of
+-            # that additive bias (-1e4 masked, 0 visible) is the boolean. The old
+-            # inline np.triu(.., 1) was TOP-LEFT: on S > L it zeroed visible cols
+-            # (i, S-L+i], which could then never be refined. S == L unchanged.
+-            # Prior art: FlashAttention-2 bottom-right causal (Dao, 2023).
+-            absr_f = absr_f.masked_fill(causal_add.float(), 0.0)
++        # Selection criterion must match the fused kernel, which thresholds on
++        # |bulk| (the cheap quantized scores) and refines the keys it picks — you
++        # cannot legitimately peek at the expensive |ranking| to decide whether to
++        # compute it. APA-MF2: the rule is the fused BK4 kernel's, transcribed in
++        # _bk4_selection (MF1 fix A's bottom-right stats mask and fix B's visible
++        # counts are kept; B1 fp32 unrounded dot, B2 one-pass moments in the
++        # non-causal branch too, B3 the visible predicate are added). In bf16/fp16
++        # the stored bulk is rounded, so the fp32 dot is recomputed from the exact
++        # fp32 upcasts of the SAME operands (query, key_quant) — the kernel's own.
++        # The 0/1 mask is cast back to the operand dtype: tc.where dispatches on
++        # the operand dtype and reads the condition buffer as that dtype.
+         z = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
+-        if is_causal:
+-            # APA-MF1 fix B: population mean/std over the VISIBLE keys only, the
+-            # fused kernel's rule (kernels.cu bk4 forward: count = S-L+qi+tid+1,
+-            # one-pass E[x^2]-E[x]^2 clamped at 0). Row i sees S-L+i+1 keys; the
+-            # masked entries are already 0, so the row sums are visible-only.
+-            # Dividing by S instead (old mean/std) diluted the threshold.
+-            # max(count, 1) keeps out-of-contract S < L rows finite.
+-            # Prior art: kernels.cu bk4 forward; GRAPA attention.py _visible_counts.
+-            cnt = np.maximum(np.arange(S - L + 1, S + 1, dtype=np.float32), 1.0)
+-            inv = tc.tensor((1.0 / cnt)[:, None], device=dev)
+-            mean = absr_f.sum([-1], True) * inv
+-            var = ((absr_f * absr_f).sum([-1], True) * inv - mean * mean).relu()
+-            thr = mean + var.pow(0.5) * z
++        if query.dtype == "float32":
++            mask = _bk4_selection(query, key_quant, scale, z, is_causal,
++                                  bulk32=bulk_raw.detach())
+         else:
+-            thr = absr_f.mean([-1], True) + absr_f.std([-1], True) * z
+-        mask = absr_f.ge(thr)          # detached 0/1, fp32 comparison
++            mask = _bk4_selection(query.detach().float(), key_quant.float(), scale, z,
++                                  is_causal)
+         if bulk.dtype != "float32":
+             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
+         scores = tc.where(mask, ranking, bulk)
+--- a/tensor_cuda/tests/test_apa_phase6.py
++++ b/tensor_cuda/tests/test_apa_phase6.py
+@@ -42,13 +42,23 @@
+         # apa_selective_kernel: APA picks which keys to refine using only the
+         # signal it already has, never the expensive |ranking| it is deciding
+         # whether to compute. (kernels.cu apa_selective_kernel.)
+-        absr = np.abs(bulk)
+-        if causal:
+-            absr = np.where(np.triu(np.ones((q.shape[2], S), bool), 1), 0.0, absr)
++        # APA-MF2: the fused BK4 kernel's rule (kernels.cu bk4::forward :8064-8077,
++        # :8112-8114): population one-pass moments over the VISIBLE keys only
++        # (row i of L sees j <= S-L+i, count S-L+i+1; all S when non-causal),
++        # clamped variance, th = mean + z*sqrt(var), sel = visible && |bulk| >= th.
++        # The old reference diluted mean/std by S. Prior art: BK4 (Project-Tensor
++        # 2026); FlashAttention-2 bottom-right (Dao 2023).
++        Lq = q.shape[2]
++        vis = (np.arange(S)[None, :] <= (S - Lq + np.arange(Lq))[:, None]) if causal \
++            else np.ones((Lq, S), bool)
++        absr = np.where(vis, np.abs(bulk), 0.0)
+         from tensor_cuda.quant import _norm_ppf
+         z = _norm_ppf(1.0 - pct)
+-        thr = absr.mean(-1, keepdims=True) + z * absr.std(-1, keepdims=True)
+-        mask = absr >= thr
++        cnt = vis.sum(-1, keepdims=True)
++        mean = absr.sum(-1, keepdims=True) / cnt
++        var = np.maximum((absr * absr).sum(-1, keepdims=True) / cnt - mean * mean, 0.0)
++        thr = mean + z * np.sqrt(var)
++        mask = vis & (absr >= thr)
+         scores = np.where(mask, ranking, bulk)
+     scores = scores - scores.max(-1, keepdims=True)
+     w = np.exp(scores); w /= w.sum(-1, keepdims=True)
+--- /dev/null
++++ b/tensor_cuda/tests/test_apa_mf2_rule.py
+@@ -0,0 +1,184 @@
++"""APA-MF2 item 1: apa_quant_attention's refine selection == the fused BK4 rule.
++
++The rule (kernels.cu bk4::forward, :8064-8077 and :8112-8114): statistics over the
++VISIBLE keys of |fl32(q.kq * scale)| (the unrounded fp32 dot), population one-pass
++moments with the clamp, th = mean + z*sqrt(var), sel = visible && |bulk| >= th.
++The reference for the bit tests is the kernel's OWN diagnostic mask
++(tc._C.bp_kernel_4_diagnostic, variant 'h') on identical operands: q, k, kq, v
++are the same bf16 values on both sides (kq = quant._quantize_keys of the bf16 K,
++i.e. exactly what apa_quant_attention computes). fp16 has no kernel, so it is
++compared with the independent fp64 oracle (scripts/apa_mf2_bk4emu.rule_fp64)
++inside the registered tie band |a - th| <= 2e-5*max(1, |th|), counted.
++
++Review cases (docs/APA_MF1_REVIEW.md on apa-mf1rev): B1 stored-bf16 statistics,
++B2 non-causal centered vs one-pass moments, B3 the missing `visible &&`.
++
++Prior art: kernels.cu BK4 (Project-Tensor 2026); FlashAttention-2 bottom-right
++causal (Dao 2023); 63960a4. Harness and witnesses: mine (B1-B3 inputs from the
++MF1 review, independently re-derived).
++"""
++import contextlib
++import os
++import sys
++
++import numpy as np
++import pytest
++
++import tensor_cuda as tc
++from tensor_cuda import quant
++
++ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
++sys.path.insert(0, os.path.join(ROOT, "scripts"))
++import apa_mf2_bk4emu as E  # noqa: E402
++
++P = 0.15
++Z = quant._norm_ppf(1.0 - P)
++
++
++@contextlib.contextmanager
++def capture_selection():
++    """Record the condition of every tc.where call; the selection is the last one."""
++    rec = []
++    orig = tc.where
++
++    def wh(c, x, y):
++        rec.append(c.float().numpy() != 0)
++        return orig(c, x, y)
++
++    tc.where = wh
++    try:
++        yield rec
++    finally:
++        tc.where = orig
++
++
++@contextlib.contextmanager
++def supplied_kq(kq):
++    """Make apa_quant_attention use a supplied quantized key (isolates the rule)."""
++    orig = quant._quantize_keys
++    quant._quantize_keys = lambda *a, **k: kq
++    try:
++        yield
++    finally:
++        quant._quantize_keys = orig
++
++
++def kernel_mask(q, k, kq, v, scale, causal, variant="h"):
++    r = tc._C.bp_kernel_4_diagnostic(q, k, kq, v, float(scale), float(Z), bool(causal), variant)
++    return r[3].numpy() != 0, r[2].numpy()
++
++
++def bf16_operands(L, S, D, H=2, seed=0):
++    rng = np.random.default_rng(20261007 + 1000 * L + 10 * S + D + seed)
++    q, k, v = (E.to_bf16_f32(rng.normal(0, 0.5, (1, H, n, D)).astype(np.float32)) for n in (L, S, S))
++    return q, k, v
++
++
++def selection_of(qt, kt, vt, causal, **kw):
++    with capture_selection() as rec:
++        out = quant.apa_quant_attention(qt, kt, vt, bulk_bits=8, refine_percentile=P,
++                                        is_causal=causal, **kw)
++    assert rec, "no tc.where call recorded"
++    return rec[-1], out
++
++
++CELLS = [(L, S, D, c) for L in (1, 3, 64) for S in (L, L + 1, 4 * L + 5)
++         for D in (64, 128) for c in (True, False)]
++
++
++@pytest.mark.parametrize("L,S,D,causal", CELLS)
++def test_bf16_selection_equals_bk4_kernel_mask(L, S, D, causal):
++    """fp32 rule on identical bf16 operands must reproduce BK4 'h' bit for bit."""
++    q, k, v = bf16_operands(L, S, D)
++    qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
++    R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
++    kq = quant._quantize_keys(kt, R, CB, BND)
++    km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, causal)
++    sel, out = selection_of(qt, kt, vt, causal)
++    sel = np.broadcast_to(sel, km.shape)
++    mism = int((sel != km).sum())
++    assert mism == 0, f"{mism} selection bits differ from BK4 'h' (L{L} S{S} D{D} causal={causal})"
++    assert np.isfinite(out.float().numpy()).all()
++
++
++def test_b1_statistics_on_unrounded_fp32_bulk():
++    """B1: BK4 thresholds the fp32 dot; bf16-stored bulk [.125,.125] would select both."""
++    D = 64
++    q = np.zeros((1, 1, 1, D), np.float32); q[..., 0:2] = 1
++    kqa = np.zeros((1, 1, 2, D), np.float32); kqa[..., 0] = 1; kqa[0, 0, 1, 1] = 1 / 256
++    v = np.zeros_like(kqa); v[0, 0, 1, :] = 1
++    qt, kqt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, kqa, v))
++    km, thr = kernel_mask(qt, kqt, kqt, vt, 0.125, True)
++    assert km.tolist() == [[[[False, False]]]], "BK4 witness changed"
++    with supplied_kq(kqt):
++        sel, _ = selection_of(qt, kqt, vt, True, scale=0.125)
++    assert np.array_equal(np.broadcast_to(sel, km.shape), km), f"B1: selection {sel.tolist()} vs BK4 {km.tolist()}"
++
++
++def test_b2_noncausal_population_one_pass_moments():
++    """B2: non-causal threshold uses one-pass moments (BK4), not centered mean/std."""
++    D = 64
++    q = np.zeros((1, 1, 1, D), np.float32); q[..., 0:2] = 1
++    kqa = np.zeros((1, 1, 2, D), np.float32); kqa[..., 0] = 800.0
++    kqa[0, 0, 1, 1] = 0.00799560546875                      # bf16-exact; bulk [100, 100.0009995]
++    v = np.zeros_like(kqa); v[0, 0, 1, :] = 1
++    qb, kqb, vb = (tc.tensor(a, dtype="bfloat16") for a in (q, kqa, v))
++    km, thr = kernel_mask(qb, kqb, kqb, vb, 0.125, False)
++    assert km.tolist() == [[[[False, True]]]], f"BK4 witness changed: {km.tolist()} thr {thr.tolist()}"
++    a = np.array([100.0, 100.0009994506836], np.float32)
++    centered = a >= np.float32(a.mean() + a.std() * np.float32(Z))
++    assert centered.tolist() == [False, False]              # the witness is a real discriminator
++    qt, kqt, vt = (tc.tensor(x) for x in (q, kqa, v))       # fp32 path isolates B2 from B1
++    with supplied_kq(kqt):
++        sel, _ = selection_of(qt, kqt, vt, False, scale=0.125)
++    assert np.array_equal(np.broadcast_to(sel, km.shape), km), f"B2: selection {sel.tolist()} vs BK4 {km.tolist()}"
++
++
++@pytest.mark.parametrize("dtype", ["float32", "bfloat16", "float16"])
++def test_b3_zero_threshold_selects_only_visible(dtype):
++    """B3: Q=K=0 gives threshold 0; BK4 selects exactly the 24 visible entries of L3 S9."""
++    q = tc.tensor(np.zeros((1, 1, 3, 64), np.float32), dtype=dtype)
++    k = tc.tensor(np.zeros((1, 1, 9, 64), np.float32), dtype=dtype)
++    sel, out = selection_of(q, k, k, True)
++    vis = E.visible(3, 9)
++    assert int(vis.sum()) == 24
++    assert np.array_equal(np.broadcast_to(sel, (1, 1, 3, 9))[0, 0], vis), f"selected {int(sel.sum())} bits, expected the 24 visible"
++    if dtype == "bfloat16":
++        qb = tc.tensor(np.zeros((1, 1, 3, 64), np.float32), dtype="bfloat16")
++        kb = tc.tensor(np.zeros((1, 1, 9, 64), np.float32), dtype="bfloat16")
++        km, _ = kernel_mask(qb, kb, kb, kb, 0.125, True)
++        assert np.array_equal(km[0, 0], vis)
++    assert np.isfinite(out.float().numpy()).all()
++
++
++@pytest.mark.parametrize("L,S,D", [(3, 9, 64), (64, 261, 128), (1, 5, 96)])
++def test_fp16_selection_within_tie_band_of_fp64_rule(L, S, D):
++    """fp16 has no BK4 entry: compare with the fp64 oracle on the call's own operands."""
++    q, k, v = bf16_operands(L, S, D)
++    qt, kt, vt = (tc.tensor(a, dtype="float16") for a in (q, k, v))
++    R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
++    kq = quant._quantize_keys(kt, R, CB, BND).float().numpy().astype(np.float64)
++    q64 = qt.float().numpy().astype(np.float64)
++    absb = np.abs(np.einsum("bhld,bhsd->bhls", q64, kq) * (D ** -0.5))
++    vis = E.visible(L, S)
++    sel_ref, th = E.rule_fp64(absb, vis, Z)
++    sel, _ = selection_of(qt, kt, vt, True)
++    sel = np.broadcast_to(sel, sel_ref.shape)
++    band = np.abs(absb - th) <= 2e-5 * np.maximum(1.0, np.abs(th))
++    bad = (sel != sel_ref) & ~band
++    assert not bad.any(), f"{int(bad.sum())} fp16 mismatches outside the tie band"
++
++
++def test_fp32_helper_is_the_selection_on_identical_operands():
++    """The fp32 item-1 cell: the selection helper on fp32 copies of the kernel's bf16
++    operands equals both the kernel mask and apa_quant_attention's own bf16 selection."""
++    L, S, D = 64, 261, 128
++    q, k, v = bf16_operands(L, S, D, seed=7)
++    qt, kt, vt = (tc.tensor(a, dtype="bfloat16") for a in (q, k, v))
++    R, CB, BND = quant._tables(D, 8, 2, True, "cuda")
++    kq = quant._quantize_keys(kt, R, CB, BND)
++    km, _ = kernel_mask(qt, kt, kq, vt, D ** -0.5, True)
++    helper = quant._bk4_selection(tc.tensor(q), kq.float(), D ** -0.5, Z, True).numpy() != 0
++    sel, _ = selection_of(qt, kt, vt, True)
++    assert np.array_equal(helper, np.broadcast_to(sel, helper.shape))
++    assert int((helper != km).sum()) == 0

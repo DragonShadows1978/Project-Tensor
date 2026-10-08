@@ -557,8 +557,13 @@ __global__ void reduce_lastdim_kernel(const T* __restrict__ in,
   int64_t row = blockIdx.x;
   if (row >= n_rows) return;
   const T* p = in + row * R;
+  // APA-MF2.1 item 2 (review F1): max/min start at their identities -inf/+inf (was
+  // -3.4e38f/3.4e38f, which beat any row whose values all lie beyond it, e.g. a visible
+  // score -3.402e38 next to -inf masked entries -> softmax 0/0). Only the start value
+  // changed: the result is unchanged whenever the row max >= -3.4e38f (min <= 3.4e38f).
+  // Prior art: PyTorch amax / FlashAttention-2 (Dao 2023) running max m = -inf.
   float acc = MODE == 0 ? 0.f
-            : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
+            : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
   for (int64_t i = threadIdx.x; i < R; i += blockDim.x) {
     float v = ld<T>(p, i);
     if (MODE == 0) acc += v;
@@ -597,7 +602,8 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
     coord[d] = s.reduced[d] ? 0 : c;
     base += coord[d] * s.in_str[d];
   }
-  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -3.4e38f : (MODE == 2 ? 3.4e38f : 1.f));
+  // APA-MF2.1 item 2: -inf/+inf identities (was -3.4e38f/3.4e38f); see reduce_lastdim_kernel.
+  float acc = MODE == 0 ? 0.f : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
   for (int64_t r = 0; r < s.red_size; ++r) {
     int64_t rr = r, off = 0;
     for (int d = s.ndim - 1; d >= 0; --d) {
@@ -5058,7 +5064,15 @@ __global__ void fused_sdpa_noncausal_kernel(
   // Each warp walks every nwarp-th key and maintains its own online-softmax
   // numerator/denominator. m and l are intentionally replicated across a
   // warp; each lane owns only values d=lane, lane+32, ... .
-  float m = -3.0e38f;
+  // APA-MF2.1 item 2: running max starts at -inf (was -3.0e38f; a fp32 score below it
+  // gave weight 0 to every key). APA-MF2.2 (re-review N1): Lk >= 1 does NOT make every
+  // score finite -- finite operands can overflow to a -inf score (fp32 1e20 * -1e20; a
+  // huge scale). The per-key step below is therefore guarded (FlashAttention-2 Check_inf):
+  // while the running max is still -inf, the exponent reference is 0, so corr and w are
+  // exp(-inf) = 0, never exp(-inf - -inf) = NaN. Whenever the row has a finite score,
+  // gmax is finite and a -inf-only or empty warp merges with rescale exp(-inf - gmax) = 0.
+  // A fully blocked row (every score -inf) is handled in the merge below (Amendment 1).
+  float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
   float acc[ACCN];
@@ -5075,8 +5089,15 @@ __global__ void fused_sdpa_noncausal_kernel(
     const float score = __shfl_sync(FULL, dot, 0) * scale;
 
     const float m_new = fmaxf(m, score);
-    const float corr = expf(m - m_new);
-    const float w = expf(score - m_new);
+    // APA-MF2.2 (N1) guard: m_new == -inf only while every score seen so far is -inf
+    // (then m == -inf too); reference 0 gives corr = w = 0 with l, acc still 0. Any
+    // finite m_new is used unchanged, so finite rows keep the exact MF2/fd32b6d bytes.
+    // Prior art: FlashAttention-2 (Dao 2023) softmax rescale "max == -inf ? 0 : max"
+    // (Check_inf); Milakov & Gimelshein (2018) online normalizer. Unverified -- lead to
+    // check. Taken: the guard; mine: its placement in this warp-streaming recurrence.
+    const float m_ref = m_new == -INFINITY ? 0.f : m_new;
+    const float corr = expf(m - m_ref);
+    const float w = expf(score - m_ref);
     l = l * corr + w;
     const T* vj = vbase + (int64_t)j * D;
     #pragma unroll
@@ -5090,7 +5111,7 @@ __global__ void fused_sdpa_noncausal_kernel(
   // Merge the four warp-local online-softmax partials. Only lane zero owns
   // each warp's m/l state; output accumulators are already lane-disjoint.
   __shared__ float red[128];
-  red[tid] = lane == 0 ? m : -3.0e38f;
+  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
   __syncthreads();
   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
@@ -5101,7 +5122,14 @@ __global__ void fused_sdpa_noncausal_kernel(
   // must finish loading the max before thread 0 can overwrite red[0]; without
   // this barrier, later warps can use warp 0's scaled denominator as gmax.
   __syncthreads();
-  const float rescale = expf(m - gmax);
+  // APA-MF2.2 Amendment 1 (item 3): a fully blocked row (every score -inf) has gmax == -inf
+  // and every warp m == -inf, l == 0, acc == 0; expf(-inf - -inf) would be NaN. Reference 0
+  // gives rescale = 0, the guarded normalizer below gives inv_denom = 0 and the output is 0
+  // -- fd32b6d's value for that row (its -3.0e38f start gave gmax = -3e38, l = 0 -> 0).
+  // Any finite gmax is used unchanged (MF2.2 bytes). Prior art: FlashAttention-2 (Dao 2023)
+  // combine/Check_inf guard (max == -inf -> 0); unverified -- lead to check. Mine: placement.
+  const float g_ref = gmax == -INFINITY ? 0.f : gmax;
+  const float rescale = expf(m - g_ref);
 
   red[tid] = lane == 0 ? l * rescale : 0.f;
   __syncthreads();
@@ -6173,7 +6201,10 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
 
   // Pass 2: blend + online softmax + V accumulation (fused_sdpa_noncausal
   // streaming state); bulk scores come from the shared cache.
-  float m = -3.0e38f;
+  // APA-MF2.1 item 2: max identity (was -3.0e38f). APA-MF2.2 (N1): Lk >= 1 does not make
+  // every score finite (fp32 overflow of finite operands; the fp16 bulk store rounds
+  // |score| > 65504 to -inf), so the per-key step is guarded as in fused_sdpa_noncausal.
+  float m = -INFINITY;
   float l = 0.f;
   constexpr int ACCN = (DMAX + 31) / 32;
   float acc[ACCN];
@@ -6201,8 +6232,12 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
     }
 
     const float m_new = fmaxf(m, score);
-    const float corr = expf(m - m_new);
-    const float w = expf(score - m_new);
+    // APA-MF2.2 (N1) guard, FlashAttention-2 Check_inf (Dao 2023; unverified -- lead to
+    // check): reference 0 while the running max is -inf, so a -inf first score gives
+    // corr = w = 0 instead of NaN; finite m_new is used unchanged (bytes as MF2/fd32b6d).
+    const float m_ref = m_new == -INFINITY ? 0.f : m_new;
+    const float corr = expf(m - m_ref);
+    const float w = expf(score - m_ref);
     l = l * corr + w;
     const T* vj = vbase + (int64_t)j * D;
     #pragma unroll
@@ -6215,7 +6250,7 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
 
   // Merge the four warp-local online-softmax partials (fused_sdpa_noncausal
   // merge, including the r2 barrier between the max and denom reductions).
-  red[tid] = lane == 0 ? m : -3.0e38f;
+  red[tid] = lane == 0 ? m : -INFINITY;  // APA-MF2.1: max identity (was -3.0e38f)
   __syncthreads();
   for (int off = blockDim.x / 2; off > 0; off >>= 1) {
     if (tid < off) red[tid] = fmaxf(red[tid], red[tid + off]);
@@ -6223,7 +6258,10 @@ __global__ void apa_int4_sdpa_noncausal_kernel(
   }
   const float gmax = red[0];
   __syncthreads();
-  const float rescale = expf(m - gmax);
+  // APA-MF2.2 Amendment 1 (item 3): fully blocked row -> reference 0, output 0 (fd32b6d's
+  // value), as in fused_sdpa_noncausal; finite gmax unchanged. FlashAttention-2 combine guard.
+  const float g_ref = gmax == -INFINITY ? 0.f : gmax;
+  const float rescale = expf(m - g_ref);
 
   red[tid] = lane == 0 ? l * rescale : 0.f;
   __syncthreads();
@@ -7222,7 +7260,12 @@ __global__ void causal_softmax_kernel(const T* x, T* o, int64_t L, int64_t S) {
   const T* xr = x + row * S;
   T* orow = o + row * S;
 
-  float mx = -3.0e38f;
+  // APA-MF2.1 item 2 (review F1): max starts at -inf (was -3.0e38f: a visible score
+  // below it -- fp32 -3.3e38, bf16 -3.38e38 -- left m at the sentinel, every exp
+  // underflowed and inv = 1/0 gave 0*inf = NaN). Unchanged for every row whose visible
+  // max >= -3.0e38f. A row whose visible entries are all -inf stays NaN (as before).
+  // Prior art: FlashAttention-2 (Dao 2023) m = -inf; PyTorch softmax -inf identity.
+  float mx = -INFINITY;
   for (int64_t c = threadIdx.x; c < visible; c += blockDim.x)
     mx = fmaxf(mx, ld<T>(xr, c));
   shm[threadIdx.x] = mx;

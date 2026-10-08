@@ -1,0 +1,30 @@
+{"provenance": {"revision": "c5c468d", "engine": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/artifacts/apa_mf2_1/build", "engine_sha256": "b5837bfe92c18efa19457e2a3a059e5eda19b186c4430d0b1cd961857a9459df", "functional_sha256": "86df0db5c906a79f596e83234e9355d51125e971a316642a09f981d777e3c6d0", "quant_sha256": "fa820b7ad643ebe15157b296e8b62dbabcc17d3f110912f4c075716e298901bc", "source_count": 19}, "driver": "595.91.07"}
+{"provenance": {"revision": "048949d", "engine": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/artifacts/apa_mf2/build", "engine_sha256": "8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a", "functional_sha256": "2d5645ae451e606677505ce9dd906e2b8c4081fc8311c85496a7989acd38ccbb", "quant_sha256": "881a583bc99ca6d6e0ef59babe64b7bf12e42fc876482a6a1b408a979ba52448", "source_count": 19}, "driver": "595.91.07"}
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 559, in <module>
+    if __name__=='__main__': main()
+                             ^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 547, in main
+    values=identity_values()
+           ^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 421, in identity_values
+    for kind,x in zip('qkv',xs): put(key+'/d'+kind,x.grad)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 409, in put
+    a=arr(t); assert np.isfinite(a).all(),name
+      ^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 45, in arr
+    def arr(t): return t.float().numpy()
+                       ^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'float'
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 559, in <module>
+    if __name__=='__main__': main()
+                             ^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 551, in main
+    if cell in ('identity','identity_mf2'): identity_driver(cell)
+                                            ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/scripts/apa_mf2_2_probe/gpu_probe.py", line 475, in identity_driver
+    assert p.returncode==0,f'identity arm failed: {rev}, exit {p.returncode}'
+           ^^^^^^^^^^^^^^^
+AssertionError: identity arm failed: 048949d, exit 1

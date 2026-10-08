@@ -31,7 +31,13 @@ std::tuple<at::Tensor, at::Tensor> mix_scores(const at::Tensor& ranking,
 
 namespace {
 
-constexpr double kNegInf = -1e9;  // matches the reference's masked fill value
+// APA-MF2 item 2 (audit of finite-bias causal masks in writable files): -inf, was
+// -1e9. A finite fill lets a masked score above 1e9 + the visible max leak weight;
+// -inf gives exact zero weight for every finite score (at::softmax / the tiled
+// online softmax give exp(-inf) = 0, no NaN while a row has a visible key: every
+// S >= L row). The Python reference's -1e9 still exps to exactly 0 for realistic
+// scores. Prior art: FlashAttention-2 (Dao 2023) -inf predicate masking.
+constexpr double kNegInf = -INFINITY;
 
 // Acklam's rational approximation to the inverse normal CDF. Matches
 // scipy.stats.norm.ppf to ~1e-9, which is the value the reference caches via
@@ -176,14 +182,22 @@ at::Tensor compute_threshold(const at::Tensor& ranking,
 }
 
 // Apply causal + additive attn_mask to a (B,H,rows,S) score tensor in place
-// of the caller's choosing. row_base is the global index of the first row.
+// of the caller's choosing. row_base is the global index of the first row
+// among the L query rows of the call.
+// APA-MF2 item 3: BOTTOM-RIGHT causal. The L queries are the LAST L of the S
+// positions, so query row r (0..L-1) sits at absolute position S-L+r and sees
+// keys j <= S-L+r (S == L: the usual j <= r). Was ri = row_base..row_base+rows,
+// i.e. TOP-LEFT: on S > L every row was blind to the prefix (review M1: L3 S9,
+// Q=K=0, V_j=j gave [0,.5,1], not [3,3.5,4]). Same convention as
+// tensor_cuda functional._causal_mask (k = 1 + S - L). Prior art: 63960a4;
+// FlashAttention-2 v2.1 bottom-right causal (Dao 2023).
 at::Tensor apply_masks(at::Tensor scores, bool is_causal,
                        const c10::optional<at::Tensor>& attn_mask,
-                       int64_t row_base, int64_t rows, int64_t S,
+                       int64_t row_base, int64_t rows, int64_t S, int64_t L,
                        c10::optional<at::Tensor>* out_causal_mask) {
   if (is_causal) {
     auto dev = scores.device();
-    auto ri = at::arange(row_base, row_base + rows,
+    auto ri = at::arange(row_base + (S - L), row_base + (S - L) + rows,
                          at::TensorOptions().dtype(at::kLong).device(dev))
                   .view({rows, 1});
     auto ci = at::arange(0, S, at::TensorOptions().dtype(at::kLong).device(dev))
@@ -226,6 +240,11 @@ std::vector<at::Tensor> apa_forward(
   const int64_t B = query.size(0), H = query.size(1), L = query.size(2),
                 D = query.size(3);
   const int64_t S = key.size(2);
+  // APA-MF2.1 item 1 (review F3): bottom-right causal row r sees keys j <= S-L+r, so
+  // S < L leaves rows without a key. Reject before any compute, like the engine's CUDA
+  // kernels and tensor_cuda functional._check_causal_lengths.
+  TORCH_CHECK(!is_causal || S >= L, "APA forward: causal attention requires S >= L "
+              "(bottom-right causal); got L=", L, " queries, S=", S, " keys");
   refine_percentile = std::max(0.0, std::min(1.0, refine_percentile));
   const int64_t refine_k = std::max<int64_t>(1, (int64_t)(S * refine_percentile));
 
@@ -257,8 +276,8 @@ std::vector<at::Tensor> apa_forward(
     auto bulk = at::matmul(query, kq_t) * scale;     // (B,H,L,S)
     auto ranking = at::matmul(query, k_t) * scale;
     c10::optional<at::Tensor> causal_mask;
-    bulk = apply_masks(bulk, is_causal, attn_mask, 0, L, S, &causal_mask);
-    ranking = apply_masks(ranking, is_causal, attn_mask, 0, L, S, nullptr);
+    bulk = apply_masks(bulk, is_causal, attn_mask, 0, L, S, L, &causal_mask);
+    ranking = apply_masks(ranking, is_causal, attn_mask, 0, L, S, L, nullptr);
 
     if (adaptive) {
       auto conc = per_head_concentration(bulk);
@@ -293,8 +312,8 @@ std::vector<at::Tensor> apa_forward(
       auto bulk = at::matmul(Qi, kq_t) * scale;       // (B,H,bl,S)
       auto ranking = at::matmul(Qi, k_t) * scale;
       c10::optional<at::Tensor> causal_mask;
-      bulk = apply_masks(bulk, is_causal, attn_mask, i, bl, S, &causal_mask);
-      ranking = apply_masks(ranking, is_causal, attn_mask, i, bl, S, nullptr);
+      bulk = apply_masks(bulk, is_causal, attn_mask, i, bl, S, L, &causal_mask);
+      ranking = apply_masks(ranking, is_causal, attn_mask, i, bl, S, L, nullptr);
 
       if (adaptive && i == 0) {
         auto conc = per_head_concentration(bulk);
@@ -349,6 +368,8 @@ std::vector<at::Tensor> apa_backward(
     int64_t block_size) {
   const int64_t B = query.size(0), H = query.size(1), L = query.size(2);
   const int64_t S = key.size(2);
+  TORCH_CHECK(!is_causal || S >= L, "APA backward: causal attention requires S >= L "
+              "(bottom-right causal); got L=", L, " queries, S=", S, " keys");  // APA-MF2.1
   auto mask_bool = refine_mask.to(at::kBool);
 
   auto grad_q = at::zeros_like(query);
@@ -364,7 +385,7 @@ std::vector<at::Tensor> apa_backward(
 
     auto scores = at::matmul(Qi, k_t) * scale;  // (B,H,bl,S)
     c10::optional<at::Tensor> causal_mask;
-    scores = apply_masks(scores, is_causal, attn_mask, i, end_i - i, S, &causal_mask);
+    scores = apply_masks(scores, is_causal, attn_mask, i, end_i - i, S, L, &causal_mask);
 
     auto attn_w = at::softmax(scores, -1);
     // grad_v += attn_w^T @ dO

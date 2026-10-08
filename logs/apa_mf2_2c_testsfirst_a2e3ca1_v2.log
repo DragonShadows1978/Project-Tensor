@@ -1,0 +1,327 @@
+FF...................................................................... [ 41%]
+..............................................................FF........ [ 83%]
+............FF......FFFFFFFF                                             [100%]
+=================================== FAILURES ===================================
+_____________________ test_review_v7_witness_exact_operand _____________________
+
+    def test_review_v7_witness_exact_operand():
+        b = witness(); S = b.size; D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1.0
+        k = np.zeros((1, 1, S, D), np.float32); k[..., 0] = b
+        with tc.no_grad():
+            qt, kt = tc.tensor(q), tc.tensor(k)
+            bulk = tc.matmul(qt, kt, trans_b=True).numpy()
+            assert np.array_equal(bulk.ravel(), b)                     # the one-hot dot is exact
+            sel = Q._definition_selection(qt, kt, 1.0, Z, False).numpy()
+>       r = check(sel, bulk, False, "V7 exact")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[0., 0., 0., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 1, 1048576), dtype=float32)
+b = array([[[[0.9997568, 0.9997568, 0.9997568, ..., 1.       , 1.       ,
+          1.       ]]]], shape=(1, 1, 1, 1048576), dtype=float32)
+causal = False, label = 'V7 exact'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: V7 exact: {'entries_visible': 1048576, 'mismatch': 208896, 'in_band': 86016, 'out_of_band': 122880, 'invisible_selected': 0, 'max_rel_gap_mismatch': 4.855133403556798e-05, 'selected': 0, 'selected64': 208896}, review-band 122880
+E       assert (122880 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+_______________ test_review_v7_witness_public_quantizer_operand ________________
+
+    def test_review_v7_witness_public_quantizer_operand():
+        b = witness(); S = b.size; D = 64
+        q = np.zeros((1, 1, 1, D), np.float32); q[..., 0] = 1.0
+        k = np.zeros((1, 1, S, D), np.float32); k[..., 0] = b
+        with tc.no_grad():
+            qt, kt = tc.tensor(q), tc.tensor(k)
+            R, CB, BND = Q._tables(D, 4, 1, True, "cuda")
+            kq = Q._quantize_keys(kt, R, CB, BND)
+            bulk = tc.matmul(qt, kq, trans_b=True)
+            sel = Q._definition_selection(qt, kq, 1.0, Z, False, bulk32=bulk).numpy()
+>       check(sel, bulk.numpy(), False, "V7 public quantizer")
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[0., 0., 0., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 1, 1048576), dtype=float32)
+b = array([[[[0.98641115, 0.98641115, 0.98641115, ..., 0.9866512 ,
+          0.9866512 , 0.9866512 ]]]],
+      shape=(1, 1, 1, 1048576), dtype=float32)
+causal = False, label = 'V7 public quantizer'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: V7 public quantizer: {'entries_visible': 1048576, 'mismatch': 208896, 'in_band': 86016, 'out_of_band': 122880, 'invisible_selected': 0, 'max_rel_gap_mismatch': 4.861215168419458e-05, 'selected': 0, 'selected64': 208896}, review-band 122880
+E       assert (122880 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+________ test_long_key_sweep[1048576-0.000244140625-sorted_steps-False] ________
+
+S = 1048576, width = 0.000244140625, pattern = 'sorted_steps', causal = False
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("pattern", ["sorted_steps", "steps", "uniform"])
+    @pytest.mark.parametrize("width", [2.0 ** -20, 2.0 ** -16, 2.0 ** -12, 2.0 ** -10, 1.0])  # 2^-12: the witness width (added)
+    @pytest.mark.parametrize("S", [1 << 10, 1 << 14, 1 << 17, (1 << 17) + 3, 1 << 20])
+    def test_long_key_sweep(S, width, pattern, causal):
+        b = rows(S, width, pattern, 2, S)[None, None]
+>       check(select(b, causal), b, causal, f"S={S} w={width:g} {pattern} causal={causal}")
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[1., 1., 1., ..., 0., 0., 0.],
+         [1., 1., 1., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 2, 1048576), dtype=float32)
+b = array([[[[1.       , 1.       , 1.       , ..., 0.9997568, 0.9997568,
+          0.9997568],
+         [1.       , 1.       , 1.       , ..., 0.9997568, 0.9997568,
+          0.9997568]]]], shape=(1, 1, 2, 1048576), dtype=float32)
+causal = False, label = 'S=1048576 w=0.000244141 sorted_steps causal=False'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: S=1048576 w=0.000244141 sorted_steps causal=False: {'entries_visible': 2097152, 'mismatch': 253952, 'in_band': 172032, 'out_of_band': 81920, 'invisible_selected': 0, 'max_rel_gap_mismatch': 2.8700036068322323e-05, 'selected': 671744, 'selected64': 417792}, review-band 81920
+E       assert (81920 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+________ test_long_key_sweep[1048576-0.000244140625-sorted_steps-True] _________
+
+S = 1048576, width = 0.000244140625, pattern = 'sorted_steps', causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("pattern", ["sorted_steps", "steps", "uniform"])
+    @pytest.mark.parametrize("width", [2.0 ** -20, 2.0 ** -16, 2.0 ** -12, 2.0 ** -10, 1.0])  # 2^-12: the witness width (added)
+    @pytest.mark.parametrize("S", [1 << 10, 1 << 14, 1 << 17, (1 << 17) + 3, 1 << 20])
+    def test_long_key_sweep(S, width, pattern, causal):
+        b = rows(S, width, pattern, 2, S)[None, None]
+>       check(select(b, causal), b, causal, f"S={S} w={width:g} {pattern} causal={causal}")
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[1., 1., 1., ..., 0., 0., 0.],
+         [1., 1., 1., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 2, 1048576), dtype=float32)
+b = array([[[[1.       , 1.       , 1.       , ..., 0.9997568, 0.9997568,
+          0.9997568],
+         [1.       , 1.       , 1.       , ..., 0.9997568, 0.9997568,
+          0.9997568]]]], shape=(1, 1, 2, 1048576), dtype=float32)
+causal = True, label = 'S=1048576 w=0.000244141 sorted_steps causal=True'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: S=1048576 w=0.000244141 sorted_steps causal=True: {'entries_visible': 2097151, 'mismatch': 253952, 'in_band': 172032, 'out_of_band': 81920, 'invisible_selected': 0, 'max_rel_gap_mismatch': 2.8700083182237692e-05, 'selected': 671744, 'selected64': 417792}, review-band 81920
+E       assert (81920 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+________________ test_full_api_long_keys[float32-1048576-False] ________________
+
+dt = 'float32', S = 1048576, causal = False
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("S", [1 << 14, 1 << 17, 1 << 20])
+    @pytest.mark.parametrize("dt", ["float32", "bfloat16"])
+    def test_full_api_long_keys(dt, S, causal):
+        D, L = 64, 2
+        b = rows(S, 2.0 ** -12, "sorted_steps", 1, S)[0]
+        q = np.zeros((1, 1, L, D), np.float32); q[..., 0] = 1.0
+        k = np.zeros((1, 1, S, D), np.float32); k[..., 0] = b
+        v = np.zeros((1, 1, S, D), np.float32); v[..., 0] = 1.0
+        with capture() as rec, tc.no_grad():
+            o = Q.apa_quant_attention(*[tc.tensor(x, dtype=dt) for x in (q, k, v)], bulk_bits=4,
+                                      refine_percentile=0.15, is_causal=causal, scale=1.0)
+>       check(rec["sel"], rec["bulk32"], causal, f"full API {dt} S={S} causal={causal}")
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[1., 1., 1., ..., 0., 0., 0.],
+         [1., 1., 1., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 2, 1048576), dtype=float32)
+b = array([[[[0.9866511, 0.9866511, 0.9866511, ..., 0.9864112, 0.9864112,
+          0.9864112],
+         [0.9866511, 0.9866511, 0.9866511, ..., 0.9864112, 0.9864112,
+          0.9864112]]]], shape=(1, 1, 2, 1048576), dtype=float32)
+causal = False, label = 'full API float32 S=1048576 causal=False'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: full API float32 S=1048576 causal=False: {'entries_visible': 2097152, 'mismatch': 253952, 'in_band': 172032, 'out_of_band': 81920, 'invisible_selected': 0, 'max_rel_gap_mismatch': 2.8717758822806216e-05, 'selected': 671744, 'selected64': 417792}, review-band 81920
+E       assert (81920 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+________________ test_full_api_long_keys[float32-1048576-True] _________________
+
+dt = 'float32', S = 1048576, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("S", [1 << 14, 1 << 17, 1 << 20])
+    @pytest.mark.parametrize("dt", ["float32", "bfloat16"])
+    def test_full_api_long_keys(dt, S, causal):
+        D, L = 64, 2
+        b = rows(S, 2.0 ** -12, "sorted_steps", 1, S)[0]
+        q = np.zeros((1, 1, L, D), np.float32); q[..., 0] = 1.0
+        k = np.zeros((1, 1, S, D), np.float32); k[..., 0] = b
+        v = np.zeros((1, 1, S, D), np.float32); v[..., 0] = 1.0
+        with capture() as rec, tc.no_grad():
+            o = Q.apa_quant_attention(*[tc.tensor(x, dtype=dt) for x in (q, k, v)], bulk_bits=4,
+                                      refine_percentile=0.15, is_causal=causal, scale=1.0)
+>       check(rec["sel"], rec["bulk32"], causal, f"full API {dt} S={S} causal={causal}")
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sel = array([[[[1., 1., 1., ..., 0., 0., 0.],
+         [1., 1., 1., ..., 0., 0., 0.]]]],
+      shape=(1, 1, 2, 1048576), dtype=float32)
+b = array([[[[0.9866511, 0.9866511, 0.9866511, ..., 0.9864112, 0.9864112,
+          0.9864112],
+         [0.9866511, 0.9866511, 0.9866511, ..., 0.9864112, 0.9864112,
+          0.9864112]]]], shape=(1, 1, 2, 1048576), dtype=float32)
+causal = True, label = 'full API float32 S=1048576 causal=True'
+
+    def check(sel, b, causal, label):
+        r = O.mismatch(sel, b, causal, Z)
+        rb = review_band_errors(sel, b, causal)
+>       assert r["out_of_band"] == 0 and rb == 0 and r["invisible_selected"] == 0, f"{label}: {r}, review-band {rb}"
+E       AssertionError: full API float32 S=1048576 causal=True: {'entries_visible': 2097151, 'mismatch': 253952, 'in_band': 172032, 'out_of_band': 81920, 'invisible_selected': 0, 'max_rel_gap_mismatch': 2.8717805961102612e-05, 'selected': 671744, 'selected64': 417792}, review-band 81920
+E       assert (81920 == 0)
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:44: AssertionError
+____________________ test_row_sum_accuracy_and_coverage[1] _____________________
+
+S = 1
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+____________________ test_row_sum_accuracy_and_coverage[2] _____________________
+
+S = 2
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+___________________ test_row_sum_accuracy_and_coverage[4097] ___________________
+
+S = 4097
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+___________________ test_row_sum_accuracy_and_coverage[8192] ___________________
+
+S = 8192
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+___________________ test_row_sum_accuracy_and_coverage[8193] ___________________
+
+S = 8193
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+__________________ test_row_sum_accuracy_and_coverage[12288] ___________________
+
+S = 12288
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+__________________ test_row_sum_accuracy_and_coverage[131075] __________________
+
+S = 131075
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+_________________ test_row_sum_accuracy_and_coverage[1048581] __________________
+
+S = 1048581
+
+    @pytest.mark.parametrize("S", [1, 2, 4097, 8192, 8193, 12288, (1 << 17) + 3, (1 << 20) + 5])
+    def test_row_sum_accuracy_and_coverage(S):
+        """_row_sum adds every key exactly once (incl. the remainder) with error <= 40 * 2^-24 * sum|x|."""
+        x = np.random.default_rng(S).uniform(0.0, 1.0, (2, 1, 3, S)).astype(np.float32)
+>       got = Q._row_sum(tc.tensor(x)).numpy().astype(np.float64)
+              ^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda.quant' has no attribute '_row_sum'
+
+tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:146: AttributeError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_review_v7_witness_exact_operand
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_review_v7_witness_public_quantizer_operand
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_long_key_sweep[1048576-0.000244140625-sorted_steps-False]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_long_key_sweep[1048576-0.000244140625-sorted_steps-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_full_api_long_keys[float32-1048576-False]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_full_api_long_keys[float32-1048576-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[1]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[2]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[4097]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[8192]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[8193]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[12288]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[131075]
+FAILED tensor_cuda/tests/test_apa_mf2_2c_longkeys.py::test_row_sum_accuracy_and_coverage[1048581]
+14 failed, 158 passed in 13.30s

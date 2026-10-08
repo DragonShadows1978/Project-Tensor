@@ -1,0 +1,67 @@
+{
+  "order": "orders/APA_MF2_2_REVIEW_FIXES.md",
+  "order_sha256": "dde5a35f6c3e103e3d781cf1751b1f55948c852dfe56ea67b07292094389b0a0",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent)",
+  "registered_at": "2026-10-07T19:05-04:00, before any GPU gate (no GPU command has run in this seat)",
+  "before": {
+    "tree": "apa-mf2 at MF2.1 (c5c468d content): kernels.cu 13d2a2eb..., quant.py fa820b7a... copied to artifacts/apa_mf2_2/before (SHA256SUMS, read-only); tree engine sources == artifacts/apa_mf2_1/build/manifest.json (0 mismatches, checked)",
+    "engines": {
+      "fd32b6d": "built by this seat into artifacts/apa_mf2_2/build_fd32b6d from a scratch source root whose 19 engine sources must equal the reviewer's fd32b6d pins (tensor_fork_apa_wt_mf21rev/artifacts/apa_mf21rev/provenance_pins.json) before the build; package = the reviewer's baselines/fd32b6d/pkg (pinned); sha recorded at build time",
+      "mf2_048949d": "artifacts/apa_mf2/build, module sha256 8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a; package artifacts/apa_mf2_1/before/pkg (== reviewer 048949d pins, checked)",
+      "mf2_1": "artifacts/apa_mf2_1/build, module sha256 b5837bfe92c18efa19457e2a3a059e5eda19b186c4430d0b1cd961857a9459df; package = reviewer baselines/c5c468d/pkg (== tree before this order, checked)",
+      "mf2_2": "artifacts/apa_mf2_2/build (scripts/apa_mf2_2_build.sh, same nvcc/g++ flags as apa_mf2_1_build.sh); package = this tree"
+    },
+    "isolation": "every before/after comparison runs each engine in its own python process (separate PYTHONPATH = engine dir + that revision's package); an arm asserts its imported _C path and module sha; the new engine is never a baseline"
+  },
+  "items": {
+    "1": "N1: kernels.cu fused_sdpa_noncausal_kernel and apa_int4_sdpa_noncausal_kernel per-key online-softmax recurrence ONLY: keep m = -INFINITY start and the -INFINITY merge fill; add the FlashAttention-2 Check_inf guard m_ref = (m_new == -INFINITY) ? 0.f : m_new, corr = expf(m - m_ref), w = expf(score - m_ref). No other line of the two kernels changes (the block merge is not changed: a fully blocked row -- every score -inf -- stays outside this order, policy unchanged).",
+    "2": "N2: quant._definition_selection statistics only: u = |b| / M with M = visible row max of |b| (invisible entries already 0), M := 1 where M == 0 (all-zero row); mean/var/thr of u exactly as before (centered two-pass, population, thr = mean + z*sqrt(var)); selection = visible && u >= thr (comparison in the scaled domain). No masked_fill or tc.where is added (MF1 capture contract: the stats masked_fill stays the helper's last masked_fill)."
+  },
+  "definition_oracle": {
+    "what": "fp64, mine (scripts/apa_mf2_2_oracle.py), from the definition: a = |b| for b = the call's fp32 bulk (supplied, or captured at quant._definition_selection's bulk32 / recomputed by the same SGEMM), visible = bottom-right or all, cnt = #visible, mean = sum_vis(a)/cnt, var = sum_vis((a-mean)^2)/cnt, thr64 = mean + z*sqrt(var), sel64 = visible && a >= thr64. Real captures additionally use the MF2.1 registered oracle (fp64 GEMM of the call's own q/kq upcasts, scripts/apa_mf2_1_defn.py).",
+    "tie_band": "UNCHANGED from MF2.1: entry (i,j) is in band iff | a_ij - thr64_i | <= 2e-5 * |thr64_i| (relative, no floor). Not widened. Out-of-band mismatch = G3 failure.",
+    "z": "quant._norm_ppf(1 - 0.15) (registered refine_percentile 0.15; z > 0). Rows with z <= 0 are outside the measured domain."
+  },
+  "census": {
+    "n1_witnesses": "review N1: (a) fp32 B=H=L=1, S in {2,5}, D in {64,96,128}, Q=1e20*e0, K0=-1e20*e0, other K=0, V0=0, other V=1, scale 1, ops fused_sdpa / int4 refine_all; (b) fp16 Q=2*e0, K0=-60000*e0, int4 refine_all=False (partial). Expected output exactly 1, finite.",
+    "n1_sweep": "-inf-first rows: dtypes fp32, fp16 (bf16: both kernels reject bf16 by design -- recorded per engine as not applicable; bf16-exact operand values are run through the fp32 path), ops {fused_sdpa, int4_all, int4_partial}, S in {2,5,33,1025}, D in {64,96,128}, Lq in {1,3}, patterns {key0 -inf, first key of every warp (keys 0..3) -inf, first half of keys -inf}; -inf produced from FINITE operands (fp32: Q0=1e20 x K0=-1e20 product overflow; fp16 fused: scale 1e34 x dot -120000; fp16 int4 partial: fp16 bulk store of -120000). Finite keys have K[0]=0 and random other dims (fp32) or K=0 (fp16), V ~ N(0,1). Oracle: fp64 softmax over the finite keys' fp64 scores.",
+    "identity": "finite non-overflow inputs (every score finite and > -3e38): both kernels (int4 refine_all T/F), fp32/fp16, D {64,96,128}, Lq {1,3,17}, S {1,2,3,5,9,33,200,1025}, operands N(0,0.2) and N(0,3), plus fp32 wide-range cells (scores up to ~1e30 in magnitude); TC_ATTN_QTILE=0 (the streaming kernels under change).",
+    "n2_sweep": "statistics block in isolation: fp32 |bulk| rows supplied to quant._definition_selection; row max scale in {1e-38 (subnormal), 1e-37, 1e-30, 1e-20, 1e-10, 1e-3, 1, 1e3, 1e10, 1e20, 1e30, 1e37, 3e38}; patterns {uniform, lognormal heavy tail, review [1,2,3], constant, near-constant 1 - k*2^-20, single spike}; S in {1,2,3,256,2048}; causal (L = min(4,S)) and non-causal (L = 4); plus a mixed-magnitude multi-row cell (rows 1e30 and 1e-30 in one call) and all-zero rows. Plus full-API apa_quant_attention cells: Q = mag * N(0,1) (fp32), K ~ N(0,1), bits 4, p 0.15, scale 1, mag in {1e-30, 1e-20, 1e-10, 1, 1e10, 1e20, 1e30}, S in {3, 256, 2048}, causal T/F, plus the review full-API witness Q=1e20*e0, K=[1,2,3]*e0.",
+    "real": "MF2.1 census: Qwen3-1.7B layers 0/16/27 and Qwen3-4B layers 0/21/35 (tensor_fork_apa_wt_spq3 captures, sha-pinned), S=8192, bf16, one q head per kv head, last L in {64,512,2048} rows, bits {4,8}, p 0.15, causal: 36 cells."
+  },
+  "gates": {
+    "G1": "python3 -m pytest tensor_cuda/tests -q -p no:cacheprovider --ignore=tensor_cuda/tests/test_selector_accuracy.py -rfE on the MF2.2 engine + tree: FAILED/ERROR id set == the 52 fd32b6d baseline ids (logs/apa_mf1_g1_baseline_unchanged.log) exactly, 0 new; new test_apa_mf2_2_*.py all pass.",
+    "G2": "(a) every n1 witness and n1_sweep row on MF2.2: finite, witnesses exactly 1, sweep max |out - oracle| <= 1e-5 * max(1, |oracle|) (fp32) / 4e-3 (fp16 output rounding); (b) identity census: sha256 of output bytes of both kernels on MF2.2 == MF2 (048949d) AND == fd32b6d, every key, separate processes. MF2.1 is RED on (a) (expected; failing receipt).",
+    "G3": "0 out-of-band mismatches vs the fp64 definition on every n2_sweep cell (isolated and full-API) and every real cell; 0 invisible selections; all-zero rows select every visible key. MF2.1 RED on the large/tiny cells (expected; failing receipt).",
+    "G4": "every RED row of the lead's re-review GPU logs (sentinel 1, reductions 10, training 6, masks 1, identity_mf2 arm exit, fused_overflow 18, definition 6) re-run with a copy of the reviewer probe against fd32b6d, MF2, MF2.1 and MF2.2 engines, separate processes, and classified: new product defect / pre-existing product defect / probe-harness defect / fixed. A row may be called a probe defect only when the same row is shown on a before engine with the cause named. No unexplained red.",
+    "N5": "recount artifacts/apa_mf2_1/identity/{before,after,engine_iso}.json and compare*.json; erratum with total, equal, design, strict-finite counts.",
+    "mutation": ">= 0.80 of non-error registered mutants killed by tensor_cuda/tests/test_apa_mf2_2_n1.py + test_apa_mf2_2_n2.py + test_apa_mf2_1_definition.py + test_apa_mf2_1_sentinel.py (baseline all pass first; a mutant that fails to build is an error, reported, excluded from the denominator).",
+    "sanity": "every claim names its measured domain; no universal statement beyond the census."
+  },
+  "mutants": {
+    "K1": "fused_sdpa_noncausal: unguarded recurrence (m_ref := m_new)",
+    "K2": "apa_int4_sdpa_noncausal: unguarded recurrence",
+    "K3": "fused_sdpa_noncausal: reverted start m = -3.0e38f (guard kept) -> must re-open F1 for the fused kernel",
+    "K4": "apa_int4_sdpa_noncausal: reverted start m = -3.0e38f (guard kept)",
+    "K5": "fused_sdpa_noncausal: guard keyed on the old max (m == -INFINITY) instead of m_new",
+    "K6": "apa_int4_sdpa_noncausal: guard keyed on the old max",
+    "P1": "quant: unscaled statistics (u = |b|, no division by the row max)",
+    "P2": "quant: no zero-row guard (M == 0 -> 0/0)",
+    "P3": "quant: compare unscaled |b| against the scaled threshold",
+    "P4": "quant: max over the last two axes (one scale per head, not per row)",
+    "P5": "quant: one-pass variance in the scaled domain (mean(u^2) - mean^2)",
+    "P6": "quant: invisible deviations not zeroed (dev * vis dropped)",
+    "P7": "quant: > instead of >="
+  },
+  "predictions": {
+    "PN1": "MF2.2 outputs on the n1 rows are byte-identical to MF2 and fd32b6d (old -3e38 start handled -inf-first rows; new guard reproduces the same arithmetic when every finite score > -3e38).",
+    "PN2": "MF2.2 selection differs from MF2.1 only on entries inside the tie band in the normal range (division by M adds <= 2^-24 relative rounding per entry).",
+    "PA": "bf16 'NoneType has no attribute float' / '.grad is None' rows reproduce on fd32b6d and MF2 (tensor_cuda/__init__.py tensor(): bf16 is created fp32 then .astype -> non-leaf; __init__.py is identical 2aa0435a in all three revisions). masks geometry/2048x2048 reproduces on fd32b6d and MF2 with relative error ~2e-6 (fp32 accumulation over 2048 keys against an absolute 2e-4 at magnitude ~1e3)."
+  },
+  "rails": [
+    "the -inf start stays (forbidden: reverting it); the tie band is not widened; the 595.84 override is never set",
+    "if a byte-identity key differs on finite non-overflow inputs: G2 RED, report, do not adjust the census",
+    "if a product defect adjudicated in G4 sits outside kernels.cu/quant.py: report with the minimal fix, do not fix",
+    "GPU commands: flock -w 900 /tmp/forge-gpu.lock timeout 600 ..., foreground"
+  ]
+}

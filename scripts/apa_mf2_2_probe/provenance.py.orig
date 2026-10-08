@@ -1,0 +1,40 @@
+"""Fail-closed engine/package provenance for separate historical GPU processes.
+
+Prior art: cryptographic content pinning (SHA-256, NIST FIPS 180-4, 2015).
+Taken: content identity, not semantic proof. Mine: this review's source/arm checks.
+"""
+from pathlib import Path
+import hashlib
+import json
+import os
+import sys
+
+ROOT=Path(__file__).resolve().parents[2]
+
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def verify():
+    rev=os.environ['APA_MF21REV_REV']
+    engine=Path(os.environ['APA_MF21REV_ENGINE']).resolve()
+    pkg=Path(os.environ['APA_MF21REV_PKG']).resolve()
+    pins=json.loads((ROOT/'artifacts/apa_mf21rev/provenance_pins.json').read_text())[rev]
+    manifest=json.loads((engine/'manifest.json').read_text())
+    assert manifest['sources']==pins['engine_sources'], 'engine source pins differ from independent historical revision'
+    for rel,expected in pins['python_sources'].items():
+        assert sha(pkg/rel)==expected, 'package source pin drift: '+rel
+    assert len(manifest['modules'])==1, 'expected one extension artifact'
+    for name,expected in manifest['modules'].items():
+        assert sha(engine/name)==expected, 'module hash drift'
+    import tensor_cuda as tc
+    from tensor_cuda import functional as F,quant as Q
+    assert Path(tc._C.__file__).resolve().parent==engine, 'wrong engine imported'
+    assert Path(tc.__file__).resolve().parent==pkg/'tensor_cuda', 'wrong package imported'
+    assert Path(F.__file__).resolve().parent==pkg/'tensor_cuda'
+    assert Path(Q.__file__).resolve().parent==pkg/'tensor_cuda'
+    info={'revision':rev,'engine':str(engine),'engine_sha256':sha(tc._C.__file__),
+          'functional_sha256':sha(F.__file__),'quant_sha256':sha(Q.__file__),
+          'source_count':len(pins['engine_sources'])}
+    return tc,F,Q,info

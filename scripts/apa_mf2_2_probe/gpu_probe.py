@@ -1,0 +1,563 @@
+"""Lead-only GPU cells, never executed by the CPU review seat.
+
+Prior art: Chan, Golub & LeVeque (1983) centered population statistics;
+Dao (2023) FlashAttention-2 causal geometry/online softmax; IEEE 754-2019
+special arithmetic; DeMillo, Lipton & Sayward (1978) adversarial/reversion
+testing. Taken: standard definitions and single-site coverage principles.
+Mine: this independent harness, overflow witnesses, revision isolation.
+No author oracle/helper imports. Actual product quantizer is under test.
+"""
+from pathlib import Path
+import ast
+import contextlib
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import traceback
+import numpy as np
+import oracle as O
+from provenance import ROOT,verify
+
+ART=ROOT/'artifacts/apa_mf2_2/probe'  # APA-MF2.2 copy: receipts land in this order's artifacts
+ROWS=[]
+TC=F=Q=None
+INFO={}
+
+
+def check(name,fn):
+    try:
+        detail=fn() or {}
+        ROWS.append({'name':name,'passed':True,**O.encode(detail)})
+    except Exception as e:
+        ROWS.append({'name':name,'passed':False,'error':str(e),'traceback':traceback.format_exc()})
+    print(json.dumps(ROWS[-1]),flush=True)
+
+
+def tensor(a,dt='float32',grad=False):
+    # APA-MF2.2 adjudication switch (default OFF == reviewer behavior): tc.tensor(dtype='bfloat16',
+    # requires_grad=True) returns the .astype output of an fp32 leaf (a NON-leaf: .grad stays None).
+    # With APA_MF2_2_BF16_LEAF=1 a bf16 grad tensor is made a real leaf (detach + requires_grad).
+    if os.environ.get('APA_MF2_2_BF16_LEAF')=='1' and dt=='bfloat16' and grad:
+        t=TC.tensor(np.asarray(a,np.float32),dtype=dt).detach(); t.requires_grad=True; return t
+    return TC.tensor(np.asarray(a,np.float32),dtype=dt,requires_grad=grad)
+def arr(t): return t.float().numpy()
+
+
+def finite_one(o,expected=1):
+    a=arr(o); assert np.isfinite(a).all(),a
+    assert np.all(a==expected),a
+    return {'output':a}
+
+
+def supplied(kq):
+    @contextlib.contextmanager
+    def ctx():
+        old=Q._quantize_keys; Q._quantize_keys=lambda *a,**kw:kq
+        try: yield
+        finally: Q._quantize_keys=old
+    return ctx()
+
+
+@contextlib.contextmanager
+def capture_definition_bulk(rec):
+    # Definition is fp64 statistics OF actual fp32 bulk, not a fp64 GEMM.
+    # Prior art: Chan et al. (1983) centered two-pass definition. Mine: capture.
+    old=Q._definition_selection
+    def observe(qf,kqf,scale,z,is_causal,bulk32=None):
+        if bulk32 is None: bulk32=TC.matmul(qf,kqf,alpha=scale,trans_b=True)
+        rec['bulk32']=arr(bulk32)
+        return old(qf,kqf,scale,z,is_causal,bulk32=bulk32)
+    Q._definition_selection=observe
+    try: yield
+    finally: Q._definition_selection=old
+
+
+def zero_witness(L,S,D,dt='float32',grad=False):
+    q=np.zeros((1,1,L,D),np.float32); k=np.zeros((1,1,S,D),np.float32)
+    v=np.broadcast_to(np.arange(S,dtype=np.float32)[None,None,:,None],k.shape).copy()
+    return [tensor(x,dt,grad) for x in (q,k,v)]
+
+
+def sentinel():
+    for dt,score in [('float32',-3.3e38),('float32',-3.402e38),('bfloat16',-3.38e38)]:
+        for path in ('infer','fused','grad'):
+            def run(dt=dt,score=score,path=path):
+                D=96; q=np.zeros((1,1,2,D),np.float32); q[...,0]=1
+                k=np.zeros_like(q); k[0,0,0,0]=score; v=np.zeros_like(q); v[0,0,0]=1
+                xs=[tensor(x,dt,path=='grad') for x in (q,k,v)]
+                prev=F.USE_FUSED_SOFTMAX; F.USE_FUSED_SOFTMAX=path=='fused'
+                try:
+                    with contextlib.nullcontext() if path=='grad' else TC.no_grad():
+                        o=F.scaled_dot_product_attention(*xs,is_causal=True,scale=1.)
+                        a=arr(o); assert np.isfinite(a).all() and np.all(a[0,0,0]==1) and np.all(a[0,0,1]==0)
+                        if path=='grad':
+                            o.sum().backward()
+                            for x in xs: assert np.isfinite(arr(x.grad)).all()
+                    return {'output':a[...,0],'backward':path=='grad'}
+                finally: F.USE_FUSED_SOFTMAX=prev
+            check(f'F1/{dt}/{score}/{path}',run)
+
+
+def fused_overflow():
+    # S2 has one -inf-only warp, S5 has a finite successor in the SAME warp.
+    for D in (64,96,128):
+        for S in (2,5):
+            for op in ('sdpa','int4_all','int4_partial_fp16'):
+                def run(D=D,S=S,op=op):
+                    q=np.zeros((1,1,1,D),np.float32); k=np.zeros((1,1,S,D),np.float32)
+                    v=np.ones_like(k); v[0,0,0]=0
+                    dt='float16' if op=='int4_partial_fp16' else 'float32'
+                    q[...,0]=2 if dt=='float16' else 1e20
+                    k[0,0,0,0]=-60000 if dt=='float16' else -1e20
+                    xs=[tensor(x,dt) for x in (q,k,v)]
+                    assert all(np.isfinite(arr(x)).all() for x in xs)
+                    with TC.no_grad():
+                        o=TC.fused_sdpa_noncausal(*xs,1.) if op=='sdpa' else TC.apa_int4_sdpa_noncausal(*xs,1.,O.Z,op=='int4_all')
+                    return finite_one(o)
+                check(f'N1/{op}/D{D}/S{S}',run)
+    # Explicit +/-inf and NaN rows are observations; no policy invented.
+    for label,ks in [('mixed_minus_inf',[-np.inf,0]),('all_minus_inf',[-np.inf,-np.inf]),
+                     ('mixed_plus_inf',[np.inf,0]),('mixed_nan',[np.nan,0])]:
+        def observe(label=label,ks=ks):
+            D=96; q=np.zeros((1,1,1,D),np.float32); q[...,0]=1
+            k=np.zeros((1,1,2,D),np.float32); k[0,0,:,0]=ks; v=np.ones_like(k)
+            with TC.no_grad(): o=TC.fused_sdpa_noncausal(*[tensor(x) for x in (q,k,v)],1.)
+            return {'observation_only':True,'output':arr(o),'finite':bool(np.isfinite(arr(o)).all())}
+        check('IEEE_fused_observation/'+label,observe)
+
+
+def definition():
+    for D in (64,96,128):
+        for dt in ('float32','bfloat16','float16'):
+            for L,S,causal in ((1,2,False),(3,9,True),(8,8,True),(64,97,True),(8,5,False),(2048,2048,True)):
+                def run(D=D,dt=dt,L=L,S=S,causal=causal):
+                    rng=np.random.default_rng(21+D+L+S)
+                    xs=[tensor(rng.normal(0,.2,(1,1,n,D)),dt) for n in (L,S,S)]
+                    rec={}; old=TC.where; oldq=Q._quantize_keys
+                    def wh(c,x,y): rec['sel']=arr(c); return old(c,x,y)
+                    def qk(*a,**kw): r=oldq(*a,**kw); rec['kq']=arr(r); return r
+                    TC.where=wh; Q._quantize_keys=qk
+                    try:
+                        with capture_definition_bulk(rec),TC.no_grad(): o=Q.apa_quant_attention(*xs,bulk_bits=4,refine_percentile=.15,is_causal=causal)
+                    finally: TC.where=old; Q._quantize_keys=oldq
+                    bulk=rec['bulk32']
+                    res=O.mismatch(rec['sel'],bulk,causal)
+                    assert res['out_of_band']==0 and res['invisible_selected']==0,res
+                    assert np.isfinite(arr(o)).all()
+                    return res
+                check(f'definition/{dt}/D{D}/{L}x{S}/{causal}',run)
+        for label,mag in [('large',1e20),('tiny',1e-30)]:
+            def attack(D=D,label=label,mag=mag):
+                q=np.zeros((1,1,1,D),np.float32); q[...,0]=mag
+                k=np.zeros((1,1,3,D),np.float32); k[0,0,:,0]=[1,2,3]
+                qt,kt=tensor(q),tensor(k)
+                bulk32=TC.matmul(qt,kt,alpha=1.,trans_b=True)
+                sel=Q._definition_selection(qt,kt,1.,O.Z,False,bulk32=bulk32)
+                bulk=arr(bulk32)
+                expected,thr,_,_=O.definition(bulk,False); res=O.mismatch(arr(sel),bulk,False)
+                assert res['out_of_band']==0, {'actual':arr(sel),'expected':expected,'threshold64':thr,**res}
+                return res
+            check(f'N2/{label}/D{D}',attack)
+    # Former cancellation witness must select every visible key exactly.
+    for L,S in ((1,1),(1,2),(1,256),(1,2048),(3,9)):
+        def constant(L=L,S=S):
+            b=np.full((1,1,L,S),1.4179840087890625,np.float32)
+            q=tensor(np.zeros((1,1,L,64))); k=tensor(np.zeros((1,1,S,64)))
+            sel=arr(Q._definition_selection(q,k,1.,O.Z,True,tensor(b)))!=0
+            assert np.array_equal(sel[0,0],O.visible(L,S))
+            return {'selected':int(sel.sum())}
+        check(f'F2/constant/{L}x{S}',constant)
+    cap=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_spq3/artifacts/apa_spq3/captures')
+    for model,layer in [('Qwen3-1.7B',16),('Qwen3-4B',21)]:
+        def real(model=model,layer=layer):
+            d=cap/model; man=json.loads((d/'manifest.json').read_text()); xs=[]; pins={}
+            for kind in 'qkv':
+                file=d/f'L{layer:02d}_{kind}.npy'; digest=hashlib.sha256(file.read_bytes()).hexdigest()
+                assert digest==man['files'][file.name]['sha256']; pins[kind]=digest
+                bits=np.load(file,mmap_mode='r'); sl=bits[0,-3:] if kind=='q' else bits[0]
+                xs.append(tensor((np.asarray(sl).astype(np.uint32)<<16).view(np.float32)[None,None],'bfloat16'))
+            rec={}; old=TC.where; oldq=Q._quantize_keys
+            def wh(c,x,y): rec['sel']=arr(c); return old(c,x,y)
+            def qk(*a,**kw): r=oldq(*a,**kw); rec['kq']=arr(r); return r
+            TC.where=wh; Q._quantize_keys=qk
+            try:
+                with capture_definition_bulk(rec),TC.no_grad(): out=Q.apa_quant_attention(*xs,bulk_bits=4,refine_percentile=.15,is_causal=True)
+            finally: TC.where=old; Q._quantize_keys=oldq
+            bulk=rec['bulk32']
+            res=O.mismatch(rec['sel'],bulk,True)
+            assert res['out_of_band']==0 and res['invisible_selected']==0 and np.isfinite(arr(out)).all(),res
+            return {'capture_sha256':pins,'geometry':[3,8192,128],**res}
+        check('definition_real_export/'+model,real)
+
+
+def short():
+    for D in (64,96,128):
+        for dt in ('float32','bfloat16','float16'):
+            for L,S in ((2,1),(8,5),(2048,2047)):
+                for grad in (False,True):
+                    def run(D=D,dt=dt,L=L,S=S,grad=grad):
+                        xs=zero_witness(L,S,D,dt,grad); count={'matmul':0,'quantizer':0}
+                        mm=TC.matmul; qk=Q._quantize_keys
+                        def mat(*a,**kw): count['matmul']+=1; return mm(*a,**kw)
+                        def qua(*a,**kw): count['quantizer']+=1; return qk(*a,**kw)
+                        TC.matmul=mat; Q._quantize_keys=qua
+                        try:
+                            with contextlib.nullcontext() if grad else TC.no_grad():
+                                for fn in [lambda:F._causal_mask(L,S,'cuda',dt),
+                                           lambda:F.scaled_dot_product_attention(*xs,is_causal=True),
+                                           lambda:Q.apa_quant_attention(*xs,is_causal=True)]:
+                                    try: fn()
+                                    except ValueError as e: assert 'S >= L' in str(e)
+                                    else: raise AssertionError('missing early rejection')
+                            assert count=={'matmul':0,'quantizer':0},count
+                            return count
+                        finally: TC.matmul=mm; Q._quantize_keys=qk
+                    check(f'F3/{dt}/D{D}/{L}x{S}/grad{grad}',run)
+    def noncausal():
+        xs=zero_witness(8,5,64)
+        with TC.no_grad(): o=F.scaled_dot_product_attention(*xs,is_causal=False)
+        assert np.isfinite(arr(o)).all(); return {'shape':list(o.shape)}
+    check('F3/noncausal_short_valid',noncausal)
+
+
+def masks():
+    for op in ('sdpa_grad','sdpa_infer','quant_full','quant_partial'):
+        def run(op=op):
+            q=np.zeros((1,1,3,64),np.float32); q[0,0,0,0]=2
+            k=np.zeros((1,1,9,64),np.float32); k[0,0,7,0]=60000
+            v=np.zeros_like(k); v[0,0,7]=1
+            xs=[tensor(x,'float16') for x in (q,k,v)]
+            with supplied(xs[1]), contextlib.nullcontext() if op=='sdpa_grad' else TC.no_grad():
+                o=F.scaled_dot_product_attention(*xs,is_causal=True,scale=1.) if op.startswith('sdpa') else Q.apa_quant_attention(*xs,bulk_bits=4,refine_percentile=1. if op=='quant_full' else .15,is_causal=True,scale=1.)
+            a=arr(o); assert np.isfinite(a).all() and np.all(a[0,0,0]==0),a
+            return {'row0':a[0,0,0,:3]}
+        check('F4/'+op,run)
+    # Rectangular and square bottom-right behavior + actual Gemma band helper.
+    for L,S in ((1,9),(3,9),(8,8),(64,97),(2048,2048)):
+        def run(L=L,S=S):
+            xs=zero_witness(L,S,64)
+            with TC.no_grad(): o=F.scaled_dot_product_attention(*xs,is_causal=True)
+            expected=(S-L+np.arange(L))/2
+            np.testing.assert_allclose(arr(o)[0,0,:,0],expected,rtol=0,atol=2e-4)
+            return {'first_last':arr(o)[0,0,[0,-1],0]}
+        check(f'geometry/{L}x{S}',run)
+    def band():
+        src=Path('/mnt/ForgeRealm/GraftRepository/core/gemma4_tc.py').read_text(); tree=ast.parse(src)
+        fn=next(x for x in tree.body if isinstance(x,ast.FunctionDef) and x.name=='_band_mask')
+        ns={'np':np,'tc':TC,'_band_cache':{}}; exec(compile(ast.Module(body=[fn],type_ignores=[]),'<GRM actual band helper>','exec'),ns)
+        xs=zero_witness(3,9,64); m=ns['_band_mask'](3,9,3,'cuda','float32')
+        with TC.no_grad(): o=F.scaled_dot_product_attention(*xs,attn_mask=m,scale=1.)
+        np.testing.assert_allclose(arr(o)[0,0,:,0],[5,6,7],rtol=0,atol=1e-5)
+        return {'output':arr(o)[0,0,:,0],'source':'GRM gemma4_tc.py actual _band_mask'}
+    check('GRM/sliding_actual_helper',band)
+
+
+def masks_geometry_observe():
+    # APA-MF2.2 adjudication (observation, no assertion): same operands as masks/geometry;
+    # records output sha + abs/rel error vs the exact expected mean (S-L+i)/2.
+    for L,S in ((1,9),(3,9),(8,8),(64,97),(2048,2048)):
+        def run(L=L,S=S):
+            xs=zero_witness(L,S,64)
+            with TC.no_grad(): o=F.scaled_dot_product_attention(*xs,is_causal=True)
+            a=arr(o); col=a[0,0,:,0].astype(np.float64); expected=(S-L+np.arange(L))/2
+            err=np.abs(col-expected); rel=err/np.maximum(np.abs(expected),1e-30)
+            return {'observation_only':True,'output_sha256':hashlib.sha256(a.tobytes()).hexdigest(),
+                    'max_abs_err':float(err.max()),'max_rel_err':float(rel[expected>0].max()) if (expected>0).any() else 0.0,
+                    'n_abs_gt_2e-4':int((err>2e-4).sum()),'max_expected':float(expected.max())}
+        check(f'geometry_observe/{L}x{S}',run)
+
+
+def n2_full_api_before():
+    # APA-MF2.2 adjudication: the review N2 full-API witness through apa_quant_attention's own
+    # selection (last tc.where condition) -- runs on every revision (no _definition_selection hook).
+    for D in (64,96,128):
+        for label,mag in [('large',1e20),('tiny',1e-30)]:
+            def run(D=D,mag=mag):
+                q=np.zeros((1,1,1,D),np.float32); q[...,0]=mag
+                k=np.zeros((1,1,3,D),np.float32); k[0,0,:,0]=[1,2,3]
+                rec={}; old=TC.where; oldq=Q._quantize_keys
+                def wh(c,x,y): rec['sel']=arr(c); return old(c,x,y)
+                def qk(*a,**kw): r=oldq(*a,**kw); rec['kq']=r; return r
+                TC.where=wh; Q._quantize_keys=qk
+                try:
+                    with TC.no_grad(): Q.apa_quant_attention(tensor(q),tensor(k),tensor(np.ones_like(k)),bulk_bits=4,refine_percentile=.15,is_causal=False,scale=1.)
+                finally: TC.where=old; Q._quantize_keys=oldq
+                bulk=arr(TC.matmul(tensor(q),rec['kq'],alpha=1.,trans_b=True))
+                res=O.mismatch(rec['sel'],bulk,False)
+                assert res['out_of_band']==0,{'actual':rec['sel'],**res}
+                return res
+            check(f'N2_full_api/{label}/D{D}',run)
+
+
+def reductions():
+    for dt in ('float32','bfloat16','float16'):
+        for trailing in (False,True):
+            for R in (1,2,7,300,1025):
+                def run(dt=dt,trailing=trailing,R=R):
+                    a=np.random.default_rng(R).normal(0,.7,(2,R)).astype(np.float32)
+                    if not trailing: a=a.T.copy()
+                    x=tensor(a,dt); axis=1 if trailing else 0
+                    # Max/min forward and genuine tie-distributed backward.
+                    for mode in ('max','min'):
+                        leaf=tensor(a,dt,True); out=getattr(leaf,mode)([axis],True)
+                        expected=getattr(np,mode)(arr(leaf),axis=axis,keepdims=True)
+                        np.testing.assert_array_equal(arr(out),expected)
+                        out.sum().backward(); assert np.isfinite(arr(leaf.grad)).all()
+                    return {'R':R,'dtype':dt,'trailing':trailing}
+                check(f'reduce/{dt}/R{R}/trailing{trailing}',run)
+    for label,row in [('empty',[]),('all_minus_inf',[-np.inf]*3),('all_plus_inf',[np.inf]*3),
+                      ('all_nan',[np.nan]*3),('mixed_nan',[np.nan,-2,3]),('mixed_inf',[-np.inf,2,np.inf]),
+                      ('extreme_neg',[-3.402e38,-np.finfo(np.float32).max]),
+                      ('extreme_pos',[3.402e38,np.finfo(np.float32).max])]:
+        for trailing in (False,True):
+            def observe(label=label,row=row,trailing=trailing):
+                a=np.asarray([row],np.float32); a=a if trailing else a.T.copy(); axis=1 if trailing else 0
+                x=tensor(a); out={m:arr(getattr(x,m)([axis],True)) for m in ('max','min')}
+                # Empty and all-NaN have identity outputs because comparator ignores NaN.
+                if label in ('empty','all_nan'):
+                    assert np.isneginf(out['max']).all() and np.isposinf(out['min']).all()
+                if label=='extreme_neg': assert np.all(out['max']==np.float32(-3.402e38))
+                if label=='extreme_pos': assert np.all(out['min']==np.float32(3.402e38))
+                return {'observation':out}
+            check(f'special_reduce/{label}/trailing{trailing}',observe)
+    def losses():
+        x=tensor([[1,2,3],[3,1,-2]],grad=True); out=x.log_softmax(-1)
+        a=arr(x).astype(np.float64); ref=a-a.max(-1,keepdims=True); ref-=np.log(np.exp(ref).sum(-1,keepdims=True))
+        np.testing.assert_allclose(arr(out),ref,rtol=1e-5,atol=1e-6)
+        out.sum().backward(); assert np.isfinite(arr(x.grad)).all()
+        return {'log_softmax':arr(out),'backward_finite':True}
+    check('caller/log_softmax_losses',losses)
+    def downstream():
+        # Normalization/clamp/pooling are independent from max/min reduction;
+        # record values for separate-process exact identity checks as well.
+        x=tensor(np.arange(16,dtype=np.float32).reshape(1,1,4,4)/10,grad=True)
+        n=(x-x.mean([-1],True))/(x.var([-1],True)+1e-5).sqrt()
+        c=x.clamp(.2,.8); p=TC._C.max_pool2d(x,2,2,2,2,0,0)
+        for y in (n,c,p): assert np.isfinite(arr(y)).all()
+        return {'normalization':arr(n),'clamp':arr(c),'pool':arr(p),'generic_reduce_dependence':False}
+    check('caller/normalization_clamp_pool',downstream)
+    def scales():
+        x=tensor(np.random.default_rng(8).normal(0,.2,(1,1,3,96)))
+        codes,scale=TC.kv_int4_pack(x,32)
+        expected=np.abs(arr(x).reshape(1,1,3,3,32)).max(-1)/8+1e-8
+        np.testing.assert_array_equal(arr(scale),expected)
+        assert np.isfinite(arr(scale)).all()
+        return {'scales':arr(scale),'code_shape':list(codes.shape)}
+    check('caller/kv_int4_pack_absmax',scales)
+    def residuals():
+        a=np.array([-np.finfo(np.float32).max,-3.402e38],np.float32)
+        x=tensor(a[None]); index=int(x.argmax(-1).numpy().reshape(-1)[0])
+        pool=TC._C.max_pool2d(tensor(a[:1].reshape(1,1,1,1)),1,1,1,1,0,0)
+        return {'observation_only':True,'argmax_actual':index,'argmax_expected':1,
+                'maxpool_actual':arr(pool),'maxpool_expected':a[:1],'pre_existing':True}
+    check('caller/independent_index_pool_extreme_residuals',residuals)
+    def ce():
+        x=tensor([[1,2,3],[3,1,-2]],grad=True)
+        loss=TC.cross_entropy(x,np.array([2,0],np.int64)); loss.backward()
+        assert np.isfinite(arr(loss)).all() and np.isfinite(arr(x.grad)).all()
+        return {'loss':arr(loss),'backward_finite':True}
+    check('caller/cross_entropy',ce)
+
+
+def training():
+    sys.path.insert(0,'/mnt/ForgeRealm/GRAPA-Native-LLM')
+    from grapa.attention import GQAAttention
+    from grapa.attention_mla import MLAAttention
+    from grapa.model import GRAPAConfig
+    from grapa.model_mla import MLAConfig200
+    for cls in (GQAAttention,MLAAttention):
+        cfg=GRAPAConfig() if cls is GQAAttention else MLAConfig200()
+        for L in (3,64,256):
+            for p in (1.,.15):
+                def run(cls=cls,L=L,p=p):
+                    np.random.seed(211); attn=cls(cfg)
+                    rope=cfg.head_dim if cls is GQAAttention else cfg.qk_rope_dim
+                    cs,ss=F.rope_tables(L,rope,'cuda',base=cfg.rope_base)
+                    x=tensor(np.random.default_rng(L).normal(0,.3,(1,L,cfg.d_model)),grad=True)
+                    o=attn(x,cs,ss,refine_percentile=p); assert np.isfinite(arr(o)).all()
+                    o.sum().backward(); assert np.isfinite(arr(x.grad)).all()
+                    grads=[t.grad for t in attn.parameters() if t.grad is not None]
+                    assert grads and all(np.isfinite(arr(g)).all() for g in grads)
+                    return {'shape':list(o.shape),'parameter_grads':len(grads),'input_grad_finite':True,
+                            'kernel_selection_equivalence_gated':False}
+                check(f'GRAPA/{cls.__name__}/L{L}/p{p}',run)
+    for dt in ('float32','bfloat16','float16'):
+        for D in (64,96,128):
+            for L,S in ((8,8),(3,9)):
+                def native(dt=dt,D=D,L=L,S=S):
+                    rng=np.random.default_rng(21+L+D)
+                    xs=[tensor(rng.normal(0,.2,(1,1,n,D)),dt,True) for n in (L,S,S)]
+                    kq=xs[1].detach()
+                    o=TC.apa_selective_train(xs[0],xs[1],kq,xs[2],D**-.5,O.Z,True)
+                    assert np.isfinite(arr(o)).all(); o.sum().backward()
+                    assert all(x.grad is not None and np.isfinite(arr(x.grad)).all() for x in xs)
+                    return {'shape':list(o.shape),'dtypes':dt,'forward_backward_finite':True,
+                            'kernel_statistics_not_definition_gated':True}
+                check(f'GRAPA_native_train/{dt}/D{D}/{L}x{S}',native)
+
+
+def identity_values():
+    """Runs in ONE revision-specific process. Ordinary finite domain only.
+
+    Prior art: differential testing (McKeeman, 1998), byte-level comparison
+    on identical fixed operands. Mine: source-pinned subprocess isolation.
+    """
+    rec={}
+    def put(name,t):
+        a=arr(t); assert np.isfinite(a).all(),name
+        rec[name]={'sha256':hashlib.sha256(a.tobytes()).hexdigest(),'shape':list(a.shape),'dtype':t.dtype}
+    for dt in ('float32','bfloat16','float16'):
+        for L,S,D in ((1,9,64),(3,9,96),(8,8,128),(64,97,64),(256,257,96)):
+            rng=np.random.default_rng(D+L+S); raw=[rng.normal(0,.2,(1,1,n,D)).astype(np.float32) for n in (L,S,S)]
+            key=f'{dt}/{L}x{S}/D{D}'
+            for grad in (False,True):
+                xs=[tensor(x,dt,grad) for x in raw]
+                with contextlib.nullcontext() if grad else TC.no_grad():
+                    o=F.scaled_dot_product_attention(*xs,is_causal=True); put(key+f'/sdpa/{grad}',o)
+                    if grad:
+                        o.sum().backward()
+                        for kind,x in zip('qkv',xs): put(key+'/d'+kind,x.grad)
+            for trailing in (False,True):
+                a=rng.normal(0,1,(2,300)).astype(np.float32); a=a if trailing else a.T.copy()
+                x=tensor(a,dt)
+                for mode in ('max','min'): put(key+f'/{mode}/{trailing}',getattr(x,mode)([1 if trailing else 0],True))
+            x=tensor(raw[0],dt,True); y=x.log_softmax(-1); put(key+'/log_softmax',y)
+            y.sum().backward(); put(key+'/log_softmax_grad',x.grad)
+            # Full-refine uses changed masking, independent of semantic item3.
+            with TC.no_grad(): put(key+'/quant_p1',Q.apa_quant_attention(*[tensor(x,dt) for x in raw],bulk_bits=4,refine_percentile=1.,is_causal=True))
+            with TC.no_grad():
+                put(key+'/causal_softmax',TC.causal_softmax(TC.matmul(*[tensor(x,dt) for x in raw[:2]],alpha=D**-.5,trans_b=True)))
+                im=tensor(rng.normal(0,.2,(1,1,4,4)),dt)
+                put(key+'/clamp',im.clamp(-.1,.1))
+                # APA-MF2.2 adjudication switch (default OFF == reviewer behavior): the engine's
+                # max_pool2d takes fp32/fp16 only ('conv/pool: float32/float16 only'); with
+                # APA_MF2_2_SKIP_BF16_POOL=1 the bf16 pool key is not recorded on ANY arm.
+                if not (dt=='bfloat16' and os.environ.get('APA_MF2_2_SKIP_BF16_POOL')=='1'):
+                    put(key+'/pool',TC._C.max_pool2d(im,2,2,2,2,0,0))
+                put(key+'/normalization',(im-im.mean([-1],True))/(im.var([-1],True)+1e-5).sqrt())
+                codes,scales=TC.kv_int4_pack(tensor(raw[1],dt),32)
+                put(key+'/kv_int4_codes',codes); put(key+'/kv_int4_scales',scales)
+    for dt in ('float32','float16'):
+        for D in (64,96,128):
+            for S in (1,2,3,9,200):
+                rng=np.random.default_rng(D+S); xs=[tensor(rng.normal(0,.2,(1,1,n,D)),dt) for n in (3,S,S)]
+                with TC.no_grad():
+                    put(f'fused/{dt}/D{D}/S{S}',TC.fused_sdpa_noncausal(*xs,D**-.5))
+                    for full in (False,True): put(f'int4/{dt}/D{D}/S{S}/{full}',TC.apa_int4_sdpa_noncausal(*xs,D**-.5,O.Z,full))
+    # Real faithful exported operands, one q/kv head, long-prefix prefill + decode.
+    cap=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_spq3/artifacts/apa_spq3/captures')
+    for model,layer in [('Qwen3-1.7B',16),('Qwen3-4B',21)]:
+        d=cap/model; man=json.loads((d/'manifest.json').read_text())
+        for L in (1,3,64):
+            xs=[]
+            for kind in 'qkv':
+                file=d/f'L{layer:02d}_{kind}.npy'
+                assert hashlib.sha256(file.read_bytes()).hexdigest()==man['files'][file.name]['sha256']
+                bits=np.load(file,mmap_mode='r'); sl=bits[0,-L:] if kind=='q' else bits[0]
+                xs.append(tensor((np.asarray(sl).astype(np.uint32)<<16).view(np.float32)[None,None]))
+            with TC.no_grad(): put(f'real/{model}/L{L}/S8192',F.scaled_dot_product_attention(*xs,is_causal=L>1))
+    return rec
+
+
+def identity_driver(cell):
+    revs=['048949d','c5c468d'] if cell=='identity_mf2' else ['fd32b6d','048949d','c5c468d']
+    # APA-MF2.2 copy: APA_MF2_2_IDENTITY_REVS='a,b,...,after' overrides (last = after arm)
+    if os.environ.get('APA_MF2_2_IDENTITY_REVS'): revs=os.environ['APA_MF2_2_IDENTITY_REVS'].split(',')
+    AFTER=revs[-1]
+    results={}; engines={'048949d':os.environ['APA_MF21REV_BEFORE_ENGINE'],
+                        'fd32b6d':os.environ['APA_MF21REV_PRODUCTION_ENGINE'],
+                        'c5c468d':os.environ['APA_MF21REV_AFTER_ENGINE'],
+                        'mf2_2':os.environ.get('APA_MF2_2_ENGINE_MF2_2','')}
+    pkgs=json.loads(os.environ['APA_MF2_2_PKGS'])
+    for rev in revs:
+        env=os.environ.copy(); env['APA_MF21REV_REV']=rev; env['APA_MF21REV_ENGINE']=engines[rev]
+        env['APA_MF21REV_PKG']=pkgs[rev]
+        env['PYTHONPATH']=engines[rev]+':'+env['APA_MF21REV_PKG']
+        p=subprocess.run([sys.executable,__file__,'_identity_arm'],env=env,timeout=180,check=False)
+        assert p.returncode==0,f'identity arm failed: {rev}, exit {p.returncode}'
+        results[rev]=json.loads((ART/f'gpu_identity_arm_{rev}_{env["APA_MF21REV_RUN"]}.json').read_text())
+    after=results[AFTER]
+    for rev in revs:
+        if rev==AFTER: continue
+        before=results[rev]
+        assert before['provenance']['engine_sha256']!=after['provenance']['engine_sha256'],'same NEW engine used on both arms'
+        assert before['values'].keys()==after['values'].keys(),'unequal key coverage'
+        mismatches=[k for k in before['values'] if before['values'][k]!=after['values'][k]]
+        check('separate_process_identity/'+rev,lambda mismatches=mismatches,rev=rev:
+              assert_identity(mismatches,len(before['values']),rev))
+
+
+def assert_identity(mismatches,count,rev):
+    assert not mismatches,mismatches
+    return {'baseline':rev,'matched_tensors':count,'engine_hashes_different':True,
+            'domain':'ordinary finite, no intentional extreme fix rows; partial quant selection not byte-gated'}
+
+
+def extension():
+    # Official module only; no author stand-in imports or build by this reviewer.
+    import torch
+    modpath=Path(os.environ['APA_MF21REV_EXTENSION_MODULE']).resolve()
+    assert 'stub' not in str(modpath).lower(),'stand-in rejected'
+    manifest=json.loads(Path(os.environ['APA_MF21REV_EXTENSION_MANIFEST']).read_text())
+    assert manifest['apa_cpp_sha256']==hashlib.sha256((ROOT/'apa_cuda/csrc/apa.cpp').read_bytes()).hexdigest()
+    assert manifest['module_sha256']==hashlib.sha256(modpath.read_bytes()).hexdigest()
+    assert manifest['official_cuda_kernels'] is True
+    assert manifest['apa_kernels_sha256']==hashlib.sha256((ROOT/'apa_cuda/csrc/apa_kernels.cu').read_bytes()).hexdigest()
+    sys.path.insert(0,str(modpath.parent)); import apa_attention_cuda as ext
+    assert Path(ext.__file__).resolve()==modpath
+    def fwd(q,k,v,causal=True):
+        D=q.shape[-1]; rot=torch.eye(D,device='cuda')[None]
+        return ext.forward(q,k,v,rot,torch.zeros(1,device='cuda'),torch.empty(0,device='cuda'),
+                           1.,causal,None,1.,0.,64,False,False)[0]
+    for L,S in ((8,5),(3,2),(2,1)):
+        def run(L=L,S=S):
+            q=torch.zeros((1,1,L,64),device='cuda'); k=torch.zeros((1,1,S,64),device='cuda')
+            try: fwd(q,k,k)
+            except RuntimeError as e: assert 'S >= L' in str(e)
+            else: raise AssertionError('forward missing S<L rejection')
+            mask=torch.zeros((1,1,L,S),dtype=torch.uint8,device='cuda')
+            try: ext.backward(torch.ones_like(q),q,k,k,k,mask,1.,True,None,False,64)
+            except RuntimeError as e: assert 'S >= L' in str(e)
+            else: raise AssertionError('backward missing S<L rejection')
+            return {'forward_backward_rejected':True}
+        check(f'official_extension/short/{L}x{S}',run)
+    for L,S in ((3,3),(3,9)):
+        def run(L=L,S=S):
+            q=torch.zeros((1,1,L,64),device='cuda'); q[...,0]=1
+            k=torch.zeros((1,1,S,64),device='cuda'); k[0,0,0,0]=-2e9
+            v=torch.zeros_like(k); v[0,0,0]=1
+            out=fwd(q,k,v); assert torch.isfinite(out).all()
+            if L==S: assert torch.all(out[0,0,0]==1),'finite -1e9 fill reversion'
+            return {'output':out[0,0,:,0].cpu().numpy()}
+        check(f'official_extension/F4_negative/{L}x{S}',run)
+    def rectangular():
+        q=torch.zeros((1,1,3,64),device='cuda'); k=torch.zeros((1,1,9,64),device='cuda')
+        v=torch.arange(9,device='cuda',dtype=torch.float32)[None,None,:,None].expand_as(k).contiguous()
+        out=fwd(q,k,v); np.testing.assert_allclose(out[0,0,:,0].cpu().numpy(),[3,3.5,4],atol=1e-6,rtol=0)
+        return {'rectangular_output':[3,3.5,4]}
+    check('official_extension/rectangular_mask',rectangular)
+
+
+def main():
+    global TC,F,Q,INFO
+    cell=sys.argv[1]
+    # Device discovery is lead-only; this script is not imported by CPU tests.
+    p=subprocess.run(['nvidia-smi','--query-gpu=driver_version','--format=csv,noheader'],capture_output=True,text=True,check=True)
+    assert set(p.stdout.split())=={'595.91.07'}, 'native driver must be 595.91.07, got '+p.stdout
+    TC,F,Q,INFO=verify(); print(json.dumps({'provenance':INFO,'driver':p.stdout.strip()}),flush=True)
+    if cell=='_identity_arm':
+        values=identity_values()
+        with (ART/f'gpu_identity_arm_{INFO["revision"]}_{os.environ["APA_MF21REV_RUN"]}.json').open('x') as f:
+            json.dump({'provenance':INFO,'values':values},f,indent=2)
+        return
+    if cell in ('identity','identity_mf2'): identity_driver(cell)
+    else: globals()[cell]()
+    result={'cell':cell,'provenance':INFO,'evidence_class':'actual CUDA execution by lead',
+            'rows':ROWS,'passed':bool(ROWS) and all(r['passed'] for r in ROWS)}
+    with (ART/f'gpu_{cell}_{os.environ["APA_MF21REV_RUN"]}.json').open('x') as f: json.dump(O.encode(result),f,indent=2,allow_nan=False)
+    sys.exit(0 if result['passed'] else 1)
+
+
+if __name__=='__main__': main()

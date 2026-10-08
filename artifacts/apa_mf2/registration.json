@@ -1,0 +1,86 @@
+{
+  "order": "orders/APA_MF2_EXACT_RULE_MASK_LEAK_EXTENSION.md",
+  "order_sha256": "9272c0149f7559d6166530c8812c15b298aef745e1cbde958fc4e64b28dcb90f",
+  "seat": "Claude Opus 5.5, high effort, Agent-tool subagent (GPU)",
+  "written_at": "2026-10-07T15:43-04:00",
+  "written_before_any_gpu_gate": true,
+  "disclosure_pre_registration_design_probe": {
+    "what": "Design probe P0 ran on the GPU BEFORE this registration. It is not a gate. It asked whether a composed engine-op rule can be bit-identical to BK4 at all, and it fixed no threshold (every threshold below is the order's).",
+    "receipts": [
+      "logs/apa_mf2_p0_probe_1p7b_L16_L64_b8.log sha256 5a256277422a57c6d757593f41f19fad72be3339611b136e07394367a7ef4d48",
+      "logs/apa_mf2_p0_probe_1p7b_L16_L2048_b8.log sha256 97a779a49085835d2ce77118e225e154c679dc84287abcc6deaf7ef217ef0967",
+      "scripts/apa_mf2_bk4emu.py sha256 4e8c7666afb905129c853e3abb6c1861c7a0ed51824272d5e7d12f8ff9b88f5c",
+      "scripts/apa_mf2_probe_p0.py sha256 b18188cdb7751df67ebbfdf16efc6abcc7dbbef440bfa8d68b25d7b11963b5ca"
+    ],
+    "findings_known_at_registration": [
+      "An fp32 transcription of BK4's compiled arithmetic (SASS: FADD sums, FFMA squares, IEEE div, FFMA var and th), fed BK4's own WMMA dots (extracted through its thr output at S=L=1, scale 1, z 0), reproduces BK4 thr bits and mask exactly: 0/4096 rows and 0/33554432 mask entries (Qwen3-1.7B L16, L2048, bulk 8, 2 KV heads).",
+      "The engine's fp32 matmul (cublasSgemmStridedBatched) differs bitwise from BK4's bf16 WMMA dot in 25068385/33554432 entries. Even with a perfect transcription of the statistics on SGEMM dots, 2 mask entries differ from 'h'.",
+      "BK4 'h' and the shipped 'a' kernel disagree with each other on 15 mask entries and on 3980/4096 thr bit patterns in the same cell.",
+      "Seat expectation, therefore: G2 fp32 exactness vs 'h' is likely RED on large real cells. The residual is R1 (dot bits), which needs a kernel or engine change (out of scope). That is the order's stop-and-report rail."
+    ]
+  },
+  "base": {
+    "branch": "apa-mf2 (= apa-mf1 42e19e6, MF1 A+B)",
+    "before_copies": "artifacts/apa_mf2/before/mf1_AB/SHA256SUMS (quant.py 74420d2b.., functional.py 418ee285.., apa.cpp 6c237950.., test_apa_phase6.py 0e01d13f..); artifacts/apa_mf2/before/prod_fd32b6d/SHA256SUMS (quant.py f5ceea6a.., functional.py 418ee285.. = unchanged by MF1)",
+    "engine_build": "artifacts/apa_mf2/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so sha256 8ca4de6c9d8aecfd5129a45794ba309254fa3bcaa35ba5eb54b69a69b6c0908a; NOT equal to MF1's 8a13e5b3...cc437. Sources 19/19 identical; kernels.o and matmul.o SASS identical after normalizing nvcc module-id strings (logs/apa_mf2_build_provenance.log). The C++/CUDA engine is unchanged by MF2; every arm in this order runs on this one binary.",
+    "driver": "native 595.91.07; the 595.84 override is never set (scripts/apa_mf2_env.sh refuses it)"
+  },
+  "definitions": {
+    "visible": "row i of L queries sees key j iff j <= S-L+i (bottom-right; 63960a4; Dao 2023). Non-causal: all j.",
+    "bk4_rule": "kernels.cu:8064-8077,8112-8114: count_i = S-L+i+1 (causal) or S; a_ij = |fl32(dot_ij*scale)| over visible j; mean = sum a/count; var = max(sum a^2/count - mean^2, 0); th = mean + z*sqrt(var); sel = visible && a >= th. z = _norm_ppf(1-p).",
+    "kernel_masks": "tc._C.bp_kernel_4_diagnostic(q,k,kq,v,scale,z,causal,variant)[3] for variant 'h' (bk4::forward, kernels.cu:8027) and 'a' (apa_selective_fwd_train + a_mask). Kernel thr = [2]. BF16 operands only (kernels.cu:8163).",
+    "identical_operands": "q, k, kq, v are the same bf16 values for the kernel and the composed rule. kq is quant._quantize_keys of the bf16 K: bf16, the kernel's kq, as in MF1. The composed rule receives their exact fp32 upcasts.",
+    "fp32_item1_cell": "The selection produced by quant.py's rule in fp32 arithmetic on identical operands. Realized (i) as the selection helper on fp32 tensors holding the bf16 values, and (ii) as apa_quant_attention on bf16 tensors (selection captured at the tc.where condition). (i) and (ii) must be identical (plumbing check, exact).",
+    "agreement": "1 - mismatches / (L*S*heads), over ALL L x S entries (visible and invisible); mismatches also reported over visible only. Gated vs 'h'; 'a' reported, not gated, because 'h' and 'a' disagree with each other (P0).",
+    "tie_band": "|a - thr| <= 2e-5*max(1,|thr|), thr = kernel thr ('h') where a kernel exists, else my fp64 oracle thr.",
+    "oracle": "scripts/apa_mf2_bk4emu.py rule_fp64: fp64 numpy written from the definition. It never imports MF1's or the reviewer's helpers."
+  },
+  "census": {
+    "real": "captures tensor_fork_apa_wt_spq3/artifacts/apa_spq3/captures: Qwen3-1.7B layers {0,16,27} (16q/8kv, D128) and Qwen3-4B layers {0,21,35} (32q/8kv, D128), S=8192, bf16. Last L query rows, L in {64,512,2048}, bulk {4,8}, p 0.15, causal. One query head per KV head (heads 0,g,2g,..; kq shared), as MF1. 2 x 3 x 3 x 2 = 36 cells. Arms: before = MF1 A+B quant.py + MF1 functional.py (from artifacts/apa_mf2/before/mf1_AB); after = MF2 tree.",
+    "synthetic": "L in {1,3,64,513}, S in {L,L+1,4L+5}, D in {64,96,128}; B=1, H=KVH=2; N(0,0.5) values rounded to bf16; bulk 8; p 0.15; causal and non-causal: 72 cells. Plus review cases B1 (bf16 supplied Kq), B2 (non-causal one-pass vs centered), B3 (Q=K=0, L3 S9).",
+    "leak": "Reviewer N1 (fp32 L3 S9 D64; Q=e0 every row; K7=80008e0; V7=1; refine 1; scale 1/8) plus a sweep: the masked-key score M at one masked key, other scores 0, V nonzero only on that key. fp32 M in {1e3,9.9e3,1e4,1.0001e4,2e4,1e5,1e6,1e10,1e20,1e30}; bf16 M in {1e3,1e4,1e5,1e10,1e30,3.3e38}; fp16 M in {1e3,1e4,2e4,6e4,65504}. Shapes L3 S9 and L=S=9. Paths: SDPA grad-off (causal_softmax), SDPA grad-on (composed softmax), apa_quant_attention refine 1.0 and 0.15.",
+    "byte_identity_real": "Qwen3-1.7B L16 and Qwen3-4B L21: 4 query heads with their KV heads expanded; L in {64,512}, S=8192 (rectangular) and L=S=512 (square, first 512 positions); fp32/bf16/fp16 (bf16 values cast); SDPA grad-off and grad-on (output and dq/dk/dv), apa_quant_attention p 0.15 and 1.0 with quant.py X in {MF1 A+B, MF2}. Before arm = before functional.py loaded from artifacts/apa_mf2/before/mf1_AB; after arm = tree functional.py."
+  },
+  "gates": {
+    "G1": "tensor_cuda/tests full suite: python3 -m pytest tensor_cuda/tests -q -p no:cacheprovider --ignore=tensor_cuda/tests/test_selector_accuracy.py -rfE. The FAILED/ERROR id set must equal the 52 ids in tensor_fork_apa_wt_mf1/logs/apa_mf1_g1_baseline_unchanged.log. test_apa_phase6::test_apa_causal must PASS. New tensor_cuda/tests/test_apa_mf2_*.py run as part of the suite and must pass. apa_cuda tests: pass/skip/fail counts equal or improved vs before (same environment).",
+    "G2": {
+      "G2a_fp32_exact": "In every real cell (36) and every synthetic cell (72), the fp32 item-1 selection equals the 'h' diagnostic mask exactly: mismatches == 0, agreement == 1.0. No tie band.",
+      "G2b_bf16_fp16_band": "apa_quant_attention on bf16 operands vs 'h' (identical operands), and on fp16 operands vs the fp64 oracle on the call's own operands (no fp16 kernel exists): every mismatch lies inside the tie band, and all are counted.",
+      "G2c_review_cases": "B1, B2 and B3 are RED on before (MF1 A+B) and GREEN on after. GREEN means the after selection equals the 'h' kernel mask on the case's operands. For B3 that is exactly 24 selected entries, all visible.",
+      "plumbing": "(i) == (ii) exactly in every synthetic and real cell."
+    },
+    "G3": {
+      "leak": "On after, every query row that cannot see the adversarial key gets output exactly 0.0 (bitwise) for every M, dtype, shape and path. Rows that can see it stay finite. Before (fd32b6d and MF1 A+B) is expected RED for M large enough to beat the bias.",
+      "byte_identity": "Every realistic arm in census.byte_identity_real is bytewise equal, before vs after (outputs; SDPA grad-on also dq/dk/dv). GRM Qwen3-1.7B standard-mode logits are bytewise equal, before functional vs after functional, on one wikitext-2 window: prefill 8192 tokens in 512-token chunks, then 32 teacher-forced steps. The GRAPA GQAAttention forward is bytewise equal before vs after on small real-shaped inputs (refine 1.0 SDPA path and the force_selective composed path; grad on and off), GRAPA imported read-only.",
+      "finite": "No NaN or Inf in any S >= L output of the above (after arm)."
+    },
+    "G4": "apa_cuda builds in place (python3 setup.py build_ext --inplace) and probe red-extension (reviewer copy) passes, with apa_cuda tests run before and after. OR the build failure is recorded verbatim and item 3 is labeled source-verified only. If the build fails, the seat may additionally execute the shipped apa.cpp through a C++-only torch extension with apa_kernels.cu replaced by an ATen transcription. That is labeled 'stub-harness execution, not the shipped extension' and never reported as a G4 build PASS.",
+    "mutation": ">= 6 registered mutants (list below), applied only to scratch copies of the package (sources never edited), run against the MF2 gate tests after a passing baseline. Killed / non-error >= 0.80. A runtime/import error is not a kill. Survivors are named.",
+    "sanity": "Every anomaly gets a one-line explanation in the ledger."
+  },
+  "mutants": [
+    "M1 bf16 bulk restored for the statistics (stats on the stored-dtype bulk, not the fp32 dot)",
+    "M2 visible predicate dropped (selection = |b| >= thr everywhere)",
+    "M3 sample variance (divide the centered sum of squares by count-1)",
+    "M4 _causal_mask bias back to -1e4",
+    "M5 apa.cpp causal mask back to top-left (ri without S-L)",
+    "M6 kernel-rule count off by one (count = S-L+i)",
+    "M7 '>' instead of '>=' in the selection",
+    "M8 clamp dropped (var not clamped at 0)",
+    "M9 non-causal branch back to centered mean/std (B2 regression)"
+  ],
+  "predictions": {
+    "lead_P1": "fp32 item-1 agreement goes from about 0.9987-0.9995 to exactly 1.0",
+    "lead_P2": "the item-2 change is byte-identical on every realistic input",
+    "lead_P3": "GRM 'apa' chunked KL vs standard moves by less than 5% relative to MF1 A+B",
+    "seat_S1": "P1 partly misses: agreement rises to >= 0.999999 in every real cell, but is exactly 1.0 only in cells where no entry falls in the ulp gap. Every mismatch lies inside the 2e-5 tie band (R1).",
+    "seat_S2": "P2 holds: byte-identical on every realistic arm",
+    "seat_S3": "P3 holds",
+    "seat_S4": "The apa_cuda extension fails to build: torch 2.11 is cu130, only CUDA 12.x nvcc is installed (12.0, 12.6), and cpp_extension raises on a major-version mismatch"
+  },
+  "rails": [
+    "Exact BK4 match impossible without a kernel/engine change: stop iterating, report the residual, keep the faithful rule components (fp32 unrounded bulk, one-pass population moments with division by count, clamp, IEEE sqrt, visible predicate, >=). No sequential-order or host-emulation knob beyond that.",
+    "Any frozen output that moves, outside the intended item-1 selection change, is a STOP-and-report.",
+    "If item 2 needs a kernel change: STOP item 2 and report."
+  ]
+}

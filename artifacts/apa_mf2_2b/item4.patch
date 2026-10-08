@@ -1,0 +1,99 @@
+--- a/tensor_cuda/tensor_cuda/functional.py	2026-10-07 19:46:57.676186493 -0400
++++ b/tensor_cuda/tensor_cuda/functional.py	2026-10-07 19:56:10.500321442 -0400
+@@ -73,6 +73,54 @@
+     return m
+ 
+ 
++_NEG_FLT_MAX = -3.4028234663852886e38    # -FLT_MAX: only -inf compares below it (NaN never does)
++_GUARD_CONST = {}
++
++
++def _guard_const(value, like):
++    """Cached broadcastable (1,..,1) constant in `like`'s dtype/device (APA-MF2.2 Amendment 2)."""
++    key = (value, like.dtype, like.device, len(like.shape))
++    c = _GUARD_CONST.get(key)
++    if c is None:
++        c = tc.tensor(np.full((1,) * len(like.shape), value, np.float32),
++                      device=like.device.split(":")[0], dtype=like.dtype)
++        _GUARD_CONST[key] = c
++    return c
++
++
++def _blocked_rows(scores, invisible=None):
++    """APA-MF2.2 Amendment 2: (..., L, 1) 0/1 in scores' dtype, 1 iff EVERY entry of the row is -inf.
++
++    `invisible` (a nonzero == masked (L, S) mask) marks entries the softmax never reads (the
++    causal_softmax kernel path); they count as blocked. NaN entries compare false, so a row with
++    a NaN score is never 'blocked' and keeps its NaN (the order: rows containing NaN may stay NaN).
++    """
++    ind = scores.__lt__(_NEG_FLT_MAX)
++    if invisible is not None:
++        ind = tc._C.where(invisible, _guard_const(1.0, ind), ind)
++    return ind.min([-1], True)
++
++
++def _guarded_softmax(scores, softmax, invisible=None):
++    """APA-MF2.2 Amendment 2 (lead decision, option b): a row whose every score is -inf (every
++    visible key blocked, or every key masked) gets weight 0 -- output 0 -- instead of
++    softmax(all -inf) = 0/0 = NaN, which in a left-padded batch reaches the next layer's K/V and
++    poisons the other rows' PV (0 x NaN). The blocked row's scores are first replaced by 0, so the
++    softmax and its backward stay finite, then its weights are multiplied by 0 (dq = 0 there).
++    Every other row sees a no-op select and x * 1: bytes and gradients unchanged. The -inf
++    predicate mask stays (a finite additive mask would re-open F4).
++    The selects use the engine primitive tc._C.where, not Tensor.masked_fill / tc.where: the MF1
++    and MF2.1 tests observe apa_quant_attention's selection as the LAST masked_fill (stats mask)
++    and the LAST tc.where (refine) of the call, and this guard runs after both.
++    Prior art: FlashAttention-2 (Dao 2023) returns 0 for fully masked rows (its Check_inf / lse
++    guards); PyTorch SDPA returns NaN there. Unverified -- lead to check. Mine: the composed-op
++    form (select-then-zero, so the backward never sees NaN).
++    """
++    blocked = _blocked_rows(scores, invisible)
++    weights = softmax(tc._C.where(blocked, _guard_const(0.0, scores), scores))
++    return weights * (blocked * -1.0 + 1.0)
++
++
+ # Flag for the fused causal-softmax path in scaled_dot_product_attention
+ # (default off until ppl-gated; flip per-run or at merge).
+ USE_FUSED_SOFTMAX = False
+@@ -114,8 +162,11 @@
+     if (USE_FUSED_SOFTMAX and is_causal and attn_mask is None and S >= L
+             and not tc.is_grad_enabled()):
+         # single-kernel bottom-right causal softmax: no mask tensor, masked
+-        # columns never read (inference-only; backward raises).
+-        return tc.matmul(tc.causal_softmax(scores), value)
++        # columns never read (inference-only; backward raises). APA-MF2.2 Amendment 2:
++        # rows whose visible scores are all -inf -> weight 0 (invisible counts as blocked).
++        return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,
++                                          _causal_mask(L, S, query.device.split(":")[0], query.dtype)),
++                         value)
+     if is_causal:
+         # APA-MF2: predicate mask (nonzero bias == masked) -> -inf, never an add
+         scores = scores.masked_fill(
+@@ -128,12 +179,14 @@
+     # one kernel. Measured 8x at sliding-window prefill shapes
+     # (16,512,1535); the composed chain also paid the old pathological
+     # trailing-axis reduce.
++    # APA-MF2.2 Amendment 2: a row whose every score is -inf (all visible keys blocked or
++    # masked) returns weight 0, not NaN (_guarded_softmax); other rows are unchanged.
+     if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
+         B_, H_ = scores.shape[0], scores.shape[1]
+-        weights = tc.causal_softmax(
+-            scores.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S])
++        weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(
++            s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S]))
+     else:
+-        weights = scores.softmax(-1)
++        weights = _guarded_softmax(scores, lambda s: s.softmax(-1))
+     return tc.matmul(weights, value)
+ 
+ 
+--- a/tensor_cuda/tensor_cuda/quant.py	2026-10-07 19:46:57.677336285 -0400
++++ b/tensor_cuda/tensor_cuda/quant.py	2026-10-07 19:49:10.382313937 -0400
+@@ -286,5 +286,6 @@
+             mask = mask.astype(bulk.dtype)   # match tc.where's operand dtype
+         scores = tc.where(mask, ranking, bulk)
+ 
+-    weights = scores.softmax(-1)
++    # APA-MF2.2 Amendment 2: a row whose every score is -inf returns 0, not NaN.
++    weights = F._guarded_softmax(scores, lambda s: s.softmax(-1))
+     return tc.matmul(weights, value)

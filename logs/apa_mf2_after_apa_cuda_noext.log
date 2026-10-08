@@ -1,0 +1,165 @@
+........................................................................ [ 67%]
+.............................FFFFFF                                      [100%]
+=================================== FAILURES ===================================
+_______________________________ test_dense_topk ________________________________
+
+    def test_dense_topk():
+>       _run_case(2, 4, 64, 64, 32)
+
+apa_cuda/tests/test_parity.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 2, H = 4, L = 64, S = 64, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+____________________________ test_dense_topk_causal ____________________________
+
+    def test_dense_topk_causal():
+>       _run_case(2, 4, 64, 64, 32, is_causal=True)
+
+apa_cuda/tests/test_parity.py:233: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 2, H = 4, L = 64, S = 64, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+____________________________ test_dense_zscore_long ____________________________
+
+    def test_dense_zscore_long():
+>       _run_case(1, 2, 320, 320, 32)  # S > 256 -> z-score path
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+apa_cuda/tests/test_parity.py:237: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 1, H = 2, L = 320, S = 320, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+_____________________________ test_full_precision ______________________________
+
+    def test_full_precision():
+>       _run_case(2, 4, 48, 48, 32, refine_percentile=1.0)
+
+apa_cuda/tests/test_parity.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 2, H = 4, L = 48, S = 48, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+______________________________ test_bits_variants ______________________________
+
+    def test_bits_variants():
+        for bits in (1, 2, 4, 8):
+>           _run_case(1, 2, 64, 64, 32, bulk_bits=bits)
+
+apa_cuda/tests/test_parity.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 1, H = 2, L = 64, S = 64, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+_____________________________ test_adaptive_heads ______________________________
+
+    def test_adaptive_heads():
+>       _run_case(2, 8, 64, 64, 32, adaptive_heads=True)
+
+apa_cuda/tests/test_parity.py:250: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+B = 2, H = 8, L = 64, S = 64, D = 32
+
+    def _run_case(B, H, L, S, D, *, is_causal=False, refine_percentile=0.15,
+                  bulk_bits=2, adaptive_heads=False, seed=0, tol=None):
+        # cuBLAS vs NumPy matmul differ by ~1e-5; near the refinement threshold that
+        # can flip a single mask bit, swapping one position between full-precision
+        # and quantized scores. The output impact scales with quantization coarseness,
+        # so the tolerance is bit-width aware (full-precision stays tight).
+        if tol is None:
+            tol = {1: 2e-2, 2: 1e-2, 4: 5e-3, 8: 3e-3}.get(bulk_bits, 1e-2)
+            if refine_percentile >= 1.0:
+                tol = 1e-4
+>       import apa_attention_cuda as _C  # noqa: F401  (ensures built)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'apa_attention_cuda'
+
+apa_cuda/tests/test_parity.py:190: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED apa_cuda/tests/test_parity.py::test_dense_topk - ModuleNotFoundError: ...
+FAILED apa_cuda/tests/test_parity.py::test_dense_topk_causal - ModuleNotFound...
+FAILED apa_cuda/tests/test_parity.py::test_dense_zscore_long - ModuleNotFound...
+FAILED apa_cuda/tests/test_parity.py::test_full_precision - ModuleNotFoundErr...
+FAILED apa_cuda/tests/test_parity.py::test_bits_variants - ModuleNotFoundErro...
+FAILED apa_cuda/tests/test_parity.py::test_adaptive_heads - ModuleNotFoundErr...
+SKIPPED [1] apa_cuda/tests/test_apa_mf2_extension.py:32: apa_attention_cuda not importable (No module named 'apa_attention_cuda'); build it or set APA_MF2_EXT_DIR
+6 failed, 101 passed, 1 skipped in 48.05s
+rc=1

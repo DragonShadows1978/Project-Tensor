@@ -1,0 +1,50 @@
+{
+  "order": "orders/APA_MF2_2_AMENDMENT_2.md",
+  "order_sha256": "76918bea703364484dbdfd601177cae1965b89a9c425711a21d057bb830874b1",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent)",
+  "registration": "artifacts/apa_mf2_2b/registration.json",
+  "registration_sha256": "5e84edd44d7d8e1f70867efb75103c1fa2f1547614a4b94732ab739eb0edcb24",
+  "engine": "NO build: after1 and after2 both run artifacts/apa_mf2_2a/build (ccc9f8d2533f7134e4d260c1788f8b53da7752473996cbf979e474f3ab422bcf); no build directory was written",
+  "packages": {
+    "after1": "artifacts/apa_mf2_2b/before/pkg (functional.py 86df0db5..., quant.py 3ff09e9b...)",
+    "after2": "tree: functional.py 71f045562c7d..., quant.py (see item4.patch)"
+  },
+  "item4": "functional._blocked_rows / _guard_const / _guarded_softmax: blocked = (scores < -FLT_MAX).min(-1) (every entry -inf; NaN never blocked; on the USE_FUSED_SOFTMAX branch invisible entries count as blocked); weights = softmax(tc._C.where(blocked, 0, scores)) * (1 - blocked). Applied at the four softmax sites: SDPA fused causal_softmax branch, SDPA composed inference (causal_softmax row kernel), SDPA composed grad (Tensor.softmax), quant.apa_quant_attention. The -inf predicate mask is unchanged (F4 closed). Diff: functional.py +58 -5, quant.py +2 -1.",
+  "gates": {
+    "G1": {"verdict": "PASS", "detail": "final code: 37 failed + 15 errors = 52 ids == baseline, 0 new; 1750 passed. An earlier version of the guard (Tensor.masked_fill) FAILED G1 with 60 new test_apa_mf1_quant.py failures (that test observes the selection as the LAST masked_fill / tc.where of the call); the guard now selects with the engine primitive tc._C.where, and G1 was re-run.",
+           "receipts": ["logs/apa_mf2_2b_g1_full_v2.log", "logs/apa_mf2_2b_g1_compare_v2.log", "logs/apa_mf2_2b_g1_full.log (v1 FAIL)", "logs/apa_mf2_2b_g1_compare.log (v1 FAIL)"]},
+    "G2": {"verdict": "RED (as registered, on primitive score-input paths and 6 fp16 grad cells); attention-path forward PASS",
+           "detail": "census 2376 cells x 7 arms (fd32b6d, MF2, MF2.1, MF2.2, after1 recorded, after1 fresh, after2): (a) fd32b6d finite & after2 non-finite = 0 cells (was 72 on after1). (b) cells containing an all -inf row that are non-finite on after2 = 63: 57 on the two PRIMITIVE score-input paths (eager_softmax = Tensor.softmax on an all -inf row: 30; causal_softmax = tc.causal_softmax kernel: 27) -- outside the writable list (ops.cpp / kernels.cu), predicted in the registration, NaN on every engine since fd32b6d; and 6 sdpa_grad_causal fp16 S=1 cells whose FORWARD is 0 but whose dq has one NaN element from the matmul backward with alpha = 1e34 (the census's fp16 overflow scale): reproduced with an exactly zero upstream gradient and no softmax, on fd32b6d and after2 alike (logs/apa_mf2_2b_fp16_alpha_backward_check.log), so not a blocked-row softmax NaN. Every attention-path blocked cell (999) has finite output exactly 0 on its blocked row 0.",
+           "receipts": ["artifacts/apa_mf2_2b/census/compare_v2_20261008T0000Z.json", "artifacts/apa_mf2_2b/census_condensed.md", "logs/apa_mf2_2b_census_compare_v2.log", "logs/apa_mf2_2b_blocked_values_check_v2.log", "logs/apa_mf2_2b_fp16_alpha_backward_check.log"]},
+    "G3": {"verdict": "PASS", "detail": "after2 == after1 bytes on all 1230 census cells without an all -inf row (vs the recorded after1 arm and a fresh after1 arm); fused identity set 882/882 and N1 522/522 vs the recorded after1 arm; re-review probe identity_values set (SDPA infer/grad, causal_softmax, max/min, log_softmax, quant p1, clamp/pool/norm, KV pack, fused kernels, real Qwen exports) 361/361 after1 vs after2 in separate processes.",
+           "receipts": ["artifacts/apa_mf2_2b/census/compare_v2_20261008T0000Z.json", "logs/apa_mf2_2b_identity_fused_v2.log", "logs/apa_mf2_2b_probe_identity_20261007T235709Z_mf2_2b_337027.log"]},
+    "G4": {"verdict": "PASS", "detail": "left-padded batch (Lq = S in {8,33,256}, first k in {1,3} keys masked for all queries via attn_mask -inf, causal; fp32/fp16/bf16; D {64,128}; SDPA infer composed, infer fused-softmax flag, grad): padded rows exactly 0, all outputs and gradients finite, padded rows' dq exactly 0, other rows within tolerance of the fp64 oracle; two-layer chain (layer-1 output as K and V) finite; apa_quant overflow-padding variant (p 1 and 0.15) rows 0..k-1 exactly 0. after1: 22 G4 tests FAILED (non-finite); after2: all pass.",
+           "receipts": ["logs/apa_mf2_2b_testsfirst_after1_v2.log", "logs/apa_mf2_2b_tests_after2_v2.log"]},
+    "mutation": {"verdict": "PASS", "detail": "7/7 killed (1.00): B1-B4 guard removed at each site (SDPA composed infer, SDPA grad, SDPA fused causal_softmax branch, apa_quant), B5 zeroing dropped, B6 'any -inf' detection, B7 invisible entries not counted",
+                 "receipts": ["artifacts/apa_mf2_2b/mutation/summary.json", "artifacts/apa_mf2_2b/mutation/mutants.json", "logs/apa_mf2_2b_mutation.log", "logs/apa_mf2_2b_mutation_baseline.log"]}
+  },
+  "predictions": {
+    "PB1": "HOLDS: the 72 Amendment-1 cells are finite (blocked rows 0); every all_blocked / all_masked attention cell has output 0 (999/999 forward)",
+    "PB2": "HOLDS: eager_softmax and causal_softmax primitive all -inf cells stay NaN (57 cells)",
+    "PB3": "HOLDS: after2 == after1 on every non-blocked census cell and on both identity sets"
+  },
+  "tests": {
+    "new": "tensor_cuda/tests/test_apa_mf2_2b_blocked.py (56 tests)",
+    "failing_first": "logs/apa_mf2_2b_testsfirst_after1_v2.log:1957 '46 failed, 10 passed' (v1 log had 24 oracle-indexing errors of mine, fixed)",
+    "after": "logs/apa_mf2_2b_tests_after2_v2.log:7 '371 passed, 12 skipped' (2b tests + test_apa_mf1_quant + test_apa_mf2_1_definition)"
+  },
+  "patch": "artifacts/apa_mf2_2b/item4.patch (functional.py, quant.py vs artifacts/apa_mf2_2b/before/pkg)",
+  "deviations": [
+    "Guard v1 used Tensor.masked_fill; G1 v1 FAILED (60 test_apa_mf1_quant.py ids: the test takes the LAST masked_fill and tc.where of apa_quant_attention as the stats mask and refine selection). v2 uses tc._C.where for both selects (same where_nd arithmetic and backward); census v1 vs v2 identical on 2376/2376 cells; every gate re-run on v2. The test assertions were not changed.",
+    "Probe identity v2 first exited 1 on 'package source pin drift' (after2 pins taken from guard v1); pins regenerated (v1 kept as artifacts/apa_mf2_2b/probe/provenance_pins_v1_superseded.json), re-run PASS.",
+    "Probe copy reports the hard-coded label 'engine_hashes_different': true; after1/after2 share one engine, and the copy's separation assertion is on (engine, functional, quant) hashes (logs/apa_mf2_2b_probe_copy_edits.diff).",
+    "Blocked rows may be -0.0 (0 x negative V summed): equal to 0, sign bit set.",
+    "registration registered_at text says 19:48; hashed 19:47:32.",
+    "G1 regenerated the 17 artifacts/wo*.ppm test outputs again."
+  ],
+  "open_items_for_david": [
+    "Primitive score-input ops: Tensor.softmax (ops.cpp) and tc.causal_softmax (kernels.cu) still return NaN for an all -inf row when called directly (as on every engine since fd32b6d; PyTorch softmax does the same). Every attention path now guards its own softmax. Changing the primitives would change log_softmax/CE consumers; decide whether the 'no NaN for all -inf rows' rule covers primitives.",
+    "Matmul backward with an alpha that overflows the operand (S=1 GEMV path, e.g. fp16/fp32 alpha 1e34 with |K| = 6e4) gives NaN dq even for a zero upstream gradient (fd32b6d too). Not caused by this order; outside scope.",
+    "The fp16 sdpa_grad_causal neg_inf_first cells (12, not blocked rows) have a non-finite dk element on every engine including fd32b6d; unchanged by this order. Mechanism NOT isolated (the zero-gradient alpha check is finite at S >= 2); likely related to the 1e34 fp16 census scale -- unverified."
+  ]
+}

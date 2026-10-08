@@ -1,0 +1,1422 @@
+FFFFFFFFFFFFFFFFF.F.F.F.F.F.FFFFFFFFFFFFFFFFFFFFFFFF....                 [100%]
+=================================== FAILURES ===================================
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-infer_composed] _
+
+dt = 'float32', path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,
+           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07831013,  1.64060283, -0.1580056 , -0.51804262,
+           0.06536466,  1.60238945,  1.47044098,  1.04272056]]]])
+blocked_rows = [0, 1], dt = 'float32', label = 'float32 infer_composed S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float32 infer_composed S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274b7dcb0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274b7dcb0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,\n           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-infer_fused] _
+
+dt = 'float32', path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,
+           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07831013,  1.64060283, -0.1580056 , -0.51804262,
+           0.06536466,  1.60238945,  1.47044098,  1.04272056]]]])
+blocked_rows = [0, 1], dt = 'float32', label = 'float32 infer_fused S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float32 infer_fused S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274543930>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274543930> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,\n           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+__ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-grad] __
+
+dt = 'float32', path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,
+           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07831013,  1.64060283, -0.1580056 , -0.51804262,
+           0.06536466,  1.60238945,  1.47044098,  1.04272056]]]])
+blocked_rows = [0, 1], dt = 'float32', label = 'float32 grad S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float32 grad S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274543e70>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274543e70> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...6028 , -0.1580056 , -0.5180426 ,\n           0.06536466,  1.6023895 ,  1.470441  ,  1.0427206 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-infer_composed] _
+
+dt = 'float16', path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,
+           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07830811,  1.640625  , -0.15795898, -0.51806641,
+           0.06536865,  1.60253906,  1.47070312,  1.04296875]]]])
+blocked_rows = [0, 1], dt = 'float16', label = 'float16 infer_composed S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float16 infer_composed S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274543b70>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274543b70> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,\n           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-infer_fused] _
+
+dt = 'float16', path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,
+           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07830811,  1.640625  , -0.15795898, -0.51806641,
+           0.06536865,  1.60253906,  1.47070312,  1.04296875]]]])
+blocked_rows = [0, 1], dt = 'float16', label = 'float16 infer_fused S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float16 infer_fused S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274540e70>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274540e70> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,\n           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+__ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-grad] __
+
+dt = 'float16', path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,
+           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.07830811,  1.640625  , -0.15795898, -0.51806641,
+           0.06536865,  1.60253906,  1.47070312,  1.04296875]]]])
+blocked_rows = [0, 1], dt = 'float16', label = 'float16 grad S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float16 grad S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274574b10>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274574b10> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15795898, -0.5180664 ,\n           0.06536865,  1.6025391 ,  1.4707031 ,  1.0429688 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-infer_composed] _
+
+dt = 'bfloat16', path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.078125  ,  1.640625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]])
+blocked_rows = [0, 1], dt = 'bfloat16'
+label = 'bfloat16 infer_composed S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: bfloat16 infer_composed S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed2745750b0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed2745750b0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,\n           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-infer_fused] _
+
+dt = 'bfloat16', path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.078125  ,  1.640625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]])
+blocked_rows = [0, 1], dt = 'bfloat16', label = 'bfloat16 infer_fused S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: bfloat16 infer_fused S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed2745757d0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed2745757d0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,\n           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_ test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-grad] __
+
+dt = 'bfloat16', path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero(dt, path):
+        for S in (3, 33, 1025):
+            for D in (64, 128):
+                Lq = 3
+                q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), S + D)
+                vis = O.visible(Lq, S, True)
+                allowed = vis & (np.arange(S) == S - 1)[None]            # only key S-1 is unblocked
+                ref = oracle(mk(v, dt).float().numpy(), allowed)
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, is_causal=True, scale=scale)
+                    if path == "grad":
+                        o.sum().backward()
+>               check(o, ref, [0, 1], dt, f"{dt} {path} S={S} D={D}")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...  -0.078125  ,  1.640625  , -0.15820312, -0.51953125,
+           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]])
+blocked_rows = [0, 1], dt = 'bfloat16', label = 'bfloat16 grad S=3 D=64'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: bfloat16 grad S=3 D=64: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274543c30>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274543c30> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...625  , -0.15820312, -0.51953125,\n           0.06542969,  1.6015625 ,  1.46875   ,  1.0390625 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+______________ test_sdpa_all_masked_rows_are_zero[float32-False] _______________
+
+dt = 'float32', grad = False
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+_______________ test_sdpa_all_masked_rows_are_zero[float32-True] _______________
+
+dt = 'float32', grad = True
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+______________ test_sdpa_all_masked_rows_are_zero[float16-False] _______________
+
+dt = 'float16', grad = False
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+_______________ test_sdpa_all_masked_rows_are_zero[float16-True] _______________
+
+dt = 'float16', grad = True
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+______________ test_sdpa_all_masked_rows_are_zero[bfloat16-False] ______________
+
+dt = 'bfloat16', grad = False
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+______________ test_sdpa_all_masked_rows_are_zero[bfloat16-True] _______________
+
+dt = 'bfloat16', grad = True
+
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_sdpa_all_masked_rows_are_zero(dt, grad):
+        Lq, S, D = 4, 33, 64
+        rng = np.random.default_rng(11)
+        q, k, v = (rng.normal(0, 0.5, (1, 2, n, D)).astype(np.float32) for n in (Lq, S, S))
+        mask = np.zeros((1, 2, Lq, S), np.float32); mask[..., 1, :] = -np.inf; mask[..., 3, 5:] = -np.inf
+        xs = [mk(x, dt, grad) for x in (q, k, v)]
+        with contextlib.nullcontext() if grad else tc.no_grad():
+            o = F.scaled_dot_product_attention(*xs, attn_mask=mk(mask, dt), scale=D ** -0.5)
+            if grad:
+                o.sum().backward()
+        qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+        s = np.where(np.isfinite(mask), qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+        ref = np.zeros((1, 2, Lq, D))
+        for r in (0, 2, 3):
+>           ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+            ^^^^^^^^^^^^^^
+E           ValueError: could not broadcast input array from shape (2,2,64) into shape (1,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:115: ValueError
+_______ test_sdpa_noncausal_composed_all_blocked_rows_are_zero[float32] ________
+
+dt = 'float32'
+
+    @pytest.mark.parametrize("dt", ["float32", "bfloat16"])
+    def test_sdpa_noncausal_composed_all_blocked_rows_are_zero(dt):
+        S, D = 33, 64
+        q, k, v, scale = overflow_ops(dt, 3, S, D, np.arange(S), 7)
+        q[..., 2, 0] = 0.0                                             # row 2 not blocked (all scores 0)
+        with tc.no_grad():
+            o = F.scaled_dot_product_attention(*[mk(x, dt) for x in (q, k, v)], scale=scale)
+        allowed = np.zeros((3, S), bool); allowed[2] = True
+>       check(o, oracle(mk(v, dt).float().numpy(), allowed), [0, 1], dt, f"{dt} noncausal")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[            nan,             nan,             nan,
+                      nan,             nan,             n...2627030e-02,
+           3.38507742e-02, -8.16158503e-02, -9.20018628e-02,
+          -9.53424200e-02]]]], dtype=float32)
+ref = array([[[[ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00,
+           0.00000000e+00,  0.00000000e+00,  0.00000000e+...14658e-03,  7.52626922e-02,
+           3.38507768e-02, -8.16158422e-02, -9.20018660e-02,
+          -9.53424223e-02]]]])
+blocked_rows = [0, 1], dt = 'float32', label = 'float32 noncausal'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: float32 noncausal: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274577330>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274577330> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[            nan,             nan,             nan,\n                      nan,             nan,             n...2627030e-02,\n           3.38507742e-02, -8.16158503e-02, -9.20018628e-02,\n          -9.53424200e-02]]]], dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+_______ test_sdpa_noncausal_composed_all_blocked_rows_are_zero[bfloat16] _______
+
+dt = 'bfloat16'
+
+    @pytest.mark.parametrize("dt", ["float32", "bfloat16"])
+    def test_sdpa_noncausal_composed_all_blocked_rows_are_zero(dt):
+        S, D = 33, 64
+        q, k, v, scale = overflow_ops(dt, 3, S, D, np.arange(S), 7)
+        q[..., 2, 0] = 0.0                                             # row 2 not blocked (all scores 0)
+        with tc.no_grad():
+            o = F.scaled_dot_product_attention(*[mk(x, dt) for x in (q, k, v)], scale=scale)
+        allowed = np.zeros((3, S), bool); allowed[2] = True
+>       check(o, oracle(mk(v, dt).float().numpy(), allowed), [0, 1], dt, f"{dt} noncausal")
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+o = array([[[[        nan,         nan,         nan,         nan,
+                  nan,         nan,         nan,        ...31494,  0.00518799,  0.07519531,
+           0.03369141, -0.08154297, -0.09228516, -0.09521484]]]],
+      dtype=float32)
+ref = array([[[[ 0.        ,  0.        ,  0.        ,  0.        ,
+           0.        ,  0.        ,  0.        ,  0.    ...   0.08754291,  0.01032789,  0.0051938 ,  0.07535992,
+           0.03368031, -0.08177971, -0.09249231, -0.09515196]]]])
+blocked_rows = [0, 1], dt = 'bfloat16', label = 'bfloat16 noncausal'
+
+    def check(o, ref, blocked_rows, dt, label):
+        o = o.float().numpy()
+>       assert np.isfinite(o).all(), f"{label}: non-finite output"
+E       AssertionError: bfloat16 noncausal: non-finite output
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed2745777b0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed2745777b0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...31494,  0.00518799,  0.07519531,\n           0.03369141, -0.08154297, -0.09228516, -0.09521484]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:69: AssertionError
+____ test_apa_quant_rows_with_all_scores_blocked_are_zero[float32-1.0-True] ____
+
+dt = 'float32', p = 1.0, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('float32', 1.0, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274543c30>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274543c30> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...7891 ,  0.23780127, -0.30944875,\n          -0.4862598 , -0.3730976 , -1.9478912 ,  0.67911696]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+___ test_apa_quant_rows_with_all_scores_blocked_are_zero[float32-0.15-True] ____
+
+dt = 'float32', p = 0.15, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('float32', 0.15, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274574bd0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed274574bd0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...7891 ,  0.23780127, -0.30944875,\n          -0.4862598 , -0.3730976 , -1.9478912 ,  0.67911696]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+____ test_apa_quant_rows_with_all_scores_blocked_are_zero[float16-1.0-True] ____
+
+dt = 'float16', p = 1.0, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('float16', 1.0, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed1c7a62550>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed1c7a62550> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...73047,  0.23779297, -0.3095703 ,\n          -0.48632812, -0.37304688, -1.9482422 ,  0.6791992 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+___ test_apa_quant_rows_with_all_scores_blocked_are_zero[float16-0.15-True] ____
+
+dt = 'float16', p = 0.15, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('float16', 0.15, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed1c7a62130>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed1c7a62130> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...73047,  0.23779297, -0.3095703 ,\n          -0.48632812, -0.37304688, -1.9482422 ,  0.6791992 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+___ test_apa_quant_rows_with_all_scores_blocked_are_zero[bfloat16-1.0-True] ____
+
+dt = 'bfloat16', p = 1.0, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('bfloat16', 1.0, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed1c7a62bb0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed1c7a62bb0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...21875,  0.23828125, -0.30859375,\n          -0.48632812, -0.37304688, -1.9453125 ,  0.6796875 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+___ test_apa_quant_rows_with_all_scores_blocked_are_zero[bfloat16-0.15-True] ___
+
+dt = 'bfloat16', p = 0.15, causal = True
+
+    @pytest.mark.parametrize("causal", [False, True])
+    @pytest.mark.parametrize("p", [1.0, 0.15])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_apa_quant_rows_with_all_scores_blocked_are_zero(dt, p, causal):
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops(dt, Lq, S, D, np.arange(S - 1), 5)
+        with tc.no_grad():
+            o = Q.apa_quant_attention(*[mk(x, dt) for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                      is_causal=causal, scale=scale).float().numpy()
+>       assert np.isfinite(o).all(), (dt, p, causal)
+E       AssertionError: ('bfloat16', 0.15, True)
+E       assert np.False_
+E        +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed1c7a62fd0>()
+E        +    where <built-in method all of numpy.ndarray object at 0x7ed1c7a62fd0> = array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]).all
+E        +      where array([[[[False, False, False, False, False, False, False, False,\n          False, False, False, False, False, False, ...  True,  True,  True,  True,  True,  True,  True,\n           True,  True,  True,  True,  True,  True,  True,  True]]]]) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan,         nan,\n                  nan,         nan,         nan,        ...21875,  0.23828125, -0.30859375,\n          -0.48632812, -0.37304688, -1.9453125 ,  0.6796875 ]]]],\n      dtype=float32))
+E        +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:142: AssertionError
+_________________ test_apa_quant_backward_blocked_rows_finite __________________
+
+    def test_apa_quant_backward_blocked_rows_finite():
+        S, D, Lq = 33, 64, 3
+        q, k, v, scale = overflow_ops("float32", Lq, S, D, np.arange(S - 1), 6)
+        xs = [mk(x, "float32", True) for x in (q, k, v)]
+        o = Q.apa_quant_attention(*xs, bulk_bits=4, refine_percentile=1.0, is_causal=True, scale=scale)
+        o.sum().backward()
+>       assert np.all(o.numpy()[..., :2, :] == 0.0)
+E       assert np.False_
+E        +  where np.False_ = <function all at 0x7ed277366470>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32) == 0.0)
+E        +    where <function all at 0x7ed277366470> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:153: AssertionError
+_______________ test_left_padded_batch[float32-1-infer_composed] _______________
+
+dt = 'float32', kpad = 1, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[float32-1-infer_fused] _________________
+
+dt = 'float32', kpad = 1, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+____________________ test_left_padded_batch[float32-1-grad] ____________________
+
+dt = 'float32', kpad = 1, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+_______________ test_left_padded_batch[float32-3-infer_composed] _______________
+
+dt = 'float32', kpad = 3, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[float32-3-infer_fused] _________________
+
+dt = 'float32', kpad = 3, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+____________________ test_left_padded_batch[float32-3-grad] ____________________
+
+dt = 'float32', kpad = 3, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+_______________ test_left_padded_batch[float16-1-infer_composed] _______________
+
+dt = 'float16', kpad = 1, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[float16-1-infer_fused] _________________
+
+dt = 'float16', kpad = 1, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+____________________ test_left_padded_batch[float16-1-grad] ____________________
+
+dt = 'float16', kpad = 1, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+_______________ test_left_padded_batch[float16-3-infer_composed] _______________
+
+dt = 'float16', kpad = 3, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[float16-3-infer_fused] _________________
+
+dt = 'float16', kpad = 3, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+____________________ test_left_padded_batch[float16-3-grad] ____________________
+
+dt = 'float16', kpad = 3, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+______________ test_left_padded_batch[bfloat16-1-infer_composed] _______________
+
+dt = 'bfloat16', kpad = 1, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[bfloat16-1-infer_fused] ________________
+
+dt = 'bfloat16', kpad = 1, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+___________________ test_left_padded_batch[bfloat16-1-grad] ____________________
+
+dt = 'bfloat16', kpad = 1, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+______________ test_left_padded_batch[bfloat16-3-infer_composed] _______________
+
+dt = 'bfloat16', kpad = 3, path = 'infer_composed'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+________________ test_left_padded_batch[bfloat16-3-infer_fused] ________________
+
+dt = 'bfloat16', kpad = 3, path = 'infer_fused'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+___________________ test_left_padded_batch[bfloat16-3-grad] ____________________
+
+dt = 'bfloat16', kpad = 3, path = 'grad'
+
+    @pytest.mark.parametrize("path", ["infer_composed", "infer_fused", "grad"])
+    @pytest.mark.parametrize("kpad", [1, 3])
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_batch(dt, kpad, path):
+        for S in (8, 33, 256):
+            for D in (64, 128):
+                rng = np.random.default_rng(S + kpad + D)
+                q, k, v = (rng.normal(0, 0.5, (2, 2, S, D)).astype(np.float32) for _ in range(3))
+                mask = np.zeros((2, 1, S, S), np.float32); mask[..., :kpad] = -np.inf
+                xs = [mk(x, dt, path == "grad") for x in (q, k, v)]
+                m = mk(np.broadcast_to(mask, (2, 2, S, S)), dt)
+                with fused_softmax(path == "infer_fused"), contextlib.nullcontext() if path == "grad" else tc.no_grad():
+                    o = F.scaled_dot_product_attention(*xs, attn_mask=m, is_causal=True, scale=D ** -0.5)
+                    if path == "grad":
+                        o.sum().backward()
+                qe, ke, ve = (x.float().numpy().astype(np.float64) for x in xs)
+                allowed = O.visible(S, S, True) & (np.arange(S) >= kpad)[None]
+                s = np.where(allowed, qe @ np.swapaxes(ke, -1, -2) * D ** -0.5, -np.inf)
+                ref = np.zeros_like(qe)
+                for r in range(kpad, S):
+>                   ref[..., r, :] = O.softmax64(s[..., r, :], ve)
+                    ^^^^^^^^^^^^^^
+E                   ValueError: could not broadcast input array from shape (2,2,2,64) into shape (2,2,64)
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:178: ValueError
+____________ test_left_padded_two_layer_chain_stays_finite[float32] ____________
+
+dt = 'float32'
+
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_two_layer_chain_stays_finite(dt):
+        """Layer-1 output (padded rows) becomes layer 2's K and V: a NaN there would poison every row."""
+        S, D, kpad = 33, 64, 3
+        rng = np.random.default_rng(9)
+        x = mk(rng.normal(0, 0.5, (1, 2, S, D)), dt)
+        m = mk(np.broadcast_to(np.where(np.arange(S) < kpad, -np.inf, 0.0).astype(np.float32), (1, 2, S, S)), dt)
+        with tc.no_grad():
+            h1 = F.scaled_dot_product_attention(x, x, x, attn_mask=m, is_causal=True)
+            h2 = F.scaled_dot_product_attention(h1, h1, h1, is_causal=True)
+        a1, a2 = h1.float().numpy(), h2.float().numpy()
+>       assert np.all(a1[..., :kpad, :] == 0.0) and np.isfinite(a1).all() and np.isfinite(a2).all()
+E       assert (np.False_)
+E        +  where np.False_ = <function all at 0x7ed277366470>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32) == 0.0)
+E        +    where <function all at 0x7ed277366470> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:196: AssertionError
+____________ test_left_padded_two_layer_chain_stays_finite[float16] ____________
+
+dt = 'float16'
+
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_two_layer_chain_stays_finite(dt):
+        """Layer-1 output (padded rows) becomes layer 2's K and V: a NaN there would poison every row."""
+        S, D, kpad = 33, 64, 3
+        rng = np.random.default_rng(9)
+        x = mk(rng.normal(0, 0.5, (1, 2, S, D)), dt)
+        m = mk(np.broadcast_to(np.where(np.arange(S) < kpad, -np.inf, 0.0).astype(np.float32), (1, 2, S, S)), dt)
+        with tc.no_grad():
+            h1 = F.scaled_dot_product_attention(x, x, x, attn_mask=m, is_causal=True)
+            h2 = F.scaled_dot_product_attention(h1, h1, h1, is_causal=True)
+        a1, a2 = h1.float().numpy(), h2.float().numpy()
+>       assert np.all(a1[..., :kpad, :] == 0.0) and np.isfinite(a1).all() and np.isfinite(a2).all()
+E       assert (np.False_)
+E        +  where np.False_ = <function all at 0x7ed277366470>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32) == 0.0)
+E        +    where <function all at 0x7ed277366470> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:196: AssertionError
+___________ test_left_padded_two_layer_chain_stays_finite[bfloat16] ____________
+
+dt = 'bfloat16'
+
+    @pytest.mark.parametrize("dt", DTS)
+    def test_left_padded_two_layer_chain_stays_finite(dt):
+        """Layer-1 output (padded rows) becomes layer 2's K and V: a NaN there would poison every row."""
+        S, D, kpad = 33, 64, 3
+        rng = np.random.default_rng(9)
+        x = mk(rng.normal(0, 0.5, (1, 2, S, D)), dt)
+        m = mk(np.broadcast_to(np.where(np.arange(S) < kpad, -np.inf, 0.0).astype(np.float32), (1, 2, S, S)), dt)
+        with tc.no_grad():
+            h1 = F.scaled_dot_product_attention(x, x, x, attn_mask=m, is_causal=True)
+            h2 = F.scaled_dot_product_attention(h1, h1, h1, is_causal=True)
+        a1, a2 = h1.float().numpy(), h2.float().numpy()
+>       assert np.all(a1[..., :kpad, :] == 0.0) and np.isfinite(a1).all() and np.isfinite(a2).all()
+E       assert (np.False_)
+E        +  where np.False_ = <function all at 0x7ed277366470>(array([[[[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan, nan, nan, nan, nan...\n          nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,\n          nan, nan, nan, nan]]]], dtype=float32) == 0.0)
+E        +    where <function all at 0x7ed277366470> = np.all
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:196: AssertionError
+_________________ test_left_padded_apa_quant_overflow_padding __________________
+
+    def test_left_padded_apa_quant_overflow_padding():
+        S, D, kpad = 33, 64, 3
+        q, k, v, scale = overflow_ops("float32", S, S, D, np.arange(kpad), 4)
+        q[..., 1:] = np.random.default_rng(1).normal(0, 0.3, (S, D - 1)); k[..., kpad:, 1:] = np.random.default_rng(2).normal(0, 0.3, (S - kpad, D - 1))
+        for p in (1.0, 0.15):
+            with tc.no_grad():
+                o = Q.apa_quant_attention(*[mk(x, "float32") for x in (q, k, v)], bulk_bits=4, refine_percentile=p,
+                                          is_causal=True, scale=scale).numpy()
+>           assert np.isfinite(o).all() and np.all(o[..., :kpad, :] == 0.0), p
+E           AssertionError: 1.0
+E           assert (np.False_)
+E            +  where np.False_ = <built-in method all of numpy.ndarray object at 0x7ed274b7d4d0>()
+E            +    where <built-in method all of numpy.ndarray object at 0x7ed274b7d4d0> = array([[[[False, False, False, ..., False, False, False],\n         [False, False, False, ..., False, False, False],\n  ...ue, ...,  True,  True,  True],\n         [ True,  True,  True, ...,  True,  True,  True]]]],\n      shape=(1, 2, 33, 64)).all
+E            +      where array([[[[False, False, False, ..., False, False, False],\n         [False, False, False, ..., False, False, False],\n  ...ue, ...,  True,  True,  True],\n         [ True,  True,  True, ...,  True,  True,  True]]]],\n      shape=(1, 2, 33, 64)) = <ufunc 'isfinite'>(array([[[[        nan,         nan,         nan, ...,         nan,\n                  nan,         nan],\n         [    ...3755,  0.03912409, ...,  0.05205706,\n          -0.02054019, -0.17341585]]]],\n      shape=(1, 2, 33, 64), dtype=float32))
+E            +        where <ufunc 'isfinite'> = np.isfinite
+
+tensor_cuda/tests/test_apa_mf2_2b_blocked.py:207: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float32-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[float16-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_causal_rows_with_all_visible_keys_blocked_are_zero[bfloat16-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[float32-False]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[float32-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[float16-False]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[float16-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[bfloat16-False]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_all_masked_rows_are_zero[bfloat16-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_noncausal_composed_all_blocked_rows_are_zero[float32]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_sdpa_noncausal_composed_all_blocked_rows_are_zero[bfloat16]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[float32-1.0-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[float32-0.15-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[float16-1.0-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[float16-0.15-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[bfloat16-1.0-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_rows_with_all_scores_blocked_are_zero[bfloat16-0.15-True]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_apa_quant_backward_blocked_rows_finite
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-1-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-1-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-1-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-3-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-3-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float32-3-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-1-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-1-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-1-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-3-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-3-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[float16-3-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-1-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-1-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-1-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-3-infer_composed]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-3-infer_fused]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_batch[bfloat16-3-grad]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_two_layer_chain_stays_finite[float32]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_two_layer_chain_stays_finite[float16]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_two_layer_chain_stays_finite[bfloat16]
+FAILED tensor_cuda/tests/test_apa_mf2_2b_blocked.py::test_left_padded_apa_quant_overflow_padding
+46 failed, 10 passed in 2.06s

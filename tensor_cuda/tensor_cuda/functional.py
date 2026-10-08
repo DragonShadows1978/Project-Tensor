@@ -17,7 +17,23 @@ import tensor_cuda as tc
 _causal_cache = {}
 
 
+def _check_causal_lengths(L, S):
+    """APA-MF2.1 item 1 (review F3): bottom-right causal needs S >= L.
+
+    Query row i of L sees keys j <= S-L+i; with S < L rows 0..L-S-1 see no key, so
+    their softmax has no finite entry (NaN under the -inf mask). Rejected up front,
+    before any matmul, like the engine's CUDA kernels (kernels.cu causal_softmax:
+    "S < L (queries outnumber keys)"). Prior art: FlashAttention-2 v2.1 (Dao 2023)
+    defines the same bottom-right alignment (it returns zeros for such rows instead).
+    """
+    if S < L:
+        raise ValueError(
+            f"causal attention requires S >= L (bottom-right causal: query row i sees keys "
+            f"j <= S-L+i); got L={L} queries, S={S} keys, so rows 0..{L - S - 1} would see no key")
+
+
 def _causal_mask(L, S, device, dtype):
+    _check_causal_lengths(L, S)
     key = (L, S, device, dtype)
     m = _causal_cache.get(key)
     if m is None:
@@ -26,8 +42,22 @@ def _causal_mask(L, S, device, dtype):
         # ~500MB of cached masks that empty_cache() cannot reach
         if len(_causal_cache) >= 16:
             _causal_cache.clear()
-        # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
-        # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
+        # bf16 has no numpy dtype — build fp32 then cast on device.
+        # APA-MF2: masked entries are -inf (was -1e4, chosen to stay finite in
+        # fp16/bf16). A finite bias lets a large enough score win: masked score s
+        # leaks once s - 1e4 approaches the visible max (review N1: K7 = 80008 e0
+        # gave row 0 = 0.2797, not 0). -inf is exact zero weight for every finite
+        # score in every dtype; the engine softmaxes (ops.cpp softmax via reduce_max,
+        # kernels.cu causal_softmax; both start their max at -inf since APA-MF2.1 --
+        # were -3.4e38 / -3e38, review F1) give exp(-inf) = 0 for ANY finite visible max
+        # and no NaN as long as the row has one visible key, i.e. for every S >= L
+        # row. APA-MF2.1: S < L (rows with no visible key) is rejected with a
+        # ValueError before any compute (_check_causal_lengths; was NaN under MF2,
+        # a uniform average of masked keys before). Consumers that ADD this bias keep
+        # working; SDPA and apa_quant_attention apply it as a predicate
+        # (masked_fill), so masked positions are -inf even if their score is not
+        # finite. Prior art: FlashAttention-2 (Dao 2023) -inf predicate masking;
+        # PyTorch SDPA boolean attn_mask semantics (masked -> -inf).
         # BOTTOM-RIGHT aligned (k = 1 + S - L): when S > L the L queries are the
         # LAST L positions of S keys (KV-cache decode, grafted/injected prefix),
         # so row i attends cols 0..(S-L)+i — prefix fully visible, causal among
@@ -35,12 +65,63 @@ def _causal_mask(L, S, device, dtype):
         # triu(k=1) on a rectangle is TOP-LEFT aligned and silently blinds the
         # queries to most of the prefix AND to each other (measured: predicted
         # ' briefing' from the first visible graft tokens instead of recall).
-        bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1 + (S - L))
+        bias = np.triu(np.full((L, S), -np.inf, dtype=np.float32), k=1 + (S - L))
         m = tc.tensor(bias, device=device)
         if dtype in ("float16", "bfloat16"):
             m = m.astype(dtype)
         _causal_cache[key] = m
     return m
+
+
+_NEG_FLT_MAX = -3.4028234663852886e38    # -FLT_MAX: only -inf compares below it (NaN never does)
+_GUARD_CONST = {}
+
+
+def _guard_const(value, like):
+    """Cached broadcastable (1,..,1) constant in `like`'s dtype/device (APA-MF2.2 Amendment 2)."""
+    key = (value, like.dtype, like.device, len(like.shape))
+    c = _GUARD_CONST.get(key)
+    if c is None:
+        c = tc.tensor(np.full((1,) * len(like.shape), value, np.float32),
+                      device=like.device.split(":")[0], dtype=like.dtype)
+        _GUARD_CONST[key] = c
+    return c
+
+
+def _blocked_rows(scores, invisible=None):
+    """APA-MF2.2 Amendment 2: (..., L, 1) 0/1 in scores' dtype, 1 iff EVERY entry of the row is -inf.
+
+    `invisible` (a nonzero == masked (L, S) mask) marks entries the softmax never reads (the
+    causal_softmax kernel path); they count as blocked. NaN entries compare false, so a row with
+    a NaN score is never 'blocked' and keeps its NaN (the order: rows containing NaN may stay NaN).
+    """
+    ind = scores.__lt__(_NEG_FLT_MAX)
+    if invisible is not None:
+        ind = tc._C.where(invisible, _guard_const(1.0, ind), ind)
+    return ind.min([-1], True)
+
+
+def _guarded_softmax(scores, softmax, invisible=None):
+    """APA-MF2.2 Amendment 2 (lead decision, option b): a row whose every score is -inf (every
+    visible key blocked, or every key masked) gets weight 0 -- output 0 -- instead of
+    softmax(all -inf) = 0/0 = NaN, which in a left-padded batch reaches the next layer's K/V and
+    poisons the other rows' PV (0 x NaN). The blocked row's scores are first replaced by 0, so the
+    softmax and its backward stay finite, then its weights are multiplied by 0 (dq = 0 there).
+    Every other row sees a no-op select and x * 1: bytes and gradients unchanged. The -inf
+    predicate mask stays (a finite additive mask would re-open F4).
+    The selects use the engine primitive tc._C.where, not Tensor.masked_fill / tc.where: the MF1
+    and MF2.1 tests observe apa_quant_attention's selection as the LAST masked_fill (stats mask)
+    and the LAST tc.where (refine) of the call, and this guard runs after both.
+    Prior art: FlashAttention-2 (Dao 2023) returns 0 for fully masked rows (its Check_inf / lse
+    guards); so does PyTorch 2.11's scaled_dot_product_attention (measured on CPU, additive and
+    boolean masks: logs/apa_mf2_2c_v3_torch_check.log), while the softmax primitive returns NaN --
+    the same split as here (APA-MF2.2 Amendment 3, review V3: this line used to say PyTorch SDPA
+    returns NaN). Unverified beyond that measurement -- lead to check. Mine: the composed-op form
+    (select-then-zero, so the backward never sees NaN).
+    """
+    blocked = _blocked_rows(scores, invisible)
+    weights = softmax(tc._C.where(blocked, _guard_const(0.0, scores), scores))
+    return weights * (blocked * -1.0 + 1.0)
 
 
 # Flag for the fused causal-softmax path in scaled_dot_product_attention
@@ -64,6 +145,8 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     """query/key/value: (B, H, L, D). Returns (B, H, L, D)."""
     D = query.shape[-1]
     L, S = query.shape[-2], key.shape[-2]
+    if is_causal:
+        _check_causal_lengths(L, S)      # APA-MF2.1: S < L raises before any matmul
     scale = scale if scale is not None else 1.0 / math.sqrt(D)
     # HY3D DiT / VAE attention is non-causal, mask-free inference with D=64
     # or 128. Route it before the composed GEMM path so a [B,H,Lq,Lk] score
@@ -82,24 +165,31 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None,
     if (USE_FUSED_SOFTMAX and is_causal and attn_mask is None and S >= L
             and not tc.is_grad_enabled()):
         # single-kernel bottom-right causal softmax: no mask tensor, masked
-        # columns never read (inference-only; backward raises).
-        return tc.matmul(tc.causal_softmax(scores), value)
+        # columns never read (inference-only; backward raises). APA-MF2.2 Amendment 2:
+        # rows whose visible scores are all -inf -> weight 0 (invisible counts as blocked).
+        return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,
+                                          _causal_mask(L, S, query.device.split(":")[0], query.dtype)),
+                         value)
     if is_causal:
-        scores = scores + _causal_mask(L, S, query.device.split(":")[0], query.dtype)
+        # APA-MF2: predicate mask (nonzero bias == masked) -> -inf, never an add
+        scores = scores.masked_fill(
+            _causal_mask(L, S, query.device.split(":")[0], query.dtype), float("-inf"))
     if attn_mask is not None:
         scores = scores + attn_mask
     # fused row softmax at inference: masks are already FOLDED INTO the
-    # scores above (-1e4 entries exp to ~0 exactly as in the composed
+    # scores above (-inf entries exp to exactly 0 as in the composed
     # path), so causal_softmax with L=1 rows == plain softmax(-1) in
     # one kernel. Measured 8x at sliding-window prefill shapes
     # (16,512,1535); the composed chain also paid the old pathological
     # trailing-axis reduce.
+    # APA-MF2.2 Amendment 2: a row whose every score is -inf (all visible keys blocked or
+    # masked) returns weight 0, not NaN (_guarded_softmax); other rows are unchanged.
     if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
         B_, H_ = scores.shape[0], scores.shape[1]
-        weights = tc.causal_softmax(
-            scores.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S])
+        weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(
+            s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S]))
     else:
-        weights = scores.softmax(-1)
+        weights = _guarded_softmax(scores, lambda s: s.softmax(-1))
     return tc.matmul(weights, value)
 
 
