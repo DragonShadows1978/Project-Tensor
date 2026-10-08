@@ -1,0 +1,58 @@
+{
+ "B1": {
+  "file": "functional.py",
+  "replace": [
+   "        weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(\n            s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S]))",
+   "        weights = tc.causal_softmax(\n            scores.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S])"
+  ],
+  "sha256": "8bbc93ab592515ac3b346efbf5e70885bf7886085f9ece3a110de77d78a6a0ae"
+ },
+ "B2": {
+  "file": "functional.py",
+  "replace": [
+   "        weights = _guarded_softmax(scores, lambda s: s.softmax(-1))",
+   "        weights = scores.softmax(-1)"
+  ],
+  "sha256": "574c823e67e139be923b3414d4f16314ab4088da18d6a2a9db35e9fa5b29551f"
+ },
+ "B3": {
+  "file": "functional.py",
+  "replace": [
+   "        return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,\n                                          _causal_mask(L, S, query.device.split(\":\")[0], query.dtype)),\n                         value)",
+   "        return tc.matmul(tc.causal_softmax(scores), value)"
+  ],
+  "sha256": "6d780633a8ff311910942233f6b0867045657cce7274902121a547727bcdfa12"
+ },
+ "B4": {
+  "file": "quant.py",
+  "replace": [
+   "    weights = F._guarded_softmax(scores, lambda s: s.softmax(-1))",
+   "    weights = scores.softmax(-1)"
+  ],
+  "sha256": "a7b40427f82e0fdf54743affd3091ea0a6466a1f2204830d541efab134188112"
+ },
+ "B5": {
+  "file": "functional.py",
+  "replace": [
+   "    return weights * (blocked * -1.0 + 1.0)",
+   "    return weights"
+  ],
+  "sha256": "552909aa9daf2ed3b8423a0f6218f941bee8c1c1b48f6193a9d5effb087a7ceb"
+ },
+ "B6": {
+  "file": "functional.py",
+  "replace": [
+   "    return ind.min([-1], True)",
+   "    return ind.max([-1], True)"
+  ],
+  "sha256": "f93dea93a3c1b5c7d47f6a577b941091165f14ba32c0eae722d5e54cd4a5b718"
+ },
+ "B7": {
+  "file": "functional.py",
+  "replace": [
+   "        ind = tc._C.where(invisible, _guard_const(1.0, ind), ind)",
+   "        ind = ind"
+  ],
+  "sha256": "617e582bc301a0f61c3701612fac038543d9374247c8b01011a87f949ad3c11d"
+ }
+}

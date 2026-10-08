@@ -1,0 +1,43 @@
+{
+  "order": "orders/APA_MF2_2_AMENDMENT_2.md",
+  "order_sha256": "76918bea703364484dbdfd601177cae1965b89a9c425711a21d057bb830874b1",
+  "seat": "Claude Opus 5.5 high (Agent-tool subagent), same seat",
+  "registered_at": "written 19:48 EDT 2026-10-07, before any GPU command of this amendment",
+  "base": "apa-mf2 f3cde75 content: kernels.cu d9d98518..., functional.py 86df0db5..., quant.py 3ff09e9b... (checked); package snapshot artifacts/apa_mf2_2b/before/pkg (SHA256SUMS)",
+  "engines": {
+    "note": "Python-only change: NO engine build. after1 = artifacts/apa_mf2_2a/build (ccc9f8d2...) + the before package snapshot; after2 = the SAME engine + this tree's package. Every other build dir is read-only; if a build were ever needed it would go only to artifacts/apa_mf2_2b/build with APA_MF2_2_BUILD_DIR passed explicitly.",
+    "census_arms": "fd32b6d, mf2, mf2_1, mf2_2 (original bc7ed2a9 recording), after1 (Amendment 1 'after' recording + a fresh after1 arm), after2 -- one python process each, Amendment-1 harness scripts/apa_mf2_2a_census.py unchanged"
+  },
+  "item4": {
+    "rule": "a row whose every score (after masking) is -inf returns weights 0 -> output 0 on every composed softmax site; rows with any non--inf entry (including NaN) are untouched.",
+    "detection": "blocked = (scores < -FLT_MAX).min(-1, keepdim) in the scores' dtype (1 iff every entry is -inf; NaN compares false so NaN rows are never 'blocked'). For the USE_FUSED_SOFTMAX causal_softmax branch, invisible positions count as blocked (masked_fill(causal_mask, 1) on the indicator) because that kernel never reads them.",
+    "guard": "weights = softmax(scores.masked_fill(blocked, 0)) * (1 - blocked): blocked rows softmax a finite row (no NaN in forward or backward) and are multiplied by 0; non-blocked rows see a no-op fill and x*1 (bytes unchanged, gradients unchanged; masked_fill backward zeroes the gradient only at filled positions).",
+    "sites": ["functional.scaled_dot_product_attention: USE_FUSED_SOFTMAX causal_softmax branch", "functional.scaled_dot_product_attention: composed inference softmax (causal_softmax row kernel)", "functional.scaled_dot_product_attention: composed grad softmax (Tensor.softmax)", "quant.apa_quant_attention: weights softmax (causal and non-causal)"],
+    "unchanged": "the -inf predicate causal mask (no finite additive mask: F4 stays closed), the fused non-causal kernels, the selection rule, primitive ops (ops.cpp softmax, kernels.cu causal_softmax)"
+  },
+  "gates": {
+    "G1": "full tensor_cuda suite on the after1 engine + after2 package: FAILED/ERROR set == the 52 baseline ids, 0 new; test_apa_mf2_2b_* pass.",
+    "G2": "census (Amendment-1 harness, 2376 cells): (a) 0 cells where fd32b6d is finite and after2 is non-finite; (b) 0 all-(-inf)-row cells that are NaN on any path (cells containing an all -inf row: all_blocked, all_masked, S=1 neg_inf_first, causal single_visible with S >= 3 > ... rows 0-1 at Lq=3). PREDICTION, stated before the run: (b) stays RED on the two score-input PRIMITIVE paths of the census (eager_softmax = Tensor.softmax called directly on an all -inf row, causal_softmax = tc.causal_softmax called directly), because their code (ops.cpp softmax, kernels.cu causal_softmax) is outside this amendment's writable list; every attention path is predicted 0. If so, G2 is reported RED on exactly those primitive cells with the scope reason.",
+    "G3": "after2 byte-identical to after1 on every census cell that contains no all -inf row (canonical sha), and on the identity sets: (i) scripts/apa_mf2_2_identity.py (882 fused-kernel keys + 522 N1 rows) vs the after1 recorded arm; (ii) the re-review probe identity_values set (SDPA infer/grad, causal_softmax, max/min, log_softmax, quant p1, clamp/pool/norm, KV pack, fused kernels, real Qwen exports; 361 tensors with real bf16 leaves) after1 vs after2 in separate processes (probe copy scripts/apa_mf2_2b_probe/).",
+    "G4": "left-padded batch-style case: Lq = S in {8, 33, 256}, the first k in {1, 3} keys masked for ALL queries via attn_mask -inf, causal; fp32/fp16/bf16; D {64, 128}; SDPA inference (USE_FUSED_SOFTMAX False and True) and grad: padded rows (0..k-1) exactly 0, every output finite, every gradient finite, padded rows' dq exactly 0, non-padded rows within tolerance of the fp64 oracle over their unmasked visible keys (fp32 1e-5, fp16/bf16 2e-2 abs); plus a two-layer chain (layer-1 output used as the next layer's V and K) finite everywhere. apa_quant_attention variant: first k keys blocked by fp32 overflow (Q0=1e21, K0=-1e18), causal, p 1 and 0.15: rows 0..k-1 exactly 0, all finite.",
+    "mutation": ">= 0.80 of non-error registered mutants killed by tensor_cuda/tests/test_apa_mf2_2b_*.py (baseline all pass first)."
+  },
+  "mutants": {
+    "B1": "SDPA composed inference softmax site: guard removed (plain causal_softmax row kernel)",
+    "B2": "SDPA composed grad softmax site: guard removed (plain Tensor.softmax)",
+    "B3": "SDPA USE_FUSED_SOFTMAX causal_softmax site: guard removed",
+    "B4": "apa_quant_attention softmax site: guard removed",
+    "B5": "guard helper: zeroing multiply dropped (blocked rows become a uniform average of V)",
+    "B6": "guard helper: detection 'any entry -inf' (max) instead of 'every entry -inf' (min) -- changes non-blocked rows",
+    "B7": "fused causal branch: invisible positions not counted as blocked"
+  },
+  "predictions": {
+    "PB1": "after2: all 72 Amendment-1 G2 cells return 0 on blocked rows (finite); every all_blocked / all_masked attention cell is finite (0)",
+    "PB2": "eager_softmax and causal_softmax primitive all_blocked cells stay NaN (outside scope) -> G2(b) RED on those cells only",
+    "PB3": "after2 == after1 bytes on every census cell without an all -inf row and on both identity sets"
+  },
+  "rails": [
+    "no finite additive mask (F4); no change to any row that is not all -inf; no engine build outside artifacts/apa_mf2_2b/build (none planned); 595.84 override never set",
+    "GPU: flock -w 900 /tmp/forge-gpu.lock timeout 600, foreground, native driver"
+  ]
+}

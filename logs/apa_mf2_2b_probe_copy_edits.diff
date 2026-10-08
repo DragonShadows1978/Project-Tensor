@@ -1,0 +1,44 @@
+--- scripts/apa_mf2_2_probe/gpu_probe.py	2026-10-07 19:08:29.976246545 -0400
++++ scripts/apa_mf2_2b_probe/gpu_probe.py	2026-10-07 19:51:24.208169254 -0400
+@@ -20,7 +20,7 @@
+ import oracle as O
+ from provenance import ROOT,verify
+ 
+-ART=ROOT/'artifacts/apa_mf2_2/probe'  # APA-MF2.2 copy: receipts land in this order's artifacts
++ART=ROOT/'artifacts/apa_mf2_2b/probe'  # APA-MF2.2 copy: receipts land in this order's artifacts
+ ROWS=[]
+ TC=F=Q=None
+ INFO={}
+@@ -470,6 +470,7 @@
+                         'fd32b6d':os.environ['APA_MF21REV_PRODUCTION_ENGINE'],
+                         'c5c468d':os.environ['APA_MF21REV_AFTER_ENGINE'],
+                         'mf2_2':os.environ.get('APA_MF2_2_ENGINE_MF2_2','')}
++    engines.update(json.loads(os.environ.get('APA_MF2_2B_ENGINES','{}')))  # APA-MF2.2b: after1/after2
+     pkgs=json.loads(os.environ['APA_MF2_2_PKGS'])
+     for rev in revs:
+         env=os.environ.copy(); env['APA_MF21REV_REV']=rev; env['APA_MF21REV_ENGINE']=engines[rev]
+@@ -482,7 +483,10 @@
+     for rev in revs:
+         if rev==AFTER: continue
+         before=results[rev]
+-        assert before['provenance']['engine_sha256']!=after['provenance']['engine_sha256'],'same NEW engine used on both arms'
++        # APA-MF2.2b copy: after1/after2 share one engine binary and differ in the package, so the
++        # separation check is on (engine, functional, quant) hashes, not the engine alone.
++        pv=lambda r: (r['provenance']['engine_sha256'],r['provenance']['functional_sha256'],r['provenance']['quant_sha256'])
++        assert pv(before)!=pv(after),'same NEW code used on both arms'
+         assert before['values'].keys()==after['values'].keys(),'unequal key coverage'
+         mismatches=[k for k in before['values'] if before['values'][k]!=after['values'][k]]
+         check('separate_process_identity/'+rev,lambda mismatches=mismatches,rev=rev:
+--- scripts/apa_mf2_2_probe/provenance.py	2026-10-07 19:06:06.351053868 -0400
++++ scripts/apa_mf2_2b_probe/provenance.py	2026-10-07 19:51:24.207928700 -0400
+@@ -20,8 +20,8 @@
+     rev=os.environ['APA_MF21REV_REV']
+     engine=Path(os.environ['APA_MF21REV_ENGINE']).resolve()
+     pkg=Path(os.environ['APA_MF21REV_PKG']).resolve()
+-    # APA-MF2.2 copy: reviewer pins + an 'mf2_2' entry (artifacts/apa_mf2_2/probe/provenance_pins.json)
+-    pins=json.loads((ROOT/'artifacts/apa_mf2_2/probe/provenance_pins.json').read_text())[rev]
++    # APA-MF2.2 copy: reviewer pins + an 'mf2_2' entry (artifacts/apa_mf2_2b/probe/provenance_pins.json)
++    pins=json.loads((ROOT/'artifacts/apa_mf2_2b/probe/provenance_pins.json').read_text())[rev]
+     manifest=json.loads((engine/'manifest.json').read_text())
+     assert manifest['sources']==pins['engine_sources'], 'engine source pins differ from independent historical revision'
+     for rel,expected in pins['python_sources'].items():
