@@ -14,7 +14,7 @@ significantly hurts performance."
 | G1 port | **PASS** | Only the six new files, in authorized paths. "Fork" and "WorkTree" appear in none of them (grep exit 1). With `CUDA_VISIBLE_DEVICES=""`: 20 passed, 11 skipped, 0 errors. |
 | G2 main | **PASS** | 31/31 pass on the pinned main engine d8fda9a8. Its build manifest matches this worktree's a28e28e sources: 19/19 files, and the .so matches the pin. Full suite: FAILED/ERROR set equals the 52 baseline ids, with 0 new. |
 | G3 teeth | **PASS per detector** | ZWS fails on PYSTAT and CU7. The PDWL cut check and the stagger cuts fail on CU5; the PDWL label check fails on LD1's CU1. IMM, textbook and gradcheck each fail on MU2–MU6, with identical alarm sets. |
-| G4 cost | **PASS** | The 31 new tests take 0.484 s in-suite: 0.089 s CPU-only (20 tests) and 0.395 s GPU (11 tests). Suite with vs without: +1.30 s mean over two pairs, within noise. Nothing gated or dropped. |
+| G4 cost | **PASS** | Measured suite overhead: +1.30 s mean over two with/without pairs (+2.46 s and +0.13 s), within noise. The 31 new tests' summed test durations are 0.484 s: 0.089 s for the 20 CPU-only tests and 0.395 s for the 11 GPU tests. That sum is per-test time, not the suite's wall-time delta. Nothing gated or dropped. |
 
 **Engine runtime performance is unaffected:** no engine source changed. The six files are three test modules and the
 three script modules they import.
@@ -107,8 +107,8 @@ The standalone run gives 31 passed in 1.67 s (`logs/apa_regt1_main_new_tests_r1.
 |---|---|---|---|
 | r1 | with | 37 failed, 1956 passed, 46 skipped, 15 errors | 147.70 |
 | r2 | without | 37 failed, 1925 passed, 46 skipped, 15 errors | 145.24 |
-| r3 | with | 1956 passed | 144.22 |
-| r4 | without | 1925 passed | 144.09 |
+| r3 | with | 37 failed, 1956 passed, 46 skipped, 15 errors | 144.22 |
+| r4 | without | 37 failed, 1925 passed, 46 skipped, 15 errors | 144.09 |
 
 The FAILED/ERROR set equals the 52 baseline ids in every run.
 
@@ -163,3 +163,63 @@ Each check below was re-run by the lead, independently of the seat:
 | MU2 (2e166353) | 3 failed, 28 passed |
 | MU6 (5635286f) | 3 failed, 28 passed |
 | main with `CUDA_VISIBLE_DEVICES=""` | 20 passed, 11 skipped |
+
+## Cross-model review and promotion (2026-10-09)
+
+### The review
+
+- **Reviewer:** Codex gpt-6.1-sol, reasoning high.
+- **Order:** `orders/APA_REGT1_REVIEW.md` on branch `apa-regt1rev`.
+- **Run:** sentinel run 20261009T200915Z-1624941 ended COMPLETED with SHIM-DONE exit=0.
+- **Receipts:** `apa-regt1rev` ffa99e4 (`docs/APA_REGT1_REVIEW.md`, `artifacts/apa_regt1rev/verdict.json`).
+
+| gate | verdict |
+|---|---|
+| R1 faithful port | **FAITHFUL**: no non-declared logic differences |
+| R2 sound as production tests | **SOUND-WITH-NITS** |
+| R3 B04 | **CORRECT**: only B04 changes; all 17 rectangular cells keep their original cuts |
+| R4 promotion of a28e28e..e4023c1 | **APPROVE-WITH-NITS**, no blocking findings |
+
+### Open nits (none blocking)
+
+- **F01 (SUSPICIOUS): the CUDA-availability guard is too broad.** It catches any exception from the one-tensor probe
+  and skips. A programming defect in that probe would therefore show up as 11 skips, not failures.
+  - Follow-up: narrow the guard to no-device errors, or have a GPU CI lane require zero GPU skips.
+  - Production's `test_terrain_render.py` uses the same pattern.
+- **F03 (BENIGN):** the r3/r4 summaries were abbreviated, and the duration sum was worded as overhead. Both are
+  corrected above.
+- **F04 (BENIGN):** the registered exact-integer APA operands make atomic accumulation order-independent. Future
+  nondeterministic paths are not covered.
+- **F05 (BENIGN):** the CU6 tile-edge gap is inherited from the source tests.
+- **F06 (BENIGN):** the dormant `load_engine`, `driver_check` and `ROOT`/`ART` helpers in `apa_om135_core.py` are
+  unreachable from the shipped tests.
+- **F07 (BENIGN):** the wrong-orientation test is an active positive control, not an engine kill.
+
+### The reviewer's GPU probes, run by the lead
+
+The lead ran these on 2026-10-09 at about 20:31Z, on driver 595.99.02 with main d8fda9a8, using
+`scripts/apa_regt1rev_gpu.sh`. All 3 passed:
+
+| probe | result |
+|---|---|
+| repeat | 352 shipped GPU item calls, each repeated 32 times: zero skips, refusals, noise or assertion failures |
+| zws | 96/96 valid ZWS runs PASS; the original B04 rule is still REFUSED-operand, with 264 ghost V-tag changes |
+| om135 | 2304 certified method/cell/dtype checks, all non-alarm |
+
+### What is promoted
+
+- **Scope:** six new files, three test modules and the three script modules they import, plus their receipts. No
+  engine source, existing test or runtime path changes.
+- **Covers:**
+  - the ZWS statistics tag, the PDWL/frontier-first stagger cuts and the OM135 IMM/textbook/gradcheck backward checks,
+    at their registered cells, on the engine as built from main;
+  - the B04 square cell, with the corrected ghost block.
+- **Does not cover:**
+  - CU6 tile-edge leaks;
+  - nondeterministic backward paths;
+  - engine speed;
+  - GRM or GRAPA consumers.
+- **David's approval** (2026-10-09, verbatim): "On things like regression tests going into production, that's fine
+  unless it really significantly hurts performance."
+- **The performance condition:** the measured suite overhead is about 1 s on a 146 s suite, and engine runtime is
+  untouched.
