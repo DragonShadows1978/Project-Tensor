@@ -1,0 +1,64 @@
+diff -r PYSTAT pkg vs this worktree's package (a28e28e):
+diff -r /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ld2/artifacts/apa_ld2/mutants/PYSTAT_fd32b6d/pkg/tensor_cuda/quant.py tensor_cuda/tensor_cuda/quant.py
+254c254
+<         absb = absb.masked_fill(tc.tensor(np.triu(np.ones((L, S), np.float32), 1), device=dev), 0.0)  # APA-LD2 MUTANT PYSTAT: fd32b6d quant.py:174 top-left statistics mask
+---
+>         absb = absb.masked_fill(F._causal_mask(L, S, dev, "float32"), 0.0)
+diff exit=1
+9bb2093df1fa751022400791579afebfe904e7c616d3cd090e0746266829ecd7  tensor_cuda/tensor_cuda/quant.py
+9425e47efc7a05091ba1bfad07c03387200ca44eaebdf291eb6258d18db70a3c  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ld2/artifacts/apa_ld2/mutants/PYSTAT_fd32b6d/pkg/tensor_cuda/quant.py
+== CU5_offby1 kernels.diff
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu (CU5_offby1)
+@@ -1186,7 +1186,7 @@
+   // at S==L (square, no cache), and SILENTLY blinds queries to the most
+   // recent S-L keys otherwise (the 121->11M ppl bug class). Reduces to
+   // i+1 exactly when S==L.
+-  int s_max = is_causal ? ((S - L) + i + 1) : S;
++  int s_max = is_causal ? min(S, (S - L) + i + 2) : S;  // APA-LD2 MUTANT CU5: one extra future key
+   __shared__ float red[256];
+ 
+   // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+== CU6_tile_edge kernels.diff
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu (CU6_tile_edge)
+@@ -1186,7 +1186,7 @@
+   // at S==L (square, no cache), and SILENTLY blinds queries to the most
+   // recent S-L keys otherwise (the 121->11M ppl bug class). Reduces to
+   // i+1 exactly when S==L.
+-  int s_max = is_causal ? ((S - L) + i + 1) : S;
++  int s_max = is_causal ? ((S - L) + i + 1 + ((((S - L) + i + 1) % 64 == 0 && (S - L) + i + 1 < S) ? 1 : 0)) : S;  // APA-LD2 MUTANT CU6: tile-edge leak
+   __shared__ float red[256];
+ 
+   // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+== CU7_stats_range kernels.diff
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu (CU7_stats_range)
+@@ -1186,7 +1186,7 @@
+   // at S==L (square, no cache), and SILENTLY blinds queries to the most
+   // recent S-L keys otherwise (the 121->11M ppl bug class). Reduces to
+   // i+1 exactly when S==L.
+-  int s_max = is_causal ? ((S - L) + i + 1) : S;
++  int s_max = is_causal ? ((S - L) + i + 1) : S;  int s_stat = is_causal ? (i + 1) : S;  // APA-LD2 MUTANT CU7: top-left stats range
+   __shared__ float red[256];
+ 
+   // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+@@ -1196,7 +1196,7 @@
+   // genuine disjoint partial).
+   float sum = 0.f, sumsq = 0.f;
+   if constexpr (WCOOP) {
+-    for (int j = warp; j < s_max; j += nwarp) {
++    for (int j = warp; j < s_stat; j += nwarp) {  // APA-LD2 MUTANT CU7
+       const T* kqj = kqbase + (int64_t)j * D;
+       float dot = 0.f;
+       for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+@@ -1207,7 +1207,7 @@
+       sum += a; sumsq += a * a;
+     }
+   } else {
+-    for (int j = tid; j < s_max; j += nt) {
++    for (int j = tid; j < s_stat; j += nt) {  // APA-LD2 MUTANT CU7
+       const T* kqj = kqbase + (int64_t)j * D;
+       float dot = 0.f;
+       for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+@@ -1225,7 +1225,7 @@
