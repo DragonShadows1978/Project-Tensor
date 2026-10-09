@@ -1,0 +1,118 @@
+# evidence script (verbatim source follows; sha256 8924bb2b2a2ecef0a8ccab2787703632532f1af29760e6d0ba551adb9c1d1bdc)
+# | """APA-REGT1 evidence (not shipped): per-cell / per-method verdicts with the SHIPPED harness on whatever engine and
+# | package the environment imports (one engine per process).
+# | 
+# |   zws  : the ZWS cells of test_engine_zws_passes_on_main_apa, each reported separately, plus B04 under the
+# |          REGISTERED (pre-fix) ghost rule t_g = S - max(L, 3) = 0 to show the defect reproduces and the fix removes it.
+# |   om135: every small cell x dtype x method of test_three_methods_pass_on_main_gpu, each method run on its own
+# |          (the test asserts IMM first, which hides the textbook and gradcheck verdicts on a mutant).
+# | usage: python3 regt1_evidence_cells.py <zws|om135> <worktree>
+# | """
+# | import hashlib
+# | import json
+# | import math
+# | import sys
+# | import traceback
+# | 
+# | import numpy as np
+# | 
+# | mode, wt = sys.argv[1], sys.argv[2]
+# | sys.path.insert(0, wt + "/scripts")
+# | import tensor_cuda as tc  # noqa: E402
+# | from tensor_cuda import functional as F  # noqa: E402
+# | from tensor_cuda import nn  # noqa: E402
+# | from tensor_cuda import quant as Q  # noqa: E402
+# | 
+# | so = tc._C.__file__
+# | print(json.dumps(dict(event="engine", package=tc.__file__, engine=so,
+# |                       engine_sha256=hashlib.sha256(open(so, "rb").read()).hexdigest(),
+# |                       quant_py_sha256=hashlib.sha256(open(tc.__file__.replace("__init__.py", "quant.py"), "rb")
+# |                                                      .read()).hexdigest())))
+# | 
+# | 
+# | def slim(r):
+# |     keep = ("verdict", "why", "t_g", "cuts", "violations", "leak_rows", "blind_rows", "must_change_rows",
+# |             "must_invariant_rows", "indeterminate_rows", "repeat_noise", "ghost_vtag_changed_rows_untagged",
+# |             "ghost_vtag_changed_rows_tagged", "first_violation", "runs", "seconds")
+# |     return {k: r[k] for k in keep if k in r}
+# | 
+# | 
+# | if mode == "zws":
+# |     import apa_ld1_pdwl as P
+# |     import apa_ld2_pdwl as P2
+# |     P.tc, P.F, P.Q = tc, F, Q
+# |     cells = [("rect_apa_quant_fp32_L3_S33", "apa_quant", "float32", 3, 33, None),
+# |              ("rect_apa_sel_bf16_L3_S33", "apa_sel", "bfloat16", 3, 33, None),
+# |              ("B04_apa_quant_fp32_L33_S33_corrected", "apa_quant", "float32", 33, 33, None),
+# |              ("B04_apa_quant_fp32_L33_S33_registered_rule", "apa_quant", "float32", 33, 33, "registered")]
+# |     for name, fam, dt, L, S, rule in cells:
+# |         if rule == "registered":   # the fork's zws_cuts @ cb2fac1, verbatim
+# |             t_g = S - max(L, 3)
+# |             cuts = sorted({t_g, min(S - 1, max(t_g, (S - L) + L // 2))})
+# |         elif L == 3:
+# |             t_g, cuts = 30, P2.zws_cuts(3, 33)[1]   # as the test passes them
+# |         else:
+# |             t_g, cuts = P2.zws_cuts(L, S)
+# |         try:
+# |             e = P2.Attn2(fam, dt, 2, 4, 2, L, S, 32, None, causal=True,
+# |                          inject=P2.zws_qk(np.random.default_rng(1), 2, 4, 2, L, S, 32, 1 / math.sqrt(32), dt, t_g))
+# |             r = slim(P2.zws_cell(e, t_g, cuts, np.random.default_rng(2), None))
+# |         except Exception as ex:
+# |             r = dict(verdict="RAISE", error=f"{type(ex).__name__}: {ex}"[:300])
+# |         print(json.dumps(dict(event="cell", cell=name, family=fam, dtype=dt, L=L, S=S, **r)))
+# | 
+# | elif mode == "om135":
+# |     import apa_om135_core as C
+# |     C.tc, C.F, C.nn = tc, F, nn
+# |     # the test's _small_cells(), verbatim
+# |     cells = [
+# |         C.ChainCell("CH3", "chain", [(17, 16), (16, 12), (12, 20)], [False] * 3, [1.0] * 3, 2, 2, 21),
+# |         C.ChainCell("CH4", "chain", [(17, 16), (16, 8), (8, 24), (24, 10)], [False] * 4, [1.0] * 4, 2, 2, 22),
+# |         C.ChainCell("SQ3T", "chain", [(16, 16)] * 3, [False, True, False], [1.0, 2.0, 1.0], 2, 2, 23),
+# |         C.ChainCell("LIN", "linear", [(2, 17, 16), (12, 16)], [False, True], [1.0, 1.0], 2, 2, 24, bias=True,
+# |                     shared=[False, True]),
+# |         C.ChainCell("BBM", "bbm", [(2, 17, 16), (16, 12)], [False, False], [1.0, 1.0], 2, 2, 25, shared=[False, True]),
+# |         C.ChainCell("BMM", "bmm", [(2, 4, 17, 16), (2, 4, 16, 12)], [False, False], [1.0, 1.0], 2, 2, 26),
+# |         C.SdpaCell("SDPA", 2, 4, 33, 64, 27, 0.5, 0.5, 1 / 16, 4),
+# |         C.ApaCell("APA", 2, 4, 2, 33, 64, 28, 0.5, 0.25),
+# |     ]
+# |     tally = {}
+# |     for dtype in C.DTYPES:
+# |         for cell in cells:
+# |             p = C.prepare(cell, "bfloat16")
+# |             lins = {}
+# |             if isinstance(cell, C.ChainCell) and cell.kind == "linear":
+# |                 lins = {d: cell.make_linear(d) for d in {dtype, "float32"}}
+# |             prep = p["imm"]
+# |             if not isinstance(cell, C.ChainCell):
+# |                 prep = (prep[0], prep[1], prep[2], cell.eye_host(dtype) if cell.kind == "sdpa" else None)
+# |             out = {}
+# |             for meth in ("imm", "textbook", "gradcheck"):
+# |                 try:
+# |                     if meth == "imm":
+# |                         a = C.method_imm(cell, None, dtype, lin=lins.get(dtype), prepared=prep)[0]
+# |                     elif meth == "textbook":
+# |                         a = C.method_textbook(cell, dtype, lin=lins.get(dtype), prepared=p["textbook"])[0]
+# |                     else:
+# |                         a = C.method_gradcheck(cell, dtype, lin32=lins.get("float32"), lin=lins.get(dtype),
+# |                                                prepared=p["textbook"], probe_seed=cell.seed + 2)[0]
+# |                     v = "ALARM" if a else "PASS"
+# |                 except Exception as ex:
+# |                     v = "RAISE:" + f"{type(ex).__name__}: {ex}"[:80]
+# |                 out[meth] = v
+# |                 k = (meth, v.split(":")[0])
+# |                 tally[k] = tally.get(k, 0) + 1
+# |             print(json.dumps(dict(event="cell", cell=cell.cid, dtype=dtype, cert_ok=p["ok"], **out)))
+# |     print(json.dumps(dict(event="tally", **{f"{m}|{v}": n for (m, v), n in sorted(tally.items())})))
+# | else:
+# |     raise SystemExit(mode)
+# known: main date: 2026-10-09T16:01:48-04:00 driver: NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  595.99.02  Release Build  (dvs-builder@U22-I3-AF05-06-2)  Wed Aug 26 05:20:50 UTC 2026
+# PYTHONPATH=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/artifacts/apa_mf_main/build:/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_regt1/tensor_cuda
+{"event": "engine", "package": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_regt1/tensor_cuda/tensor_cuda/__init__.py", "engine": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/artifacts/apa_mf_main/build/_tensor_cuda.cpython-312-x86_64-linux-gnu.so", "engine_sha256": "d8fda9a8879b2c0de1b659653e8899aa6fbb89da36af03d1339e2a1c9b011e31", "quant_py_sha256": "9bb2093df1fa751022400791579afebfe904e7c616d3cd090e0746266829ecd7"}
+{"event": "cell", "cell": "rect_apa_quant_fp32_L3_S33", "family": "apa_quant", "dtype": "float32", "L": 3, "S": 33, "verdict": "PASS", "t_g": 30, "cuts": [30, 31], "violations": 0, "leak_rows": 0, "blind_rows": 0, "must_change_rows": 40, "must_invariant_rows": 8, "indeterminate_rows": 0, "repeat_noise": 0, "ghost_vtag_changed_rows_untagged": 0, "ghost_vtag_changed_rows_tagged": 0, "first_violation": null, "runs": 6, "seconds": 0.1267}
+{"event": "cell", "cell": "rect_apa_sel_bf16_L3_S33", "family": "apa_sel", "dtype": "bfloat16", "L": 3, "S": 33, "verdict": "PASS", "t_g": 30, "cuts": [30, 31], "violations": 0, "leak_rows": 0, "blind_rows": 0, "must_change_rows": 34, "must_invariant_rows": 8, "indeterminate_rows": 6, "repeat_noise": 0, "ghost_vtag_changed_rows_untagged": 0, "ghost_vtag_changed_rows_tagged": 0, "first_violation": null, "runs": 6, "seconds": 0.0051}
+{"event": "cell", "cell": "B04_apa_quant_fp32_L33_S33_corrected", "family": "apa_quant", "dtype": "float32", "L": 33, "S": 33, "verdict": "PASS", "t_g": 16, "cuts": [16, 24], "violations": 0, "leak_rows": 0, "blind_rows": 0, "must_change_rows": 187, "must_invariant_rows": 320, "indeterminate_rows": 21, "repeat_noise": 0, "ghost_vtag_changed_rows_untagged": 0, "ghost_vtag_changed_rows_tagged": 0, "first_violation": null, "runs": 6, "seconds": 0.0132}
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_regt1/scripts/apa_ld2_pdwl.py:255: RuntimeWarning: divide by zero encountered in divide
+  return (wlo @ V) / whi.sum(1, keepdims=True), (whi @ V) / wlo.sum(1, keepdims=True)
+{"event": "cell", "cell": "B04_apa_quant_fp32_L33_S33_registered_rule", "family": "apa_quant", "dtype": "float32", "L": 33, "S": 33, "verdict": "REFUSED-operand", "why": "ghost weights not exactly zero (V-tag on the ghost block changed rows)", "t_g": 0, "cuts": [0, 16], "violations": 0, "leak_rows": 0, "blind_rows": 0, "must_change_rows": 244, "must_invariant_rows": 128, "indeterminate_rows": 156, "repeat_noise": 0, "ghost_vtag_changed_rows_untagged": 264, "ghost_vtag_changed_rows_tagged": 264, "first_violation": null, "runs": 6, "seconds": 0.012}
+# EXIT 0

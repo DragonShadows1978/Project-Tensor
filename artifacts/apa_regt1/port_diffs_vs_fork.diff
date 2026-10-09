@@ -1,0 +1,608 @@
+################ scripts/apa_ld1_pdwl.py  (fork source: cb2fac1:scripts/apa_ld1_pdwl.py, sha256 5dfd698003b69317f26a11b5a86bc8463456bf92adb1b3e2c3393f2c844123a1; ported sha256 c25f500482320d5975c9a01d3fc8d2b64c88c14a7b201c818d39955cb59ff875)
+--- fork cb2fac1:scripts/apa_ld1_pdwl.py
++++ port scripts/apa_ld1_pdwl.py
+@@ -353,3 +353,209 @@
+     n = int(np.count_nonzero(diff))
+     return dict(mode="basis", verdict="ALARM" if n else "PASS", violations=n, first_violation=_first_index(diff),
+                 runs=1, seconds=round(time.perf_counter() - t0, 4))
++
++
++# =================================================================================================
++# Engine adapter (APA-REGT1 port). Ported from scripts/apa_ld1_entries.py @ cb2fac1 (APA-LD1) as a LINE SUBSET:
++# every retained line is verbatim; lines were only removed. Kept: up / down / expand_heads / batch_stride_off1
++# and the Attn cell class for the entry families the ported regression tests exercise (sdpa, apa_quant,
++# apa_sel) with the Python leak mutants they use (tile, topleft, offby1). The pure-geometry methods
++# (_kv_layout, _heads_for_kernel, labels, operand, intervals, cuts) are kept whole, so the TRUE visibility the
++# detectors judge against is the fork's, byte for byte.
++# Removed, with the reason: load_engine (env-var engine pinning; production tests import the installed
++# tensor_cuda like every other test in tensor_cuda/tests); the GRM / GRAPA callers and their hardcoded external
++# repo paths (GRM and GRAPA are out of this order's scope); the other entry families, the dV leg (_run_bwd),
++# run_grad, _mask_t and _synthetic_margins (which wrote under artifacts/); RaggedBank. Nothing in this section
++# touches the file system.
++# The adapter lines say `P.<name>` because apa_ld1_entries imported this module as P; the alias below keeps them
++# verbatim. The test module sets tc / F / Q to the imported engine before it builds an Attn.
++# Prior art: the PDWL references in this module's header; the adapters themselves are APA-LD1's (no prior art
++# known to me for them).
++# =================================================================================================
++import sys as _sys  # noqa: E402
++
++P = _sys.modules[__name__]
++
++tc = None
++F = None
++Q = None
++
++
++def up(x, dtype):
++    return tc.tensor(np.ascontiguousarray(x, dtype=np.float32), dtype=dtype)
++
++
++def down(t):
++    return np.ascontiguousarray(t.float().numpy(), dtype=np.float32)
++
++
++def expand_heads(x, rep, how="repeat"):
++    """(B, KVH, ...) -> (B, KVH*rep, ...): repeat (h -> h//rep, the correct GQA map) or tile
++    (h -> h % KVH, the T4a mutant)."""
++    if rep == 1:
++        return x
++    return np.repeat(x, rep, axis=1) if how == "repeat" else np.tile(x, (1, rep) + (1,) * (x.ndim - 2))
++
++
++def batch_stride_off1(x):
++    """T4a 'batch stride off-by-one': slab b is read from flat offset b*(stride-1) (stride = the
++    per-batch element count): batch b >= 1 starts b elements early, reading batch b-1's tail."""
++    B = x.shape[0]
++    stride = int(np.prod(x.shape[1:]))
++    flat = x.reshape(-1)
++    out = np.empty_like(x)
++    for b in range(B):
++        off = b * (stride - 1)
++        out[b] = flat[off:off + stride].reshape(x.shape[1:])
++    return out
++
++
++class Attn:
++    """One (entry, dtype, shape) cell. Builds q/k/(kq)/v operands, fixed except the tagged one."""
++
++    def __init__(self, family, dtype, B, H, KVH, L, S, D, VD=None, *, causal=True, window=0,
++                 scale=None, seed=0, mutant=None, row0=0, Lq=None, pad=None, variant=None, zthr=None):
++        self.family, self.dtype, self.B, self.H, self.KVH = family, dtype, B, H, KVH
++        self.L, self.S, self.D, self.VD = L, S, D, (VD or D)
++        self.causal, self.window, self.mutant, self.row0, self.Lq, self.pad = causal, window, mutant, row0, Lq, pad
++        self.variant = variant
++        self.rep = H // KVH
++        self.scale = (1.0 / math.sqrt(D)) if scale is None else scale
++        self.zthr = Q._norm_ppf(1.0 - 0.15) if zthr is None else zthr
++        rng = np.random.default_rng(seed)
++        self.q, self.k = P.make_qk(rng, (B, H, L, D), (B, KVH, S, D), self.scale, dtype)
++        self.v = P.make_v(rng, (B, KVH, S, self.VD), dtype)
++        self.sinks = None
++        self.n_extra_den = 0
++        self.dv_leg = family.startswith("bwd")
++        self.sigma_rows = [self.k]
++        self._prep()
++        self.sigma = P.score_bound(self.scale, self.q, *self.sigma_rows)
++        if self.dv_leg:
++            self.dO = P.make_v(rng, (B, H, L, self.VD), dtype)
++
++    # ---------------------------------------------------------------- operand prep (no tagging)
++    def _kv_layout(self, x):
++        """apply the KV-side mutant to a (B, KVH, S, *) operand; returns the array the kernel sees."""
++        if self.mutant == "bstride":
++            x = batch_stride_off1(x)
++        if self.mutant == "topleft":
++            x = x[:, :, :self.L]
++        if self.mutant == "offby1":   # EXPLORATORY (unregistered): one extra future key per row (S' = S+1)
++            x = np.concatenate([x, x[:, :, -1:]], axis=2)
++        return x
++
++    def _prep(self):
++        f, dt = self.family, self.dtype
++        self.k_np = self._kv_layout(self.k)
++        if f in ("apa_sel", "apa_sink", "fwd_train", "fwd_train_h", "bwd", "grm_mcpm3_apa", "grm_blend",
++                 "grapa_sel"):
++            R, CB, BND = Q._tables(self.D, 2, self.KVH, True, "cuda")
++            # row-independent quantizer: chunk along S (GRM gemma4_tc does the same, "proven bit-exact")
++            parts = []
++            for s0 in range(0, self.S, 8192):
++                kq = Q._quantize_keys(up(self.k[:, :, s0:s0 + 8192], "float32"), R, CB, BND)
++                parts.append(down(kq))
++                del kq
++            self.kq = P.round_to(np.concatenate(parts, axis=2), dt)
++            self.sigma_rows = [self.k, self.kq]
++            self.kq_np = self._kv_layout(self.kq)
++        # upload the fixed operands once
++        self.q_t = up(self.q, dt)
++        gq = self._heads_for_kernel()
++        self.k_t = up(expand_heads(self.k_np, gq[0], gq[1]), dt)
++        if hasattr(self, "kq_np"):
++            self.kq_t = up(expand_heads(self.kq_np, gq[0], gq[1]), dt)
++
++    def _heads_for_kernel(self):
++        """(rep, how) the adapter must expand KV heads by before the kernel."""
++        gqa_native = self.family in ("apa_sel", "apa_int4", "apa_int4_ws", "apa_sp", "apa_sink",
++                                     "apa_gemm", "apa_gemm_cached", "fwd_train", "fwd_train_h", "bwd",
++                                     "grm_blend", "grm_g4_sliding", "grapa_sel", "grapa_sdpa")
++        if self.mutant == "tile":
++            return self.rep, "tile"          # expand with the WRONG map; kernel then sees KVH = H
++        if gqa_native:
++            return 1, "repeat"
++        return self.rep, "repeat"
++
++    # ---------------------------------------------------------------- the kernel call
++    def run(self, X):
++        dt, f = self.dtype, self.family
++        rep, how = self._heads_for_kernel()
++        v_t = up(expand_heads(self._kv_layout(X), rep, how), dt)
++        q, k = self.q_t, self.k_t
++        caus = self.causal
++        if self.mutant == "topleft":
++            caus = True       # square truncation: bottom-right on (L, L) == top-left on (L, S)
++        with tc.no_grad():
++            if f == "sdpa":
++                y = F.scaled_dot_product_attention(q, k, v_t, is_causal=caus, scale=self.scale)
++            elif f == "apa_quant":   # zthr < -10 = the baselines' all-refine regime (refine_percentile 1.0)
++                y = Q.apa_quant_attention(q, k, v_t, is_causal=caus, scale=self.scale,
++                                          refine_percentile=1.0 if self.zthr < -10 else 0.15)
++            elif f == "apa_sel":
++                y = tc.apa_selective_attention(q, k, self.kq_t, v_t, self.scale, self.zthr, caus)
++            else:
++                raise ValueError(f)
++        return down(y)
++
++    # ---------------------------------------------------------------- label & interval geometry
++    def labels(self, mode):
++        B, H, KVH = self.B, self.H, self.KVH
++        g_of_h = np.arange(H) // self.rep
++        if mode == "head":
++            lab_kv = np.broadcast_to(np.arange(KVH)[None, :], (B, KVH))
++        elif mode == "batch":
++            lab_kv = np.broadcast_to(np.arange(B)[:, None], (B, KVH))
++        elif mode == "slab":
++            lab_kv = np.arange(B)[:, None] * KVH + np.arange(KVH)[None, :]
++        else:
++            raise ValueError(mode)
++        lab_kv = np.ascontiguousarray(lab_kv)
++        lab_q = lab_kv[:, g_of_h]
++        if self.dv_leg:
++            return lab_q, lab_kv          # operand dO carries query-head labels; dV the KV-head labels
++        return lab_kv, lab_q
++
++    def operand(self):
++        return self.dO if self.dv_leg else self.v
++
++    def intervals(self):
++        B, H, L, S = self.B, self.H, self.L, self.S
++        if self.dv_leg:
++            lo, hi = P.dv_intervals(B, self.KVH, S, L, causal=self.causal)
++            return lo, hi, np.full(lo.shape, S * self.rep * L)
++        if self.family == "sdpa_mask" and self.window:
++            lo, hi = P.causal_intervals(B, H, L, S, window=self.window)
++        elif self.family == "sdpa_mask":
++            lo, hi = P.causal_intervals(B, H, L, S, pad=self.pad)
++        elif self.family == "grm_g4_sliding":
++            lo, hi = P.causal_intervals(B, H, L, S, window=self.window if S > self.window else 0)
++            if S <= self.window and L == 1:
++                lo, hi = P.full_intervals(B, H, L, S)
++        elif self.family == "apa_gemm" or self.family == "apa_gemm_cached":
++            lo, hi = (P.causal_intervals(B, H, L, S, row0=self.row0, Lq=self.Lq, window=self.window)
++                      if self.causal else P.full_intervals(B, H, L, S))
++        elif self.causal:
++            lo, hi = P.causal_intervals(B, H, L, S)
++        else:
++            lo, hi = P.full_intervals(B, H, L, S)
++        n_den = np.maximum(0, hi - lo + 1) + self.n_extra_den
++        return lo, hi, n_den
++
++    def cuts(self):
++        L, S = self.L, self.S
++        if self.dv_leg:
++            t = max(1, min(L // 2, L - 1)) if L > 1 else 1
++            return [(t, "lt")] if L > 1 else []
++        if self.family in ("sdpa_mask", "grm_g4_sliding", "apa_gemm", "apa_gemm_cached") and self.window \
++                and S > self.window:
++            return P.causal_cuts(L, S) + P.window_cuts(L, S, self.window)
++        if self.family in ("apa_gemm", "apa_gemm_cached") and self.causal and self.Lq:
++            pos0 = (S - self.Lq) + self.row0
++            ta = min(max(1, pos0 + L // 2), S - 1)
++            tb = min(max(1, min(L // 2, pos0)), S - 1)
++            return [(t, "ge") for t in sorted({ta, tb})]
++        if self.causal or self.family == "sdpa_mask":
++            return P.causal_cuts(L, S)
++        return [(max(1, S // 2), "ge")]
+################ scripts/apa_ld2_pdwl.py  (fork source: cb2fac1:scripts/apa_ld2_pdwl.py, sha256 000e32046a87ac70042707b8f8a0b2554fe788e52bac827652fd8b3b0f3934f8; ported sha256 d9ee67740e5896bb324d735243143ef4b88a315921edb5066be1bd8ab370d6e8)
+--- fork cb2fac1:scripts/apa_ld2_pdwl.py
++++ port scripts/apa_ld2_pdwl.py
+@@ -184,6 +184,15 @@
+     """ghost block start t_g and the K-tag cuts (each >= t_g): t_g itself (every row that sees a ghost
+     sees a tagged one) and the interior cut (S-L) + L//2 (rows below it must stay invariant)."""
+     t_g = S - max(L, 3)
++    if t_g < 1:
++        # APA-REGT1 B04 fix (the one retune the port order allows). The registered rule above gives t_g <= 0 at
++        # L = S (APA-LD2 cell B04, the square control), so row 0 saw only ghost keys, its ghost weight was not 0,
++        # and the ghost precheck refused the cell (REFUSED-operand). Corrected ghost block = the one APA-LD2's
++        # exploratory rerun used (scripts/apa_ld2_explore.py @ cb2fac1; PASS on main and on PYSTAT at L = S = 33):
++        # the block starts at row L//2's key position, so every row keeps >= 1 ordinary key, and the cuts are
++        # {t_g, t_g + L//4}. Every cell with t_g >= 1 (every registered cell except B04) is unchanged.
++        t_g = (S - L) + L // 2
++        return t_g, sorted({t_g, min(S - 1, t_g + L // 4)})
+     cuts = sorted({t_g, min(S - 1, max(t_g, (S - L) + L // 2))})
+     return t_g, cuts
+ 
+@@ -281,3 +290,158 @@
+         n = rng.integers(0, 8, size=(S, VD))
+         V[b, g] = np.where(hi_[:, None], (1.0 + (120 + n) / 128.0), (1.0 + n / 128.0)) * 2.0 ** vexp
+     return V.astype(np.float32)
++
++
++# =================================================================================================
++# Engine adapter + ZWS cell runner (APA-REGT1 port), LINE SUBSETS of two fork files @ cb2fac1 (APA-LD2); every
++# retained line is verbatim, lines were only removed:
++#   * class Attn2 from scripts/apa_ld2_entries.py: the injected-(q, k) constructor, run_kv and engine_kq (the ZWS
++#     plumbing). Removed: the win_off1 / tile_edge mutant wrappers (_mask_t, _grm_g4_sliding, tile_rows, _sub and
++#     the tile_edge branch of run) and make_zattn (it imported apa_ld1_run.GEO): the ported tests use only the
++#     offby1 mutant, which lives in Attn._kv_layout (scripts/apa_ld1_pdwl.py).
++#   * zws_cell from scripts/apa_ld2_run.py: unchanged (the campaign runner around it is not ported).
++# The fork files imported apa_ld1_entries as EN and this module as P2; both now live in modules already imported
++# here, so the aliases below keep those lines verbatim (EN -> apa_ld1_pdwl, which carries Attn / up / down /
++# expand_heads / tc / F / Q since the port; P2 -> this module).
++# Prior art: this module's header (ZWS, staggered cuts); the adapters are APA-LD1/LD2's own (no prior art known
++# to me for them).
++# =================================================================================================
++import sys as _sys  # noqa: E402
++
++EN = P
++P2 = _sys.modules[__name__]
++
++
++class Attn2(EN.Attn):
++    """LD1 Attn with the LD2 mutants and optional injected (q, k)."""
++
++    def __init__(self, *a, inject=None, **kw):
++        self._inject = inject
++        super().__init__(*a, **kw)
++
++    def _prep(self):
++        if self._inject is not None:
++            self.q, self.k = self._inject
++        super()._prep()
++
++    # ---- ZWS: run with a replacement K (and kq for the fused kernels), V given
++    def run_kv(self, k_np, kq_np, V):
++        old = (self.k_t, getattr(self, "kq_t", None))
++        rep, how = self._heads_for_kernel()
++        self.k_t = EN.up(EN.expand_heads(k_np, rep, how), self.dtype)
++        if kq_np is not None and hasattr(self, "kq_t"):
++            self.kq_t = EN.up(EN.expand_heads(kq_np, rep, how), self.dtype)
++        try:
++            return self.run(V)
++        finally:
++            self.k_t = old[0]
++            if old[1] is not None:
++                self.kq_t = old[1]
++
++    def engine_kq(self, k_np):
++        """the quantized keys the kernel actually uses for its statistics (exact values):
++        apa_sel: the kq operand (LD1 _prep: chunked Q._quantize_keys over KVH heads, rounded to dtype);
++        apa_quant: Q._quantize_keys of the head-expanded key in the operand dtype (quant.py:290)."""
++        if self.family == "apa_quant":
++            rep, how = self._heads_for_kernel()
++            kx = EN.expand_heads(k_np, rep, how)
++            R, CB, BND = EN.Q._tables(self.D, 2, self.H, True, "cuda")
++            return EN.down(EN.Q._quantize_keys(EN.up(kx, self.dtype), R, CB, BND)), kx
++        R, CB, BND = EN.Q._tables(self.D, 2, self.KVH, True, "cuda")
++        parts = []
++        for s0 in range(0, k_np.shape[2], 8192):
++            parts.append(EN.down(EN.Q._quantize_keys(EN.up(k_np[:, :, s0:s0 + 8192], "float32"), R, CB, BND)))
++        return P.round_to(np.concatenate(parts, axis=2), self.dtype), k_np
++
++
++def zws_cell(e, t_g, cuts, rng, bh):
++    """run the ZWS tag on one cell (operands injected). Returns the result row."""
++    dt, rep = e.dtype, e.rep
++    E = P2.ZWS["E"][dt]
++    t0 = time.perf_counter()
++    ok, why = P2.zws_precheck(dt, e.k, E)
++    if not ok:
++        return dict(verdict="REFUSED-operand", why=why)
++    z = EN.Q._norm_ppf(1.0 - 0.15)
++    lo, hi, _ = e.intervals()
++    B, H, L = lo.shape
++    bh = bh or [(b, h) for b in range(B) for h in range(H)]
++    fused = e.family != "apa_quant"
++    round_s = (lambda x: x) if fused else (lambda x: P.round_to(x.astype(np.float32), dt).astype(np.float64))
++    kq0, kx0 = (e.kq, e.k) if fused else e.engine_kq(e.k)
++    em0 = P2.zws_emulate(e.q, kq0, kx0, np.zeros((B, kx0.shape[1], e.S, e.VD)), lo, hi, e.scale, z,
++                         1 if not fused else rep, round_s, bh)
++    V = P2.zws_sensitive_v(em0, B, e.KVH, e.S, e.VD, rep, dt, rng)
++    Vx = EN.expand_heads(V, rep, "repeat") if not fused else V
++    for key in em0:
++        b, h = key
++        em0[key]["V"] = Vx[b, h if not fused else h // rep].astype(np.float64)
++    kq_in = getattr(e, "kq", None)
++    base = e.run_kv(e.k, kq_in, V)
++    pok, pwhy = P.postcheck(dt, base)
++    if not pok:
++        return dict(verdict="REFUSED-operand", why=pwhy)
++    noise = int(np.count_nonzero(P.bits(e.run_kv(e.k, kq_in, V)) != P.bits(base)))
++    bb = P.bits(base)
++    Ev = P.DT[dt]["E"]
++    Vg = V.copy()
++    Vg[:, :, t_g:] *= np.float32(2.0 ** Ev)
++    pre_base = int(np.count_nonzero(np.any(P.bits(e.run_kv(e.k, kq_in, Vg)) != bb, axis=-1)))
++    out = dict(mode="zws", t_g=t_g, cuts=cuts, E=E, precheck=why, repeat_noise=noise,
++               ghost_vtag_changed_rows_untagged=pre_base, per_cut=[])
++    runs = 3
++    tl = tb = ti = nmc = nmi = 0
++    first = None
++    for t in cuts:
++        kt = e.k.copy()
++        kt[:, :, t:] *= np.float32(2.0 ** E)
++        kqt = None
++        if kq_in is not None:
++            kqt = kq_in.copy()
++            kqt[:, :, t:] *= np.float32(2.0 ** E)
++        Y = e.run_kv(kt, kqt, V)
++        runs += 1
++        changed = np.any(P.bits(Y) != bb, axis=-1)
++        touched = hi >= t                                 # row's TRUE visible (= statistics) set holds a tagged ghost
++        kq1, kx1 = (kqt, kt) if fused else e.engine_kq(kt)
++        em1 = P2.zws_emulate(e.q, kq1, kx1, np.zeros((B, kx1.shape[1], e.S, e.VD)), lo, hi, e.scale, z,
++                             1 if not fused else rep, round_s, bh)
++        for key in em1:
++            em1[key]["V"] = em0[key]["V"]
++        mc = P2.zws_must_change(em0, em1, dt)
++        must_chg = np.zeros_like(touched)
++        indet = touched.copy()
++        dmin = []
++        for (b, h), (m, ind, dm) in mc.items():
++            must_chg[b, h] = m & touched[b, h]
++            indet[b, h] = touched[b, h] & ~m
++            dmin += [float(x) for x in dm[touched[b, h] & np.isfinite(dm)]]
++        must_inv = ~touched
++        leak, blind = changed & must_inv, (~changed) & must_chg
++        nl, nb = int(leak.sum()), int(blind.sum())
++        tl, tb, ti = tl + nl, tb + nb, ti + int(indet.sum())
++        nmc, nmi = nmc + int(must_chg.sum()), nmi + int(must_inv.sum())
++        viol = leak | blind
++        if viol.any() and first is None:
++            first = [int(x) for x in np.argwhere(viol)[0]] + [int(t)]
++        # ghost weight zero also under the tag (V-tag on the ghost block of the tagged run)
++        if t == cuts[0]:
++            Vy = P.bits(Y)
++            pre_tag = int(np.count_nonzero(np.any(P.bits(e.run_kv(kt, kqt, Vg)) != Vy, axis=-1)))
++            runs += 1
++            out["ghost_vtag_changed_rows_tagged"] = pre_tag
++        band = touched & (np.arange(L)[None, None, :] < t)     # rows a top-left statistics set would blind
++        out["per_cut"].append(dict(t=int(t), leak_rows=nl, blind_rows=nb, must_change_rows=int(must_chg.sum()),
++                                   must_invariant_rows=int(must_inv.sum()), indeterminate_rows=int(indet.sum()),
++                                   changed_rows=int(changed.sum()), touched_rows=int(touched.sum()),
++                                   band_rows_must_change=int((band & must_chg).sum()),
++                                   dmin_min=(min(dmin) if dmin else None), dmin_median=(float(np.median(dmin)) if dmin else None)))
++    if out["ghost_vtag_changed_rows_untagged"] or out.get("ghost_vtag_changed_rows_tagged"):
++        verdict = "REFUSED-operand"
++        out["why"] = "ghost weights not exactly zero (V-tag on the ghost block changed rows)"
++    else:
++        verdict = "ALARM" if (tl + tb) else "PASS"
++    out.update(verdict=verdict, violations=tl + tb, leak_rows=tl, blind_rows=tb, must_change_rows=nmc,
++               must_invariant_rows=nmi, indeterminate_rows=ti, first_violation=first, runs=runs,
++               seconds=round(time.perf_counter() - t0, 4))
++    return out
+################ scripts/apa_om135_core.py  (fork source: 2bbee82:scripts/apa_om135_core.py, sha256 af4b16d4d3b061bb101defcafcfbc5be522b5e733e0a9623b53e839c879b2339; ported sha256 cb2f5dd76c9ab7552bc5b8aca7ee0ff4462acc3f05c97156616bdf661336f849)
+--- fork 2bbee82:scripts/apa_om135_core.py
++++ port scripts/apa_om135_core.py
+@@ -763,3 +763,42 @@
+     per_fwd = tfd / max(1, 2 * nprobe)
+     return alarm, dict(first_violation=worst, probes=nprobe, forwards=2 * nprobe, sec_per_fd_forward=per_fwd,
+                        elementwise_full_jacobian_extrapolated_s=2 * numel * per_fwd), dt
++
++
++# ------------------------------------------------------------------ operand preparation (APA-REGT1 port)
++# Ported verbatim from scripts/apa_om135_prep.py @ 2bbee82 (APA-OM135), whose docstring follows. That module did
++# `from apa_om135_core import ChainCell, chain_eff`; both names are defined above, so the import line is dropped.
++# It moved here because the port order authorizes only this script for OM135.
++# "APA-OM135 operand preparation (shared by the CPU certificate dry run and the GPU runner). Deterministic per
++# (cell, dtype): baseline/gradcheck operands from seed, IMM operands from seed+1, gradcheck probes from seed+2.
++# Prior art: see apa_om135_core.py header. Mine: the preparation layout."
++def prepare(cell, dtype):
++    """Returns dict(textbook=..., imm=..., cert={...}, ok=bool). Host-only (no engine)."""
++    rng = np.random.default_rng(cell.seed)
++    rng_imm = np.random.default_rng(cell.seed + 1)
++    out = {}
++    if isinstance(cell, ChainCell):
++        Xs, b = cell.operands(rng)
++        dY = cell.dy(rng)
++        ok_t, cert_t = cell.certify(Xs, dY, dtype)
++        Xi, bi, dYi, seeds = cell.imm_operands(rng_imm)
++        mid = ()
++        if cell.k == 4:
++            Ms = chain_eff(Xi, cell.trans)
++            mid = (np.matmul(np.abs(Ms[1]), np.abs(Ms[2])),)
++        ok_i, cert_i = cell.certify(Xi, dYi, dtype, mid=mid)
++        out["textbook"] = (Xs, b, dY)
++        out["imm"] = (Xi, bi, dYi, seeds)
++    else:
++        ops = cell.operands(rng)
++        dY = cell.dy(rng)
++        ok_t, cert_t = cell.certify(ops, dY, dtype)
++        ops_i = cell.operands(rng_imm)
++        dYi, seeds = cell.imm_seeds(rng_imm)
++        ok_i, cert_i = cell.certify(ops_i, dYi, dtype)
++        eye = cell.eye_host(dtype) if cell.kind == "sdpa" else None
++        out["textbook"] = (ops, dY)
++        out["imm"] = (ops_i, dYi, seeds, eye)
++    out["cert"] = dict(textbook=dict(ok=bool(ok_t), **cert_t), imm=dict(ok=bool(ok_i), **cert_i))
++    out["ok"] = bool(ok_t and ok_i)
++    return out
+################ tensor_cuda/tests/test_apa_ld1_pdwl.py  (fork source: cb2fac1:tensor_cuda/tests/test_apa_ld1_pdwl.py, sha256 bf4267d7c801d63703addae3ecf5d9feeee2526fed6f99d7dcc528067aa7c866; ported sha256 83f4bb8d32a980a0a14de813ebc8bf6fd364111ec7381c1a50cde02304ab0ed3)
+--- fork cb2fac1:tensor_cuda/tests/test_apa_ld1_pdwl.py
++++ port tensor_cuda/tests/test_apa_ld1_pdwl.py
+@@ -6,6 +6,10 @@
+ exactness of power-of-two scaling; Chen et al. (1998) metamorphic testing; DeMillo, Lipton & Sayward
+ (1978) mutation testing; Dao (2023) FlashAttention-2 bottom-right causal. Unverified -- lead to check.
+ Mine: the engine harness under test (scripts/apa_ld1_pdwl.py, scripts/apa_ld1_entries.py).
++
++APA-REGT1 production port (from branch apa-ld2 @ cb2fac1): the engine adapter of scripts/apa_ld1_entries.py now
++lives in scripts/apa_ld1_pdwl.py; the engine tests use the importable tensor_cuda (like every test in this
++directory) and skip, never error, when no CUDA device is usable. Detector logic and cells unchanged.
+ """
+ import math
+ import os
+@@ -83,9 +87,19 @@
+ 
+ 
+ # ---------------------------------------------------------------- real engine (main), small shapes
++def _require_cuda(tc):
++    """APA-REGT1: tensor_cuda imports without a CUDA device and fails at the first allocation; skip, never error
++    (the probe of test_terrain_render.py's _require_cuda)."""
++    try:
++        tc.zeros((1,), dtype="float32").numpy()
++    except Exception as exc:  # pragma: no cover - host dependent
++        pytest.skip(f"CUDA unavailable: {exc}")
++
++
+ def _engine():
+     tc = pytest.importorskip("tensor_cuda")
+-    import apa_ld1_entries as EN
++    _require_cuda(tc)
++    EN = P  # APA-REGT1: the Attn adapter (apa_ld1_entries @ cb2fac1) now lives in scripts/apa_ld1_pdwl.py
+     from tensor_cuda import functional as F
+     from tensor_cuda import quant as Q
+     EN.tc, EN.F, EN.Q = tc, F, Q
+################ tensor_cuda/tests/test_apa_ld2_pdwl.py  (fork source: cb2fac1:tensor_cuda/tests/test_apa_ld2_pdwl.py, sha256 9b078d7a6409f029cbac1622d076a8ca106f9c505d6be8581f879d6512393295; ported sha256 8fe81fa58cefaaf84ce70d21b977882172b42da90535d1aa91d10ac2a1589db7)
+--- fork cb2fac1:tensor_cuda/tests/test_apa_ld2_pdwl.py
++++ port tensor_cuda/tests/test_apa_ld2_pdwl.py
+@@ -7,6 +7,13 @@
+ (1998) metamorphic testing; DeMillo, Lipton & Sayward (1978) mutation testing; Dao (2023) FlashAttention-2
+ bottom-right causal. Unverified -- lead to check. Mine: the staggered per-slab cut packing and the ZWS ghost-key
+ statistics tag under test (scripts/apa_ld2_pdwl.py).
++
++APA-REGT1 production port (from branch apa-ld2 @ cb2fac1): Attn2 (scripts/apa_ld2_entries.py) and zws_cell
++(scripts/apa_ld2_run.py) now live in scripts/apa_ld2_pdwl.py, LD1's Attn in scripts/apa_ld1_pdwl.py; the engine
++tests use the importable tensor_cuda and skip, never error, without a usable CUDA device. One cell added: B04, the
++(B) square control L = S, on the corrected ghost block (zws_cuts' L = S branch; the B04 fix the port order allows).
++B04 is a negative control: at L = S a top-left statistics set equals the bottom-right one, so a statistics-mask bug
++(PYSTAT, CU7) is a no-op there and B04 must PASS on correct and on statistics-mutant engines alike.
+ """
+ import math
+ import os
+@@ -136,9 +143,19 @@
+ 
+ 
+ # ---------------------------------------------------------------- real engine (main), small shapes
++def _require_cuda(tc):
++    """APA-REGT1: tensor_cuda imports without a CUDA device and fails at the first allocation; skip, never error
++    (the probe of test_terrain_render.py's _require_cuda)."""
++    try:
++        tc.zeros((1,), dtype="float32").numpy()
++    except Exception as exc:  # pragma: no cover - host dependent
++        pytest.skip(f"CUDA unavailable: {exc}")
++
++
+ def _engine():
+     tc = pytest.importorskip("tensor_cuda")
+-    import apa_ld1_entries as EN
++    _require_cuda(tc)
++    EN = P  # APA-REGT1: the Attn adapter (apa_ld1_entries @ cb2fac1) now lives in scripts/apa_ld1_pdwl.py
+     from tensor_cuda import functional as F
+     from tensor_cuda import quant as Q
+     EN.tc, EN.F, EN.Q = tc, F, Q
+@@ -148,7 +165,7 @@
+ @pytest.mark.parametrize("dt", ["float32", "bfloat16"])
+ def test_engine_stagger_cuts_pass_on_main_and_catch_offby1(dt):
+     EN = _engine()
+-    import apa_ld2_entries as E2
++    E2 = P2  # APA-REGT1: Attn2 (apa_ld2_entries @ cb2fac1) now lives in scripts/apa_ld2_pdwl.py
+     for fam in ("sdpa", "apa_sel"):
+         for mut, want in ((None, "PASS"), ("offby1", "ALARM")):
+             e = E2.Attn2(fam, dt, 2, 4, 2, 8, 24, 32, mutant=mut)
+@@ -160,10 +177,21 @@
+ 
+ def test_engine_zws_passes_on_main_apa():
+     _engine()
+-    import apa_ld2_entries as E2
+-    import apa_ld2_run as R
++    E2 = P2  # APA-REGT1: Attn2 (apa_ld2_entries @ cb2fac1) now lives in scripts/apa_ld2_pdwl.py
++    R = P2  # APA-REGT1: zws_cell (apa_ld2_run @ cb2fac1) now lives in scripts/apa_ld2_pdwl.py
++    assert P2.zws_cuts(3, 33) == (30, [30, 31])  # APA-REGT1: the B04 fix leaves the registered L < S cells alone
+     for fam, dt in (("apa_quant", "float32"), ("apa_sel", "bfloat16")):
+         e = E2.Attn2(fam, dt, 2, 4, 2, 3, 33, 32, None, causal=True,
+                      inject=P2.zws_qk(np.random.default_rng(1), 2, 4, 2, 3, 33, 32, 1 / math.sqrt(32), dt, 30))
+         r = R.zws_cell(e, 30, P2.zws_cuts(3, 33)[1], np.random.default_rng(2), None)
+         assert r["verdict"] == "PASS" and r["must_change_rows"] > 0, r
++    # APA-REGT1: B04, the square control (L = S; APA-LD2 registered it as apa_quant fp32), at this test's small
++    # geometry, on the corrected ghost block (APA-LD2's exploratory rerun: t_g = 16, cuts {16, 24}). The registered
++    # rule gave t_g = 0 here and the cell was REFUSED-operand; it must now PASS with must-change rows.
++    L = S = 33
++    t_g, cuts = P2.zws_cuts(L, S)
++    assert (t_g, cuts) == (16, [16, 24])
++    e = E2.Attn2("apa_quant", "float32", 2, 4, 2, L, S, 32, None, causal=True,
++                 inject=P2.zws_qk(np.random.default_rng(1), 2, 4, 2, L, S, 32, 1 / math.sqrt(32), "float32", t_g))
++    r = R.zws_cell(e, t_g, cuts, np.random.default_rng(2), None)
++    assert r["verdict"] == "PASS" and r["must_change_rows"] > 0, r
+################ tensor_cuda/tests/test_apa_om135_imm.py  (fork source: 2bbee82:tensor_cuda/tests/test_apa_om135_imm.py, sha256 ade7bb9fbbc25b55b4ac8e5b2555bb46b13d23b01037819d87194ac7349ab37d; ported sha256 8ac67998194ce0cca0dd5ad507bcb0811e2fb4f4c220dc5ccc1a3419623fd4b3)
+--- fork 2bbee82:tensor_cuda/tests/test_apa_om135_imm.py
++++ port tensor_cuda/tests/test_apa_om135_imm.py
+@@ -8,6 +8,11 @@
+ Wigderson (1997) partial-derivative measures; Baur & Strassen (1983); Griewank & Walther (2008) basis-seed reverse
+ mode; PyTorch gradcheck fast_mode (2021); DeMillo, Lipton & Sayward (1978). Unverified -- lead to check.
+ Mine: the harness under test.
++
++APA-REGT1 production port (from branch apa-om135 @ 2bbee82): the hardcoded fork build path (MAIN_BUILD) and the
++env-var engine pinning (C.load_engine) are gone -- the GPU tests use the importable tensor_cuda like every test in
++this directory and skip, never error, without a usable CUDA device; prepare() (scripts/apa_om135_prep.py) now lives
++in scripts/apa_om135_core.py. Methods, thresholds and cells unchanged.
+ """
+ import os
+ import sys
+@@ -20,9 +25,6 @@
+ sys.path.insert(0, os.path.join(ROOT, "scripts"))
+ import apa_om135_core as C  # noqa: E402
+ 
+-MAIN_BUILD = ("/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/"
+-              "artifacts/apa_mf_main/build")
+-
+ 
+ # ------------------------------------------------------------------ CPU
+ @pytest.mark.parametrize("k,trans,alphas,shapes", [
+@@ -98,12 +100,16 @@
+ 
+ # ------------------------------------------------------------------ GPU (main engine)
+ def _engine():
+-    os.environ.setdefault("APA_OM135_ENGINE", MAIN_BUILD)
+-    os.environ.setdefault("APA_OM135_PKG", os.path.join(ROOT, "tensor_cuda"))
++    """APA-REGT1: the importable tensor_cuda (it imports without a CUDA device and fails at the first allocation:
++    skip, never error -- the probe of test_terrain_render.py's _require_cuda)."""
++    tc = pytest.importorskip("tensor_cuda")
+     try:
+-        return C.load_engine()
+-    except Exception as e:  # pragma: no cover
+-        pytest.skip(f"engine not loadable: {e}")
++        tc.zeros((1,), dtype="float32").numpy()
++    except Exception as exc:  # pragma: no cover - host dependent
++        pytest.skip(f"CUDA unavailable: {exc}")
++    from tensor_cuda import functional as F
++    from tensor_cuda import nn
++    C.tc, C.F, C.nn = tc, F, nn
+ 
+ 
+ def _small_cells():
+@@ -123,7 +129,7 @@
+ @pytest.mark.parametrize("dtype", list(C.DTYPES))
+ def test_three_methods_pass_on_main_gpu(dtype):
+     _engine()
+-    from apa_om135_prep import prepare
++    prepare = C.prepare  # APA-REGT1: apa_om135_prep.prepare @ 2bbee82 now lives in scripts/apa_om135_core.py
+     for cell in _small_cells():
+         p = prepare(cell, "bfloat16")
+         assert p["ok"], (cell.cid, p["cert"])
+@@ -156,7 +162,7 @@
+ @pytest.mark.parametrize("dtype", list(C.DTYPES))
+ def test_wrong_orientation_fixture_is_flagged_gpu(dtype):
+     _engine()
+-    from apa_om135_prep import prepare
++    prepare = C.prepare  # APA-REGT1: apa_om135_prep.prepare @ 2bbee82 now lives in scripts/apa_om135_core.py
+     cell = _WrongOrientationChain("WRONG", "chain", [(16, 16), (16, 16)], [False, False], [1.0, 1.0], 2, 2, 31)
+     p = prepare(cell, "bfloat16")
+     assert p["ok"]

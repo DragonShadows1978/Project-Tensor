@@ -1,0 +1,33 @@
+{
+ "order": "APA-REGT1 regression tests: ZWS statistics tag, PDWL/frontier-first stagger cuts, OM135 exact-integer backward checks (31 tests, 6 new files, no engine change)",
+ "author_model": "claude-opus-5-5",
+ "reviewer_model": "gpt-6.1-sol",
+ "verdict": "PASS_WITH_FINDINGS",
+ "final_review": {
+  "branch": "apa-regt1rev",
+  "commit": "ffa99e4",
+  "doc": "docs/APA_REGT1_REVIEW.md",
+  "verdict_file": "artifacts/apa_regt1rev/verdict.json",
+  "R1_port": "FAITHFUL",
+  "R2_soundness": "SOUND-WITH-NITS",
+  "R3_B04": "CORRECT",
+  "R4_promotion": "APPROVE-WITH-NITS",
+  "blocking_findings": [],
+  "sentinel_run": "20261009T200915Z-1624941",
+  "reasoning_effort": "high"
+ },
+ "reviewed_tip": "e4023c1",
+ "nits_open": [
+  "F01 CUDA-availability guard catches every exception (a probe programming defect would skip, not fail); same pattern as test_terrain_render.py",
+  "F04 nondeterministic future backward paths not covered",
+  "F05 CU6 tile-edge leak not caught (inherited gap)",
+  "F06 dormant helpers in apa_om135_core.py unreachable from shipped tests",
+  "F07 wrong-orientation test is a positive control"
+ ],
+ "nits_closed": [
+  "F03 report transcription (r3/r4 summaries; duration sum vs overhead) corrected in docs/APA_REGT1_REPORT.md"
+ ],
+ "lead_gpu_probes_of_review": "PASS 3/3 (repeat: 352 item calls x32, zero noise; zws: 96/96 PASS, original B04 REFUSED; om135: 2304 checks, no alarms); run 2026-10-09 ~20:31Z on driver 595.99.02, main d8fda9a8; receipts apa-regt1rev ffa99e4 logs/apa_regt1rev_gpu_*",
+ "lead_verification": "re-ran 31 tests on main (31 passed), known-bad PYSTAT/CU7/CU5/MU2/MU6 (all fail), CUDA hidden (20 passed, 11 skipped); byte-identical prefixes checked with cmp; no Fork/WorkTree strings",
+ "promoted_tip_difference": "promoted tip = e4023c1 + this record and report text (docs/artifacts only); no source or test difference from the reviewed tip"
+}

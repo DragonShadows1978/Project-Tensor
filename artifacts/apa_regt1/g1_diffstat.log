@@ -1,0 +1,83 @@
+$ git diff a28e28e --stat   (2026-10-09T16:03:34-04:00)
+ orders/APA_REGT1_REGRESSION_TESTS.md | 163 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 163 insertions(+)
+exit=0
+
+$ git --no-optional-locks status --porcelain --untracked-files=all
+?? artifacts/apa_regt1/port_diffs_vs_fork.diff
+?? artifacts/apa_regt1/suite_with_r1.xml
+?? artifacts/apa_regt1/suite_with_r3.xml
+?? artifacts/apa_regt1/suite_without_r2.xml
+?? artifacts/apa_regt1/suite_without_r4.xml
+?? scripts/apa_ld1_pdwl.py
+?? scripts/apa_ld2_pdwl.py
+?? scripts/apa_om135_core.py
+?? tensor_cuda/tests/test_apa_ld1_pdwl.py
+?? tensor_cuda/tests/test_apa_ld2_pdwl.py
+?? tensor_cuda/tests/test_apa_om135_imm.py
+exit=0
+
+$ git --no-optional-locks log --oneline a28e28e..HEAD
+4c62298 APA-REGT1 order: port the ZWS tag, PDWL/frontier-first probe and OM135 integer backward checks to production as regression tests (David 2026-10-09: "On things like regression tests going into production, that's fine unless it really significantly hurts performance.")
+
+line counts of the new (untracked) shipped files:
+   561 scripts/apa_ld1_pdwl.py
+   447 scripts/apa_ld2_pdwl.py
+   804 scripts/apa_om135_core.py
+   124 tensor_cuda/tests/test_apa_ld1_pdwl.py
+   197 tensor_cuda/tests/test_apa_ld2_pdwl.py
+   171 tensor_cuda/tests/test_apa_om135_imm.py
+  2304 total
+
+sha256 of the shipped files:
+c25f500482320d5975c9a01d3fc8d2b64c88c14a7b201c818d39955cb59ff875  scripts/apa_ld1_pdwl.py
+d9ee67740e5896bb324d735243143ef4b88a315921edb5066be1bd8ab370d6e8  scripts/apa_ld2_pdwl.py
+cb2f5dd76c9ab7552bc5b8aca7ee0ff4462acc3f05c97156616bdf661336f849  scripts/apa_om135_core.py
+83f4bb8d32a980a0a14de813ebc8bf6fd364111ec7381c1a50cde02304ab0ed3  tensor_cuda/tests/test_apa_ld1_pdwl.py
+8fe81fa58cefaaf84ce70d21b977882172b42da90535d1aa91d10ac2a1589db7  tensor_cuda/tests/test_apa_ld2_pdwl.py
+8ac67998194ce0cca0dd5ad507bcb0811e2fb4f4c220dc5ccc1a3419623fd4b3  tensor_cuda/tests/test_apa_om135_imm.py
+
+__pycache__ dirs created under scripts/ or tensor_cuda/tests/:
+!! artifacts/apa_regt1/evidence_om135_main.log
+!! artifacts/apa_regt1/evidence_om135_MU1_dropped_not_trans_b.log
+!! artifacts/apa_regt1/evidence_om135_MU2_swapped_dB_operands.log
+!! artifacts/apa_regt1/evidence_om135_MU3a_missing_transpose_trans_b_dB.log
+!! artifacts/apa_regt1/evidence_om135_MU3b_missing_transpose_dB.log
+!! artifacts/apa_regt1/evidence_om135_MU4_broadcast_keep_first_slice.log
+!! artifacts/apa_regt1/evidence_om135_MU5_alpha_dropped_trans_b_dB.log
+!! artifacts/apa_regt1/evidence_om135_MU6_apa_dv_query_row.log
+!! artifacts/apa_regt1/evidence_om135_summary.log
+!! artifacts/apa_regt1/evidence_pystat_mask_LeqS.log
+!! artifacts/apa_regt1/evidence_zws_CU7_stats_range.log
+!! artifacts/apa_regt1/evidence_zws_main.log
+!! artifacts/apa_regt1/evidence_zws_PYSTAT_fd32b6d.log
+!! artifacts/apa_regt1/g1_diffstat.log
+!! artifacts/apa_regt1/g2_compare_r1.log
+!! artifacts/apa_regt1/g4_cost_summary.log
+!! artifacts/apa_regt1/knownbad_provenance.log
+!! artifacts/apa_regt1/main_engine_manifest_check.log
+?? artifacts/apa_regt1/port_diffs_vs_fork.diff
+!! artifacts/apa_regt1/port_line_subset_check.log
+?? artifacts/apa_regt1/suite_without_r2.xml
+?? artifacts/apa_regt1/suite_without_r4.xml
+?? artifacts/apa_regt1/suite_with_r1.xml
+?? artifacts/apa_regt1/suite_with_r3.xml
+!! logs/apa_regt1_g1_nocuda.log
+!! logs/apa_regt1_knownbad_CU5_offby1.log
+!! logs/apa_regt1_knownbad_CU6_tile_edge.log
+!! logs/apa_regt1_knownbad_CU7_stats_range.log
+!! logs/apa_regt1_knownbad_LD1_CU1_gqa_tile.log
+!! logs/apa_regt1_knownbad_LD1_CU2_topleft.log
+!! logs/apa_regt1_knownbad_MU1_dropped_not_trans_b.log
+!! logs/apa_regt1_knownbad_MU2_swapped_dB_operands.log
+!! logs/apa_regt1_knownbad_MU3a_missing_transpose_trans_b_dB.log
+!! logs/apa_regt1_knownbad_MU3b_missing_transpose_dB.log
+!! logs/apa_regt1_knownbad_MU4_broadcast_keep_first_slice.log
+!! logs/apa_regt1_knownbad_MU5_alpha_dropped_trans_b_dB.log
+!! logs/apa_regt1_knownbad_MU6_apa_dv_query_row.log
+!! logs/apa_regt1_knownbad_PYSTAT_fd32b6d.log
+!! logs/apa_regt1_main_new_tests_r1.log
+!! logs/apa_regt1_suite_without_r2.log
+!! logs/apa_regt1_suite_without_r4.log
+!! logs/apa_regt1_suite_with_r1.log
+!! logs/apa_regt1_suite_with_r3.log
