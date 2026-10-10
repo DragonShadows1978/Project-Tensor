@@ -1,0 +1,87 @@
+2026-10-09 20:53:02
+===== script source (/tmp/claude-1000/-mnt-ForgeRealm-Project-Tensor/5018da7e-9784-4250-ba60-cc8fa4e7d188/scratchpad/regt2_port_diff.py)
+"""APA-REGT2 evidence script (not shipped): function-level diff of the port against the LD3 / LD1 sources on disk."""
+import ast, difflib, sys
+ld3, here = sys.argv[1], sys.argv[2]
+def funcs(path):
+    src = open(path).read()
+    lines = src.splitlines()
+    out = {}
+    for n in ast.parse(src).body:
+        if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
+            out[n.name] = lines[n.lineno - 1 - len(n.decorator_list):n.end_lineno]
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Tuple):
+            out["<" + ",".join(t.id for t in n.targets[0].elts) + ">"] = lines[n.lineno - 1:n.end_lineno]
+        elif isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and n.targets[0].id == "GEO":
+            out["GEO"] = lines[n.lineno - 1:n.end_lineno]
+    return out
+mine = funcs(f"{here}/scripts/apa_pidv.py")
+pd2 = funcs(f"{ld3}/scripts/apa_ld3_pdwl2.py")
+run = funcs(f"{ld3}/scripts/apa_ld3_run.py")
+print("== detector functions: apa_pidv.py vs apa_ld3_pdwl2.py / apa_ld3_run.py (exact line equality)")
+for name, src in (("<BASE,TWIN,CUT,LABEL,COLOR>", pd2), ("spread", pd2), ("_empty_layout", pd2), ("_cut_nt", pd2),
+                  ("pidv_layouts", pd2), ("pidv_operand", pd2), ("pidv_check", pd2), ("pidv_cell", run)):
+    a, b = src[name], mine[name]
+    d = list(difflib.unified_diff(a, b, "ld3", "regt2", lineterm="", n=0))
+    print(f"{name}: {len(a)} lines in LD3, {len(b)} in port, {'IDENTICAL' if not d else 'DIFFERS'}")
+    for l in d:
+        print("   ", l)
+# the constants line carries a trailing comment in both files; show both raw lines
+print("== adapter lines: PidvAttn / synthetic_margins / make_cell / GEO vs apa_ld1_entries.py, apa_ld2_run.py, apa_ld1_run.py")
+ent = open(f"{ld3}/scripts/apa_ld1_entries.py").read().splitlines()
+ld1run = funcs(f"{ld3}/scripts/apa_ld1_run.py")
+ld2run = funcs(f"{ld3}/scripts/apa_ld2_run.py")
+pool = set(l.strip() for l in ent) | set(l.strip() for v in ld1run.values() for l in v) | set(l.strip() for v in ld2run.values() for l in v)
+for name in ("synthetic_margins", "PidvAttn", "make_cell", "GEO"):
+    body = mine[name]
+    new = [l for l in body if l.strip() and l.strip() not in pool]
+    print(f"{name}: {len(body)} lines, {len(body) - len(new)} found verbatim (stripped) in the LD1/LD2 adapter sources, {len(new)} new or changed:")
+    for l in new:
+        print("    +", l)
+===== output
+== detector functions: apa_pidv.py vs apa_ld3_pdwl2.py / apa_ld3_run.py (exact line equality)
+<BASE,TWIN,CUT,LABEL,COLOR>: 1 lines in LD3, 1 in port, DIFFERS
+    --- ld3
+    +++ regt2
+    @@ -1 +1 @@
+    -BASE, TWIN, CUT, LABEL, COLOR = 0, 1, 2, 3, 4
+    +BASE, TWIN, CUT, LABEL, COLOR = 0, 1, 2, 3, 4   # APA-LD3 kind constants; pIdV uses CUT and COLOR
+spread: 13 lines in LD3, 13 in port, IDENTICAL
+_empty_layout: 3 lines in LD3, 3 in port, IDENTICAL
+_cut_nt: 6 lines in LD3, 6 in port, IDENTICAL
+pidv_layouts: 19 lines in LD3, 19 in port, IDENTICAL
+pidv_operand: 21 lines in LD3, 21 in port, IDENTICAL
+pidv_check: 38 lines in LD3, 38 in port, IDENTICAL
+pidv_cell: 9 lines in LD3, 9 in port, IDENTICAL
+== adapter lines: PidvAttn / synthetic_margins / make_cell / GEO vs apa_ld1_entries.py, apa_ld2_run.py, apa_ld1_run.py
+synthetic_margins: 13 lines, 9 found verbatim (stripped) in the LD1/LD2 adapter sources, 4 new or changed:
+    + def synthetic_margins(dirpath):
+    +     SYNTHETIC table (same shape as test_apa_sp2.example_table) is used and labelled as such.
+    +     APA-REGT2: written into `dirpath` (caller-owned), not artifacts/apa_ld1/."""
+    +     d = Path(dirpath) / SP_MARGINS_NAME
+PidvAttn: 57 lines, 40 found verbatim (stripped) in the LD1/LD2 adapter sources, 17 new or changed:
+    + class PidvAttn(P.Attn):
+    +     """production Attn (sdpa / apa_quant / apa_sel and the Python mutants bstride / offby1 / tile / topleft) plus the
+    +     entry families sdpa_fused_cs, apa_int4 and apa_sp. margins_dir: required for apa_sp only."""
+    +     def __init__(self, *a, margins_dir=None, **kw):
+    +         self.margins_dir = margins_dir
+    +         super().__init__(*a, **kw)
+    +         f = self.family
+    +             if self.margins_dir is None:
+    +                 raise ValueError("PidvAttn: apa_sp needs margins_dir (a caller-owned directory)")
+    +         super()._prep()
+    +             self.margins = synthetic_margins(self.margins_dir)
+    +         if f not in EXTRA_FAMILIES:
+    +             return super().run(X)
+    +             if f == "sdpa_fused_cs":
+    +                 old = os.environ.get("TC_APA_SP")
+    +                         os.environ.pop("TC_APA_SP", None)
+    +                         os.environ["TC_APA_SP"] = old
+make_cell: 7 lines, 1 found verbatim (stripped) in the LD1/LD2 adapter sources, 6 new or changed:
+    + def make_cell(fam, dt, geo, L, S, *, B=2, mutant=None, seed=0, margins_dir=None, **kw):
+    +     """APA-LD2 attn2 (apa_ld2_run.py:94-101) for the causal entry families above: GEO lookup, causal, seed 0 and the
+    +     production refine threshold (zthr default) -- the operand instance APA-LD3 ran pIdV on."""
+    +     causal = True
+    +     return PidvAttn(fam, dt, B, g.pop("H"), g.pop("KVH"), L, S, g.pop("D"), g.pop("VD", None), causal=causal,
+    +                     mutant=mutant, seed=seed, scale=g.pop("scale", None), margins_dir=margins_dir, **kw)
+GEO: 5 lines, 5 found verbatim (stripped) in the LD1/LD2 adapter sources, 0 new or changed:

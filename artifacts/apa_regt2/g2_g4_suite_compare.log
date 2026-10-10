@@ -1,0 +1,124 @@
+2026-10-09 20:52:01
+----- with_r1
+G1 compare (APA-MF2.2): baseline = /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/logs/apa_mf1_g1_baseline_unchanged.log; now = logs/apa_regt2_suite_with_r1.log
+summary: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 165.27s (0:02:45)
+baseline ids 52 now ids 52
+baseline ids that no longer fail: 0 []
+new failing ids: 0 []
+new MF2.2 test files with any FAILED/ERROR: 0
+G1 PASS
+new APA-REGT2 test ids with FAILED/ERROR: 0
+----- without_r2
+G1 compare (APA-MF2.2): baseline = /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/logs/apa_mf1_g1_baseline_unchanged.log; now = logs/apa_regt2_suite_without_r2.log
+summary: 37 failed, 1956 passed, 46 skipped, 2 warnings, 15 errors in 164.47s (0:02:44)
+baseline ids 52 now ids 52
+baseline ids that no longer fail: 0 []
+new failing ids: 0 []
+new MF2.2 test files with any FAILED/ERROR: 0
+G1 PASS
+new APA-REGT2 test ids with FAILED/ERROR: 0
+----- with_r3
+G1 compare (APA-MF2.2): baseline = /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/logs/apa_mf1_g1_baseline_unchanged.log; now = logs/apa_regt2_suite_with_r3.log
+summary: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 163.84s (0:02:43)
+baseline ids 52 now ids 52
+baseline ids that no longer fail: 0 []
+new failing ids: 0 []
+new MF2.2 test files with any FAILED/ERROR: 0
+G1 PASS
+new APA-REGT2 test ids with FAILED/ERROR: 0
+----- without_r4
+G1 compare (APA-MF2.2): baseline = /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/logs/apa_mf1_g1_baseline_unchanged.log; now = logs/apa_regt2_suite_without_r4.log
+summary: 37 failed, 1956 passed, 46 skipped, 2 warnings, 15 errors in 157.74s (0:02:37)
+baseline ids 52 now ids 52
+baseline ids that no longer fail: 0 []
+new failing ids: 0 []
+new MF2.2 test files with any FAILED/ERROR: 0
+G1 PASS
+new APA-REGT2 test ids with FAILED/ERROR: 0
+----- with_r2_MISLABELLED_pattern_bug
+G1 compare (APA-MF2.2): baseline = /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_mf2/logs/apa_mf1_g1_baseline_unchanged.log; now = logs/apa_regt2_suite_with_r2_MISLABELLED_pattern_bug.log
+summary: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 170.53s (0:02:50)
+baseline ids 52 now ids 52
+baseline ids that no longer fail: 0 []
+new failing ids: 0 []
+new MF2.2 test files with any FAILED/ERROR: 0
+G1 PASS
+new APA-REGT2 test ids with FAILED/ERROR: 0
+
+===== evidence script source (/tmp/claude-1000/-mnt-ForgeRealm-Project-Tensor/5018da7e-9784-4250-ba60-cc8fa4e7d188/scratchpad/regt2_suite_summary.py) =====
+"""APA-REGT2 evidence script (not shipped): per-run summary, junit sums for test_apa_pidv, per-test durations."""
+import re, sys, collections
+import xml.etree.ElementTree as ET
+root = sys.argv[1]
+runs = ["with_r1", "without_r2", "with_r3", "without_r4", "with_r2_MISLABELLED_pattern_bug"]
+for r in runs:
+    log = f"{root}/logs/apa_regt2_suite_{r}.log"
+    summ = [l.strip() for l in open(log) if re.search(r"\d+ (passed|failed)", l)][-1]
+    wall = [l.strip() for l in open(log) if l.startswith("process wall")][-1]
+    t = ET.parse(f"{root}/artifacts/apa_regt2/suite_{r}.xml")
+    tcs = list(t.iter("testcase"))
+    new = [tc for tc in tcs if "test_apa_pidv" in (tc.get("classname") or "")]
+    out = collections.Counter()
+    for tc in new:
+        kind = "passed"
+        for ch in tc:
+            if ch.tag in ("failure", "error", "skipped"):
+                kind = ch.tag
+        out[kind] += 1
+    s_new = sum(float(tc.get("time") or 0) for tc in new)
+    s_all = sum(float(tc.get("time") or 0) for tc in tcs)
+    print(f"{r}: {summ} | {wall} | junit testcases {len(tcs)} (summed {s_all:.2f} s) | test_apa_pidv testcases {len(new)} {dict(out)} summed {s_new:.3f} s")
+print()
+print("per-test in-suite durations (junit time = setup+call+teardown), with_r1 and with_r3:")
+d = collections.defaultdict(list)
+for r in ("with_r1", "with_r3"):
+    for tc in ET.parse(f"{root}/artifacts/apa_regt2/suite_{r}.xml").iter("testcase"):
+        if "test_apa_pidv" in (tc.get("classname") or ""):
+            d[tc.get("name")].append(float(tc.get("time") or 0))
+for name, ts in d.items():
+    print(f"  {ts[0]:7.3f} {ts[1]:7.3f}  {name}")
+print(f"  {sum(v[0] for v in d.values()):7.3f} {sum(v[1] for v in d.values()):7.3f}  TOTAL ({len(d)} tests)")
+===== output
+with_r1: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 165.27s (0:02:45) | process wall s 167.46 | junit testcases 2089 (summed 159.58 s) | test_apa_pidv testcases 35 {'passed': 34, 'skipped': 1} summed 11.907 s
+without_r2: 37 failed, 1956 passed, 46 skipped, 2 warnings, 15 errors in 164.47s (0:02:44) | process wall s 167.02 | junit testcases 2054 (summed 158.58 s) | test_apa_pidv testcases 0 {} summed 0.000 s
+with_r3: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 163.84s (0:02:43) | process wall s 166.2 | junit testcases 2089 (summed 157.83 s) | test_apa_pidv testcases 35 {'passed': 34, 'skipped': 1} summed 11.983 s
+without_r4: 37 failed, 1956 passed, 46 skipped, 2 warnings, 15 errors in 157.74s (0:02:37) | process wall s 160.11 | junit testcases 2054 (summed 151.07 s) | test_apa_pidv testcases 0 {} summed 0.000 s
+with_r2_MISLABELLED_pattern_bug: 37 failed, 1990 passed, 47 skipped, 2 warnings, 15 errors in 170.53s (0:02:50) | process wall s 172.77 | junit testcases 2089 (summed 163.99 s) | test_apa_pidv testcases 35 {'passed': 34, 'skipped': 1} summed 12.243 s
+
+per-test in-suite durations (junit time = setup+call+teardown), with_r1 and with_r3:
+    0.000   0.000  test_availability_guard_skips_only_on_no_device_conditions
+    0.001   0.001  test_pidv_layouts_cover_every_cut_and_every_slab
+    0.001   0.001  test_pidv_operand_is_exact_zero_one
+    0.003   0.003  test_pidv_numpy_kernels_correct_pass_and_leaks_alarm[float32]
+    0.003   0.003  test_pidv_numpy_kernels_correct_pass_and_leaks_alarm[bfloat16]
+    0.003   0.003  test_pidv_numpy_kernels_correct_pass_and_leaks_alarm[float16]
+    0.001   0.001  test_pidv_numpy_window_edges_use_lt_cuts
+    0.001   0.001  test_pidv_blind_to_in_slab_reordering_of_visible_keys
+    0.151   0.151  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A01-sdpa-float32-QW-64-1025]
+    0.185   0.187  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A02-sdpa-bfloat16-QW-64-1025]
+    0.227   0.217  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A03-sdpa-float16-QW-64-1025]
+    0.013   0.014  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A04-sdpa-bfloat16-MC3-3-33]
+    0.180   0.182  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A05-sdpa_fused_cs-bfloat16-QW-64-1025]
+    0.135   0.135  test_engine_pidv_edge_cell_passes_and_offby1_alarms[R01-sdpa_fused_cs-float32-QW-64-1025]
+    0.230   0.231  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A06-apa_quant-bfloat16-QW-64-1025]
+    0.197   0.195  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A07-apa_quant-float16-QW-3-1025]
+    0.153   0.171  test_engine_pidv_edge_cell_passes_and_offby1_alarms[R02-apa_quant-float32-QW-64-1025]
+    0.158   0.160  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A08-apa_sel-float32-QW-64-1025]
+    0.239   0.235  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A09-apa_sel-bfloat16-QW-64-1025]
+    0.123   0.141  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A10-apa_sel-float16-G4G-3-33]
+    0.088   0.092  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A24-apa_sel-float32-G4G-3-1025]
+    0.006   0.007  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A27-apa_sel-float32-QW-3-33]
+    0.106   0.109  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A31-apa_sel-float16-G4G-3-1025]
+    0.166   0.170  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A13-apa_int4-bfloat16-QW-64-1025]
+    0.187   0.180  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A25-apa_int4-float16-QW-64-1025]
+    0.140   0.135  test_engine_pidv_edge_cell_passes_and_offby1_alarms[R03-apa_int4-float32-QW-64-1025]
+    0.149   0.150  test_engine_pidv_edge_cell_passes_and_offby1_alarms[A15-apa_sp-float32-QW-64-1025]
+    1.283   1.328  test_engine_pidv_production_layout_passes_and_bstride_alarms[W16-sdpa-bfloat16-64]
+    1.256   1.278  test_engine_pidv_production_layout_passes_and_bstride_alarms[W18-sdpa-bfloat16-1]
+    1.031   1.056  test_engine_pidv_production_layout_passes_and_bstride_alarms[W20-sdpa-float32-64]
+    1.632   1.637  test_engine_pidv_production_layout_passes_and_bstride_alarms[W21-apa_sel-bfloat16-64]
+    1.596   1.591  test_engine_pidv_production_layout_passes_and_bstride_alarms[W23-apa_sel-bfloat16-1]
+    1.151   1.121  test_engine_pidv_production_layout_passes_and_bstride_alarms[W25-apa_sel-float32-64]
+    1.112   1.097  test_engine_pidv_production_layout_passes_and_bstride_alarms[I07-apa_sel-float32-1]
+    0.000   0.000  test_engine_pidv_long_context_98304_passes_and_bstride_alarms
+   11.907  11.983  TOTAL (35 tests)
