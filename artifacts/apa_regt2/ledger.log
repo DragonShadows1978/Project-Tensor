@@ -1,0 +1,49 @@
+APA-REGT2 ledger (seat: Claude Opus 5.5 high, Agent-tool subagent). Times EDT 2026-10-09. NO git, NO subagents, NO deletes.
+20:22 read order orders/APA_REGT2_PIDV_REGRESSION.md, /mnt/Shared/HOUSE_RULES.md, AGENTS.md (Prior Art Directive).
+20:24 read LD3 sources on disk (wt_ld3: scripts/apa_ld3_pdwl2.py, apa_ld3_run.py, apa_ld1_entries.py, apa_ld2_run.py,
+      apa_ld2_entries.py, apa_ld1_run.py), docs/APA_LD3_REPORT.md (pIdV design, W/I/E tables, census), REGT1 adapters
+      (scripts/apa_ld1_pdwl.py, apa_ld2_pdwl.py) and tests. Mechanism check: the order exercises pIdV on the engine
+      entry points LD3 ran it on; no scope mismatch.
+20:27 checks: main .so sha256 d8fda9a8...; main build kernels.cu d9d98518 == this worktree's == every mutant's base;
+      no-device error text = RuntimeError 'cudaMalloc failed: no CUDA-capable device is detected'.
+20:28 source_provenance.log: sha256 of the LD3 files read (lead to confirm vs 24f8b11 with git show).
+      frontier_cuts / causal_intervals / LD1 detector core identical between wt_ld3 and this worktree.
+20:29 wrote scripts/apa_pidv.py (detector verbatim; PidvAttn adds sdpa_fused_cs / apa_int4 / apa_sp from LD1's
+      adapter; TC_APA_SP scoped; margin table into a caller-owned dir).
+20:30 exploratory probe on main (logs/apa_regt2_probe_main_exploratory.log): 19 edge + 7 production cells PASS,
+      offby1 / bstride controls ALARM; edge 0.1-0.4 s, production 0.5-0.8 s per cell.
+20:31 S = 98,304 probe (logs/apa_regt2_probe_main_98304_exploratory.log): 26.85 s process, 10.75 GB peak RSS ->
+      DECISION: behind TC_SLOW_TESTS=1 (does not fit the 30 s budget).
+20:32 wrote tensor_cuda/tests/test_apa_pidv.py (8 CPU tests, 19 edge + 7 production GPU tests, 1 slow test).
+20:33 main: 34 passed, 1 skipped in 14.76 s (logs/apa_regt2_main_new_tests_r1.log). Slow cell on main: 1 passed
+      in 20.77 s (logs/apa_regt2_main_slow_98304.log).
+20:34 known-bad x8 (one pytest process each; logs/apa_regt2_knownbad_*.log): every build fails >= 1 test
+      (CU1 5, CU3 8, CU4 8, CU5 8, CU6 4, I1 5, I2 2, I3 5); all failures on apa_sel cells; every non-apa_sel test
+      passes on every mutant build.
+20:36 guard demo (artifacts/apa_regt2/g1_guard_demo.log): D1 CUDA_VISIBLE_DEVICES="" skip, D2 no extension skip,
+      D3 injected non-device RuntimeError FAIL (26), D4 injected no-device skip, D5 injected non-extension
+      ImportError FAIL (26). First attempt truncated the D3/D5 summaries with head -40; re-run with full summaries.
+20:37 pre-suite tree hash snapshot (2847 files).
+20:38-20:51 full suite: with_r1, [with_r2 MISLABELLED: shell pattern `with*` also matched `without_r2`, so the
+      ignore flag was not applied; renamed to *_with_r2_MISLABELLED_pattern_bug.*, kept as an extra with-run],
+      without_r2, with_r3, without_r4. All 5: FAILED/ERROR ids 52 == baseline 52, 0 new, 0 test_apa_pidv ids.
+20:52 post-suite tree hash == pre-suite (17 artifacts/wo*.ppm rewritten byte-identically by the suite).
+      Worktree vs production checkout (main 27d87fdf): 3148 identical, 0 differ, only-in-worktree = 2 shipped files,
+      the lead's order file, and logs/artifacts of this order.
+20:53 port diff (artifacts/apa_regt2/port_diff_vs_ld3.log): spread, _empty_layout, _cut_nt, pidv_layouts,
+      pidv_operand, pidv_check, pidv_cell IDENTICAL; constants line differs by a trailing comment only.
+DECISION: the harness instruction for this subagent forbids writing report .md files; per the order's fallback the
+      report goes in the final message, docs/APA_REGT2_REPORT.md not written.
+PRIOR ART (Directive): Dorfman (1943) group testing; non-adaptive combinatorial group testing (Du & Hwang) -- the
+      set-indicator columns are group tests, column packing a multiplexed non-adaptive design (TAKEN as the general
+      idea, by APA-LD3); identity-V baselines of APA-LD1/LD2 (TAKEN: exact zero/nonzero oracle); DeMillo, Lipton &
+      Sayward (1978) mutation testing (known-bad builds, in-test mutants); Dao (2023) FlashAttention-2 bottom-right
+      causal convention; APA-LD2 frontier_cuts. MINE (APA-LD3): pIdV design. MINE (APA-REGT2): nothing algorithmic --
+      the port, three adapter families, scoped TC_APA_SP, caller-owned margin dir, the narrow availability guard
+      (no prior art known to me for the guard). Unverified -- lead to check; search terms: "non-adaptive group testing
+      multiplexing", "combinatorial group testing Du Hwang", "Dorfman 1943", "DeMillo Lipton Sayward 1978",
+      "identity matrix probe attention mask test", "FlashAttention-2 bottom-right causal".
+SCRATCH outside the worktree (not deletable by me; /tmp is OS-wiped): the scratchpad scripts probe_cells.py,
+      regt2_guard_inject.py, regt2_suite_summary.py, regt2_port_diff.py, d3.out, d5.out, tree_*_suite.sha256 under
+      /tmp/claude-1000/-mnt-ForgeRealm-Project-Tensor/5018da7e-9784-4250-ba60-cc8fa4e7d188/scratchpad; pytest tmp
+      dirs under /tmp/pytest-of-vader (apa_pidv_sp_margins*); /tmp/regt2_probe_* from the probe (tempfile.mkdtemp).
