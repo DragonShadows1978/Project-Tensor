@@ -25,6 +25,8 @@ KVH 8, D 128, S 8192), with one run per cell and an exact zero/nonzero oracle.
 
 **Engine runtime is unaffected**: no engine source changed.
 
+**What it cannot catch.** pIdV is blind to in-slab reordering or substitution of visible keys. A kernel that reads the right head and batch slab but the wrong visible key produces the same zero/nonzero pattern. A PASS is therefore not general V-read correctness. Both shipped module headers state this, and `test_pidv_blind_to_in_slab_reordering_of_visible_keys` pins it (APA-REGT2-REV F03).
+
 ## Files
 
 | file | lines | contents |
@@ -101,3 +103,38 @@ The narrow availability guard has no prior art known to us. The external items a
 | I3 c22c290e | 5 failed |
 | no CUDA | 8 passed, 27 skipped |
 | **production package with its installed engine** (PYTHONPATH `tensor_cuda/tensor_cuda:tensor_cuda` of `/mnt/ForgeRealm/Project-Tensor`) | 34 passed, 1 skipped |
+
+## Amendment 1 (lead, 2026-10-09): APA-REGT2-REV F01 closed; F02 and F03 addressed
+
+The cross-model review (Codex gpt-6.1-sol high, `apa-regt2rev` 6675f4e) returned **R4 REJECT on F01**.
+
+**The defect.** The module did not scope the engine's environment dispatch switches. An inherited
+`TC_APA_SELECTIVE_PATH=1` routes the split-K decode cells (W23, I07) to the fused kernel, which makes the I2
+split-K defect unreachable. An inherited `TC_APA_SELECTIVE_PATH=2` makes prefill cells throw on a correct engine.
+
+**The witness.** On the unfixed module, the reviewer's own GPU probes gave dispatch-main FAIL and dispatch-i2 FAIL,
+exactly as predicted. The fp16 probe passed: min positive output 5.8e-4, against an analytic bound of 1.34e-7.
+
+**The fix** (in `tensor_cuda/tests/test_apa_pidv.py`):
+- An autouse fixture `_auto_dispatch` deletes, for every test in the module, all seven engine environment switches
+  that are read at call time: `TC_APA_SELECTIVE_PATH`, `TC_APA_STATS_PART_KEYS`, `TC_ATTN_QTILE`, `TC_APA_THR`,
+  `TC_APA_FRAC`, `TC_APA_SP` and `TC_FUSED_SDPA_NONCAUSAL`. It uses `monkeypatch.delenv`, so the caller's values are
+  restored afterwards. The lead checked that `kernels.cu:1793` reads the override per call, not cached.
+- `test_dispatch_env_is_cleared_for_every_test` pins this.
+
+**F02.** The fp16 floor sentence in `scripts/apa_pidv.py` now states the reviewer's quantizer-aware bound (≥ 1.34e-7
+at A31, about 2.25× the least fp16 subnormal, below the normal range). It names the dependence on
+round-to-nearest-even and on no subnormal flush.
+
+**F03.** The blind-spot sentence above, next to the verdict.
+
+**Lead re-runs after the fix** (`logs/apa_regt2_a1_lead_dispatch_*.log`, driver 595.99.02, each under the GPU lock):
+
+| engine | inherited environment | result |
+|---|---|---|
+| main d8fda9a8 | none | 35 passed, 1 skipped |
+| main | `TC_APA_SELECTIVE_PATH=2` | 35 passed, 1 skipped |
+| main | `TC_APA_SELECTIVE_PATH=1` | 35 passed, 1 skipped |
+| main | `=2`, `TC_APA_SP=1`, `TC_FUSED_SDPA_NONCAUSAL=1` and `TC_ATTN_QTILE=32` together | 35 passed, 1 skipped |
+| I2 add3c3ec | none, `=0`, or `=1` | exactly W23 and I07 FAILED; 33 passed, 1 skipped |
+| no CUDA | n/a | 9 passed, 27 skipped |
