@@ -113,7 +113,7 @@ The cross-model review (Codex gpt-6.1-sol high, `apa-regt2rev` 6675f4e) returned
 split-K defect unreachable. An inherited `TC_APA_SELECTIVE_PATH=2` makes prefill cells throw on a correct engine.
 
 **The witness.** On the unfixed module, the reviewer's own GPU probes gave dispatch-main FAIL and dispatch-i2 FAIL,
-exactly as predicted. The fp16 probe passed: min positive output 5.8e-4, against an analytic bound of 1.34e-7.
+exactly as predicted. The fp16 probe passed. Its smallest positive output was 2.9e-4 at A25 (analytic bound 3.3e-7); A31's was 5.8e-4 (bound 1.34e-7). This corrects REV2 F11, which caught an earlier version of this line labelling A31's value as the overall minimum.
 
 **The fix** (in `tensor_cuda/tests/test_apa_pidv.py`):
 - An autouse fixture `_auto_dispatch` deletes, for every test in the module, all seven engine environment switches
@@ -138,3 +138,53 @@ round-to-nearest-even and on no subnormal flush.
 | main | `=2`, `TC_APA_SP=1`, `TC_FUSED_SDPA_NONCAUSAL=1` and `TC_ATTN_QTILE=32` together | 35 passed, 1 skipped |
 | I2 add3c3ec | none, `=0`, or `=1` | exactly W23 and I07 FAILED; 33 passed, 1 skipped |
 | no CUDA | n/a | 9 passed, 27 skipped |
+
+## Re-review and promotion (2026-10-09/10)
+
+### The re-review
+
+- **Reviewer:** Codex gpt-6.1-sol, reasoning high.
+- **Order:** `orders/APA_REGT2_REVIEW_2.md` on branch `apa-regt2rev2`.
+- **Run:** sentinel run 20261010T012710Z-2074846 ended COMPLETED with SHIM-DONE exit=0.
+- **Receipts:** `apa-regt2rev2` (`docs/APA_REGT2_REVIEW_2.md`, `artifacts/apa_regt2rev2/verdict.json`).
+
+| gate | verdict |
+|---|---|
+| R1 | **F01 CLOSED** |
+| R2 | **PASS**: the amendment introduces no new BREAK |
+| R3 | **APPROVE-WITH-NITS** for `27d87fd..78c60d0`, no blocking findings |
+
+### Findings
+
+- **F01, F02 and F03 are now BENIGN (addressed).**
+- **F08 (BENIGN):** the function-scoped fixture and `PidvAttn`'s nested `TC_APA_SP` restore compose correctly.
+- **F09 (BENIGN):** three DF flags the fixture does not clear cannot reach the registered int4 prefill cells.
+- **F10 (SUSPICIOUS):** the lead's amended dispatch log was summary-only. It is superseded by the reviewer's
+  re-targeted probes below, which keep full logs.
+- **F11 (SUSPICIOUS):** A31's minimum was mislabelled as the overall minimum. Corrected above.
+
+### The reviewer's re-targeted GPU probes on the fixed module, run by the lead
+
+The lead ran these on 2026-10-10 at about 01:38Z, on driver 595.99.02, using `scripts/apa_regt2rev2_gpu.sh`. All 3
+passed:
+
+| probe | engine | result |
+|---|---|---|
+| fp16 | main d8fda9a8 | 5 singleton tests pass: finite, non-negative, exact visibility, min ≥ 0.5 × analytic bound |
+| dispatch-main | main d8fda9a8 | the full module passes 35 tests plus 1 slow skip under inherited unset, `=0`, `=1`, `=2` and a combined seven-switch override |
+| dispatch-i2 | I2 add3c3ec | under each of those cases: exactly the W23 and I07 assertion failures, 33 pass, 1 slow skip, no setup errors |
+
+### What is promoted
+
+- **Scope:** two new files plus receipts. No engine source, existing test or runtime path changes.
+- **Covers:** pIdV's exact zero/nonzero leak checks on sdpa, fused causal, apa_quant, apa_selective (fused and
+  split-K), apa_int4 and apa_sp. That is 19 edge cells, 7 production-layout cells (B 2, Hq 16, KVH 8, D 128,
+  S 8192), and one opt-in S = 98,304 cell. They catch CU1, CU3, CU4, CU5, **CU6**, I1, I2 and I3, independent of
+  inherited dispatch switches.
+- **Does not cover:**
+  - in-slab reordering of visible keys;
+  - fp16 at S > 1025;
+  - the GRM sliding path;
+  - backward passes;
+  - engine speed.
+- **Cost:** about 12 s of test time, against a 30 s budget.
