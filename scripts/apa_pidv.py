@@ -24,8 +24,10 @@ What it CANNOT catch, by design (say so before relying on a PASS):
     The CPU test `test_pidv_blind_to_in_slab_reordering_of_visible_keys` pins it.
   * Numerics, selection rules, statistics paths (see the ZWS tests), backward passes, kernel speed.
   * fp16 tiny-weight underflow: an fp16 kernel that flushes a legitimately tiny weight to 0 would read as a "blind"
-    entry; the registered fp16 cells (S <= 1025, LD1 operand regime |score| <= 3) stay far above the fp16 floor.
-    Larger fp16 S is not covered.
+    entry. In the registered fp16 cells (S <= 1025, LD1 operand regime |score| <= 3, quantized keys included), the
+    smallest visible weight is >= 1.34e-7 (cell A31; a quantizer-aware CPU bound, APA-REGT2-REV F02). That is about
+    2.25x the least positive fp16 subnormal, and BELOW the fp16 normal range, so the claim relies on round-to-nearest-
+    even conversion and on no subnormal flush along the composed value-matmul path. Larger fp16 S is not covered.
   * The GRM gemma4 sliding path (production tests must not import GRM).
 
 Prior art (Prior Art Directive; kept from APA-LD3's annotation at scripts/apa_ld3_pdwl2.py; external items

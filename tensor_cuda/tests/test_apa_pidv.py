@@ -122,6 +122,31 @@ def _engine():
     return M
 
 
+# Engine dispatch and tuning switches that are read from the environment on every call:
+#   kernels.cu: TC_APA_SELECTIVE_PATH, TC_APA_STATS_PART_KEYS, TC_ATTN_QTILE, TC_APA_THR, TC_APA_FRAC, TC_APA_SP;
+#   functional.py: TC_FUSED_SDPA_NONCAUSAL.
+# An inherited value would reroute the registered cells. For example, TC_APA_SELECTIVE_PATH=1 sends the split-K
+# decode cells (W23, I07) to the fused kernel, which makes a split-K defect (I2) unreachable, and =2 makes the prefill
+# cells throw. So every test here runs with all of them unset, and pytest restores the caller's values afterwards.
+# PidvAttn still sets and restores TC_APA_SP around each apa_sp call.
+# Source: APA-REGT2-REV F01. Prior art: pytest's monkeypatch fixture-restore idiom (pytest-dev); the same intent as
+# test_apa_selective_int4.py's _clear_path_override.
+DISPATCH_ENV = ("TC_APA_SELECTIVE_PATH", "TC_APA_STATS_PART_KEYS", "TC_ATTN_QTILE", "TC_APA_THR", "TC_APA_FRAC",
+                "TC_APA_SP", "TC_FUSED_SDPA_NONCAUSAL")
+
+
+@pytest.fixture(autouse=True)
+def _auto_dispatch(monkeypatch):
+    for name in DISPATCH_ENV:
+        monkeypatch.delenv(name, raising=False)
+    yield
+
+
+def test_dispatch_env_is_cleared_for_every_test():
+    """The autouse fixture above has run: no inherited dispatch or tuning switch is visible inside a test."""
+    assert [n for n in DISPATCH_ENV if n in os.environ] == []
+
+
 @pytest.fixture(scope="module")
 def margins_dir(tmp_path_factory):
     """caller-owned directory for apa_sp's synthetic margin table (pytest's tmp area, never the repo)."""
