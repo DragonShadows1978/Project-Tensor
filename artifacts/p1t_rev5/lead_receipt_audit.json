@@ -1,0 +1,34 @@
+{
+  "baseline_count": 52,
+  "lead_count": 52,
+  "new": [],
+  "resolved": [],
+  "lead_summary": "37 failed, 2729 passed, 47 skipped, 2 warnings, 15 errors in 438.10s (0:07:18)",
+  "source": "lead historical logs; not rerun",
+  "after_fix4_tests.log": "........................................                                 [100%]\n40 passed, 122 deselected in 39.16s\n",
+  "mut_a_fix4_tests.log": " {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1!', 'destroy@1'], ...}\nE       assert ('RuntimeError' == 'RuntimeError'\nE         \nE           RuntimeError and 'cudaStreamWaitEvent' in \"__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaStreamWaitEvent on the consumer's stream (cudaErrorInvalidDevice: invalid device ordinal);\" and 'was restored' in \"__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaStreamWaitEvent on the consumer's stream (cudaErrorInvalidDevice: invalid device ordinal);\")\n\ntensor_cuda/tests/test_dlpack.py:1532: AssertionError\n________ test_fix4_v401_export_fence_failed_restore_is_raised_and_named ________\n\nfix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'\n\n    def test_fix4_v401_export_fence_failed_restore_is_raised_and_named(fix4_shim):\n        res = _run_fix4(fix4_shim, \"export_fail_restore\")\n>       assert res[\"raised\"] == \"RuntimeError\", res\nE       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}\nE       assert None == 'RuntimeError'\n\ntensor_cuda/tests/test_dlpack.py:1544: AssertionError\n=========================== short test summary info ============================\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_switch]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_ptds]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_record-logged0-cudaEventRecord]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_destroy-logged1-cudaEventDestroy]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_switch-logged2-cannot make the tensor's CUDA device 0 current]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_create-logged0-cudaEventCreateWithFlags]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_wait-logged1-cudaStreamWaitEvent]\nFAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failed_restore_is_raised_and_named\n8 failed, 14 passed, 122 deselected in 21.62s\n",
+  "after_export_device.log": "INCONCLUSIVE: two GPUs required\n",
+  "after_import_query_error.log": "PASS: failed device query refused before consumption\n",
+  "after_sync_existing_error.log": "PASS: staged error reported 98 98 tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorInvalidDeviceFunction: invalid device function), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here\n",
+  "after_exit_overrun_bounded.log": "ARMED\ntensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted)\ntensor_cuda: the DLPack release(s) admitted before exit finished after 5.5 s; interpreter exit continues\nRESULT {\"before_hook\": {\"stats\": {\"released\": 0, \"leaked_interpreter_shutdown\": 0, \"leaked_drain_failure\": 0, \"deleter_exceptions\": 0, \"leaked_closing\": 0, \"lock_failures\": 0, \"in_flight\": 1, \"closing\": false, \"shutdown_calls\": 0, \"shutdown_in_flight_at_close\": 0, \"shutdown_timeouts\": 0, \"shutdown_still_in_flight\": 0, \"shutdown_wait_us\": 0, \"shutdown_diagnostics\": 0, \"device_restore_failures\": 0}}, \"after_hook\": {\"stats\": {\"released\": 1, \"leaked_interpreter_shutdown\": 0, \"leaked_drain_failure\": 0, \"deleter_exceptions\": 0, \"leaked_closing\": 0, \"lock_failures\": 0, \"in_flight\": 0, \"closing\": true, \"shutdown_calls\": 1, \"shutdown_in_flight_at_close\": 1, \"shutdown_timeouts\": 1, \"shutdown_still_in_flight\": 0, \"shutdown_wait_us\": 5496039, \"shutdown_diagnostics\": 1, \"device_restore_failures\": 0}, \"deleter_calls\": [1, 0], \"deleter_done\": [true, false], \"finalizing\": false}}\nFINAL finalizing=True\n",
+  "voice_actual_count": 249,
+  "voice_verdict_counts": {
+    "PASS": 249
+  },
+  "voice_ok_fields": {
+    "count": 12,
+    "all_present_true": true
+  },
+  "voice_items": {
+    "T1": 11,
+    "T2": 144,
+    "T3": 28,
+    "T4": 12,
+    "T5": 28,
+    "T6": 13,
+    "T1R": 1,
+    "T4S": 12
+  },
+  "before_import_query_error.log": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev4/probes/core_import_query_error.py\", line 30, in <module>\n    raise AssertionError('core import succeeded after failed device query; name=' + str(name(cap)))\nAssertionError: core import succeeded after failed device query; name=b'used_dltensor'\n",
+  "before_sync_existing_error.log": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev4/probes/sync_existing_error.py\", line 26, in <module>\n    raise AssertionError('synchronize returned success with a preexisting launch error; slot=' + str(r.cudaPeekAtLastError()))\nAssertionError: synchronize returned success with a preexisting launch error; slot=98\n"
+}
