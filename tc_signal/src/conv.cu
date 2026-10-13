@@ -1,0 +1,288 @@
+// tc_signal 1-D convolutions (P1T-M2: T2 Conv1d, T3 ConvTranspose1d). fp32, deterministic, no atomics, no fast-math.
+//
+// Numerics contract (Project-Voice TENSOR_IMPL_PLAN_P1T.md §4; tc_signal plan §4):
+//  * fp32 math throughout; cuBLAS in CUBLAS_DEFAULT_MATH (never TF32) with atomics not allowed;
+//  * every output element is produced by exactly one thread (or one cuBLAS dot product) in a fixed order, so two calls
+//    on the same inputs are bitwise equal; no atomicAdd anywhere in this package;
+//  * no intrinsics such as __expf/__fdividef and no --use_fast_math (CMakeLists.txt refuses it). FMA contraction is
+//    nvcc's default (--fmad=true, not a fast-math flag); the gather kernel spells its FMA out with fmaf().
+//
+// Prior art:
+//  * im2col + GEMM convolution: Chellapilla, Puri & Simard, "High Performance Convolutional Neural Networks for
+//    Document Processing" (2006). Taken: unfold the receptive fields into a matrix and run one SGEMM. Ours: the 1-D
+//    unfold with dilation and separate (pad_begin, pad_end), the per-batch-element scratch reuse, and the group batch
+//    as a strided-batched SGEMM.
+//  * Row-major GEMM through column-major BLAS by computing C^T = B^T A^T: standard BLAS practice (no single source).
+//  * Gather-form transposed convolution: transposed convolution is the adjoint of the strided convolution
+//    (Dumoulin & Visin, "A guide to convolution arithmetic for deep learning", 2016); evaluating each output as a sum
+//    over the input taps that land on it (instead of scattering inputs) is the usual deterministic formulation.
+//    Taken: the tap condition (t + pb - k*dilation) % stride == 0. Ours: the fixed loop order (k outer ascending,
+//    c inner ascending, bias last) and the thread mapping.
+//  * Semantics: ONNX Conv / ConvTranspose operator specs (1-D case; pads = (begin, end), ConvTranspose weight layout
+//    [C_in, C_out/groups, K], output_padding appended at the end).
+#include "conv_ops.h"
+
+#include <cublas_v2.h>
+#include <cuda_runtime.h>
+
+#include <algorithm>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+
+#include "tuning.h"
+
+#ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
+#error "tc_signal queues on the legacy default stream (stream 0); do not build it with --default-stream per-thread"
+#endif
+// nvcc 12.6 defines no preprocessor macro for --use_fast_math (it only passes -ftz=1 -prec_div=0 -prec_sqrt=0 to
+// cicc), so fast-math cannot be refused here at compile time. CMakeLists.txt refuses the flag at configure time, and
+// fp32_divide_probe_kernel below is a runtime canary compiled with this TU's flags (tests/test_conv.py checks it).
+
+namespace tcs {
+
+namespace {
+
+// Stream 0 is the legacy default stream in this translation unit (per-thread default stream refused above). It is the
+// same stream TensorCUDA queues on, and the stream DLPack producers were asked to order against (stream=1).
+constexpr cudaStream_t kLegacyStream = 0;
+
+void check_cuda(cudaError_t e, const char* what) {
+  if (e != cudaSuccess) {
+    std::ostringstream os;
+    os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+    throw std::runtime_error(os.str());
+  }
+}
+
+// Checked after every kernel launch (launch-configuration and sticky errors surface here as RuntimeError).
+void check_launch(const char* kernel) { check_cuda(cudaGetLastError(), kernel); }
+
+void check_cublas(cublasStatus_t s, const char* what) {
+  if (s != CUBLAS_STATUS_SUCCESS) {
+    std::ostringstream os;
+    os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(s);
+    throw std::runtime_error(os.str());
+  }
+}
+
+unsigned int grid_for(int64_t total, int block) {
+  const int64_t blocks = (total + block - 1) / block;
+  return static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(blocks, tuning::kGridCap)));
+}
+
+// Makes `device` current for the call and restores the caller's device afterwards.
+class DeviceGuard {
+ public:
+  explicit DeviceGuard(int device) {
+    check_cuda(cudaGetDevice(&prev_), "cudaGetDevice");
+    if (prev_ != device) {
+      check_cuda(cudaSetDevice(device), "cudaSetDevice");
+      changed_ = true;
+    }
+  }
+  ~DeviceGuard() {
+    if (changed_) cudaSetDevice(prev_);
+  }
+  DeviceGuard(const DeviceGuard&) = delete;
+  DeviceGuard& operator=(const DeviceGuard&) = delete;
+
+ private:
+  int prev_ = 0;
+  bool changed_ = false;
+};
+
+// One cuBLAS handle per device, created lazily on first use and kept for the life of the process (destroying it at
+// interpreter exit can race CUDA's own teardown). All entry points run under the GIL, so no extra lock is needed.
+// cuBLAS allocates its own internal workspace for this handle on first use (cudaMalloc inside cuBLAS); that is the
+// only device memory tc_signal causes to be allocated outside the caller's allocator (README "cuBLAS").
+cublasHandle_t handle_for(int device) {
+  static std::unordered_map<int, cublasHandle_t> handles;
+  auto it = handles.find(device);
+  if (it != handles.end()) return it->second;
+  cublasHandle_t h = nullptr;
+  check_cublas(cublasCreate(&h), "cublasCreate");
+  check_cublas(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
+  check_cublas(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
+  check_cublas(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
+  check_cublas(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
+  handles.emplace(device, h);
+  return h;
+}
+
+// ------------------------------------------------------------------------------------------------ kernels
+// 1-D im2col for one batch element (Chellapilla et al. 2006, 1-D with dilation and asymmetric zero padding):
+//   col[(c*K + k), t] = x[c, t*stride - pad_begin + k*dilation]   (0 outside [0, T))
+// Rows (c, k) are c-major, so group g's rows [g*Cg*K, (g+1)*Cg*K) form one contiguous [Cg*K, T_out] block that
+// matches w[g*Og:(g+1)*Og] viewed as [Og, Cg*K].
+__global__ void im2col1d_kernel(const float* __restrict__ x, float* __restrict__ col, int64_t C, int64_t T, int64_t K,
+                                int64_t T_out, int64_t stride, int64_t pad_begin, int64_t dilation) {
+  const int64_t total = C * K * T_out;
+  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < total;
+       i += static_cast<int64_t>(gridDim.x) * blockDim.x) {
+    const int64_t t = i % T_out;
+    const int64_t r = i / T_out;
+    const int64_t k = r % K;
+    const int64_t c = r / K;
+    const int64_t src = t * stride - pad_begin + k * dilation;
+    col[i] = (src >= 0 && src < T) ? x[c * T + src] : 0.0f;
+  }
+}
+
+// y[n, o, t] += b[o], one thread per output element (fp32 add, one rounding).
+__global__ void bias_add_kernel(float* __restrict__ y, const float* __restrict__ b, int64_t C_out, int64_t T_out,
+                                int64_t total) {
+  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < total;
+       i += static_cast<int64_t>(gridDim.x) * blockDim.x) {
+    const int64_t o = (i / T_out) % C_out;
+    y[i] = y[i] + b[o];
+  }
+}
+
+// Gather-form ConvTranspose1d (adjoint of strided conv, Dumoulin & Visin 2016), one thread per output element:
+//   y[n, o, t] = b[o] + sum_{k=0..K-1} sum_{c in group(o)} w[c, o - g*Og, k] * x[n, c, (t + pb - k*dilation)/stride]
+// over the taps with (t + pb - k*dilation) >= 0, divisible by stride, and quotient < T. Fixed order: k ascending
+// (outer), c ascending within the group (inner), fp32 fmaf accumulation from 0, bias added last. No atomics.
+__global__ void conv_transpose1d_gather_kernel(const float* __restrict__ x, const float* __restrict__ w,
+                                               const float* __restrict__ b, float* __restrict__ y, int64_t N,
+                                               int64_t C_in, int64_t T, int64_t C_out, int64_t K, int64_t T_out,
+                                               int64_t stride, int64_t pad_begin, int64_t dilation, int64_t groups) {
+  const int64_t Cg = C_in / groups;
+  const int64_t Og = C_out / groups;
+  const int64_t total = N * C_out * T_out;
+  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < total;
+       i += static_cast<int64_t>(gridDim.x) * blockDim.x) {
+    const int64_t t = i % T_out;
+    const int64_t r = i / T_out;
+    const int64_t o = r % C_out;
+    const int64_t n = r / C_out;
+    const int64_t g = o / Og;
+    const int64_t ol = o - g * Og;
+    const float* xg = x + (n * C_in + g * Cg) * T;   // x[n, g*Cg + cl, :] = xg[cl*T + :]
+    const float* wg = w + (g * Cg * Og + ol) * K;    // w[g*Cg + cl, ol, k] = wg[cl*Og*K + k]
+    float acc = 0.0f;
+    for (int64_t k = 0; k < K; ++k) {
+      const int64_t s = t + pad_begin - k * dilation;
+      if (s < 0 || s % stride != 0) continue;
+      const int64_t q = s / stride;
+      if (q >= T) continue;
+      const float* xp = xg + q;
+      const float* wp = wg + k;
+      for (int64_t cl = 0; cl < Cg; ++cl) acc = fmaf(wp[cl * Og * K], xp[cl * T], acc);
+    }
+    if (b != nullptr) acc = acc + b[o];
+    y[i] = acc;
+  }
+}
+
+// Fast-math canary: out[i] = x[i] / y[i] in fp32. Built with this TU's flags, so --use_fast_math (-ftz=1,
+// -prec_div=0) shows up as flushed subnormals or non-IEEE quotients, which the tests compare bitwise against the host's
+// IEEE fp32 division. Prior art: no specific source known to me (it is the usual "test the build flags by their
+// observable effect" idea; denormal flushing as a fast-math symptom is documented in the CUDA C Programming Guide).
+__global__ void fp32_divide_probe_kernel(const float* __restrict__ x, const float* __restrict__ y,
+                                         float* __restrict__ out, int64_t n) {
+  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n;
+       i += static_cast<int64_t>(gridDim.x) * blockDim.x)
+    out[i] = x[i] / y[i];
+}
+
+}  // namespace
+
+void fp32_divide_probe(int device, const float* x, const float* y, float* out, int64_t n) {
+  DeviceGuard guard(device);
+  fp32_divide_probe_kernel<<<grid_for(n, tuning::kProbeBlock), tuning::kProbeBlock, 0, kLegacyStream>>>(x, y, out, n);
+  check_launch("fp32_divide_probe_kernel");
+}
+
+// ------------------------------------------------------------------------------------------------ Conv1d
+void conv1d_forward(int device, const Conv1dGeom& g, const float* x, const float* w, const float* b, float* y,
+                    float* col) {
+  DeviceGuard guard(device);
+  cublasHandle_t h = handle_for(device);
+  const int64_t Cg = g.C_in / g.groups;
+  const int64_t Og = g.C_out / g.groups;
+  const int64_t CgK = Cg * g.K;
+  const float alpha = 1.0f;
+  const float beta = 0.0f;
+  for (int64_t n = 0; n < g.N; ++n) {
+    const float* xn = x + n * g.C_in * g.T;
+    const float* A = nullptr;   // the [Cg*K, T_out] row-major operand of group 0 for this batch element
+    long long strideA = 0;
+    if (g.direct) {
+      // K == 1, stride 1, no pads: x[n] itself is the col matrix (T_out == T), no scratch.
+      A = xn;
+      strideA = static_cast<long long>(Cg * g.T);
+    } else {
+      // The scratch is reused for every n: the next im2col is queued after this n's GEMM on the same stream.
+      const int64_t total = g.C_in * g.K * g.T_out;
+      im2col1d_kernel<<<grid_for(total, tuning::kIm2colBlock), tuning::kIm2colBlock, 0, kLegacyStream>>>(
+          xn, col, g.C_in, g.T, g.K, g.T_out, g.stride, g.pad_begin, g.dilation);
+      check_launch("im2col1d_kernel");
+      A = col;
+      strideA = static_cast<long long>(CgK * g.T_out);
+    }
+    float* yn = y + n * g.C_out * g.T_out;
+    // Row-major Y_g[Og, T_out] = W_g[Og, CgK] . Col_g[CgK, T_out], computed as the column-major product
+    // Y_g^T[T_out, Og] = Col_g^T[T_out, CgK] . W_g^T[CgK, Og]: m = T_out, n = Og, k = CgK, both ops N,
+    // lda = T_out (col), ldb = CgK (w), ldc = T_out (y); one batch entry per group.
+    check_cublas(cublasSgemmStridedBatched(h, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(g.T_out),
+                                           static_cast<int>(Og), static_cast<int>(CgK), &alpha, A,
+                                           static_cast<int>(g.T_out), strideA, w, static_cast<int>(CgK),
+                                           static_cast<long long>(Og * CgK), &beta, yn, static_cast<int>(g.T_out),
+                                           static_cast<long long>(Og * g.T_out), static_cast<int>(g.groups)),
+                 "cublasSgemmStridedBatched");
+    check_launch("cublasSgemmStridedBatched");
+  }
+  if (b != nullptr) {
+    const int64_t total = g.N * g.C_out * g.T_out;
+    bias_add_kernel<<<grid_for(total, tuning::kBiasBlock), tuning::kBiasBlock, 0, kLegacyStream>>>(y, b, g.C_out,
+                                                                                                   g.T_out, total);
+    check_launch("bias_add_kernel");
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ ConvTranspose1d
+void conv_transpose1d_forward(int device, const ConvTranspose1dGeom& g, const float* x, const float* w,
+                              const float* b, float* y) {
+  DeviceGuard guard(device);
+  const int64_t total = g.N * g.C_out * g.T_out;
+  conv_transpose1d_gather_kernel<<<grid_for(total, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
+                                   kLegacyStream>>>(x, w, b, y, g.N, g.C_in, g.T, g.C_out, g.K, g.T_out, g.stride,
+                                                    g.pad_begin, g.dilation, g.groups);
+  check_launch("conv_transpose1d_gather_kernel");
+}
+
+// ------------------------------------------------------------------------------------------------ introspection
+CublasConfig cublas_config(int device) {
+  DeviceGuard guard(device);
+  cublasHandle_t h = handle_for(device);
+  cublasMath_t math;
+  cublasAtomicsMode_t atomics;
+  cublasPointerMode_t pmode;
+  cudaStream_t s;
+  check_cublas(cublasGetMathMode(h, &math), "cublasGetMathMode");
+  check_cublas(cublasGetAtomicsMode(h, &atomics), "cublasGetAtomicsMode");
+  check_cublas(cublasGetPointerMode(h, &pmode), "cublasGetPointerMode");
+  check_cublas(cublasGetStream(h, &s), "cublasGetStream");
+  CublasConfig c;
+  c.math_mode = static_cast<int>(math);
+  c.atomics_mode = static_cast<int>(atomics);
+  c.pointer_mode = static_cast<int>(pmode);
+  c.legacy_stream = (s == kLegacyStream);
+  c.default_math = (math == CUBLAS_DEFAULT_MATH);
+  c.atomics_not_allowed = (atomics == CUBLAS_ATOMICS_NOT_ALLOWED);
+  return c;
+}
+
+BuildInfo build_info() {
+  BuildInfo bi{};
+  check_cuda(cudaRuntimeGetVersion(&bi.cudart_version), "cudaRuntimeGetVersion");
+  check_cublas(cublasGetProperty(MAJOR_VERSION, &bi.cublas_major), "cublasGetProperty(MAJOR)");
+  check_cublas(cublasGetProperty(MINOR_VERSION, &bi.cublas_minor), "cublasGetProperty(MINOR)");
+  check_cublas(cublasGetProperty(PATCH_LEVEL, &bi.cublas_patch), "cublasGetProperty(PATCH)");
+  check_cuda(cudaGetDevice(&bi.current_device), "cudaGetDevice");
+  return bi;
+}
+
+}  // namespace tcs

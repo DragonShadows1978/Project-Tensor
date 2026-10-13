@@ -1,0 +1,11 @@
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -125,7 +125,7 @@
+     const int64_t r = i / T_out;
+     const int64_t k = r % K;
+     const int64_t c = r / K;
+-    const int64_t src = t * stride - pad_begin + k * dilation;
++    const int64_t src = t * stride - pad_begin + k;  // MUTANT (a): dilation ignored
+     col[i] = (src >= 0 && src < T) ? x[c * T + src] : 0.0f;
+   }
+ }

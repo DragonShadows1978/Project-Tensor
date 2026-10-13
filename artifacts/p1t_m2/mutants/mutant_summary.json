@@ -1,0 +1,1031 @@
+{
+ "a": {
+  "desc": "mutant a: im2col ignores dilation",
+  "g1_summary": "10 failed, 147 passed in 5.03s",
+  "g1_failed_tests": [
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d3_p99_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d5_p1515_256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d3_p33_256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d5_p55_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d3_p1515_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d5_p2525_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p03_k5_d2]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups4_k5_d2]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-dil_span_ge_T]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_groups2_asym]"
+  ],
+  "g1_census_failed_cells": [
+   {
+    "op": "conv1d",
+    "cell": "k7_d3_p99_128",
+    "N": 1.1232334564494861,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k7_d5_p1515_256",
+    "N": 1.2392032252387712,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_d3_p33_256",
+    "N": 0.7561861364759027,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_d5_p55_128",
+    "N": 0.9364641207432643,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k11_d3_p1515_128",
+    "N": 1.074586441814711,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k11_d5_p2525_128",
+    "N": 0.8956345145273069,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "asym_p03_k5_d2",
+    "N": 1.0685603189534596,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "groups4_k5_d2",
+    "N": 0.9480442530310021,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "dil_span_ge_T",
+    "N": 0.6460095879309293,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "N2_groups2_asym",
+    "N": 1.082819730125677,
+    "deterministic": true,
+    "mismatches": 0
+   }
+  ],
+  "g1_census_nondeterministic": 0,
+  "g1_census_cells": 61,
+  "g2_verdict": "FAIL",
+  "g2_exit": 1,
+  "g2_counts": {
+   "PASS": 124,
+   "FAIL": 48,
+   "SKIP": 0
+  },
+  "g2_by_item": {
+   "T2": {
+    "PASS": 96,
+    "FAIL": 48,
+    "SKIP": 0
+   },
+   "T3": {
+    "PASS": 28,
+    "FAIL": 0,
+    "SKIP": 0
+   }
+  },
+  "g2_gate_failures": 48,
+  "g2_nondeterministic_cases": 0,
+  "g2_nondet_detail": [],
+  "g2_max_N": 1.2594523196796015,
+  "g2_failed_ids": [
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/max_1/wfp16"
+  ],
+  "g2_min_failing_N": 0.28884501874614765
+ },
+ "b": {
+  "desc": "mutant b: pad_begin and pad_end swapped (both ops)",
+  "g1_summary": "13 failed, 144 passed in 6.04s",
+  "g1_failed_tests": [
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p20_k3]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p03_k5_d2]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p41_k3_s2]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups2]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-stride_gt_K_asym]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_groups2_asym]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-k1_pad10_im2col_path]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p20_k4_s2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p03_k5_s3_op1]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p31_k3_d2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups4_s3_op2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-stride_gt_K_asym_op]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_groups2_asym]"
+  ],
+  "g1_census_failed_cells": [
+   {
+    "op": "conv1d",
+    "cell": "asym_p20_k3",
+    "N": 1.0503948049400065,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "asym_p03_k5_d2",
+    "N": 1.1953944517839261,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "asym_p41_k3_s2",
+    "N": 1.3143827136406199,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "groups2",
+    "N": 1.1184779347039548,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "stride_gt_K_asym",
+    "N": 0.5347386621498491,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "N2_groups2_asym",
+    "N": 1.2012277922499488,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k1_pad10_im2col_path",
+    "N": 1.3985196756755534,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p20_k4_s2",
+    "N": 0.9980539447315042,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p03_k5_s3_op1",
+    "N": 0.9765504101624684,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p31_k3_d2",
+    "N": 0.7382480708002896,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "groups4_s3_op2",
+    "N": 1.1379103186981223,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "stride_gt_K_asym_op",
+    "N": 0.46727063979881384,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "N2_groups2_asym",
+    "N": 0.7880100371245187,
+    "deterministic": true,
+    "mismatches": 0
+   }
+  ],
+  "g1_census_nondeterministic": 0,
+  "g1_census_cells": 61,
+  "g2_verdict": "PASS",
+  "g2_exit": 0,
+  "g2_counts": {
+   "PASS": 172,
+   "FAIL": 0,
+   "SKIP": 0
+  },
+  "g2_by_item": {
+   "T2": {
+    "PASS": 144,
+    "FAIL": 0,
+    "SKIP": 0
+   },
+   "T3": {
+    "PASS": 28,
+    "FAIL": 0,
+    "SKIP": 0
+   }
+  },
+  "g2_gate_failures": 0,
+  "g2_nondeterministic_cases": 0,
+  "g2_nondet_detail": [],
+  "g2_max_N": 1.3939452150970144e-06,
+  "g2_failed_ids": []
+ },
+ "c": {
+  "desc": "mutant c: TF32 math on the cuBLAS handle",
+  "g1_summary": "25 failed, 132 passed in 5.91s",
+  "g1_failed_tests": [
+   "tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-field]",
+   "tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-data]",
+   "tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-field]",
+   "tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-data]",
+   "tc_signal/tests/test_contract.py::test_cublas_handle_config",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_512to512]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to1024]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_514to1024]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to512]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_512to256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_1090to1024]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k5_s1_p22_512to512]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k12_s6_p33_22to256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_256to256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_128to22]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d3_p99_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d5_p1515_256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d3_p33_256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d5_p55_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d1_p55_256]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d3_p1515_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d5_p2525_128]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-dil_span_ge_T]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_Cout33]",
+   "tc_signal/tests/test_conv.py::test_conv1d_census[edge-Cout11_no_bias]"
+  ],
+  "g1_census_failed_cells": [
+   {
+    "op": "conv1d",
+    "cell": "k3_s1_p11_512to512",
+    "N": 0.00021653247845280954,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_s1_p11_1090to1024",
+    "N": 0.0002294882558282576,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_s1_p11_514to1024",
+    "N": 0.0002245124616200664,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_s1_p11_1090to512",
+    "N": 0.00020346083565117,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k1_s1_p00_512to256",
+    "N": 0.00020335395648336278,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k1_s1_p00_1090to1024",
+    "N": 0.000320777884408124,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k5_s1_p22_512to512",
+    "N": 0.00019117777394188516,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k12_s6_p33_22to256",
+    "N": 0.00025671723850551883,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k7_s1_p33_256to256",
+    "N": 0.0002067012217771739,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k7_s1_p33_128to22",
+    "N": 0.00031039136448521813,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k7_d3_p99_128",
+    "N": 0.00023171046129186025,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k7_d5_p1515_256",
+    "N": 0.00023627048027724905,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_d3_p33_256",
+    "N": 0.00022131607814561183,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k3_d5_p55_128",
+    "N": 0.0002721006882242511,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k11_d1_p55_256",
+    "N": 0.00023304542473190037,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k11_d3_p1515_128",
+    "N": 0.00020823873034334244,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "k11_d5_p2525_128",
+    "N": 0.00022144670950596495,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "dil_span_ge_T",
+    "N": 0.00017886448490154937,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "N2_Cout33",
+    "N": 0.00019722017324194934,
+    "deterministic": true,
+    "mismatches": 0
+   },
+   {
+    "op": "conv1d",
+    "cell": "Cout11_no_bias",
+    "N": 0.0003018612642686696,
+    "deterministic": true,
+    "mismatches": 0
+   }
+  ],
+  "g1_census_nondeterministic": 0,
+  "g1_census_cells": 61,
+  "g2_verdict": "FAIL",
+  "g2_exit": 1,
+  "g2_counts": {
+   "PASS": 46,
+   "FAIL": 126,
+   "SKIP": 0
+  },
+  "g2_by_item": {
+   "T2": {
+    "PASS": 18,
+    "FAIL": 126,
+    "SKIP": 0
+   },
+   "T3": {
+    "PASS": 28,
+    "FAIL": 0,
+    "SKIP": 0
+   }
+  },
+  "g2_gate_failures": 126,
+  "g2_nondeterministic_cases": 0,
+  "g2_nondet_detail": [],
+  "g2_max_N": 0.0005649379402239925,
+  "g2_failed_ids": [
+   "T2/F0.0__conv1__Conv/short_07/wfp32",
+   "T2/F0.0__conv1__Conv/short_07/wfp16",
+   "T2/F0.0__conv1__Conv/max_1/wfp32",
+   "T2/F0.0__conv1__Conv/max_1/wfp16",
+   "T2/F0.1__conv1__Conv/short_07/wfp32",
+   "T2/F0.1__conv1__Conv/short_07/wfp16",
+   "T2/F0.1__conv1__Conv/max_1/wfp32",
+   "T2/F0.1__conv1__Conv/max_1/wfp16",
+   "T2/F0.1__conv2__Conv/short_07/wfp32",
+   "T2/F0.1__conv2__Conv/short_07/wfp16",
+   "T2/F0.1__conv2__Conv/max_1/wfp32",
+   "T2/F0.1__conv2__Conv/max_1/wfp16",
+   "T2/F0.1__conv1x1__Conv/short_07/wfp32",
+   "T2/F0.1__conv1x1__Conv/short_07/wfp16",
+   "T2/F0.1__conv1x1__Conv/max_1/wfp32",
+   "T2/F0.1__conv1x1__Conv/max_1/wfp16",
+   "T2/text_encoder__cnn.0__cnn.0.0__Conv/short_07/wfp32",
+   "T2/text_encoder__cnn.0__cnn.0.0__Conv/short_07/wfp16",
+   "T2/text_encoder__cnn.0__cnn.0.0__Conv/max_1/wfp32",
+   "T2/text_encoder__cnn.0__cnn.0.0__Conv/max_1/wfp16",
+   "T2/decoder__encode__conv1__Conv/short_07/wfp32",
+   "T2/decoder__encode__conv1__Conv/short_07/wfp16",
+   "T2/decoder__encode__conv1__Conv/max_1/wfp32",
+   "T2/decoder__encode__conv1__Conv/max_1/wfp16",
+   "T2/decoder__encode__conv2__Conv/short_07/wfp32",
+   "T2/decoder__encode__conv2__Conv/short_07/wfp16",
+   "T2/decoder__encode__conv2__Conv/max_1/wfp32",
+   "T2/decoder__encode__conv2__Conv/max_1/wfp16",
+   "T2/decoder__encode__conv1x1__Conv/short_07/wfp32",
+   "T2/decoder__encode__conv1x1__Conv/short_07/wfp16",
+   "T2/decoder__encode__conv1x1__Conv/max_1/wfp32",
+   "T2/decoder__encode__conv1x1__Conv/max_1/wfp16",
+   "T2/decoder__asr_res__asr_res.0__Conv/short_07/wfp32",
+   "T2/decoder__asr_res__asr_res.0__Conv/short_07/wfp16",
+   "T2/decoder__asr_res__asr_res.0__Conv/max_1/wfp32",
+   "T2/decoder__asr_res__asr_res.0__Conv/max_1/wfp16",
+   "T2/decoder__decode.0__conv1__Conv/short_07/wfp32",
+   "T2/decoder__decode.0__conv1__Conv/short_07/wfp16",
+   "T2/decoder__decode.0__conv1__Conv/max_1/wfp32",
+   "T2/decoder__decode.0__conv1__Conv/max_1/wfp16",
+   "T2/decoder__decode.0__conv1x1__Conv/short_07/wfp32",
+   "T2/decoder__decode.0__conv1x1__Conv/short_07/wfp16",
+   "T2/decoder__decode.0__conv1x1__Conv/max_1/wfp32",
+   "T2/decoder__decode.0__conv1x1__Conv/max_1/wfp16",
+   "T2/decoder__decode.3__conv1__Conv/short_07/wfp32",
+   "T2/decoder__decode.3__conv1__Conv/short_07/wfp16",
+   "T2/decoder__decode.3__conv1__Conv/max_1/wfp32",
+   "T2/decoder__decode.3__conv1__Conv/max_1/wfp16",
+   "T2/decoder__decode.3__conv1x1__Conv/short_07/wfp32",
+   "T2/decoder__decode.3__conv1x1__Conv/short_07/wfp16",
+   "T2/decoder__decode.3__conv1x1__Conv/max_1/wfp32",
+   "T2/decoder__decode.3__conv1x1__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_convs.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_convs.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_convs.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_convs.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.0__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.0__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.2__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__noise_res.1__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.3__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.0__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.0__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.0__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.0__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.1__Conv/max_1/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/short_07/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/short_07/wfp16",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/max_1/wfp32",
+   "T2/decoder__generator__resblocks.4__convs1.2__Conv/max_1/wfp16",
+   "T2/decoder__generator__conv_post__Conv/max_1/wfp32",
+   "T2/decoder__generator__conv_post__Conv/max_1/wfp16"
+  ],
+  "g2_min_failing_N": 2.267471794461312e-05
+ },
+ "d": {
+  "desc": "mutant d: conv_transpose1d as an atomicAdd scatter",
+  "g1_summary": "14 failed, 143 passed in 8.63s",
+  "g1_failed_tests": [
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s10_p55_512to256]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k12_s6_p33_256to128]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw512_k3_s2_p11_op1]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw1090_k3_s2_p11_op1]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s5_p00_11to1]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p20_k4_s2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p03_k5_s3_op1]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p31_k3_d2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups4_s3_op2]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_Cout33]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_groups2_asym]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-op_dil_gt_stride]",
+   "tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-Cout11_no_bias]"
+  ],
+  "g1_census_failed_cells": [
+   {
+    "op": "conv_transpose1d",
+    "cell": "k20_s10_p55_512to256",
+    "N": 2.3333265726446852e-06,
+    "deterministic": false,
+    "mismatches": 55337
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "k12_s6_p33_256to128",
+    "N": 1.5730533045143763e-06,
+    "deterministic": false,
+    "mismatches": 43361
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "dw512_k3_s2_p11_op1",
+    "N": 6.694569688666954e-08,
+    "deterministic": false,
+    "mismatches": 10
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "dw1090_k3_s2_p11_op1",
+    "N": 5.0719237169653114e-08,
+    "deterministic": false,
+    "mismatches": 21
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "k20_s5_p00_11to1",
+    "N": 2.613401309516485e-07,
+    "deterministic": false,
+    "mismatches": 1323
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p20_k4_s2",
+    "N": 1.8979943263645846e-07,
+    "deterministic": false,
+    "mismatches": 529
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p03_k5_s3_op1",
+    "N": 2.4238754349344293e-07,
+    "deterministic": false,
+    "mismatches": 536
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "asym_p31_k3_d2",
+    "N": 2.2821734821107805e-07,
+    "deterministic": false,
+    "mismatches": 250
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "groups2",
+    "N": 8.626317283727457e-08,
+    "deterministic": false,
+    "mismatches": 125
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "groups4_s3_op2",
+    "N": 1.0848692290439532e-07,
+    "deterministic": false,
+    "mismatches": 114
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "N2_Cout33",
+    "N": 2.008149934695867e-07,
+    "deterministic": false,
+    "mismatches": 544
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "N2_groups2_asym",
+    "N": 1.5882184924511611e-07,
+    "deterministic": false,
+    "mismatches": 91
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "op_dil_gt_stride",
+    "N": 9.017726280248914e-08,
+    "deterministic": false,
+    "mismatches": 5
+   },
+   {
+    "op": "conv_transpose1d",
+    "cell": "Cout11_no_bias",
+    "N": 1.2455789673704023e-07,
+    "deterministic": false,
+    "mismatches": 252
+   }
+  ],
+  "g1_census_nondeterministic": 14,
+  "g1_census_cells": 61,
+  "g2_verdict": "FAIL",
+  "g2_exit": 1,
+  "g2_counts": {
+   "PASS": 144,
+   "FAIL": 28,
+   "SKIP": 0
+  },
+  "g2_by_item": {
+   "T2": {
+    "PASS": 144,
+    "FAIL": 0,
+    "SKIP": 0
+   },
+   "T3": {
+    "PASS": 0,
+    "FAIL": 28,
+    "SKIP": 0
+   }
+  },
+  "g2_gate_failures": 0,
+  "g2_nondeterministic_cases": 28,
+  "g2_nondet_detail": [
+   {
+    "id": "T3/F0.1__pool__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     4
+    ],
+    "numel": null,
+    "N": 7.866951512908289e-08
+   },
+   {
+    "id": "T3/F0.1__pool__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     6
+    ],
+    "numel": null,
+    "N": 9.501174825416199e-08
+   },
+   {
+    "id": "T3/F0.1__pool__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     245
+    ],
+    "numel": null,
+    "N": 7.163130769916426e-08
+   },
+   {
+    "id": "T3/F0.1__pool__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     125
+    ],
+    "numel": null,
+    "N": 7.701418231109761e-08
+   },
+   {
+    "id": "T3/N.1__pool__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     3
+    ],
+    "numel": null,
+    "N": 5.7283306198963846e-08
+   },
+   {
+    "id": "T3/N.1__pool__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     4
+    ],
+    "numel": null,
+    "N": 5.868261178368509e-08
+   },
+   {
+    "id": "T3/N.1__pool__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     135
+    ],
+    "numel": null,
+    "N": 1.0158978277968884e-07
+   },
+   {
+    "id": "T3/N.1__pool__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     126
+    ],
+    "numel": null,
+    "N": 7.327452450904395e-08
+   },
+   {
+    "id": "T3/decoder__decode.3__pool__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     34
+    ],
+    "numel": null,
+    "N": 4.8212369961378865e-08
+   },
+   {
+    "id": "T3/decoder__decode.3__pool__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     28
+    ],
+    "numel": null,
+    "N": 4.284650812546342e-08
+   },
+   {
+    "id": "T3/decoder__decode.3__pool__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     568
+    ],
+    "numel": null,
+    "N": 6.457393411492422e-08
+   },
+   {
+    "id": "T3/decoder__decode.3__pool__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     210
+    ],
+    "numel": null,
+    "N": 8.920916736872713e-08
+   },
+   {
+    "id": "T3/decoder__generator__ups.0__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     385793
+    ],
+    "numel": null,
+    "N": 8.288521268367928e-07
+   },
+   {
+    "id": "T3/decoder__generator__ups.0__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     383403
+    ],
+    "numel": null,
+    "N": 6.891941899163553e-07
+   },
+   {
+    "id": "T3/decoder__generator__ups.0__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     1696791
+    ],
+    "numel": null,
+    "N": 1.1320277641925732e-06
+   },
+   {
+    "id": "T3/decoder__generator__ups.0__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     1670414
+    ],
+    "numel": null,
+    "N": 1.2147180899201754e-06
+   },
+   {
+    "id": "T3/decoder__generator__ups.1__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     981641
+    ],
+    "numel": null,
+    "N": 8.511751317225244e-07
+   },
+   {
+    "id": "T3/decoder__generator__ups.1__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     966567
+    ],
+    "numel": null,
+    "N": 8.073076599137415e-07
+   },
+   {
+    "id": "T3/decoder__generator__ups.1__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     1433350
+    ],
+    "numel": null,
+    "N": 1.3528039251805425e-06
+   },
+   {
+    "id": "T3/decoder__generator__ups.1__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     1463296
+    ],
+    "numel": null,
+    "N": 1.498740783014764e-06
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose/short_07/wfp32",
+    "mismatches": [
+     36993
+    ],
+    "numel": null,
+    "N": 4.380709803863471e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose/short_07/wfp16",
+    "mismatches": [
+     36585
+    ],
+    "numel": null,
+    "N": 5.028265988261398e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose/max_1/wfp32",
+    "mismatches": [
+     1538
+    ],
+    "numel": null,
+    "N": 7.08166243708034e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose/max_1/wfp16",
+    "mismatches": [
+     1250
+    ],
+    "numel": null,
+    "N": 5.211368793118174e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose_1/short_07/wfp32",
+    "mismatches": [
+     28634
+    ],
+    "numel": null,
+    "N": 2.389999537138619e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose_1/short_07/wfp16",
+    "mismatches": [
+     27439
+    ],
+    "numel": null,
+    "N": 2.2907701101239804e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose_1/max_1/wfp32",
+    "mismatches": [
+     1118
+    ],
+    "numel": null,
+    "N": 3.228654981376092e-07
+   },
+   {
+    "id": "T3/decoder__generator__ConvTranspose_1/max_1/wfp16",
+    "mismatches": [
+     1300
+    ],
+    "numel": null,
+    "N": 4.893271186146036e-07
+   }
+  ],
+  "g2_max_N": 1.498740783014764e-06,
+  "g2_failed_ids": [
+   "T3/F0.1__pool__ConvTranspose/short_07/wfp32",
+   "T3/F0.1__pool__ConvTranspose/short_07/wfp16",
+   "T3/F0.1__pool__ConvTranspose/max_1/wfp32",
+   "T3/F0.1__pool__ConvTranspose/max_1/wfp16",
+   "T3/N.1__pool__ConvTranspose/short_07/wfp32",
+   "T3/N.1__pool__ConvTranspose/short_07/wfp16",
+   "T3/N.1__pool__ConvTranspose/max_1/wfp32",
+   "T3/N.1__pool__ConvTranspose/max_1/wfp16",
+   "T3/decoder__decode.3__pool__ConvTranspose/short_07/wfp32",
+   "T3/decoder__decode.3__pool__ConvTranspose/short_07/wfp16",
+   "T3/decoder__decode.3__pool__ConvTranspose/max_1/wfp32",
+   "T3/decoder__decode.3__pool__ConvTranspose/max_1/wfp16",
+   "T3/decoder__generator__ups.0__ConvTranspose/short_07/wfp32",
+   "T3/decoder__generator__ups.0__ConvTranspose/short_07/wfp16",
+   "T3/decoder__generator__ups.0__ConvTranspose/max_1/wfp32",
+   "T3/decoder__generator__ups.0__ConvTranspose/max_1/wfp16",
+   "T3/decoder__generator__ups.1__ConvTranspose/short_07/wfp32",
+   "T3/decoder__generator__ups.1__ConvTranspose/short_07/wfp16",
+   "T3/decoder__generator__ups.1__ConvTranspose/max_1/wfp32",
+   "T3/decoder__generator__ups.1__ConvTranspose/max_1/wfp16",
+   "T3/decoder__generator__ConvTranspose/short_07/wfp32",
+   "T3/decoder__generator__ConvTranspose/short_07/wfp16",
+   "T3/decoder__generator__ConvTranspose/max_1/wfp32",
+   "T3/decoder__generator__ConvTranspose/max_1/wfp16",
+   "T3/decoder__generator__ConvTranspose_1/short_07/wfp32",
+   "T3/decoder__generator__ConvTranspose_1/short_07/wfp16",
+   "T3/decoder__generator__ConvTranspose_1/max_1/wfp32",
+   "T3/decoder__generator__ConvTranspose_1/max_1/wfp16"
+  ]
+ }
+}

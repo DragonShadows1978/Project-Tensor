@@ -1,0 +1,31 @@
+........................................................................ [ 45%]
+F....................................................................... [ 91%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+______________ test_fast_math_canary_ieee_division_and_subnormals ______________
+
+    def test_fast_math_canary_ieee_division_and_subnormals():
+        """fp32 division compiled with the package's flags matches host IEEE division bitwise, and a subnormal quotient is
+        not flushed to zero (--use_fast_math would give -prec_div=0 and -ftz=1)."""
+        rng = np.random.default_rng(C.SEED)
+        n = C.DIVIDE_PROBE_PAIRS
+        xs = (rng.standard_normal(n) * np.exp2(rng.integers(-20, 20, n))).astype(np.float32)
+        ys = (rng.standard_normal(n) * np.exp2(rng.integers(-20, 20, n))).astype(np.float32)
+        tiny = np.float32(np.finfo(np.float32).tiny)
+        xs[:4] = [tiny, tiny, -tiny, tiny * 3]
+        ys[:4] = [2.0, 8.0, 4.0, 16.0]
+        out = torch.empty(n, device='cuda')
+        _C.fp32_divide_probe(torch.from_numpy(xs).cuda(), torch.from_numpy(ys).cuda(), out)
+        torch.cuda.synchronize()
+        got = out.cpu().numpy()
+        want = xs / ys
+>       assert np.all(got[:4] != 0.0), f'subnormal quotients flushed to zero: {got[:4]}'
+E       AssertionError: subnormal quotients flushed to zero: [ 0.  0. -0.  0.]
+E       assert np.False_
+E        +  where np.False_ = <function all at 0x7ddcf1b870f0>(array([ 0.,  0., -0.,  0.], dtype=float32) != 0.0)
+E        +    where <function all at 0x7ddcf1b870f0> = np.all
+
+tc_signal/tests/test_contract.py:458: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_fast_math_canary_ieee_division_and_subnormals
+1 failed, 156 passed in 5.35s
