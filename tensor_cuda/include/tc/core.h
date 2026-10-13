@@ -60,8 +60,23 @@ struct Storage {
   // In-place engine operations bump it after enqueueing their write, allowing
   // persistent derived tensors to invalidate without hashing device bytes.
   uint64_t revision = 0;
+  // P1T-M1 (DLPack import): external memory owned by another library. When
+  // `external_release` is set, the engine neither pools nor frees `ptr`: the
+  // destructor first drains the engine stream (so no queued engine kernel can
+  // still touch the memory), then calls external_release(external_ctx), which
+  // hands the memory back to its producer (bindings.cpp calls the DLPack
+  // deleter with the GIL held). Prior art: the owner-keepalive pattern of the
+  // PyTorch/CuPy DLPack importers (ATen's from_dlpack deleter-in-storage,
+  // 2017+); the drain-before-release ordering is ours (see kernels.cu).
+  using ExternalRelease = void (*)(void* ctx);
+  ExternalRelease external_release = nullptr;
+  void* external_ctx = nullptr;
 
   Storage(size_t nbytes, Device device);
+  // Wrap `external_ptr` (nbytes long, on `device`) without allocating.
+  Storage(void* external_ptr, size_t nbytes, Device device,
+          ExternalRelease release, void* release_ctx);
+  bool is_external() const { return external_release != nullptr; }
   ~Storage();
   Storage(const Storage&) = delete;
   Storage& operator=(const Storage&) = delete;
@@ -625,6 +640,10 @@ void adagrad_step(NDArray& param, const NDArray& grad, NDArray& acc,
 // param.data += alpha * other  (in place); param.data *= s (in place).
 void axpy_(NDArray& param, const NDArray& other, double alpha);
 void scale_(NDArray& param, double s);
+// P1T-M1: a[...] = value in place, queued on the engine (legacy default)
+// stream through the existing fill_kernel; bumps the Storage revision.
+// float32/float16/bfloat16 CUDA arrays only.
+void fill_(NDArray& a, double value);
 
 // CUDA bookkeeping.
 void cuda_sync();

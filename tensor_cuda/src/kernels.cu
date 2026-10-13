@@ -178,7 +178,34 @@ Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(devic
     ptr = std::malloc(nbytes);
   }
 }
+// P1T-M1 (DLPack import): wrap a producer's memory. No allocation, no pool.
+Storage::Storage(void* external_ptr, size_t nbytes_, Device device_,
+                 ExternalRelease release, void* release_ctx)
+    : ptr(external_ptr), nbytes(nbytes_), device(device_),
+      external_release(release), external_ctx(release_ctx) {}
 Storage::~Storage() {
+  if (external_release) {
+    // Imported (DLPack) memory belongs to its producer: never cudaFree it and
+    // never hand it to the pool. ORDER MATTERS:
+    //  1. Drain the engine stream. Every engine kernel, cuBLAS call and
+    //     cudaMemcpy runs on stream 0 (the legacy default stream; this TU is
+    //     built without --default-stream per-thread), so once it is idle no
+    //     queued engine work can still read or write this memory. The engine
+    //     keeps no per-Storage "last use" event, so "everything queued so far"
+    //     is the only sound fence; an event recorded here and waited on would
+    //     cover exactly the same work at three API calls instead of one. A
+    //     deferred release (host callback) is not allowed to run the
+    //     producer's deleter, which may call CUDA (torch's caching allocator).
+    //  2. Then hand the memory back (the DLPack deleter, GIL held, in
+    //     bindings.cpp). A producer may reuse it at once on its own stream.
+    // Prior art: the DLPack deleter contract (dmlc/dlpack, 2017+) and the
+    // array API's stream rules (2021+); the drain-then-delete order is the
+    // standard CUDA "free only after last use" rule. Ours: its placement in
+    // the Storage destructor.
+    if (device.is_cuda()) cudaStreamSynchronize(0);
+    external_release(external_ctx);
+    return;
+  }
   if (!ptr) return;
   if (device.is_cuda()) {
     if (pooled) cudaFreeAsync(ptr, 0);
@@ -247,6 +274,21 @@ NDArray NDArray::full(const Shape& shape, double value, DType dtype, Device devi
   });
   cuda_check_last("full");
   return a;
+}
+// P1T-M1: in-place fill through the EXISTING fill_kernel (no new kernel),
+// queued on the engine stream like NDArray::full; an in-place engine write,
+// so it bumps the Storage revision after enqueueing (core.h contract).
+// Prior art: torch.Tensor.fill_ / numpy ndarray.fill (API shape only).
+void fill_(NDArray& a, double value) {
+  if (!a.defined()) throw std::runtime_error("fill_: undefined array");
+  if (!a.device.is_cuda()) throw std::runtime_error("fill_: CUDA arrays only");
+  int64_t n = a.numel();
+  if (n == 0) return;
+  DISPATCH_FLOAT(a.dtype, T, {
+    fill_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+  });
+  cuda_check_last("fill_");
+  a.mark_modified();
 }
 NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Device device) {
   NDArray a(shape, dtype, device);

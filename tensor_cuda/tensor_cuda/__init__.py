@@ -70,6 +70,76 @@ def from_numpy(arr, *, device="cuda", requires_grad=False):
     return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
 
 
+# P1T-M1 (Project-Voice T1): DLPack import. Prior art: the Python array API
+# standard's from_dlpack (Consortium for Python Data API Standards, 2021-2023)
+# and the PyTorch/CuPy importers' owner keepalive (the imported tensor keeps the
+# producer's DLPack manager alive and calls its deleter when it dies); the
+# versioned-then-legacy retry mirrors torch.utils.dlpack.from_dlpack. Ours: the
+# TensorCUDA wiring (bindings.cpp, kernels.cu Storage).
+_DLPACK_MAX_VERSION = (1, 3)   # the vendored dlpack.h (include/dlpack/dlpack.h)
+_DLPACK_LEGACY_STREAM = 1      # DLPack int for the CUDA legacy default stream
+_KDL_CUDA = 2
+
+
+def from_dlpack(obj):
+    """Zero-copy import of any DLPack CUDA producer (or a bare DLPack capsule).
+
+    For an object with ``__dlpack__`` this calls
+    ``obj.__dlpack__(stream=1, max_version=(1, 3))`` (retrying without
+    ``max_version`` for a producer that predates it). ``stream=1`` names the
+    consumer stream, TensorCUDA's legacy default stream, so the producer orders
+    that stream after its own pending work before handing the capsule over.
+    A bare capsule carries no stream information: the caller must already have
+    ordered the producer's work.
+
+    The result aliases the producer's memory (``data_ptr()`` is the producer's
+    element 0) and keeps the producer's DLPack manager alive. When the last
+    TensorCUDA reference to that memory dies, TensorCUDA first drains its own
+    stream, so no queued TensorCUDA kernel can still touch the memory, and then
+    calls the producer's deleter with the GIL held. The memory is never
+    returned to TensorCUDA's pool and never ``cudaFree``-d by TensorCUDA.
+
+    Refused with ``BufferError``, never converted: non-CUDA devices (CPU
+    included), another CUDA device than TensorCUDA's, non-contiguous strides
+    (a size-1 dimension may carry any stride), read-only tensors, and dtypes
+    with no exact TensorCUDA match (supported: float32, float16, bfloat16,
+    int64, uint8, bool). The result has ``requires_grad=False``. If anything
+    outside TensorCUDA later writes into it in place, call
+    ``mark_modified()`` (see ``Tensor.__dlpack__``).
+    """
+    if not hasattr(obj, "__dlpack__"):
+        return _C._from_dlpack_capsule(obj)   # bare capsule (TypeError otherwise)
+    dev = getattr(obj, "__dlpack_device__", None)
+    if dev is not None:
+        dev_type, dev_id = dev()
+        if int(dev_type) != _KDL_CUDA:
+            raise BufferError(
+                f"from_dlpack: only CUDA device memory (kDLCUDA = 2) can be "
+                f"imported; the producer reports device ({int(dev_type)}, "
+                f"{int(dev_id)})" + (" (CPU)" if int(dev_type) == 1 else ""))
+    try:
+        cap = obj.__dlpack__(stream=_DLPACK_LEGACY_STREAM,
+                             max_version=_DLPACK_MAX_VERSION)
+    except TypeError:
+        cap = obj.__dlpack__(stream=_DLPACK_LEGACY_STREAM)
+    return _C._from_dlpack_capsule(cap)
+
+
+def empty(*shape, dtype="float32", device="cuda"):
+    """Uninitialized tensor allocated on the device by the engine's allocator.
+
+    Amendment 1 (P1T-M1): binds ``NDArray::empty`` with no host round-trip and
+    no fill, so the CONTENTS ARE UNINITIALIZED (whatever the allocator hands
+    back). Shape conventions match ``zeros``: ``empty(2, 3)``,
+    ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
+    Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
+    string raises instead of falling back to float32.
+    """
+    if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+        shape = tuple(shape[0])
+    return _C.empty([operator.index(s) for s in shape], dtype, device)
+
+
 def matmul(a, b, alpha=1.0, trans_b=False):
     # trans_b reads b as (..., N, K) row-major via cuBLAS OP_T — no transpose
     # copy. alpha is applied in the fp32 accumulator before the 16-bit store.
@@ -1237,7 +1307,7 @@ from . import quantization  # noqa: E402
 apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
-    "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
+    "Tensor", "tensor", "from_numpy", "from_dlpack", "empty", "zeros", "ones", "randn", "rand",
     "matmul", "dda_raycast", "raster_winner_scatter_min",
     "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",
     "bake_back_project", "bake_cosine_blend", "build_inpaint_island_csr",

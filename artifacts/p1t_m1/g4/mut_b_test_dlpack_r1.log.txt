@@ -1,0 +1,70 @@
+..............FF.F...................                                    [100%]
+=================================== FAILURES ===================================
+________________ test_unconsumed_capsule_releases_its_reference ________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_unconsumed_capsule_releases_its_reference(torch):
+        n = 16 << 20                                         # 64 MiB fp32: visible in cudaMemGetInfo
+        t = tc.empty(n)
+        cap = t.__dlpack__(max_version=(1, 0))
+        del t
+        gc.collect()
+        torch.cuda.synchronize()
+        tc.empty_cache()                                     # robust if another test left the transient pool on
+        free_held, _ = torch.cuda.mem_get_info()
+        del cap                                              # the capsule destructor calls the deleter -> Storage freed
+        gc.collect()
+        torch.cuda.synchronize()
+        tc.empty_cache()
+        free_after, _ = torch.cuda.mem_get_info()
+>       assert free_after - free_held >= (n * 4) // 2
+E       assert (11958550528 - 11958550528) >= ((16777216 * 4) // 2)
+
+tensor_cuda/tests/test_dlpack.py:252: AssertionError
+_________________ test_export_lifetime_after_producer_dropped __________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_export_lifetime_after_producer_dropped(torch):
+        for k in range(RACE_TRIALS):
+            v = float(k + 1)
+            t = tc.empty(RACE_NUMEL)
+            t.fill_(v)
+            torch.cuda.synchronize()
+            x = torch.from_dlpack(t)
+            del t
+            gc.collect()
+            junk = [tc.empty(RACE_NUMEL).fill_(-7.0) for _ in range(JUNK_ALLOCS)]
+            torch.cuda.synchronize()
+>           assert bool(torch.all(x == v).item()), f"trial {k}: exported memory was freed with the producer Tensor"
+E           AssertionError: trial 0: exported memory was freed with the producer Tensor
+E           assert False
+E            +  where False = bool(False)
+E            +    where False = <built-in method item of Tensor object at 0x763aa12e5e50>()
+E            +      where <built-in method item of Tensor object at 0x763aa12e5e50> = tensor(False, device='cuda:0').item
+E            +        where tensor(False, device='cuda:0') = <built-in method all of type object at 0x763ad0b3e180>(tensor([-7., -7., -7.,  ..., -7., -7., -7.], device='cuda:0') == 1.0)
+E            +          where <built-in method all of type object at 0x763ad0b3e180> = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>.all
+
+tensor_cuda/tests/test_dlpack.py:267: AssertionError
+_______________ test_import_deleter_called_once_when_tensor_dies _______________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_import_deleter_called_once_when_tensor_dies(torch):
+        owner = torch.arange(12, dtype=torch.float32, device="cuda")
+        prod = _Producer(owner, (12,), (1,))
+        u = tc.from_dlpack(prod.capsule())
+        x = torch.from_dlpack(u)                             # re-export keeps the imported Storage alive too
+        del u
+        gc.collect()
+>       assert prod.deleter_calls == 0
+E       assert 1 == 0
+E        +  where 1 = <test_dlpack._Producer object at 0x763aa1058350>.deleter_calls
+
+tensor_cuda/tests/test_dlpack.py:294: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_unconsumed_capsule_releases_its_reference
+FAILED tensor_cuda/tests/test_dlpack.py::test_export_lifetime_after_producer_dropped
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_deleter_called_once_when_tensor_dies
+3 failed, 34 passed in 5.36s

@@ -4,10 +4,15 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
+#include <cuda_runtime.h>
+
 #include <cmath>
+#include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "dlpack/dlpack.h"  // vendored dmlc/dlpack v1.3 (git blob 9252a448)
 #include "tc/autograd.h"
 #include "tc/bp_op_timing.h"
 #include "tc/ops.h"
@@ -213,6 +218,402 @@ std::vector<TerrainRenderObject> terrain_objects_from_python(
   return parsed;
 }
 
+// ===================================================================== DLPack
+// P1T-M1 (Project-Voice T1): zero-copy DLPack export/import.
+//
+// Prior art: DLPack (dmlc/dlpack, 2017-; v1.3 header vendored verbatim at
+// include/dlpack/dlpack.h); the Python array API standard's data-interchange
+// protocol (__dlpack__(stream=, max_version=, dl_device=, copy=) and
+// __dlpack_device__; Consortium for Python Data API Standards, 2021-2023);
+// PyTorch's ATen DLConvertor/torch.utils.dlpack and CuPy's from_dlpack
+// (owner keepalive: the manager context owns a reference to the producer's
+// storage, and the consumer keeps the manager until its tensor dies; capsule
+// renamed "used_*" on consumption). Taken: the protocol, capsule naming and
+// the keepalive pattern; the event-record + cudaStreamWaitEvent fence is the
+// standard CUDA cross-stream idiom. Ours: wiring it to tc::Storage (a
+// shared_ptr<Storage> owner on export; an external-release Storage that
+// drains the engine stream before the deleter on import, kernels.cu).
+constexpr const char* kCapLegacy = "dltensor";
+constexpr const char* kCapVersioned = "dltensor_versioned";
+constexpr const char* kCapUsedLegacy = "used_dltensor";
+constexpr const char* kCapUsedVersioned = "used_dltensor_versioned";
+
+DLDataType to_dl_dtype(DType dt) {
+  auto mk = [](int code, int bits) {
+    DLDataType d;
+    d.code = static_cast<uint8_t>(code);
+    d.bits = static_cast<uint8_t>(bits);
+    d.lanes = 1;
+    return d;
+  };
+  switch (dt) {
+    case DType::Float32: return mk(kDLFloat, 32);
+    case DType::Float16: return mk(kDLFloat, 16);
+    case DType::BFloat16: return mk(kDLBfloat, 16);
+    case DType::Int64: return mk(kDLInt, 64);
+    case DType::Uint8: return mk(kDLUInt, 8);
+    case DType::Bool: return mk(kDLBool, 8);
+  }
+  throw py::buffer_error("__dlpack__: dtype has no DLPack mapping");
+}
+
+// Exact matches only: TensorCUDA never converts on import.
+bool from_dl_dtype(const DLDataType& d, DType* out) {
+  if (d.lanes != 1) return false;
+  if (d.code == kDLFloat && d.bits == 32) { *out = DType::Float32; return true; }
+  if (d.code == kDLFloat && d.bits == 16) { *out = DType::Float16; return true; }
+  if (d.code == kDLBfloat && d.bits == 16) { *out = DType::BFloat16; return true; }
+  if (d.code == kDLInt && d.bits == 64) { *out = DType::Int64; return true; }
+  if (d.code == kDLUInt && d.bits == 8) { *out = DType::Uint8; return true; }
+  if (d.code == kDLBool && d.bits == 8) { *out = DType::Bool; return true; }
+  return false;
+}
+
+std::string shape_str(const int64_t* v, int n) {
+  std::string s = "[";
+  for (int i = 0; i < n; ++i) s += (i ? ", " : "") + std::to_string(v[i]);
+  return s + "]";
+}
+
+// ---- export: the manager context OWNS a reference to the Storage, so the
+// memory outlives the producer Tensor's last Python reference.
+struct DLPackExportCtx {
+  std::shared_ptr<Storage> owner;
+  std::vector<int64_t> shape;
+  std::vector<int64_t> strides;
+  DLManagedTensor legacy{};
+  DLManagedTensorVersioned versioned{};
+};
+
+void export_deleter_legacy(DLManagedTensor* self) {
+  delete static_cast<DLPackExportCtx*>(self->manager_ctx);
+}
+void export_deleter_versioned(DLManagedTensorVersioned* self) {
+  delete static_cast<DLPackExportCtx*>(self->manager_ctx);
+}
+
+// PyCapsule destructors: an UNCONSUMED capsule (still named dltensor*) owns
+// its manager and must call the deleter; a consumed one ("used_*") does not.
+void capsule_destructor_legacy(PyObject* cap) {
+  if (!PyCapsule_IsValid(cap, kCapLegacy)) return;
+  PyObject *et, *ev, *etb;
+  PyErr_Fetch(&et, &ev, &etb);
+  auto* m = static_cast<DLManagedTensor*>(PyCapsule_GetPointer(cap, kCapLegacy));
+  if (m && m->deleter) m->deleter(m);
+  PyErr_Restore(et, ev, etb);
+}
+void capsule_destructor_versioned(PyObject* cap) {
+  if (!PyCapsule_IsValid(cap, kCapVersioned)) return;
+  PyObject *et, *ev, *etb;
+  PyErr_Fetch(&et, &ev, &etb);
+  auto* m = static_cast<DLManagedTensorVersioned*>(
+      PyCapsule_GetPointer(cap, kCapVersioned));
+  if (m && m->deleter) m->deleter(m);
+  PyErr_Restore(et, ev, etb);
+}
+
+// Stream contract (array API): `stream` is the CONSUMER's stream. TensorCUDA
+// queues all work on the legacy default stream. None/1 = the consumer is on
+// the legacy stream too (nothing to do); -1 = no synchronization; 2 = the
+// per-thread default stream; > 2 = a cudaStream_t. For 2 and handles, record
+// an event on the legacy stream and make the consumer wait on it.
+void dlpack_fence_consumer(const py::object& stream) {
+  if (stream.is_none()) return;
+  if (!py::isinstance<py::int_>(stream))
+    throw py::type_error("__dlpack__: stream must be an int or None");
+  const long long s = stream.cast<long long>();
+  if (s == -1 || s == 1) return;
+  if (s == 0)
+    throw py::value_error(
+        "__dlpack__: stream=0 is ambiguous for CUDA under the DLPack protocol; "
+        "use None or 1 (legacy default stream), 2 (per-thread default stream) "
+        "or a cudaStream_t handle");
+  if (s < -1) throw py::value_error("__dlpack__: invalid stream " + std::to_string(s));
+  cudaStream_t consumer =
+      (s == 2) ? cudaStreamPerThread
+               : reinterpret_cast<cudaStream_t>(static_cast<uintptr_t>(s));
+  cudaEvent_t ev = nullptr;
+  cudaError_t e = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+  if (e == cudaSuccess) e = cudaEventRecord(ev, cudaStreamLegacy);  // engine stream
+  if (e == cudaSuccess) e = cudaStreamWaitEvent(consumer, ev, 0);
+  // Safe right after the wait is enqueued: the dependency is captured at the
+  // cudaStreamWaitEvent call and the runtime frees the event once it fires.
+  if (ev) cudaEventDestroy(ev);
+  if (e != cudaSuccess) {
+    cudaGetLastError();
+    throw std::runtime_error(std::string("__dlpack__: stream fence failed: ") +
+                             cudaGetErrorString(e));
+  }
+}
+
+py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
+                         py::object dl_device, py::object copy) {
+  if (!t.defined() || !t.data().defined())
+    throw py::buffer_error("__dlpack__: undefined tensor");
+  const NDArray& a = t.data();
+  if (!a.device.is_cuda())
+    throw py::buffer_error(
+        "__dlpack__: TensorCUDA exports CUDA tensors only; this tensor is on "
+        "cpu (CPU DLPack export is not supported)");
+  if (!copy.is_none() && copy.cast<bool>())
+    throw py::buffer_error(
+        "__dlpack__: copy=True is not supported; TensorCUDA exports zero-copy "
+        "only (pass copy=None or copy=False)");
+  if (!dl_device.is_none()) {
+    py::sequence d = dl_device.cast<py::sequence>();
+    if (py::len(d) != 2)
+      throw py::value_error("__dlpack__: dl_device must be a (device_type, device_id) pair");
+    const int dt = d[0].cast<int>();
+    const int id = d[1].cast<int>();
+    if (dt != kDLCUDA || id != a.device.index)
+      throw py::buffer_error(
+          "__dlpack__: dl_device=(" + std::to_string(dt) + ", " +
+          std::to_string(id) + ") differs from this tensor's device (2, " +
+          std::to_string(a.device.index) +
+          "); a cross-device export needs a copy, which TensorCUDA does not make");
+  }
+  bool versioned = false;
+  if (!max_version.is_none()) {
+    py::sequence mv = max_version.cast<py::sequence>();
+    if (py::len(mv) < 1)
+      throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
+    versioned = mv[0].cast<int>() >= 1;
+  }
+
+  dlpack_fence_consumer(stream);
+
+  auto* ctx = new DLPackExportCtx();
+  ctx->owner = a.storage;
+  ctx->shape.assign(a.shape.begin(), a.shape.end());
+  Shape st = contiguous_strides(a.shape);
+  ctx->strides.assign(st.begin(), st.end());
+  const int nd = a.ndim();
+  DLTensor dl{};
+  dl.data = a.storage->ptr;  // allocation base; element 0 is data + byte_offset
+  dl.byte_offset = static_cast<uint64_t>(a.offset) * dtype_size(a.dtype);
+  dl.device.device_type = kDLCUDA;
+  dl.device.device_id = a.device.index;
+  dl.ndim = nd;
+  dl.dtype = to_dl_dtype(a.dtype);
+  dl.shape = nd ? ctx->shape.data() : nullptr;
+  dl.strides = nd ? ctx->strides.data() : nullptr;
+
+  PyObject* cap = nullptr;
+  if (versioned) {
+    DLManagedTensorVersioned& mt = ctx->versioned;
+    mt.version.major = DLPACK_MAJOR_VERSION;
+    mt.version.minor = DLPACK_MINOR_VERSION;
+    mt.manager_ctx = ctx;
+    mt.deleter = export_deleter_versioned;
+    mt.flags = 0;
+    mt.dl_tensor = dl;
+    cap = PyCapsule_New(&mt, kCapVersioned, capsule_destructor_versioned);
+  } else {
+    DLManagedTensor& mt = ctx->legacy;
+    mt.dl_tensor = dl;
+    mt.manager_ctx = ctx;
+    mt.deleter = export_deleter_legacy;
+    cap = PyCapsule_New(&mt, kCapLegacy, capsule_destructor_legacy);
+  }
+  if (!cap) {
+    delete ctx;
+    throw py::error_already_set();
+  }
+  return py::reinterpret_steal<py::object>(cap);
+}
+
+py::tuple tensor_dlpack_device(Tensor& t) {
+  if (!t.defined() || !t.device().is_cuda())
+    throw py::buffer_error(
+        "__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor "
+        "is on cpu");
+  return py::make_tuple(static_cast<int>(kDLCUDA), t.device().index);
+}
+
+// ---- import: the Storage keeps the producer's manager alive; its destructor
+// drains the engine stream (kernels.cu) and then calls this, GIL held.
+void import_release_legacy(void* ctx) {
+  auto* m = static_cast<DLManagedTensor*>(ctx);
+  if (!m || !m->deleter || !Py_IsInitialized()) return;
+  PyGILState_STATE g = PyGILState_Ensure();
+  m->deleter(m);
+  PyGILState_Release(g);
+}
+void import_release_versioned(void* ctx) {
+  auto* m = static_cast<DLManagedTensorVersioned*>(ctx);
+  if (!m || !m->deleter || !Py_IsInitialized()) return;
+  PyGILState_STATE g = PyGILState_Ensure();
+  m->deleter(m);
+  PyGILState_Release(g);
+}
+void import_release_noop(void*) {}
+
+Tensor tensor_from_dlpack_capsule(py::object obj) {
+  PyObject* cap = obj.ptr();
+  bool versioned = false;
+  if (PyCapsule_IsValid(cap, kCapVersioned)) {
+    versioned = true;
+  } else if (!PyCapsule_IsValid(cap, kCapLegacy)) {
+    if (PyCapsule_CheckExact(cap)) {
+      const char* name = PyCapsule_GetName(cap);
+      PyErr_Clear();
+      throw py::value_error(
+          std::string("from_dlpack: capsule named '") + (name ? name : "NULL") +
+          "' is not an unconsumed DLPack capsule (a capsule can be consumed "
+          "only once)");
+    }
+    throw py::type_error(
+        "from_dlpack: expected an object with __dlpack__ or a DLPack capsule");
+  }
+  DLTensor* dl = nullptr;
+  void* manager = nullptr;
+  uint64_t flags = 0;
+  if (versioned) {
+    auto* m = static_cast<DLManagedTensorVersioned*>(
+        PyCapsule_GetPointer(cap, kCapVersioned));
+    if (!m) throw py::error_already_set();
+    if (m->version.major != DLPACK_MAJOR_VERSION)
+      throw py::buffer_error(
+          "from_dlpack: DLPack major version " + std::to_string(m->version.major) +
+          " is not supported (this build speaks DLPack " +
+          std::to_string(DLPACK_MAJOR_VERSION) + ".x)");
+    dl = &m->dl_tensor;
+    flags = m->flags;
+    manager = m;
+  } else {
+    auto* m = static_cast<DLManagedTensor*>(PyCapsule_GetPointer(cap, kCapLegacy));
+    if (!m) throw py::error_already_set();
+    dl = &m->dl_tensor;
+    manager = m;
+  }
+  // Every refusal below leaves the capsule unconsumed, so its destructor
+  // hands the memory back to the producer.
+  if (flags & DLPACK_FLAG_BITMASK_READ_ONLY)
+    throw py::buffer_error(
+        "from_dlpack: the producer marked this tensor read-only; TensorCUDA "
+        "tensors are writable, so read-only imports are refused");
+  if (dl->device.device_type != kDLCUDA)
+    throw py::buffer_error(
+        "from_dlpack: only CUDA device memory (kDLCUDA = 2) can be imported; "
+        "got device type " + std::to_string(static_cast<int>(dl->device.device_type)) +
+        (dl->device.device_type == kDLCPU ? " (CPU)" : ""));
+  int cur = 0;
+  cudaGetDevice(&cur);
+  if (dl->device.device_id != cur)
+    throw py::buffer_error(
+        "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +
+        " but TensorCUDA runs on device " + std::to_string(cur) +
+        " (multi-GPU import is not supported)");
+  DType dt;
+  if (!from_dl_dtype(dl->dtype, &dt))
+    throw py::buffer_error(
+        "from_dlpack: DLPack dtype (code=" + std::to_string(dl->dtype.code) +
+        ", bits=" + std::to_string(dl->dtype.bits) + ", lanes=" +
+        std::to_string(dl->dtype.lanes) +
+        ") has no exact TensorCUDA dtype; TensorCUDA never converts on import "
+        "(supported: float32, float16, bfloat16, int64, uint8, bool)");
+  if (dl->ndim < 0 || dl->ndim > TC_MAX_DIMS)
+    throw py::buffer_error("from_dlpack: ndim " + std::to_string(dl->ndim) +
+                           " is outside TensorCUDA's 0.." +
+                           std::to_string(TC_MAX_DIMS));
+  const int nd = dl->ndim;
+  Shape shape(nd);
+  for (int i = 0; i < nd; ++i) {
+    if (dl->shape[i] < 0)
+      throw py::buffer_error("from_dlpack: negative extent in shape " +
+                             shape_str(dl->shape, nd));
+    shape[i] = dl->shape[i];
+  }
+  const int64_t numel = numel_of(shape);
+  // C-contiguous only; a size-1 dimension may carry any stride (it is never
+  // stepped). Strides == NULL means compact row-major (DLPack < 1.2).
+  if (nd > 0 && dl->strides && numel > 0) {
+    int64_t expected = 1;
+    for (int i = nd - 1; i >= 0; --i) {
+      if (shape[i] != 1 && dl->strides[i] != expected)
+        throw py::buffer_error(
+            "from_dlpack: non-contiguous strides " + shape_str(dl->strides, nd) +
+            " for shape " + shape_str(dl->shape, nd) +
+            "; TensorCUDA imports C-contiguous (row-major) tensors only "
+            "(size-1 dimensions may have any stride). Make the tensor "
+            "contiguous on the producer side first.");
+      expected *= shape[i];
+    }
+  }
+  const size_t isz = dtype_size(dt);
+  if (dl->byte_offset % isz != 0)
+    throw py::buffer_error("from_dlpack: byte_offset " +
+                           std::to_string(dl->byte_offset) +
+                           " is not a multiple of the element size " +
+                           std::to_string(isz));
+  if (numel > 0 && dl->data == nullptr)
+    throw py::buffer_error("from_dlpack: null data pointer for a non-empty tensor");
+
+  Device dev;
+  dev.type = DeviceType::CUDA;
+  dev.index = cur;
+  auto storage = std::make_shared<Storage>(
+      dl->data, static_cast<size_t>(dl->byte_offset) + static_cast<size_t>(numel) * isz,
+      dev, versioned ? import_release_versioned : import_release_legacy, manager);
+  // Consume the capsule only once the Storage owns the manager.
+  if (PyCapsule_SetName(cap, versioned ? kCapUsedVersioned : kCapUsedLegacy) != 0) {
+    storage->external_release = import_release_noop;  // the capsule still owns it
+    throw py::error_already_set();
+  }
+  NDArray a;
+  a.storage = std::move(storage);
+  a.shape = std::move(shape);
+  a.dtype = dt;
+  a.device = dev;
+  a.offset = static_cast<int64_t>(dl->byte_offset / isz);
+  return Tensor::make(a, false);
+}
+
+// Amendment 1: device-side empty (no host round-trip, no fill).
+Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
+                    const std::string& device) {
+  for (int64_t s : shape)
+    if (s < 0) throw py::value_error("empty: negative dimensions are not allowed");
+  return Tensor::make(NDArray::empty(Shape(shape.begin(), shape.end()),
+                                     dtype_from_string(dtype),
+                                     Device::from_string(device)),
+                      false);
+}
+
+const char* const kDlpackDoc = R"doc(Export this tensor zero-copy as a DLPack capsule (Python array API protocol).
+
+stream: the CONSUMER's CUDA stream, as a DLPack int. TensorCUDA queues all of its
+  work on the legacy default stream.
+  * None or 1: the consumer is on the legacy default stream; nothing to do.
+  * -1: no synchronization.
+  * 2 (per-thread default stream) or any other handle (a cudaStream_t): TensorCUDA
+    records a CUDA event on the legacy default stream and makes the consumer's
+    stream wait on it before returning, so the consumer sees every TensorCUDA
+    write queued so far.
+  * 0 is ambiguous under the protocol and raises ValueError.
+max_version: None (or major < 1) returns a legacy "dltensor" capsule; (1, x) or
+  later returns "dltensor_versioned" (DLPack 1.3 header, flags 0).
+dl_device: None or (2, this tensor's device); anything else raises BufferError.
+copy: None or False. copy=True raises BufferError (TensorCUDA never copies on
+  export).
+
+The capsule's manager holds a reference to the tensor's Storage, so the memory
+outlives this Tensor's last Python reference. data + byte_offset addresses
+element 0; strides are C-contiguous. An unconsumed capsule releases its
+reference when it is garbage collected.
+
+Raises BufferError for CPU tensors.
+
+External in-place writes (mark_modified rule): TensorCUDA's derived-tensor
+caches key on the Storage revision, which only TensorCUDA's own in-place ops
+bump. After anything outside TensorCUDA (a DLPack consumer, or a kernel given
+data_ptr()) writes into this tensor's memory, call t.mark_modified() before
+passing t (or any tensor sharing its Storage) to a TensorCUDA op. Today the
+only revision-keyed cache is terrain_render's density_filter cache on the
+materials tensor; ops that read device memory directly (arithmetic, matmul,
+norms, attention) need nothing. Calling mark_modified() when it is not needed
+is harmless.)doc";
+
 }  // namespace
 
 PYBIND11_MODULE(_tensor_cuda, m) {
@@ -230,6 +631,31 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                     [](Tensor& t, bool r) { t.set_requires_grad(r); })
       .def_property_readonly("grad", &grad_of)
       .def("numpy", &tensor_to_numpy)
+      // P1T-M1: DLPack interop (see the DLPack section above for prior art).
+      .def("__dlpack__", &tensor_dlpack, py::kw_only(),
+           py::arg("stream") = py::none(), py::arg("max_version") = py::none(),
+           py::arg("dl_device") = py::none(), py::arg("copy") = py::none(),
+           kDlpackDoc)
+      .def("__dlpack_device__", &tensor_dlpack_device,
+           "(2, device_ordinal) for a CUDA tensor (kDLCUDA = 2); BufferError on CPU.")
+      .def("data_ptr", [](Tensor& t) -> uintptr_t {
+             if (!t.defined() || !t.data().defined()) return 0;
+             return reinterpret_cast<uintptr_t>(t.data().data_ptr());
+           },
+           "Device address of element 0, as an int (storage base + offset).")
+      .def("fill_", [](py::object self, double value) {
+             tc::fill_(self.cast<Tensor&>().data(), value);
+             return self;
+           }, py::arg("value"),
+           "Fill in place with `value`, queued on the legacy default stream "
+           "(asynchronous; existing fill_kernel). float32/float16/bfloat16 CUDA "
+           "tensors only. Bumps the storage revision. Not recorded by autograd. "
+           "Returns self.")
+      .def("mark_modified", [](Tensor& t) { t.data().mark_modified(); },
+           "Bump the Storage revision. Call after an external (non-TensorCUDA) "
+           "in-place write, e.g. through DLPack or data_ptr(); see __dlpack__.")
+      .def_property_readonly("revision", [](Tensor& t) { return t.data().revision(); },
+           "Storage revision (read-only): bumped by TensorCUDA in-place ops and mark_modified().")
       .def("backward", [](Tensor& t) { t.backward(); })
       .def("zero_grad", &Tensor::zero_grad)
       .def("reshape", [](Tensor& t, std::vector<int64_t> s) { return ops::reshape(t, s); })
@@ -979,6 +1405,11 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("set_grad_enabled", &set_grad_enabled);
   m.def("checkpoint", &checkpoint_py, py::arg("fn"), py::arg("inputs"));
   m.def("synchronize", &cuda_sync);
+  // P1T-M1: DLPack import of a capsule (tensor_cuda.from_dlpack wraps it), and
+  // Amendment 1's device-side empty (tensor_cuda.empty wraps it).
+  m.def("_from_dlpack_capsule", &tensor_from_dlpack_capsule, py::arg("capsule"));
+  m.def("empty", &tensor_empty, py::arg("shape"), py::arg("dtype") = "float32",
+        py::arg("device") = "cuda");
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }
