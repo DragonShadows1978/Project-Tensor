@@ -1,0 +1,11 @@
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -218,6 +218,8 @@
+   const float zero = 0.0f;
+ 
+   // 1. Initial state into the outputs that carry the recurrence.
++  h0 = nullptr;  // MUTANT (d): initial_h ignored
++  c0 = nullptr;  // MUTANT (d): initial_c ignored
+   if (h0 != nullptr)
+     check_cuda(cudaMemcpyAsync(Y_h, h0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream), "initial_h copy");
+   else

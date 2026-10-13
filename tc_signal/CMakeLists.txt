@@ -50,6 +50,8 @@ pybind11_add_module(_tc_signal
   src/conv.cu
   src/dlpack_operand.cpp
   src/bindings.cpp
+  src/lstm.cu
+  src/lstm_bindings.cpp
 )
 
 target_include_directories(_tc_signal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)

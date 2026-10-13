@@ -1,0 +1,61 @@
+{
+ "case": "cases/T4/shared__LSTM__max_1.npz",
+ "shape": {
+  "T": 1193,
+  "N": 1,
+  "I": 640,
+  "H": 256,
+  "D": 2
+ },
+ "reps": 20,
+ "warmup": 3,
+ "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+ "loadavg": [
+  26.2099609375,
+  26.89208984375,
+  29.33837890625
+ ],
+ "rows": [
+  {
+   "path": "tc_signal.lstm (TensorCUDA tensors, tensor_cuda.empty)",
+   "wall_us": 11458.622000645846,
+   "wall_sync_us": 11600.127996644005,
+   "gpu_us": 11574.480056762695,
+   "us_per_step": 9.701995018241991,
+   "gpu_us_min": 9144.991874694824,
+   "gpu_us_max": 13933.600425720215,
+   "N_vs_fp64_oracle": 2.9320924609478163e-06
+  },
+  {
+   "path": "tc_signal.lstm (torch tensors, torch.empty)",
+   "wall_us": 11529.170493304264,
+   "wall_sync_us": 11684.772005537525,
+   "gpu_us": 11647.871971130371,
+   "us_per_step": 9.763513806479775,
+   "gpu_us_min": 9736.191749572754,
+   "gpu_us_max": 20796.703338623047,
+   "N_vs_fp64_oracle": 2.9320924609478163e-06
+  },
+  {
+   "path": "torch nn.LSTM cuDNN fp32 (allow_tf32=False)",
+   "wall_us": 24159.510496247094,
+   "wall_sync_us": 24281.163998239208,
+   "gpu_us": 24248.687744140625,
+   "us_per_step": 20.325806994250314,
+   "gpu_us_min": 21080.06477355957,
+   "gpu_us_max": 26044.448852539062,
+   "N_vs_fp64_oracle": 4.533682642316067e-06
+  },
+  {
+   "path": "torch nn.LSTM cuDNN fp32 (allow_tf32=True)",
+   "wall_us": 24517.559497326147,
+   "wall_sync_us": 24629.810504848137,
+   "gpu_us": 24601.152420043945,
+   "us_per_step": 20.621250980757708,
+   "gpu_us_min": 20239.360809326172,
+   "gpu_us_max": 32324.542999267578,
+   "N_vs_fp64_oracle": 0.0009059139990227334
+  }
+ ],
+ "cudnn_version": 91900
+}

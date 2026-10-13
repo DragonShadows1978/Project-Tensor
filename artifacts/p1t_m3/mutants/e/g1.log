@@ -1,0 +1,346 @@
+..........................................F............................. [ 25%]
+........................................................................ [ 50%]
+........................................................................ [ 75%]
+.......F.............................................................    [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+________________________ test_lstm_transcendental_probe ________________________
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    def test_lstm_transcendental_probe(receipt):
+        """Isolates the cell's sigmoid and tanh (z = Wb exactly; registered thresholds in ulps, ledger 20:33)."""
+        zs = np.linspace(*L.PROBE_SIGMOID_Z).astype(np.float32)
+        zt = np.linspace(*L.PROBE_TANH_Z).astype(np.float32)
+        Ps, Pt = zs.size, zt.size
+        H = Ps + Pt
+        Wb = np.zeros((4, H), np.float32)                        # ONNX gate rows i, o, f, c
+        Wb[0, :Ps], Wb[3, :Ps] = zs, L.PROBE_TANH_ONE_Z             # sigmoid columns: Y_c = sigmoid(z) * tanh(20)
+        Wb[0, Ps:], Wb[3, Ps:] = L.PROBE_SIGMOID_ONE_Z, zt          # tanh columns:    Y_c = sigmoid(60) * tanh(z)
+        Wb[1, :] = L.PROBE_SIGMOID_ONE_Z                            # o = 1 exactly: Y_h = tanh(Y_c)
+        B = np.zeros((1, 8 * H), np.float32)
+        B[0, :4 * H] = Wb.reshape(-1)
+        x = np.zeros((1, 1, 1), np.float32)
+        W = np.zeros((1, 4 * H, 1), np.float32)
+        R = np.zeros((1, 4 * H, H), np.float32)
+        Y, Yh, Yc = ts.lstm(_cu(x), _cu(W), _cu(R), _cu(B), hidden_size=H, direction='forward')
+        torch.cuda.synchronize()
+        yc = Yc.cpu().numpy().reshape(-1).astype(np.float64)
+        yh = Yh.cpu().numpy().reshape(-1).astype(np.float64)
+        ref_c_sig = sigmoid_f64(zs.astype(np.float64)) * np.tanh(np.float64(L.PROBE_TANH_ONE_Z))
+        ref_c_tanh = np.tanh(zt.astype(np.float64))
+        ref_h = np.tanh(Yc.cpu().numpy().reshape(-1).astype(np.float32).astype(np.float64))
+        u_sig = ulp_error(yc[:Ps], ref_c_sig)
+        u_tanh = ulp_error(yc[Ps:], ref_c_tanh)
+        u_h = ulp_error(yh, ref_h)
+        rec = {'op': 'lstm', 'kind': 'probe', 'cell': 'transcendental_probe',
+               'sigmoid_max_ulp': float(u_sig.max()), 'sigmoid_argmax_z': float(zs[int(u_sig.argmax())]),
+               'tanh_max_ulp': float(u_tanh.max()), 'tanh_argmax_z': float(zt[int(u_tanh.argmax())]),
+               'tanh_of_state_max_ulp': float(u_h.max()), 'sigmoid_limit_ulp': L.PROBE_SIGMOID_MAX_ULP,
+               'tanh_limit_ulp': L.PROBE_TANH_MAX_ULP, 'all_finite': bool(np.isfinite(yc).all() and np.isfinite(yh).all())}
+        rec['pass'] = bool(rec['all_finite'] and rec['sigmoid_max_ulp'] <= L.PROBE_SIGMOID_MAX_ULP
+                           and rec['tanh_max_ulp'] <= L.PROBE_TANH_MAX_ULP
+                           and rec['tanh_of_state_max_ulp'] <= L.PROBE_TANH_MAX_ULP)
+        receipt.append(rec)
+        assert rec['all_finite']
+>       assert rec['sigmoid_max_ulp'] <= L.PROBE_SIGMOID_MAX_ULP, rec
+E       AssertionError: {'all_finite': True, 'cell': 'transcendental_probe', 'kind': 'probe', 'op': 'lstm', ...}
+E       assert 44.09022247232497 <= 8.0
+E        +  where 8.0 = L.PROBE_SIGMOID_MAX_ULP
+
+tc_signal/tests/test_lstm.py:270: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_list]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_numpy_cpu]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_cpu_tensor]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[w_fp64]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_noncontiguous]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_2d]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_empty_T]
+PASSED tc_signal/tests/test_contract.py::test_refusal[w_bad_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups_not_dividing_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups_not_dividing_cout]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_wrong_len]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_2d]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_wrong_shape]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_cpu]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_is_x]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_partial_overlap]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_over_w]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_len_le0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_len_le0_dilation]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[dilation0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[neg_pad]
+PASSED tc_signal/tests/test_contract.py::test_refusal[neg_pad_end]
+PASSED tc_signal/tests/test_contract.py::test_refusal[padding_str]
+PASSED tc_signal/tests/test_contract.py::test_refusal[padding_len3]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride_bool]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride_float]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_op_ge_max]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_op_neg]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_w_bad_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_groups_not_dividing]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_b_wrong_len]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_len_le0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_wrong_shape]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_over_b]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_x_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_x_cpu]
+PASSED tc_signal/tests/test_contract.py::test_set_allocator_non_callable
+PASSED tc_signal/tests/test_contract.py::test_allocator_wrong_shape_or_dtype
+PASSED tc_signal/tests/test_contract.py::test_dlpack_returns_non_capsule
+PASSED tc_signal/tests/test_contract.py::test_foreign_capsule_name
+PASSED tc_signal/tests/test_contract.py::test_consumed_capsule_refused
+PASSED tc_signal/tests/test_contract.py::test_written_operand_flags_refused[read_only]
+PASSED tc_signal/tests/test_contract.py::test_written_operand_flags_refused[is_copied]
+PASSED tc_signal/tests/test_contract.py::test_device_ordinal_mismatch_refused
+PASSED tc_signal/tests/test_contract.py::test_non_cuda_device_type_refused
+PASSED tc_signal/tests/test_contract.py::test_dlpack_major_version_refused
+PASSED tc_signal/tests/test_contract.py::test_misaligned_refused
+PASSED tc_signal/tests/test_contract.py::test_explicit_noncompact_strides_refused
+PASSED tc_signal/tests/test_contract.py::test_producer_kwargs_stream_1_and_copy_false
+PASSED tc_signal/tests/test_contract.py::test_legacy_only_producer_fallback
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-field]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-data]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-field]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-data]
+PASSED tc_signal/tests/test_contract.py::test_size1_dims_any_stride
+PASSED tc_signal/tests/test_contract.py::test_explicit_compact_strides_accepted
+PASSED tc_signal/tests/test_contract.py::test_bare_capsules_versioned_and_legacy
+PASSED tc_signal/tests/test_contract.py::test_deleter_called_exactly_once_on_every_path
+PASSED tc_signal/tests/test_contract.py::test_set_allocator_returns_previous
+PASSED tc_signal/tests/test_contract.py::test_allocator_calls_and_out_identity
+PASSED tc_signal/tests/test_contract.py::test_padding_int_equals_tuple
+PASSED tc_signal/tests/test_contract.py::test_adjacent_operands_allowed
+PASSED tc_signal/tests/test_contract.py::test_stream_order_torch_write_then_tc_signal_read
+PASSED tc_signal/tests/test_contract.py::test_stream_order_tc_signal_write_then_torch_read
+PASSED tc_signal/tests/test_contract.py::test_cublas_handle_config
+PASSED tc_signal/tests/test_contract.py::test_build_info
+PASSED tc_signal/tests/test_contract.py::test_fast_math_canary_ieee_division_and_subnormals
+PASSED tc_signal/tests/test_contract.py::test_convt_matches_oracle_with_torch_tensor_inputs_mixed_with_producer_out
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_512to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_514to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_512to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_256to1]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_22to128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_1090to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k5_s1_p22_512to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s2_p11_1to1]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k20_s5_p00_1to11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k12_s6_p33_22to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_256to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_128to22]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d3_p99_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d5_p1515_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d3_p33_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d5_p55_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d1_p55_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d3_p1515_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d5_p2525_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p20_k3]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p03_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p41_k3_s2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups4_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-stride_gt_K_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_direct_k1_Cout5]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_groups2_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-out_len1_T_eq_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-out_len1_T1_p11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-k1_pad10_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-k1_s2_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s10_p55_512to256]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k12_s6_p33_256to128]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw512_k3_s2_p11_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw1090_k3_s2_p11_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s5_p00_11to1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p20_k4_s2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p03_k5_s3_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p31_k3_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups4_s3_op2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-stride_gt_K_asym_op]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_groups2_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-out_len1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-op_dil_gt_stride]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups4_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[N2_direct_k1_Cout5]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[out_len1_T_eq_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[out_len1_T1_p11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[k1_s2_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[out_len1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[op_dil_gt_stride]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[Cout11_no_bias]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T1_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T1_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T2_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T17_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T17_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T33_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_init_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T4_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T2_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T40_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_noB_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_noB_init_T9_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_H20_T25_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_H20_init_T25_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_I1_T30]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_I1_H20_init_T30_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_H1_init_T6_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_large_z_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_large_z_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_large_z_T20_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I640_T82]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I640_T1193]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I512_T505]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_fixture_manifest
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-lstm__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-lstm__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-shared__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-shared__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstm__LSTM/short_07]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstm__LSTM/max_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T1_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T1_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T2_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T17_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T17_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T33_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_init_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T4_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T2_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T40_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_noB_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_noB_init_T9_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_H20_T25_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_H20_init_T25_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_I1_T30]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_I1_H20_init_T30_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_H1_init_T6_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_large_z_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_large_z_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_large_z_T20_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[kokoro_I640_T82]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_gate_order_is_onnx
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_bool]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_str]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_short]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_mixed]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_zero]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_len]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_float]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_cuda_short]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_bad]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_case]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_vs_W]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_mismatch]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_float]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_bool]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_zero]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_negative]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_bad_input_size]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_2d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[R_bad]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[R_one_direction]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_half]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_1d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[initial_h_bad_N]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[initial_c_bad_H]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_2d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_empty_T]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_fp64]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_cpu]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_numpy]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_noncontiguous]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_list]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[device_mismatch]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_not_tuple]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_len2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_c_rank]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_over_x]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_is_Y_c]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_is_initial_h]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[clip_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[peepholes_P_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[input_forget_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[activations_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_missing]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_sequence_lens_equal_T_accepted
+PASSED tc_signal/tests/test_lstm.py::test_lstm_out_tuple_is_written_and_returned
+PASSED tc_signal/tests/test_lstm.py::test_lstm_allocations_go_through_the_allocator
+PASSED tc_signal/tests/test_lstm.py::test_lstm_last_step_state_matches_Y
+PASSED tc_signal/tests/test_lstm.py::test_lstm_cublas_handle_config
+PASSED tc_signal/tests/test_lstm.py::test_lstm_deleters_and_stream_every_path
+PASSED tc_signal/tests/test_lstm.py::test_lstm_tensor_cuda_producers_and_default_allocator
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_lstm.py::test_lstm_transcendental_probe - Asserti...
+2 failed, 283 passed in 9.90s
