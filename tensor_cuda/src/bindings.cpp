@@ -31,6 +31,10 @@ namespace tc {
 // caller-device restores that failed where nothing could raise.
 std::string cuda_storage_device_mismatch(const NDArray& a, const char* who);
 unsigned long long dlpack_device_restore_failures();
+// P1T-FIX5 (sweep d, defined in kernels.cu): CUDA errors of the P1-T core paths that cannot raise (external Storage
+// drain and its restore, fill_'s guard unwinding), recorded before their slot entry is consumed: count, and the first.
+unsigned long long dlpack_unraisable_errors();
+void dlpack_first_unraisable(std::string* what, int* device, int* error);
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
 void bp_kernel_4_set_variant(const std::string&);
 std::string bp_kernel_4_get_variant();
@@ -645,7 +649,8 @@ py::tuple tensor_dlpack_device(Tensor& t) {
 //    follow a geometric schedule (each one when the time waited has doubled), so
 //    a deleter that hangs for hours logs a few dozen lines at most, and the wait
 //    goes on. Admission stays closed throughout (no new release is admitted).
-//  * GIL: the whole wait, diagnostics included, runs inside gil_scoped_release, so
+//  * GIL: the whole wait, diagnostics included, runs with the GIL released (P1T-FIX5: an
+//    explicit PyEval_SaveThread / PyEval_RestoreThread pair, see dlpack_begin_shutdown), so
 //    an admitted deleter that needs the GIL (PyGILState_Ensure, a ctypes or
 //    Python deleter, time.sleep re-taking it) can always finish; the condition
 //    variable wait drops the mutex; each diagnostic is written with the mutex
@@ -803,8 +808,20 @@ py::dict dlpack_begin_shutdown(double first_diag_s) {
   bool overran = false;
   unsigned long long diagnostics = 0;
   const auto t0 = std::chrono::steady_clock::now();
-  {
-    py::gil_scoped_release nogil;                           // admitted releases need the GIL to finish
+  // P1T-FIX5 (sweep (c), callbacks during interpreter exit): the GIL is released with PyEval_SaveThread and re-taken
+  // with an explicit PyEval_RestoreThread in THIS frame (not noexcept), no longer by py::gil_scoped_release's
+  // destructor. CPython 3.12 exits a non-main thread that re-takes the GIL during finalization (take_gil ->
+  // PyThread_exit_thread -> pthread_exit, a forced unwind); started inside a destructor, that unwind meets the
+  // destructor's implicit noexcept (std::terminate, abort). A non-main thread can be here: the hook is a plain Python
+  // function (tensor_cuda._dlpack_shutdown_hook), and two waiters (it and the main thread's real atexit call) wake
+  // together when the last admitted release leaves. Now such a thread's forced unwind travels through ordinary frames
+  // to pybind11's dispatcher, which rethrows abi::__forced_unwind (pybind11 v2.12 pybind11.h:1037). The mutex is still
+  // released before the GIL is re-taken. Same design as tc_signal's release lifecycle (dlpack_operand.cpp). Prior art:
+  // CPython's PyEval_SaveThread / PyEval_RestoreThread contract; glibc/libstdc++ forced unwinding (abi::__forced_unwind
+  // must propagate; a noexcept frame terminates); pybind11's gil_scoped_release::disarm note ("PyEval_RestoreThread()
+  // should not be called if runtime is finalizing"). Ours: the explicit restore placement.
+  PyThreadState* gil_state = PyEval_SaveThread();           // admitted releases need the GIL to finish
+  try {
     std::unique_lock<std::mutex> lk(lc.mu);
     lc.closing = true;                                      // admission closed for good: nothing new can start
     at_close = lc.in_flight;
@@ -828,7 +845,13 @@ py::dict dlpack_begin_shutdown(double first_diag_s) {
       lk.lock();
     }
     remaining = lc.in_flight - own;
-  }  // lk is released before nogil re-takes the GIL
+  } catch (...) {
+    // A mutex / condition-variable failure (never observed): re-take the GIL, then let it propagate (as the RAII guard
+    // did). No Python ran in the try block, so this is never a forced unwind of the interpreter's making.
+    PyEval_RestoreThread(gil_state);
+    throw;
+  }  // lk is released before the GIL is re-taken
+  PyEval_RestoreThread(gil_state);                          // explicit, in this non-noexcept frame (see above)
   const long long waited_us =
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
   g_shutdown_calls.fetch_add(1);
@@ -1146,7 +1169,11 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            "Returns self. P1T-FIX4: launched on the tensor's own device (proven "
            "against its allocation; the caller's device is switched to it and "
            "restored), and a CUDA error already pending in the calling thread is "
-           "raised as such before the launch (RuntimeError, nothing launched).")
+           "raised as such before the launch (RuntimeError, nothing launched). "
+           "P1T-FIX5: an extent whose one-thread-per-element launch would need "
+           "more than 2^31-1 blocks of 256 threads (the CUDA grid x-dimension "
+           "limit), i.e. more than 549755813632 elements, raises ValueError before "
+           "any launch; nothing is written and the revision is unchanged.")
       .def("mark_modified", [](Tensor& t) { t.data().mark_modified(); },
            "Bump the Storage revision. Call after an external (non-TensorCUDA) "
            "in-place write, e.g. through DLPack or data_ptr(); see __dlpack__.")
@@ -1929,13 +1956,26 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["shutdown_wait_us"] = g_shutdown_wait_us.load();
     d["shutdown_diagnostics"] = g_shutdown_diagnostics.load();  // P1T-FIX3 (V3-01)
     d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
+    // P1T-FIX5 (sweep d): every unraisable CUDA error of the P1-T core paths, recorded before its slot entry was
+    // consumed (count), and the first one: site, device, CUDA error name ("" / -1 / "cudaSuccess" when none).
+    d["unraisable_errors"] = dlpack_unraisable_errors();
+    {
+      std::string what;
+      int dev = -1, err = 0;
+      dlpack_first_unraisable(&what, &dev, &err);
+      d["first_unraisable_what"] = what;
+      d["first_unraisable_device"] = dev;
+      d["first_unraisable_error"] = std::string(cudaGetErrorName(static_cast<cudaError_t>(err)));
+    }
     return d;
   }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
      "after a failed device drain (F05); P1T-FIX2: deleter exceptions contained (N4), leaks after the exit hook "
      "closed, the in-flight count and the exit hook's wait (N5); P1T-FIX3: stderr diagnostics written while the exit "
      "hook waited (V3-01; shutdown_timeouts now counts waits that outlasted the first-diagnostic delay); P1T-FIX4: "
      "device_restore_failures, restores of the caller's CUDA device that failed where nothing could raise (the "
-     "external Storage drain, or a fill_ guard unwinding after another error).");
+     "external Storage drain, or a fill_ guard unwinding after another error); P1T-FIX5: unraisable_errors and the "
+     "first one (first_unraisable_what / _device / _error), every CUDA error of those paths recorded before its "
+     "error-slot entry was consumed.");
   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
   (void)release_lifecycle();
   m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("first_diag_s"),

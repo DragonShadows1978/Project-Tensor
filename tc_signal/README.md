@@ -196,6 +196,37 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   (`pending_stats()['deleter_exceptions']`), never calls it again and goes on with the remaining managers. The DLPack
   ABI declares the deleter as a C function, so such a producer is already out of contract; tc_signal neither touches
   its memory again nor retries.
+- **Interpreter exit (P1T-FIX5, round-5 review V5-01).** Every add-on callback that may take the GIL is an *admitted
+  section* of one release lifecycle (`src/dlpack_operand.cpp`), independent of the pending list: each producer deleter
+  call (the immediate release of a refused call, the next-call drain, `synchronize()`, the bound drain, the fallback
+  sync), each drop of the last reference to a still-unconsumed capsule tc_signal holds (its destructor calls the
+  producer's deleter), and the producer's `__dlpack_device__` / `__dlpack__` calls. The `atexit` hook first runs
+  `synchronize()`, then closes admission for good and waits, GIL released and with **no time bound**, until no admitted
+  section of another thread is running; sections on its own thread's stack are excluded (the hook may run inside a
+  callback). CPython runs atexit hooks before it marks the runtime finalizing, so finalization never starts under a
+  running callback (before FIX5 a finite deleter still running on a daemon thread made CPython 3.12 exit that thread
+  when it re-took the GIL, and the process aborted: `FATAL: exception not rethrown`, rc -6). After the close:
+  - a deleter is NOT called: the manager is deliberately leaked (`pending_stats()['deleters_leaked_after_close']`);
+  - a capsule reference is kept, so its destructor never runs (`['capsules_kept_after_close']`);
+  - a producer `__dlpack__` is not called: the call raises `RuntimeError` (`['callbacks_refused_after_close']`).
+  No add-on code enters Python for them. The wait writes a stderr line after `tc_signal._RELEASE_EXIT_DIAG_S` (5 s),
+  then another each time the time waited doubles. **Consequence:** a producer deleter, capsule destructor or
+  `__dlpack__` that never returns makes interpreter exit wait for it (the producer's contract violation; returning
+  early would abort the process). Ctrl-C does not interrupt that wait; SIGTERM / SIGKILL still end the process.
+  The GIL is released with `PyEval_SaveThread` and re-taken with an explicit `PyEval_RestoreThread` in an ordinary
+  (not noexcept) frame, after the wait's mutex is dropped, so an admitted deleter that needs the GIL can finish, and a
+  daemon thread that CPython exits while it re-takes the GIL unwinds cleanly. `synchronize()` (any thread) also waits
+  this way, without closing, for releases already running on other threads (skipped inside the caller's own callback),
+  so when it returns every operand handed to tc_signal before the call has been released or deliberately leaked.
+  Counters: `release_admission_closed`, `releases_in_flight`, `callbacks_in_flight`, `admitted_releases`,
+  `admitted_callbacks`, `exit_hook_calls`, `exit_in_flight_at_close`, `exit_wait_us`, `exit_wait_diagnostics`,
+  `exit_wait_overruns`, `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics`,
+  `deleters_leaked_finalizing`, `capsules_kept_finalizing`, `lifecycle_lock_failures`.
+- **Recorded CUDA failures (P1T-FIX5, V5-02 and the class sweep).** A failed completion-event query in the next-call
+  drain (anything but NotReady) and a failed completion-event record (the call then synchronizes instead) are recorded
+  BEFORE their error-slot entry is consumed (`pending_stats()['event_query_failures']` / `['event_record_failures']`)
+  and raised exactly once by the next `synchronize()`, which still releases what completed and leaks what it cannot
+  prove done. Before FIX5 a one-shot query failure was consumed and never reported.
 - Producers that are asked for `stream=1` order their pending work before the op (DLPack's forward direction).
 - Outputs are written on the legacy stream. A consumer on another stream must order itself after it.
 
@@ -209,6 +240,11 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   - `cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED)`;
   - `cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST)`.
 - `tc_signal._tc_signal.cublas_config(device)` reports these settings.
+- **A new handle is owned until it is cached (P1T-FIX5, V5-03).** From `cublasCreate` until the cache insertion
+  commits, a scope guard owns the handle: if a setting fails, the handle is destroyed and the destroy's status named in
+  the `RuntimeError` (FIX4); if the insertion itself fails (host allocation, `MemoryError`), the guard destroys it while
+  the exception propagates, checks the status and counts a failure without throwing
+  (`pending_stats()['cublas_handle_destroy_failures']`). Nothing is cached then, and the next call creates a new handle.
 - **cuBLAS's own internal workspace** is the one piece of device memory tc_signal causes to be allocated outside the
   caller's allocator. cuBLAS allocates it itself (cudaMalloc) for the handle.
   - Measured with `artifacts/p1t_m2/cublas_workspace_probe.py` as a cudaMemGetInfo delta on the RTX 4070 SUPER with
@@ -248,7 +284,8 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 |---|---|
 | `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
 | `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03); the operands of one call total more than `INT64_MAX` bytes (V3-02) |
-| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early); a CUDA error was already pending in the calling thread before a call's first launch, or when `synchronize()` was called (P1T-FIX4); the caller's CUDA device could not be restored (P1T-FIX4) |
+| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early); a CUDA error was already pending in the calling thread before a call's first launch, or when `synchronize()` was called (P1T-FIX4); the caller's CUDA device could not be restored (P1T-FIX4); an earlier failed event query or record, raised once by `synchronize()` (P1T-FIX5); a call that would invoke a producer's `__dlpack__` after the exit hook closed admission (P1T-FIX5) |
+| `MemoryError` | an allocation failed before the launch (the call is refused, its operands released at once), while building `synchronize()`'s error message, or while caching a new cuBLAS handle (the handle is destroyed; P1T-FIX5) |
 
 ## Tests
 
@@ -285,6 +322,12 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
   an `LD_PRELOAD` shim over `libcudart.so.12` / `libcublas.so.12` that simulates a second current device on this
   one-GPU host (every launch, event create/record/destroy and sync on the operands' device, the caller's device
   restored; failed switch, failed restore, failed event destroy, failed cuBLAS setting).
+- `test_fix5_findings.py` (P1T-FIX5) covers V5-01 (a deleter, capsule destructor or producer `__dlpack__` in flight
+  on a daemon thread at ordinary interpreter exit: 0.1 / 5.5 / 12 s on the immediate-refusal and deferred paths, no
+  visible GPU, the doubling diagnostic schedule; releases and callbacks after the close; the hook inside its own
+  callback; a throwing C++ deleter; `synchronize()` waiting for another thread's release), V5-02 (one-shot query
+  failures, reported once) and the failed event record, and V5-03 (a real `operator new` failure at each cache's
+  insertion through an `LD_PRELOAD` C++ shim; the reviewer's CPU probe regenerated from these sources, `fix5_regen.py`).
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 
@@ -320,3 +363,15 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
   saturating arithmetic (DSP/SIMD saturated add, e.g. MMX/SSE `PADDS`, ARM `QADD`) for the pending-list total. Ours:
   checking the aggregate before the first launch, and the sticky saturated state that keeps the bound comparison
   conservative until the list empties. Details: `src/dlpack_operand.cpp` (`note_push`).
+- **Release lifecycle at interpreter exit (P1T-FIX5, V5-01):** core's own `ImportReleaseLifecycle`
+  (`tensor_cuda/src/bindings.cpp`, P1T-FIX2 N5 / P1T-FIX3 V3-01), reused: closing flag + in-flight count + condition
+  variable, the unbounded wait with the GIL released and the doubling stderr schedule, the thread-local depth for
+  self-exclusion, leak-without-Python after closing; CPython's atexit-before-finalizing order and `threading._shutdown`;
+  RCU grace periods (McKenney & Slingwine, 1998) and the Linux `percpu_ref` kill-then-wait; the store-buffering
+  (Dekker / Dijkstra, 1965) flag-plus-counter handshake; glibc/libstdc++ forced unwinding (`abi::__forced_unwind`).
+  Ours: admitting the add-on's deleter, capsule-drop and producer-callback sites, `synchronize()`'s non-closing wait,
+  and the explicit GIL re-take. Details: `src/dlpack_operand.cpp` (release lifecycle block).
+- **Handle ownership until commit (P1T-FIX5, V5-03):** RAII and the scope guard with dismissal (Alexandrescu &
+  Marginean, C/C++ Users Journal, 2000). Ours: checking and counting the cleanup status during unwinding.
+- **Record before consume (P1T-FIX5, V5-02):** the CUDA 12.6 `cudaEventQuery` / per-thread error-slot contracts; no
+  specific prior art known to me for the deferred one-shot report.

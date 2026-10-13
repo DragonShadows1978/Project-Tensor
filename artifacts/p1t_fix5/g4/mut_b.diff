@@ -1,0 +1,15 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -1239,11 +1239,7 @@
+       if (r == cudaErrorNotReady) {
+         if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+       } else {
+-        ++st.event_query_failures;
+-        note_unraisable_failure(st, "cudaEventQuery of a pending entry's completion event in the next-call drain (the "
+-                                    "entry stayed pending; synchronize() re-queried it)",
+-                                st.q.front().device, r);
+-        cudaGetLastError();
++        cudaGetLastError();  // MUTANT (b): the V5-02 record removed
+       }
+       return;
+     }

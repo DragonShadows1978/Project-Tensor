@@ -452,7 +452,12 @@ def test_fix4_failed_event_query_in_the_drain_is_consumed_there(shim):
     res = _shim(shim, 'query_fail')
     assert 'query@-1!' in res['call_log'], res                                   # the injected drain failure happened
     assert res['call']['raised'] is None and res['call_slot'] == 0, res
-    assert res['sync']['raised'] is None and res['deleted'] == 4 and res['y_correct'] is True, res
+    # P1T-FIX5 (round-5 review V5-02): this test used to assert that the next synchronize() returned SUCCESS, which
+    # pinned the defect (the consumed query failure was never reported; FIX4 sweep rows 47/50). The failure is now
+    # recorded before it is consumed and raised exactly once by the next synchronize(), which still releases every
+    # entry; the following synchronize() succeeds.
+    assert res['sync']['raised'] == 'RuntimeError' and 'cudaEventQuery' in res['sync']['msg'], res
+    assert res['final_sync']['raised'] is None and res['deleted'] == 4 and res['y_correct'] is True, res
 
 
 def test_fix4_device_lstm_runs_on_the_operand_device_and_restores(shim):

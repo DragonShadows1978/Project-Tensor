@@ -189,7 +189,7 @@ ConvTranspose1dPlan plan_conv_transpose1d(const std::vector<int64_t>& xs, const 
 
 // ------------------------------------------------------------------------------------------------ peek helpers
 struct Peeked {
-  py::object capsule;            // None for an absent optional operand
+  CapsuleRef capsule;            // P1T-FIX5: admitted last-reference drop (dlpack_operand.h); empty when absent
   std::vector<int64_t> shape;
   int device = -1;
 };
@@ -198,7 +198,7 @@ Peeked peek_operand(py::handle obj, const char* role, int ndim) {
   Peeked p;
   require_operand(obj, role);
   p.capsule = to_capsule(obj, role, false);
-  const DLTensor* t = peek(p.capsule, role);
+  const DLTensor* t = peek(p.capsule.handle(), role);
   validate_tensor(t, role, ndim);
   p.shape = shape_of(t);
   p.device = t->device.device_id;
@@ -247,8 +247,8 @@ py::tuple conv1d_plan(py::object x, py::object w, py::object b, int64_t stride, 
   if (has_b) B = peek_operand(b, "b", 1);
   same_device_peeked({&X, &W, has_b ? &B : nullptr}, {"x", "w", "b"});
   Conv1dPlan p = plan_conv1d(X.shape, W.shape, has_b ? &B.shape : nullptr, stride, pb, pe, dilation, groups);
-  return py::make_tuple(X.capsule, W.capsule, has_b ? B.capsule : py::none(), to_tuple(p.out_shape),
-                        py::int_(p.scratch_numel));
+  return py::make_tuple(X.capsule.object(), W.capsule.object(), has_b ? B.capsule.object() : py::none(),
+                        to_tuple(p.out_shape), py::int_(p.scratch_numel));
 }
 
 void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py::object scratch, int64_t stride,
@@ -266,12 +266,12 @@ void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py:
   const std::vector<int64_t> xshape = op_shape(X);
   const std::vector<int64_t> wshape = op_shape(W);
   Conv1dPlan p = plan_conv1d(xshape, wshape, B.present() ? &bshape : nullptr, stride, pb, pe, dilation, groups);
-  Operand Y(to_capsule(out, "out", true), "out", 3, true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", 3, true);
   expect_shape(Y, p.out_shape);
   Operand S;
   if (p.scratch_numel > 0) {
     if (scratch.is_none()) bad_attr("conv1d: this call needs an im2col scratch operand and none was passed");
-    S = Operand(to_capsule(scratch, "scratch", true), "scratch", 1, true);
+    S = Operand(to_capsule(scratch, "scratch", true).handle(), "scratch", 1, true);
     expect_shape(S, {p.scratch_numel});
   } else if (!scratch.is_none()) {
     bad_attr("conv1d: this call needs no scratch (K == 1, stride 1, no pads) but one was passed");
@@ -300,7 +300,8 @@ py::tuple conv_transpose1d_plan(py::object x, py::object w, py::object b, int64_
   same_device_peeked({&X, &W, has_b ? &B : nullptr}, {"x", "w", "b"});
   ConvTranspose1dPlan p = plan_conv_transpose1d(X.shape, W.shape, has_b ? &B.shape : nullptr, stride, pb, pe,
                                                 output_padding, dilation, groups);
-  return py::make_tuple(X.capsule, W.capsule, has_b ? B.capsule : py::none(), to_tuple(p.out_shape));
+  return py::make_tuple(X.capsule.object(), W.capsule.object(), has_b ? B.capsule.object() : py::none(),
+                        to_tuple(p.out_shape));
 }
 
 void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::object out, int64_t stride, int64_t pb,
@@ -319,7 +320,7 @@ void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::objec
   const std::vector<int64_t> wshape = op_shape(W);
   ConvTranspose1dPlan p = plan_conv_transpose1d(xshape, wshape, B.present() ? &bshape : nullptr, stride, pb, pe,
                                                 output_padding, dilation, groups);
-  Operand Y(to_capsule(out, "out", true), "out", 3, true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", 3, true);
   expect_shape(Y, p.out_shape);
   const int device = common_device({&X, &W, &B, &Y});
   for (const Operand* in : {&X, &W, &B}) expect_disjoint(Y, *in);
@@ -332,9 +333,9 @@ void divide_probe(py::object x, py::object y, py::object out) {
   require_operand(x, "x");
   require_operand(y, "y");
   require_operand(out, "out");
-  Operand X(to_capsule(x, "x", false), "x", 1, false);
-  Operand Y(to_capsule(y, "y", false), "y", 1, false);
-  Operand O(to_capsule(out, "out", true), "out", 1, true);
+  Operand X(to_capsule(x, "x", false).handle(), "x", 1, false);
+  Operand Y(to_capsule(y, "y", false).handle(), "y", 1, false);
+  Operand O(to_capsule(out, "out", true).handle(), "out", 1, true);
   expect_shape(Y, {X.dim(0)});
   expect_shape(O, {X.dim(0)});
   const int device = common_device({&X, &Y, &O});
@@ -405,8 +406,17 @@ PYBIND11_MODULE(_tc_signal, m) {
         "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
         "fallback syncs, deliberate leaks, and the bounds; P1T-FIX2: deleter_exceptions, push_alloc_failures, "
         "event_recycle_failures, release_errors, unreported_release_errors.");
+  // P1T-FIX5 (round-5 review V5-01): the exit side of the release lifecycle, called by tc_signal's atexit hook
+  // (tc_signal/__init__.py _release_pending_at_exit) after its final synchronize(). Not an API for other callers.
+  m.def("_exit_close_admission", &close_admission_and_wait, py::arg("first_diag_s"),
+        "P1T-FIX5 (V5-01), tc_signal's atexit hook: close admission for good (later producer deleter calls and capsule "
+        "drops are deliberately leaked without entering Python, counted; later producer __dlpack__ callbacks are "
+        "refused), then wait, GIL released and with NO time bound, until no admitted section of another thread is "
+        "running (the calling thread's own are excluded). After first_diag_s seconds it writes a stderr line, then "
+        "another each time the time waited doubles. Returns {in_flight_at_close, own_thread_in_flight, "
+        "pending_entries_at_close, waited_us, diagnostics, overran}.");
   // P1T-FIX2 (N3): build the pending-list state now (it allocates), so no noexcept release path is the first to touch
-  // it; a failure here fails the import (MemoryError), never a later release.
+  // it; a failure here fails the import (MemoryError), never a later release. P1T-FIX5: also the release lifecycle.
   init_pending_state();
   // TEST HOOK (P1T-FIX2 N1/N3 regression tests only; not part of the API): arm one-shot failures at named release-path
   // sites (dlpack_operand.h, test_hooks). `names` is a list of site names; "clear" disarms everything.

@@ -23,10 +23,48 @@ struct CUevent_st;  // cudaEvent_t is `CUevent_st*` (CUDA driver_types.h); kept 
 namespace tcs {
 namespace py = pybind11;
 
+// P1T-FIX5 (round-5 review V5-01, sweep (c), the capsule-destructor path). One reference to a capsule that tc_signal
+// holds in C++ (to_capsule's result). Dropping the LAST reference to a capsule that is still unconsumed ("dltensor" /
+// "dltensor_versioned") runs the producer's capsule destructor, which by the DLPack protocol calls the producer's
+// deleter: that drop is a release, so it goes through the release admission of dlpack_operand.cpp (admitted: dropped,
+// and waited for at interpreter exit; admission closed or the interpreter finalizing: the reference is deliberately
+// kept, counted, and no producer code runs). Every other drop is a plain Py_DECREF. Before FIX5 these references were
+// py::object members (Peeked / Peek4) whose destructor ran the producer's destructor unadmitted, for example when a
+// plan refused an operand after acquiring its capsule. Prior art: pybind11's py::object (reference ownership, Jakob
+// 2015) and RAII; no prior art known to me for admitting the last-reference drop.
+class CapsuleRef {
+ public:
+  CapsuleRef() = default;
+  explicit CapsuleRef(py::object o) noexcept : p_(o.release().ptr()) {}
+  CapsuleRef(CapsuleRef&& o) noexcept : p_(o.p_) { o.p_ = nullptr; }
+  CapsuleRef& operator=(CapsuleRef&& o) noexcept {
+    if (this != &o) {
+      drop();
+      p_ = o.p_;
+      o.p_ = nullptr;
+    }
+    return *this;
+  }
+  CapsuleRef(const CapsuleRef&) = delete;
+  CapsuleRef& operator=(const CapsuleRef&) = delete;
+  ~CapsuleRef() { drop(); }
+  py::handle handle() const noexcept { return py::handle(p_); }
+  // A new reference to the object (for a returned tuple); this CapsuleRef keeps its own.
+  py::object object() const { return p_ ? py::reinterpret_borrow<py::object>(p_) : py::none(); }
+
+ private:
+  void drop() noexcept;  // dlpack_operand.cpp
+  PyObject* p_ = nullptr;
+};
+
 // A DLPack capsule for `obj`: `obj` itself when it is a capsule, else `obj.__dlpack__(stream=1, max_version=(1, 3)
 // [, copy=False])`, falling back to `obj.__dlpack__(stream=1)` when the producer rejects the newer keywords with a
 // TypeError (pre-2023 producers). `writable` adds copy=False: a written operand must alias the producer's memory.
-py::object to_capsule(py::handle obj, const char* role, bool writable);
+// P1T-FIX5 (V5-01 sweep (c)): the producer's attribute lookups, __dlpack_device__ and __dlpack__ are Python callbacks
+// that may release and re-take the GIL, so they run inside an admitted section that tc_signal's exit hook waits for;
+// once the exit hook has closed admission they are not called at all (RuntimeError, nothing acquired). A bare capsule
+// involves no callback and is returned at once.
+CapsuleRef to_capsule(py::handle obj, const char* role, bool writable);
 
 // The DLTensor inside an unconsumed capsule (the capsule keeps ownership). Raises ValueError for a consumed capsule,
 // TypeError for a capsule of another kind.
@@ -55,6 +93,9 @@ struct ManagedOwner {
   ManagedOwner& operator=(const ManagedOwner&) = delete;
   // Calls the producer's deleter at most once. P1T-FIX2 (N4): a deleter that throws is contained (caught, counted in
   // deleter_exceptions()), never std::terminate; the pointer is cleared before the call.
+  // P1T-FIX5 (V5-01): the call is an admitted release (dlpack_operand.cpp, release lifecycle): tc_signal's exit hook
+  // waits for it; once the hook has closed admission (or the interpreter is finalizing) the deleter is NOT called, the
+  // manager is deliberately leaked and counted (pending_stats()['deleters_leaked_after_close' / '..._finalizing']).
   void reset() noexcept;
   // F01: deliberately drop ownership WITHOUT calling the deleter (used only when tc_signal cannot prove the GPU is done
   // with the memory, e.g. a broken CUDA context: a leak is safe, a release could be a use-after-free).
@@ -181,7 +222,20 @@ void drain_completed() noexcept;
 // above, and then raises RuntimeError naming that error even when every synchronization succeeded; it also raises
 // (once) the failures recorded on paths that cannot raise and leak no operand (a failed caller-device restore, a failed
 // event destroy; cuda_guard.h).
+// P1T-FIX5: (V5-01) before anything else it waits, GIL released, until every producer release (deleter call or
+// capsule drop) already admitted on ANOTHER thread has returned (skipped when the calling thread is itself inside an
+// admitted callback: two threads each calling synchronize() from a deleter must not wait for each other); (V5-02) the
+// recorded failures include a non-NotReady event-query failure of the next-call drain and (sweep d) a failed
+// completion-event record, each reported exactly once.
 void synchronize_and_release_all();
+// P1T-FIX5 (V5-01): the exit side of the release lifecycle, called by tc_signal's atexit hook with the GIL held. Closes
+// admission for good (from here on every producer deleter call and capsule drop is deliberately leaked without entering
+// Python, and every producer __dlpack__ callback is refused), then waits, GIL released and with NO time bound, until no
+// admitted section (release or producer callback) of ANOTHER thread is running; sections on the calling thread's own
+// stack are excluded (self-exclusion: the hook may run inside its own callback). After `first_diag_s` seconds it writes
+// a stderr line, then another each time the time waited has doubled. Returns {in_flight_at_close, own_thread_in_flight,
+// pending_entries_at_close, waited_us, diagnostics, overran}.
+py::dict close_admission_and_wait(double first_diag_s);
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
 // push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
 // (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that

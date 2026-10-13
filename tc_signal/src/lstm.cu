@@ -110,12 +110,27 @@ cublasHandle_t lstm_handle_for(int device) {
   if (it != handles.end()) return it->second;
   cublasHandle_t h = nullptr;
   check_cublas(cublasCreate(&h), "cublasCreate");
+  // P1T-FIX5, round-5 review finding V5-03 (MINOR), same fix as conv.cu handle_for: the new handle is owned from creation
+  // until the cache insertion commits; on any exception before the commit (handles.emplace throwing std::bad_alloc was
+  // the leak: review probe handle_insert_oom_cpu.cpp, creates 1, destroys 0) the owner destroys it, checks the status
+  // and counts a failure without throwing during unwinding. A failed setting still destroys it explicitly and names the
+  // status (FIX4), clearing `h` first so it is destroyed once. Prior art: RAII and the scope guard with dismissal on
+  // commit (Alexandrescu & Marginean, C/C++ Users Journal, 2000); see conv.cu.
+  struct NewHandleOwner {
+    cublasHandle_t& h;
+    ~NewHandleOwner() {
+      if (h == nullptr) return;  // committed to the cache, or already destroyed by settle
+      const cublasStatus_t ds = cublasDestroy(h);
+      if (ds != CUBLAS_STATUS_SUCCESS) note_cublas_handle_destroy_failure(static_cast<int>(ds));
+    }
+  } owned{h};
   // P1T-FIX4 (sweep): a setting that fails no longer leaks the new handle: it is destroyed (on this device, which the
   // caller's DeviceGuard keeps current), the destroy's own status is checked and named, and the call raises. Nothing is
   // cached, so the next call retries from cublasCreate.
   auto settle = [&h](cublasStatus_t st, const char* what) {
     if (st == CUBLAS_STATUS_SUCCESS) return;
     const cublasStatus_t ds = cublasDestroy(h);
+    h = nullptr;  // P1T-FIX5: destroyed here; the owner must not destroy it again
     std::ostringstream os;
     os << "tc_signal.lstm: " << what << " failed: cuBLAS status " << static_cast<int>(st);
     if (ds != CUBLAS_STATUS_SUCCESS) os << "; destroying the new handle also failed: cuBLAS status " << static_cast<int>(ds);
@@ -125,8 +140,10 @@ cublasHandle_t lstm_handle_for(int device) {
   settle(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
   settle(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
   settle(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
-  handles.emplace(device, h);
-  return h;
+  handles.emplace(device, h);  // may throw (host allocation): `owned` destroys h, nothing is cached
+  const cublasHandle_t cached = h;
+  h = nullptr;  // committed: the cache owns the handle now
+  return cached;
 }
 
 // ------------------------------------------------------------------------------------------------ device functions

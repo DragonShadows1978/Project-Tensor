@@ -1,0 +1,38 @@
+tc_signal/src/cuda_guard.h:50:  cudaGetLastError();
+tc_signal/src/cuda_guard.h:87:  cudaGetLastError();
+tc_signal/src/cuda_guard.h:107:  cudaGetLastError();
+tc_signal/src/cuda_guard.h:114:  cudaGetLastError();
+tc_signal/src/cuda_guard.h:125:  cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:787:  if (r != cudaSuccess) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:878:  cudaGetLastError(); // the guard consumed its own failure already; this consumes cudaEventDestroy's
+tc_signal/src/dlpack_operand.cpp:993:  cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1010:  if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1013:  cudaGetLastError(); // the event itself cannot be queried: no completion proof (N1: an error)
+tc_signal/src/dlpack_operand.cpp:1044:  cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1140:  const cudaError_t pending_err = cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1192:  cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1240:  if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1246:  cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1293:  const cudaError_t prior = cudaGetLastError();
+tc_signal/src/conv.cu:56:  cudaGetLastError(); // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
+tc_signal/src/conv.cu:62: void check_launch(const char* kernel) { check_cuda(cudaGetLastError(), kernel); }
+tc_signal/src/lstm.cu:77:  cudaGetLastError(); // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
+tc_signal/src/lstm.cu:83: void check_launch(const char* what) { check_cuda(cudaGetLastError(), what); }
+tc_signal/src/norms.cu:73:  cudaGetLastError(); // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
+tc_signal/src/norms.cu:160:  check_cuda(cudaGetLastError(), "row_norm_kernel");
+tc_signal/src/small_ops.cu:45:  cudaGetLastError(); // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
+tc_signal/src/small_ops.cu:101:  check_cuda(cudaGetLastError(), "upsample_nearest1d_kernel");
+tc_signal/src/small_ops.cu:113:  check_cuda(cudaGetLastError(), "reflection_pad1d_kernel");
+tc_signal/src/small_ops.cu:121:  check_cuda(cudaGetLastError(), "rint_kernel");
+tensor_cuda/src/bindings.cpp:440:  cudaGetLastError();
+tensor_cuda/src/bindings.cpp:448:  cudaGetLastError();
+tensor_cuda/src/bindings.cpp:471:  cudaGetLastError(); // the failed calls are reported by the raise below
+tensor_cuda/src/bindings.cpp:942:  cudaGetLastError();
+tensor_cuda/src/bindings.cpp:1063:  cudaGetLastError();
+tensor_cuda/src/bindings.cpp:1084:  if (dev.is_cuda()) cudaGetLastError();
+tensor_cuda/src/kernels.cu:284:  cudaGetLastError();
+tensor_cuda/src/kernels.cu:290:  cudaGetLastError();
+tensor_cuda/src/kernels.cu:301:  cudaGetLastError();
+tensor_cuda/src/kernels.cu:343:  cudaGetLastError();
+tensor_cuda/src/kernels.cu:559:  const cudaError_t pending = cudaGetLastError();
+tensor_cuda/src/kernels.cu:568:  cuda_check_last("fill_");

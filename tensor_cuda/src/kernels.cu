@@ -223,9 +223,48 @@ std::atomic<unsigned long long> g_external_drain_leaks{0};
 // it. Read through tensor_cuda._C._dlpack_release_stats()["device_restore_failures"].
 std::atomic<unsigned long long> g_dlpack_device_restore_failures{0};
 
+// P1T-FIX5 (sweep (d), consumed-but-unrecorded errors; round 5 found V5-02 in this class in the add-on). The P1-T core
+// sites that consume a failed call's slot entry WITHOUT raising (they run in the external Storage destructor or while
+// fill_ unwinds: nothing may raise there) were counted (leaked_drain_failure, device_restore_failures) but the error
+// itself was lost. Each now RECORDS it first: counted in unraisable_errors, and the first one (site, device, CUDA error)
+// kept; tensor_cuda._C._dlpack_release_stats() reports them. Core's synchronize() (cuda_sync: cudaDeviceSynchronize +
+// cuda_check_last) is pre-existing engine code outside the P1-T surface and is not changed to raise them.
+// Thread-safe (a Storage may die on any thread): the count is atomic, the first record is taken under a mutex whose
+// failure is caught (never thrown from these noexcept paths). Prior art: PyTorch's C10_CUDA_CHECK_WARN (consume and
+// report in a destructor, never throw) and errno-style "first error" recording; no specific prior art known to me for
+// keeping the first unraisable error next to a counter.
+struct CoreUnraisableRecord {
+  std::mutex mu;
+  const char* what = nullptr;
+  int device = -1;
+  int error = 0;
+};
+std::atomic<unsigned long long> g_core_unraisable_errors{0};
+
+CoreUnraisableRecord& core_unraisable_record() {
+  static CoreUnraisableRecord* r = new CoreUnraisableRecord();  // never destroyed (a Storage may die at exit)
+  return *r;
+}
+
+void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept {
+  g_core_unraisable_errors.fetch_add(1);
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    if (r.what == nullptr) {
+      r.what = what;
+      r.device = device;
+      r.error = static_cast<int>(e);
+    }
+  } catch (const std::exception&) {
+    // bad_alloc on the first use or a mutex failure: the counter above still records it.
+  }
+}
+
 // P1T-FIX4: the restore result is now checked (62c8d9f ignored it). The drain itself decides release vs leak; a failed
 // restore does not make the drained memory unsafe, so it is counted (above) rather than turned into a leak. Every
 // failed call of ours is consumed from the last-error slot (the error is accounted for by the leak or the counter).
+// P1T-FIX5 (sweep d): each failure is recorded (note_core_unraisable) before its slot entry is consumed.
 // Prior art: PyTorch c10 CUDAGuardImpl::uncheckedSetDevice -> C10_CUDA_CHECK_WARN (consume with cudaGetLastError, warn,
 // never throw from the guard's destructor), read in the installed torch 2.11 headers. Taken: check, consume, do not
 // throw. Ours: counting instead of a warning line.
@@ -238,8 +277,16 @@ bool drain_device_legacy_stream(int dev) {
     switched = (e == cudaSuccess);
   }
   if (e == cudaSuccess) e = cudaStreamSynchronize(0);
-  if (e != cudaSuccess) cudaGetLastError();
-  if (switched && cudaSetDevice(prev) != cudaSuccess) {
+  if (e != cudaSuccess) {
+    note_core_unraisable("draining an imported Storage's device before its DLPack release (cudaGetDevice / "
+                         "cudaSetDevice / cudaStreamSynchronize); the release was deliberately leaked",
+                         dev, e);
+    cudaGetLastError();
+  }
+  const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
+  if (re != cudaSuccess) {
+    note_core_unraisable("restoring the caller's CUDA device after an imported Storage's drain (cudaSetDevice)", prev,
+                         re);
     cudaGetLastError();
     g_dlpack_device_restore_failures.fetch_add(1);
   }
@@ -287,7 +334,12 @@ class CheckedDeviceGuard {
                          e);
   }
   ~CheckedDeviceGuard() {
-    if (switched_ && cudaSetDevice(prev_) != cudaSuccess) {
+    if (!switched_) return;
+    const cudaError_t e = cudaSetDevice(prev_);
+    if (e != cudaSuccess) {
+      // P1T-FIX5 (sweep d): recorded before its slot entry is consumed (counted only, before).
+      note_core_unraisable("restoring the caller's CUDA device while fill_ unwound after another error (cudaSetDevice)",
+                           prev_, e);
       cudaGetLastError();
       g_dlpack_device_restore_failures.fetch_add(1);
     }
@@ -306,6 +358,16 @@ unsigned long long storage_external_drain_leaks() { return g_external_drain_leak
 
 // P1T-FIX4: declared locally in bindings.cpp (core.h is outside this order's scope).
 unsigned long long dlpack_device_restore_failures() { return g_dlpack_device_restore_failures.load(); }
+
+// P1T-FIX5 (sweep d): the recorded unraisable CUDA errors of the P1-T core paths (declared locally in bindings.cpp).
+unsigned long long dlpack_unraisable_errors() { return g_core_unraisable_errors.load(); }
+void dlpack_first_unraisable(std::string* what, int* device, int* error) {
+  CoreUnraisableRecord& r = core_unraisable_record();
+  std::lock_guard<std::mutex> lk(r.mu);
+  *what = r.what ? r.what : "";
+  *device = r.device;
+  *error = r.error;
+}
 
 // P1T-FIX4 (sweep, implicit current device): TensorCUDA labels its OWN allocations cuda:0 (Device::from_string, which
 // predates P1-T, maps every "cuda..." string to index 0) while the Storage constructor allocates on whatever device is
@@ -450,6 +512,39 @@ NDArray NDArray::full(const Shape& shape, double value, DType dtype, Device devi
 //     to cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel
 //     launch." (receipt artifacts/p1t_fix4/cuda_doc_quotes.txt). Taken: that rule. Ours: raising the pending error,
 //     named as pre-existing, instead of discarding it.
+//
+// P1T-FIX5, round-5 review finding V5-04 (MINOR): fill_ launched the existing, NON-grid-stride fill_kernel (one thread
+// per element, `if (i < n)`) with the baseline helper nblk(n), which narrows ceil(n / 256) to int. For an accepted
+// extent of 2^40 + 1 fp32 elements (4 TiB + 4 bytes of metadata; shape and byte bounds fit int64) the block count
+// 2^32 + 1 became 1: one block wrote 256 elements, the launch succeeded and the revision was bumped (review probes
+// fill_grid_cpu.cpp, fill_grid_single_gpu.py). Now, before anything else (before the label proof, the device guard, any
+// launch and the revision bump), fill_grid_blocks computes the block count in int64 and REFUSES (ValueError) an extent
+// whose block count exceeds the grid's x-dimension limit; an accepted extent's launch covers every element
+// (blocks * 256 >= n). Refusal, not a grid-stride fill: a grid-stride kernel would be a new core __global__, which the
+// P1-T plan forbids. The shared nblk helper and the other engine kernels are unchanged (baseline, outside P1-T).
+// The limit: CUDA C++ Programming Guide 12.6, "Compute Capabilities", Table "Technical Specifications per Compute
+// Capability": "Maximum x-dimension of a grid of thread blocks" = 2^31-1 for every compute capability CUDA 12.6 supports
+// (it is also cudaDeviceProp::maxGridSize[0] / cudaDevAttrMaxGridDimX; tests/test_dlpack.py test_fix5_v504_* reads it
+// on this host: 2147483647). A hardware limit, not a tunable.
+// Prior art: ISO C++17 integral conversions ([conv.integral]: an out-of-range signed conversion is implementation-
+// defined, here a wrap) and the checked-narrowing rule of the C++ Core Guidelines (ES.46, gsl::narrow); CUDA's dim3 grid
+// semantics. Taken: compute wide, check, then narrow. Ours: refusing at fill_'s boundary instead of capping the grid.
+namespace {
+constexpr int64_t kFillMaxGridX = 2147483647;  // 2^31-1: CUDA 12.6 grid x-dimension limit (see above)
+
+int64_t fill_grid_blocks(int64_t n) {
+  const int64_t blocks = n / kT + (n % kT != 0 ? 1 : 0);  // ceil(n / kT) for n >= 1, without forming n + kT - 1
+  if (blocks > kFillMaxGridX)
+    throw std::invalid_argument(
+        "fill_: " + std::to_string(n) + " elements need " + std::to_string(blocks) + " blocks of " +
+        std::to_string(kT) + " threads, more than the CUDA grid x-dimension limit of " +
+        std::to_string(kFillMaxGridX) + " (2^31-1) blocks; fill_ launches one thread per element (the existing "
+        "fill_kernel), so it covers at most " + std::to_string(kFillMaxGridX * kT) +
+        " elements. Refused before any launch: nothing was written and the revision is unchanged");
+  return blocks;
+}
+}  // namespace
+
 void fill_(NDArray& a, double value) {
   if (!a.defined()) throw std::runtime_error("fill_: undefined array");
   if (!a.device.is_cuda()) throw std::runtime_error("fill_: CUDA arrays only");
@@ -457,6 +552,7 @@ void fill_(NDArray& a, double value) {
     throw std::runtime_error("op supports float32/float16/bfloat16 only");
   int64_t n = a.numel();
   if (n == 0) return;
+  const int64_t blocks = fill_grid_blocks(n);  // P1T-FIX5 V5-04: int64 block count; refused here if over the limit
   const std::string mismatch = cuda_storage_device_mismatch(a, "fill_");
   if (!mismatch.empty()) throw std::runtime_error(mismatch);
   CheckedDeviceGuard guard(a.device.index, "fill_");
@@ -466,7 +562,8 @@ void fill_(NDArray& a, double value) {
                              cudaGetErrorName(pending) + ": " + cudaGetErrorString(pending) +
                              "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched");
   DISPATCH_FLOAT(a.dtype, T, {
-    fill_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+    // P1T-FIX5 V5-04: blocks <= 2^31-1 (checked above), so this conversion is exact and blocks * kT >= n.
+    fill_kernel<T><<<static_cast<unsigned int>(blocks), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
   });
   cuda_check_last("fill_");
   a.mark_modified();  // the write is queued: bump the revision BEFORE a restore failure can raise

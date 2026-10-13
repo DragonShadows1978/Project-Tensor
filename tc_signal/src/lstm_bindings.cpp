@@ -123,7 +123,7 @@ LstmPlan plan_lstm(const std::vector<int64_t>& xs, const std::vector<int64_t>& W
 
 // ------------------------------------------------------------------------------------------------ peek helpers
 struct Peeked {
-  py::object capsule;            // None for an absent optional operand
+  CapsuleRef capsule;            // None for an absent optional operand; P1T-FIX5: admitted last-reference drop
   std::vector<int64_t> shape;
   int device = -1;
   bool present = false;
@@ -133,11 +133,11 @@ struct Peeked {
 Peeked peek_operand(py::handle obj, const char* role, int ndim) {
   Peeked p;
   if (obj.is_none()) {
-    p.capsule = py::none();
+    p.capsule = CapsuleRef(py::none());
     return p;
   }
   p.capsule = to_capsule(obj, role, false);
-  const DLTensor* t = peek(p.capsule, role);
+  const DLTensor* t = peek(p.capsule.handle(), role);
   validate_tensor(t, role, ndim);
   p.shape = shape_of(t);
   p.device = t->device.device_id;
@@ -190,8 +190,9 @@ py::tuple lstm_plan(py::object x, py::object W, py::object R, py::object B, py::
   same_device_peeked({&X, &Wp, &Rp, &Bp, &H0, &C0}, {"x", "W", "R", "B", "initial_h", "initial_c"});
   LstmPlan p = plan_lstm(X.shape, Wp.shape, Rp.shape, Bp.present ? &Bp.shape : nullptr,
                          H0.present ? &H0.shape : nullptr, C0.present ? &C0.shape : nullptr, hidden_size, direction);
-  return py::make_tuple(X.capsule, Wp.capsule, Rp.capsule, Bp.capsule, H0.capsule, C0.capsule, to_tuple(p.y_shape),
-                        to_tuple(p.state_shape), py::int_(p.scratch_numel), py::int_(p.g.T), py::int_(p.g.N));
+  return py::make_tuple(X.capsule.object(), Wp.capsule.object(), Rp.capsule.object(), Bp.capsule.object(),
+                        H0.capsule.object(), C0.capsule.object(), to_tuple(p.y_shape), to_tuple(p.state_shape),
+                        py::int_(p.scratch_numel), py::int_(p.g.T), py::int_(p.g.N));
 }
 
 void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::object h0c, py::object c0c, py::object Y,
@@ -219,13 +220,13 @@ void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::ob
   if (C0.present()) c0shape = op_shape(C0);
   LstmPlan p = plan_lstm(op_shape(X), op_shape(Wo), op_shape(Ro), Bo.present() ? &bshape : nullptr,
                          H0.present() ? &h0shape : nullptr, C0.present() ? &c0shape : nullptr, hidden_size, direction);
-  Operand Yo(to_capsule(Y, "Y", true), "Y", 4, true);
+  Operand Yo(to_capsule(Y, "Y", true).handle(), "Y", 4, true);
   expect_shape(Yo, p.y_shape);
-  Operand Yh(to_capsule(Y_h, "Y_h", true), "Y_h", 3, true);
+  Operand Yh(to_capsule(Y_h, "Y_h", true).handle(), "Y_h", 3, true);
   expect_shape(Yh, p.state_shape);
-  Operand Yc(to_capsule(Y_c, "Y_c", true), "Y_c", 3, true);
+  Operand Yc(to_capsule(Y_c, "Y_c", true).handle(), "Y_c", 3, true);
   expect_shape(Yc, p.state_shape);
-  Operand S(to_capsule(scratch, "scratch", true), "scratch", 1, true);
+  Operand S(to_capsule(scratch, "scratch", true).handle(), "scratch", 1, true);
   expect_shape(S, {p.scratch_numel});
   const int device = common_device({&X, &Wo, &Ro, &Bo, &H0, &C0, &Yo, &Yh, &Yc, &S});
   // Every written operand must not alias any input nor any other written operand.

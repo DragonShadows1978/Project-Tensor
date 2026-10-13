@@ -1,0 +1,21 @@
+tc_signal/src/conv.cu:72: unsigned int grid_for(int64_t total, int block) {
+tc_signal/src/conv.cu:211:  fp32_divide_probe_kernel<<<grid_for(n, tuning::kProbeBlock), tuning::kProbeBlock, 0, kLegacyStream>>>(x, y, out, n);
+tc_signal/src/conv.cu:237:  im2col1d_kernel<<<grid_for(total, tuning::kIm2colBlock), tuning::kIm2colBlock, 0, kLegacyStream>>>(
+tc_signal/src/conv.cu:247:  check_cublas(cublasSgemmStridedBatched(h, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(g.T_out),
+tc_signal/src/conv.cu:257:  bias_add_kernel<<<grid_for(total, tuning::kBiasBlock), tuning::kBiasBlock, 0, kLegacyStream>>>(y, b, g.C_out,
+tc_signal/src/conv.cu:269:  conv_transpose1d_gather_kernel<<<grid_for(total, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
+tc_signal/src/lstm.cu:93: unsigned int grid_for(int64_t total, int block) {
+tc_signal/src/lstm.cu:247:  lstm_bias_fill_kernel<<<grid_for(total, lstm_tuning::kBiasFillBlock), lstm_tuning::kBiasFillBlock, 0,
+tc_signal/src/lstm.cu:253:  check_cublas(cublasSgemm(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(rows),
+tc_signal/src/lstm.cu:264:  const unsigned int cell_grid = grid_for(state, lstm_tuning::kCellBlock);
+tc_signal/src/lstm.cu:266:  check_cublas(cublasSgemmStridedBatched(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(g.N),
+tc_signal/src/lstm.cu:273:  lstm_cell_kernel<<<cell_grid, lstm_tuning::kCellBlock, 0, kLegacyStream>>>(gx, gh, B, Y_h, Y_c, Y, g.T, s, g.D,
+tc_signal/src/norms.cu:157:  const unsigned int grid = static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(g.rows, tuning::kGridCap)));
+tc_signal/src/norms.cu:158:  row_norm_kernel<B><<<grid, B, 0, kLegacyStream>>>(x, scale, bias, y, g.rows, g.L, g.eps, static_cast<int>(g.affine),
+tc_signal/src/small_ops.cu:50: unsigned int grid_for(int64_t total, int block) {
+tc_signal/src/small_ops.cu:99:  upsample_nearest1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
+tc_signal/src/small_ops.cu:111:  reflection_pad1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
+tc_signal/src/small_ops.cu:120:  rint_kernel<<<grid_for(n, B), B, 0, kLegacyStream>>>(x, y, n);
+tensor_cuda/src/kernels.cu:555:  const int64_t blocks = fill_grid_blocks(n); // P1T-FIX5 V5-04: int64 block count; refused here if over the limit
+tensor_cuda/src/kernels.cu:566:  fill_kernel<T><<<static_cast<unsigned int>(blocks), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+tc_signal/tests/fix4_stage_kernel.cu:13:  fix4_never_runs<<<1, 4096>>>();

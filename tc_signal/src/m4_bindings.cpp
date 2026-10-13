@@ -45,7 +45,7 @@ namespace {
 
 // ------------------------------------------------------------------------------------------------ peek / consume
 struct Peek4 {
-  py::object capsule = py::none();  // None for an absent optional operand
+  CapsuleRef capsule = CapsuleRef(py::none());  // None when absent; P1T-FIX5: admitted last-reference drop
   std::vector<int64_t> shape;
   int device = -1;
   bool present = false;
@@ -67,7 +67,7 @@ Peek4 peek4(py::handle obj, const char* role, int rank, int min_rank, Need need)
   if (need == Need::kRequired) require_operand(obj, role);  // F02: None is refused here, before any planning
   if (obj.is_none()) return p;
   p.capsule = to_capsule(obj, role, false);
-  const DLTensor* t = peek(p.capsule, role);
+  const DLTensor* t = peek(p.capsule.handle(), role);
   validate_tensor(t, role, rank >= 0 ? rank : t->ndim);  // device, dtype, (rank), non-empty, C-contiguous, aligned
   check_rank(role, t->ndim, rank, min_rank);
   p.shape = shape_of(t);
@@ -219,7 +219,7 @@ py::tuple norm_plan(NormKind kind, py::object x, py::object scale, py::object bi
   Peek4 B = peek4(bias, "bias", -1, 1, Need::kOptional);
   same_device4({{&X, "x"}, {&S, "scale"}, {&B, "bias"}});
   NormPlan p = plan_norm(kind, X.shape, S.present ? &S.shape : nullptr, B.present ? &B.shape : nullptr, arg, eps);
-  return py::make_tuple(X.capsule, S.capsule, B.capsule, tuple4(p.out_shape));
+  return py::make_tuple(X.capsule.object(), S.capsule.object(), B.capsule.object(), tuple4(p.out_shape));
 }
 
 void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::object out, int64_t arg, double eps) {
@@ -232,7 +232,7 @@ void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::ob
   if (S.present()) sshape = shape4(S);
   if (B.present()) bshape = shape4(B);
   NormPlan p = plan_norm(kind, shape4(X), S.present() ? &sshape : nullptr, B.present() ? &bshape : nullptr, arg, eps);
-  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", X.ndim(), true);
   expect_shape(Y, p.out_shape);
   const int device = common_device({&X, &S, &B, &Y});
   for (const Operand* in : {&X, &S, &B}) expect_disjoint(Y, *in);
@@ -277,7 +277,7 @@ std::vector<int64_t> pad_shape(const std::vector<int64_t>& xs, int64_t pb, int64
 py::tuple upsample_plan(py::object x, int64_t scale) {
   drain_completed();
   Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
-  return py::make_tuple(X.capsule, tuple4(upsample_shape(X.shape, scale)));
+  return py::make_tuple(X.capsule.object(), tuple4(upsample_shape(X.shape, scale)));
 }
 
 void upsample_run(py::object xc, py::object out, int64_t scale) {
@@ -286,7 +286,7 @@ void upsample_run(py::object xc, py::object out, int64_t scale) {
   Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
   const std::vector<int64_t> os = upsample_shape(xs, scale);
-  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", X.ndim(), true);
   expect_shape(Y, os);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
@@ -298,7 +298,7 @@ void upsample_run(py::object xc, py::object out, int64_t scale) {
 py::tuple pad_plan(py::object x, int64_t pb, int64_t pe) {
   drain_completed();
   Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
-  return py::make_tuple(X.capsule, tuple4(pad_shape(X.shape, pb, pe)));
+  return py::make_tuple(X.capsule.object(), tuple4(pad_shape(X.shape, pb, pe)));
 }
 
 void pad_run(py::object xc, py::object out, int64_t pb, int64_t pe) {
@@ -307,7 +307,7 @@ void pad_run(py::object xc, py::object out, int64_t pb, int64_t pe) {
   Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
   const std::vector<int64_t> os = pad_shape(xs, pb, pe);
-  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", X.ndim(), true);
   expect_shape(Y, os);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
@@ -319,7 +319,7 @@ void pad_run(py::object xc, py::object out, int64_t pb, int64_t pe) {
 py::tuple rint_plan(py::object x) {
   drain_completed();
   Peek4 X = peek4(x, "x", -1, 0, Need::kRequired);
-  return py::make_tuple(X.capsule, tuple4(X.shape));
+  return py::make_tuple(X.capsule.object(), tuple4(X.shape));
 }
 
 void rint_run(py::object xc, py::object out) {
@@ -327,7 +327,7 @@ void rint_run(py::object xc, py::object out) {
   require_operand(out, "out");
   Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
-  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", X.ndim(), true);
   expect_shape(Y, xs);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
@@ -343,7 +343,7 @@ void test_rint_then_raise(py::object xc, py::object out) {
   require_operand(out, "out");
   Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
-  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  Operand Y(to_capsule(out, "out", true).handle(), "out", X.ndim(), true);
   expect_shape(Y, xs);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);

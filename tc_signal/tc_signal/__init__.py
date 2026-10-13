@@ -133,16 +133,48 @@ def synchronize():
     - an earlier release that could not raise failed (the fallback sync or the bound drain inside a tc_signal call); such
       a failure is raised once, by the next synchronize().
     MemoryError if the error message itself cannot be allocated. Prior art: torch.cuda.synchronize /
-    cupy.cuda.Stream.synchronize (API shape only)."""
+    cupy.cuda.Stream.synchronize (API shape only).
+
+    P1T-FIX5: (V5-01) synchronize() first waits, GIL released, until every producer release (deleter call, or the drop
+    of an unconsumed capsule's last reference) already running on ANOTHER thread has returned, so when it returns every
+    operand handed to tc_signal before the call has been released or deliberately leaked; the wait is skipped inside
+    one of this thread's own producer callbacks. A release that never returns makes it wait (a stderr line after 5 s,
+    then each time the wait doubles). (V5-02) A failed completion-event query in an earlier call's drain, and a failed
+    completion-event record, are among the earlier failures raised here, exactly once."""
     _C.synchronize()
 
 
+# P1T-FIX5 (round-5 review V5-01) knob: seconds the exit hook waits for producer callbacks still running on other
+# threads before its first stderr diagnostic; another line follows each time the time waited doubles. It never bounds
+# the wait (a bounded return let CPython finalize under a running deleter and abort: round-3 V3-01 in core, round-5
+# V5-01 here). A callback normally takes microseconds. Same knob and schedule as core's _DLPACK_SHUTDOWN_WAIT_S.
+_RELEASE_EXIT_DIAG_S = 5.0
+
+
 def _release_pending_at_exit():
-    # atexit (runs before interpreter finalization, GIL held): release whatever is still pending. P1T-FIX2 (N1): an
-    # error is never swallowed silently; it is LOGGED to stderr (one line) and not raised (an exception from an atexit
-    # callback cannot be handled by anyone). The operands without a completion proof stay deliberately leaked; there is
-    # nothing else safe to do at exit. Prior art: CPython's atexit, which itself prints (not raises) a callback's
-    # exception; taken: log-don't-raise at exit.
+    """atexit hook (runs before CPython marks the runtime finalizing; GIL held).
+
+    1. synchronize(): release whatever is still pending, after waiting for releases already running on other threads.
+       P1T-FIX2 (N1): an error is never swallowed silently; it is LOGGED to stderr (one line) and not raised (an
+       exception from an atexit callback cannot be handled by anyone). Operands without a completion proof stay
+       deliberately leaked; there is nothing else safe to do at exit.
+    2. P1T-FIX5 (round-5 review V5-01): close the add-on's release admission for good, then wait, GIL released and
+       with NO time bound, until no admitted producer callback of another thread is running: a deleter call (immediate
+       release of a refused call, next-call drain, synchronize, bound drain, fallback sync), the drop of an unconsumed
+       capsule's last reference (its destructor calls the producer's deleter), or a producer __dlpack__ /
+       __dlpack_device__ call. Interpreter finalization therefore never starts under a running callback. From here on
+       every later deleter call and capsule drop is deliberately leaked (counted in pending_stats()
+       'deleters_leaked_after_close' / 'capsules_kept_after_close') and every later producer __dlpack__ call is refused
+       (RuntimeError, 'callbacks_refused_after_close'): no add-on code enters Python for them. Callbacks on this
+       thread's own stack are excluded (the hook may be called from inside one). After _RELEASE_EXIT_DIAG_S seconds a
+       line goes to stderr, then another each time the time waited doubles.
+       Consequence: a producer deleter, capsule destructor or __dlpack__ that never returns makes interpreter exit wait
+       for it. That is the producer's contract violation (a DLPack deleter must return); waiting is the honest outcome,
+       an early return aborts the process (rc -6, "FATAL: exception not rethrown"). Ctrl-C does not interrupt the wait;
+       SIGTERM / SIGKILL still end the process.
+    Never raises. Prior art: CPython's atexit, which itself prints (not raises) a callback's exception (taken:
+    log-don't-raise); core's tensor_cuda._dlpack_shutdown_hook (P1T-FIX2 N5 / P1T-FIX3 V3-01), whose close-then-wait
+    design and diagnostic schedule this reuses (see src/dlpack_operand.cpp, release lifecycle)."""
     try:
         _C.synchronize()
     except Exception as e:  # noqa: BLE001
@@ -151,6 +183,22 @@ def _release_pending_at_exit():
                              f'completion proof were deliberately leaked, not released\n')
             sys.stderr.flush()
         except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
+            pass
+    try:
+        try:
+            first_diag_s = float(_RELEASE_EXIT_DIAG_S)
+        except (TypeError, ValueError):
+            first_diag_s = float('nan')  # an unusable knob must not skip the wait: diagnose at once, still wait
+        r = _C._exit_close_admission(first_diag_s)
+        if r['overran']:
+            sys.stderr.write(f'tc_signal: the producer callback(s) admitted before exit finished after '
+                             f'{r["waited_us"] / 1e6:.1f} s; interpreter exit continues\n')
+            sys.stderr.flush()
+    except Exception as e:  # noqa: BLE001
+        try:
+            sys.stderr.write(f'tc_signal: exit hook failed ({type(e).__name__}: {e})\n')
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001
             pass
 
 

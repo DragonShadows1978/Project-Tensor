@@ -39,6 +39,12 @@ namespace tcs {
 // throws. GIL held (every tc_signal path runs under the GIL).
 void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept;
 
+// P1T-FIX5 (round-5 review V5-03), defined in dlpack_operand.cpp: a cublasDestroy of a newly created handle that failed
+// while an exception propagated (the cache insertion threw), so it could not raise. Counted, first status kept
+// (pending_stats()['cublas_handle_destroy_failures' / 'cublas_handle_destroy_first_status']). Never throws, never
+// allocates.
+void note_cublas_handle_destroy_failure(int status) noexcept;
+
 // Rule 1: raise for a failed CUDA call of ours, consuming its slot entry first.
 [[noreturn]] inline void raise_cuda_failure(const std::string& what, cudaError_t e) {
   cudaGetLastError();

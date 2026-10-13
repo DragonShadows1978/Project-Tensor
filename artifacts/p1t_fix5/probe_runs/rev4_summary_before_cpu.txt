@@ -1,0 +1,30 @@
+before build core_cpu exit=0
+before build cpu_native exit=0
+before build fix2_harness exit=0
+before build fix3_harness exit=0
+before build lifecycle exit=0
+before build sync_slot exit=0
+before build core_spy exit=0
+before build core_import exit=0
+before host_checks nogpu collector exit=0
+before fix2_harness ck_census nogpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+before fix3_harness accounting nogpu exit=0 :: {"summary": {"mode": "accounting", "cases": 17, "failures": 0}} ubsan_lines=0
+before lifecycle_timeout control nogpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 594733, 'diagnostics': 0, 'own_thread_in_flight': 0} FINALIZING True 
+before lifecycle_timeout short nogpu exit=0 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.1 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: 1 DLPack release(s) admitted befo
+before lifecycle_timeout default nogpu exit=0 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) DELETER finished HOOK {'in_flight_at_close':
+before operand_census nogpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize(
+before real_metadata_plans nogpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synch
+before sync_slot_cpu (rc 0 = defect trace reproduced) nogpu exit=1 :: ERROR tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorInvalidConfiguration: invalid configuration argument), from earlier work (for example 
+before core_interop SPY (rc 0 = defect trace reproduced; 62c8d9f slices) nogpu exit=0 :: tensor_device=0 recorded_device=1 caller_device=1 
+before host_checks gpu collector exit=0
+before fix2_harness ck_census gpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+before fix3_harness accounting gpu exit=0 :: {"summary": {"mode": "accounting", "cases": 17, "failures": 0}} ubsan_lines=0
+before lifecycle_timeout control gpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 597881, 'diagnostics': 0, 'own_thread_in_flight': 0} FINALIZING True 
+before lifecycle_timeout short gpu exit=0 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.1 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: 1 DLPack release(s) admitted befo
+before lifecycle_timeout default gpu exit=0 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) DELETER finished HOOK {'in_flight_at_close':
+before operand_census gpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters 
+before real_metadata_plans gpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim 
+before sync_slot_cpu (rc 0 = defect trace reproduced) gpu exit=1 :: ERROR tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorInvalidConfiguration: invalid configuration argument), from earlier work (for example 
+before core_interop SPY (rc 0 = defect trace reproduced; 62c8d9f slices) gpu exit=0 :: tensor_device=0 recorded_device=1 caller_device=1 
+before core_interop import (rc 0 = defect reproduced; 62c8d9f slices) nogpu exit=0 :: cudaGetDevice_error=100 device=-1 IMPORT SUCCEEDED name=used_dltensor 
+before core_import_query_error (nogpu) exit=0 :: PASS: failed device query refused before consumption 

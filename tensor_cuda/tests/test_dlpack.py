@@ -49,6 +49,17 @@ P1T-FIX3 additions (review P1T-REV3 round 3; tests named test_fix3_*):
     (nested) and "after closing" cases are the N5 tests above. Mutant (a): FIX2's bounded return restored.
   * V3-02 (tc_signal aggregate byte accounting) is tested in tc_signal/tests/test_fix3_findings.py.
 
+P1T-FIX5 additions (review P1T-REV5 round 5; tests named test_fix5_*):
+  * V5-04 (fill_ launch geometry): synthetic metadata over a small real allocation, an LD_PRELOAD shim capturing fill_'s
+    cudaLaunchKernel: the largest accepted extent (2^31-1)*256 launches grid.x = 2^31-1 x 256 (exact cover; the launch
+    is trapped, never run); one more element and 2^40+1 are refused with ValueError before any launch, revision
+    unchanged; zero size launches nothing; a small extent is unchanged; the cited limit equals the device's
+    cudaDevAttrMaxGridDimX. Mutant (d): the refusal removed.
+  * Sweep (d), core: the drain-restore and fill_-unwinding restore failures are recorded (count + first site / device /
+    error) before their error-slot entry is consumed.
+  * Sweep (c), core: the exit wait run by a NON-main thread never aborts (the GIL is re-taken explicitly, not in a
+    destructor); 5 runs, each rc 0. V5-01..V5-03 are tc_signal findings: tc_signal/tests/test_fix5_findings.py.
+
 Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
 (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
 
@@ -1788,3 +1799,239 @@ def test_fix4_empty_labels_the_current_device_and_refuses_another_index(torch):
         with pytest.raises(ValueError):
             tc.empty(4, device=bad)
     assert tc.empty(4).device == f"cuda:{cur}"
+
+
+# ================================================================================================== P1T-FIX5
+# Round-5 review finding V5-04 (fill_ narrowed its block count) and the core rows of the class (d) sweep (CUDA errors
+# consumed where nothing can raise must be recorded). V5-01..V5-03 are tc_signal findings: tc_signal/tests/
+# test_fix5_findings.py.
+#
+# V5-04 needs extents of up to 2^40 + 1 fp32 elements without allocating them: as the reviewer's
+# fill_grid_single_gpu.py does, a ctypes DLPack descriptor with the huge extent over a small real allocation is imported
+# (synthetic metadata; the label proof passes because the pointer is real), and an LD_PRELOAD shim over libcudart.so.12
+# captures fill_'s cudaLaunchKernel geometry. In "trap" mode the shim never runs the kernel: it fails the launch
+# GENUINELY (the real cudaLaunchKernel with a NULL function: cudaErrorInvalidDeviceFunction in the slot), so the small
+# buffer is never written past its end. In "pass" mode it records the geometry and launches for real (small extents).
+# Pass rule (registered in docs/P1T_FIX5_LEDGER.md before the run): the largest accepted extent (2^31-1)*256 launches
+# grid.x = 2^31-1, block 256 (covers it exactly); one more element and 2^40+1 are refused with ValueError before any
+# launch and without a revision change; a zero-size fill_ launches nothing and keeps the revision. Registered mutant
+# (d): the V5-04 refusal removed.
+# Prior art: the reviewer's fill_grid_shim.c / fill_grid_single_gpu.py (LD_PRELOAD capture on synthetic metadata),
+# taken; LD_PRELOAD interposition (glibc ld.so). Ours: the trap/pass modes and the boundary census.
+_FIX5_FILL_SHIM_C = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stddef.h>
+typedef struct { unsigned x, y, z; } dim3_;
+static int mode = 0;                  /* 0: pass-through, unrecorded; 1: record + trap (genuine failure); 2: record + pass */
+static int calls = 0;
+static unsigned grid_x = 0, block_x = 0;
+static void* real_sym(const char* name) {
+  void* h = dlopen("libcudart.so.12", RTLD_LAZY | RTLD_NOLOAD);
+  if (!h) h = dlopen("libcudart.so.12", RTLD_LAZY);
+  return h ? dlsym(h, name) : NULL;
+}
+int cudaLaunchKernel(const void* fn, dim3_ g, dim3_ b, void** a, size_t sh, void* s) {
+  static int (*real)(const void*, dim3_, dim3_, void**, size_t, void*);
+  if (!real) real = (int (*)(const void*, dim3_, dim3_, void**, size_t, void*))real_sym("cudaLaunchKernel");
+  if (mode == 0) return real(fn, g, b, a, sh, s);
+  ++calls; grid_x = g.x; block_x = b.x;
+  if (mode == 1) { mode = 0; return real(NULL, g, b, a, sh, s); }   /* trapped: nothing runs, the slot holds 98 */
+  mode = 0;
+  return real(fn, g, b, a, sh, s);
+}
+void fill_shim_arm(int m) { mode = m; calls = 0; grid_x = 0; block_x = 0; }
+int fill_shim_calls(void) { return calls; }
+unsigned fill_shim_grid(void) { return grid_x; }
+unsigned fill_shim_block(void) { return block_x; }
+int fill_shim_slot(void) { static int (*peek)(void); if (!peek) peek = (int (*)(void))real_sym("cudaPeekAtLastError"); return peek(); }
+"""
+
+_FIX5_FILL_SCRIPT = _SUBPROC_PRODUCER + r"""
+shim = ctypes.CDLL(sys.argv[1])                # already loaded through LD_PRELOAD: the same handle
+shim.fill_shim_grid.restype = ctypes.c_uint
+shim.fill_shim_block.restype = ctypes.c_uint
+case, n = sys.argv[2], int(sys.argv[3])
+owner = tc.empty(max(256, min(n, 4096)))       # the REAL allocation behind the descriptor (small)
+tc.synchronize()
+prod = Producer(owner, n)                      # synthetic metadata: n elements over `owner`'s pointer
+u = tc.from_dlpack(prod.capsule())
+res = {"case": case, "n": n, "numel": n}
+rev0 = u.revision
+shim.fill_shim_arm(2 if case == "small" else 1)
+try:
+    u.fill_(7.0)
+    res["raised"] = None
+except Exception as e:  # noqa: BLE001
+    res["raised"], res["msg"] = type(e).__name__, str(e)
+res["calls"], res["grid"], res["block"] = shim.fill_shim_calls(), shim.fill_shim_grid(), shim.fill_shim_block()
+res["revision_delta"] = u.revision - rev0
+res["slot_after"] = shim.fill_shim_slot()
+if case == "small":
+    tc.synchronize()
+    res["values"] = sorted(set(u.numpy().tolist()))
+rt = ctypes.CDLL("libcudart.so.12")
+v = ctypes.c_int(-1)
+res["max_grid_x"] = v.value if rt.cudaDeviceGetAttribute(ctypes.byref(v), 5, 0) == 0 else None  # cudaDevAttrMaxGridDimX
+del u
+gc.collect()
+res["deleter_calls"] = prod.calls
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+_FIX5_MAX_GRID_X = (1 << 31) - 1           # CUDA 12.6 grid x-dimension limit (kernels.cu kFillMaxGridX)
+_FIX5_FILL_CASES = {
+    "largest": _FIX5_MAX_GRID_X * 256,     # 549755813632: the largest accepted extent
+    "one_more": _FIX5_MAX_GRID_X * 256 + 1,
+    "huge": (1 << 40) + 1,                 # the reviewer's 2^40 + 1
+    "zero": 0,
+    "small": 1000,
+}
+
+
+@pytest.fixture(scope="module")
+def fix5_fill_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix5_fill_shim")
+    src, so = d / "fix5_fill_shim.c", d / "fix5_fill_shim.so"
+    src.write_text(_FIX5_FILL_SHIM_C)
+    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+def _run_fix5_fill(shim, case):
+    r = subprocess.run([sys.executable, "-c", _FIX5_FILL_SCRIPT, shim, case, str(_FIX5_FILL_CASES[case])],
+                       capture_output=True, text=True, timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    return json.loads(lines[-1][len("RESULT "):])
+
+
+def test_fix5_v504_fill_largest_accepted_extent_launches_a_covering_grid(fix5_fill_shim):
+    res = _run_fix5_fill(fix5_fill_shim, "largest")
+    assert res["calls"] == 1, res                                            # launched (trapped by the shim)
+    assert res["grid"] == _FIX5_MAX_GRID_X and res["block"] == 256, res      # 1475fae: nblk narrowed to int
+    assert res["grid"] * res["block"] >= res["n"], res                       # covers every element (exactly)
+    assert res["raised"] == "RuntimeError" and "invalid device function" in res["msg"], res   # the trapped launch
+    assert res["revision_delta"] == 0 and res["slot_after"] == 0, res        # nothing ran: no bump; slot consumed
+    assert res["deleter_calls"] == 1, res
+
+
+@pytest.mark.parametrize("case", ["one_more", "huge"])
+def test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch(fix5_fill_shim, case):
+    # 1475fae (and mutant (d)): "huge" launched grid 1 (2^32 + 1 narrowed), wrote 256 elements and bumped the revision.
+    res = _run_fix5_fill(fix5_fill_shim, case)
+    assert res["raised"] == "ValueError", res
+    assert "grid x-dimension limit of 2147483647" in res["msg"] and "Refused before any launch" in res["msg"], res
+    assert res["calls"] == 0 and res["revision_delta"] == 0 and res["slot_after"] == 0, res
+    assert res["deleter_calls"] == 1, res
+
+
+def test_fix5_v504_fill_zero_size_launches_nothing(fix5_fill_shim):
+    res = _run_fix5_fill(fix5_fill_shim, "zero")
+    assert res["raised"] is None and res["calls"] == 0 and res["revision_delta"] == 0, res
+
+
+def test_fix5_v504_fill_small_extent_unchanged_and_the_cited_limit_matches_the_device(fix5_fill_shim):
+    res = _run_fix5_fill(fix5_fill_shim, "small")
+    assert res["raised"] is None and res["calls"] == 1, res
+    assert res["grid"] == 4 and res["block"] == 256 and res["values"] == [7.0], res   # ceil(1000/256) = 4
+    assert res["revision_delta"] == 1, res
+    assert res["max_grid_x"] == _FIX5_MAX_GRID_X, res     # the limit kernels.cu cites, as this device reports it
+
+
+# ------------------------------------------------------------------------------------------------ sweep (d), core
+# The P1-T core sites that consume a failed call's error-slot entry where nothing can raise (the external Storage
+# drain and its restore, fill_'s guard restore while unwinding) were counted but did not record the error. They now
+# record it first (count + the first one's site, device and error). Reuses the FIX4 shim modes.
+def test_fix5_sweep_d_core_drain_restore_failure_is_recorded(fix4_shim):
+    res = _run_fix4(fix4_shim, "drain_restore_fail")
+    st = res["stats"]
+    assert st["device_restore_failures"] == 1 and st["unraisable_errors"] == 1, res
+    assert "restoring the caller's CUDA device after an imported Storage's drain" in st["first_unraisable_what"], res
+    assert st["first_unraisable_device"] == 1 and st["first_unraisable_error"] == "cudaErrorInvalidDevice", res
+    assert res["slot_after"] == 0, res
+
+
+def test_fix5_sweep_d_core_drain_failure_is_recorded(f05_shim):
+    # FIX1's F05 staging: the drain's switch to the Storage's device fails, so the release is leaked; FIX5 also records
+    # that CUDA error (it used to be consumed with only the leak counted).
+    res = _run_f05(f05_shim, "fail")
+    st = res["stats"]
+    assert st["leaked_drain_failure"] == 1 and st["unraisable_errors"] == 1, res
+    assert "draining an imported Storage's device before its DLPack release" in st["first_unraisable_what"], res
+    assert st["first_unraisable_device"] == 0 and st["first_unraisable_error"] == "cudaErrorInvalidDevice", res
+
+
+def test_fix5_sweep_d_core_fill_unwinding_restore_failure_is_recorded(fix4_shim):
+    res = _run_fix4(fix4_shim, "fill_fail_launch_and_restore")
+    st = res["stats"]
+    assert res["raised"] == "RuntimeError" and st["unraisable_errors"] == 1, res
+    assert "while fill_ unwound" in st["first_unraisable_what"], res
+    assert st["first_unraisable_error"] == "cudaErrorInvalidDevice" and res["slot_after"] == 0, res
+
+
+# ------------------------------------------------------------------------------------------------ sweep (c), core
+# Core's exit wait (dlpack_begin_shutdown) re-took the GIL in py::gil_scoped_release's DESTRUCTOR. A non-main thread can
+# run the wait (tensor_cuda._dlpack_shutdown_hook is a plain function): here a daemon thread calls it while a foreign
+# pthread's release (1 s) is in flight, then the main thread's own atexit call waits too. When the release leaves, both
+# wake; if the main thread re-takes the GIL first, CPython finalizes, and the daemon thread's GIL re-acquisition exits it
+# (a forced unwind). Started inside a destructor, that unwind terminates the process; FIX5 re-takes the GIL explicitly
+# in a non-noexcept frame. Which waiter wins is a race, so the scenario runs several times; every run must exit rc 0
+# with the release completed before finalization. Prior art: as the FIX2 N5 / FIX3 V3-01 scripts above.
+_FIX5_CORE_HOOK_THREAD_SCRIPT = r"""
+import atexit, ctypes, gc, json, os, sys, threading, time, types
+RESULTS = {}
+def _after_hook():
+    RESULTS["after_hook"] = {"stats": dict(tc._C._dlpack_release_stats()), "calls": prod.calls, "done": prod.done}
+    print("RESULT " + json.dumps(RESULTS), flush=True)
+atexit.register(_after_hook)
+""" + _SUBPROC_PRODUCER + _FIX2_PTHREAD + r"""
+class SlowProducer(Producer):
+    def _delete(self, _p):
+        self.calls += 1
+        self.started = True
+        time.sleep(1.0)
+        self.done = True
+prod = SlowProducer(tc.empty(16), 16)
+prod.started = prod.done = False
+M, FP = held_export(prod)
+def _wait_for(cond, what):
+    t0 = time.monotonic()
+    while not cond():
+        if time.monotonic() - t0 > 10:
+            raise RuntimeError("timed out waiting for " + what)
+        time.sleep(0.002)
+def start():
+    start_foreign(FP, M)
+    _wait_for(lambda: prod.started, "the foreign release to start")
+    threading.Thread(target=tc._dlpack_shutdown_hook, daemon=True).start()     # a NON-main thread runs the wait
+    _wait_for(lambda: tc._C._dlpack_release_stats()["closing"], "the daemon thread's hook to close admission")
+    RESULTS["before_hook"] = {"stats": dict(tc._C._dlpack_release_stats())}
+atexit.register(start)
+class Finalizer:
+    def __init__(self):
+        self.sleep, self.isf = time.sleep, sys.is_finalizing
+    def __del__(self):
+        fin = self.isf()
+        self.sleep(1.5)                          # drops the GIL during finalization: the daemon thread can take it
+        print("FINAL finalizing=%s" % fin, flush=True)
+_holder = types.ModuleType("_fix5_core_finalizer_holder")
+_holder.keep = Finalizer()
+sys.modules["_fix5_core_finalizer_holder"] = _holder
+del _holder
+print("ARMED", flush=True)
+"""
+
+
+@pytest.mark.parametrize("run", range(5))
+def test_fix5_sweep_c_core_exit_wait_on_a_non_main_thread_never_aborts(run):
+    r = subprocess.run([sys.executable, "-c", _FIX5_CORE_HOOK_THREAD_SCRIPT], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["before_hook"]["stats"]["in_flight"] == 1, res
+    assert res["after_hook"]["calls"] == 1 and res["after_hook"]["done"] is True, res   # finished before finalizing
+    _assert_ordinary_exit(r)                     # rc 0, FINAL line, no FATAL / terminate / abort

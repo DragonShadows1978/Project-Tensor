@@ -1,0 +1,22 @@
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -101,7 +101,7 @@
+   struct NewHandleOwner {
+     cublasHandle_t& h;
+     ~NewHandleOwner() {
+-      if (h == nullptr) return;  // committed to the cache, or already destroyed by settle
++      return;  // MUTANT (c): the V5-03 ownership removed (never destroys)
+       const cublasStatus_t ds = cublasDestroy(h);
+       if (ds != CUBLAS_STATUS_SUCCESS) note_cublas_handle_destroy_failure(static_cast<int>(ds));
+     }
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -119,7 +119,7 @@
+   struct NewHandleOwner {
+     cublasHandle_t& h;
+     ~NewHandleOwner() {
+-      if (h == nullptr) return;  // committed to the cache, or already destroyed by settle
++      return;  // MUTANT (c): the V5-03 ownership removed (never destroys)
+       const cublasStatus_t ds = cublasDestroy(h);
+       if (ds != CUBLAS_STATUS_SUCCESS) note_cublas_handle_destroy_failure(static_cast<int>(ds));
+     }

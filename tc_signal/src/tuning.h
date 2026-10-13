@@ -37,5 +37,16 @@ constexpr long long kPendingMaxBytes = 256LL << 20;
 constexpr int kSyncMaxDevices = 64;
 constexpr int kSyncReportMax = 8;
 
+// P1T-FIX5 (V5-01) release lifecycle (dlpack_operand.cpp). None of these bounds a wait (no wait ever returns early) and
+// none changes numerics:
+//  * seconds synchronize() waits for releases admitted on other threads before its first stderr diagnostic (later lines
+//    each time the time waited doubles); the exit hook's delay is the Python knob tc_signal._RELEASE_EXIT_DIAG_S;
+//  * the cap on any first-diagnostic delay (keeps the chrono conversion finite);
+//  * the polling interval used only if the lifecycle mutex ever fails (never observed), so the wait still never returns
+//    early.
+constexpr double kSyncReleaseWaitFirstDiagS = 5.0;
+constexpr double kLifecycleMaxDiagDelayS = 86400.0;
+constexpr int kLifecyclePollMs = 10;
+
 }  // namespace tuning
 }  // namespace tcs

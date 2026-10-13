@@ -5,12 +5,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdio>  // P1T-FIX5 V5-01: exit-wait diagnostics written without the GIL
 #include <cstring>
 #include <deque>
+#include <mutex>
 #include <new>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
+#include <thread>
 #include <unordered_map>
 
 #include "checked_math.h"
@@ -69,9 +75,272 @@ void check_version(const DLManagedTensorVersioned* m, const char* role) {
 
 }  // namespace
 
+// ------------------------------------------------------------------------------------------------ release lifecycle (V5-01)
+// P1T-FIX5, round-5 review finding V5-01 (MAJOR): interpreter exit overtook a producer deleter that was already running
+// on another thread. A daemon thread's call refused a versioned read-only output; the Operand constructor ran the
+// producer deleter while unwinding; the deleter released the GIL (time.sleep); the atexit hook saw an empty pending list
+// and returned; CPython began finalizing; when the deleter re-took the GIL, CPython 3.12 exited the thread
+// (PyEval_RestoreThread -> take_gil -> _PyThreadState_MustExit -> PyThread_exit_thread -> pthread_exit), and that forced
+// unwind (abi::__forced_unwind) reached the catch-all of call_deleter_contained inside the noexcept ManagedOwner::reset:
+// glibc aborts ("FATAL: exception not rethrown", rc -6). The deferred drain had the same gap (an entry is popped before
+// its deleters run, so a running deleter was invisible to the pending list).
+//
+// The fix is an admission / closing / in-flight protocol for every add-on callback that may take the GIL, independent of
+// the pending list. Two kinds of admitted section, each with an in-flight count and a per-thread depth:
+//  * kRelease: one producer deleter call (ManagedOwner::reset, so every release path: the immediate release of a
+//    refused call while unwinding, the next-call drain, synchronize(), the bound drain, the fallback sync of
+//    ~RetainUntilComplete) and one drop of the last reference to an unconsumed DLPack capsule (CapsuleRef::drop: the
+//    producer's capsule destructor calls its deleter);
+//  * kCallback: the producer's Python callbacks in to_capsule (attribute lookups, __dlpack_device__, __dlpack__).
+// Protocol:
+//  * admit(k): if the interpreter is not accepting Python (not initialized, or finalizing: second line of defence, as
+//    core's interpreter_accepts_gil_state), refuse; else increment in_flight[k], THEN read `closing`; if it is set, back
+//    out (decrement, notify) and refuse; else ++t_depth[k] and run the section. leave(k): --t_depth[k], decrement,
+//    notify. `closing` and the counts are sequentially consistent atomics: admit is "increment, then read closing", the
+//    exit hook is "set closing, then read the counts", so at least one side sees the other (the store-buffering
+//    handshake: either the releaser sees closing and backs out, or the hook sees the count and waits).
+//  * A refused release is never run: the deleter is not called (the manager is leaked, counted), the capsule reference
+//    is kept (counted); no producer code and no Python is entered. A refused producer callback raises RuntimeError
+//    before calling it (nothing acquired).
+//  * close_admission_and_wait (tc_signal's atexit hook, GIL held): set `closing` for good, then wait until no admitted
+//    section of ANOTHER thread is in flight (in_flight[k] <= this thread's t_depth[k] for both kinds: self-exclusion, so
+//    a hook running inside its own callback does not wait for itself). CPython 3.12.3 runs atexit callbacks before it
+//    marks the runtime finalizing (Py_FinalizeEx: _PyAtExit_Call, then _PyInterpreterState_SetFinalizing /
+//    _PyRuntimeState_SetFinalizing; verified by P1T-FIX2 in pylifecycle.c lines 1815 and 1832-1833), so once the hook
+//    returns no admitted add-on callback is running, and every later one is refused: nothing in the add-on can take the
+//    GIL after finalization begins.
+//  * The wait has NO time bound (round-3 V3-01: a bounded return lets finalization overtake the callback). After a delay
+//    (tc_signal._RELEASE_EXIT_DIAG_S, default 5 s) it writes one stderr line, then another each time the time waited
+//    has doubled. Consequence: a producer deleter, capsule destructor or __dlpack__ that never returns makes interpreter
+//    exit wait for it (the producer's contract violation; waiting is the honest outcome, an early return aborts).
+//  * GIL: the waiting thread releases the GIL with PyEval_SaveThread (an admitted callback that needs the GIL can then
+//    finish), waits on the condition variable with no Python object touched, drops the mutex, and only then re-takes
+//    the GIL with PyEval_RestoreThread, called explicitly in a NON-noexcept frame (not from a destructor such as
+//    py::gil_scoped_release's): if CPython exits a waiting daemon thread there during finalization, the forced unwind
+//    travels through ordinary frames to pybind11's dispatcher, which rethrows abi::__forced_unwind (pybind11 v2.12
+//    pybind11.h:1037), instead of meeting a noexcept boundary. No thread waits for the GIL while holding the mutex.
+//  * synchronize() (any thread) waits the same way, without closing, for releases already admitted on other threads
+//    (kRelease only), so that when it returns every consumed operand handed to tc_signal before the call has been
+//    released or deliberately leaked. It skips the wait when the calling thread is itself inside an admitted section
+//    (two threads each calling synchronize() from inside a deleter would otherwise wait for each other).
+// The pending list itself is unchanged (still GIL-protected; nothing here holds a reference into it across a wait).
+//
+// Prior art: core's own ImportReleaseLifecycle (tensor_cuda/src/bindings.cpp, P1T-FIX2 N5 and P1T-FIX3 V3-01). Reused
+// from it: the closing flag + in-flight count + condition variable, the unbounded wait with the GIL released and a
+// doubling stderr diagnostic schedule, the thread-local depth for self-exclusion, "leak, never enter Python, after
+// closing", and the atexit-before-finalizing argument. Different here: the add-on's releasers already hold the GIL (no
+// PyGILState_Ensure), so admission is two seq_cst atomics instead of a mutex section; two section kinds (releases and
+// producer callbacks); the GIL is re-taken explicitly rather than by a destructor; synchronize() waits too. Further
+// prior art: CPython's threading._shutdown / wait_for_thread_shutdown (finalization waits, unbounded, for non-daemon
+// threads already started); RCU grace periods (synchronize_rcu waits for every reader that entered before it, while new
+// readers do not delay it; McKenney & Slingwine 1998) and the Linux percpu_ref "kill, then wait for zero"; the
+// store-buffering (Dekker, Dijkstra 1965) handshake for flag + counter admission; glibc/libstdc++ forced unwinding
+// (abi::__forced_unwind must be rethrown by a catch-all; a noexcept frame terminates). Ours: applying the protocol to the
+// add-on's deleter, capsule-drop and producer-callback sites. Unverified here (lead to check): "CPython 3.12
+// take_gil _PyThreadState_MustExit PyThread_exit_thread", "synchronize_rcu McKenney Slingwine 1998".
+namespace {
+
+enum LifecycleKind : int { kRelease = 0, kCallback = 1, kKinds = 2 };
+
+struct Lifecycle {
+  std::mutex mu;                           // only for the waiter's condition variable; admission never takes it
+  std::condition_variable cv;
+  std::atomic<bool> closing{false};
+  std::atomic<long long> in_flight[kKinds];
+  Lifecycle() {
+    for (auto& c : in_flight) c.store(0);
+  }
+};
+
+// Never destroyed (a callback may run during static destruction). Constructed at module import (init_pending_state).
+Lifecycle& lifecycle() {
+  static Lifecycle* s = new Lifecycle();
+  return *s;
+}
+
+// Admitted sections on THIS thread's stack, per kind (self-exclusion; also synchronize()'s skip rule).
+thread_local long long t_depth[kKinds] = {0, 0};
+
+// Static storage: counting never allocates.
+std::atomic<unsigned long long> g_admitted[kKinds];
+std::atomic<unsigned long long> g_deleters_leaked_after_close{0};   // V5-01: "a late release leaks, and is counted"
+std::atomic<unsigned long long> g_deleters_leaked_finalizing{0};
+std::atomic<unsigned long long> g_capsules_kept_after_close{0};
+std::atomic<unsigned long long> g_capsules_kept_finalizing{0};
+std::atomic<unsigned long long> g_callbacks_refused{0};
+std::atomic<unsigned long long> g_lifecycle_lock_failures{0};
+std::atomic<unsigned long long> g_exit_hook_calls{0};
+std::atomic<unsigned long long> g_exit_in_flight_at_close{0};
+std::atomic<unsigned long long> g_exit_wait_us{0};
+std::atomic<unsigned long long> g_exit_wait_diagnostics{0};
+std::atomic<unsigned long long> g_exit_wait_overruns{0};
+std::atomic<unsigned long long> g_sync_waits{0};
+std::atomic<unsigned long long> g_sync_wait_us{0};
+std::atomic<unsigned long long> g_sync_wait_diagnostics{0};
+
+bool interpreter_accepts_python() noexcept {
+  if (!Py_IsInitialized()) return false;
+#if PY_VERSION_HEX >= 0x030D0000
+  if (Py_IsFinalizing()) return false;
+#else
+  if (_Py_IsFinalizing()) return false;
+#endif
+  return true;
+}
+
+enum class Admission { kAdmitted, kClosed, kFinalizing };
+
+void leave_count(Lifecycle& lc, LifecycleKind k) noexcept {
+  lc.in_flight[k].fetch_sub(1, std::memory_order_seq_cst);
+  // Take and drop the mutex before notifying: a waiter checks its predicate while holding it, so this leave either
+  // happened before that check (seen) or waits until the waiter blocks (then the notify wakes it). No lost wakeup.
+  try {
+    std::lock_guard<std::mutex> lk(lc.mu);
+  } catch (const std::system_error&) {
+    g_lifecycle_lock_failures.fetch_add(1, std::memory_order_relaxed);  // never observed; the waiter also polls
+  }
+  lc.cv.notify_all();
+}
+
+Admission admit(LifecycleKind k) noexcept {
+  if (!interpreter_accepts_python()) return Admission::kFinalizing;
+  Lifecycle& lc = lifecycle();
+  lc.in_flight[k].fetch_add(1, std::memory_order_seq_cst);
+  if (lc.closing.load(std::memory_order_seq_cst)) {
+    leave_count(lc, k);  // back out: admission closed
+    return Admission::kClosed;
+  }
+  ++t_depth[k];
+  g_admitted[k].fetch_add(1, std::memory_order_relaxed);
+  return Admission::kAdmitted;
+}
+
+void leave(LifecycleKind k) noexcept {
+  --t_depth[k];
+  leave_count(lifecycle(), k);
+}
+
+// RAII for the producer-callback section of to_capsule. Throws RuntimeError (before any callback) when refused.
+class CallbackSection {
+ public:
+  explicit CallbackSection(const char* role) {
+    const Admission a = admit(kCallback);
+    if (a == Admission::kAdmitted) return;
+    g_callbacks_refused.fetch_add(1, std::memory_order_relaxed);
+    throw std::runtime_error(std::string("tc_signal: operand '") + role + "': " +
+                             (a == Admission::kClosed
+                                  ? "interpreter exit has begun (tc_signal's exit hook closed admission)"
+                                  : "the interpreter is finalizing") +
+                             ", so the producer's __dlpack__ is not called; refused before acquiring anything");
+  }
+  ~CallbackSection() { leave(kCallback); }
+  CallbackSection(const CallbackSection&) = delete;
+  CallbackSection& operator=(const CallbackSection&) = delete;
+};
+
+struct WaitOutcome {
+  long long running_at_start = 0;  // admitted sections of OTHER threads when the wait began
+  long long own[kKinds] = {0, 0};  // this thread's own (excluded)
+  long long waited_us = 0;
+  unsigned long long diagnostics = 0;
+  bool overran = false;            // outlasted the first-diagnostic delay
+};
+
+long long others_running(const Lifecycle& lc, bool callbacks_too, const long long own[kKinds]) noexcept {
+  long long r = lc.in_flight[kRelease].load(std::memory_order_seq_cst) - own[kRelease];
+  if (callbacks_too) r += lc.in_flight[kCallback].load(std::memory_order_seq_cst) - own[kCallback];
+  return r;
+}
+
+// The part of the wait that runs with the GIL released: the mutex and condition variable only, no Python object.
+void wait_without_gil(Lifecycle& lc, bool callbacks_too, double first_diag_s, const char* who,
+                      std::chrono::steady_clock::time_point t0, WaitOutcome& w) noexcept {
+  using clock = std::chrono::steady_clock;
+  const auto first = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(first_diag_s));
+  auto quiet = [&lc, callbacks_too, &w] { return others_running(lc, callbacks_too, w.own) <= 0; };
+  try {
+    std::unique_lock<std::mutex> lk(lc.mu);
+    auto next = t0 + first;
+    while (!lc.cv.wait_until(lk, next, quiet)) {
+      // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01, V5-01).
+      w.overran = true;
+      const long long running = others_running(lc, callbacks_too, w.own);
+      lk.unlock();  // a blocked stderr must not stop a callback from leaving
+      const auto now = clock::now();
+      std::fprintf(stderr,
+                   "tc_signal: %lld DLPack producer callback(s) (deleter, capsule destructor or __dlpack__) admitted "
+                   "on other threads before %s still running after %.1f s; %s waits for them%s\n",
+                   running, who, std::chrono::duration<double>(now - t0).count(), who,
+                   callbacks_too ? " (no new one is admitted)" : "");
+      std::fflush(stderr);
+      ++w.diagnostics;
+      const auto waited = now - t0;  // next line when the time waited has doubled (at least one tick: no busy loop)
+      const auto tick = clock::duration(1);
+      next = now + (waited > tick ? waited : tick);
+      lk.lock();
+    }
+  } catch (const std::system_error&) {
+    // A mutex / condition-variable failure (never observed): keep waiting by polling, never return early.
+    g_lifecycle_lock_failures.fetch_add(1, std::memory_order_relaxed);
+    while (!quiet()) std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kLifecyclePollMs));
+  }
+}
+
+// Waits until no admitted section of another thread is running (kRelease; plus kCallback when callbacks_too). The GIL
+// is released for the wait and re-taken explicitly here (see the design block above for why not by a destructor).
+WaitOutcome wait_for_other_threads(bool callbacks_too, double first_diag_s, const char* who) {
+  Lifecycle& lc = lifecycle();
+  WaitOutcome w;
+  w.own[kRelease] = t_depth[kRelease];
+  w.own[kCallback] = t_depth[kCallback];
+  w.running_at_start = others_running(lc, callbacks_too, w.own);
+  if (w.running_at_start <= 0) return w;  // nothing to wait for: the GIL is not touched
+  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;   // NaN or negative: diagnose at once (the wait is the same)
+  if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
+  const auto t0 = std::chrono::steady_clock::now();
+  const bool held = PyGILState_Check() != 0;
+  PyThreadState* ts = held ? PyEval_SaveThread() : nullptr;  // GIL released: an admitted callback can finish
+  wait_without_gil(lc, callbacks_too, first_diag_s, who, t0, w);
+  if (held) PyEval_RestoreThread(ts);  // the mutex is not held here; may exit a daemon thread during finalization
+  w.waited_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+  return w;
+}
+
+}  // namespace
+
+void CapsuleRef::drop() noexcept {
+  PyObject* p = p_;
+  p_ = nullptr;
+  if (p == nullptr) return;
+  if (!interpreter_accepts_python()) {
+    // Finalizing (for example a daemon thread unwinding after CPython exited it): never touch Python. Kept.
+    g_capsules_kept_finalizing.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  const char* name = PyCapsule_CheckExact(p) ? PyCapsule_GetName(p) : nullptr;
+  const bool unconsumed = name != nullptr && (std::strcmp(name, kCapsule) == 0 || std::strcmp(name, kCapsuleVersioned) == 0);
+  if (unconsumed && Py_REFCNT(p) == 1) {
+    // The last reference to an unconsumed DLPack capsule: dropping it runs the producer's destructor, which calls the
+    // producer's deleter. A release: admitted, or kept (never run) once admission has closed.
+    const Admission a = admit(kRelease);
+    if (a != Admission::kAdmitted) {
+      (a == Admission::kClosed ? g_capsules_kept_after_close : g_capsules_kept_finalizing)
+          .fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+    Py_DECREF(p);
+    leave(kRelease);
+    return;
+  }
+  Py_DECREF(p);
+}
+
 // ------------------------------------------------------------------------------------------------ capsule acquisition
-py::object to_capsule(py::handle obj, const char* role, bool writable) {
-  if (PyCapsule_CheckExact(obj.ptr())) return py::reinterpret_borrow<py::object>(obj);
+CapsuleRef to_capsule(py::handle obj, const char* role, bool writable) {
+  if (PyCapsule_CheckExact(obj.ptr())) return CapsuleRef(py::reinterpret_borrow<py::object>(obj));
+  // P1T-FIX5 (V5-01 sweep (c)): from here to the return, the producer's Python code may run (and release / re-take the
+  // GIL): an admitted section, waited for by the exit hook; refused (RuntimeError, nothing called) after it closed.
+  CallbackSection section(role);
   if (!py::hasattr(obj, "__dlpack__"))
     refuse_type(role, "expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got " +
                           type_name(obj));
@@ -109,7 +378,7 @@ py::object to_capsule(py::handle obj, const char* role, bool writable) {
   }
   if (!PyCapsule_CheckExact(cap.ptr()))
     refuse_type(role, "__dlpack__ returned " + type_name(cap) + ", not a PyCapsule");
-  return cap;
+  return CapsuleRef(std::move(cap));
 }
 
 const DLTensor* peek(py::handle capsule, const char* role) {
@@ -232,23 +501,39 @@ ManagedOwner& ManagedOwner::operator=(ManagedOwner&& o) noexcept {
 // Alexandrescu 2004, item 51). Taken: catch at the noexcept boundary. Ours: counting and continuing per manager.
 // Known gap (not closed): a deleter that calls pthread_exit or is cancelled unwinds with abi::__forced_unwind, which
 // may not be swallowed (glibc aborts); no C++ handler can contain that.
+// P1T-FIX5 (V5-01): the forced unwind that round 5 produced was not the producer's: CPython exited the thread when the
+// deleter re-took the GIL during finalization. Every deleter call is now an admitted release (release lifecycle above):
+// the exit hook does not return while one is running, and once it has closed admission no deleter is called at all, so
+// CPython never finalizes under a running deleter and no forced unwind of that origin can reach this catch-all. What
+// this catch-all does with a forced unwind is unchanged: it swallows it, and glibc then aborts ("FATAL: exception not
+// rethrown"); rethrowing would instead meet the noexcept of reset() (std::terminate). Either way that remains the
+// producer's own pthread_exit / cancellation, a DLPack contract violation (the deleter is a C function that returns).
 namespace {
 std::atomic<unsigned long long> g_deleter_exceptions{0};  // static storage: counting never allocates
 
 template <typename M>
 void call_deleter_contained(M* m) noexcept {
   if (m == nullptr || m->deleter == nullptr) return;
+  // P1T-FIX5 (V5-01): admitted release, or deliberately leaked (deleter never called, counted) after admission closed.
+  const Admission a = admit(kRelease);
+  if (a != Admission::kAdmitted) {
+    (a == Admission::kClosed ? g_deleters_leaked_after_close : g_deleters_leaked_finalizing)
+        .fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
   try {
     m->deleter(m);
   } catch (...) {
     g_deleter_exceptions.fetch_add(1, std::memory_order_relaxed);
   }
+  leave(kRelease);  // reached on both outcomes: an ordinary C++ exception is contained, and the section still leaves
 }
 }  // namespace
 
 void ManagedOwner::reset() noexcept {
   // DLPack consumer rule: when done, call the producer's deleter (it may be NULL). Called with the GIL held (every
-  // tc_signal entry point runs under the GIL), so a deleter that touches Python objects is safe.
+  // tc_signal entry point runs under the GIL), so a deleter that touches Python objects is safe. P1T-FIX5: each call
+  // is an admitted release (call_deleter_contained).
   if (legacy != nullptr) {
     DLManagedTensor* m = legacy;
     legacy = nullptr;  // cleared first: never called twice, even if the deleter throws or re-enters
@@ -474,6 +759,12 @@ struct PendingState {
   // exists (so a MemoryError while building the message does not lose it: the next synchronize() raises it).
   unsigned long long prior_unreported = 0;
   cudaError_t prior_error = cudaSuccess;
+  // P1T-FIX5: CUDA failures that used to be consumed from the error slot without being recorded. Each is now counted
+  // here AND recorded through note_unraisable_failure before the slot entry is consumed, so the next synchronize()
+  // raises it exactly once: V5-02, a non-NotReady cudaEventQuery failure in the next-call drain (FIX4 rows 47/50);
+  // sweep (d), a failed completion-event record in ~RetainUntilComplete (the call then used the synchronous fallback).
+  unsigned long long event_query_failures = 0;
+  unsigned long long event_record_failures = 0;
   std::unordered_map<int, DeviceEvents> event_pool;   // per device
 };
 
@@ -762,7 +1053,45 @@ cudaEvent_t acquire_event(int device) {
 
 }  // namespace
 
-void init_pending_state() { (void)pending(); }
+void init_pending_state() {
+  (void)pending();
+  (void)lifecycle();  // P1T-FIX5 (V5-01): the release lifecycle too, so no release path is the first to allocate it
+}
+
+// P1T-FIX5 (round-5 review V5-03): a newly created cuBLAS handle that could not be cached is destroyed by its owner while
+// an exception propagates; a failed destroy is counted here (never thrown: the owner runs during unwinding). Static
+// storage: never allocates. Read through pending_stats()['cublas_handle_destroy_failures'] (and the first status).
+namespace {
+std::atomic<unsigned long long> g_cublas_destroy_failures{0};
+std::atomic<int> g_cublas_destroy_first_status{0};
+}  // namespace
+
+void note_cublas_handle_destroy_failure(int status) noexcept {
+  int expected = 0;
+  g_cublas_destroy_first_status.compare_exchange_strong(expected, status, std::memory_order_relaxed);
+  g_cublas_destroy_failures.fetch_add(1, std::memory_order_relaxed);
+}
+
+py::dict close_admission_and_wait(double first_diag_s) {
+  Lifecycle& lc = lifecycle();
+  lc.closing.store(true, std::memory_order_seq_cst);  // admission closed for good: nothing new is admitted
+  const long long pending_at_close = static_cast<long long>(pending().q.size());  // never released from here on
+  const WaitOutcome w = wait_for_other_threads(true, first_diag_s, "interpreter exit");
+  g_exit_hook_calls.fetch_add(1, std::memory_order_relaxed);
+  if (w.running_at_start > 0)
+    g_exit_in_flight_at_close.fetch_add(static_cast<unsigned long long>(w.running_at_start), std::memory_order_relaxed);
+  g_exit_wait_us.fetch_add(static_cast<unsigned long long>(w.waited_us), std::memory_order_relaxed);
+  g_exit_wait_diagnostics.fetch_add(w.diagnostics, std::memory_order_relaxed);
+  if (w.overran) g_exit_wait_overruns.fetch_add(1, std::memory_order_relaxed);
+  py::dict d;
+  d["in_flight_at_close"] = w.running_at_start > 0 ? w.running_at_start : 0;
+  d["own_thread_in_flight"] = w.own[kRelease] + w.own[kCallback];
+  d["pending_entries_at_close"] = pending_at_close;
+  d["waited_us"] = w.waited_us;
+  d["diagnostics"] = w.diagnostics;
+  d["overran"] = w.overran;
+  return d;
+}
 
 // P1T-FIX4 (cuda_guard.h rule 2): a restore of the caller's device that failed where nothing can raise.
 void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept {
@@ -851,6 +1180,15 @@ RetainUntilComplete::~RetainUntilComplete() {
       e.event = nullptr;
     }
   } else {
+    // P1T-FIX5 (sweep (d), consumed-but-unrecorded errors): the failed record (or the guard's failed switch, whose slot
+    // entry the guard consumed already) is RECORDED first, then this call's slot entry is consumed. 1475fae consumed it
+    // without a record, so when the fallback sync below succeeded the CUDA failure was never reported. It is a failure
+    // where nothing can raise (a destructor) and no operand is leaked by it (the fallback releases or leaks on its own
+    // proof), so it is an unraisable failure: raised once by the next synchronize().
+    ++st.event_record_failures;
+    note_unraisable_failure(st, "recording a call's completion event (cudaEventRecord on the operands' device; the "
+                                "call's operands were synchronized instead)",
+                            device_, r);
     cudaGetLastError();
   }
   if (r != cudaSuccess) {
@@ -886,9 +1224,25 @@ void drain_completed() noexcept {
       // synchronize_and_release_all, which re-queries it and reports and leaks it if the device cannot synchronize.
       // P1T-FIX4 (sweep): that other error's slot entry is consumed here (62c8d9f left it, so the next, unrelated
       // launch check reported it as its own); the entry itself still carries the failure to synchronize().
+      // P1T-FIX5, round-5 review finding V5-02 (MINOR): FIX4's last clause was wrong for a ONE-SHOT failure. The entry
+      // stays queued, but a queued entry does not remember the error: synchronize() re-queries it, and if the query now
+      // succeeds the entry is released and synchronize() returns success, so the failure was consumed and never
+      // reported (review probe query_error_cpu.py / query_error_single_gpu.py; FIX4 sweep rows 47 and 50). Now a
+      // non-NotReady failure is RECORDED first (counted in event_query_failures and noted as a failure where nothing
+      // can raise: the drain is noexcept and runs at the start of an unrelated call), and only then is the slot entry
+      // consumed; the next synchronize() raises it exactly once (FIX4's deferred-error routing, cleared once its message
+      // exists). Completion and release stay as before: the entry is left for synchronize(), which re-queries it and
+      // releases on a successful query, or leaks it with no completion proof. NotReady is not recorded: CUDA 12.6
+      // documents it as "not considered an error" (Programming Guide 3.2.12) and it is not an error of the query.
+      // Prior art: NVIDIA CUDA 12.6 cudaEventQuery / cudaGetLastError contracts (a returned error vs the per-thread slot);
+      // the "record before you clear" rule is ordinary error accounting, no specific prior art known to me.
       if (r == cudaErrorNotReady) {
         if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
       } else {
+        ++st.event_query_failures;
+        note_unraisable_failure(st, "cudaEventQuery of a pending entry's completion event in the next-call drain (the "
+                                    "entry stayed pending; synchronize() re-queried it)",
+                                st.q.front().device, r);
         cudaGetLastError();
       }
       return;
@@ -922,6 +1276,19 @@ void drain_completed() noexcept {
 // it reports (C10_CUDA_KERNEL_LAUNCH_CHECK = C10_CUDA_CHECK(cudaGetLastError()); C10_CUDA_CHECK_WARN, torch 2.11
 // headers). Taken: report-and-consume. Ours: capturing at synchronize() entry and still draining before raising.
 void synchronize_and_release_all() {
+  // P1T-FIX5 (V5-01): first wait, GIL released, until every producer release already admitted on ANOTHER thread (a
+  // deleter call, or the drop of an unconsumed capsule's last reference) has returned, so that a release a daemon thread
+  // popped off the list before this call is not still running when synchronize() returns (the round-5 trace probe's
+  // hook is exactly this call). No CUDA call is made by the wait, so this thread's error slot is untouched and V4-04's
+  // capture below still sees the pre-existing error. Skipped when this thread is itself inside an admitted section.
+  if (t_depth[kRelease] == 0 && t_depth[kCallback] == 0) {
+    const WaitOutcome w = wait_for_other_threads(false, tuning::kSyncReleaseWaitFirstDiagS, "this synchronize()");
+    if (w.running_at_start > 0) {
+      g_sync_waits.fetch_add(1, std::memory_order_relaxed);
+      g_sync_wait_us.fetch_add(static_cast<unsigned long long>(w.waited_us), std::memory_order_relaxed);
+      g_sync_wait_diagnostics.fetch_add(w.diagnostics, std::memory_order_relaxed);
+    }
+  }
   PendingState& st = pending();
   const cudaError_t prior = cudaGetLastError();
   if (prior != cudaSuccess) {
@@ -1016,6 +1383,37 @@ py::dict pending_stats(bool reset_high_water) {
   d["device_restore_failures"] = st.device_restore_failures;  // P1T-FIX4 (sweep): caller-device restores that failed
   d["event_destroy_failures"] = st.event_destroy_failures;    // P1T-FIX4 (sweep)
   d["unreported_unraisable_errors"] = st.unraisable_unreported;  // P1T-FIX4: raised by the next synchronize()
+  // P1T-FIX5 counters. V5-01 release lifecycle: admission state, sections in flight (all threads), admitted totals,
+  // releases refused after admission closed (deleters not called, capsule references kept: "a late release leaks
+  // without entering Python, and is counted") or while finalizing, producer callbacks refused, the exit hook's wait and
+  // synchronize()'s wait for other threads, mutex failures. V5-02 / sweep (d): recorded query and record failures.
+  // V5-03: cuBLAS handles whose destroy failed while an exception propagated.
+  {
+    const Lifecycle& lc = lifecycle();
+    d["release_admission_closed"] = lc.closing.load();
+    d["releases_in_flight"] = lc.in_flight[kRelease].load();
+    d["callbacks_in_flight"] = lc.in_flight[kCallback].load();
+  }
+  d["admitted_releases"] = g_admitted[kRelease].load();
+  d["admitted_callbacks"] = g_admitted[kCallback].load();
+  d["deleters_leaked_after_close"] = g_deleters_leaked_after_close.load();
+  d["deleters_leaked_finalizing"] = g_deleters_leaked_finalizing.load();
+  d["capsules_kept_after_close"] = g_capsules_kept_after_close.load();
+  d["capsules_kept_finalizing"] = g_capsules_kept_finalizing.load();
+  d["callbacks_refused_after_close"] = g_callbacks_refused.load();
+  d["exit_hook_calls"] = g_exit_hook_calls.load();
+  d["exit_in_flight_at_close"] = g_exit_in_flight_at_close.load();
+  d["exit_wait_us"] = g_exit_wait_us.load();
+  d["exit_wait_diagnostics"] = g_exit_wait_diagnostics.load();
+  d["exit_wait_overruns"] = g_exit_wait_overruns.load();
+  d["sync_waits_for_other_threads"] = g_sync_waits.load();
+  d["sync_wait_us"] = g_sync_wait_us.load();
+  d["sync_wait_diagnostics"] = g_sync_wait_diagnostics.load();
+  d["lifecycle_lock_failures"] = g_lifecycle_lock_failures.load();
+  d["event_query_failures"] = st.event_query_failures;    // V5-02
+  d["event_record_failures"] = st.event_record_failures;  // sweep (d)
+  d["cublas_handle_destroy_failures"] = g_cublas_destroy_failures.load();             // V5-03
+  d["cublas_handle_destroy_first_status"] = g_cublas_destroy_first_status.load();     // V5-03
   if (reset_high_water) {
     st.high_water_entries = static_cast<long long>(st.q.size());
     st.high_water_managers = st.managers;
