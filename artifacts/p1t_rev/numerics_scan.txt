@@ -1,0 +1,16 @@
+tc_signal/CMakeLists.txt:29:# Numerics contract: no fast-math anywhere in this package, no per-thread default stream.
+tc_signal/CMakeLists.txt:32:    message(FATAL_ERROR "tc_signal: ${_flags} ('${${_flags}}') carries a forbidden flag (fast-math or default-stream)")
+tc_signal/src/conv.cu:1:// tc_signal 1-D convolutions (P1T-M2: T2 Conv1d, T3 ConvTranspose1d). fp32, deterministic, no atomics, no fast-math.
+tc_signal/src/conv.cu:6://    on the same inputs are bitwise equal; no atomicAdd anywhere in this package;
+tc_signal/src/conv.cu:7://  * no intrinsics such as __expf/__fdividef and no --use_fast_math (CMakeLists.txt refuses it). FMA contraction is
+tc_signal/src/conv.cu:8://    nvcc's default (--fmad=true, not a fast-math flag); the gather kernel spells its FMA out with fmaf().
+tc_signal/src/conv.cu:39:// nvcc 12.6 defines no preprocessor macro for --use_fast_math (it only passes -ftz=1 -prec_div=0 -prec_sqrt=0 to
+tc_signal/src/conv.cu:40:// cicc), so fast-math cannot be refused here at compile time. CMakeLists.txt refuses the flag at configure time, and
+tc_signal/src/conv.cu:179:// Fast-math canary: out[i] = x[i] / y[i] in fp32. Built with this TU's flags, so --use_fast_math (-ftz=1,
+tc_signal/src/conv.cu:182:// observable effect" idea; denormal flushing as a fast-math symptom is documented in the CUDA C Programming Guide).
+tc_signal/src/lstm.cu:1:// tc_signal LSTM (P1T-M3, T4): ONNX LSTM semantics, fp32, deterministic, no atomics, no fast-math.
+tc_signal/src/lstm.cu:23://    the double-underscore fast intrinsics (exp, tanh, divide) and no fast-math compiler flag (CMakeLists.txt refuses it
+tc_signal/src/small_ops.cu:4:// roundTiesToEven in the default rounding mode, sign of zero kept, NaN and +-Inf pass through). No fast-math flag, no
+tc_signal/src/norms.cu:2:// kernel. fp32 statistics, biased variance (ONNX), deterministic, no atomic operations, no fast-math flag.
+tc_signal/src/norms.cu:28:// because the package's fast-math canary (tests/test_contract.py) already witnesses IEEE division and no flushing.
+tc_signal/src/tuning.h:15:// Threads per block for the fp32 division canary kernel (fast-math probe; tests only).
