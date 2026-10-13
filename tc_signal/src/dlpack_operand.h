@@ -262,6 +262,12 @@ void exit_device_waits_undiagnosed() noexcept;
 // P1T-FIX7 (V7-01): the runner's stderr line (C stdio, no Python) naming every recorded CUDA failure nobody raised yet,
 // after the hook was interrupted; the records are cleared once written. Never throws.
 void exit_log_unreported() noexcept;
+// P1T-FIX8 (V8-02, sweep (l)): the exit runner's window (what synchronize() raises inside it is kept as an exit report
+// until the hook acknowledges writing it), that acknowledgement, and the runner's allocation-free write of a raised
+// report the hook did not write.
+void exit_runner_window(bool open) noexcept;
+void exit_report_written() noexcept;
+void exit_log_unwritten_report() noexcept;
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
 // push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
 // (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that
@@ -291,6 +297,13 @@ enum : unsigned {
   // P1T-FIX6 (V6-03 regression tests): one-shot failures of synchronize()'s own drain.
   kCudaCurrentDevice = 1u << 7,      // sync_and_release_all_impl: cudaGetDevice
   kCudaEventQuery = 1u << 8,         // a pending entry's cudaEventQuery (synchronize's drain or the next-call drain)
+  // P1T-FIX8 (V8-01 / V8-02 regression tests): one-shot failures of the exit device wait's marker calls (inside the
+  // exit runner's window only) and of building the exit runner's full report.
+  kAllocExitLog = 1u << 9,           // exit_log_unreported: building the full report (-> allocation-free summary)
+  kCudaMarkerCreate = 1u << 10,      // wait_device_work_diagnosed: cudaEventCreateWithFlags
+  kCudaMarkerRecord = 1u << 11,      // wait_device_work_diagnosed: cudaEventRecord
+  kCudaMarkerQuery = 1u << 12,       // wait_device_work_diagnosed: cudaEventQuery
+  kCudaMarkerDestroy = 1u << 13,     // destroy_marker: cudaEventDestroy (the event is still destroyed)
 };
 void arm(unsigned bits) noexcept;
 void clear() noexcept;

@@ -271,13 +271,31 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
     the native runner runs they are preceded by a polled wait with the same schedule (the knob read at C level from the
     hook's module; default if unreadable), so a kernel that never finishes no longer keeps exit waiting silently:
     `exit_device_wait_diagnostics`. An ordinary `synchronize()` during the run is unchanged.
+  - **A CUDA failure on a P1-T path, diagnostic code included, is reported, at exit too, even when the report cannot
+    allocate (P1T-FIX8, round-8 review V8-01 / V8-02).** The exit device wait's marker event records every failure of
+    its own calls (create, record, query, destroy) as a tagged record, raised once by the `synchronize()` that is
+    running (`exit_marker_failures`); a failed create, record or query hands the wait to a watchdog thread that
+    diagnoses the stream sync on the same schedule (`exit_device_wait_watchdogs`), and "finished" is printed only after
+    completion was proved (the marker's query, or the stream sync, returned success). Stopping that thread waits until
+    it has finished (it sets a flag as its last action), repeating its wakeup every poll interval, so a failed lock
+    costs at most about one interval and a failed join detaches only a thread that no longer touches anything
+    (`exit_device_wait_watchdog_lock_failures`, `exit_device_wait_watchdog_detaches`; lead send-back L2). The native exit runner is the
+    last reader in every case, after the close and the wait: it writes the records nobody raised and a report
+    `synchronize()` raised at exit that the hook could not write (the hook acknowledges its lines with
+    `_C._exit_report_written()`); when the full report cannot be built it writes an allocation-free summary instead
+    (the count and the first record: call, purpose, device and the error's name), with C stdio
+    (`exit_log_fallbacks`). A raise builds its report before it consumes the CUDA error slot, so an allocation failure
+    while building it leaves the failure in the slot (or, for the completion event's creation, records it) for the
+    next `synchronize()`.
   Counters: `release_admission_closed`, `releases_in_flight`, `callbacks_in_flight`, `admitted_releases`,
   `admitted_callbacks`, `exit_hook_calls`, `exit_in_flight_at_close`, `exit_wait_us`, `exit_wait_diagnostics`,
   `exit_wait_overruns`, `deleters_leaked_finalizing`, `capsules_kept_finalizing`, `lifecycle_lock_failures` (FIX5's
   `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics` are gone with that wait); P1T-FIX7:
   `exit_diag_default_used` (closes whose knob could not be read), `exit_runner_closes` and
   `exit_runner_in_flight_at_close` (the runner's own closes after the hook raised, and what it then waited for);
-  P1T-FIX7 L1: `exit_wait_poll_diagnostics`, `exit_device_wait_diagnostics`.
+  P1T-FIX7 L1: `exit_wait_poll_diagnostics`, `exit_device_wait_diagnostics`; P1T-FIX8: `exit_marker_failures`,
+  `exit_device_wait_watchdogs`, `exit_log_fallbacks`, `exit_report_unwritten`; P1T-FIX8 L2:
+  `exit_device_wait_watchdog_lock_failures`, `exit_device_wait_watchdog_detaches`.
 - **Arguments are never converted by calling their Python methods (P1T-FIX6, sweep (g)).** Every `_tc_signal`
   binding takes `(*args, **kwargs)` and reads its arguments with C-level checks (`src/py_args.h`): ints are `int` or a
   subclass (an overridden `__index__` / `__int__` is not called), reals are `float` / `int` or subclasses, flags are
@@ -408,6 +426,13 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
   through an LD_PRELOAD shim), and the lead's send-back L1 (the exit wait's polling fallback, forced by an LD_PRELOAD
   `pthread_mutex_lock` interposer, and the device wait of exit, staged with GPU work queued at exit, are diagnosed;
   an ordinary `synchronize()` is not).
+- `test_fix8_findings.py` (P1T-FIX8) covers V8-01 (a one-shot failure of each marker call, with and without a failed
+  message allocation, on a host trace module of this source and on the real module with GPU work queued at exit: each
+  reported once, naming its call, purpose and device; the wait still diagnosed and completed; "finished" only after
+  proof; a healthy control), V8-02 (the exit runner's full report, its allocation-free summary under allocation
+  failure, stderr closed, a raised report the hook could not write, and one it wrote), sweep (k)'s raising paths
+  under allocation failure, and lead send-back L2 (an LD_PRELOAD interposer fails the watchdog's stop-lock, with its
+  notify lost, or its join: the stop costs no silent wait, and a detach comes only after the watchdog finished).
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 

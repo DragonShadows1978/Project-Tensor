@@ -1,0 +1,10 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -2084,6 +2084,7 @@
+   } catch (const std::exception&) {
+     // bad_alloc building the report: the allocation-free fallback below (V8-02).
+   }
++  return;  // G4 MUTANT (f): the allocation-free fallback removed
+   write_summary_line("tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported "
+                      "yet:",
+                      "the full report could not be built: it failed to allocate", summarize_unreported(st));

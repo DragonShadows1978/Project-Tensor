@@ -43,6 +43,10 @@ void dlpack_first_unraisable(std::string* what, int* device, int* error);
 // record not raised yet (count, and the first of them), and its consumption once a RuntimeError naming it exists.
 void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error);
 void dlpack_ack_unraisable(unsigned long long count) noexcept;
+// P1T-FIX8 (sweep (k), defined in kernels.cu): throw a RuntimeError whose report exists before the slot is consumed.
+[[noreturn]] void throw_cuda_report_after_consuming(const std::string& msg);
+// P1T-FIX8 (V8-02, defined in kernels.cu): the same snapshot without allocating (the site text is a static string).
+void dlpack_unreported_unraisable_raw(unsigned long long* count, const char** what, int* device, int* error) noexcept;
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
 void bp_kernel_4_set_variant(const std::string&);
 std::string bp_kernel_4_get_variant();
@@ -441,22 +445,20 @@ void dlpack_fence_consumer(bool has_stream, long long s, int device) {
   auto name = [](cudaError_t err) {
     return std::string(cudaGetErrorName(err)) + ": " + cudaGetErrorString(err);
   };
+  // P1T-FIX8 (sweep (k)): every raise below builds its report before consuming the slot entry (throw_after_consuming,
+  // kernels.cu): a bad_alloc while building it leaves the failure in the slot for the next check.
   int prev = -1;
   cudaError_t e = cudaGetDevice(&prev);
-  if (e != cudaSuccess) {
-    cudaGetLastError();
-    throw std::runtime_error("__dlpack__: stream fence: cudaGetDevice failed (" + name(e) +
-                             "); nothing was switched or recorded");
-  }
+  if (e != cudaSuccess)
+    throw_cuda_report_after_consuming("__dlpack__: stream fence: cudaGetDevice failed (" + name(e) +
+                          "); nothing was switched or recorded");
   const bool switched = (prev != device);
   if (switched) {
     e = cudaSetDevice(device);
-    if (e != cudaSuccess) {
-      cudaGetLastError();
-      throw std::runtime_error("__dlpack__: stream fence: cannot make the tensor's CUDA device " + dev +
-                               " current (cudaSetDevice: " + name(e) + "); the caller's device " +
-                               std::to_string(prev) + " is unchanged and nothing was recorded");
-    }
+    if (e != cudaSuccess)
+      throw_cuda_report_after_consuming("__dlpack__: stream fence: cannot make the tensor's CUDA device " + dev +
+                            " current (cudaSetDevice: " + name(e) + "); the caller's device " +
+                            std::to_string(prev) + " is unchanged and nothing was recorded");
   }
   // `device` is current from here until the restore below.
   cudaEvent_t ev = nullptr;
@@ -475,7 +477,7 @@ void dlpack_fence_consumer(bool has_stream, long long s, int device) {
   const cudaError_t de = ev ? cudaEventDestroy(ev) : cudaSuccess;  // on its own device
   const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
   if (e == cudaSuccess && de == cudaSuccess && re == cudaSuccess) return;
-  cudaGetLastError();  // the failed calls are reported by the raise below
+  // the failed calls are reported by the raise below; their slot entry is consumed once that report exists
   std::string msg = "__dlpack__: stream fence on the tensor's CUDA device " + dev + " failed:";
   if (e != cudaSuccess) msg += std::string(" ") + step + " (" + name(e) + ");";
   if (de != cudaSuccess) msg += " cudaEventDestroy (" + name(de) + ");";
@@ -484,7 +486,7 @@ void dlpack_fence_consumer(bool has_stream, long long s, int device) {
            "), so the calling thread's current device is still " + dev;
   else if (switched)
     msg += " the caller's CUDA device " + std::to_string(prev) + " was restored";
-  throw std::runtime_error(msg);
+  throw_cuda_report_after_consuming(msg);
 }
 
 // P1T-FIX6, round-6 review finding V6-02 (MAJOR; FIX5's residual R3). tensor_dlpack converted its arguments with
@@ -1139,12 +1141,10 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
   // a refused capsule keeps its ownership. Nothing new.
   int cur = -1;
   const cudaError_t qe = cudaGetDevice(&cur);
-  if (qe != cudaSuccess) {
-    cudaGetLastError();
-    throw std::runtime_error(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
-                             cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
-                             "); refused before taking ownership (the capsule is not consumed)");
-  }
+  if (qe != cudaSuccess)  // P1T-FIX8 (sweep (k)): the report exists before the slot entry is consumed
+    throw_cuda_report_after_consuming(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
+                          cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
+                          "); refused before taking ownership (the capsule is not consumed)");
   if (dl->device.device_id != cur)
     throw py::buffer_error(
         "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +
@@ -1260,11 +1260,9 @@ Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
   if (dev.is_cuda()) {
     int cur = -1;
     const cudaError_t qe = cudaGetDevice(&cur);
-    if (qe != cudaSuccess) {
-      cudaGetLastError();
-      throw std::runtime_error(std::string("empty: the current-device query cudaGetDevice failed (") +
-                               cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) + "); nothing was allocated");
-    }
+    if (qe != cudaSuccess)  // P1T-FIX8 (sweep (k)): the report exists before the slot entry is consumed
+      throw_cuda_report_after_consuming(std::string("empty: the current-device query cudaGetDevice failed (") +
+                            cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) + "); nothing was allocated");
     const std::string prefix = "cuda:";
     if (device.compare(0, prefix.size(), prefix) == 0) {
       const std::string idx = device.substr(prefix.size());
@@ -1605,10 +1603,33 @@ std::string unraisable_message(unsigned long long n, const std::string& what, in
   return msg;
 }
 
+// P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l) "the last reader at exit": the core exit runner is the last
+// reader of the R7 record in every case. What _dlpack_raise_unraisable RAISES inside the runner (the hook's R7 logging)
+// is acknowledged only when the hook says it wrote the line (_dlpack_exit_report_written); until then a plain-data copy
+// (count, the static site text, device, error) is kept here, and the runner writes it with C stdio if the hook could
+// not (MemoryError building the line, stderr None or raising, the hook interrupted). GIL held for every access (the
+// runner, the hook and the raise all hold it). Prior art: allocation-free last-chance reporting (async-signal-safe
+// logging with POSIX write(2); SQLite's OOM-testing discipline); ours: the acknowledged exit report.
+struct CoreExitReport {
+  bool in_runner = false;  // the exit runner is running (its window)
+  bool unwritten = false;
+  unsigned long long count = 0;
+  const char* what = nullptr;  // a static site string, or nullptr (not named)
+  int device = -1;
+  int error = 0;
+};
+CoreExitReport g_core_exit_report;
+std::atomic<unsigned long long> g_shutdown_log_fallbacks{0};   // exit log lines written by the allocation-free path
+std::atomic<bool> g_test_fail_exit_report{false};              // TEST HOOK (P1T-FIX8 V8-02 tests): one-shot
+
 void dlpack_raise_unraisable() {
   unsigned long long n = 0;
   std::string what;
   int dev = -1, err = 0;
+  const char* raw_what = nullptr;  // P1T-FIX8: the static site text, for the exit report
+  unsigned long long raw_n = 0;
+  int raw_dev = -1, raw_err = 0;
+  dlpack_unreported_unraisable_raw(&raw_n, &raw_what, &raw_dev, &raw_err);
   dlpack_unreported_unraisable(&n, &what, &dev, &err);
   if (n == 0) return;
   const std::string msg = unraisable_message(n, what, dev, err);
@@ -1619,6 +1640,16 @@ void dlpack_raise_unraisable() {
   }
   try {
     py::error_already_set raised;  // captures the RuntimeError (a bad_alloc here consumes nothing)
+    if (g_core_exit_report.in_runner) {  // P1T-FIX8 (V8-02): kept until the hook says it wrote it
+      if (!g_core_exit_report.unwritten) {
+        g_core_exit_report.what = raw_what;
+        g_core_exit_report.device = raw_dev;
+        g_core_exit_report.error = raw_err;
+      }
+      const unsigned long long c = g_core_exit_report.count;
+      g_core_exit_report.count = (n > ~0ULL - c) ? ~0ULL : c + n;
+      g_core_exit_report.unwritten = true;
+    }
     dlpack_ack_unraisable(n);      // noexcept: consumed exactly once, now that the diagnostic exists
     throw raised;
   } catch (const std::bad_alloc&) {
@@ -1637,9 +1668,74 @@ void dlpack_raise_unraisable() {
 // its tests and the round-7 probes must see, not one this runner hides. Raw METH_O: no pybind11 frame, no catch-all.
 // Prior art: CPython's atexit (an exception in one callback is printed, the rest still run); Python's try / finally,
 // which holds inside a frame but not at its first instruction. Ours: the native wrapper for that one boundary.
+// P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l): the allocation-free line for a record count and its first
+// record (static site text, device, cudaGetErrorName's static name: CUDA 12.6 Runtime API; unverified here, lead to
+// check "cudaGetErrorName returns static string"). C stdio only; a closed stderr makes it fail quietly, never crash.
+void write_core_summary(const char* head, const char* why, unsigned long long n, const char* what, int dev,
+                        int err) noexcept {
+  if (what != nullptr)
+    std::fprintf(stderr, "%s %llu CUDA failure(s) on DLPack release / fill_ paths (P1-T core; %s; allocation-free "
+                 "summary), the first: %s [CUDA device %d: %s]\n",
+                 head, n, why, what, dev, cudaGetErrorName(static_cast<cudaError_t>(err)));
+  else
+    std::fprintf(stderr, "%s %llu CUDA failure(s) on DLPack release / fill_ paths (P1-T core; %s; allocation-free "
+                 "summary), the first not named (recorded while an earlier report was being raised)\n",
+                 head, n, why);
+  std::fflush(stderr);
+  g_shutdown_log_fallbacks.fetch_add(1);
+}
+
+// P1T-FIX8 (V8-02): the runner's last reading, after the hook (returned or raised) and after quiescence. (1) The R7
+// records nobody raised: the full message (unraisable_message), or, when it cannot allocate (FIX7 caught bad_alloc and
+// wrote nothing), the allocation-free summary; consumed either way (written once: there is no later reader). (2) A
+// report the hook's _dlpack_raise_unraisable raised here but the hook did not acknowledge writing: its summary.
+void core_exit_last_reader(bool hook_raised) noexcept {
+  const char* head_tail = hook_raised ? "(logged by the exit runner: the exit hook did not finish)"
+                                      : "(logged by the exit runner: the exit hook did not report it)";
+  unsigned long long n = 0;
+  const char* what = nullptr;
+  int dev = -1, err = 0;
+  dlpack_unreported_unraisable_raw(&n, &what, &dev, &err);  // no allocation
+  if (n > 0) {
+    bool written = false;
+    try {
+      if (g_test_fail_exit_report.exchange(false)) throw std::bad_alloc();  // TEST HOOK (P1T-FIX8 V8-02 tests)
+      const std::string msg = unraisable_message(n, what != nullptr ? std::string(what) : std::string(), dev, err);
+      std::fprintf(stderr, "%s %s\n", msg.c_str(), head_tail);
+      std::fflush(stderr);
+      written = true;
+    } catch (const std::exception&) {
+      // bad_alloc building the message: the allocation-free summary below (V8-02).
+    }
+    if (!written)
+      write_core_summary("tensor_cuda: at interpreter exit,", "the full report could not be built: it failed to allocate",
+                         n, what, dev, err);
+    dlpack_ack_unraisable(n);
+  }
+  if (g_core_exit_report.unwritten) {
+    write_core_summary("tensor_cuda: at interpreter exit, a report of", "raised at exit but not written by the exit "
+                       "hook; written here by the exit runner, its last reader",
+                       g_core_exit_report.count, g_core_exit_report.what, g_core_exit_report.device,
+                       g_core_exit_report.error);
+    g_core_exit_report.unwritten = false;
+    g_core_exit_report.count = 0;
+  }
+}
+
+struct CoreExitRunnerWindow {
+  CoreExitRunnerWindow() noexcept { g_core_exit_report.in_runner = true; }
+  ~CoreExitRunnerWindow() { g_core_exit_report.in_runner = false; }
+  CoreExitRunnerWindow(const CoreExitRunnerWindow&) = delete;
+  CoreExitRunnerWindow& operator=(const CoreExitRunnerWindow&) = delete;
+};
+
 PyObject* raw_dlpack_exit_hook_runner(PyObject*, PyObject* hook) {
+  const CoreExitRunnerWindow window;  // P1T-FIX8 (V8-02): what is raised in here is kept until written
   PyObject* r = PyObject_CallNoArgs(hook);
-  if (r != nullptr) return r;
+  if (r != nullptr) {
+    core_exit_last_reader(false);  // P1T-FIX8 (V8-02): the last reader also when the hook returned
+    return r;
+  }
   PyObject *type = nullptr, *value = nullptr, *tb = nullptr;
   PyErr_Fetch(&type, &value, &tb);  // keep the hook's exception
   try {
@@ -1657,22 +1753,24 @@ PyObject* raw_dlpack_exit_hook_runner(PyObject*, PyObject* hook) {
   } catch (const std::exception&) {
     // bad_alloc building the result: the close and the wait had already happened.
   }
-  try {
-    unsigned long long n = 0;
-    std::string what;
-    int dev = -1, err = 0;
-    dlpack_unreported_unraisable(&n, &what, &dev, &err);
-    if (n > 0) {
-      const std::string msg = unraisable_message(n, what, dev, err);
-      std::fprintf(stderr, "%s (logged by the exit runner: the exit hook did not finish)\n", msg.c_str());
-      std::fflush(stderr);
-      dlpack_ack_unraisable(n);
-    }
-  } catch (const std::exception&) {
-    // bad_alloc: nothing written, the record kept.
-  }
+  core_exit_last_reader(true);  // P1T-FIX8 (V8-02): after quiescence; the hook's exception is restored below
   PyErr_Restore(type, value, tb);
   return nullptr;
+}
+
+// P1T-FIX8 (V8-02): the hook's acknowledgement that it wrote what _dlpack_raise_unraisable raised at exit. Raw
+// METH_NOARGS. Never raises.
+PyObject* raw_dlpack_exit_report_written(PyObject*, PyObject*) {
+  g_core_exit_report.unwritten = false;
+  g_core_exit_report.count = 0;
+  Py_RETURN_NONE;
+}
+
+// P1T-FIX8 (V8-02 regression tests only; not an API): the exit runner's next full report fails as if it could not
+// allocate, so its allocation-free summary is written instead. Raw METH_NOARGS.
+PyObject* raw_dlpack_test_fail_exit_report(PyObject*, PyObject*) {
+  g_test_fail_exit_report.store(true);
+  Py_RETURN_NONE;
 }
 
 const char kExitRunnerDoc[] =
@@ -1681,7 +1779,17 @@ const char kExitRunnerDoc[] =
     "_dlpack_shutdown_hook). Calls hook(); if the hook raises (for example a KeyboardInterrupt delivered at its "
     "first bytecode), closes DLPack release admission and waits itself (default diagnostic delay), writes any "
     "recorded P1-T CUDA failure nobody reported to stderr, then re-raises the hook's exception. Does nothing more "
-    "when the hook returns. Remove it with atexit.unregister(tensor_cuda._C._dlpack_exit_hook_runner).";
+    "about closing when the hook returns. P1T-FIX8 (V8-02): in every case it is the last reader of the recorded "
+    "P1-T failures: after the hook and after the close and the wait, it writes those nobody raised, and a report the "
+    "hook's R7 logging raised but did not acknowledge writing (_dlpack_exit_report_written), with an "
+    "allocation-free summary (count, first site, device, error name) when the full message cannot be built. Remove "
+    "it with atexit.unregister(tensor_cuda._C._dlpack_exit_hook_runner).";
+PyMethodDef kExitReportWrittenDef = {"_dlpack_exit_report_written", &raw_dlpack_exit_report_written, METH_NOARGS,
+                                     "_dlpack_exit_report_written()\n\nP1T-FIX8 (V8-02): called by tensor_cuda's "
+                                     "exit hook once its lines are written; not an API for other callers."};
+PyMethodDef kTestFailExitReportDef = {"_dlpack_test_fail_exit_report", &raw_dlpack_test_fail_exit_report, METH_NOARGS,
+                                      "_dlpack_test_fail_exit_report()\n\nTEST HOOK (P1T-FIX8 V8-02 tests only): "
+                                      "the exit runner's next full report fails as if it could not allocate."};
 PyMethodDef kExitRunnerDef = {"_dlpack_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_dlpack_exit_hook_runner),
                               METH_O, kExitRunnerDoc};
 
@@ -2565,6 +2673,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["shutdown_runner_in_flight_at_close"] = g_shutdown_runner_in_flight_at_close.load();
     d["shutdown_lock_retries"] = g_shutdown_lock_retries.load();
     d["shutdown_lock_diagnostics"] = g_shutdown_lock_diagnostics.load();  // P1T-FIX7 L1
+    d["shutdown_log_fallbacks"] = g_shutdown_log_fallbacks.load();  // P1T-FIX8 V8-02: allocation-free exit lines
+    {  // P1T-FIX8 (V8-02): the recorded failures not raised yet (the last reader at exit consumes them)
+      unsigned long long un = 0;
+      const char* uw = nullptr;
+      int ud = -1, ue = 0;
+      dlpack_unreported_unraisable_raw(&un, &uw, &ud, &ue);
+      d["unraisable_unreported"] = un;
+      d["exit_report_unwritten"] = g_core_exit_report.unwritten;
+    }
     d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
     // P1T-FIX5 (sweep d): every unraisable CUDA error of the P1-T core paths, recorded before its slot entry was
     // consumed (count), and the first one: site, device, CUDA error name ("" / -1 / "cudaSuccess" when none).
@@ -2608,6 +2725,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                                                                                               nullptr, nullptr)));
   // P1T-FIX7 (V7-01): the atexit runner (raw_dlpack_exit_hook_runner) and the default diagnostic delay, exported so the
   // Python knob's initial value and the native fallback are one constant.
+  m.add_object("_dlpack_exit_report_written",  // P1T-FIX8 (V8-02)
+               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kExitReportWrittenDef, nullptr, nullptr)));
+  m.add_object("_dlpack_test_fail_exit_report",  // P1T-FIX8 (V8-02 tests)
+               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kTestFailExitReportDef, nullptr, nullptr)));
   m.add_object("_dlpack_exit_hook_runner", py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kExitRunnerDef,
                                                                                                 nullptr, nullptr)));
   m.attr("_DLPACK_SHUTDOWN_DIAG_DEFAULT_S") = kDlpackShutdownDiagDefaultS;

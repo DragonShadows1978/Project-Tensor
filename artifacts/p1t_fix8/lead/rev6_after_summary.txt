@@ -1,0 +1,30 @@
+lead_after build_host_probes exit=0
+lead_after build_core_host (regenerate) exit=0
+lead_after compile core_host exit=0
+lead_after run_cpu_checks exit=0
+  query_once rc=0 PASS query once | 
+  multidevice_restore rc=0 PASS per-device sync [1, 0, 2, 0] | 
+  prior_oom rc=0 PASS prior persisted through OOM | 
+  inside_callback rc=0 PASS self exclusion and late release | 
+  deferred_exit rc=0 DELETER started | DELETER finished | HOOK returned | FINALIZING True | 
+  diagnostic_oom_query rc=0 allbacks": 0, "exit_report_unwritten": false, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0} | PASS retained error tc_signal.s
+  diagnostic_oom_sync rc=0 g_lock_failures": 0, "exit_device_wait_watchdog_detaches": 0, "exit_marker_failures": 0, "exit_log_fallbacks": 0, "exit_report_unwritten": false, "event_query_failures": 0, "event_record_failures": 0, "cublas_hand
+  diagnostic_oom_device rc=0 gs": 0, "exit_device_wait_watchdog_lock_failures": 0, "exit_device_wait_watchdog_detaches": 0, "exit_marker_failures": 0, "exit_log_fallbacks": 0, "exit_report_unwritten": false, "event_query_failures": 0, "even
+  arithmetic rc=0 PASS fill grid rail, scalar/empty and zero-neighbor products | 
+  casts_exit_bool_--control rc=0 CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_def
+  casts_exit_index_--control rc=0 CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_de
+  casts_exit_bool rc=0 CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used'
+  casts_exit_index rc=0 CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used
+  fix2_harness_ck_census rc=0 lidate_refused_as_overflow": true, "validate_msg": "tc_signal: operand 'census': byte size of shape [2305843009213693952, 0, 1] (fp32) overflows int64", "ok": true} | {"control": "[0, 1048576, 4]", "count": 0, 
+  fix3_harness_accounting rc=0 0 saturated=0 entries=1025 over=1"} | {"case": "aggregate_of_two_2p61m1_operands_refused_as_overflow", "ok": true, "detail": "tc_signal: the aggregate fp32 byte count of this call's operands (their sum) overfl
+  cpu_native_oom_sync rc=0 PASS: allocation failure propagated safely | ARMED: next host allocation fails; no CUDA call reached yet | 
+  cpu_native_throw_deleter rc=0 PASS: producer exception contained | ARMED: real ManagedOwner reset calls throwing native producer | 
+  sync_lock rc=0 as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the rele
+  operand_census rc=0 PASS operand census 17 cases, 7 once-only consumed deleters | GetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released | 
+lead_after sync_lock_inversion nogpu exit=0 :: RuntimeError tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a
+lead_after sync_lock_inversion gpu exit=0 :: elapsed=0.180 rescue=False release_finished=True 
+lead_after sync_late_release exit=0 :: SYNCHRONIZE begins ADMIT later release AFTER synchronize began FIRST completed LATER completed elapsed=0.000 waited_for_later=False 
+lead_after core_cast_exit_gpu bool  exit=0 :: ARMED real core EXPORT ended FINALIZING True 
+lead_after core_cast_exit_gpu bool --control exit=0 :: ARMED real core EXPORT ended FINALIZING True 
+lead_after core_cast_exit_gpu index  exit=0 :: ARMED real core EXPORT ended FINALIZING True 
+lead_after core_cast_exit_gpu index --control exit=0 :: ARMED real core EXPORT ended FINALIZING True 

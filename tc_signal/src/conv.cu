@@ -53,8 +53,9 @@ void check_cuda(cudaError_t e, const char* what) {
   if (e != cudaSuccess) {
     std::ostringstream os;
     os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
-    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
-    throw std::runtime_error(os.str());
+    // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry; P1T-FIX8 (sweep
+    // (k)): only once the report exists (cuda_guard.h throw_after_consuming).
+    throw_after_consuming(os);
   }
 }
 

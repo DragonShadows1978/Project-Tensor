@@ -1,0 +1,20 @@
+PASS addon_knob:default
+PASS addon_knob:huge_int
+PASS addon_knob:neg_huge_int
+PASS addon_knob:inf
+PASS addon_knob:neg_inf
+PASS addon_knob:nan
+PASS addon_knob:negative
+PASS addon_knob:zero
+PASS addon_knob:float_subclass
+PASS addon_knob:int_subclass
+Traceback (most recent call last):
+  File "/tmp/p1t_fix8_rev8/lead_after/fix7_cpu_census_paths.py", line 30, in <module>
+    for key,read in classes: run('addon_knob:'+key,s,['knob',key],exited)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/p1t_fix8_rev8/lead_after/fix7_cpu_census_paths.py", line 21, in run
+    check(r,res)
+  File "/tmp/p1t_fix8_rev8/lead_after/fix7_cpu_census_paths.py", line 25, in exited
+    assert res['calls']==[],res
+           ~~~^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable

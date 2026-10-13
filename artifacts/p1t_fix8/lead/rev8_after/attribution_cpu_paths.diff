@@ -1,0 +1,24 @@
+--- a/attribution_cpu.py
++++ b/attribution_cpu_paths.py
+@@ -4,18 +4,18 @@
+ """
+ from pathlib import Path
+ import ast,json,sys
+-root=Path(__file__).resolve().parents[3];source=root/'tc_signal/tests/test_fix7_findings.py'
++root=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8');source=root/'tc_signal/tests/test_fix7_findings.py'
+ t=ast.parse(source.read_text());t.body=[n for n in t.body if not (isinstance(n,(ast.Try,ast.If)) and n.lineno in (46,50))]
+ ns={'__file__':str(source),'__name__':'p1t_rev8_cpu_test_payloads'};exec(compile(t,str(source),'exec'),ns)
+ class Factory:
+  def mktemp(self,name):
+-  d=Path('/tmp/p1t_rev8_build')/name;d.mkdir(exist_ok=True);return d
++  d=Path('/tmp/p1t_fix8_rev8/lead_after')/name;d.mkdir(exist_ok=True);return d
+ module=ns['trace_module'].__wrapped__(Factory());rows=[]
+ for name,fn in ns.items():
+  if name.startswith('test_fix7_') and 'trace_module' in getattr(fn,'__code__',type('C',(),{'co_varnames':()})).co_varnames:
+   if 'oom' in fn.__code__.co_varnames:
+    for oom in [False,True]:fn(module,oom);rows.append({'test':name,'oom':oom,'result':'PASS'})
+   else:fn(module);rows.append({'test':name,'result':'PASS'})
+-(root/'artifacts/p1t_rev8/attribution_cpu.json').write_text(json.dumps(rows,indent=2)+'\n')
++(Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_fix8/lead/rev8_after')/'attribution_cpu.json').write_text(json.dumps(rows,indent=2)+'\n')
+ assert rows,'no assertions executed'
+ print('PASS',len(rows),'current-source attribution assertions')

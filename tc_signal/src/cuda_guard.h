@@ -28,6 +28,7 @@
 
 #include <cuda_runtime.h>
 
+#include <new>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -45,12 +46,26 @@ void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcep
 // allocates.
 void note_cublas_handle_destroy_failure(int status) noexcept;
 
-// Rule 1: raise for a failed CUDA call of ours, consuming its slot entry first.
+// P1T-FIX8 (sweep (k), consumed CUDA errors): the report exists BEFORE the slot entry it reports is consumed. Every
+// raise below builds its message and its std::runtime_error first; a std::bad_alloc while building them propagates
+// (MemoryError) with the entry still in the calling thread's slot, so the next synchronize() (or launch check) still
+// raises it, as a pre-existing error, instead of the failure being consumed and lost. Only then is the entry consumed
+// (rule 1) and the exception thrown (copying a std::runtime_error is noexcept). A launch check reads the slot with
+// cudaPeekAtLastError for the same reason. Prior art: FIX5 V5-02's record-before-consume rule; the CUDA 12.6 error-slot
+// contract of cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset"). Ours: applying it
+// to the raising paths.
+[[noreturn]] inline void throw_after_consuming(std::ostringstream& os) {
+  if (!os) throw std::bad_alloc();  // ostream swallows a bad_alloc into badbit: report the allocation failure itself
+  std::runtime_error report(os.str());
+  cudaGetLastError();  // consumed only now that the report exists
+  throw report;
+}
+
+// Rule 1: raise for a failed CUDA call of ours, consuming its slot entry once the report exists.
 [[noreturn]] inline void raise_cuda_failure(const std::string& what, cudaError_t e) {
-  cudaGetLastError();
   std::ostringstream os;
   os << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
-  throw std::runtime_error(os.str());
+  throw_after_consuming(os);
 }
 
 // P1T-FIX7, sweep (j) "error attribution": the messages of the launch paths name the call that actually returned the
@@ -73,34 +88,33 @@ void note_cublas_handle_destroy_failure(int status) noexcept;
 // device.
 [[noreturn]] inline void raise_call_failure_on(const char* prefix, const char* what, const char* api, int device,
                                                cudaError_t e) {
-  cudaGetLastError();
   std::ostringstream os;
   os << prefix << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e) << " (" << api
      << " on CUDA device " << device << " returned it)";
-  throw std::runtime_error(os.str());
+  throw_after_consuming(os);
 }
 inline void check_call_on(const char* prefix, const char* what, const char* api, int device, cudaError_t e) {
   if (e != cudaSuccess) raise_call_failure_on(prefix, what, api, device, e);
 }
 inline void check_launch_on(const char* prefix, const char* kernel, int device) {
-  const cudaError_t e = cudaGetLastError();  // consumes the entry it reports
+  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
   if (e == cudaSuccess) return;
   std::ostringstream os;
   os << prefix << "CUDA error at the launch check of " << kernel << " on CUDA device " << device << ": "
      << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
      << " (cudaGetLastError right after the launch: the launch's own error, or an asynchronous error of earlier work "
         "on that device, which CUDA reports at a later call)";
-  throw std::runtime_error(os.str());
+  throw_after_consuming(os);
 }
 inline void check_after_cublas_on(const char* prefix, const char* fn, int device) {
-  const cudaError_t e = cudaGetLastError();  // consumes the entry it reports
+  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
   if (e == cudaSuccess) return;
   std::ostringstream os;
   os << prefix << "CUDA error found by the check after " << fn << " on CUDA device " << device
      << ", which returned CUBLAS_STATUS_SUCCESS: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
      << " (cudaGetLastError; cuBLAS does not set the CUDA runtime's error state, so this is an asynchronous error of "
         "earlier work on that device)";
-  throw std::runtime_error(os.str());
+  throw_after_consuming(os);
 }
 [[noreturn]] inline void raise_cublas_failure_on(const char* prefix, const char* fn, int device, int status) {
   std::ostringstream os;
@@ -139,8 +153,8 @@ class DeviceGuard {
     if (!switched_) return;
     const cudaError_t e = cudaSetDevice(prev_);
     if (e != cudaSuccess) {
+      note_unraisable_device_restore_failure(prev_, e);  // P1T-FIX8 (sweep (k)): recorded before it is consumed
       cudaGetLastError();
-      note_unraisable_device_restore_failure(prev_, e);
     }
   }
   DeviceGuard(const DeviceGuard&) = delete;
@@ -181,8 +195,8 @@ class QuietDeviceGuard {
     if (!switched_) return;
     const cudaError_t e = cudaSetDevice(prev_);
     if (e != cudaSuccess) {
+      note_unraisable_device_restore_failure(prev_, e);  // P1T-FIX8 (sweep (k)): recorded before it is consumed
       cudaGetLastError();
-      note_unraisable_device_restore_failure(prev_, e);
     }
   }
   QuietDeviceGuard(const QuietDeviceGuard&) = delete;

@@ -1,0 +1,23 @@
+# CPython v3.12.3 Python/errors.c, fetched through the AtlasForge web proxy (raw.githubusercontent.com/python/cpython/v3.12.3/Python/errors.c), 2026-10-13
+# _PyErr_SetString: when the message str cannot be created (PyUnicode_FromString returns NULL), the MemoryError the allocator set stays the raised exception.
+
+
+void
+_PyErr_SetString(PyThreadState *tstate, PyObject *exception,
+ const char *string)
+{
+ PyObject *value = PyUnicode_FromString(string);
+ if (value != NULL) {
+ _PyErr_SetObject(tstate, exception, value);
+ Py_DECREF(value);
+ }
+}
+
+void
+PyErr_SetString(PyObject *exception, const char *string)
+{
+ PyThreadState *tstate = _PyThreadState_GET();
+ _PyErr_SetString(tstate, exception, string);
+}
+
+PyObject* _Py_HOT_FUNCTION

@@ -234,6 +234,13 @@ def _dlpack_shutdown_hook():
     native runner atexit actually calls, ``_C._dlpack_exit_hook_runner``: it
     closes and waits itself, logs the recorded failures nobody reported, and
     re-raises. Never raises, except a BaseException that arrived during it.
+    P1T-FIX8 (round-8 review V8-02): a recorded P1-T CUDA failure is reported
+    at exit even when its report cannot allocate. The native runner is the
+    last reader: after this hook (returned or raised) and after the close and
+    the wait, it writes, with C stdio, the records nobody raised and an R7
+    report this hook raised but could not write, falling back to an
+    allocation-free summary (count, first site, device, error name). This hook
+    acknowledges with _C._dlpack_exit_report_written() that its lines are out.
     P1T-FIX7 (lead send-back L1): if locking the release lifecycle mutex
     fails (never observed), the close retries it, and that retry wait is
     diagnosed like the release wait (a stderr line after the knob's delay,
@@ -276,14 +283,22 @@ def _dlpack_shutdown_hook():
         C._dlpack_raise_unraisable()
     except RuntimeError as e:
         lines.append(f"{e} (logged by tensor_cuda's interpreter-exit hook)")
-    except Exception as e:  # noqa: BLE001  (MemoryError: the record stays; nothing reads it after exit)
+    except Exception as e:  # noqa: BLE001  (MemoryError: the record stays; the native runner writes it, P1T-FIX8)
         lines.append(f"tensor_cuda: at exit, the recorded P1-T CUDA failures could not be reported "
                      f"({type(e).__name__}: {e})")
+    written = True
     for line in lines:
         try:
             sys.stderr.write(line + "\n")
             sys.stderr.flush()
         except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
+            written = False
+    if written:
+        # P1T-FIX8 (V8-02): every line is out, including the R7 report raised here; the native runner, the last
+        # reader at exit, then does not write that report's allocation-free summary again.
+        try:
+            C._dlpack_exit_report_written()
+        except Exception:  # noqa: BLE001  (a _C without it: the runner writes the summary, a harmless repeat)
             pass
 
 

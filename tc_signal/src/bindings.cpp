@@ -408,26 +408,76 @@ double exit_diag_of_hook(PyObject* hook) {
 }
 
 struct ExitDeviceWaitWindow {
-  explicit ExitDeviceWaitWindow(double first_diag_s) noexcept { exit_device_waits_diagnosed(first_diag_s); }
-  ~ExitDeviceWaitWindow() { exit_device_waits_undiagnosed(); }
+  explicit ExitDeviceWaitWindow(double first_diag_s) noexcept {
+    exit_device_waits_diagnosed(first_diag_s);
+    exit_runner_window(true);  // P1T-FIX8 (V8-02): what synchronize() raises in here is kept until it is written
+  }
+  ~ExitDeviceWaitWindow() {
+    exit_runner_window(false);
+    exit_device_waits_undiagnosed();
+  }
   ExitDeviceWaitWindow(const ExitDeviceWaitWindow&) = delete;
   ExitDeviceWaitWindow& operator=(const ExitDeviceWaitWindow&) = delete;
 };
+
+// P1T-FIX8 (sweep (l)): the message a RuntimeError raised by synchronize() already holds (its args[0]), when it is a
+// compact ASCII str (every tc_signal message is ASCII): PyException_GetArgs takes a reference to the existing tuple and
+// PyUnicode_DATA is the str's own buffer, so nothing is allocated (pybind11's error_already_set::what() formats lazily,
+// allocating inside a noexcept function: a bad_alloc there would std::terminate). nullptr when unavailable. The
+// pointer is valid while the exception object is alive.
+const char* ascii_message_of(PyObject* value) noexcept {
+  if (value == nullptr || !PyExceptionInstance_Check(value)) return nullptr;
+  PyObject* args = PyException_GetArgs(value);  // new reference to the exception's own tuple
+  if (args == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+  const char* out = nullptr;
+  if (PyTuple_Check(args) && PyTuple_GET_SIZE(args) >= 1) {
+    PyObject* s = PyTuple_GET_ITEM(args, 0);
+    if (PyUnicode_Check(s) && PyUnicode_IS_COMPACT_ASCII(s)) out = static_cast<const char*>(PyUnicode_DATA(s));
+  }
+  Py_DECREF(args);  // the exception still holds the tuple (and the str)
+  return out;
+}
+
+// P1T-FIX8, round-8 review finding V8-02 (MINOR), and sweep (l) "the last reader at exit": the runner is the last
+// reader in EVERY case, not only when the hook raised. After the hook (returned or raised) and after quiescence (the
+// close and the wait come first), it writes, with C stdio: (1) the records nobody raised (exit_log_unreported: the full
+// report, or, if that cannot allocate, the allocation-free summary of their count and first record); (2) a report that
+// synchronize() raised inside this runner but the hook did not acknowledge writing (MemoryError while building its
+// line, stderr None or raising, the hook interrupted): its allocation-free summary. A hook that wrote everything leaves
+// nothing to write. The hook's exception is fetched first and restored last, unchanged. Prior art: allocation-free
+// last-chance reporting (async-signal-safe logging with POSIX write(2); SQLite's OOM-testing discipline); ours: the
+// acknowledged exit report.
+void exit_runner_last_reader() noexcept {
+  exit_log_unreported();
+  exit_log_unwritten_report();
+}
 
 PyObject* raw_exit_hook_runner(PyObject*, PyObject* hook) {
   const ExitDeviceWaitWindow window(exit_diag_of_hook(hook));  // P1T-FIX7 L1: device waits of exit are diagnosed
   const unsigned long long closes_before = exit_hook_closes();
   PyObject* r = PyObject_CallNoArgs(hook);
-  if (r != nullptr) return r;
+  if (r != nullptr) {
+    exit_runner_last_reader();  // P1T-FIX8 (V8-02): the hook returned; nothing of its exception to keep
+    return r;
+  }
   PyObject *type = nullptr, *value = nullptr, *tb = nullptr;
   PyErr_Fetch(&type, &value, &tb);  // keep the hook's exception
   if (exit_hook_closes() == closes_before) {
     try {
       synchronize_and_release_all();  // may run producer deleters (admission is still open): the hook's step 1
     } catch (py::error_already_set& e) {
-      std::fprintf(stderr, "tc_signal: synchronize() at exit (run by the exit runner) failed (%s); operands without a "
-                   "completion proof were deliberately leaked, not released\n", e.what());
-      std::fflush(stderr);
+      // P1T-FIX8 (sweep (l)): no e.what() (it allocates inside a noexcept function). The RuntimeError's own text if it
+      // can be read without allocating; otherwise its summary is written by exit_runner_last_reader below.
+      const char* text = ascii_message_of(e.value().ptr());
+      if (text != nullptr) {
+        std::fprintf(stderr, "tc_signal: synchronize() at exit (run by the exit runner) failed (RuntimeError: %s); "
+                     "operands without a completion proof were deliberately leaked, not released\n", text);
+        std::fflush(stderr);
+        exit_report_written();
+      }
     } catch (const std::exception& e) {
       std::fprintf(stderr, "tc_signal: synchronize() at exit (run by the exit runner) failed (%s)\n", e.what());
       std::fflush(stderr);
@@ -448,9 +498,16 @@ PyObject* raw_exit_hook_runner(PyObject*, PyObject* hook) {
                  static_cast<double>(waited_us) / 1e6, running);
     std::fflush(stderr);
   }
-  exit_log_unreported();
+  exit_runner_last_reader();  // P1T-FIX8 (V8-02): after quiescence, before the hook's exception is handed back
   PyErr_Restore(type, value, tb);
   return nullptr;
+}
+
+// P1T-FIX8 (V8-02): the hook's acknowledgement that it wrote what synchronize() raised at exit (so the runner does not
+// write its summary again). Raw METH_NOARGS: no argument to read, no pybind11 frame. Never raises.
+PyObject* raw_exit_report_written(PyObject*, PyObject*) {
+  exit_report_written();
+  Py_RETURN_NONE;
 }
 
 }  // namespace
@@ -477,11 +534,22 @@ const char kExitRunnerDoc[] =
     "_release_pending_at_exit). Calls hook(); if the hook raises (for example a KeyboardInterrupt delivered at its "
     "first bytecode, before any of its statements ran), runs synchronize() if the hook had not closed yet, closes "
     "release admission and waits itself (default diagnostic delay), writes any recorded CUDA failure nobody "
-    "reported to stderr, then re-raises the hook's exception. Does nothing more when the hook returns. P1T-FIX7 "
+    "reported to stderr, then re-raises the hook's exception. Does nothing more about closing when the hook returns. "
+    "P1T-FIX8 (V8-02): in every case, after the close and the wait, it is the last reader of recorded CUDA failures: "
+    "it writes those nobody raised, and a report synchronize() raised at exit that the hook did not acknowledge "
+    "writing (_exit_report_written), falling back to an allocation-free summary (count and first record) when the "
+    "full report cannot be built. P1T-FIX7 "
     "(lead send-back L1): while it runs, every device sync of exit (synchronize() in the hook or in the runner) is "
     "diagnosed: a stderr line after the hook's _RELEASE_EXIT_DIAG_S (read at C level; default if unreadable), then "
     "each time the time waited doubles (pending_stats() exit_device_wait_diagnostics). Remove it with "
     "atexit.unregister(_exit_hook_runner).";
+const char kExitReportWrittenDoc[] =
+    "_exit_report_written()\n\n"
+    "P1T-FIX8 (V8-02): called by tc_signal's exit hook once it has written every line, including a CUDA failure report "
+    "that synchronize() raised at exit; the native exit runner then does not write that report's allocation-free "
+    "summary again. Not an API for other callers.";
+PyMethodDef kExitReportWrittenDef = {"_exit_report_written", &raw_exit_report_written, METH_NOARGS,
+                                     kExitReportWrittenDoc};
 PyMethodDef kExitRunnerDef = {"_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_exit_hook_runner), METH_O,
                               kExitRunnerDoc};
 }  // namespace tcs
@@ -617,6 +685,8 @@ PYBIND11_MODULE(_tc_signal, m) {
   // knob's initial value and the native fallback are one constant (tuning.h kExitDiagDefaultS).
   m.add_object("_exit_hook_runner",
                py::reinterpret_steal<py::object>(PyCFunction_NewEx(&tcs::kExitRunnerDef, nullptr, nullptr)));
+  m.add_object("_exit_report_written",  // P1T-FIX8 (V8-02)
+               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&tcs::kExitReportWrittenDef, nullptr, nullptr)));
   m.attr("_RELEASE_EXIT_DIAG_DEFAULT_S") = tuning::kExitDiagDefaultS;
   // P1T-FIX2 (N3): build the pending-list state now (it allocates), so no noexcept release path is the first to touch
   // it; a failure here fails the import (MemoryError), never a later release. P1T-FIX5: also the release lifecycle.
@@ -638,6 +708,11 @@ PYBIND11_MODULE(_tc_signal, m) {
             {"cuda:sync", test_hooks::kCudaSync},
             {"cuda:current_device", test_hooks::kCudaCurrentDevice},
             {"cuda:event_query", test_hooks::kCudaEventQuery},
+            {"alloc:exit_log", test_hooks::kAllocExitLog},                // P1T-FIX8 (V8-02)
+            {"cuda:exit_marker_create", test_hooks::kCudaMarkerCreate},   // P1T-FIX8 (V8-01), exit window only
+            {"cuda:exit_marker_record", test_hooks::kCudaMarkerRecord},
+            {"cuda:exit_marker_query", test_hooks::kCudaMarkerQuery},
+            {"cuda:exit_marker_destroy", test_hooks::kCudaMarkerDestroy},
         };
         unsigned bits = 0;
         for (const std::string& n : names) {

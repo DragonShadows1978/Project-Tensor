@@ -324,9 +324,17 @@ bool drain_device_legacy_stream(int dev) {
 // consumes the call's entry from the calling thread's last-error slot (CUDA 12.6 Programming Guide 3.2.12: the runtime
 // keeps one error variable per host thread, "overwritten by the error code every time an error occurs"; cudaGetLastError
 // "returns this variable and resets it"), so no later, unrelated launch check reports it a second time.
+// P1T-FIX8 (sweep (k), consumed CUDA errors): the report (message and std::runtime_error) is built BEFORE the slot entry
+// is consumed, so a std::bad_alloc while building it (MemoryError) leaves the entry in the slot for the next check to
+// report, instead of consuming a failure nobody reports. Prior art: FIX5 V5-02's record-before-consume rule; CUDA 12.6
+// cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset").
+[[noreturn]] void throw_after_consuming(const std::string& msg) {
+  std::runtime_error report(msg);
+  cudaGetLastError();  // consumed only now that the report exists
+  throw report;
+}
 [[noreturn]] void raise_cuda_failure(const std::string& what, cudaError_t e) {
-  cudaGetLastError();
-  throw std::runtime_error(what + " (" + cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + ")");
+  throw_after_consuming(what + " (" + cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + ")");
 }
 
 // P1T-FIX4 (sweep, implicit current device): a checked scoped device switch for fill_. The constructor raises
@@ -407,6 +415,28 @@ void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, 
   *what = r.unreported_what ? r.unreported_what : "";
   *device = r.unreported_device;
   *error = r.unreported_error;
+}
+
+// P1T-FIX8 (sweep (k)): the external form of throw_after_consuming for bindings.cpp's P1-T raises (declared there).
+[[noreturn]] void throw_cuda_report_after_consuming(const std::string& msg) { throw_after_consuming(msg); }
+
+// P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l): the same snapshot WITHOUT allocating, for the exit
+// runner's last-chance report (the site text is a static string; FIX6's snapshot copied it into a std::string, which
+// is what threw bad_alloc and left the exit log empty). A mutex failure (never observed) still yields the count, unnamed.
+void dlpack_unreported_unraisable_raw(unsigned long long* count, const char** what, int* device, int* error) noexcept {
+  *what = nullptr;
+  *device = -1;
+  *error = 0;
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    *count = g_core_unraisable_unreported.load();
+    *what = r.unreported_what;
+    *device = r.unreported_device;
+    *error = r.unreported_error;
+  } catch (const std::exception&) {
+    *count = g_core_unraisable_unreported.load();
+  }
 }
 
 void dlpack_ack_unraisable(unsigned long long count) noexcept {
@@ -619,9 +649,9 @@ void fill_(NDArray& a, double value) {
   const std::string mismatch = cuda_storage_device_mismatch(a, "fill_");
   if (!mismatch.empty()) throw std::runtime_error(mismatch);
   CheckedDeviceGuard guard(a.device.index, "fill_");
-  const cudaError_t pending = cudaGetLastError();
+  const cudaError_t pending = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
   if (pending != cudaSuccess)
-    throw std::runtime_error(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
+    throw_after_consuming(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
                              cudaGetErrorName(pending) + ": " + cudaGetErrorString(pending) +
                              "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
                              "(P1T-FIX7: the call that set it and its device are unknown; the slot records neither)");
@@ -636,9 +666,9 @@ void fill_(NDArray& a, double value) {
   // "CUDA error at fill_" (that helper's text). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK note ("CUDA kernel
   // errors might be asynchronously reported at some other API call").
   {
-    const cudaError_t le = cudaGetLastError();  // consumes the entry it reports
+    const cudaError_t le = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
     if (le != cudaSuccess)
-      throw std::runtime_error(std::string("CUDA error at fill_: ") + cudaGetErrorName(le) + ": " +
+      throw_after_consuming(std::string("CUDA error at fill_: ") + cudaGetErrorName(le) + ": " +
                                cudaGetErrorString(le) + " (cudaGetLastError right after launching fill_kernel on CUDA "
                                "device " + std::to_string(a.device.index) +
                                ": the launch's own error, or an asynchronous error of earlier work on that device)");

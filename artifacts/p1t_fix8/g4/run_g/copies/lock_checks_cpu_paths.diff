@@ -1,0 +1,11 @@
+--- a/lock_checks_cpu.py
++++ b/lock_checks_cpu_paths.py
+@@ -4,7 +4,7 @@
+ """
+ from pathlib import Path
+ import ast,json,subprocess,sys,os
+-root=Path(__file__).resolve().parents[3];b=Path('/tmp/p1t_rev8_build');out=root/'artifacts/p1t_rev8';rows=[]
++root=Path('/tmp/p1t_fix8_mut_g');b=Path('/tmp/p1t_fix8_mut_bin_g');out=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_fix8/g4/run_g/copies');rows=[]
+ def assign(path,name,ns=None):
+  t=ast.parse((root/path).read_text());node=next(n for n in t.body if isinstance(n,ast.Assign) and any(isinstance(k,ast.Name) and k.id==name for k in n.targets))
+  return eval(compile(ast.Expression(node.value),str(path),'eval'),ns or {})

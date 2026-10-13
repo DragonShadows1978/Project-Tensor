@@ -1,0 +1,116 @@
+[
+  {
+    "case": "query_once",
+    "rc": 0,
+    "stdout": "PASS query once\n",
+    "stderr": ""
+  },
+  {
+    "case": "multidevice_restore",
+    "rc": 0,
+    "stdout": "PASS per-device sync [1, 0, 2, 0]\n",
+    "stderr": ""
+  },
+  {
+    "case": "prior_oom",
+    "rc": 0,
+    "stdout": "PASS prior persisted through OOM\n",
+    "stderr": ""
+  },
+  {
+    "case": "inside_callback",
+    "rc": 0,
+    "stdout": "PASS self exclusion and late release\n",
+    "stderr": ""
+  },
+  {
+    "case": "deferred_exit",
+    "rc": 0,
+    "stdout": "DELETER started\nDELETER finished\nHOOK returned\nFINALIZING True\n",
+    "stderr": ""
+  },
+  {
+    "case": "diagnostic_oom_query",
+    "rc": 0,
+    "stdout": "FIRST MemoryError\nAFTER_OOM {\"entries\": 0, \"managers\": 0, \"bytes\": 0, \"high_water_entries\": 1, \"high_water_managers\": 1, \"high_water_bytes\": 4, \"retained_entries\": 1, \"released_entries\": 0, \"released_managers\": 0, \"bound_drains\": 0, \"fallback_syncs\": 0, \"leaked_managers\": 1, \"max_entries\": 1024, \"max_bytes\": 268435456, \"deleter_exceptions\": 0, \"push_alloc_failures\": 0, \"event_recycle_failures\": 0, \"bytes_saturated\": false, \"bytes_saturations\": 0, \"release_errors\": 0, \"unreported_release_errors\": 0, \"device_restore_failures\": 0, \"event_destroy_failures\": 0, \"unreported_unraisable_errors\": 0, \"release_admission_closed\": false, \"releases_in_flight\": 0, \"callbacks_in_flight\": 0, \"admitted_releases\": 0, \"admitted_callbacks\": 0, \"deleters_leaked_after_close\": 0, \"deleters_leaked_finalizing\": 0, \"capsules_kept_after_close\": 0, \"capsules_kept_finalizing\": 0, \"callbacks_refused_after_close\": 0, \"exit_hook_calls\": 0, \"exit_in_flight_at_close\": 0, \"exit_wait_us\": 0, \"exit_wait_diagnostics\": 0, \"exit_wait_overruns\": 0, \"exit_diag_default_used\": 0, \"exit_runner_closes\": 0, \"exit_runner_in_flight_at_close\": 0, \"unreported_drain_failures\": 1, \"lifecycle_lock_failures\": 0, \"exit_wait_poll_diagnostics\": 0, \"exit_device_wait_diagnostics\": 0, \"exit_device_wait_watchdogs\": 0, \"exit_device_wait_watchdog_lock_failures\": 0, \"exit_device_wait_watchdog_detaches\": 0, \"exit_marker_failures\": 0, \"exit_log_fallbacks\": 0, \"exit_report_unwritten\": false, \"event_query_failures\": 0, \"event_record_failures\": 0, \"cublas_handle_destroy_failures\": 0, \"cublas_handle_destroy_first_status\": 0}\nPASS retained error tc_signal.synchronize: CUDA error, so the release is not reported as a success: the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: injected failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released\n",
+    "stderr": ""
+  },
+  {
+    "case": "diagnostic_oom_sync",
+    "rc": 0,
+    "stdout": "FIRST MemoryError\nAFTER_OOM {\"entries\": 0, \"managers\": 0, \"bytes\": 0, \"high_water_entries\": 0, \"high_water_managers\": 0, \"high_water_bytes\": 0, \"retained_entries\": 0, \"released_entries\": 0, \"released_managers\": 0, \"bound_drains\": 0, \"fallback_syncs\": 0, \"leaked_managers\": 0, \"max_entries\": 1024, \"max_bytes\": 268435456, \"deleter_exceptions\": 0, \"push_alloc_failures\": 0, \"event_recycle_failures\": 0, \"bytes_saturated\": false, \"bytes_saturations\": 0, \"release_errors\": 0, \"unreported_release_errors\": 0, \"device_restore_failures\": 0, \"event_destroy_failures\": 0, \"unreported_unraisable_errors\": 0, \"release_admission_closed\": false, \"releases_in_flight\": 0, \"callbacks_in_flight\": 0, \"admitted_releases\": 0, \"admitted_callbacks\": 0, \"deleters_leaked_after_close\": 0, \"deleters_leaked_finalizing\": 0, \"capsules_kept_after_close\": 0, \"capsules_kept_finalizing\": 0, \"callbacks_refused_after_close\": 0, \"exit_hook_calls\": 0, \"exit_in_flight_at_close\": 0, \"exit_wait_us\": 0, \"exit_wait_diagnostics\": 0, \"exit_wait_overruns\": 0, \"exit_diag_default_used\": 0, \"exit_runner_closes\": 0, \"exit_runner_in_flight_at_close\": 0, \"unreported_drain_failures\": 1, \"lifecycle_lock_failures\": 0, \"exit_wait_poll_diagnostics\": 0, \"exit_device_wait_diagnostics\": 0, \"exit_device_wait_watchdogs\": 0, \"exit_device_wait_watchdog_lock_failures\": 0, \"exit_device_wait_watchdog_detaches\": 0, \"exit_marker_failures\": 0, \"exit_log_fallbacks\": 0, \"exit_report_unwritten\": false, \"event_query_failures\": 0, \"event_record_failures\": 0, \"cublas_handle_destroy_failures\": 0, \"cublas_handle_destroy_first_status\": 0}\nPASS retained error tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidValue: injected failure)\n",
+    "stderr": ""
+  },
+  {
+    "case": "diagnostic_oom_device",
+    "rc": 0,
+    "stdout": "FIRST MemoryError\nAFTER_OOM {\"entries\": 0, \"managers\": 0, \"bytes\": 0, \"high_water_entries\": 0, \"high_water_managers\": 0, \"high_water_bytes\": 0, \"retained_entries\": 0, \"released_entries\": 0, \"released_managers\": 0, \"bound_drains\": 0, \"fallback_syncs\": 0, \"leaked_managers\": 0, \"max_entries\": 1024, \"max_bytes\": 268435456, \"deleter_exceptions\": 0, \"push_alloc_failures\": 0, \"event_recycle_failures\": 0, \"bytes_saturated\": false, \"bytes_saturations\": 0, \"release_errors\": 0, \"unreported_release_errors\": 0, \"device_restore_failures\": 0, \"event_destroy_failures\": 0, \"unreported_unraisable_errors\": 0, \"release_admission_closed\": false, \"releases_in_flight\": 0, \"callbacks_in_flight\": 0, \"admitted_releases\": 0, \"admitted_callbacks\": 0, \"deleters_leaked_after_close\": 0, \"deleters_leaked_finalizing\": 0, \"capsules_kept_after_close\": 0, \"capsules_kept_finalizing\": 0, \"callbacks_refused_after_close\": 0, \"exit_hook_calls\": 0, \"exit_in_flight_at_close\": 0, \"exit_wait_us\": 0, \"exit_wait_diagnostics\": 0, \"exit_wait_overruns\": 0, \"exit_diag_default_used\": 0, \"exit_runner_closes\": 0, \"exit_runner_in_flight_at_close\": 0, \"unreported_drain_failures\": 1, \"lifecycle_lock_failures\": 0, \"exit_wait_poll_diagnostics\": 0, \"exit_device_wait_diagnostics\": 0, \"exit_device_wait_watchdogs\": 0, \"exit_device_wait_watchdog_lock_failures\": 0, \"exit_device_wait_watchdog_detaches\": 0, \"exit_marker_failures\": 0, \"exit_log_fallbacks\": 0, \"exit_report_unwritten\": false, \"event_query_failures\": 0, \"event_record_failures\": 0, \"cublas_handle_destroy_failures\": 0, \"cublas_handle_destroy_first_status\": 0}\nPASS retained error tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cudaGetDevice failed (cudaErrorInvalidValue: injected failure)\n",
+    "stderr": ""
+  },
+  {
+    "case": "arithmetic",
+    "rc": 0,
+    "stdout": "PASS fill grid rail, scalar/empty and zero-neighbor products\n",
+    "stderr": ""
+  },
+  {
+    "case": "casts_exit_bool_--control",
+    "rc": 0,
+    "stdout": "CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used': False}\nFINALIZING True\n",
+    "stderr": "Exception in thread Thread-1 (worker):\nTraceback (most recent call last):\n  File \"/usr/lib/python3.12/threading.py\", line 1073, in _bootstrap_inner\n    self.run()\n  File \"/usr/lib/python3.12/threading.py\", line 1010, in run\n    self._target(*self._args, **self._kwargs)\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 36, in worker\n    if sys.argv[2]=='bool':t.__dlpack__(copy=Flag())\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: __dlpack__: copy must be None or a bool, not Flag (P1T-FIX6: refused without calling any of its Python methods)\nException ignored in atexit callback: <function start at 0x721ed4fa09a0>\nTraceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 42, in start\n    th=threading.Thread(target=worker,daemon=True);th.start();assert started.wait(2)\n                                                                     ^^^^^^^^^^^^^^^\nAssertionError: \n"
+  },
+  {
+    "case": "casts_exit_index_--control",
+    "rc": 0,
+    "stdout": "CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used': False}\nFINALIZING True\n",
+    "stderr": "Exception in thread Thread-1 (worker):\nTraceback (most recent call last):\n  File \"/usr/lib/python3.12/threading.py\", line 1073, in _bootstrap_inner\n    self.run()\n  File \"/usr/lib/python3.12/threading.py\", line 1010, in run\n    self._target(*self._args, **self._kwargs)\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 37, in worker\n    else:t.__dlpack__(max_version=(Index(),3))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: __dlpack__: max_version[0] (the major version) must be an int, not Index (P1T-FIX6: refused without calling any of its Python methods)\nException ignored in atexit callback: <function start at 0x7d164eba09a0>\nTraceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 42, in start\n    th=threading.Thread(target=worker,daemon=True);th.start();assert started.wait(2)\n                                                                     ^^^^^^^^^^^^^^^\nAssertionError: \n"
+  },
+  {
+    "case": "casts_exit_bool",
+    "rc": 0,
+    "stdout": "CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used': False}\nFINALIZING True\n",
+    "stderr": "Exception in thread Thread-1 (worker):\nTraceback (most recent call last):\n  File \"/usr/lib/python3.12/threading.py\", line 1073, in _bootstrap_inner\n    self.run()\n  File \"/usr/lib/python3.12/threading.py\", line 1010, in run\n    self._target(*self._args, **self._kwargs)\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 36, in worker\n    if sys.argv[2]=='bool':t.__dlpack__(copy=Flag())\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: __dlpack__: copy must be None or a bool, not Flag (P1T-FIX6: refused without calling any of its Python methods)\nException ignored in atexit callback: <function start at 0x7e7a9caa49a0>\nTraceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 42, in start\n    th=threading.Thread(target=worker,daemon=True);th.start();assert started.wait(2)\n                                                                     ^^^^^^^^^^^^^^^\nAssertionError: \n"
+  },
+  {
+    "case": "casts_exit_index",
+    "rc": 0,
+    "stdout": "CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0, 'others_in_flight_at_close': 0, 'first_diag_s': 5.0, 'first_diag_default_used': False}\nFINALIZING True\n",
+    "stderr": "Exception in thread Thread-1 (worker):\nTraceback (most recent call last):\n  File \"/usr/lib/python3.12/threading.py\", line 1073, in _bootstrap_inner\n    self.run()\n  File \"/usr/lib/python3.12/threading.py\", line 1010, in run\n    self._target(*self._args, **self._kwargs)\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 37, in worker\n    else:t.__dlpack__(max_version=(Index(),3))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: __dlpack__: max_version[0] (the major version) must be an int, not Index (P1T-FIX6: refused without calling any of its Python methods)\nException ignored in atexit callback: <function start at 0x7618dfda09a0>\nTraceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev6/probes/core_host_cpu.py\", line 42, in start\n    th=threading.Thread(target=worker,daemon=True);th.start();assert started.wait(2)\n                                                                     ^^^^^^^^^^^^^^^\nAssertionError: \n"
+  },
+  {
+    "case": "fix2_harness_ck_census",
+    "rc": 0,
+    "stdout": "{\"shape\": \"[0, 4611686018427387904, 4]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [0, 4611686018427387904, 4] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[4611686018427387904, 0, 4]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [4611686018427387904, 0, 4] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[4611686018427387904, 4, 0]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [4611686018427387904, 4, 0] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[0, 9223372036854775807, 2]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [0, 9223372036854775807, 2] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[9223372036854775807, 2, 0]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [9223372036854775807, 2, 0] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[2, 0, 9223372036854775807]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": true, \"ck_prod_expected_refused\": true, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': element count of shape [2, 0, 9223372036854775807] overflows int64 (every nonzero extent counts, also next to a zero extent)\", \"ok\": true}\n{\"shape\": \"[0, 9223372036854775807]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [0, 9223372036854775807] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[9223372036854775807, 0]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [9223372036854775807, 0] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[0, 9223372036854775807, 1]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [0, 9223372036854775807, 1] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[1, 0, 9223372036854775807]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [1, 0, 9223372036854775807] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[0, 4611686018427387904]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [0, 4611686018427387904] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[4611686018427387904, 0]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [4611686018427387904, 0] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[0, 2305843009213693952]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [0, 2305843009213693952] (fp32) overflows int64\", \"ok\": true}\n{\"shape\": \"[2305843009213693952, 0, 1]\", \"ck_shape_numel_refused\": true, \"ck_prod_refused\": false, \"ck_prod_expected_refused\": false, \"validate_refused_as_overflow\": true, \"validate_msg\": \"tc_signal: operand 'census': byte size of shape [2305843009213693952, 0, 1] (fp32) overflows int64\", \"ok\": true}\n{\"control\": \"[0, 1048576, 4]\", \"count\": 0, \"expected\": 0, \"ok\": true}\n{\"control\": \"[2, 3, 4]\", \"count\": 24, \"expected\": 24, \"ok\": true}\n{\"control\": \"[0, 1152921504606846976]\", \"count\": 0, \"expected\": 0, \"ok\": true}\n{\"control\": \"[]\", \"count\": 1, \"expected\": 1, \"ok\": true}\n{\"summary\": {\"mode\": \"ck_census\", \"cases\": 18, \"failures\": 0}}\n",
+    "stderr": ""
+  },
+  {
+    "case": "fix3_harness_accounting",
+    "rc": 0,
+    "stdout": "{\"case\": \"saturates_on_overflowing_push\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=1 entries=2 over=1\"}\n{\"case\": \"saturated_total_is_over_the_bound\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=1 entries=2 over=1\"}\n{\"case\": \"pushes_while_saturated_stay_pinned\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=1 entries=3 over=1\"}\n{\"case\": \"pop_keeps_saturated_total_pinned_while_entries_remain\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=1 entries=2 over=1\"}\n{\"case\": \"empty_list_resets_to_exact_zero\", \"ok\": true, \"detail\": \"bytes=0 saturated=0 entries=0 over=0\"}\n{\"case\": \"exact_again_after_reset\", \"ok\": true, \"detail\": \"bytes=12 saturated=0 entries=1 over=0\"}\n{\"case\": \"exact_sum_of_int64_max_is_not_saturated\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=0 entries=2 over=1\"}\n{\"case\": \"exact_pop_from_int64_max\", \"ok\": true, \"detail\": \"bytes=10 saturated=0 entries=1 over=0\"}\n{\"case\": \"one_byte_past_int64_max_saturates\", \"ok\": true, \"detail\": \"bytes=9223372036854775807 saturated=1 entries=3 over=1\"}\n{\"case\": \"total_equal_to_the_byte_bound_is_within_it\", \"ok\": true, \"detail\": \"bytes=268435456 saturated=0 entries=2 over=0\"}\n{\"case\": \"four_bytes_over_the_byte_bound_is_over_it\", \"ok\": true, \"detail\": \"bytes=268435460 saturated=0 entries=3 over=1\"}\n{\"case\": \"back_within_the_byte_bound_after_pop\", \"ok\": true, \"detail\": \"bytes=268435456 saturated=0 entries=2 over=0\"}\n{\"case\": \"entries_equal_to_the_entry_bound_are_within_it\", \"ok\": true, \"detail\": \"bytes=0 saturated=0 entries=1024 over=0\"}\n{\"case\": \"one_entry_over_the_entry_bound_is_over_it\", \"ok\": true, \"detail\": \"bytes=0 saturated=0 entries=1025 over=1\"}\n{\"case\": \"aggregate_of_two_2p61m1_operands_refused_as_overflow\", \"ok\": true, \"detail\": \"tc_signal: the aggregate fp32 byte count of this call's operands (their sum) overflows 64-bit arithmetic; refused (no wrapped size is ever used)\"}\n{\"case\": \"aggregate_of_three_2p60_operands_refused\", \"ok\": true, \"detail\": \"\"}\n{\"case\": \"aggregate_that_fits_is_exact\", \"ok\": true, \"detail\": \"9223372036854775800\"}\n{\"summary\": {\"mode\": \"accounting\", \"cases\": 17, \"failures\": 0}}\n",
+    "stderr": ""
+  },
+  {
+    "case": "cpu_native_oom_sync",
+    "rc": 0,
+    "stdout": "PASS: allocation failure propagated safely\n",
+    "stderr": "ARMED: next host allocation fails; no CUDA call reached yet\n"
+  },
+  {
+    "case": "cpu_native_throw_deleter",
+    "rc": 0,
+    "stdout": "PASS: producer exception contained\n",
+    "stderr": "ARMED: real ManagedOwner reset calls throwing native producer\n"
+  },
+  {
+    "case": "sync_lock",
+    "rc": 0,
+    "stdout": "RuntimeError tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here (the call that set it and its device are unknown: the slot records neither); the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)\nelapsed=0.014 rescue=False release_finished=True\n",
+    "stderr": "tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here (the call that set it and its device are unknown: the slot records neither); the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released\n"
+  },
+  {
+    "case": "operand_census",
+    "rc": 0,
+    "stdout": "PASS operand census 17 cases, 7 once-only consumed deleters\n",
+    "stderr": "tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here (the call that set it and its device are unknown: the slot records neither); the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released\n"
+  }
+]

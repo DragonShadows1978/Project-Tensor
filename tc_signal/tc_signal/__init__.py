@@ -206,6 +206,14 @@ def _release_pending_at_exit():
     its polling fallback when the lifecycle mutex fails), and the device syncs of step 1 (while the native runner runs,
     each is preceded by a polled wait that writes a line after _RELEASE_EXIT_DIAG_S, then each time the time waited
     doubles); pending_stats() exit_wait_poll_diagnostics / exit_device_wait_diagnostics count them.
+    P1T-FIX8 (round-8 review V8-02): a CUDA failure on a P1-T path, diagnostic code included, is reported at exit
+    too, even when its report cannot allocate. The native runner is the last reader: after this hook (whether it
+    returned or raised) and after the close and the wait, it writes, with C stdio, the records nobody raised and any
+    report synchronize() raised here that this hook could not write (a MemoryError while building its line, stderr
+    None or raising): the full report, or an allocation-free summary of the count and the first record (call,
+    purpose, device, error name). This hook acknowledges, with _C._exit_report_written(), that it wrote its lines.
+    (V8-01) A failed call of the device wait's own marker event is recorded and raised like any other CUDA failure, and
+    the wait is then diagnosed by a watchdog thread; "finished" is printed only after completion was proved.
     Never raises, except a BaseException that arrived during it (after the close). Prior art: CPython's atexit, which
     itself prints (not raises) a callback's exception and runs the rest (taken: log-don't-raise); Python's try / finally
     guarantee, also for KeyboardInterrupt (language reference, "The try statement"); core's
@@ -252,11 +260,19 @@ def _release_pending_at_exit():
         if result['overran']:
             lines.append(f'tc_signal: the producer callback(s) admitted before exit finished after '
                          f'{result["waited_us"] / 1e6:.1f} s; interpreter exit continues')
+    written = True
     for line in lines:
         try:
             sys.stderr.write(line + '\n')
             sys.stderr.flush()
         except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
+            written = False
+    if written:
+        # P1T-FIX8 (V8-02): every line is out, including any report synchronize() raised here; the native runner, the
+        # last reader at exit, then does not write that report's allocation-free summary again.
+        try:
+            C._exit_report_written()
+        except Exception:  # noqa: BLE001  (a _C without it: the runner writes the summary, a harmless repeat)
             pass
 
 

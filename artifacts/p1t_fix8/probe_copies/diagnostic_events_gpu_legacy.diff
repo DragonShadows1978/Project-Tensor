@@ -1,0 +1,11 @@
+--- a/artifacts/p1t_rev8/probes/diagnostic_events_gpu.py
++++ b/artifacts/p1t_fix8/probe_copies/diagnostic_events_gpu_legacy.py
+@@ -24,7 +24,7 @@
+  torch.cuda.init()
+  # Explicit legacy stream, finite work. About 0.4 seconds is bounded; no infinite kernel.
+  torch.cuda.synchronize()
+- with torch.cuda.stream(torch.cuda.ExternalStream(0)):
++ with torch.cuda.stream(torch.cuda.default_stream()):  # P1T-FIX8 scenario copy: torch 2.11's ExternalStream(0) is a non-blocking stream, not the legacy stream (artifacts/p1t_fix8/extstream_receipt.txt)
+   t0=time.perf_counter();torch.cuda._sleep(50_000_000);torch.cuda.synchronize()
+   rate=50_000_000/(time.perf_counter()-t0)
+   torch.cuda._sleep(int(rate*0.4))

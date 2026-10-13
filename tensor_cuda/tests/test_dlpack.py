@@ -2961,3 +2961,168 @@ def test_fix7_sweep_i_core_close_step_raising_after_the_close_does_not_skip_the_
 
 def test_fix7_core_knob_default_is_the_native_default():
     assert tc._DLPACK_SHUTDOWN_WAIT_S == tc._C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S == 5.0
+
+
+# ================================================================================================== P1T-FIX8
+# Round-8 review V8-02 (core half) and the core rows of the sweeps (k) "consumed CUDA errors" and (l) "the last reader
+# at exit" (order P1T_FIX8_ERROR_VISIBILITY_AT_EXIT.md). The add-on rows are in tc_signal/tests/test_fix8_findings.py.
+#  * V8-02: an R7 record (an imported Storage's drain failed: FIX1's F05 shim) is still reported at exit when the hook
+#    is interrupted AND the runner's full message cannot be built (allocation-free summary: count, site, device, error
+#    name); with stderr closed nothing crashes and the record is consumed; a report the hook's R7 logging raised but
+#    could not write (sys.stderr None) is written by the runner; one it wrote is not repeated. The hook's exception is
+#    preserved and the runner closes first. Mutant (g) = the core runner's allocation-free fallback removed.
+#  * Sweep (k): a raise builds its report BEFORE it consumes the error slot. An LD_PRELOAD shim makes cudaGetDevice
+#    fail genuinely (the real cudaGetDevice(NULL) puts cudaErrorInvalidValue in the slot) and the next operator new
+#    fail: empty() / from_dlpack() then raise MemoryError and the failure is still in the slot (FIX7: consumed, lost).
+# Prior art: the round-8 reviewer's core_exit_log_oom_cpu.py / build_core_host_oom.py (OOM while the exit runner reports;
+# taken: the scenario); SQLite's OOM-testing discipline; LD_PRELOAD interposition (FIX1 / FIX4 / FIX7 shims), here of
+# operator new; CUDA 12.6 cudaGetLastError / cudaPeekAtLastError. Ours: the stagings.
+_FIX8_R7_SCRIPT = r"""
+import atexit, json, os, sys
+AFTER = {}
+def _after():                                   # registered before tensor_cuda is imported: runs after its runner
+    st = sys.modules["tensor_cuda"]._C._dlpack_release_stats()
+    AFTER.update({k: st[k] for k in ("unraisable_unreported", "shutdown_log_fallbacks", "exit_report_unwritten",
+                                     "shutdown_runner_closes", "shutdown_calls")})
+    os.write(1, ("AFTER " + json.dumps(AFTER) + "\n").encode())
+atexit.register(_after)
+""" + _FIX6_R7_SCRIPT.replace(
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())',
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())\n'
+    'import _thread\n'
+    'if mode in ("fail_oom", "fail_oom_stderr_closed"):\n'
+    '    atexit.register(_thread.interrupt_main)          # the hook is interrupted at its first bytecode\n'
+    '    atexit.register(tc._C._dlpack_test_fail_exit_report)   # the runner\'s full message will fail to allocate\n'
+    '    if mode == "fail_oom_stderr_closed":\n'
+    '        def _close():\n'
+    '            sys.stderr = open(os.devnull, "w")         # Python\'s own writes go nowhere; C stdio hits a closed fd\n'
+    '            os.close(2)\n'
+    '        atexit.register(_close)\n'
+    'elif mode == "fail_hook_cannot_write":\n'
+    '    def _swap():\n'
+    '        sys.stderr = None                            # the hook\'s lines fail; fd 2 stays open for C stdio\n'
+    '    atexit.register(_swap)')
+
+
+def _run_fix8_r7(shim, mode):
+    r = subprocess.run([sys.executable, "-c", _FIX8_R7_SCRIPT, shim, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("AFTER ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    for bad in ("FATAL", "terminate called", "Aborted", "core dumped"):
+        assert bad not in r.stderr, r.stderr
+    return r, json.loads(lines[-1][len("AFTER "):])
+
+
+def test_fix8_v802_core_runner_writes_an_allocation_free_summary_when_its_message_cannot_allocate(f05_shim):
+    r, a = _run_fix8_r7(f05_shim, "fail_oom")
+    line = next((ln for ln in r.stderr.splitlines() if "allocation-free summary" in ln), "")
+    assert "tensor_cuda: at interpreter exit, 1 CUDA failure(s) on DLPack release / fill_ paths" in line, r.stderr
+    assert "the full report could not be built: it failed to allocate" in line, line
+    assert "the first: draining an imported Storage's device before its DLPack release" in line, line
+    assert "[CUDA device 0: cudaErrorInvalidDevice]" in line, line
+    assert a["unraisable_unreported"] == 0 and a["shutdown_log_fallbacks"] == 1, a   # written once, consumed
+    assert a["shutdown_runner_closes"] == 1, a                                       # quiescence first
+    assert "KeyboardInterrupt" in r.stderr, r.stderr                                 # the hook's exception
+
+
+def test_fix8_v802_core_runner_with_stderr_closed_does_not_crash_and_consumes(f05_shim):
+    r, a = _run_fix8_r7(f05_shim, "fail_oom_stderr_closed")
+    assert a["unraisable_unreported"] == 0 and a["shutdown_log_fallbacks"] == 1 and a["shutdown_runner_closes"] == 1, a
+
+
+def test_fix8_v802_core_report_the_hook_could_not_write_is_written_by_the_runner(f05_shim):
+    r, a = _run_fix8_r7(f05_shim, "fail_hook_cannot_write")
+    line = next((ln for ln in r.stderr.splitlines() if "raised at exit but not written by the exit hook" in ln), "")
+    assert "tensor_cuda: at interpreter exit, a report of 1 CUDA failure(s)" in line, r.stderr
+    assert "draining an imported Storage's device" in line and "[CUDA device 0: cudaErrorInvalidDevice]" in line, line
+    assert a["exit_report_unwritten"] is False and a["shutdown_log_fallbacks"] == 1 and a["shutdown_calls"] == 1, a
+
+
+def test_fix8_v802_core_report_the_hook_wrote_is_not_repeated(f05_shim):
+    r, a = _run_fix8_r7(f05_shim, "fail")
+    assert "(logged by tensor_cuda's interpreter-exit hook)" in r.stderr, r.stderr
+    assert "allocation-free summary" not in r.stderr and "logged by the exit runner" not in r.stderr, r.stderr
+    assert a["exit_report_unwritten"] is False and a["shutdown_log_fallbacks"] == 0 and a["unraisable_unreported"] == 0, a
+
+
+_FIX8_OOM_SHIM_CPP = r"""
+#include <cuda_runtime_api.h>
+#include <dlfcn.h>
+#include <cstdlib>
+#include <new>
+static thread_local bool fail_next_new = false;
+static int armed = 0;            /* the next cudaGetDevice fails genuinely, then the next operator new fails */
+void* operator new(std::size_t n) {
+  if (fail_next_new) { fail_next_new = false; throw std::bad_alloc(); }
+  void* p = std::malloc(n ? n : 1);
+  if (!p) throw std::bad_alloc();
+  return p;
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+/* As FIX1's F05 shim: Python loads extension modules RTLD_LOCAL, so RTLD_NEXT finds nothing; use a handle. */
+static void* real_sym(const char* name) {
+  void* h = dlopen("libcudart.so.12", RTLD_LAZY | RTLD_NOLOAD);
+  if (!h) h = dlopen("libcudart.so.12", RTLD_LAZY);
+  return h ? dlsym(h, name) : nullptr;
+}
+extern "C" cudaError_t cudaGetDevice(int* d) {
+  using F = cudaError_t (*)(int*);
+  static F real = reinterpret_cast<F>(real_sym("cudaGetDevice"));
+  if (armed) {
+    armed = 0;
+    const cudaError_t e = real(nullptr);   /* genuine: cudaErrorInvalidValue, and it is in the slot now */
+    fail_next_new = true;
+    return e;
+  }
+  return real(d);
+}
+extern "C" void oom_shim_arm() { armed = 1; }
+"""
+
+
+@pytest.fixture(scope="module")
+def fix8_oom_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix8_oom_shim")
+    src, so = d / "oom_shim.cpp", d / "oom_shim.so"
+    src.write_text(_FIX8_OOM_SHIM_CPP)
+    r = subprocess.run(["g++", "-shared", "-fPIC", "-O1", "-std=c++17", "-I/usr/local/cuda-12.6/include", "-o",
+                        str(so), str(src), "-ldl"], capture_output=True, text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+_FIX8_RAISE_OOM_SCRIPT = r"""
+import ctypes, json, sys
+import tensor_cuda as tc
+shim = ctypes.CDLL(None)
+cudart = ctypes.CDLL("libcudart.so.12")
+site = sys.argv[1]
+x = tc.empty(4)                                  # a healthy call first (context up)
+cap = x.__dlpack__()                             # made before arming: the import is the call under test
+shim.oom_shim_arm()
+try:
+    if site == "empty":
+        tc.empty(4)
+    else:
+        tc.from_dlpack(cap)
+    outcome = "returned"
+except MemoryError:
+    outcome = "MemoryError"
+except RuntimeError as e:
+    outcome = "RuntimeError: " + str(e)
+slot = cudart.cudaPeekAtLastError()              # the failure is still in the slot: nothing consumed it unreported
+cudart.cudaGetLastError()
+print("RESULT " + json.dumps({"outcome": outcome, "slot": slot}), flush=True)
+"""
+
+
+@pytest.mark.parametrize("site", ["empty", "from_dlpack"])
+def test_fix8_sweep_k_core_raise_consumes_only_after_its_report_exists(fix8_oom_shim, site):
+    r = subprocess.run([sys.executable, "-c", _FIX8_RAISE_OOM_SCRIPT, site], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=fix8_oom_shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res == {"outcome": "MemoryError", "slot": 1}, res   # cudaErrorInvalidValue (1) is still there

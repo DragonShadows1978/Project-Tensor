@@ -1,0 +1,45 @@
+lead_before build_cpu exit=0
+lead_before build_core_host exit=0
+lead_before build_core_host_oom exit=0
+lead_before build_diag exit=0
+lead_before build_oom exit=0
+lead_before build_shim exit=0
+lead_before diagnostic_errors_cpu exit=1 :: [   {     "site": "create",     "expected_api": "cudaEventCreateWithFlags",     "error": null,     "slot": 0,     "stats": {       "entries": 0,       "managers": 0,       "bytes": 0,       "high_water_entries": 0,       "high_water_managers": 0,       "high_water_bytes": 0,       "retained_entries"
+lead_before verify_exit_log_cpu exit=1 :: [   {     "arm": "--control",     "rc": 0,     "stdout": "record_still_pending= False\n",     "stderr": "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet: the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErr
+lead_before exit_log_oom_cpu --control exit=0 :: tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet: the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: injected failure); 1 consumed operand manager(s) still pending there were deliberately le
+lead_before exit_log_oom_cpu --oom exit=0 :: record_still_pending= True 
+lead_before verify_core_exit_log_cpu exit=1 :: [   {     "arm": "--control",     "rc": 0,     "stdout": "recorded= 1\n",     "stderr": "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: host probe erro
+lead_before core_exit_log_oom_cpu --control exit=0 :: tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: host probe error [CUDA device 0: cudaErrorInvalidValue: invalid argument] (logged by the exit runner: th
+lead_before core_exit_log_oom_cpu --oom exit=0 :: recorded= 1 
+lead_before diagnostic_events_gpu exit=1 :: [   {     "site": "create",     "rc": 1,     "stdout": "RESULT {\"site\": \"create\", \"messages\": []}\n",     "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev8/artifacts/p1t_rev8/probes/diagnostic_eve
+lead_before run_cpu_checks exit=0
+  query_once rc=0
+  multidevice_restore rc=0
+  prior_oom rc=0
+  inside_callback rc=0
+  deferred_exit rc=0
+  diagnostic_oom_query rc=0
+  diagnostic_oom_sync rc=0
+  diagnostic_oom_device rc=0
+  fix2_harness_ck_census rc=0
+  fix3_harness_accounting rc=0
+  cpu_native_oom_sync rc=0
+  cpu_native_throw_deleter rc=0
+  sync_lock rc=0
+  sync_late_release rc=0
+lead_before argument_census_cpu exit=0 :: PASS 1067 argument checks; 29 addon bindings, all typed positions both call styles; zero conversion calls tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchr
+lead_before operand_census_cpu exit=0 :: PASS 17 actual-source CPU descriptor checks tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device 
+lead_before attribution_cpu exit=0 :: PASS 22 current-source attribution assertions 
+lead_before fix7_cpu_census exit=0 :: PASS addon_knob:default PASS addon_knob:huge_int PASS addon_knob:neg_huge_int PASS addon_knob:inf PASS addon_knob:neg_inf PASS addon_knob:nan PASS addon_knob:negative PASS addon_knob:zero PASS addon_knob:float_subclass PASS addon_knob:int_subclass PASS addon_knob:bool PASS addon_knob:str PASS addon_
+lead_before lock_checks_cpu exit=0 :: PASS core_close PASS core_relock PASS addon_poll 
+lead_before knob_exit_cpu exit=0 :: ARMED DELETER started IN_FLIGHT 1 DELETER finished REFUSED tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-
+lead_before core_knob_exit_cpu exit=0 :: ARMED core actual-source host lifecycle DELETER started IN_FLIGHT 1 DELETER finished tensor_cuda: _DLPACK_SHUTDOWN_WAIT_S holds an int beyond the range of a C double; the exit wait used the default first-diagnostic delay of 5 s (the close and the wait are never affected) FINALIZING True 
+lead_before knob_exit_cpu_control exit=0 :: ARMED DELETER started IN_FLIGHT 1 DELETER finished REFUSED tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-
+lead_before core_knob_exit_cpu_control exit=0 :: ARMED core actual-source host lifecycle DELETER started IN_FLIGHT 1 DELETER finished FINALIZING True 
+lead_before query_diagnostic_cpu exit=0 :: Successful stream sync devices: [0] tc_signal.synchronize: CUDA error, so the release is not reported as a success: the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: injected failure); 1 consumed operand manager(s) still pending there we
+lead_before gpu_regressions fix7 exit=0 :: 115 passed, 211 deselected in 199.49s (0:03:19) PASS fix7 115 tests with zero skips 
+lead_before gpu_regressions fix56 exit=0 :: 157 passed, 184 deselected in 170.88s (0:02:50) PASS fix56 157 tests with zero skips 
+lead_before gpu_regressions semantics exit=0 :: 504 passed in 8.27s PASS semantics 504 tests with zero skips 
+lead_before gpu_regressions multidevice exit=3 :: 
+lead_before done
+shim_rc=1

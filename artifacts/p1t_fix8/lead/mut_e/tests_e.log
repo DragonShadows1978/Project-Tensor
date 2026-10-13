@@ -1,0 +1,375 @@
+FFFFFFFFF.FFFFFFFF.                                                      [100%]
+=================================== FAILURES ===================================
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[create-plain] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'create'
+oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            calls = calls[1:]
+>       assert calls[0][0] == 'RuntimeError', res          # ...and raised (by the next synchronize() under OOM)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E       assert 'ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok
+
+tc_signal/tests/test_fix8_findings.py:245: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[create-oom] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'create'
+oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:243: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[record-plain] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'record'
+oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            calls = calls[1:]
+>       assert calls[0][0] == 'RuntimeError', res          # ...and raised (by the next synchronize() under OOM)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E       assert 'ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok
+
+tc_signal/tests/test_fix8_findings.py:245: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[record-oom] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'record'
+oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:243: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[query-plain] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'query'
+oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            calls = calls[1:]
+>       assert calls[0][0] == 'RuntimeError', res          # ...and raised (by the next synchronize() under OOM)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E       assert 'ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok
+
+tc_signal/tests/test_fix8_findings.py:245: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[query-oom] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'query'
+oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:243: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[destroy-plain] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'destroy'
+oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            calls = calls[1:]
+>       assert calls[0][0] == 'RuntimeError', res          # ...and raised (by the next synchronize() under OOM)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E       assert 'ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok
+
+tc_signal/tests/test_fix8_findings.py:245: AssertionError
+_ test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[destroy-oom] _
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0', site = 'destroy'
+oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device(trace_dir, site, oom):
+        r, res = _trace(trace_dir, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res       # its message could not be built: the record is kept...
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: {'calls': [['ok', None]], 'marker': 1, 'slot': 0, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:243: AssertionError
+_____________ test_fix8_v801_finished_is_printed_only_after_proof ______________
+
+trace_dir = '/tmp/pytest-of-vader/pytest-190/fix8_trace0'
+
+    def test_fix8_v801_finished_is_printed_only_after_proof(trace_dir):
+        # The marker query fails AND the stream sync that follows fails: nothing proved completion, so no "finished".
+        r, res = _trace(trace_dir, 'query+sync', 'plain')
+        _ok(r, res)
+        msg = res['calls'][0][1]
+>       assert '(cudaEventQuery: cudaErrorInvalidValue' in msg and 'cudaStreamSynchronize: cudaErrorInvalidValue' in msg, msg
+E       AssertionError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidValue: injected failure)
+E       assert ('(cudaEventQuery: cudaErrorInvalidValue' in 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidValue: injected failure)')
+
+tc_signal/tests/test_fix8_findings.py:267: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[create-plain] _
+
+site = 'create', oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res
+            calls = calls[1:]
+        msg = calls[0][1] or ''
+>       assert calls[0][0] == 'RuntimeError' and f'({API[site]}: {INJECTED_ERROR}' in msg and MARKER in msg, res
+E       AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E       assert ('ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok)
+
+tc_signal/tests/test_fix8_findings.py:360: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[create-oom] _
+
+site = 'create', oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res
+E           AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:357: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[record-plain] _
+
+site = 'record', oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res
+            calls = calls[1:]
+        msg = calls[0][1] or ''
+>       assert calls[0][0] == 'RuntimeError' and f'({API[site]}: {INJECTED_ERROR}' in msg and MARKER in msg, res
+E       AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E       assert ('ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok)
+
+tc_signal/tests/test_fix8_findings.py:360: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[record-oom] _
+
+site = 'record', oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res
+E           AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:357: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[query-plain] _
+
+site = 'query', oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res
+            calls = calls[1:]
+        msg = calls[0][1] or ''
+>       assert calls[0][0] == 'RuntimeError' and f'({API[site]}: {INJECTED_ERROR}' in msg and MARKER in msg, res
+E       AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E       assert ('ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok)
+
+tc_signal/tests/test_fix8_findings.py:360: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[query-oom] _
+
+site = 'query', oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res
+E           AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:357: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[destroy-plain] _
+
+site = 'destroy', oom = 'plain'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+            assert calls[0][0] == 'MemoryError', res
+            calls = calls[1:]
+        msg = calls[0][1] or ''
+>       assert calls[0][0] == 'RuntimeError' and f'({API[site]}: {INJECTED_ERROR}' in msg and MARKER in msg, res
+E       AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E       assert ('ok' == 'RuntimeError'
+E         
+E         - RuntimeError
+E         + ok)
+
+tc_signal/tests/test_fix8_findings.py:360: AssertionError
+_ test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[destroy-oom] _
+
+site = 'destroy', oom = 'oom'
+
+    @pytest.mark.parametrize('oom', ['plain', 'oom'])
+    @pytest.mark.parametrize('site', ['create', 'record', 'query', 'destroy'])
+    def test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, oom)
+        _ok(r, res)
+        calls = res['calls']
+        if oom == 'oom':
+>           assert calls[0][0] == 'MemoryError', res
+E           AssertionError: {'calls': [['ok', None]], 'lines': 4, 'marker': 1, 'unreported': 0, ...}
+E           assert 'ok' == 'MemoryError'
+E             
+E             - MemoryError
+E             + ok
+
+tc_signal/tests/test_fix8_findings.py:357: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[create-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[create-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[record-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[record-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[query-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[query-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[destroy-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_failed_marker_call_is_reported_once_naming_call_purpose_device[destroy-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_finished_is_printed_only_after_proof
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[create-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[create-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[record-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[record-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[query-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[query-oom]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[destroy-plain]
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v801_real_module_reports_each_marker_failure_and_still_diagnoses_the_wait[destroy-oom]
+17 failed, 2 passed, 14 deselected in 24.42s

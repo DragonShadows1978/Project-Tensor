@@ -1,0 +1,192 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev4/probes/lifecycle.cpp	2026-10-13 15:03:57.237875567 -0400
++++ /tmp/p1t_fix8_probes/after/rev4/lifecycle_regen.cpp	2026-10-13 16:13:28.983213343 -0400
+@@ -19,6 +19,25 @@
+ std::atomic<unsigned long long> g_shutdown_still_in_flight{0};
+ std::atomic<unsigned long long> g_shutdown_wait_us{0};
+ std::atomic<unsigned long long> g_shutdown_diagnostics{0};       // V3-01: stderr lines written while waiting
++// P1T-FIX7 (V7-01): closes whose diagnostic argument could not be read (the default delay was used), the exit runner's
++// own closes after the Python hook raised before closing (and the releases of other threads it then found running),
++// and mutex failures retried by the close (never observed).
++std::atomic<unsigned long long> g_shutdown_diag_default_used{0};
++std::atomic<unsigned long long> g_shutdown_runner_closes{0};
++std::atomic<unsigned long long> g_shutdown_runner_in_flight_at_close{0};
++std::atomic<unsigned long long> g_shutdown_lock_retries{0};
++// P1T-FIX7, lead send-back L1: stderr lines written while the close retried a failed lifecycle-mutex lock (also
++// counted in g_shutdown_diagnostics when the hook's own close wrote them).
++std::atomic<unsigned long long> g_shutdown_lock_diagnostics{0};
++
++// P1T-FIX7 (V7-01) exit tunables of the import-release lifecycle (P1-T core; none bounds the wait, none changes
++// numerics): the default first-diagnostic delay (the initial value of the Python knob
++// tensor_cuda._DLPACK_SHUTDOWN_WAIT_S, exported as _C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S, and the delay used when the knob
++// cannot be read at C level); the cap that keeps the chrono conversion finite (FIX3's literal 86400, now named); the
++// pause between retries of the lifecycle mutex when locking it fails in the close (never observed).
++constexpr double kDlpackShutdownDiagDefaultS = 5.0;
++constexpr double kDlpackShutdownMaxDiagDelayS = 86400.0;
++constexpr int kDlpackShutdownLockRetryMs = 10;
+ 
+ // V3-01: admitted releases on the CURRENT thread's stack (incremented on admission, decremented after leaving). The
+ // exit hook does not wait for these: they cannot finish while the hook's thread waits (self-exclusion, see above).
+@@ -108,10 +127,74 @@
+ // now means "the wait outlasted the first-diagnostic delay" (it no longer means the hook gave up), `still_in_flight`
+ // (other threads' admitted releases still running at return) is always 0 now, and `own_thread_in_flight` is the
+ // calling thread's own admitted releases that it did not wait for (0 at a real interpreter exit).
+-py::dict dlpack_begin_shutdown(double first_diag_s) {
++// P1T-FIX7, round-7 review finding V7-01 (MAJOR): reached by the Python hook with ANY knob value (the raw entry reads
++// it at C level and falls back to kDlpackShutdownDiagDefaultS: `diag_default_used`), and by the atexit runner after the
++// hook raised before closing (`runner`: counted apart). Sweep (i) also found one path INSIDE this function that could
++// skip the close: locking the lifecycle mutex can throw std::system_error (C++17 [thread.mutex.requirements.mutex]),
++// and FIX3-FIX6 re-took the GIL and rethrew before `closing` was set (with one injected lock failure 429446d aborts at
++// exit, rc -6: artifacts/p1t_fix7/lock_failure_receipt_before_B.txt). The lock is now retried (GIL released,
++// kDlpackShutdownLockRetryMs apart, counted) until it succeeds, so the close is never skipped and the function never
++// returns before the wait has finished (a permanently broken mutex makes exit wait, as a deleter that never returns
++// does, instead of letting finalization overtake a release).
++// P1T-FIX7, lead send-back L1: that retry loop is an exit wait too, so it is diagnosed exactly like the timed wait
++// below (FIX3 V3-01: never silent). Once the retries of one lock attempt have lasted the first-diagnostic delay (the
++// caller's clamped first_diag_s), a line goes to stderr (C stdio, GIL released, no allocation: what() is the
++// exception's own string) naming what is waited for, how many attempts failed and for how long; then another each
++// time the time spent retrying has doubled. Each line is counted (g_shutdown_lock_diagnostics, and in the caller's
++// `diagnostics`). When the lock is finally taken after a diagnostic, one more line says so. Prior art: FIX3's V3-01
++// diagnostic schedule (first delay, then doubling), itself after the kernel's repeated stall warnings (RCU CPU stall
++// warnings, hung-task detector; unverified here, lead to check "RCU CPU stall warning repeated"); ours: applying it to
++// a lock-retry loop.
++namespace {
++void lock_retrying(std::unique_lock<std::mutex>& lk, std::chrono::steady_clock::duration first, const char* purpose,
++                   unsigned long long& diagnostics) {
++  using clock = std::chrono::steady_clock;
++  unsigned long long failed = 0;
++  unsigned long long written = 0;
++  clock::time_point r0{};
++  clock::time_point next{};
++  for (;;) {
++    try {
++      lk.lock();
++      if (written > 0) {
++        std::fprintf(stderr,
++                     "tensor_cuda: interpreter exit took the DLPack release lifecycle lock %s after %llu failed "
++                     "attempt(s) over %.1f s; exit continues\n",
++                     purpose, failed, std::chrono::duration<double>(clock::now() - r0).count());
++        std::fflush(stderr);
++      }
++      return;
++    } catch (const std::system_error& e) {
++      g_shutdown_lock_retries.fetch_add(1);
++      const auto now = clock::now();
++      if (failed++ == 0) {
++        r0 = now;
++        next = r0 + first;
++      }
++      if (now >= next) {
++        std::fprintf(stderr,
++                     "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock %s (%s): %llu failed "
++                     "attempt(s) over %.1f s; it retries every %d ms and waits (it never returns early)\n",
++                     purpose, e.what(), failed, std::chrono::duration<double>(now - r0).count(),
++                     kDlpackShutdownLockRetryMs);
++        std::fflush(stderr);
++        ++written;
++        ++diagnostics;
++        g_shutdown_lock_diagnostics.fetch_add(1);
++        const auto waited = now - r0;            // next line when the time spent retrying has doubled
++        const auto tick = clock::duration(1);    // (at least one clock tick later: no line per attempt at a zero delay)
++        next = now + (waited > tick ? waited : tick);
++      }
++      std::this_thread::sleep_for(std::chrono::milliseconds(kDlpackShutdownLockRetryMs));
++    }
++  }
++}
++}  // namespace
++
++py::dict dlpack_begin_shutdown_impl(double first_diag_s, bool diag_default_used, bool runner) {
+   ImportReleaseLifecycle& lc = release_lifecycle();
+   if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;           // NaN or negative: diagnose at once (the wait is the same)
+-  if (first_diag_s > 86400.0) first_diag_s = 86400.0;       // keep the chrono conversion finite
++  if (first_diag_s > kDlpackShutdownMaxDiagDelayS) first_diag_s = kDlpackShutdownMaxDiagDelayS;  // finite chrono
+   const auto first = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+       std::chrono::duration<double>(first_diag_s));
+   const long long own = t_admitted_depth;                   // this thread's own admitted releases: never waited for
+@@ -120,12 +203,27 @@
+   bool overran = false;
+   unsigned long long diagnostics = 0;
+   const auto t0 = std::chrono::steady_clock::now();
+-  {
+-    py::gil_scoped_release nogil;                           // admitted releases need the GIL to finish
+-    std::unique_lock<std::mutex> lk(lc.mu);
++  // P1T-FIX5 (sweep (c), callbacks during interpreter exit): the GIL is released with PyEval_SaveThread and re-taken
++  // with an explicit PyEval_RestoreThread in THIS frame (not noexcept), no longer by py::gil_scoped_release's
++  // destructor. CPython 3.12 exits a non-main thread that re-takes the GIL during finalization (take_gil ->
++  // PyThread_exit_thread -> pthread_exit, a forced unwind); started inside a destructor, that unwind meets the
++  // destructor's implicit noexcept (std::terminate, abort). A non-main thread can be here: the hook is a plain Python
++  // function (tensor_cuda._dlpack_shutdown_hook), and two waiters (it and the main thread's real atexit call) wake
++  // together when the last admitted release leaves. Now such a thread's forced unwind travels through ordinary frames
++  // to the raw function's caller. The mutex is still released before the GIL is re-taken. Same design as tc_signal's
++  // release lifecycle (dlpack_operand.cpp). Prior art: CPython's PyEval_SaveThread / PyEval_RestoreThread contract;
++  // glibc/libstdc++ forced unwinding (abi::__forced_unwind must propagate; a noexcept frame terminates); pybind11's
++  // gil_scoped_release::disarm note ("PyEval_RestoreThread() should not be called if runtime is finalizing"). Ours:
++  // the explicit restore placement.
++  PyThreadState* gil_state = PyEval_SaveThread();           // admitted releases need the GIL to finish
++  try {
++    std::unique_lock<std::mutex> lk(lc.mu, std::defer_lock);
++    lock_retrying(lk, first, "to close DLPack release admission", diagnostics);  // P1T-FIX7: never skips the close
+     lc.closing = true;                                      // admission closed for good: nothing new can start
+     at_close = lc.in_flight;
+     auto next = t0 + first;
++    // libstdc++'s wait_until on steady_clock does not throw (pthread_cond_clockwait errors other than a timeout are
++    // ignored) and the predicate reads two integers; the re-lock after a diagnostic is retried as above.
+     while (!lc.cv.wait_until(lk, next, [&lc, own] { return lc.in_flight <= own; })) {
+       // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01).
+       overran = true;
+@@ -142,27 +240,46 @@
+       const auto waited = now - t0;
+       const auto tick = std::chrono::steady_clock::duration(1);
+       next = now + (waited > tick ? waited : tick);
+-      lk.lock();
++      lock_retrying(lk, first, "again after a diagnostic (admission is already closed)", diagnostics);
+     }
+     remaining = lc.in_flight - own;
+-  }  // lk is released before nogil re-takes the GIL
++  } catch (...) {
++    // Not reachable (see above; FIX5's safety net, kept): never leave this frame without the GIL. No Python ran in the
++    // try block, so this is never a forced unwind of the interpreter's making; it is rethrown unchanged.
++    PyEval_RestoreThread(gil_state);
++    throw;
++  }  // lk is released before the GIL is re-taken
++  PyEval_RestoreThread(gil_state);                          // explicit, in this non-noexcept frame (see above)
+   const long long waited_us =
+       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+-  g_shutdown_calls.fetch_add(1);
+-  g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
+-  if (overran) g_shutdown_timeouts.fetch_add(1);
+-  g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
+-  g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
+-  g_shutdown_diagnostics.fetch_add(diagnostics);
+-  py::dict d;
++  const long long others_at_close = at_close - own > 0 ? at_close - own : 0;
++  if (runner) {
++    g_shutdown_runner_closes.fetch_add(1);
++    g_shutdown_runner_in_flight_at_close.fetch_add(static_cast<unsigned long long>(others_at_close));
++  } else {
++    g_shutdown_calls.fetch_add(1);
++    g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
++    if (overran) g_shutdown_timeouts.fetch_add(1);
++    g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
++    g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
++    g_shutdown_diagnostics.fetch_add(diagnostics);
++    if (diag_default_used) g_shutdown_diag_default_used.fetch_add(1);
++  }
++  py::dict d;  // built after the close and the wait: a MemoryError here cannot skip them
+   d["in_flight_at_close"] = at_close;
+   d["still_in_flight"] = remaining;
+   d["timed_out"] = overran;
+   d["waited_us"] = waited_us;
+   d["diagnostics"] = diagnostics;
+   d["own_thread_in_flight"] = own;
++  d["others_in_flight_at_close"] = others_at_close;      // P1T-FIX7
++  d["first_diag_s"] = first_diag_s;                      // P1T-FIX7: the delay actually used (after NaN / cap handling)
++  d["first_diag_default_used"] = diag_default_used;      // P1T-FIX7: the knob could not be read; the default was used
+   return d;
+ }
++
++// The one-argument form (FIX2-FIX6 signature, kept: the reviewers' host slices bind it as `close`).
++py::dict dlpack_begin_shutdown(double first_diag_s) { return dlpack_begin_shutdown_impl(first_diag_s, false, false); }
+ static DLManagedTensor manager{};
+ static PyObject* callback=nullptr;
+ static void run_callback(DLManagedTensor*) { PyObject* r=PyObject_CallNoArgs(callback); if(!r) throw py::error_already_set(); Py_DECREF(r); }
