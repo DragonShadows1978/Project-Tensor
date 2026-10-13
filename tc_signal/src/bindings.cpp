@@ -403,5 +403,43 @@ PYBIND11_MODULE(_tc_signal, m) {
         "operands are then deliberately leaked, never released early).");
   m.def("pending_stats", &pending_stats, py::arg("reset_high_water") = false,
         "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
-        "fallback syncs, deliberate leaks, and the bounds.");
+        "fallback syncs, deliberate leaks, and the bounds; P1T-FIX2: deleter_exceptions, push_alloc_failures, "
+        "event_recycle_failures, release_errors, unreported_release_errors.");
+  // P1T-FIX2 (N3): build the pending-list state now (it allocates), so no noexcept release path is the first to touch
+  // it; a failure here fails the import (MemoryError), never a later release.
+  init_pending_state();
+  // TEST HOOK (P1T-FIX2 N1/N3 regression tests only; not part of the API): arm one-shot failures at named release-path
+  // sites (dlpack_operand.h, test_hooks). `names` is a list of site names; "clear" disarms everything.
+  m.def(
+      "_test_inject",
+      [](const std::vector<std::string>& names) {
+        static const std::pair<const char*, unsigned> kSites[] = {
+            {"alloc:event_pool_reserve", test_hooks::kAllocEventPoolReserve},
+            {"alloc:event_recycle", test_hooks::kAllocEventRecycle},
+            {"alloc:pending_push", test_hooks::kAllocPendingPush},
+            {"alloc:owner_reserve", test_hooks::kAllocOwnerReserve},
+            {"alloc:error_message", test_hooks::kAllocErrorMessage},
+            {"cuda:event_record", test_hooks::kCudaEventRecord},
+            {"cuda:sync", test_hooks::kCudaSync},
+        };
+        unsigned bits = 0;
+        for (const std::string& n : names) {
+          if (n == "clear") {
+            test_hooks::clear();
+            continue;
+          }
+          bool found = false;
+          for (const auto& site : kSites)
+            if (n == site.first) {
+              bits |= site.second;
+              found = true;
+            }
+          if (!found) throw py::value_error("tc_signal._test_inject: unknown site '" + n + "'");
+        }
+        test_hooks::arm(bits);
+        return test_hooks::armed();
+      },
+      py::arg("names"), "TEST HOOK (P1T-FIX2): arm one-shot failures at named release-path sites; returns the armed bits.");
+  m.def("_test_injection_armed", []() { return test_hooks::armed(); },
+        "TEST HOOK (P1T-FIX2): the release-path injection bits still armed (a hit site disarms itself).");
 }

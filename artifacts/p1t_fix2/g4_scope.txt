@@ -1,0 +1,75 @@
+1. paths changed by P1T-FIX2 (tracked vs HEAD + untracked, gitignored build outputs excluded):
+   OK  tc_signal/README.md
+   OK  tc_signal/src/bindings.cpp
+   OK  tc_signal/src/checked_math.h
+   OK  tc_signal/src/dlpack_operand.cpp
+   OK  tc_signal/src/dlpack_operand.h
+   OK  tc_signal/src/tuning.h
+   OK  tc_signal/tc_signal/__init__.py
+   OK  tensor_cuda/include/tc/core.h
+   OK  tensor_cuda/src/bindings.cpp
+   OK  tensor_cuda/src/kernels.cu
+   OK  tensor_cuda/tensor_cuda/__init__.py
+   OK  tensor_cuda/tests/test_dlpack.py
+   OK  artifacts/p1t_fix2/before_witness/native_harness_ck_census_on_d116ac0_src.jsonl
+   OK  artifacts/p1t_fix2/before_witness/native_harness_ck_census_on_d116ac0_src.stderr
+   OK  artifacts/p1t_fix2/before_witness/native_harness_oom_sweep_on_d116ac0_src.jsonl
+   OK  artifacts/p1t_fix2/before_witness/native_harness_oom_sweep_on_d116ac0_src.stderr
+   OK  artifacts/p1t_fix2/build_rev2_probes.sh
+   OK  artifacts/p1t_fix2/build_sha256.txt
+   OK  artifacts/p1t_fix2/g3/make_mutants.py
+   OK  artifacts/p1t_fix2/g3/mut_a.diff
+   OK  artifacts/p1t_fix2/g3/mut_a_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/mut_b.diff
+   OK  artifacts/p1t_fix2/g3/mut_b_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/mut_c.diff
+   OK  artifacts/p1t_fix2/g3/mut_c_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/mut_d1.diff
+   OK  artifacts/p1t_fix2/g3/mut_d1_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/mut_d2.diff
+   OK  artifacts/p1t_fix2/g3/mut_d2_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/mut_e.diff
+   OK  artifacts/p1t_fix2/g3/mut_e_so_sha256.txt
+   OK  artifacts/p1t_fix2/g3/run_mutant.sh
+   OK  artifacts/p1t_fix2/g4_scope.py
+   OK  artifacts/p1t_fix2/g4_scope.txt
+   OK  artifacts/p1t_fix2/make_disarm_variant.py
+   OK  artifacts/p1t_fix2/make_host_checks_copy.py
+   OK  artifacts/p1t_fix2/probe_runs/core_cpu_regen_fix2.cpp
+   OK  artifacts/p1t_fix2/probe_runs/core_cpu_regen_fix2.diff
+   OK  artifacts/p1t_fix2/probe_runs/host_checks_paths_after.diff
+   OK  artifacts/p1t_fix2/probe_runs/host_checks_paths_before.diff
+   OK  artifacts/p1t_fix2/probe_runs/rev2_inputs_sha256.txt
+   OK  artifacts/p1t_fix2/probe_runs/rev2_oom_sync_gpu_backtrace_after.txt
+   OK  artifacts/p1t_fix2/probe_runs/rev2_oom_sync_gpu_backtrace_before.txt
+   OK  artifacts/p1t_fix2/probe_runs/rev2_probe_files_sha256.txt
+   OK  artifacts/p1t_fix2/probe_runs/round1_host_checks.stderr
+   OK  artifacts/p1t_fix2/probe_runs/round1_inputs_sha256.txt
+   OK  artifacts/p1t_fix2/probe_runs/round1_summary.txt
+   OK  artifacts/p1t_fix2/regen_core_cpu_probe.py
+   OK  artifacts/p1t_fix2/run_g1_rev2_probes.sh
+   OK  artifacts/p1t_fix2/run_g2_round1_probes.sh
+   OK  artifacts/p1t_fix2/run_n5_scenarios.py
+   OK  artifacts/p1t_fix2/source_sha256_frozen.txt
+   OK  docs/P1T_FIX2_LEDGER.md
+   OK  docs/P1T_FIX2_REPORT.md
+   OK  logs/p1t_fix2_g2_compare.txt
+   OK  tc_signal/tests/fix2_native_harness.cpp
+   OK  tc_signal/tests/test_fix2_findings.py
+2. HEAD vs d116ac0 (lead commits already on voice-fix2, not this seat's):
+   4f62b97 Order P1T-FIX2 (Opus 5.5 high): close round-2 partial findings N1 (synchronize swallows CUDA errors), 
+   9231270 Bring P1T-REV2 partial receipts and CPU probes into voice-fix2
+   e299341 P1T-REV2 r1 receipts (Codex gpt-6.1-sol high, sentinel 20261013T025732Z-1952776): INCOMPLETE — run sto
+   5368e54 Order P1T-REV2 (Codex gpt-6.1-sol high): round-2 blind review of 9df5bef..d116ac0 (tensor_cuda/, tc_si
+   files: artifacts/p1t_rev2/REGISTRATION.md, artifacts/p1t_rev2/fix1_diff.patch, artifacts/p1t_rev2/full_diff.patch, artifacts/p1t_rev2/host_checks.json, artifacts/p1t_rev2/probes/core_cpu.cpp, artifacts/p1t_rev2/probes/cpu_native.cpp, artifacts/p1t_rev2/probes/host_checks.py, artifacts/p1t_rev2/source_inventory.json, artifacts/p1t_rev2/source_slices.json, docs/P1T_REV2_LEDGER.md, logs/p1t_rev2_r1.log, orders/P1T_FIX2_ROBUSTNESS.md, orders/P1T_REV2_BLIND_REVIEW.md
+3. added-code checks vs d116ac0 (tensor_cuda/, tc_signal/):
+   new core __global__: 0
+   device atomics (atomicAdd/atomicCAS/...): 0
+   fast-math flags: 0
+   TF32: 0
+   cudaDeviceSynchronize: 0
+   host-callback launches: 0
+   std::terminate / abort calls: 0
+   (informational) host-side std::atomic counter lines added: 11
+4. reviewer probe files vs HEAD: byte-identical
+G4 PASS

@@ -4,10 +4,11 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <deque>
+#include <new>
 #include <limits>
-#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -148,18 +149,24 @@ int64_t validate_tensor(const DLTensor* t, const char* role, int ndim) {
     os << "expected " << ndim << " dimensions, got " << t->ndim;
     refuse_value(role, os.str());
   }
-  for (int i = 0; i < t->ndim; ++i)
-    if (t->shape[i] <= 0) refuse_value(role, "empty operand (shape " + shape_str(shape_of(t)) + ")");
-  // F03: checked element count and fp32 byte total (every extent is >= 1 here), before the stride walk below
-  // multiplies extents and before any later byte range is formed.
+  // F03: checked element count and fp32 byte total, before the stride walk below multiplies extents and before any
+  // later byte range is formed.
+  // P1T-FIX2, review finding N2 (zero-extent rule, checked_math.h ck_extent_bound): EVERY extent is multiplied (a zero
+  // or negative one counted as 1) BEFORE the empty-operand refusal, so a shape such as [0, 2^62, 4] is refused as an
+  // overflow, never waved through because its count is 0. Prior art: NumPy's array constructor rule (see
+  // checked_math.h); the checked builtins (GCC 5, 2015).
   int64_t numel = 1;
   for (int i = 0; i < t->ndim; ++i) {
-    if (__builtin_mul_overflow(numel, t->shape[i], &numel))
-      refuse_value(role, "element count of shape " + shape_str(shape_of(t)) + " overflows int64");
+    if (__builtin_mul_overflow(numel, t->shape[i] > 1 ? t->shape[i] : int64_t{1}, &numel))
+      refuse_value(role, "element count of shape " + shape_str(shape_of(t)) +
+                             " overflows int64 (every nonzero extent counts, also next to a zero extent)");
   }
   int64_t nbytes = 0;
   if (__builtin_mul_overflow(numel, static_cast<int64_t>(sizeof(float)), &nbytes))
     refuse_value(role, "byte size of shape " + shape_str(shape_of(t)) + " (fp32) overflows int64");
+  for (int i = 0; i < t->ndim; ++i)
+    if (t->shape[i] <= 0) refuse_value(role, "empty operand (shape " + shape_str(shape_of(t)) + ")");
+  // Every extent is >= 1 from here: numel is the element count and nbytes its fp32 byte size.
   if (t->strides != nullptr) {
     // C-contiguous: every dimension of extent > 1 has the compact stride; size-1 dimensions may carry any stride
     // (they are never stepped), as the order and the DLPack/array API conventions allow.
@@ -210,20 +217,50 @@ ManagedOwner& ManagedOwner::operator=(ManagedOwner&& o) noexcept {
   return *this;
 }
 
+// P1T-FIX2, review finding N4: a producer deleter that throws a C++ exception must not terminate the process. Every
+// deleter call in tc_signal goes through reset() (the immediate release of a refused call, the deferred drain, the
+// bound drain, the fallback sync, synchronize() and the atexit hook all end here), and reset() is noexcept, so an
+// escaping exception used to reach std::terminate (round-2 probe cpu_native throw_deleter, rc -6). Now each call is
+// wrapped: the exception is caught (catch-all), counted (pending_stats()['deleter_exceptions']) and dropped; the owner
+// pointer is cleared BEFORE the call, so a deleter is never called twice, and the caller (a loop over an entry's
+// managers) keeps going with the remaining managers. The DLPack ABI declares the deleter as a C function, so a
+// throwing deleter already breaks the producer's contract; containing it is the consumer's choice, not a recovery
+// (the producer's memory may or may not have been freed: tc_signal does not touch it again either way).
+// Prior art: C++11 noexcept semantics ([except.terminate]: an exception escaping a noexcept function calls
+// std::terminate) and the "destructors/cleanup must not throw" guideline (C++ Core Guidelines C.36/E.16, Sutter &
+// Alexandrescu 2004, item 51). Taken: catch at the noexcept boundary. Ours: counting and continuing per manager.
+// Known gap (not closed): a deleter that calls pthread_exit or is cancelled unwinds with abi::__forced_unwind, which
+// may not be swallowed (glibc aborts); no C++ handler can contain that.
+namespace {
+std::atomic<unsigned long long> g_deleter_exceptions{0};  // static storage: counting never allocates
+
+template <typename M>
+void call_deleter_contained(M* m) noexcept {
+  if (m == nullptr || m->deleter == nullptr) return;
+  try {
+    m->deleter(m);
+  } catch (...) {
+    g_deleter_exceptions.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+}  // namespace
+
 void ManagedOwner::reset() noexcept {
   // DLPack consumer rule: when done, call the producer's deleter (it may be NULL). Called with the GIL held (every
   // tc_signal entry point runs under the GIL), so a deleter that touches Python objects is safe.
   if (legacy != nullptr) {
     DLManagedTensor* m = legacy;
-    legacy = nullptr;
-    if (m->deleter) m->deleter(m);
+    legacy = nullptr;  // cleared first: never called twice, even if the deleter throws or re-enters
+    call_deleter_contained(m);
   }
   if (versioned != nullptr) {
     DLManagedTensorVersioned* m = versioned;
     versioned = nullptr;
-    if (m->deleter) m->deleter(m);
+    call_deleter_contained(m);
   }
 }
+
+unsigned long long deleter_exceptions() noexcept { return g_deleter_exceptions.load(std::memory_order_relaxed); }
 
 // ------------------------------------------------------------------------------------------------ Operand
 Operand::Operand(py::handle capsule, const char* role, int ndim, bool writable) : role_(role) {
@@ -347,14 +384,58 @@ void expect_disjoint(const Operand& written, const Operand& other) {
 // Design and prior art: dlpack_operand.h, RetainUntilComplete. Every function here runs on the calling host thread with
 // the GIL held (every _tc_signal entry point is a pybind11 function that keeps the GIL), so the pending list needs no
 // lock. Deleters may run Python (a ctypes producer) and may even re-enter tc_signal; therefore an entry is always taken
-// OFF the list before its deleters run, and nothing iterates the list across a deleter call.
+// OFF the list before its deleters run, and nothing holds a reference into the list across a deleter call.
+//
+// P1T-FIX2 (round-2 review N1, N3) changed the release paths as follows:
+//  * N3, no allocation failure terminates. The noexcept functions here (drain_completed, the RetainUntilComplete
+//    destructor, sync_and_release_all_impl, recycle_event) no longer allocate, except the pending-list push in the
+//    destructor, which is caught and falls back to a synchronous release (counted). sync_and_release_all_impl works on
+//    the live list in place (phase 1 synchronizes the devices into a fixed-capacity set, phase 2 pops completed
+//    entries), instead of a take-all std::deque swap and a std::set / std::vector of devices, which allocated inside a
+//    noexcept function (libstdc++'s deque allocates even when default-constructed: the round-2 probe oom_sync, rc -6).
+//    The recycle slot of every completion event is reserved when the event is created (constructor path, before any
+//    launch), so recycling never allocates. The owner vector is reserved in the constructor, as before.
+//  * N1, no CUDA error is reported as success: a failed current-device query (cudaGetDevice) is now an error of
+//    synchronize() (it used to be skipped, so an empty list "synchronized" successfully on a machine with no usable
+//    device: probe empty_sync); a stream sync that fails is an error; and a release-path failure that happens where
+//    nothing can raise (the fallback sync and the bound drain inside the destructor) is recorded and raised by the next
+//    synchronize() (once), and logged by the atexit hook.
+// Prior art for the in-place two-phase drain: PyTorch's CUDA caching allocator processes its event list in place from
+// the host (process_events: query each recorded event, stop at the first one not ready). Taken: query-and-pop in FIFO
+// order. Ours: the sync-then-pop split with the per-device failure set, and leak-instead-of-release for entries whose
+// device could not be synchronized. Fixed-capacity, allocation-free bookkeeping on failure paths is ordinary
+// "no allocation on the error path" practice (e.g. the C++ Core Guidelines E.16 discussion); no specific prior art
+// claimed for the set itself.
+namespace test_hooks {
 namespace {
+std::atomic<unsigned> g_armed{0};
+}  // namespace
+void arm(unsigned bits) noexcept { g_armed.fetch_or(bits, std::memory_order_relaxed); }
+void clear() noexcept { g_armed.store(0, std::memory_order_relaxed); }
+unsigned armed() noexcept { return g_armed.load(std::memory_order_relaxed); }
+bool take(unsigned bit) noexcept {
+  if ((g_armed.load(std::memory_order_relaxed) & bit) == 0) return false;  // the production path: one relaxed load
+  return (g_armed.fetch_and(~bit, std::memory_order_relaxed) & bit) != 0;
+}
+}  // namespace test_hooks
+
+namespace {
+
+// TEST HOOK: the CUDA error an armed kCuda* site reports instead of calling CUDA (tests only; never in production).
+constexpr cudaError_t kTestInjectedCudaError = cudaErrorLaunchFailure;
 
 struct PendingEntry {
   cudaEvent_t event = nullptr;   // recorded on `device`'s legacy stream right after the call's last launch
   int device = -1;
   int64_t bytes = 0;             // sum of the fp32 operand sizes this entry keeps alive
   std::vector<ManagedOwner> owners;
+};
+
+// Completion events of one device: `free` holds completed events for reuse; its capacity is kept >= `created` (the
+// number of live events of this device), so returning an event to it never allocates (N3).
+struct DeviceEvents {
+  std::vector<cudaEvent_t> free;
+  size_t created = 0;
 };
 
 struct PendingState {
@@ -368,31 +449,42 @@ struct PendingState {
   unsigned long long released_entries = 0;
   unsigned long long released_managers = 0;
   unsigned long long bound_drains = 0;       // a push exceeded a bound -> synchronize + release everything
-  unsigned long long fallback_syncs = 0;     // the event could not be recorded -> the legacy stream was synchronized
+  unsigned long long fallback_syncs = 0;     // the event could not be recorded/queued -> the legacy stream was synced
   unsigned long long leaked_managers = 0;    // no completion proof (broken context): deliberately not released
-  std::unordered_map<int, std::vector<cudaEvent_t>> event_pool;   // completed events, reused per device
+  unsigned long long push_alloc_failures = 0;     // N3: the pending-list push failed to allocate (-> fallback sync)
+  unsigned long long event_recycle_failures = 0;  // N3: an event could not be pooled (destroyed instead)
+  unsigned long long release_errors = 0;          // N1: CUDA failures on the release paths (fallback sync, bound drain)
+  // N1: release-path failures not yet raised by synchronize() (the first one is named; all are counted).
+  unsigned long long unreported_count = 0;
+  unsigned long long unreported_leaked = 0;
+  int unreported_device = -1;
+  cudaError_t unreported_error = cudaSuccess;
+  std::unordered_map<int, DeviceEvents> event_pool;   // per device
 };
 
 // Never destroyed: no static destructor may call a producer deleter at process exit (Python may be gone by then).
+// Constructed at module import (init_pending_state), so the first call from a noexcept release path never allocates.
 PendingState& pending() {
   static PendingState* state = new PendingState();
   return *state;
 }
 
-// Makes `device` current for its scope and restores the caller's device; never throws (ok() reports failure, and a
-// failed switch clears the runtime's last-error slot so a later, unrelated launch check does not report it).
+// Makes `device` current for its scope and restores the caller's device; never throws (ok()/error() report failure,
+// and a failed call clears the runtime's last-error slot so a later, unrelated launch check does not report it).
 class QuietDeviceGuard {
  public:
   explicit QuietDeviceGuard(int device) noexcept {
-    if (cudaGetDevice(&prev_) != cudaSuccess) {
+    cudaError_t e = cudaGetDevice(&prev_);
+    if (e != cudaSuccess) {
       cudaGetLastError();
-      ok_ = false;
+      err_ = e;
       return;
     }
     if (prev_ != device) {
-      if (cudaSetDevice(device) != cudaSuccess) {
+      e = cudaSetDevice(device);
+      if (e != cudaSuccess) {
         cudaGetLastError();
-        ok_ = false;
+        err_ = e;
         return;
       }
       switched_ = true;
@@ -403,19 +495,105 @@ class QuietDeviceGuard {
   }
   QuietDeviceGuard(const QuietDeviceGuard&) = delete;
   QuietDeviceGuard& operator=(const QuietDeviceGuard&) = delete;
-  bool ok() const { return ok_; }
+  bool ok() const { return err_ == cudaSuccess; }
+  cudaError_t error() const { return err_; }
 
  private:
   int prev_ = 0;
-  bool ok_ = true;
+  cudaError_t err_ = cudaSuccess;
   bool switched_ = false;
 };
 
+// Synchronizes the legacy stream of `device` (switching to it and back). Never throws, never allocates.
+cudaError_t sync_device_legacy(int device) noexcept {
+  QuietDeviceGuard g(device);
+  if (!g.ok()) return g.error();
+  const cudaError_t r =
+      test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
+  if (r != cudaSuccess) cudaGetLastError();
+  return r;
+}
+
+// N1/N3: the devices one sync_and_release_all_impl call synchronized, with each result. Fixed capacity, no allocation.
+// A device beyond the capacity is still synchronized; its failure is remembered only as `spill_failed`, which makes
+// every unrecorded device count as failed (conservative: its not-yet-complete entries are leaked, never released).
+struct DeviceSyncSet {
+  int dev[tuning::kSyncMaxDevices];
+  cudaError_t err[tuning::kSyncMaxDevices];
+  int n = 0;
+  bool spill_failed = false;
+  cudaError_t spill_error = cudaSuccess;
+
+  void sync(int d) noexcept {
+    for (int i = 0; i < n; ++i)
+      if (dev[i] == d) return;
+    const cudaError_t r = sync_device_legacy(d);
+    if (n < tuning::kSyncMaxDevices) {
+      dev[n] = d;
+      err[n] = r;
+      ++n;
+    } else if (r != cudaSuccess) {
+      spill_failed = true;
+      spill_error = r;
+    }
+  }
+  bool failed(int d) const noexcept {
+    for (int i = 0; i < n; ++i)
+      if (dev[i] == d) return err[i] != cudaSuccess;
+    return spill_failed;
+  }
+};
+
+// What one sync_and_release_all_impl call found (fixed capacity: the first kSyncReportMax failures are named, the
+// rest only counted).
+struct SyncReport {
+  bool query_failed = false;               // cudaGetDevice failed (N1: never a success)
+  cudaError_t query_error = cudaSuccess;
+  int n = 0;
+  int dev[tuning::kSyncReportMax];
+  cudaError_t err[tuning::kSyncReportMax];
+  int unnamed = 0;                         // failures beyond the named ones
+  unsigned long long leaked_managers = 0;  // managers leaked by this call (no completion proof)
+
+  void add(int d, cudaError_t e) noexcept {
+    if (n < tuning::kSyncReportMax) {
+      dev[n] = d;
+      err[n] = e;
+      ++n;
+    } else {
+      ++unnamed;
+    }
+  }
+  bool failed() const noexcept { return query_failed || n > 0 || unnamed > 0 || leaked_managers > 0; }
+  int first_device() const noexcept { return n > 0 ? dev[0] : -1; }
+  cudaError_t first_error() const noexcept { return query_failed ? query_error : (n > 0 ? err[0] : cudaErrorUnknown); }
+};
+
+// N1: a CUDA failure on a release path that cannot raise (inside the noexcept destructor). Raised by the next
+// synchronize(), logged at exit. Never allocates.
+void note_release_failure(PendingState& st, int device, cudaError_t err, unsigned long long leaked) noexcept {
+  ++st.release_errors;
+  if (st.unreported_count == 0) {
+    st.unreported_device = device;
+    st.unreported_error = err;
+  }
+  ++st.unreported_count;
+  st.unreported_leaked += leaked;
+}
+
 void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
   if (ev == nullptr) return;
+  DeviceEvents* de = nullptr;
   try {
-    st.event_pool[device].push_back(ev);
+    auto it = st.event_pool.find(device);  // find, never operator[]: no insertion on the release path
+    if (it != st.event_pool.end()) de = &it->second;
+    // N3: the slot was reserved when the event was created; refuse (never allocate) if it somehow is not there.
+    if (test_hooks::take(test_hooks::kAllocEventRecycle) || de == nullptr || de->free.size() >= de->free.capacity())
+      throw std::bad_alloc();
+    de->free.push_back(ev);  // within capacity: no allocation
   } catch (...) {
+    ++st.event_recycle_failures;
+    if (de != nullptr && de->created > 0) --de->created;
     cudaEventDestroy(ev);
   }
 }
@@ -434,7 +612,8 @@ void note_pop(PendingState& st, const PendingEntry& e) {
   st.managers -= static_cast<long long>(e.owners.size());
 }
 
-// Runs the entry's deleters (they may run Python and re-enter tc_signal; the entry is already off the list).
+// Runs the entry's deleters (they may run Python and re-enter tc_signal; the entry is already off the list). A throwing
+// deleter is contained in ManagedOwner::reset (N4) and the loop goes on with the remaining managers.
 void release_entry(PendingState& st, PendingEntry& e) noexcept {
   recycle_event(st, e.device, e.event);
   e.event = nullptr;
@@ -443,72 +622,82 @@ void release_entry(PendingState& st, PendingEntry& e) noexcept {
   for (ManagedOwner& o : e.owners) o.reset();
 }
 
-void leak_entry(PendingState& st, PendingEntry& e) noexcept {
+// Returns the number of managers leaked.
+unsigned long long leak_entry(PendingState& st, PendingEntry& e) noexcept {
+  unsigned long long n = 0;
   for (ManagedOwner& o : e.owners) {
-    if (!o.empty()) ++st.leaked_managers;
+    if (!o.empty()) ++n;
     o.leak();
   }
+  st.leaked_managers += n;
   // The event is not recycled either: it may belong to a broken context.
   e.event = nullptr;
+  return n;
 }
 
-// Takes the whole list off, synchronizes the legacy stream of the current device and of every device in it, then
-// releases each entry whose device synchronized and leaks the others. Entries pushed by deleters while this runs (a
-// re-entrant tc_signal call) land on the fresh list and are not touched here. Returns the failed devices' errors.
-std::vector<std::pair<int, cudaError_t>> sync_and_release_all_impl() noexcept {
+// Phase 1: synchronize the legacy stream of the current device and of every device with pending entries (no deleter
+// runs, so iterating the live list is safe). Phase 2: pop entries in FIFO order and release each one whose event has
+// completed; leak (counted) an entry with no completion proof whose device could not be synchronized or whose event
+// query failed; stop at the first entry that is merely not ready on a device that DID synchronize: it was pushed after
+// phase 1 by a re-entrant call (a deleter that calls tc_signal) and is left pending. Every entry is popped before its
+// deleters run, so a re-entrant drain or bound drain pops each entry at most once. No allocation, never throws.
+SyncReport sync_and_release_all_impl() noexcept {
   PendingState& st = pending();
-  std::deque<PendingEntry> taken;
-  taken.swap(st.q);
-  st.bytes = 0;
-  st.managers = 0;
-  std::vector<std::pair<int, cudaError_t>> failed;
-  try {
-    std::set<int> devices;
-    int cur = -1;
-    if (cudaGetDevice(&cur) == cudaSuccess)
-      devices.insert(cur);
-    else
-      cudaGetLastError();
-    for (const PendingEntry& e : taken) devices.insert(e.device);
-    for (int d : devices) {
-      QuietDeviceGuard g(d);
-      cudaError_t r = g.ok() ? cudaStreamSynchronize(cudaStreamLegacy) : cudaErrorInvalidDevice;
-      if (r != cudaSuccess) {
-        cudaGetLastError();
-        failed.emplace_back(d, r);
+  SyncReport rep;
+  DeviceSyncSet set;
+  int cur = -1;
+  const cudaError_t qe = cudaGetDevice(&cur);
+  if (qe != cudaSuccess) {
+    cudaGetLastError();
+    rep.query_failed = true;  // N1: was silently skipped (synchronize() then "succeeded" with no device)
+    rep.query_error = qe;
+  } else {
+    set.sync(cur);
+  }
+  for (const PendingEntry& e : st.q) set.sync(e.device);
+  for (int i = 0; i < set.n; ++i)
+    if (set.err[i] != cudaSuccess) rep.add(set.dev[i], set.err[i]);
+  if (set.spill_failed) rep.add(-1, set.spill_error);
+
+  while (!st.q.empty()) {
+    const cudaError_t r = cudaEventQuery(st.q.front().event);
+    const int dev = st.q.front().device;
+    const bool complete = (r == cudaSuccess);
+    if (!complete) {
+      if (r == cudaErrorNotReady) {
+        if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+        if (!set.failed(dev)) break;  // pushed after phase 1 (re-entrant call): not ours to force
+      } else {
+        cudaGetLastError();           // the event itself cannot be queried: no completion proof (N1: an error)
+        rep.add(dev, r);
       }
     }
-  } catch (...) {
-    // Only bad_alloc can land here: without a completion proof, leak everything taken.
-    for (PendingEntry& e : taken) leak_entry(st, e);
-    failed.emplace_back(-1, cudaErrorMemoryAllocation);
-    return failed;
-  }
-  while (!taken.empty()) {
-    PendingEntry e = std::move(taken.front());
-    taken.pop_front();
-    bool ok = true;
-    for (const auto& f : failed)
-      if (f.first == e.device) ok = false;
-    if (ok)
+    PendingEntry e = std::move(st.q.front());
+    st.q.pop_front();
+    note_pop(st, e);
+    if (complete)
       release_entry(st, e);
     else
-      leak_entry(st, e);
+      rep.leaked_managers += leak_entry(st, e);
   }
-  return failed;
+  return rep;
 }
 
 cudaEvent_t acquire_event(int device) {
   PendingState& st = pending();
-  auto it = st.event_pool.find(device);
-  if (it != st.event_pool.end() && !it->second.empty()) {
-    cudaEvent_t ev = it->second.back();
-    it->second.pop_back();
+  DeviceEvents& de = st.event_pool[device];  // may allocate: constructor path, nothing has been launched yet
+  if (!de.free.empty()) {
+    cudaEvent_t ev = de.free.back();
+    de.free.pop_back();
     return ev;
   }
+  // N3: reserve the recycle slot of the event about to be created HERE, where an allocation failure only refuses the
+  // call (MemoryError, operands released at once), so returning the event to the pool later never allocates.
+  if (test_hooks::take(test_hooks::kAllocEventPoolReserve)) throw std::bad_alloc();
+  if (de.free.capacity() < de.created + 1) de.free.reserve(std::max<size_t>(2 * de.free.capacity(), de.created + 1));
   QuietDeviceGuard g(device);
   cudaEvent_t ev = nullptr;
-  cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : cudaErrorInvalidDevice;
+  cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : g.error();
   if (r != cudaSuccess) {
     cudaGetLastError();
     std::ostringstream os;
@@ -516,13 +705,19 @@ cudaEvent_t acquire_event(int device) {
        << ": " << cudaGetErrorString(r);
     throw std::runtime_error(os.str());
   }
+  ++de.created;
   return ev;
 }
 
 }  // namespace
 
+void init_pending_state() { (void)pending(); }
+
 RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Operand*> ops)
     : device_(device), ops_(ops) {
+  // N3: every allocation the release needs happens here (may throw: then nothing has been launched and the operands
+  // are released at once by their own destructors); the destructor below allocates only for the pending-list push.
+  if (test_hooks::take(test_hooks::kAllocOwnerReserve)) throw std::bad_alloc();
   owners_.reserve(ops_.size());
   event_ = acquire_event(device_);  // last: if it throws, nothing else is held and nothing has been launched
 }
@@ -540,14 +735,20 @@ RetainUntilComplete::~RetainUntilComplete() {
   cudaError_t r = cudaSuccess;
   {
     QuietDeviceGuard g(device_);
-    r = g.ok() ? cudaEventRecord(event_, cudaStreamLegacy) : cudaErrorInvalidDevice;
+    r = !g.ok() ? g.error()
+                : (test_hooks::take(test_hooks::kCudaEventRecord) ? kTestInjectedCudaError
+                                                                  : cudaEventRecord(event_, cudaStreamLegacy));
   }
   if (r == cudaSuccess) {
     e.event = event_;
+    // N3: the push may allocate (a new deque node); this destructor is noexcept, so a failure must be caught here
+    // and turned into the synchronous fallback below (round-2 review: bad_alloc on the release path terminated).
     try {
+      if (test_hooks::take(test_hooks::kAllocPendingPush)) throw std::bad_alloc();
       st.q.push_back(std::move(e));
       note_push(st, st.q.back());
     } catch (...) {
+      ++st.push_alloc_failures;
       r = cudaErrorMemoryAllocation;  // e was not moved (push_back's strong guarantee): use the fallback below
       e.event = nullptr;
     }
@@ -555,27 +756,24 @@ RetainUntilComplete::~RetainUntilComplete() {
     cudaGetLastError();
   }
   if (r != cudaSuccess) {
-    // Fallback: no event, so synchronize this device's legacy stream; release on success, leak on failure.
+    // Fallback: no queued event, so synchronize this device's legacy stream; release on success, leak on failure.
     ++st.fallback_syncs;
-    bool synced = false;
-    {
-      QuietDeviceGuard g(device_);
-      synced = g.ok() && cudaStreamSynchronize(cudaStreamLegacy) == cudaSuccess;
-      if (!synced) cudaGetLastError();
-    }
-    if (synced) {
+    const cudaError_t sr = sync_device_legacy(device_);
+    if (sr == cudaSuccess) {
       recycle_event(st, device_, event_);
       ++st.released_entries;
       st.released_managers += e.owners.size();
-      for (ManagedOwner& o : e.owners) o.reset();
+      for (ManagedOwner& o : e.owners) o.reset();  // N4: a throwing deleter is contained per manager
     } else {
-      leak_entry(st, e);
+      const unsigned long long leaked = leak_entry(st, e);
+      note_release_failure(st, device_, sr, leaked);  // N1: raised by the next synchronize()
     }
     return;
   }
   if (static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes > tuning::kPendingMaxBytes) {
     ++st.bound_drains;
-    sync_and_release_all_impl();
+    const SyncReport rep = sync_and_release_all_impl();
+    if (rep.failed()) note_release_failure(st, rep.first_device(), rep.first_error(), rep.leaked_managers);  // N1
   }
 }
 
@@ -598,15 +796,45 @@ void drain_completed() noexcept {
 }
 
 void synchronize_and_release_all() {
-  const auto failed = sync_and_release_all_impl();
-  if (!failed.empty()) {
-    std::ostringstream os;
-    os << "tc_signal.synchronize: the legacy stream could not be synchronized on";
-    for (const auto& f : failed)
-      os << " device " << f.first << " (" << cudaGetErrorName(f.second) << ": " << cudaGetErrorString(f.second) << ")";
-    os << "; the operands still pending there were deliberately leaked, not released";
-    throw std::runtime_error(os.str());
+  const SyncReport rep = sync_and_release_all_impl();
+  PendingState& st = pending();
+  if (!rep.failed() && st.unreported_count == 0) return;
+  // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
+  // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate). The earlier release-path
+  // failures are cleared only once their message exists, so they are raised exactly once.
+  if (test_hooks::take(test_hooks::kAllocErrorMessage)) throw std::bad_alloc();
+  std::ostringstream os;
+  os << "tc_signal.synchronize: CUDA error, so the release is not reported as a success:";
+  const char* sep = " ";
+  if (rep.query_failed) {
+    os << sep << "the current-device query cudaGetDevice failed (" << cudaGetErrorName(rep.query_error) << ": "
+       << cudaGetErrorString(rep.query_error) << ")";
+    sep = "; ";
   }
+  for (int i = 0; i < rep.n; ++i) {
+    os << sep << "the legacy stream of device " << rep.dev[i] << " could not be synchronized ("
+       << cudaGetErrorName(rep.err[i]) << ": " << cudaGetErrorString(rep.err[i]) << ")";
+    sep = "; ";
+  }
+  if (rep.unnamed > 0) os << sep << rep.unnamed << " more device failure(s)";
+  if (rep.leaked_managers > 0)
+    os << "; " << rep.leaked_managers
+       << " consumed operand manager(s) still pending there were deliberately leaked, not released";
+  if (st.unreported_count > 0) {
+    os << sep << st.unreported_count << " earlier release-path failure(s) since the last synchronize, the first on device "
+       << st.unreported_device << " (" << cudaGetErrorName(st.unreported_error) << ": "
+       << cudaGetErrorString(st.unreported_error) << "), deliberately leaked " << st.unreported_leaked
+       << " operand manager(s)";
+  }
+  // std::ostream swallows a bad_alloc from its buffer and only sets badbit (a truncated message would follow): report
+  // the allocation failure itself instead.
+  if (!os) throw std::bad_alloc();
+  std::string msg = os.str();
+  st.unreported_count = 0;
+  st.unreported_leaked = 0;
+  st.unreported_device = -1;
+  st.unreported_error = cudaSuccess;
+  throw std::runtime_error(msg);
 }
 
 py::dict pending_stats(bool reset_high_water) {
@@ -626,6 +854,12 @@ py::dict pending_stats(bool reset_high_water) {
   d["leaked_managers"] = st.leaked_managers;
   d["max_entries"] = tuning::kPendingMaxEntries;
   d["max_bytes"] = tuning::kPendingMaxBytes;
+  // P1T-FIX2 counters.
+  d["deleter_exceptions"] = deleter_exceptions();           // N4
+  d["push_alloc_failures"] = st.push_alloc_failures;        // N3
+  d["event_recycle_failures"] = st.event_recycle_failures;  // N3
+  d["release_errors"] = st.release_errors;                  // N1
+  d["unreported_release_errors"] = st.unreported_count;     // N1
   if (reset_high_water) {
     st.high_water_entries = static_cast<long long>(st.q.size());
     st.high_water_managers = st.managers;

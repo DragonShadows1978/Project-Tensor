@@ -1,0 +1,28 @@
+ARMED: next host allocation fails; no CUDA call reached yet
+terminate called after throwing an instance of 'std::bad_alloc'
+  what():  std::bad_alloc
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff6a4527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff6a288ff in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff6ea5ff5 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#6  0x00007ffff6ebb0da in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#7  0x00007ffff6ea58e6 in __cxa_call_terminate () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#8  0x00007ffff6eba8ba in __gxx_personality_v0 () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#9  0x00007ffff7f97b06 in ?? () from /lib/x86_64-linux-gnu/libgcc_s.so.1
+#10 0x00007ffff7f981f1 in _Unwind_RaiseException () from /lib/x86_64-linux-gnu/libgcc_s.so.1
+#11 0x00007ffff6ebb384 in __cxa_throw () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#12 0x000055555555ba14 in operator new (n=n@entry=64) at /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/artifacts/p1t_rev2/probes/cpu_native.cpp:11
+#13 0x000055555555ba87 in std::__new_allocator<tcs::(anonymous namespace)::PendingEntry*>::allocate (__n=<optimized out>, this=<synthetic pointer>) at /usr/include/c++/13/bits/new_allocator.h:151
+#14 std::allocator_traits<std::allocator<tcs::(anonymous namespace)::PendingEntry*> >::allocate (__n=<optimized out>, __a=<synthetic pointer>...) at /usr/include/c++/13/bits/alloc_traits.h:482
+#15 std::_Deque_base<tcs::(anonymous namespace)::PendingEntry, std::allocator<tcs::(anonymous namespace)::PendingEntry> >::_M_allocate_map (__n=<optimized out>, this=0x7fffffffda00) at /usr/include/c++/13/bits/stl_deque.h:597
+#16 std::_Deque_base<tcs::(anonymous namespace)::PendingEntry, std::allocator<tcs::(anonymous namespace)::PendingEntry> >::_M_initialize_map (this=this@entry=0x7fffffffda00, __num_elements=__num_elements@entry=0) at /usr/include/c++/13/bits/stl_deque.h:646
+#17 0x000055555555ff23 in std::_Deque_base<tcs::(anonymous namespace)::PendingEntry, std::allocator<tcs::(anonymous namespace)::PendingEntry> >::_Deque_base (this=0x7fffffffda00) at /usr/include/c++/13/bits/stl_deque.h:460
+#18 std::deque<tcs::(anonymous namespace)::PendingEntry, std::allocator<tcs::(anonymous namespace)::PendingEntry> >::deque (this=0x7fffffffda00) at /usr/include/c++/13/bits/stl_deque.h:855
+#19 tcs::(anonymous namespace)::sync_and_release_all_impl () at /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/src/dlpack_operand.cpp:460
+#20 0x00005555555605db in tcs::synchronize_and_release_all () at /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/src/dlpack_operand.cpp:601
+#21 0x0000555555560ac3 in main (argc=2, argv=<optimized out>) at /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/artifacts/p1t_rev2/probes/cpu_native.cpp:26

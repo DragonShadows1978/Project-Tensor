@@ -67,17 +67,32 @@ Device Device::from_string(const std::string& s) {
   return d;
 }
 
+// P1T-FIX2, review finding N2: both helpers used plain signed products, which overflowed (undefined behaviour) for
+// zero-extent shapes such as [2^62, 4, 0] (numel_of: the prefix product 2^64 is formed before the 0 is reached) and
+// [0, 2^62, 4] (contiguous_strides: the stride of axis 0 is 2^64) even though the element count is 0 (round-2 probe
+// core_cpu prefix/suffix, UBSan). The DLPack/empty entry points now refuse such shapes first (bindings.cpp
+// checked_numel/checked_nbytes, the zero-extent rule); these helpers are the second line:
+//  * numel_of returns 0 for any shape with a zero extent WITHOUT multiplying (that is the exact count), and otherwise
+//    multiplies with overflow checks;
+//  * contiguous_strides multiplies with overflow checks and no longer forms the unused product past axis 0.
+// An overflow throws std::overflow_error (Python OverflowError) instead of wrapping. Values are unchanged whenever no
+// overflow occurs. Prior art: GCC/Clang __builtin_mul_overflow (GCC 5, 2015), C23 ckd_mul, CERT INT32-C. Ours: where.
 int64_t numel_of(const Shape& shape) {
+  for (int64_t s : shape)
+    if (s == 0) return 0;
   int64_t n = 1;
-  for (int64_t s : shape) n *= s;
-  return shape.empty() ? 1 : n;
+  for (int64_t s : shape)
+    if (__builtin_mul_overflow(n, s, &n))
+      throw std::overflow_error("numel_of: the element count of a shape overflows int64");
+  return n;  // 1 for a 0-d shape
 }
 Shape contiguous_strides(const Shape& shape) {
   Shape st(shape.size());
   int64_t acc = 1;
   for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
     st[i] = acc;
-    acc *= shape[i];
+    if (i > 0 && __builtin_mul_overflow(acc, shape[i], &acc))
+      throw std::overflow_error("contiguous_strides: a stride of a shape overflows int64");
   }
   return st;
 }

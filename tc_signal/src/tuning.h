@@ -31,6 +31,11 @@ constexpr int kDlpackLegacyStream = 1;
 constexpr long long kPendingMaxEntries = 1024;
 // Bytes: the sum of the fp32 operand sizes held by the pending entries (inputs, outputs and scratch).
 constexpr long long kPendingMaxBytes = 256LL << 20;
+// P1T-FIX2 (N3): fixed capacities of the allocation-free bookkeeping in synchronize/the bound drain. Devices whose sync
+// result is remembered per call (a device beyond this is still synchronized; its failure is kept as one conservative
+// flag), and CUDA failures named in one synchronize() error message (the rest are counted). Neither changes numerics.
+constexpr int kSyncMaxDevices = 64;
+constexpr int kSyncReportMax = 8;
 
 }  // namespace tuning
 }  // namespace tcs

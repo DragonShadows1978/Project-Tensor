@@ -30,6 +30,17 @@ P1T-FIX1 additions (review P1T-REV round 1; tests named test_fix1_*), with the r
   * F06: the export context is owned exactly once (capsule GC and consumer deleter paths); the bad_alloc path itself is
     verified by reasoning + RAII (unique_ptr until PyCapsule_New succeeds).
 
+P1T-FIX2 additions (review P1T-REV2 round 2; tests named test_fix2_*), with the registered mutant each one must kill:
+  * N2 (zero-extent rule): shapes with a 0 first / middle / last next to 2^62 and 2^63-1 extents are refused with
+    ValueError by empty (cpu, cuda), from_dlpack (capsule left unconsumed) and __dlpack__ (a reshape of an empty
+    tensor); zero-extent shapes whose bound fits stay empty tensors. Mutant (b): the zero exemption restored.
+  * N4: a producer deleter that throws a C++ exception (native, built here) on the import release, on the main thread
+    and on a foreign pthread: contained, counted, called once, rc 0. Mutant (d2): the catch removed.
+  * N5: interpreter-exit coordination of foreign-thread releases (the core_shutdown.py pattern, torch-free): a release
+    already taking the GIL when the exit hook runs completes before finalization (in-flight wait); one that starts
+    during the wait, or after the hook, leaks without touching the GIL; a release that outlives the bounded wait is
+    reported. Mutant (e): the in-flight wait removed.
+
 Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
 (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
 
@@ -628,8 +639,11 @@ def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, fr
 
 
 def test_fix1_f03_empty_zero_extent_is_empty_not_overflow():
-    t = tc.empty((0, 1 << 62, 1 << 62), device="cpu")                     # count 0: a real empty tensor
-    assert t.shape == (0, 1 << 62, 1 << 62)
+    # P1T-FIX2 (N2) changed this case: FIX1 pinned (0, 1 << 62, 1 << 62) as a real empty tensor, which is exactly the
+    # defect the round-2 review reproduced (its strides overflow int64). A zero-extent shape whose other extents fit
+    # the zero-extent rule is still a real empty tensor; the old shape is now refused (test_fix2_n2_* below).
+    t = tc.empty((0, 1 << 30, 1 << 30), device="cpu")                     # count 0: a real empty tensor
+    assert t.shape == (0, 1 << 30, 1 << 30)
 
 
 def test_fix1_f03_import_refuses_overflow(torch):
@@ -874,3 +888,313 @@ def test_fix1_f06_export_context_owned_exactly_once(torch):
     del xs, caps
     gc.collect()
     assert prod.deleter_calls == 1 and prod.owner is None
+
+
+
+# =================================================================================================== P1T-FIX2
+# Regression tests for the P1T-REV2 round-2 findings (order P1T_FIX2_ROBUSTNESS.md). Crash-prone paths run in
+# subprocesses (the reviewer's host_checks.py / core_shutdown.py pattern).
+
+# ------------------------------------------------------------------------------------------------ N2
+# The census of the order: a 0 in the first, middle or last position next to extents up to 2^62 and 2^63 - 1. Prior
+# art: NumPy's array-constructor rule (itemsize times every nonzero extent must fit; numpy 2.4.2 refuses
+# np.empty((0, 2**62, 4)) and np.empty((0, 2**61), float32)); checked builtins (GCC 5, 2015). Ours: the census.
+_N2_REFUSE = [
+    ((0, 1 << 62, 4), "float32", "element count"), ((1 << 62, 0, 4), "float32", "element count"),
+    ((1 << 62, 4, 0), "float32", "element count"),
+    ((0, (1 << 63) - 1, 2), "float32", "element count"), (((1 << 63) - 1, 2, 0), "float32", "element count"),
+    ((2, 0, (1 << 63) - 1), "float32", "element count"),
+    ((0, (1 << 63) - 1), "float32", "byte size"), (((1 << 63) - 1, 0), "float16", "byte size"),
+    ((0, 1 << 62), "float32", "byte size"), ((0, 1 << 61), "float32", "byte size"), ((1 << 62, 0, 1), "float16", "byte size"),
+]
+_N2_IDS = ["0x2^62x4", "2^62x0x4", "2^62x4x0", "0xMAXx2", "MAXx2x0", "2x0xMAX", "0xMAX_f32", "MAXx0_f16",
+           "0x2^62_f32", "0x2^61_f32", "2^62x0x1_f16"]
+_N2_ACCEPT = [((0, 1 << 60), "float32"), ((0, (1 << 63) - 1), "uint8"), ((1 << 30, 0, 1 << 30), "float32"),
+              ((0, 1 << 61), "float16")]
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("shape,dtype,frag", _N2_REFUSE, ids=_N2_IDS)
+def test_fix2_n2_empty_refuses_zero_extent_overflow(device, shape, dtype, frag):
+    with pytest.raises(ValueError, match=frag):
+        tc.empty(shape, dtype=dtype, device=device)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("shape,dtype", _N2_ACCEPT, ids=["0x2^60_f32", "0xMAX_u8", "2^30x0x2^30", "0x2^61_f16"])
+def test_fix2_n2_empty_zero_extent_within_the_rule_is_empty(device, shape, dtype):
+    t = tc.empty(shape, dtype=dtype, device=device)
+    assert t.shape == shape
+
+
+@pytest.mark.parametrize("shape,dtype,frag", _N2_REFUSE, ids=_N2_IDS)
+def test_fix2_n2_import_refuses_zero_extent_overflow(torch, shape, dtype, frag):
+    owner = torch.zeros(4, device="cuda")
+    prod = _Producer(owner, shape, None, bits=32 if dtype == "float32" else 16)
+    cap = prod.capsule()
+    with pytest.raises(ValueError, match=frag):
+        tc.from_dlpack(cap)
+    assert "used_" not in repr(cap) and prod.deleter_calls == 0             # refused before consumption
+
+
+def test_fix2_n2_import_zero_extent_within_the_rule_is_empty(torch):
+    owner = torch.zeros(4, device="cuda")
+    prod = _Producer(owner, (0, 1 << 60), None)
+    u = tc.from_dlpack(prod.capsule())
+    assert u.shape == (0, 1 << 60)
+    del u
+    gc.collect()
+    assert prod.deleter_calls == 1
+
+
+@pytest.mark.parametrize("shape,dtype,frag", _N2_REFUSE, ids=_N2_IDS)
+def test_fix2_n2_export_refuses_zero_extent_overflow(shape, dtype, frag):
+    # reshape of an empty tensor is the reachable way to hold such a shape (numel 0 == 0); export must not form its
+    # strides. float32 everywhere (empty's default): the byte-size cases overflow for 4-byte elements too.
+    t = tc.empty((0,), device="cuda").reshape(list(shape))
+    assert t.shape == shape
+    for kw in ({}, {"max_version": (1, 3)}):
+        with pytest.raises(ValueError, match="element count|byte size"):
+            t.__dlpack__(**kw)
+
+
+def test_fix2_n2_export_zero_extent_within_the_rule(torch):
+    t = tc.empty((0,), device="cuda").reshape([0, 1 << 60])
+    x = torch.from_dlpack(t.__dlpack__(max_version=(1, 3)))
+    assert tuple(x.shape) == (0, 1 << 60)
+
+
+# ------------------------------------------------------------------------------------------------ N4
+# A native producer deleter that throws (out of the DLPack C contract on purpose). Prior art: C++ noexcept /
+# std::terminate semantics; the round-2 reviewer's throw_deleter probe (cpu_native.cpp). Ours: the core import path.
+_FIX2_THROWER_SRC = r"""
+#include <atomic>
+#include <stdexcept>
+static std::atomic<long> g_calls{0};
+extern "C" void fix2_throwing_deleter(void*) {
+  g_calls.fetch_add(1);
+  throw std::runtime_error("fix2 test producer deleter threw");
+}
+extern "C" long fix2_throwing_deleter_calls() { return g_calls.load(); }
+"""
+
+
+@pytest.fixture(scope="module")
+def fix2_thrower(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix2_thrower")
+    src, so = d / "fix2_thrower.cpp", d / "fix2_thrower.so"
+    src.write_text(_FIX2_THROWER_SRC)
+    r = subprocess.run(["g++", "-shared", "-fPIC", "-O1", "-std=c++17", "-o", str(so), str(src)], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+_FIX2_PTHREAD = r"""
+libc = ctypes.CDLL(None)
+pthread_create = libc.pthread_create
+pthread_create.argtypes = [ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+pthread_create.restype = ctypes.c_int
+pthread_join = libc.pthread_join
+pthread_join.argtypes = [ctypes.c_ulong, ctypes.c_void_p]
+pthread_join.restype = ctypes.c_int
+GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
+GetPointer.restype, GetPointer.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
+SetName = ctypes.pythonapi['PyCapsule_SetName']
+SetName.restype, SetName.argtypes = ctypes.c_int, [ctypes.py_object, ctypes.c_char_p]
+KEEP = []
+
+def held_export(prod):
+    # An imported Storage (prod's manager) whose last reference is a TensorCUDA export manager owned by this script.
+    u = tc.from_dlpack(prod.capsule())
+    cap = u.__dlpack__(max_version=(1, 3))
+    del u
+    gc.collect()
+    mptr = GetPointer(cap, NAME)
+    assert SetName(cap, b"used_dltensor_versioned") == 0
+    KEEP.append(cap)
+    return mptr, ctypes.cast(mptr + 16, ctypes.POINTER(ctypes.c_void_p)).contents.value
+
+def start_foreign(fp, m):
+    tid = ctypes.c_ulong()
+    assert pthread_create(ctypes.byref(tid), None, fp, m) == 0
+    return tid.value
+
+def join(tid):
+    pthread_join(tid, None)                      # ctypes releases the GIL for the call
+
+def new_producer(n=16):
+    owner = tc.empty(n)
+    owner.fill_(3.0)
+    tc.synchronize()
+    return Producer(owner, n)
+"""
+
+_FIX2_N4_SCRIPT = _SUBPROC_PRODUCER + _FIX2_PTHREAD + r"""
+lib = ctypes.CDLL(sys.argv[1])
+calls = lib.fix2_throwing_deleter_calls
+calls.restype = ctypes.c_long
+mode = sys.argv[2]
+prod = new_producer()
+prod.m.deleter = DELETER(ctypes.cast(lib.fix2_throwing_deleter, ctypes.c_void_p).value)   # the native thrower
+if mode == "main":
+    u = tc.from_dlpack(prod.capsule())
+    del u                                        # Storage destructor on this thread -> deleter throws
+    gc.collect()
+else:
+    mptr, fp = held_export(prod)
+    join(start_foreign(fp, mptr))                # release on a foreign pthread -> deleter throws there
+print("RESULT " + json.dumps({"calls": int(calls()), "stats": dict(tc._C._dlpack_release_stats())}), flush=True)
+"""
+
+
+@pytest.mark.parametrize("mode", ["main", "foreign"])
+def test_fix2_n4_throwing_producer_deleter_is_contained(fix2_thrower, mode):
+    r = subprocess.run([sys.executable, "-c", _FIX2_N4_SCRIPT, fix2_thrower, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["calls"] == 1, res                                # called exactly once
+    assert res["stats"]["deleter_exceptions"] == 1 and res["stats"]["released"] == 0, res
+    assert "terminate called" not in r.stderr, r.stderr
+
+
+# ------------------------------------------------------------------------------------------------ N5
+# Exit-time coordination (bindings.cpp ImportReleaseLifecycle + tensor_cuda._dlpack_shutdown_hook). Each scenario is a
+# fresh process. atexit runs callbacks last-registered-first, so `_after_hook` (registered BEFORE tensor_cuda is
+# imported) runs after tensor_cuda's hook, and `_start_in_flight` (registered after the import) runs before it.
+# Staging "in flight": `_start_in_flight` starts a foreign pthread release of a real imported Storage whose producer
+# deleter (a ctypes callback, so it needs the GIL) sleeps; it returns only once that deleter has STARTED, so the
+# release is admitted and unfinished when the hook closes admission. (A thread merely blocked in PyGILState_Ensure
+# cannot be held there: the eval loop hands it the GIL at the next bytecode boundary, before the hook's C call.)
+# Without the in-flight wait (mutant (e); d116ac0 has no hook at all) the deleter is still sleeping when CPython marks
+# the runtime finalizing; it wakes during the Finalizer's sleep in __del__ (module teardown) and must re-take the GIL:
+# CPython 3.12 take_gil -> PyThread_exit_thread -> a forced unwind through the noexcept Storage destructor -> abort.
+# Prior art: the reviewer's core_shutdown.py + release_worker.cpp scenario (a real imported Storage released on a
+# foreign thread at shutdown); CPython 3.12.3 Py_FinalizeEx ordering (atexit before finalizing). Ours: the staging,
+# the nested and bounded variants, the torch-free form.
+_FIX2_N5_SCRIPT = r"""
+import atexit, ctypes, gc, json, os, sys, time
+RESULTS = {}
+PRODS = []
+def _after_hook():
+    RESULTS["after_hook"] = {"stats": dict(tc._C._dlpack_release_stats()), "deleter_calls": [p.calls for p in PRODS],
+                             "deleter_done": [p.done for p in PRODS], "finalizing": sys.is_finalizing()}
+    if MODE == "after":                         # a foreign release that starts after the hook closed admission
+        join(start_foreign(FP_B, M_B))
+        RESULTS["after_release"] = {"stats": dict(tc._C._dlpack_release_stats()),
+                                    "deleter_calls": [p.calls for p in PRODS]}
+    print("RESULT " + json.dumps(RESULTS), flush=True)
+    if MODE == "bounded":
+        os._exit(0)                             # the in-flight thread is still in its 2 s deleter: end here
+atexit.register(_after_hook)
+""" + _SUBPROC_PRODUCER + _FIX2_PTHREAD + r"""
+MODE = sys.argv[1]
+SLEEP = {"during": 1.0, "nested": 0.0, "bounded": 2.0}.get(MODE, 0.0)
+if MODE == "bounded":
+    tc._DLPACK_SHUTDOWN_WAIT_S = 0.3           # the knob, read by the hook at exit
+class SlowProducer(Producer):
+    def _delete(self, _p):
+        self.calls += 1
+        self.started = True
+        if self.on_delete:
+            self.on_delete()
+        time.sleep(self.sleep_s)                # GIL released while sleeping; re-taken to return
+        self.done = True
+def _new(sleep_s):
+    p = SlowProducer(tc.empty(16), 16)
+    p.started = p.done = False
+    p.on_delete, p.sleep_s = None, sleep_s
+    return p
+prod_a, prod_b = _new(SLEEP), _new(0.0)
+PRODS.extend([prod_a, prod_b])
+M_A, FP_A = held_export(prod_a)
+M_B, FP_B = held_export(prod_b)
+def _wait_for(cond, what):
+    t0 = time.monotonic()
+    while not cond():
+        if time.monotonic() - t0 > 10:
+            raise RuntimeError("timed out waiting for " + what)
+        time.sleep(0.005)
+def _nested():                                  # runs in A's deleter, i.e. while the hook waits for A
+    _wait_for(lambda: tc._C._dlpack_release_stats()["closing"], "the hook to close admission")
+    RESULTS["nested"] = {"before": dict(tc._C._dlpack_release_stats())}
+    join(start_foreign(FP_B, M_B))
+    RESULTS["nested"]["after"] = dict(tc._C._dlpack_release_stats())
+if MODE == "nested":
+    prod_a.on_delete = _nested
+def _start_in_flight():
+    start_foreign(FP_A, M_A)
+    _wait_for(lambda: prod_a.started, "the in-flight deleter to start")
+    RESULTS["before_hook"] = {"stats": dict(tc._C._dlpack_release_stats())}
+if MODE in ("during", "nested", "bounded"):
+    atexit.register(_start_in_flight)
+class Finalizer:                                # drops the GIL during finalization (the core_shutdown.py pattern)
+    def __init__(self):
+        self.sleep, self.isf = time.sleep, sys.is_finalizing
+    def __del__(self):
+        fin = self.isf()
+        self.sleep(1.5)
+        print("FINAL finalizing=%s" % fin, flush=True)
+# Held by its own module, not by __main__: an unfinished deleter's frame keeps __main__'s globals alive, which would
+# keep a __main__ global from ever being finalized (measured on d116ac0: no FINAL line, the deleter cut off at exit).
+import types
+_holder = types.ModuleType("_fix2_finalizer_holder")
+_holder.keep = Finalizer()
+sys.modules["_fix2_finalizer_holder"] = _holder
+del _holder
+print("ARMED", flush=True)
+"""
+
+
+def _run_n5(mode):
+    r = subprocess.run([sys.executable, "-c", _FIX2_N5_SCRIPT, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+    return r, res
+
+
+def test_fix2_n5_in_flight_foreign_release_completes_before_finalization():
+    r, res = _run_n5("during")
+    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    before, after = res["before_hook"]["stats"], res["after_hook"]["stats"]
+    assert before.get("in_flight") == 1, res                      # admitted and unfinished when the hook ran
+    assert res["after_hook"]["deleter_done"][0] is True and res["after_hook"]["deleter_calls"][0] == 1, res
+    assert after["in_flight"] == 0 and after["released"] == 1 and after["closing"] is True, res
+    assert after["shutdown_in_flight_at_close"] == 1 and after["shutdown_timeouts"] == 0, res
+    assert res["after_hook"]["finalizing"] is False, res      # the hook ran before CPython marked finalizing
+    assert r.returncode == 0 and "FINAL finalizing=True" in r.stdout, f"rc={r.returncode}\nstderr={r.stderr}"
+    assert "terminate called" not in r.stderr, r.stderr
+
+
+def test_fix2_n5_release_starting_during_the_wait_leaks_without_gil():
+    r, res = _run_n5("nested")
+    assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    nested = res["nested"]
+    assert nested["before"]["closing"] is True and nested["before"]["in_flight"] == 1, res   # during the wait for A
+    assert nested["after"]["leaked_closing"] == 1, res            # B leaked: admission closed, no GIL taken
+    after = res["after_hook"]
+    assert after["deleter_calls"] == [1, 0], res                  # A released once, B never
+    assert after["stats"]["released"] == 1 and after["stats"]["in_flight"] == 0, res
+
+
+def test_fix2_n5_release_after_the_exit_hook_leaks_without_gil():
+    r, res = _run_n5("after")
+    assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    rel = res["after_release"]
+    assert rel["stats"]["leaked_closing"] == 1 and rel["stats"]["released"] == 0, res
+    assert rel["deleter_calls"] == [0, 0], res
+    assert "FINAL finalizing=True" in r.stdout and "terminate called" not in r.stderr, r.stderr
+
+
+def test_fix2_n5_the_wait_is_bounded_and_reported():
+    t0 = __import__("time").monotonic()
+    r, res = _run_n5("bounded")
+    assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    after = res["after_hook"]["stats"]
+    assert after["shutdown_timeouts"] == 1 and after["shutdown_still_in_flight"] == 1, res
+    assert 300_000 <= after["shutdown_wait_us"] < 1_900_000, res  # 0.3 s bound, not the deleter's 2 s
+    assert "DLPack release(s) still running after 0.3 s at exit" in r.stderr, r.stderr
+    assert __import__("time").monotonic() - t0 < _SUBPROC_TIMEOUT

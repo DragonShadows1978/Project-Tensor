@@ -1,0 +1,55 @@
+.......F..F........                                                      [100%]
+=================================== FAILURES ===================================
+________ test_n3_native_real_allocation_failure_sweep_never_terminates _________
+
+native_harness = '/tmp/pytest-of-vader/pytest-40/fix2_harness0/fix2_native_harness'
+
+    def test_n3_native_real_allocation_failure_sweep_never_terminates(native_harness):
+        r, lines, summary = _harness(native_harness, 'oom_sweep')
+>       assert 'runtime error' not in r.stderr and 'terminate called' not in r.stderr, r.stderr[-3000:]
+E       AssertionError: terminate called after throwing an instance of 'std::bad_alloc'
+E           what():  std::bad_alloc
+E         
+E       assert ('runtime error' not in 'terminate c...:bad_alloc\n'
+E         
+E         'runtime error' is contained here:
+E           :bad_alloc and 'terminate called' not in 'terminate c...:bad_alloc\n'
+E         
+E         'terminate called' is contained here:
+E           terminate called after throwing an instance of 'std::bad_alloc'
+E         ? ++++++++++++++++
+E             what():  std::bad_alloc)
+
+tc_signal/tests/test_fix2_findings.py:324: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:pending_push] _
+
+site = 'alloc:pending_push'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...e=-6, stdout='', stderr="terminate called after throwing an instance of 'std::bad_alloc'\n  what():  std::bad_alloc\n")
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::bad_alloc'
+E           what():  std::bad_alloc
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...e=-6, stdout='', stderr="terminate called after throwing an instance of 'std::bad_alloc'\n  what():  std::bad_alloc\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_native_real_allocation_failure_sweep_never_terminates
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:pending_push]
+2 failed, 17 passed in 43.57s

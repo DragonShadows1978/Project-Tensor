@@ -8,9 +8,11 @@ plumbing, no_grad). See ROADMAP.md for the layers still being ported.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 from collections.abc import Mapping
 import operator
+import sys
 
 import numpy as np
 
@@ -102,6 +104,11 @@ def from_dlpack(obj):
     last reference dies while the interpreter is finalizing, the deleter is
     deliberately NOT called: the manager is leaked rather than risk a
     use-after-free or a GIL acquisition during shutdown (P1T-FIX1 F04/F05).
+    Interpreter exit (P1T-FIX2 N5): an atexit hook stops admitting such
+    releases and waits (GIL released, at most ``_DLPACK_SHUTDOWN_WAIT_S``
+    seconds) for the ones already taking the GIL to finish; every release
+    after it leaks (counted) without touching the GIL. A producer deleter that
+    raises a C++ exception is contained and counted (P1T-FIX2 N4).
     The memory is never returned to TensorCUDA's pool and never
     ``cudaFree``-d by TensorCUDA.
 
@@ -111,7 +118,9 @@ def from_dlpack(obj):
     with no exact TensorCUDA match (supported: float32, float16, bfloat16,
     int64, uint8, bool). Refused with ``ValueError``: an element count, byte
     size, ``byte_offset`` + size or address range that overflows 64-bit
-    arithmetic (P1T-FIX1 F03); ``TypeError``: anything that is neither a DLPack
+    arithmetic (P1T-FIX1 F03), counting every nonzero extent also when another
+    extent is 0 (P1T-FIX2 N2: ``[0, 2**62, 4]`` is refused, not an empty
+    tensor); ``TypeError``: anything that is neither a DLPack
     producer nor a capsule (``None`` included). The result has
     ``requires_grad=False``. If anything outside TensorCUDA later writes into
     it in place, call ``mark_modified()`` (see ``Tensor.__dlpack__``).
@@ -145,11 +154,49 @@ def empty(*shape, dtype="float32", device="cuda"):
     string raises instead of falling back to float32. More than 8 dimensions
     (TensorCUDA's maximum rank), a negative extent, or an element count or
     byte size that overflows 64-bit arithmetic raises ``ValueError`` before
-    anything is allocated (P1T-FIX1 F03).
+    anything is allocated (P1T-FIX1 F03). Every nonzero extent counts, also
+    when another extent is 0 (P1T-FIX2 N2): the product of the extents with
+    zeros counted as 1, times the element size, must fit in int64, so
+    ``empty(0, 2**62, 4)`` raises while ``empty(0, 2**60)`` is an empty tensor
+    (NumPy's rule).
     """
     if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
         shape = tuple(shape[0])
     return _C.empty([operator.index(s) for s in shape], dtype, device)
+
+
+# P1T-FIX2 (N5): interpreter-exit coordination for DLPack import releases that
+# need the GIL (bindings.cpp, ImportReleaseLifecycle). CPython runs atexit
+# callbacks before it marks the runtime finalizing (v3.12.3 pylifecycle.c,
+# Py_FinalizeEx: _PyAtExit_Call at line 1815, _PyRuntimeState_SetFinalizing at
+# 1833), so this hook closes admission while taking the GIL is still safe and
+# waits for the releases already admitted. Knob: the bound on that wait, in
+# seconds (a release normally finishes in microseconds; the bound only matters
+# for a producer deleter that blocks). Prior art: CPython's own
+# threading._shutdown (join non-daemon threads before finalizing), the same
+# "stop admitting, then wait" order; ours: applying it to the DLPack release.
+_DLPACK_SHUTDOWN_WAIT_S = 5.0
+
+
+def _dlpack_shutdown_hook():
+    # An exception from an atexit callback cannot be handled by anyone: log, never raise.
+    try:
+        r = _C._dlpack_begin_shutdown(float(_DLPACK_SHUTDOWN_WAIT_S))
+        if r["timed_out"]:
+            sys.stderr.write(
+                f"tensor_cuda: {r['still_in_flight']} DLPack release(s) still running after "
+                f"{_DLPACK_SHUTDOWN_WAIT_S} s at exit; the interpreter may terminate "
+                f"that thread during finalization\n")
+            sys.stderr.flush()
+    except Exception as e:  # noqa: BLE001
+        try:
+            sys.stderr.write(f"tensor_cuda: DLPack exit hook failed ({type(e).__name__}: {e})\n")
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+atexit.register(_dlpack_shutdown_hook)
 
 
 def matmul(a, b, alpha=1.0, trans_b=False):

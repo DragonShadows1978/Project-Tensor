@@ -7,10 +7,13 @@
 #include <cuda_runtime.h>
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <string>
 #include <utility>
@@ -286,23 +289,45 @@ std::string shape_str(const int64_t* v, int n) {
 // Prior art: GCC/Clang __builtin_mul_overflow / __builtin_add_overflow (GCC 5, 2015); C23 ckd_mul / ckd_add
 // (<stdckdint.h>, ISO/IEC 9899:2024); SEI CERT C INT30-C / INT32-C. Taken: the checked-operation primitive. Ours:
 // where it is applied. Unverified here (lead to check): "GCC 5 __builtin_mul_overflow", "C23 stdckdint".
-int64_t checked_numel(const int64_t* dims, int n, const char* who) {
-  for (int i = 0; i < n; ++i)
-    if (dims[i] == 0) return 0;
+//
+// P1T-FIX2, review finding N2 (the zero-extent rule). FIX1 returned a count of 0 for any shape with a zero extent
+// WITHOUT looking at the other extents, so [0, 2^62, 4] and [2^62, 4, 0] were accepted as empty tensors; the engine
+// then formed their strides and partial counts (contiguous_strides, numel_of, byte strides) and overflowed (round-2
+// probe core_cpu prefix/suffix: UBSan signed overflow). The rule now: the EXTENT BOUND, the product of every extent
+// with a zero counted as 1, must fit in int64 (checked_numel), and so must the bound times the element size
+// (checked_nbytes), whatever the other extents are. Every quantity the engine later forms from such a shape (count,
+// each contiguous stride, each byte stride, the byte size) is at most that bound, so none can overflow. Zero-extent
+// shapes whose bound fits (e.g. [0, 2^60] float32) stay real empty tensors.
+// Prior art: NumPy's array constructor applies the same rule (zero dimensions skipped, the rest multiplied into the
+// byte size with overflow checks): numpy 2.4.2 refuses np.empty((0, 2**62, 4), float32) and (0, 2**61) float32 ("array
+// is too big"), measured in the P1T-FIX2 ledger. PyTorch 2.11 refuses the element-level part only. Taken: NumPy's
+// rule. Ours: applying it to TensorCUDA's empty / from_dlpack / __dlpack__. Source-level citation unverified here (lead
+// to check): "numpy ctors.c PyArray_NewFromDescr_int is_zero overflow".
+int64_t checked_extent_bound(const int64_t* dims, int n, const char* who) {
   int64_t p = 1;
   for (int i = 0; i < n; ++i)
-    if (__builtin_mul_overflow(p, dims[i], &p))
+    if (__builtin_mul_overflow(p, dims[i] > 1 ? dims[i] : int64_t{1}, &p))
       throw py::value_error(std::string(who) + ": the element count of shape " + shape_str(dims, n) +
-                            " overflows int64; refused");
+                            " overflows int64 (every nonzero extent counts, also next to a zero extent: strides and "
+                            "partial counts are formed from them); refused");
   return p;
 }
 
+int64_t checked_numel(const int64_t* dims, int n, const char* who) {
+  const int64_t bound = checked_extent_bound(dims, n, who);
+  for (int i = 0; i < n; ++i)
+    if (dims[i] == 0) return 0;
+  return bound;
+}
+
 int64_t checked_nbytes(int64_t numel, size_t itemsize, const int64_t* dims, int n, const char* who) {
+  const int64_t bound = checked_extent_bound(dims, n, who);
   int64_t b = 0;
-  if (__builtin_mul_overflow(numel, static_cast<int64_t>(itemsize), &b))
+  if (__builtin_mul_overflow(bound, static_cast<int64_t>(itemsize), &b))
     throw py::value_error(std::string(who) + ": the byte size of shape " + shape_str(dims, n) + " (" +
-                          std::to_string(itemsize) + "-byte elements) overflows int64; refused");
-  return b;
+                          std::to_string(itemsize) + "-byte elements) overflows int64 (every nonzero extent counts, "
+                          "also next to a zero extent); refused");
+  return numel == 0 ? 0 : b;  // numel is 0 or the bound itself (checked_numel)
 }
 
 // ---- export: the manager context OWNS a reference to the Storage, so the
@@ -409,6 +434,13 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
       throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
     versioned = mv[0].cast<int>() >= 1;
   }
+  // P1T-FIX2, N2: a tensor whose shape breaks the zero-extent rule (reachable through reshape of an empty tensor, e.g.
+  // empty((0,)).reshape([0, 2**62, 4])) cannot be described with int64 strides: refused (ValueError) before the
+  // consumer fence and before contiguous_strides forms them.
+  {
+    const int64_t n_ex = checked_numel(a.shape.data(), a.ndim(), "__dlpack__");
+    checked_nbytes(n_ex, dtype_size(a.dtype), a.shape.data(), a.ndim(), "__dlpack__");
+  }
 
   dlpack_fence_consumer(stream);
 
@@ -479,17 +511,87 @@ py::tuple tensor_dlpack_device(Tensor& t) {
 // module teardown Py_IsInitialized() is already 0 and _Py_IsFinalizing() is 1,
 // because 3.12 clears `initialized` when it sets the finalizing thread; the
 // explicit finalizing test keeps this correct if a runtime orders those two
-// stores differently. Residual (not closed here): a thread that passed this
-// test an instant before finalization starts can still reach
-// PyGILState_Ensure; closing that needs lifecycle coordination with the
-// interpreter, which the order does not ask for.
+// stores differently. FIX1's residual (a thread that passed this test an instant
+// before finalization started could still reach PyGILState_Ensure) is closed by
+// P1T-FIX2 N5 below.
 // Prior art: the CPython 3.12 C-API docs (Initialization, Finalization, and
 // Threads: PyGILState_Ensure / Py_IsFinalizing, "calling this function from a
 // thread when the runtime is finalizing will terminate the thread"); pybind11's
 // guidance not to touch the GIL during interpreter shutdown. Taken: the rule.
 // Ours: the deliberate-leak policy at this call site and its counters.
+//
+// P1T-FIX2, review finding N5 (lifecycle coordination). The check above and
+// PyGILState_Ensure were not atomic with respect to the start of finalization: a
+// foreign thread could pass the check, the main thread could then reach
+// Py_FinalizeEx and mark the runtime finalizing, and the foreign thread's
+// PyGILState_Ensure would then run PyThread_exit_thread (CPython 3.12.3
+// ceval_gil.c take_gil -> _PyThreadState_MustExit), whose forced unwind through
+// the noexcept Storage destructor is std::terminate (FIX1 mutant (e): rc -6).
+// Closed with an admission protocol under one mutex (ImportReleaseLifecycle):
+//  * a releasing thread takes the mutex, checks `closing` (and, second line of
+//    defence, interpreter_accepts_gil_state()), and only then increments
+//    `in_flight`; it calls PyGILState_Ensure WITHOUT the mutex, runs the deleter,
+//    calls PyGILState_Release, and only after that decrements `in_flight` under
+//    the mutex and notifies. A release that finds `closing` set leaks (counted).
+//  * tensor_cuda registers a Python atexit callback (`_dlpack_shutdown_hook` in
+//    tensor_cuda/__init__.py) that calls dlpack_begin_shutdown: with the GIL
+//    RELEASED (in-flight releases need it to finish) it sets `closing` under the
+//    mutex and waits on a condition variable, bounded by a timeout, until
+//    `in_flight` is 0.
+//  * Ordering (verified in CPython v3.12.3 Python/pylifecycle.c, Py_FinalizeEx):
+//    _PyAtExit_Call (line 1815) runs every atexit callback BEFORE
+//    _PyInterpreterState_SetFinalizing / _PyRuntimeState_SetFinalizing (1832-1833)
+//    and before runtime->initialized = 0 (1834). So once the hook has returned
+//    with in_flight == 0, no thread is between admission and PyGILState_Release,
+//    and every later release leaks without touching the GIL; nothing can call
+//    PyGILState_Ensure after the finalizing flag is set.
+//  * Lock order: no thread ever waits for the GIL while holding the mutex (the
+//    hook drops the mutex before re-taking the GIL; releasers never call Python
+//    under it), so the protocol cannot deadlock with the GIL.
+//  * Bounded: if an in-flight deleter does not finish within the timeout
+//    (tensor_cuda._DLPACK_SHUTDOWN_WAIT_S), the hook returns, reports it, and the
+//    exit proceeds; that thread may then still be terminated by CPython at
+//    finalization (honest residual: a deleter that blocks forever cannot be made
+//    safe from outside).
+// Prior art: CPython's own atexit-before-finalizing ordering (above) and its
+// threading._shutdown join of non-daemon threads (pylifecycle.c
+// wait_for_thread_shutdown), which is the same "stop admitting, wait for the
+// in-flight ones" idea one level up; the admission-counter + condition-variable
+// drain is the classic reader-count / quiescence pattern (e.g. the Linux
+// kernel's percpu_ref: kill, then wait for the count to drop to zero). Taken:
+// the pattern. Ours: its
+// placement around PyGILState_Ensure in the DLPack import release. Unverified here
+// (lead to check): "percpu_ref_kill_and_confirm quiesce", "pybind11
+// gil_scoped_acquire finalization".
+//
+// P1T-FIX2, review finding N4: the producer's deleter is called inside a
+// catch-all (counted in deleter_exceptions); this function is reached from the
+// noexcept Storage destructor, so an escaping C++ exception would be
+// std::terminate. Called at most once per Storage (the Storage owns the manager).
 std::atomic<unsigned long long> g_import_released{0};
 std::atomic<unsigned long long> g_import_leaked_shutdown{0};
+std::atomic<unsigned long long> g_import_leaked_closing{0};      // N5: release after the exit hook closed
+std::atomic<unsigned long long> g_import_deleter_exceptions{0};  // N4
+std::atomic<unsigned long long> g_import_lock_failures{0};       // N5: mutex failure (never observed) -> leak
+std::atomic<unsigned long long> g_shutdown_calls{0};
+std::atomic<unsigned long long> g_shutdown_in_flight_at_close{0};
+std::atomic<unsigned long long> g_shutdown_timeouts{0};
+std::atomic<unsigned long long> g_shutdown_still_in_flight{0};
+std::atomic<unsigned long long> g_shutdown_wait_us{0};
+
+struct ImportReleaseLifecycle {
+  std::mutex mu;
+  std::condition_variable cv;
+  bool closing = false;
+  long long in_flight = 0;
+};
+
+// Never destroyed (a foreign thread may release after static destruction began). Constructed at module import
+// (PYBIND11_MODULE below), so no release path is the first caller (its allocation could fail there).
+ImportReleaseLifecycle& release_lifecycle() {
+  static ImportReleaseLifecycle* s = new ImportReleaseLifecycle();
+  return *s;
+}
 
 bool interpreter_accepts_gil_state() {
   if (!Py_IsInitialized()) return false;
@@ -501,29 +603,83 @@ bool interpreter_accepts_gil_state() {
   return true;
 }
 
-void import_release_legacy(void* ctx) {
-  auto* m = static_cast<DLManagedTensor*>(ctx);
+template <typename M>
+void import_release_impl(M* m) noexcept {
   if (!m || !m->deleter) return;
-  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
-    g_import_leaked_shutdown.fetch_add(1);
-    return;
+  ImportReleaseLifecycle& lc = release_lifecycle();
+  bool admitted = false;
+  try {
+    std::lock_guard<std::mutex> lk(lc.mu);
+    // Both checks leak without touching the GIL; the order only decides which counter records it (a release during
+    // finalization keeps FIX1's leaked_interpreter_shutdown attribution).
+    if (!interpreter_accepts_gil_state()) {
+      g_import_leaked_shutdown.fetch_add(1);         // F04: second line of defence
+    } else if (lc.closing) {
+      g_import_leaked_closing.fetch_add(1);          // N5: after the exit hook closed admission: deliberate leak
+    } else {
+      ++lc.in_flight;
+      admitted = true;
+    }
+  } catch (...) {
+    g_import_lock_failures.fetch_add(1);
   }
+  if (!admitted) return;
   PyGILState_STATE g = PyGILState_Ensure();
-  m->deleter(m);
+  try {
+    m->deleter(m);
+    g_import_released.fetch_add(1);
+  } catch (...) {
+    g_import_deleter_exceptions.fetch_add(1);        // N4: contained (GIL still held while the exception dies)
+  }
   PyGILState_Release(g);
-  g_import_released.fetch_add(1);
+  // Leave only after PyGILState_Release: the exit hook must not let finalization start while this thread still
+  // touches the interpreter.
+  try {
+    std::lock_guard<std::mutex> lk(lc.mu);
+    if (--lc.in_flight == 0) lc.cv.notify_all();
+  } catch (...) {
+    g_import_lock_failures.fetch_add(1);
+  }
 }
-void import_release_versioned(void* ctx) {
-  auto* m = static_cast<DLManagedTensorVersioned*>(ctx);
-  if (!m || !m->deleter) return;
-  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
-    g_import_leaked_shutdown.fetch_add(1);
-    return;
-  }
-  PyGILState_STATE g = PyGILState_Ensure();
-  m->deleter(m);
-  PyGILState_Release(g);
-  g_import_released.fetch_add(1);
+
+void import_release_legacy(void* ctx) noexcept {
+  import_release_impl(static_cast<DLManagedTensor*>(ctx));
+}
+void import_release_versioned(void* ctx) noexcept {
+  import_release_impl(static_cast<DLManagedTensorVersioned*>(ctx));
+}
+
+// N5: the atexit side (tensor_cuda/__init__.py _dlpack_shutdown_hook). Called with the GIL held by the main thread.
+py::dict dlpack_begin_shutdown(double timeout_s) {
+  ImportReleaseLifecycle& lc = release_lifecycle();
+  if (!(timeout_s >= 0.0)) timeout_s = 0.0;                 // NaN or negative: do not wait
+  if (timeout_s > 86400.0) timeout_s = 86400.0;             // keep the chrono conversion finite
+  const auto bound = std::chrono::microseconds(static_cast<long long>(timeout_s * 1e6));
+  long long at_close = 0;
+  long long remaining = 0;
+  bool timed_out = false;
+  const auto t0 = std::chrono::steady_clock::now();
+  {
+    py::gil_scoped_release nogil;                           // in-flight releases need the GIL to finish
+    std::unique_lock<std::mutex> lk(lc.mu);
+    lc.closing = true;
+    at_close = lc.in_flight;
+    if (at_close > 0) timed_out = !lc.cv.wait_for(lk, bound, [&lc] { return lc.in_flight == 0; });
+    remaining = lc.in_flight;
+  }  // lk is released before nogil re-takes the GIL
+  const long long waited_us =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+  g_shutdown_calls.fetch_add(1);
+  g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
+  if (timed_out) g_shutdown_timeouts.fetch_add(1);
+  g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
+  g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
+  py::dict d;
+  d["in_flight_at_close"] = at_close;
+  d["still_in_flight"] = remaining;
+  d["timed_out"] = timed_out;
+  d["waited_us"] = waited_us;
+  return d;
 }
 void import_release_noop(void*) {}
 
@@ -1522,9 +1678,31 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["released"] = g_import_released.load();
     d["leaked_interpreter_shutdown"] = g_import_leaked_shutdown.load();
     d["leaked_drain_failure"] = storage_external_drain_leaks();
+    // P1T-FIX2 (N4/N5).
+    d["deleter_exceptions"] = g_import_deleter_exceptions.load();
+    d["leaked_closing"] = g_import_leaked_closing.load();
+    d["lock_failures"] = g_import_lock_failures.load();
+    {
+      ImportReleaseLifecycle& lc = release_lifecycle();
+      std::lock_guard<std::mutex> lk(lc.mu);  // GIL held, but no thread waits for the GIL while holding lc.mu
+      d["in_flight"] = lc.in_flight;
+      d["closing"] = lc.closing;
+    }
+    d["shutdown_calls"] = g_shutdown_calls.load();
+    d["shutdown_in_flight_at_close"] = g_shutdown_in_flight_at_close.load();
+    d["shutdown_timeouts"] = g_shutdown_timeouts.load();
+    d["shutdown_still_in_flight"] = g_shutdown_still_in_flight.load();
+    d["shutdown_wait_us"] = g_shutdown_wait_us.load();
     return d;
   }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
-     "after a failed device drain (F05).");
+     "after a failed device drain (F05); P1T-FIX2: deleter exceptions contained (N4), leaks after the exit hook "
+     "closed, the in-flight count and the exit hook's wait (N5).");
+  // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
+  (void)release_lifecycle();
+  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("timeout_s"),
+        "P1T-FIX2 (N5), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack import releases (later "
+        "ones leak, counted) and wait, GIL released, up to timeout_s for the in-flight ones to finish. Returns "
+        "{in_flight_at_close, still_in_flight, timed_out, waited_us}.");
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }

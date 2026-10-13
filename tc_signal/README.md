@@ -121,6 +121,10 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   every planned size that overflows: output lengths (`conv1d`, `conv_transpose1d`, `T * scale`, `T + pads`), output
   and scratch element counts and bytes (im2col, LSTM `G_x`/`G_h`), LSTM `T*N` and `D*N*H`, norm rows and row lengths.
   A wrapped value is never used, never becomes an "empty" or negative extent, and no narrowing cast happens first.
+- the zero-extent rule (P1T-FIX2, N2): every extent counts, also next to a zero one. The product of all extents with
+  a zero counted as 1, and its fp32 byte size, must fit in int64, or the operand (or planned shape) is refused with
+  `ValueError` before the empty-operand check; `[0, 2**62, 4]` is an overflow, not an empty operand. The same rule
+  as NumPy's array constructor; core `tensor_cuda.empty` / `from_dlpack` / `__dlpack__` apply it too.
 
 ## Streams and lifetimes
 
@@ -147,6 +151,26 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   at the next tc_signal call (or `synchronize()`), not at the end of the call. Choice: the deferred release (the
   order's preferred design) rather than a legacy-stream sync before release, which would block every call
   (receipts and per-call cost: `docs/P1T_FIX1_REPORT.md`). Counters: `_tc_signal.pending_stats()`.
+- **Errors on the release paths (P1T-FIX2, N1).** A CUDA failure is never reported as success:
+  - `tc_signal.synchronize()` raises `RuntimeError` naming the CUDA error when the current-device query
+    (`cudaGetDevice`) fails, even with nothing pending (for example on a machine with no usable device), or when a
+    device's legacy stream cannot be synchronized (that device's pending operands are deliberately leaked);
+  - a release inside a tc_signal call cannot raise (it runs in a destructor). If its fallback sync or a bound drain
+    fails there, the failure is recorded (`pending_stats()['unreported_release_errors']`) and the NEXT
+    `synchronize()` raises it, once;
+  - the `atexit` hook calls `synchronize()` and, on an error, writes one line to stderr
+    (`tc_signal: synchronize() at exit failed (...)`) instead of raising. On a machine without a usable CUDA device,
+    a process that imported tc_signal therefore logs that line at exit.
+- **Allocation failure on the release paths (P1T-FIX2, N3)** never terminates the process. Releasing (the next-call
+  drain, the fallback sync, the bound drain, `synchronize()`, the exit hook) allocates nothing, except the pending-list
+  push, whose failure falls back to a synchronous release (`pending_stats()['push_alloc_failures']`). Everything else a
+  release needs (the owner vector, the completion event and its pool slot) is allocated before the launch, where a
+  failure refuses the call with `MemoryError` and releases its operands at once. Building `synchronize()`'s error
+  message may allocate; a failure there is a `MemoryError`.
+- **A throwing producer deleter (P1T-FIX2, N4)** is contained: tc_signal catches whatever it throws, counts it
+  (`pending_stats()['deleter_exceptions']`), never calls it again and goes on with the remaining managers. The DLPack
+  ABI declares the deleter as a C function, so such a producer is already out of contract; tc_signal neither touches
+  its memory again nor retries.
 - Producers that are asked for `stream=1` order their pending work before the op (DLPack's forward direction).
 - Outputs are written on the legacy stream. A consumer on another stream must order itself after it.
 

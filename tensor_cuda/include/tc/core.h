@@ -46,6 +46,9 @@ struct Device {
 
 using Shape = std::vector<int64_t>;
 
+// P1T-FIX2 (N2): numel_of returns 0 for a shape with a zero extent without multiplying the others, and both helpers
+// use checked products: an overflow throws std::overflow_error instead of wrapping (kernels.cu). The DLPack/empty
+// entry points refuse such shapes first (bindings.cpp, the zero-extent rule).
 int64_t numel_of(const Shape& shape);
 Shape contiguous_strides(const Shape& shape);
 

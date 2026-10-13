@@ -1,0 +1,17 @@
+--- worktree/tensor_cuda/src/bindings.cpp
++++ mut_d2/tensor_cuda/src/bindings.cpp
+@@ -625,12 +625,8 @@
+   }
+   if (!admitted) return;
+   PyGILState_STATE g = PyGILState_Ensure();
+-  try {
+-    m->deleter(m);
+-    g_import_released.fetch_add(1);
+-  } catch (...) {
+-    g_import_deleter_exceptions.fetch_add(1);        // N4: contained (GIL still held while the exception dies)
+-  }
++  m->deleter(m);  // MUTANT (d2): N4, core's catch around the producer deleter removed
++  g_import_released.fetch_add(1);
+   PyGILState_Release(g);
+   // Leave only after PyGILState_Release: the exit hook must not let finalization start while this thread still
+   // touches the interpreter.

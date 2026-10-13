@@ -53,6 +53,8 @@ struct ManagedOwner {
   ManagedOwner& operator=(ManagedOwner&& o) noexcept;
   ManagedOwner(const ManagedOwner&) = delete;
   ManagedOwner& operator=(const ManagedOwner&) = delete;
+  // Calls the producer's deleter at most once. P1T-FIX2 (N4): a deleter that throws is contained (caught, counted in
+  // deleter_exceptions()), never std::terminate; the pointer is cleared before the call.
   void reset() noexcept;
   // F01: deliberately drop ownership WITHOUT calling the deleter (used only when tc_signal cannot prove the GPU is done
   // with the memory, e.g. a broken CUDA context: a leak is safe, a release could be a use-after-free).
@@ -152,10 +154,42 @@ class RetainUntilComplete {
 // _tc_signal entry point that takes operands. GIL held.
 void drain_completed() noexcept;
 // Synchronizes the legacy stream of the current device and of every device with pending entries, then releases all
-// entries. Raises RuntimeError naming the CUDA error if a synchronization failed (that device's entries are leaked).
+// entries. P1T-FIX2 (N1): raises RuntimeError naming the CUDA error if the current-device query (cudaGetDevice) or a
+// synchronization failed (that device's entries are leaked, never released), and also for any release-path failure
+// recorded since the last call (a fallback sync or bound drain that failed inside a destructor, which cannot raise);
+// it never reports a CUDA failure as success. N3: allocation-free up to the error message; a bad_alloc while building
+// the message propagates as MemoryError.
 void synchronize_and_release_all();
-// Counters of the pending list (tests, G4 high-water mark).
+// Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
+// push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors).
 py::dict pending_stats(bool reset_high_water);
+// P1T-FIX2 (N3): constructs the pending-list state (it allocates) at module import, so no noexcept release path is the
+// first to touch it.
+void init_pending_state();
+// P1T-FIX2 (N4): producer deleters that threw a C++ exception (contained in ManagedOwner::reset), process-wide.
+unsigned long long deleter_exceptions() noexcept;
+
+// TEST HOOKS (P1T-FIX2, N1/N3 regression tests only; not part of the API). Arming a bit makes the NEXT pass through
+// that release-path site fail once: kAlloc* sites throw std::bad_alloc exactly where the real allocation would
+// (simulating an allocation failure there), kCuda* sites report cudaErrorLaunchFailure instead of calling CUDA. The
+// production cost is one relaxed atomic load per site. Prior art: fault injection at named sites (e.g. the Linux
+// kernel's fault-injection framework, failslab / fail_page_alloc; SQLite's OOM test harness, which fails the Nth
+// malloc). Taken: arm-once named failure points. Ours: the site list.
+namespace test_hooks {
+enum : unsigned {
+  kAllocEventPoolReserve = 1u << 0,  // acquire_event: reserving the event's recycle slot (constructor path)
+  kAllocEventRecycle = 1u << 1,      // recycle_event: returning an event to the pool (release path)
+  kAllocPendingPush = 1u << 2,       // ~RetainUntilComplete: pushing the entry onto the pending list (release path)
+  kAllocOwnerReserve = 1u << 3,      // RetainUntilComplete: reserving the owner vector (constructor path)
+  kAllocErrorMessage = 1u << 4,      // synchronize_and_release_all: building the error message
+  kCudaEventRecord = 1u << 5,        // ~RetainUntilComplete: cudaEventRecord (-> fallback sync)
+  kCudaSync = 1u << 6,               // any legacy-stream sync on a release path (fallback, synchronize, bound drain)
+};
+void arm(unsigned bits) noexcept;
+void clear() noexcept;
+unsigned armed() noexcept;
+bool take(unsigned bit) noexcept;  // true once per arming: the site must fail now
+}  // namespace test_hooks
 
 std::vector<int64_t> shape_of(const DLTensor* t);
 std::string shape_str(const std::vector<int64_t>& s);

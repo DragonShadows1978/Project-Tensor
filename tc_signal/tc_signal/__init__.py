@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import atexit
 import operator
+import sys
 
 from . import _tc_signal as _C
 
@@ -122,18 +123,35 @@ def synchronize():
     passed that call, and releases completed ones at the start of the next tc_signal call. Call synchronize() to release
     them now (for example before measuring memory, or before handing a producer's memory back by other means). It
     synchronizes the legacy stream of the current device and of every device with pending operands (stream syncs, not a
-    device-wide sync). Raises RuntimeError if a device cannot synchronize; its operands are then deliberately leaked,
-    never released early. Prior art: torch.cuda.synchronize / cupy.cuda.Stream.synchronize (API shape only)."""
+    device-wide sync).
+
+    Errors (P1T-FIX2, N1): a CUDA failure is never reported as success. RuntimeError, naming the CUDA error, when
+    - the current-device query (cudaGetDevice) fails, for example on a machine with no usable CUDA device, even when
+      nothing is pending;
+    - a device's legacy stream cannot be synchronized (its pending operands are then deliberately leaked, never
+      released early);
+    - an earlier release that could not raise failed (the fallback sync or the bound drain inside a tc_signal call); such
+      a failure is raised once, by the next synchronize().
+    MemoryError if the error message itself cannot be allocated. Prior art: torch.cuda.synchronize /
+    cupy.cuda.Stream.synchronize (API shape only)."""
     _C.synchronize()
 
 
 def _release_pending_at_exit():
-    # atexit (runs before interpreter finalization, GIL held): release whatever is still pending. A CUDA error here
-    # (a broken context) leaves those operands deliberately leaked; there is nothing else safe to do at exit.
+    # atexit (runs before interpreter finalization, GIL held): release whatever is still pending. P1T-FIX2 (N1): an
+    # error is never swallowed silently; it is LOGGED to stderr (one line) and not raised (an exception from an atexit
+    # callback cannot be handled by anyone). The operands without a completion proof stay deliberately leaked; there is
+    # nothing else safe to do at exit. Prior art: CPython's atexit, which itself prints (not raises) a callback's
+    # exception; taken: log-don't-raise at exit.
     try:
         _C.synchronize()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        try:
+            sys.stderr.write(f'tc_signal: synchronize() at exit failed ({type(e).__name__}: {e}); operands without a '
+                             f'completion proof were deliberately leaked, not released\n')
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
+            pass
 
 
 atexit.register(_release_pending_at_exit)

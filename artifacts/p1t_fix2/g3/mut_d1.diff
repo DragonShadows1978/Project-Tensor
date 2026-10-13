@@ -1,0 +1,15 @@
+--- worktree/tc_signal/src/dlpack_operand.cpp
++++ mut_d1/tc_signal/src/dlpack_operand.cpp
+@@ -237,11 +237,7 @@
+ template <typename M>
+ void call_deleter_contained(M* m) noexcept {
+   if (m == nullptr || m->deleter == nullptr) return;
+-  try {
+-    m->deleter(m);
+-  } catch (...) {
+-    g_deleter_exceptions.fetch_add(1, std::memory_order_relaxed);
+-  }
++  m->deleter(m);  // MUTANT (d1): N4, tc_signal's catch around the producer deleter removed
+ }
+ }  // namespace
+ 

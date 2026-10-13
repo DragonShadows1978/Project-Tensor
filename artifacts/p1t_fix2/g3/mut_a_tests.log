@@ -1,0 +1,28 @@
+FF.................                                                      [100%]
+=================================== FAILURES ===================================
+____________ test_n1_synchronize_raises_when_the_device_query_fails ____________
+
+    def test_n1_synchronize_raises_when_the_device_query_fails():
+        """The reviewer's empty_sync case: no usable device, nothing pending. d116ac0 returned success (rc 9 in the probe)."""
+        r, res = _run(_N1_NO_DEVICE, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+>       assert res['raised'] is True, f'synchronize() reported success with no usable CUDA device: {res}'
+E       AssertionError: synchronize() reported success with no usable CUDA device: {'raised': False}
+E       assert False is True
+
+tc_signal/tests/test_fix2_findings.py:148: AssertionError
+_________________ test_n1_atexit_hook_logs_instead_of_raising __________________
+
+    def test_n1_atexit_hook_logs_instead_of_raising():
+        r, res = _run(_N1_NO_DEVICE, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+>       assert 'tc_signal: synchronize() at exit failed (RuntimeError' in r.stderr, r.stderr
+E       AssertionError: 
+E       assert 'tc_signal: synchronize() at exit failed (RuntimeError' in ''
+E        +  where '' = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport sys\nimport tc_signal as ts\ntry:\n    ts.synchronize()\n  ...ype": type(e).__name__, "msg": str(e)}), flush=True)\n'], returncode=0, stdout='RESULT {"raised": false}\n', stderr='').stderr
+
+tc_signal/tests/test_fix2_findings.py:155: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_synchronize_raises_when_the_device_query_fails
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_atexit_hook_logs_instead_of_raising
+2 failed, 17 passed in 36.13s

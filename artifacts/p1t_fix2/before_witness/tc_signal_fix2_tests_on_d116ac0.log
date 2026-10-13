@@ -1,0 +1,515 @@
+FFFFFF..FFFFFFFFFFF                                                      [100%]
+=================================== FAILURES ===================================
+____________ test_n1_synchronize_raises_when_the_device_query_fails ____________
+
+    def test_n1_synchronize_raises_when_the_device_query_fails():
+        """The reviewer's empty_sync case: no usable device, nothing pending. d116ac0 returned success (rc 9 in the probe)."""
+        r, res = _run(_N1_NO_DEVICE, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+>       assert res['raised'] is True, f'synchronize() reported success with no usable CUDA device: {res}'
+E       AssertionError: synchronize() reported success with no usable CUDA device: {'raised': False}
+E       assert False is True
+
+tc_signal/tests/test_fix2_findings.py:148: AssertionError
+_________________ test_n1_atexit_hook_logs_instead_of_raising __________________
+
+    def test_n1_atexit_hook_logs_instead_of_raising():
+        r, res = _run(_N1_NO_DEVICE, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+>       assert 'tc_signal: synchronize() at exit failed (RuntimeError' in r.stderr, r.stderr
+E       AssertionError: 
+E       assert 'tc_signal: synchronize() at exit failed (RuntimeError' in ''
+E        +  where '' = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport sys\nimport tc_signal as ts\ntry:\n    ts.synchronize()\n  ...ype": type(e).__name__, "msg": str(e)}), flush=True)\n'], returncode=0, stdout='RESULT {"raised": false}\n', stderr='').stderr
+
+tc_signal/tests/test_fix2_findings.py:155: AssertionError
+_____________ test_n1_failed_sync_raises_names_the_error_and_leaks _____________
+
+    def test_n1_failed_sync_raises_names_the_error_and_leaks():
+        r, res = _run(_N1_GPU, 'sync_failure')
+>       _ok(r, res)
+
+tc_signal/tests/test_fix2_findings.py:209: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 54, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 54, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 54, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n1_destructor_release_failure_is_raised_once_by_next_synchronize[deferred] _
+
+mode = 'deferred'
+
+    @pytest.mark.parametrize('mode', ['deferred', 'bound_drain'])
+    def test_n1_destructor_release_failure_is_raised_once_by_next_synchronize(mode):
+        r, res = _run(_N1_GPU, mode)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix2_findings.py:221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 63, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 63, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 63, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n1_destructor_release_failure_is_raised_once_by_next_synchronize[bound_drain] _
+
+mode = 'bound_drain'
+
+    @pytest.mark.parametrize('mode', ['deferred', 'bound_drain'])
+    def test_n1_destructor_release_failure_is_raised_once_by_next_synchronize(mode):
+        r, res = _run(_N1_GPU, mode)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix2_findings.py:221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 66, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 66, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 66, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_________ test_n2_every_plan_refuses_zero_extent_overflow_as_overflow __________
+
+    def test_n2_every_plan_refuses_zero_extent_overflow_as_overflow():
+        r, res = _run(_N2_PLANS, json.dumps(CENSUS_3D), json.dumps(CENSUS_2D))
+        _ok(r, res)
+        assert len(res) == 11 * len(CENSUS_3D) + 4 * len(CENSUS_2D)
+        bad = [c for c in res if c['accepted'] or c['type'] != 'ValueError' or 'overflows' not in c['msg']]
+>       assert not bad, json.dumps(bad[:6], indent=1)
+E       AssertionError: [
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            0,
+E            4611686018427387904,
+E            4
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [0, 4611686018427387904, 4])"
+E          },
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            4611686018427387904,
+E            0,
+E            4
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [4611686018427387904, 0, 4])"
+E          },
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            4611686018427387904,
+E            4,
+E            0
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [4611686018427387904, 4, 0])"
+E          },
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            0,
+E            9223372036854775807,
+E            2
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [0, 9223372036854775807, 2])"
+E          },
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            9223372036854775807,
+E            2,
+E            0
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [9223372036854775807, 2, 0])"
+E          },
+E          {
+E           "plan": "conv1d.x",
+E           "shape": [
+E            2,
+E            0,
+E            9223372036854775807
+E           ],
+E           "accepted": false,
+E           "type": "ValueError",
+E           "msg": "tc_signal: operand 'x': empty operand (shape [2, 0, 9223372036854775807])"
+E          }
+E         ]
+E       assert not [{'accepted': False, 'msg': "tc_signal: operand 'x': empty operand (shape [0, 4611686018427387904, 4])", 'plan': 'conv...mpty operand (shape [2, 0, 9223372036854775807])", 'plan': 'conv1d.x', 'shape': [2, 0, 9223372036854775807], ...}, ...]
+
+tc_signal/tests/test_fix2_findings.py:290: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:owner_reserve] _
+
+site = 'alloc:owner_reserve'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 69, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:event_pool_reserve] _
+
+site = 'alloc:event_pool_reserve'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 69, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:pending_push] _
+
+site = 'alloc:pending_push'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 69, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 69, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:event_recycle] _
+
+site = 'alloc:event_recycle'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 65, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 65, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 65, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:error_message] _
+
+site = 'alloc:error_message'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+>       _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 55, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 55, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 55, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+___ test_n4_throwing_producer_deleter_is_contained_on_every_path[immediate] ____
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'immediate'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n")
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+____ test_n4_throwing_producer_deleter_is_contained_on_every_path[deferred] ____
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'deferred'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n")
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+__ test_n4_throwing_producer_deleter_is_contained_on_every_path[bound_drain] ___
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'bound_drain'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n")
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_ test_n4_throwing_producer_deleter_is_contained_on_every_path[fallback_sync] __
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'fallback_sync'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 73, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n')
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 73, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute '_test_inject'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ..."<string>", line 73, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'_test_inject\'\n').returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+__ test_n4_throwing_producer_deleter_is_contained_on_every_path[synchronize] ___
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'synchronize'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n")
+res = None
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+_____ test_n4_throwing_producer_deleter_is_contained_on_every_path[atexit] _____
+
+thrower = '/tmp/pytest-of-vader/pytest-48/fix2_thrower0/fix2_thrower.so'
+mode = 'atexit'
+
+    @pytest.mark.parametrize('mode', ['immediate', 'deferred', 'bound_drain', 'fallback_sync', 'synchronize', 'atexit'])
+    def test_n4_throwing_producer_deleter_is_contained_on_every_path(thrower, mode):
+        r, res = _run(_N4, thrower, mode)
+>       _ok(r, res)                                                   # mutant (d) terminates here (rc -6)
+        ^^^^^^^^^^^
+
+tc_signal/tests/test_fix2_findings.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n")
+res = {'calls': 0, 'delta': {'bound_drains': 0, 'bytes': 32768, 'entries': 1, 'fallback_syncs': 0, ...}, 'mode': 'atexit'}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=RESULT {"mode": "atexit", "calls": 0, "delta": {"entries": 1, "managers": 2, "bytes": 32768, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 32704, "retained_entries": 1, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 0, "max_bytes": 0}}
+E         
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, json, os, sys\ndef _report_at_exit():\n    ...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tc_signal/tests/test_fix2_findings.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_synchronize_raises_when_the_device_query_fails
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_atexit_hook_logs_instead_of_raising
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_failed_sync_raises_names_the_error_and_leaks
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_destructor_release_failure_is_raised_once_by_next_synchronize[deferred]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n1_destructor_release_failure_is_raised_once_by_next_synchronize[bound_drain]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n2_every_plan_refuses_zero_extent_overflow_as_overflow
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:owner_reserve]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:event_pool_reserve]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:pending_push]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:event_recycle]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:error_message]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[immediate]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[deferred]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[bound_drain]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[fallback_sync]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[synchronize]
+FAILED tc_signal/tests/test_fix2_findings.py::test_n4_throwing_producer_deleter_is_contained_on_every_path[atexit]
+17 failed, 2 passed in 75.57s (0:01:15)

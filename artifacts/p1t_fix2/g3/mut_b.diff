@@ -1,0 +1,11 @@
+--- worktree/tensor_cuda/src/bindings.cpp
++++ mut_b/tensor_cuda/src/bindings.cpp
+@@ -304,6 +304,8 @@
+ // rule. Ours: applying it to TensorCUDA's empty / from_dlpack / __dlpack__. Source-level citation unverified here (lead
+ // to check): "numpy ctors.c PyArray_NewFromDescr_int is_zero overflow".
+ int64_t checked_extent_bound(const int64_t* dims, int n, const char* who) {
++  for (int i = 0; i < n; ++i)
++    if (dims[i] == 0) return 0;  // MUTANT (b): N2, zero extents exempt the others again
+   int64_t p = 1;
+   for (int i = 0; i < n; ++i)
+     if (__builtin_mul_overflow(p, dims[i] > 1 ? dims[i] : int64_t{1}, &p))
