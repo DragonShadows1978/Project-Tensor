@@ -111,3 +111,5 @@ def conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dil
         out = _allocator(tuple(out_shape))
     _C.conv_transpose1d_run(xc, wc, bc, out, s, pb, pe, op, d, g)
     return out
+from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)
+__all__.append('lstm')

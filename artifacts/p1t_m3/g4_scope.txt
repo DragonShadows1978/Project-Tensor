@@ -1,0 +1,156 @@
+# P1T-M3 G4 scope receipt, Mon Oct 12 09:01:14 PM EDT 2026
+## base snapshot sha256 (/tmp/p1t_m3_base, copied 20:27 before any edit)
+0e10a3e3002b497515dc8a4d23c92cb9c1f3feb70abb035691dac15de6546f9b  /tmp/p1t_m3_base/bindings.cpp
+1ebc272352de561c1d8b55ac4f186aa2d4a27f8ebb3394e59b5448a0dda79048  /tmp/p1t_m3_base/CMakeLists.txt
+ca0b48b4a8e7d38f09eca76c53b45de00cfca7c396996e139bc3ba76b05858b3  /tmp/p1t_m3_base/__init__.py
+
+## diff -u tc_signal/src/bindings.cpp
+--- /tmp/p1t_m3_base/bindings.cpp	2026-10-12 20:24:28.688154675 -0400
++++ tc_signal/src/bindings.cpp	2026-10-12 20:36:54.958300927 -0400
+@@ -305,6 +305,8 @@
+ }  // namespace
+ }  // namespace tcs
+ 
++namespace tcs { void register_lstm(py::module_& m); }  // P1T-M3: src/lstm_bindings.cpp
++
+ PYBIND11_MODULE(_tc_signal, m) {
+   m.doc() = "tc_signal C++ core: DLPack-consuming fp32 1-D convolutions on the legacy default stream (P1T-M2)";
+   using namespace tcs;
+@@ -348,4 +350,5 @@
+     d["dlpack_consumer_stream"] = tuning::kDlpackLegacyStream;
+     return d;
+   });
++  register_lstm(m);
+ }
+
+## diff -u tc_signal/CMakeLists.txt
+--- /tmp/p1t_m3_base/CMakeLists.txt	2026-10-12 20:24:28.687780911 -0400
++++ tc_signal/CMakeLists.txt	2026-10-12 20:36:58.645322033 -0400
+@@ -50,6 +50,8 @@
+   src/conv.cu
+   src/dlpack_operand.cpp
+   src/bindings.cpp
++  src/lstm.cu
++  src/lstm_bindings.cpp
+ )
+ 
+ target_include_directories(_tc_signal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+## diff -u tc_signal/tc_signal/__init__.py
+--- /tmp/p1t_m3_base/__init__.py	2026-10-12 20:24:28.688550189 -0400
++++ tc_signal/tc_signal/__init__.py	2026-10-12 20:36:59.546327194 -0400
+@@ -111,3 +111,5 @@
+         out = _allocator(tuple(out_shape))
+     _C.conv_transpose1d_run(xc, wc, bc, out, s, pb, pe, op, d, g)
+     return out
++from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)
++__all__.append('lstm')
+
+## grep -n "__expf\|__tanhf\|__fdividef\|use_fast_math\|atomicAdd" tc_signal/src/lstm*
+grep exit=1 (1 = no match)
+
+## files under tensor_cuda/ newer than the order file (expect none)
+count=0
+core module sha256: 09aa9076d40922dac50521735579d01db2e96cf21058b8e6fc6ae6e27b67e83d  tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so
+
+## M2's existing tc_signal files vs the M2 worktree's copies (/tmp/p1t_m3_baseline_m2, read from wt_m2): byte-identical?
+identical  build.sh
+identical  README.md
+identical  .gitignore
+identical  include/dlpack/dlpack.h
+identical  src/conv.cu
+identical  src/conv_ops.h
+identical  src/dlpack_operand.cpp
+identical  src/dlpack_operand.h
+identical  src/tuning.h
+identical  tests/conftest.py
+identical  tests/tcs_census.py
+identical  tests/tcs_oracle.py
+identical  tests/tcs_producer.py
+identical  tests/test_contract.py
+identical  tests/test_conv.py
+
+## non-git diff stat: every file under the worktree newer than the order file (20:25:23), excluding __pycache__
+    4191  ./artifacts/p1t_m3/g1_census_receipt.json
+      74  ./artifacts/p1t_m3/g4_scope.txt
+      35  ./artifacts/p1t_m3/mutants/a/build.log
+    2984  ./artifacts/p1t_m3/mutants/a/g1.log
+    4191  ./artifacts/p1t_m3/mutants/a/g1_receipt.json
+    9167  ./artifacts/p1t_m3/mutants/a/g2_T1toT4.json
+      80  ./artifacts/p1t_m3/mutants/a/g2_T1toT4.log
+    1253  ./artifacts/p1t_m3/mutants/a/g2_T4.json
+      62  ./artifacts/p1t_m3/mutants/a/g2_T4.log
+      17  ./artifacts/p1t_m3/mutants/a/mutant_a.diff
+       2  ./artifacts/p1t_m3/mutants/a/MUTANT.txt
+       1  ./artifacts/p1t_m3/mutants/a/so_sha256.txt
+       1  ./artifacts/p1t_m3/mutants/a/which_module.txt
+      35  ./artifacts/p1t_m3/mutants/b/build.log
+    2424  ./artifacts/p1t_m3/mutants/b/g1.log
+    4191  ./artifacts/p1t_m3/mutants/b/g1_receipt.json
+    9167  ./artifacts/p1t_m3/mutants/b/g2_T1toT4.json
+      80  ./artifacts/p1t_m3/mutants/b/g2_T1toT4.log
+    1253  ./artifacts/p1t_m3/mutants/b/g2_T4.json
+      62  ./artifacts/p1t_m3/mutants/b/g2_T4.log
+      11  ./artifacts/p1t_m3/mutants/b/mutant_b.diff
+       2  ./artifacts/p1t_m3/mutants/b/MUTANT.txt
+       1  ./artifacts/p1t_m3/mutants/b/so_sha256.txt
+       1  ./artifacts/p1t_m3/mutants/b/which_module.txt
+      35  ./artifacts/p1t_m3/mutants/c/build.log
+    2516  ./artifacts/p1t_m3/mutants/c/g1.log
+    4191  ./artifacts/p1t_m3/mutants/c/g1_receipt.json
+    9167  ./artifacts/p1t_m3/mutants/c/g2_T1toT4.json
+      80  ./artifacts/p1t_m3/mutants/c/g2_T1toT4.log
+    1253  ./artifacts/p1t_m3/mutants/c/g2_T4.json
+      62  ./artifacts/p1t_m3/mutants/c/g2_T4.log
+      11  ./artifacts/p1t_m3/mutants/c/mutant_c.diff
+       2  ./artifacts/p1t_m3/mutants/c/MUTANT.txt
+       1  ./artifacts/p1t_m3/mutants/c/so_sha256.txt
+       1  ./artifacts/p1t_m3/mutants/c/which_module.txt
+      35  ./artifacts/p1t_m3/mutants/d/build.log
+     972  ./artifacts/p1t_m3/mutants/d/g1.log
+    4191  ./artifacts/p1t_m3/mutants/d/g1_receipt.json
+    9141  ./artifacts/p1t_m3/mutants/d/g2_T1toT4.json
+      54  ./artifacts/p1t_m3/mutants/d/g2_T1toT4.log
+    1227  ./artifacts/p1t_m3/mutants/d/g2_T4.json
+      36  ./artifacts/p1t_m3/mutants/d/g2_T4.log
+      11  ./artifacts/p1t_m3/mutants/d/mutant_d.diff
+       2  ./artifacts/p1t_m3/mutants/d/MUTANT.txt
+       1  ./artifacts/p1t_m3/mutants/d/so_sha256.txt
+       1  ./artifacts/p1t_m3/mutants/d/which_module.txt
+      35  ./artifacts/p1t_m3/mutants/e/build.log
+     346  ./artifacts/p1t_m3/mutants/e/g1.log
+    4191  ./artifacts/p1t_m3/mutants/e/g1_receipt.json
+    9141  ./artifacts/p1t_m3/mutants/e/g2_T1toT4.json
+      54  ./artifacts/p1t_m3/mutants/e/g2_T1toT4.log
+    1227  ./artifacts/p1t_m3/mutants/e/g2_T4.json
+      36  ./artifacts/p1t_m3/mutants/e/g2_T4.log
+      22  ./artifacts/p1t_m3/mutants/e/mutant_e.diff
+       2  ./artifacts/p1t_m3/mutants/e/MUTANT.txt
+       1  ./artifacts/p1t_m3/mutants/e/so_sha256.txt
+       1  ./artifacts/p1t_m3/mutants/e/which_module.txt
+      81  ./artifacts/p1t_m3/mutants/make_mutants.py
+     896  ./artifacts/p1t_m3/mutants/mutant_summary.json
+      42  ./artifacts/p1t_m3/mutants/run_mutant.sh
+      76  ./artifacts/p1t_m3/mutants/summarize.py
+    9141  ./artifacts/p1t_m3/p1t_T1toT4.json
+    1227  ./artifacts/p1t_m3/p1t_T4.json
+     156  ./artifacts/p1t_m3/tensorcuda_adapter.py
+     159  ./docs/P1T_M3_LEDGER.md
+      38  ./logs/p1t_m3_build.log
+      20  ./logs/p1t_m3_g1_baseline_m2_witness.log
+     306  ./logs/p1t_m3_g1_own_tests.log
+      59  ./logs/p1t_m3_g2_runner_T1toT4.log
+      41  ./logs/p1t_m3_g2_runner_T4.log
+      77  ./tc_signal/CMakeLists.txt
+     354  ./tc_signal/src/bindings.cpp
+     248  ./tc_signal/src/lstm_bindings.cpp
+     290  ./tc_signal/src/lstm.cu
+      47  ./tc_signal/src/lstm_ops.h
+      19  ./tc_signal/src/lstm_tuning.h
+     115  ./tc_signal/tc_signal/__init__.py
+     122  ./tc_signal/tc_signal/_lstm.py
+    1327  ./tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so
+     101  ./tc_signal/tests/tcs_lstm_census.py
+     154  ./tc_signal/tests/tcs_lstm_oracle.py
+     535  ./tc_signal/tests/test_lstm.py
+(tc_signal/build/: 60 CMake build files, gitignored by tc_signal/.gitignore; not listed)
