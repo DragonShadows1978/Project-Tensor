@@ -305,6 +305,8 @@ void divide_probe(py::object x, py::object y, py::object out) {
 }  // namespace
 }  // namespace tcs
 
+namespace tcs { void register_m4(py::module_& m); }  // P1T-M4 norms and small ops (src/m4_bindings.cpp)
+
 PYBIND11_MODULE(_tc_signal, m) {
   m.doc() = "tc_signal C++ core: DLPack-consuming fp32 1-D convolutions on the legacy default stream (P1T-M2)";
   using namespace tcs;
@@ -348,4 +350,5 @@ PYBIND11_MODULE(_tc_signal, m) {
     d["dlpack_consumer_stream"] = tuning::kDlpackLegacyStream;
     return d;
   });
+  register_m4(m);
 }

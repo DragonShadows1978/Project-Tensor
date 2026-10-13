@@ -1,0 +1,11 @@
+--- a/tc_signal/src/small_ops.cu
++++ b/tc_signal/src/small_ops.cu
+@@ -102,7 +102,7 @@
+ __global__ void rint_kernel(const float* __restrict__ x, float* __restrict__ y, int64_t n) {
+   for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n;
+        i += static_cast<int64_t>(gridDim.x) * blockDim.x)
+-    y[i] = rintf(x[i]);
++    y[i] = roundf(x[i]);  // MUTANT (d)
+ }
+ 
+ }  // namespace

@@ -1,0 +1,585 @@
+Mon Oct 12 09:15:18 PM EDT 2026
+..........................................F............................. [ 19%]
+........................................................................ [ 38%]
+........................................................................ [ 57%]
+........................................................................ [ 76%]
+...........................FF.FFFFF.FFF................................. [ 96%]
+............F.F                                                          [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+_________ test_reflection_pad_census[kokoro-gen_reflection_pad_short] __________
+
+cell = ('gen_reflection_pad_short', 'kokoro', (1, 128, 9840), (1, 0), 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'kokoro', name = 'gen_reflection_pad_short'
+attrs = {'pads': [1, 0], 'shape': [1, 128, 9840]}
+a1 = array([[[ 0.15685715,  0.15685715, -1.2395679 , ...,  0.55535966,
+          2.660961  ,  0.40907675],
+        [ 1.1263...  0.6934457 , -0.43446177, ...,  2.9086165 ,
+          3.2496207 ,  2.852684  ]]], shape=(1, 128, 9841), dtype=float32)
+a2 = array([[[ 0.15685715,  0.15685715, -1.2395679 , ...,  0.55535966,
+          2.660961  ,  0.40907675],
+        [ 1.1263...  0.6934457 , -0.43446177, ...,  2.9086165 ,
+          3.2496207 ,  2.852684  ]]], shape=(1, 128, 9841), dtype=float32)
+o = array([[[-1.2395679 ,  0.15685715, -1.2395679 , ...,  0.55535966,
+          2.660961  ,  0.40907675],
+        [ 1.4945...  0.6934457 , -0.43446177, ...,  2.9086165 ,
+          3.2496207 ,  2.852684  ]]], shape=(1, 128, 9841), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 128 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________ test_reflection_pad_census[kokoro-gen_reflection_pad_long] __________
+
+cell = ('gen_reflection_pad_long', 'kokoro', (1, 128, 16383), (1, 0), 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'kokoro', name = 'gen_reflection_pad_long'
+attrs = {'pads': [1, 0], 'shape': [1, 128, 16383]}
+a1 = array([[[-0.86305666, -0.86305666, -0.02289105, ...,  0.42102072,
+         -0.24513146,  3.4705446 ],
+        [ 0.9354... 1.5186728 , -1.8959206 , ..., -1.8440813 ,
+          1.0320631 , -0.47586304]]], shape=(1, 128, 16384), dtype=float32)
+a2 = array([[[-0.86305666, -0.86305666, -0.02289105, ...,  0.42102072,
+         -0.24513146,  3.4705446 ],
+        [ 0.9354... 1.5186728 , -1.8959206 , ..., -1.8440813 ,
+          1.0320631 , -0.47586304]]], shape=(1, 128, 16384), dtype=float32)
+o = array([[[-0.02289105, -0.86305666, -0.02289105, ...,  0.42102072,
+         -0.24513146,  3.4705446 ],
+        [ 0.0194... 1.5186728 , -1.8959206 , ..., -1.8440813 ,
+          1.0320631 , -0.47586304]]], shape=(1, 128, 16384), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 128 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________________ test_reflection_pad_census[edge-p23_N2] ____________________
+
+cell = ('p23_N2', 'edge', (2, 4, 10), (2, 3), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'p23_N2'
+attrs = {'pads': [2, 3], 'shape': [2, 4, 10]}
+a1 = array([[[ 1.1597858e-01,            nan,            nan,  1.1597858e-01,
+          2.6293765e-03,            nan,  6.5...7171731e+00, -1.1463124e+00,            nan,
+                    nan, -1.1463124e+00,  1.7171731e+00]]], dtype=float32)
+a2 = array([[[ 1.1597858e-01,            nan,            nan,  1.1597858e-01,
+          2.6293765e-03,            nan,  6.5...7171731e+00, -1.1463124e+00,            nan,
+                    nan, -1.1463124e+00,  1.7171731e+00]]], dtype=float32)
+o = array([[[ 2.6293765e-03,  1.1597858e-01,            nan,  1.1597858e-01,
+          2.6293765e-03,            nan,  6.5...7171731e+00, -1.1463124e+00,            nan,
+         -1.1463124e+00,  1.7171731e+00,  0.0000000e+00]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 40 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_________________ test_reflection_pad_census[edge-pTm1_Tm1_N2] _________________
+
+cell = ('pTm1_Tm1_N2', 'edge', (2, 4, 10), ('T-1', 'T-1'), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'pTm1_Tm1_N2'
+attrs = {'pads': [9, 9], 'shape': [2, 4, 10]}
+a1 = array([[[           nan,  8.6997228e-04,  9.0179642e+01, -1.1754942e-38,
+          1.7788738e+00,            nan,     ...8e-02, -0.0000000e+00,
+          1.1701634e+00,  2.4250843e+01,  1.4205168e+01, -5.3864427e+00]]],
+      dtype=float32)
+a2 = array([[[           nan,  8.6997228e-04,  9.0179642e+01, -1.1754942e-38,
+          1.7788738e+00,            nan,     ...8e-02, -0.0000000e+00,
+          1.1701634e+00,  2.4250843e+01,  1.4205168e+01, -5.3864427e+00]]],
+      dtype=float32)
+o = array([[[ 5.4301710e+00,            nan,  8.6997228e-04,  9.0179642e+01,
+         -1.1754942e-38,  1.7788738e+00,     ...0e+00,  1.1701634e+00,
+          2.4250843e+01,  1.4205168e+01, -5.3864427e+00,           -inf]]],
+      dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 142 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________________ test_reflection_pad_census[edge-pTm1_0_N2] __________________
+
+cell = ('pTm1_0_N2', 'edge', (2, 4, 10), ('T-1', 0), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'pTm1_0_N2'
+attrs = {'pads': [9, 0], 'shape': [2, 4, 10]}
+a1 = array([[[ 1.70027435e+02, -1.63838593e+02,  8.94795380e+01,
+                     nan, -3.39793451e-02,  1.15524979e+01...1.69596970e-01,
+          1.07015514e+01, -1.88234329e-01,             nan,
+          7.75502625e+01]]], dtype=float32)
+a2 = array([[[ 1.70027435e+02, -1.63838593e+02,  8.94795380e+01,
+                     nan, -3.39793451e-02,  1.15524979e+01...1.69596970e-01,
+          1.07015514e+01, -1.88234329e-01,             nan,
+          7.75502625e+01]]], dtype=float32)
+o = array([[[ 1.00358105e+00,  1.70027435e+02, -1.63838593e+02,
+          8.94795380e+01,             nan, -3.39793451e-02...1.69596970e-01,
+          1.07015514e+01, -1.88234329e-01,             nan,
+          7.75502625e+01]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 72 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________________ test_reflection_pad_census[edge-p0_Tm1_N2] __________________
+
+cell = ('p0_Tm1_N2', 'edge', (2, 4, 10), (0, 'T-1'), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'p0_Tm1_N2'
+attrs = {'pads': [0, 9], 'shape': [2, 4, 10]}
+a1 = array([[[           inf,           -inf, -3.8509499e-03,  1.9140754e+00,
+          1.1754942e-38, -7.8448862e-02,  3.4...8367213e-02, -3.9743366e+01,  1.1754942e-38,
+         -3.6486480e-02,            nan,  1.3427459e+01]]], dtype=float32)
+a2 = array([[[           inf,           -inf, -3.8509499e-03,  1.9140754e+00,
+          1.1754942e-38, -7.8448862e-02,  3.4...8367213e-02, -3.9743366e+01,  1.1754942e-38,
+         -3.6486480e-02,            nan,  1.3427459e+01]]], dtype=float32)
+o = array([[[           inf,           -inf, -3.8509499e-03,  1.9140754e+00,
+          1.1754942e-38, -7.8448862e-02,  3.4...9743366e+01,  1.1754942e-38, -3.6486480e-02,
+                    nan,  1.3427459e+01,  4.2964500e+01]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 72 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_______________ test_reflection_pad_census[edge-p10_N2_special] ________________
+
+cell = ('p10_N2_special', 'edge', (2, 4, 9), (1, 0), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'p10_N2_special'
+attrs = {'pads': [1, 0], 'shape': [2, 4, 9]}
+a1 = array([[[-2.6215243e-01, -2.6215243e-01, -1.1754942e-38,            nan,
+         -0.0000000e+00, -1.1754942e-38, -2.6...9841967e+00, -3.3690077e-03,  2.2812111e-02,  1.1014369e+00,
+          1.4012985e-45, -3.4151787e+01]]], dtype=float32)
+a2 = array([[[-2.6215243e-01, -2.6215243e-01, -1.1754942e-38,            nan,
+         -0.0000000e+00, -1.1754942e-38, -2.6...9841967e+00, -3.3690077e-03,  2.2812111e-02,  1.1014369e+00,
+          1.4012985e-45, -3.4151787e+01]]], dtype=float32)
+o = array([[[-1.1754942e-38, -2.6215243e-01, -1.1754942e-38,            nan,
+         -0.0000000e+00, -1.1754942e-38, -2.6...9841967e+00, -3.3690077e-03,  2.2812111e-02,  1.1014369e+00,
+          1.4012985e-45, -3.4151787e+01]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 8 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________________ test_reflection_pad_census[edge-T2_p11_N2] __________________
+
+cell = ('T2_p11_N2', 'edge', (2, 3, 2), (1, 1), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'T2_p11_N2'
+attrs = {'pads': [1, 1], 'shape': [2, 3, 2]}
+a1 = array([[[           nan,            nan, -5.5199180e-02, -5.5199180e-02],
+        [ 9.4228089e-02,  9.4228089e-02, -5....e+00, -3.7559392e+00],
+        [ 1.1011740e+00,  1.1011740e+00,            nan,            nan]]],
+      dtype=float32)
+a2 = array([[[           nan,            nan, -5.5199180e-02, -5.5199180e-02],
+        [ 9.4228089e-02,  9.4228089e-02, -5....e+00, -3.7559392e+00],
+        [ 1.1011740e+00,  1.1011740e+00,            nan,            nan]]],
+      dtype=float32)
+o = array([[[-5.5199180e-02,            nan, -5.5199180e-02,            nan],
+        [-5.8887501e+00,  9.4228089e-02, -5....e+00,            nan],
+        [           nan,  1.1011740e+00,            nan,  1.1011740e+00]]],
+      dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 12 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________________ test_reflection_pad_census[edge-rank1_p34] __________________
+
+cell = ('rank1_p34', 'edge', (10,), (3, 4), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'rank1_p34'
+attrs = {'pads': [3, 4], 'shape': [10]}
+a1 = array([ 5.6541309e+00, -7.8637316e-04, -1.1754942e-38, -1.1754942e-38,
+       -7.8637316e-04,  5.6541309e+00,  2.04200...1805e-01,
+        1.1802091e-02,  1.1802091e-02, -1.2261805e-01,  1.5299439e-02,
+        9.9975342e-01], dtype=float32)
+a2 = array([ 5.6541309e+00, -7.8637316e-04, -1.1754942e-38, -1.1754942e-38,
+       -7.8637316e-04,  5.6541309e+00,  2.04200...1805e-01,
+        1.1802091e-02,  1.1802091e-02, -1.2261805e-01,  1.5299439e-02,
+        9.9975342e-01], dtype=float32)
+o = array([ 2.0420006e-03,  5.6541309e+00, -7.8637316e-04, -1.1754942e-38,
+       -7.8637316e-04,  5.6541309e+00,  2.04200...1805e-01,
+        1.1802091e-02, -1.2261805e-01,  1.5299439e-02,  9.9975342e-01,
+       -1.7524827e-03], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 7 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+________________ test_reflection_pad_census[edge-rank4_p21_N2] _________________
+
+cell = ('rank4_p21_N2', 'edge', (2, 2, 3, 6), (2, 1), 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.PAD_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.PAD_CELLS])
+    def test_reflection_pad_census(cell, receipt):
+        name, kind, shape, pads, data = cell
+        pb, pe = _pads(shape, pads)
+        x = _data('pad/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.reflection_pad1d(X, (pb, pe))), _host(ts.reflection_pad1d(X, [pb, pe]))
+>       _record(receipt, 'reflection_pad1d', kind, name, {'shape': list(shape), 'pads': [pb, pe]}, a1, a2,
+                O.pad_oracle(x, pb, pe), strict=True)
+
+tc_signal/tests/test_small_ops.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'reflection_pad1d', kind = 'edge', name = 'rank4_p21_N2'
+attrs = {'pads': [2, 1], 'shape': [2, 2, 3, 6]}
+a1 = array([[[[ 1.4012985e-45,            inf,            inf,
+           1.4012985e-45,  9.2748553e-03,  1.1754942e-38,
+  ...nan, -1.0960456e-01,  1.1754942e-38,
+          -1.0835265e+02,  1.3974376e-01,  1.3974376e-01]]]],
+      dtype=float32)
+a2 = array([[[[ 1.4012985e-45,            inf,            inf,
+           1.4012985e-45,  9.2748553e-03,  1.1754942e-38,
+  ...nan, -1.0960456e-01,  1.1754942e-38,
+          -1.0835265e+02,  1.3974376e-01,  1.3974376e-01]]]],
+      dtype=float32)
+o = array([[[[ 9.2748553e-03,  1.4012985e-45,            inf,
+           1.4012985e-45,  9.2748553e-03,  1.1754942e-38,
+  ...nan, -1.0960456e-01,  1.1754942e-38,
+          -1.0835265e+02,  1.3974376e-01, -1.0835265e+02]]]],
+      dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 35 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________ test_small_ops_producer_kwargs_byte_offset_and_deleters ____________
+
+    def test_small_ops_producer_kwargs_byte_offset_and_deleters():
+        import gc
+        P.reset_stats()
+        base = _t(1000)
+        off = 13
+        xn = base[off:off + 80].view(2, 4, 10).cpu().numpy()
+        for mode in ('field', 'data'):
+            x = P.Producer(base, (2, 4, 10), offset_elems=off, byte_offset_mode=mode)
+            ob = _t(2 * 4 * 20)
+            op = P.Producer(ob, (2, 4, 20))
+            assert ts.upsample_nearest1d(x, 2, out=op) is op
+            torch.cuda.synchronize()
+            assert x.calls[0]['stream'] == 1 and x.calls[0]['copy'] is None
+            assert op.calls[0]['stream'] == 1 and op.calls[0]['copy'] is False
+            assert O.bits_equal_strict(ob.view(2, 4, 20).cpu().numpy(), O.upsample_oracle(xn, 2))
+            y = ts.reflection_pad1d(P.Producer(base, (2, 4, 10), offset_elems=off, byte_offset_mode=mode), (3, 2))
+            z = ts.rint(P.Producer(base, (2, 4, 10), offset_elems=off, byte_offset_mode=mode))
+            torch.cuda.synchronize()
+>           assert O.bits_equal_strict(y.cpu().numpy(), O.pad_oracle(xn, 3, 2))
+E           AssertionError: assert False
+E            +  where False = <function bits_equal_strict at 0x705ebf7bcf40>(array([[[-1.0403681 ,  0.6585809 , -2.1200826 , -2.1200826 ,\n          0.6585809 , -1.0403681 ,  1.45563   ,  0.275019...   0.08110631, -0.7101206 , -1.6017658 , -0.09206071,\n         -0.05429396, -0.05429396, -0.09206071]]], dtype=float32), array([[[ 1.45563   , -1.0403681 ,  0.6585809 , -2.1200826 ,\n          0.6585809 , -1.0403681 ,  1.45563   ,  0.275019...   0.08110631, -0.7101206 , -1.6017658 , -0.09206071,\n         -0.05429396, -0.09206071, -1.6017658 ]]], dtype=float32))
+E            +    where <function bits_equal_strict at 0x705ebf7bcf40> = O.bits_equal_strict
+E            +    and   array([[[-1.0403681 ,  0.6585809 , -2.1200826 , -2.1200826 ,\n          0.6585809 , -1.0403681 ,  1.45563   ,  0.275019...   0.08110631, -0.7101206 , -1.6017658 , -0.09206071,\n         -0.05429396, -0.05429396, -0.09206071]]], dtype=float32) = <built-in method numpy of Tensor object at 0x705ebd330cd0>()
+E            +      where <built-in method numpy of Tensor object at 0x705ebd330cd0> = tensor([[[-1.0404,  0.6586, -2.1201, -2.1201,  0.6586, -1.0404,  1.4556,\n           0.2750, -1.4844, -2.5545, -0.8533,....0411,  0.6660,  0.4524,\n          -1.4759,  0.0811, -0.7101, -1.6018, -0.0921, -0.0543, -0.0543,\n          -0.0921]]]).numpy
+E            +        where tensor([[[-1.0404,  0.6586, -2.1201, -2.1201,  0.6586, -1.0404,  1.4556,\n           0.2750, -1.4844, -2.5545, -0.8533,....0411,  0.6660,  0.4524,\n          -1.4759,  0.0811, -0.7101, -1.6018, -0.0921, -0.0543, -0.0543,\n          -0.0921]]]) = <built-in method cpu of Tensor object at 0x705ebd331b30>()
+E            +          where <built-in method cpu of Tensor object at 0x705ebd331b30> = tensor([[[-1.0404,  0.6586, -2.1201, -2.1201,  0.6586, -1.0404,  1.4556,\n           0.2750, -1.4844, -2.5545, -0.8533,...0.4524,\n          -1.4759,  0.0811, -0.7101, -1.6018, -0.0921, -0.0543, -0.0543,\n          -0.0921]]], device='cuda:0').cpu
+E            +    and   array([[[ 1.45563   , -1.0403681 ,  0.6585809 , -2.1200826 ,\n          0.6585809 , -1.0403681 ,  1.45563   ,  0.275019...   0.08110631, -0.7101206 , -1.6017658 , -0.09206071,\n         -0.05429396, -0.09206071, -1.6017658 ]]], dtype=float32) = <function pad_oracle at 0x705ebf7bcb80>(array([[[-2.1200826 ,  0.6585809 , -1.0403681 ,  1.45563   ,\n          0.2750196 , -1.4844294 , -2.5545053 , -0.853259...39  ,\n         -1.4758844 ,  0.08110631, -0.7101206 , -1.6017658 ,\n         -0.09206071, -0.05429396]]], dtype=float32), 3, 2)
+E            +      where <function pad_oracle at 0x705ebf7bcb80> = O.pad_oracle
+
+tc_signal/tests/test_small_ops.py:255: AssertionError
+___________ test_small_ops_tensorcuda_producer_and_default_allocator ___________
+
+    def test_small_ops_tensorcuda_producer_and_default_allocator():
+        """The production path: TensorCUDA tensors in, outputs from tc_signal's default allocator (tensor_cuda.empty)."""
+        tc = pytest.importorskip('tensor_cuda')
+        ts.set_allocator(None)
+        x = O.special_data('tc/special', (2, 4, 9))
+        X = tc.tensor(x, dtype='float32')
+        u = ts.upsample_nearest1d(X, 300)
+        p = ts.reflection_pad1d(X, (8, 8))
+        r = ts.rint(X)
+        for t in (u, p, r):
+            assert type(t).__module__.startswith('tensor_cuda'), type(t)
+        assert O.bits_equal_strict(np.asarray(u.numpy()), O.upsample_oracle(x, 300))
+>       assert O.bits_equal_strict(np.asarray(p.numpy()), O.pad_oracle(x, 8, 8))
+E       assert False
+E        +  where False = <function bits_equal_strict at 0x705ebf7bcf40>(array([[[-2.82188952e-02,             nan,             nan,\n          1.40129846e-45, -8.27920341e+00,  7.61925983e+00...1.40129846e-45,\n          4.28815613e+01, -3.97658408e-01, -1.17549421e-38,\n                    -inf]]], dtype=float32), array([[[-1.18968086e-02, -2.82188952e-02,             nan,\n                     nan,  1.40129846e-45, -8.27920341e+00...4.28815613e+01,\n         -3.97658408e-01, -1.17549421e-38,            -inf,\n         -6.12968318e-02]]], dtype=float32))
+E        +    where <function bits_equal_strict at 0x705ebf7bcf40> = O.bits_equal_strict
+E        +    and   array([[[-2.82188952e-02,             nan,             nan,\n          1.40129846e-45, -8.27920341e+00,  7.61925983e+00...1.40129846e-45,\n          4.28815613e+01, -3.97658408e-01, -1.17549421e-38,\n                    -inf]]], dtype=float32) = <built-in function asarray>(array([[[-2.82188952e-02,             nan,             nan,\n          1.40129846e-45, -8.27920341e+00,  7.61925983e+00...1.40129846e-45,\n          4.28815613e+01, -3.97658408e-01, -1.17549421e-38,\n                    -inf]]], dtype=float32))
+E        +      where <built-in function asarray> = np.asarray
+E        +      and   array([[[-2.82188952e-02,             nan,             nan,\n          1.40129846e-45, -8.27920341e+00,  7.61925983e+00...1.40129846e-45,\n          4.28815613e+01, -3.97658408e-01, -1.17549421e-38,\n                    -inf]]], dtype=float32) = numpy()
+E        +        where numpy = <tensor_cuda._tensor_cuda.Tensor object at 0x705ebd498170>.numpy
+E        +    and   array([[[-1.18968086e-02, -2.82188952e-02,             nan,\n                     nan,  1.40129846e-45, -8.27920341e+00...4.28815613e+01,\n         -3.97658408e-01, -1.17549421e-38,            -inf,\n         -6.12968318e-02]]], dtype=float32) = <function pad_oracle at 0x705ebf7bcb80>(array([[[-3.17067700e-03, -8.77896595e+00,  7.61925983e+00,\n         -8.27920341e+00,  1.40129846e-45,             nan...,  4.28815613e+01, -1.40129846e-45,\n          5.96181154e+00, -2.33618355e+00, -1.83004704e+01]]],\n      dtype=float32), 8, 8)
+E        +      where <function pad_oracle at 0x705ebf7bcb80> = O.pad_oracle
+
+tc_signal/tests/test_small_ops.py:292: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[kokoro-gen_reflection_pad_short]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[kokoro-gen_reflection_pad_long]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-p23_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-pTm1_Tm1_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-pTm1_0_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-p0_Tm1_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-p10_N2_special]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-T2_p11_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-rank1_p34]
+FAILED tc_signal/tests/test_small_ops.py::test_reflection_pad_census[edge-rank4_p21_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_small_ops_producer_kwargs_byte_offset_and_deleters
+FAILED tc_signal/tests/test_small_ops.py::test_small_ops_tensorcuda_producer_and_default_allocator
+13 failed, 362 passed in 11.49s
+pytest exit=1
+Mon Oct 12 09:15:32 PM EDT 2026
