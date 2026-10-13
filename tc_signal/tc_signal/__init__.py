@@ -152,11 +152,17 @@ def synchronize():
 # threads before its first stderr diagnostic; another line follows each time the time waited doubles. It never bounds
 # the wait (a bounded return let CPython finalize under a running deleter and abort: round-3 V3-01 in core, round-5
 # V5-01 here). A callback normally takes microseconds. Same knob and schedule as core's _DLPACK_SHUTDOWN_WAIT_S.
-_RELEASE_EXIT_DIAG_S = 5.0
+# P1T-FIX7 (round-7 review V7-01): diagnostics only, and NEVER able to stop the exit close-and-wait. The hook passes the
+# knob as is to the native exit entry, which reads a float or an int (subclasses included) without calling any of its
+# Python methods; anything else (None, a str, an object with __float__, an int beyond the double range) or a deleted
+# knob uses the default below and the close and the wait still happen (stderr says the default was used). Initial value:
+# the native default (src/tuning.h kExitDiagDefaultS), so the two cannot drift apart.
+_RELEASE_EXIT_DIAG_S = _C._RELEASE_EXIT_DIAG_DEFAULT_S
 
 
 def _release_pending_at_exit():
-    """atexit hook (runs before CPython marks the runtime finalizing; GIL held).
+    """atexit hook (runs before CPython marks the runtime finalizing; GIL held). Registered through the native runner
+    `_C._exit_hook_runner` (see below).
 
     1. synchronize(): release whatever is still pending (P1T-FIX6: it does not wait for other threads; step 2 does).
        P1T-FIX2 (N1): an error is never swallowed silently; it is LOGGED to stderr (one line) and not raised (an
@@ -164,14 +170,14 @@ def _release_pending_at_exit():
        deliberately leaked; there is nothing else safe to do at exit.
     2. P1T-FIX5 (round-5 review V5-01): close the add-on's release admission for good, then wait, GIL released and
        with NO time bound, until no admitted producer callback of another thread is running: a deleter call (immediate
-       release of a refused call, next-call drain, synchronize, bound drain, fallback sync), the drop of an unconsumed
-       capsule's last reference (its destructor calls the producer's deleter), or a producer __dlpack__ /
-       __dlpack_device__ call. Interpreter finalization therefore never starts under a running callback. From here on
-       every later deleter call and capsule drop is deliberately leaked (counted in pending_stats()
-       'deleters_leaked_after_close' / 'capsules_kept_after_close') and every later producer __dlpack__ call is refused
-       (RuntimeError, 'callbacks_refused_after_close'): no add-on code enters Python for them. Callbacks on this
-       thread's own stack are excluded (the hook may be called from inside one). After _RELEASE_EXIT_DIAG_S seconds a
-       line goes to stderr, then another each time the time waited doubles.
+       release of a refused call, next-call drain, synchronize, bound drain, fallback sync), the drop of a capsule's
+       last reference (its destructor is producer code), or a producer __dlpack__ / __dlpack_device__ call.
+       Interpreter finalization therefore never starts under a running callback. From here on every later deleter call
+       and capsule drop is deliberately leaked (counted in pending_stats() 'deleters_leaked_after_close' /
+       'capsules_kept_after_close') and every later producer __dlpack__ call is refused (RuntimeError,
+       'callbacks_refused_after_close'): no add-on code enters Python for them. Callbacks on this thread's own stack
+       are excluded (the hook may be called from inside one). After _RELEASE_EXIT_DIAG_S seconds a line goes to stderr,
+       then another each time the time waited doubles.
        P1T-FIX6: this is the ONLY place tc_signal waits for another thread, and the wait's contract is: the exiting
        thread must not hold a lock that such an admitted callback needs (the rule CPython applies when it joins
        non-daemon threads at exit; atexit callbacks normally run with no application lock held).
@@ -179,37 +185,85 @@ def _release_pending_at_exit():
        for it. That is the producer's contract violation (a DLPack deleter must return); waiting is the honest outcome,
        an early return aborts the process (rc -6, "FATAL: exception not rethrown"). Ctrl-C does not interrupt the wait;
        SIGTERM / SIGKILL still end the process.
-    Never raises. Prior art: CPython's atexit, which itself prints (not raises) a callback's exception (taken:
-    log-don't-raise); core's tensor_cuda._dlpack_shutdown_hook (P1T-FIX2 N5 / P1T-FIX3 V3-01), whose close-then-wait
-    design and diagnostic schedule this reuses (see src/dlpack_operand.cpp, release lifecycle)."""
+
+    P1T-FIX7 (round-7 review V7-01, sweep (i)): diagnostic configuration never gates exit quiescence. Step 2 is
+    reached on every path that runs any statement of this hook:
+      * step 1 runs inside try / finally and step 2 is the finally: an Exception from synchronize() is logged after
+        the close; a BaseException (KeyboardInterrupt, SystemExit) still closes and waits, then propagates;
+      * the knob is never converted here: it is passed as is (a deleted knob passes None), so no float(), __float__ or
+        OverflowError can run before the close (FIX6 called float(knob): 1 << 4096 raised OverflowError, the close was
+        skipped, and a finite deleter still running on a daemon thread aborted the process, rc 134);
+      * the finally block reads the knob (a deleted knob is caught as NameError and passes None) and makes one call, the
+        native close; nothing touches stderr before the close: every log line is written after it, each guarded.
+    An exception that escapes the hook before its close is handled by the runner that atexit actually calls
+    (_C._exit_hook_runner): when this hook raises before closing, the runner runs step 1 (synchronize(), a failure
+    logged), closes admission and waits itself, logs any recorded CUDA failure nobody reported, and re-raises. That covers the asynchronous case a Python function cannot: CPython 3.12
+    delivers a pending Ctrl-C at a frame's first instruction (RESUME), after a call returns and at a backward jump (the
+    jump out of an except handler is one), so a KeyboardInterrupt can arrive before any statement of this hook runs.
+    After a MemoryError from step 1 (V6-03: its CUDA failures are kept), synchronize() is called once more after the
+    close, so the kept failures are logged too (after the close it releases nothing; late releases are leaked).
+    P1T-FIX7 (lead send-back L1): every wait of exit is diagnosed on stderr, never silent: the wait of step 2 (also
+    its polling fallback when the lifecycle mutex fails), and the device syncs of step 1 (while the native runner runs,
+    each is preceded by a polled wait that writes a line after _RELEASE_EXIT_DIAG_S, then each time the time waited
+    doubles); pending_stats() exit_wait_poll_diagnostics / exit_device_wait_diagnostics count them.
+    Never raises, except a BaseException that arrived during it (after the close). Prior art: CPython's atexit, which
+    itself prints (not raises) a callback's exception and runs the rest (taken: log-don't-raise); Python's try / finally
+    guarantee, also for KeyboardInterrupt (language reference, "The try statement"); core's
+    tensor_cuda._dlpack_shutdown_hook (P1T-FIX2 N5 / P1T-FIX3 V3-01), whose close-then-wait design and diagnostic
+    schedule this reuses (see src/dlpack_operand.cpp, release lifecycle)."""
+    C = _C
+    knob = None
+    missing = False
+    sync_error = close_error = result = None
     try:
-        _C.synchronize()
-    except Exception as e:  # noqa: BLE001
+        C.synchronize()
+    except Exception as e:  # noqa: BLE001  (logged after the close, below)
+        sync_error = e
+    finally:
+        # V7-01: plain loads and one call; the close and the wait happen whatever the knob holds.
         try:
-            sys.stderr.write(f'tc_signal: synchronize() at exit failed ({type(e).__name__}: {e}); operands without a '
-                             f'completion proof were deliberately leaked, not released\n')
+            knob = _RELEASE_EXIT_DIAG_S
+        except NameError:
+            missing = True
+        try:
+            result = C._exit_close_admission(knob)
+        except Exception as e:  # noqa: BLE001  (only after the close and the wait: building the result failed)
+            close_error = e
+    lines = []
+    if isinstance(sync_error, MemoryError):
+        try:
+            C.synchronize()  # the failures V6-03 kept when the first message could not be allocated
+        except Exception as e:  # noqa: BLE001
+            lines.append(f'tc_signal: synchronize() at exit, called again after the close to report what the '
+                         f'MemoryError hid, raised {type(e).__name__}: {e}')
+    if sync_error is not None:
+        lines.insert(0, f'tc_signal: synchronize() at exit failed ({type(sync_error).__name__}: {sync_error}); operands '
+                        f'without a completion proof were deliberately leaked, not released')
+    if close_error is not None:
+        lines.append(f'tc_signal: exit hook: admission was closed and the wait finished, then building its result failed '
+                     f'({type(close_error).__name__}: {close_error})')
+    if result is not None:
+        if result['first_diag_default_used'] and (missing or knob is not None):
+            kind = type(knob)
+            what = ('was deleted' if missing else 'holds an int beyond the range of a C double'
+                    if issubclass(kind, int) else f'holds a {kind.__name__} (not a float or an int)')
+            lines.append(f'tc_signal: _RELEASE_EXIT_DIAG_S {what}; the exit wait used the default first-diagnostic '
+                         f'delay of {result["first_diag_s"]:g} s (the close and the wait are never affected)')
+        if result['overran']:
+            lines.append(f'tc_signal: the producer callback(s) admitted before exit finished after '
+                         f'{result["waited_us"] / 1e6:.1f} s; interpreter exit continues')
+    for line in lines:
+        try:
+            sys.stderr.write(line + '\n')
             sys.stderr.flush()
         except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
             pass
-    try:
-        try:
-            first_diag_s = float(_RELEASE_EXIT_DIAG_S)
-        except (TypeError, ValueError):
-            first_diag_s = float('nan')  # an unusable knob must not skip the wait: diagnose at once, still wait
-        r = _C._exit_close_admission(first_diag_s)
-        if r['overran']:
-            sys.stderr.write(f'tc_signal: the producer callback(s) admitted before exit finished after '
-                             f'{r["waited_us"] / 1e6:.1f} s; interpreter exit continues\n')
-            sys.stderr.flush()
-    except Exception as e:  # noqa: BLE001
-        try:
-            sys.stderr.write(f'tc_signal: exit hook failed ({type(e).__name__}: {e})\n')
-            sys.stderr.flush()
-        except Exception:  # noqa: BLE001
-            pass
 
 
-atexit.register(_release_pending_at_exit)
+# P1T-FIX7 (V7-01): registered through the native runner, not directly: atexit calls _C._exit_hook_runner(hook), which
+# calls the hook and, only if the hook raised before closing (for example a Ctrl-C delivered at its first bytecode),
+# closes and waits itself. To remove it: atexit.unregister(tc_signal._C._exit_hook_runner).
+atexit.register(_C._exit_hook_runner, _release_pending_at_exit)
 
 
 from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)

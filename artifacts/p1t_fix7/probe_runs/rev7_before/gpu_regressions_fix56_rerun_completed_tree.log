@@ -1,0 +1,28 @@
+........................................................................ [ 45%]
+....................F................................................... [ 91%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+_ test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[deleter] _
+
+mode = 'deleter'
+
+    @pytest.mark.parametrize('mode', ['deleter', 'consumed_capsule_drop'])
+    def test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread(mode):
+        r, res = _run(_EXIT_SCRIPT, mode)
+        _ok(r, res)
+        _no_abort(r)
+        out = r.stdout
+>       assert 0 <= out.find('CALLBACK finished') < out.find('FINALIZING True'), out
+E       AssertionError: ARMED deleter
+E         RESULT {"after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 0, "callbacks_in_flight": 0, "admitted_releases": 0, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "unreported_drain_failures": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "done": 0, "finalizing": false}}
+E         FINALIZING True
+E         
+E       assert 0 <= -1
+E        +  where -1 = <built-in method find of str object at 0xe47a5d0>('CALLBACK finished')
+E        +    where <built-in method find of str object at 0xe47a5d0> = 'ARMED deleter\nRESULT {"after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "hi...le_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "done": 0, "finalizing": false}}\nFINALIZING True\n'.find
+
+tc_signal/tests/test_fix6_findings.py:260: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix6_findings.py::test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[deleter]
+1 failed, 156 passed, 144 deselected in 198.70s (0:03:18)
+exit=1

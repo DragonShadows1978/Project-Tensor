@@ -38,14 +38,10 @@ namespace {
 
 constexpr cudaStream_t kLegacyStream = 0;  // the legacy default stream (TensorCUDA's only stream)
 
-void check_cuda(cudaError_t e, const char* what) {
-  if (e != cudaSuccess) {
-    std::ostringstream os;
-    os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
-    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
-    throw std::runtime_error(os.str());
-  }
-}
+// P1T-FIX7 (sweep (j), error attribution): the launch check names the device and the kernel, and never claims the
+// kernel failed when cudaGetLastError may be reporting an asynchronous error of earlier work (cuda_guard.h
+// check_launch_on; FIX6 said "<kernel> failed"). It consumes the slot entry it reports (cuda_guard.h rule 1).
+constexpr const char* kPrefix = "tc_signal: ";
 
 unsigned int grid_for(int64_t total, int block) {
   const int64_t blocks = (total + block - 1) / block;
@@ -98,7 +94,7 @@ void upsample_nearest1d_forward(int device, int64_t rows, int64_t T, int64_t sca
   constexpr int B = m4tuning::kCopyBlock;
   upsample_nearest1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
       reinterpret_cast<const uint32_t*>(x), reinterpret_cast<uint32_t*>(y), total, T, T_out, scale);
-  check_cuda(cudaGetLastError(), "upsample_nearest1d_kernel");
+  check_launch_on(kPrefix, "upsample_nearest1d_kernel", device);
   guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
@@ -110,7 +106,7 @@ void reflection_pad1d_forward(int device, int64_t rows, int64_t T, int64_t pad_b
   constexpr int B = m4tuning::kCopyBlock;
   reflection_pad1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
       reinterpret_cast<const uint32_t*>(x), reinterpret_cast<uint32_t*>(y), total, T, T_out, pad_begin);
-  check_cuda(cudaGetLastError(), "reflection_pad1d_kernel");
+  check_launch_on(kPrefix, "reflection_pad1d_kernel", device);
   guard.restore();  // P1T-FIX4
 }
 
@@ -118,7 +114,7 @@ void rint_forward(int device, int64_t n, const float* x, float* y) {
   DeviceGuard guard(device);
   constexpr int B = m4tuning::kCopyBlock;
   rint_kernel<<<grid_for(n, B), B, 0, kLegacyStream>>>(x, y, n);
-  check_cuda(cudaGetLastError(), "rint_kernel");
+  check_launch_on(kPrefix, "rint_kernel", device);
   guard.restore();  // P1T-FIX4
 }
 

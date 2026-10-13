@@ -58,15 +58,21 @@ void check_cuda(cudaError_t e, const char* what) {
   }
 }
 
-// Checked after every kernel launch (launch-configuration and sticky errors surface here as RuntimeError).
-void check_launch(const char* kernel) { check_cuda(cudaGetLastError(), kernel); }
+// Checked after every kernel launch and after every cuBLAS call (launch-configuration and sticky errors surface here as
+// RuntimeError). P1T-FIX7 (sweep (j)): through cuda_guard.h check_launch_on / check_after_cublas_on, which name the
+// device and never claim that a kernel or a cuBLAS call failed when cudaGetLastError may be reporting an asynchronous
+// error of earlier work (FIX6: "<kernel> failed", "cublasSgemmStridedBatched failed" after it returned success).
+constexpr const char* kPrefix = "tc_signal: ";
 
-void check_cublas(cublasStatus_t s, const char* what) {
+void check_cublas(cublasStatus_t s, const char* what) {  // no device involved (cublasGetProperty)
   if (s != CUBLAS_STATUS_SUCCESS) {
     std::ostringstream os;
     os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(s);
     throw std::runtime_error(os.str());
   }
+}
+void check_cublas_on(cublasStatus_t s, const char* what, int device) {
+  if (s != CUBLAS_STATUS_SUCCESS) raise_cublas_failure_on(kPrefix, what, device, static_cast<int>(s));
 }
 
 unsigned int grid_for(int64_t total, int block) {
@@ -86,7 +92,7 @@ cublasHandle_t handle_for(int device) {
   auto it = handles.find(device);
   if (it != handles.end()) return it->second;
   cublasHandle_t h = nullptr;
-  check_cublas(cublasCreate(&h), "cublasCreate");
+  check_cublas_on(cublasCreate(&h), "cublasCreate", device);
   // P1T-FIX5, round-5 review finding V5-03 (MINOR): FIX4 destroyed the new handle when a SETTING failed, but the handle
   // had no owner through the cache insertion below: when handles.emplace threw (std::bad_alloc for the map node) the
   // handle leaked, with its device resources (review probe handle_insert_oom_cpu.cpp: creates 1, destroys 0). Now `owned`
@@ -109,12 +115,13 @@ cublasHandle_t handle_for(int device) {
   // P1T-FIX4 (sweep): a setting that fails no longer leaks the new handle: it is destroyed (on this device, which the
   // caller's DeviceGuard keeps current), the destroy's own status is checked and named, and the call raises. Nothing is
   // cached, so the next call retries from cublasCreate.
-  auto settle = [&h](cublasStatus_t st, const char* what) {
+  auto settle = [&h, device](cublasStatus_t st, const char* what) {
     if (st == CUBLAS_STATUS_SUCCESS) return;
     const cublasStatus_t ds = cublasDestroy(h);
     h = nullptr;  // P1T-FIX5: destroyed here; the owner must not destroy it again
     std::ostringstream os;
-    os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(st);
+    os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(st) << " (the new handle of CUDA device "
+       << device << ")";  // P1T-FIX7 (sweep (j)): the device named
     if (ds != CUBLAS_STATUS_SUCCESS) os << "; destroying the new handle also failed: cuBLAS status " << static_cast<int>(ds);
     throw std::runtime_error(os.str());
   };
@@ -209,7 +216,7 @@ __global__ void fp32_divide_probe_kernel(const float* __restrict__ x, const floa
 void fp32_divide_probe(int device, const float* x, const float* y, float* out, int64_t n) {
   DeviceGuard guard(device);
   fp32_divide_probe_kernel<<<grid_for(n, tuning::kProbeBlock), tuning::kProbeBlock, 0, kLegacyStream>>>(x, y, out, n);
-  check_launch("fp32_divide_probe_kernel");
+  check_launch_on(kPrefix, "fp32_divide_probe_kernel", device);
   guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
@@ -236,7 +243,7 @@ void conv1d_forward(int device, const Conv1dGeom& g, const float* x, const float
       const int64_t total = g.C_in * g.K * g.T_out;
       im2col1d_kernel<<<grid_for(total, tuning::kIm2colBlock), tuning::kIm2colBlock, 0, kLegacyStream>>>(
           xn, col, g.C_in, g.T, g.K, g.T_out, g.stride, g.pad_begin, g.dilation);
-      check_launch("im2col1d_kernel");
+      check_launch_on(kPrefix, "im2col1d_kernel", device);
       A = col;
       strideA = static_cast<long long>(CgK * g.T_out);
     }
@@ -244,19 +251,19 @@ void conv1d_forward(int device, const Conv1dGeom& g, const float* x, const float
     // Row-major Y_g[Og, T_out] = W_g[Og, CgK] . Col_g[CgK, T_out], computed as the column-major product
     // Y_g^T[T_out, Og] = Col_g^T[T_out, CgK] . W_g^T[CgK, Og]: m = T_out, n = Og, k = CgK, both ops N,
     // lda = T_out (col), ldb = CgK (w), ldc = T_out (y); one batch entry per group.
-    check_cublas(cublasSgemmStridedBatched(h, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(g.T_out),
+    check_cublas_on(cublasSgemmStridedBatched(h, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(g.T_out),
                                            static_cast<int>(Og), static_cast<int>(CgK), &alpha, A,
                                            static_cast<int>(g.T_out), strideA, w, static_cast<int>(CgK),
                                            static_cast<long long>(Og * CgK), &beta, yn, static_cast<int>(g.T_out),
                                            static_cast<long long>(Og * g.T_out), static_cast<int>(g.groups)),
-                 "cublasSgemmStridedBatched");
-    check_launch("cublasSgemmStridedBatched");
+                 "cublasSgemmStridedBatched", device);
+    check_after_cublas_on(kPrefix, "cublasSgemmStridedBatched", device);
   }
   if (b != nullptr) {
     const int64_t total = g.N * g.C_out * g.T_out;
     bias_add_kernel<<<grid_for(total, tuning::kBiasBlock), tuning::kBiasBlock, 0, kLegacyStream>>>(y, b, g.C_out,
                                                                                                    g.T_out, total);
-    check_launch("bias_add_kernel");
+    check_launch_on(kPrefix, "bias_add_kernel", device);
   }
   guard.restore();  // P1T-FIX4
 }
@@ -269,7 +276,7 @@ void conv_transpose1d_forward(int device, const ConvTranspose1dGeom& g, const fl
   conv_transpose1d_gather_kernel<<<grid_for(total, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
                                    kLegacyStream>>>(x, w, b, y, g.N, g.C_in, g.T, g.C_out, g.K, g.T_out, g.stride,
                                                     g.pad_begin, g.dilation, g.groups);
-  check_launch("conv_transpose1d_gather_kernel");
+  check_launch_on(kPrefix, "conv_transpose1d_gather_kernel", device);
   guard.restore();  // P1T-FIX4
 }
 
@@ -281,10 +288,10 @@ CublasConfig cublas_config(int device) {
   cublasAtomicsMode_t atomics;
   cublasPointerMode_t pmode;
   cudaStream_t s;
-  check_cublas(cublasGetMathMode(h, &math), "cublasGetMathMode");
-  check_cublas(cublasGetAtomicsMode(h, &atomics), "cublasGetAtomicsMode");
-  check_cublas(cublasGetPointerMode(h, &pmode), "cublasGetPointerMode");
-  check_cublas(cublasGetStream(h, &s), "cublasGetStream");
+  check_cublas_on(cublasGetMathMode(h, &math), "cublasGetMathMode", device);
+  check_cublas_on(cublasGetAtomicsMode(h, &atomics), "cublasGetAtomicsMode", device);
+  check_cublas_on(cublasGetPointerMode(h, &pmode), "cublasGetPointerMode", device);
+  check_cublas_on(cublasGetStream(h, &s), "cublasGetStream", device);
   CublasConfig c;
   c.math_mode = static_cast<int>(math);
   c.atomics_mode = static_cast<int>(atomics);

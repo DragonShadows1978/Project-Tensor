@@ -109,7 +109,8 @@ def from_dlpack(obj):
     until every release already admitted has finished (a release normally
     takes microseconds); ``_DLPACK_SHUTDOWN_WAIT_S`` is only the delay before
     the first stderr diagnostic, and another follows each time the time waited
-    doubles. So a producer deleter that never returns makes interpreter exit
+    doubles (P1T-FIX7: whatever that knob holds, an unusable value or none at
+    all, the close and the wait still happen; see ``_dlpack_shutdown_hook``). So a producer deleter that never returns makes interpreter exit
     wait for it (Ctrl-C does not interrupt that wait; SIGTERM / SIGKILL end the
     process). Every release that starts after the hook leaks (counted) without
     touching the GIL. A producer deleter that raises a C++ exception is
@@ -195,7 +196,12 @@ def empty(*shape, dtype="float32", device="cuda"):
 # for what already started" order; RCU-style grace periods (an unbounded wait
 # for pre-existing readers) and the kernel's repeated stall warnings. Ours:
 # applying them to the DLPack release at the atexit boundary.
-_DLPACK_SHUTDOWN_WAIT_S = 5.0
+# P1T-FIX7 (round-7 review V7-01): diagnostics only, and never able to stop the exit close-and-wait. The hook passes
+# the knob as is to the native entry, which reads a float or an int (subclasses included) without calling any of its
+# Python methods; anything else (None, a str, an object with __float__, an int beyond the double range) or a deleted
+# knob uses the native default and the close and the wait still happen (stderr says the default was used). Initial
+# value: that native default (bindings.cpp kDlpackShutdownDiagDefaultS), so the two cannot drift apart.
+_DLPACK_SHUTDOWN_WAIT_S = _C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S
 
 
 def _dlpack_shutdown_hook():
@@ -212,35 +218,79 @@ def _dlpack_shutdown_hook():
     running callback and abort the process (round-3 review V3-01, rc -6). Ctrl-C
     does not interrupt the wait; SIGTERM / SIGKILL still end the process.
     Releases that start after admission closed are deliberately leaked (no GIL
-    is taken), as before. Never raises (an atexit exception has no handler).
+    is taken), as before.
+
+    P1T-FIX7 (round-7 review V7-01, sweep (i)): diagnostic configuration never
+    gates exit quiescence. The close is the hook's first call: the knob is read
+    by a plain name load (a deleted knob is caught as NameError and passes None)
+    and handed to the native entry as is, never converted here, so no float(),
+    __float__ or OverflowError can run before the close (FIX2-FIX6 called
+    float(knob): 1 << 4096 raised OverflowError, the close was skipped, and a
+    finite deleter still running on another thread aborted the process at
+    finalization). Everything else (the diagnostic lines, the recorded P1-T
+    failures) is logged after the close, each line guarded. An exception that
+    escapes the hook before its close (a Ctrl-C delivered at its first
+    bytecode, where CPython 3.12 checks for pending signals) is handled by the
+    native runner atexit actually calls, ``_C._dlpack_exit_hook_runner``: it
+    closes and waits itself, logs the recorded failures nobody reported, and
+    re-raises. Never raises, except a BaseException that arrived during it.
+    P1T-FIX7 (lead send-back L1): if locking the release lifecycle mutex
+    fails (never observed), the close retries it, and that retry wait is
+    diagnosed like the release wait (a stderr line after the knob's delay,
+    then each time the retrying time doubles; _dlpack_release_stats()
+    shutdown_lock_retries / shutdown_lock_diagnostics). No exit wait is
+    silent.
+    Prior art: CPython's atexit (a callback's exception is printed, the rest
+    still run) and Python's try / finally; see bindings.cpp.
     """
+    C = _C
     try:
+        knob = _DLPACK_SHUTDOWN_WAIT_S
+        missing = False
+    except NameError:
+        knob, missing = None, True
+    result = hook_error = None
+    try:
+        result = C._dlpack_begin_shutdown(knob)    # V7-01: closes and waits for ANY knob object
+    except Exception as e:  # noqa: BLE001  (raised only after the close and the wait: building the result failed)
+        hook_error = e
+    lines = []
+    if hook_error is not None:
+        lines.append(f"tensor_cuda: DLPack exit hook: admission was closed and the wait finished, then building its "
+                     f"result failed ({type(hook_error).__name__}: {hook_error})")
+    if result is not None:
+        if result["first_diag_default_used"] and (missing or knob is not None):
+            kind = type(knob)
+            what = ("was deleted" if missing else "holds an int beyond the range of a C double"
+                    if issubclass(kind, int) else f"holds a {kind.__name__} (not a float or an int)")
+            lines.append(f"tensor_cuda: _DLPACK_SHUTDOWN_WAIT_S {what}; the exit wait used the default "
+                         f"first-diagnostic delay of {result['first_diag_s']:g} s (the close and the wait are never "
+                         f"affected)")
+        if result["timed_out"]:
+            lines.append(f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
+                         f"{result['waited_us'] / 1e6:.1f} s; interpreter exit continues")
+    # P1T-FIX6 (FIX5 residual R7): a CUDA failure recorded on a P1-T path that could not raise, and not raised by a
+    # synchronize() since, is logged here (an exception from an atexit callback has no handler). P1T-FIX7: attempted
+    # whatever the close returned or raised (FIX6 skipped it when the close step raised).
+    try:
+        C._dlpack_raise_unraisable()
+    except RuntimeError as e:
+        lines.append(f"{e} (logged by tensor_cuda's interpreter-exit hook)")
+    except Exception as e:  # noqa: BLE001  (MemoryError: the record stays; nothing reads it after exit)
+        lines.append(f"tensor_cuda: at exit, the recorded P1-T CUDA failures could not be reported "
+                     f"({type(e).__name__}: {e})")
+    for line in lines:
         try:
-            first_diag_s = float(_DLPACK_SHUTDOWN_WAIT_S)
-        except (TypeError, ValueError):
-            first_diag_s = float("nan")  # an unusable knob must not skip the wait: diagnose at once, still wait
-        r = _C._dlpack_begin_shutdown(first_diag_s)
-        if r["timed_out"]:
-            sys.stderr.write(
-                f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
-                f"{r['waited_us'] / 1e6:.1f} s; interpreter exit continues\n")
+            sys.stderr.write(line + "\n")
             sys.stderr.flush()
-        # P1T-FIX6 (FIX5 residual R7): a CUDA failure recorded on a P1-T path that could not raise, and not raised
-        # by a synchronize() since, is logged here (an exception from an atexit callback has no handler).
-        try:
-            _C._dlpack_raise_unraisable()
-        except RuntimeError as e:
-            sys.stderr.write(f"tensor_cuda: at exit: {e}\n")
-            sys.stderr.flush()
-    except Exception as e:  # noqa: BLE001
-        try:
-            sys.stderr.write(f"tensor_cuda: DLPack exit hook failed ({type(e).__name__}: {e})\n")
-            sys.stderr.flush()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
             pass
 
 
-atexit.register(_dlpack_shutdown_hook)
+# P1T-FIX7 (V7-01): registered through the native runner: atexit calls _C._dlpack_exit_hook_runner(hook), which calls
+# the hook and, only if the hook raised before closing (a Ctrl-C delivered at its first bytecode), closes and waits
+# itself. To remove it: atexit.unregister(tensor_cuda._C._dlpack_exit_hook_runner).
+atexit.register(_C._dlpack_exit_hook_runner, _dlpack_shutdown_hook)
 
 
 def matmul(a, b, alpha=1.0, trans_b=False):

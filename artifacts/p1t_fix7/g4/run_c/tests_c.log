@@ -1,0 +1,364 @@
+FF..FFFF..FFFF......FF.....                                              [100%]
+=================================== FAILURES ===================================
+_ test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery[plain] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery(trace_module, oom):
+        res = _trace(trace_module, 'query_after_sync', oom)
+        m = res['msg']
+>       _once(m, 'the completion event of a pending entry on device 0 could not be queried '
+                 '(cudaEventQuery: cudaErrorIllegalAddress', 'cudaEventQuery')
+
+tc_signal/tests/test_fix7_findings.py:696: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress'
+@py_assert1 = <built-in method count of str object at 0x7167b55b53e0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', ...legalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b55b53e0>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress')
+E            +    where <built-in method count of str object at 0x7167b55b53e0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery[message_oom] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery(trace_module, oom):
+        res = _trace(trace_module, 'query_after_sync', oom)
+        m = res['msg']
+>       _once(m, 'the completion event of a pending entry on device 0 could not be queried '
+                 '(cudaEventQuery: cudaErrorIllegalAddress', 'cudaEventQuery')
+
+tc_signal/tests/test_fix7_findings.py:696: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress'
+@py_assert1 = <built-in method count of str object at 0x7167b55b5680>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', ...legalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b55b5680>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress')
+E            +    where <built-in method count of str object at 0x7167b55b5680> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+______ test_fix7_v702_sync_and_query_failures_are_each_named_once[plain] _______
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_sync_and_query_failures_are_each_named_once(trace_module, oom):
+        m = _trace(trace_module, 'both', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure',
+              'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: '
+              'cudaErrorIllegalAddress', 'cudaStreamSynchronize', 'cudaEventQuery')
+
+tc_signal/tests/test_fix7_findings.py:713: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure', 'the comple... on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', 'cudaStreamSynchronize', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress'
+@py_assert1 = <built-in method count of str object at 0x71688ee0cff0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', ...legalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x71688ee0cff0>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress')
+E            +    where <built-in method count of str object at 0x71688ee0cff0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+___ test_fix7_v702_sync_and_query_failures_are_each_named_once[message_oom] ____
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_sync_and_query_failures_are_each_named_once(trace_module, oom):
+        m = _trace(trace_module, 'both', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure',
+              'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: '
+              'cudaErrorIllegalAddress', 'cudaStreamSynchronize', 'cudaEventQuery')
+
+tc_signal/tests/test_fix7_findings.py:713: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure', 'the comple... on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', 'cudaStreamSynchronize', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress'
+@py_assert1 = <built-in method count of str object at 0x71688ee0cab0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress', ...legalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x71688ee0cab0>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorIllegalAddress')
+E            +    where <built-in method count of str object at 0x71688ee0cab0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could n...llegalAddress: stub failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_____________ test_fix7_v702_spill_failure_names_its_device[plain] _____________
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_spill_failure_names_its_device(trace_module, oom):
+        m = _trace(trace_module, 'spill', oom)['msg']
+>       _once(m, 'the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure',
+              'device 67 is beyond the first 64 devices')
+
+tc_signal/tests/test_fix7_findings.py:721: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)'
+frags = ('the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure', 'device 67 is beyond the first 64 devices')
+f = 'device 67 is beyond the first 64 devices'
+@py_assert1 = <built-in method count of str object at 0x7167b53a65b0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('device 67 is beyond the first 64 devices', 'tc_signal.synchronize: CUDA error, so the release is not reported as a s...he legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a65b0>('device 67 is beyond the first 64 devices')
+E            +    where <built-in method count of str object at 0x7167b53a65b0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+__________ test_fix7_v702_spill_failure_names_its_device[message_oom] __________
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_v702_spill_failure_names_its_device(trace_module, oom):
+        m = _trace(trace_module, 'spill', oom)['msg']
+>       _once(m, 'the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure',
+              'device 67 is beyond the first 64 devices')
+
+tc_signal/tests/test_fix7_findings.py:721: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)'
+frags = ('the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure', 'device 67 is beyond the first 64 devices')
+f = 'device 67 is beyond the first 64 devices'
+@py_assert1 = <built-in method count of str object at 0x7167b53a6c40>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('device 67 is beyond the first 64 devices', 'tc_signal.synchronize: CUDA error, so the release is not reported as a s...he legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a6c40>('device 67 is beyond the first 64 devices')
+E            +    where <built-in method count of str object at 0x7167b53a6c40> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 67 could not be synchronized (cudaStreamSynchronize: cudaErrorLaunchFailure: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync[plain] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync(trace_module, oom):
+        m = _trace(trace_module, 'guard_set', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 was not synchronized: switching to device 1 failed '
+                 '(cudaSetDevice: cudaErrorInvalidDevice', 'cudaSetDevice')
+
+tc_signal/tests/test_fix7_findings.py:736: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)'
+frags = ('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice', 'cudaSetDevice')
+f = 'the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice'
+@py_assert1 = <built-in method count of str object at 0x7167b53a70f0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDev...the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a70f0>('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice')
+E            +    where <built-in method count of str object at 0x7167b53a70f0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync[message_oom] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync(trace_module, oom):
+        m = _trace(trace_module, 'guard_set', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 was not synchronized: switching to device 1 failed '
+                 '(cudaSetDevice: cudaErrorInvalidDevice', 'cudaSetDevice')
+
+tc_signal/tests/test_fix7_findings.py:736: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)'
+frags = ('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice', 'cudaSetDevice')
+f = 'the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice'
+@py_assert1 = <built-in method count of str object at 0x7167b53a73c0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDev...the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a73c0>('the legacy stream of device 1 was not synchronized: switching to device 1 failed (cudaSetDevice: cudaErrorInvalidDevice')
+E            +    where <built-in method count of str object at 0x7167b53a73c0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorInvalidDevice: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync[plain] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync(trace_module, oom):
+        m = _trace(trace_module, 'guard_get', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 was not synchronized: the current-device query before switching to '
+                 'device 1 failed (cudaGetDevice: cudaErrorNoDevice', 'cudaGetDevice')
+
+tc_signal/tests/test_fix7_findings.py:744: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)'
+frags = ('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice', 'cudaGetDevice')
+f = 'the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice'
+@py_assert1 = <built-in method count of str object at 0x7167b53a7780>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cu...ess: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a7780>('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice')
+E            +    where <built-in method count of str object at 0x7167b53a7780> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync[message_oom] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-130/fix7_trace0', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    def test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync(trace_module, oom):
+        m = _trace(trace_module, 'guard_get', oom)['msg']
+>       _once(m, 'the legacy stream of device 1 was not synchronized: the current-device query before switching to '
+                 'device 1 failed (cudaGetDevice: cudaErrorNoDevice', 'cudaGetDevice')
+
+tc_signal/tests/test_fix7_findings.py:744: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)'
+frags = ('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice', 'cudaGetDevice')
+f = 'the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice'
+@py_assert1 = <built-in method count of str object at 0x7167b53a7b40>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cu...ess: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53a7b40>('the legacy stream of device 1 was not synchronized: the current-device query before switching to device 1 failed (cudaGetDevice: cudaErrorNoDevice')
+E            +    where <built-in method count of str object at 0x7167b53a7b40> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 1 could not be synchronized (cudaStreamSynchronize: cudaErrorNoDevice: stub failure)'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_v702_real_module_names_the_failed_call_once[cuda:event_query-plain] _
+
+site = 'cuda:event_query', oom = False
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    @pytest.mark.parametrize('site', list(_REAL_EXPECT))
+    def test_fix7_v702_real_module_names_the_failed_call_once(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, 'oom' if oom else '-')
+        _ok(r, res)
+        if oom:
+            assert res['first'] == 'MemoryError', res
+        text, api, absent = _REAL_EXPECT[site]
+>       _once(res['msg'], text, api)
+
+tc_signal/tests/test_fix7_findings.py:842: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n... unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure'
+@py_assert1 = <built-in method count of str object at 0x7167b53b9fd0>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure', '...unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53b9fd0>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure')
+E            +    where <built-in method count of str object at 0x7167b53b9fd0> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n... unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+_ test_fix7_v702_real_module_names_the_failed_call_once[cuda:event_query-message_oom] _
+
+site = 'cuda:event_query', oom = True
+
+    @pytest.mark.parametrize('oom', [False, True], ids=['plain', 'message_oom'])
+    @pytest.mark.parametrize('site', list(_REAL_EXPECT))
+    def test_fix7_v702_real_module_names_the_failed_call_once(site, oom):
+        r, res = _run(_REAL_SCRIPT, site, 'oom' if oom else '-')
+        _ok(r, res)
+        if oom:
+            assert res['first'] == 'MemoryError', res
+        text, api, absent = _REAL_EXPECT[site]
+>       _once(res['msg'], text, api)
+
+tc_signal/tests/test_fix7_findings.py:842: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+msg = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n... unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released'
+frags = ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure', 'cudaEventQuery')
+f = 'the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure'
+@py_assert1 = <built-in method count of str object at 0x7167b53ba550>
+@py_assert4 = 0
+
+    def _once(msg, *frags):
+        for f in frags:
+>           assert msg.count(f) == 1, (f, msg)
+E           AssertionError: ('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure', '...unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released')
+E           assert 0 == 1
+E            +  where 0 = <built-in method count of str object at 0x7167b53ba550>('the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorLaunchFailure')
+E            +    where <built-in method count of str object at 0x7167b53ba550> = 'tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could n... unspecified launch failure); 2 consumed operand manager(s) still pending there were deliberately leaked, not released'.count
+
+tc_signal/tests/test_fix7_findings.py:689: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery[plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_query_failure_after_a_successful_sync_names_cudaEventQuery[message_oom]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_sync_and_query_failures_are_each_named_once[plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_sync_and_query_failures_are_each_named_once[message_oom]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_spill_failure_names_its_device[plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_spill_failure_names_its_device[message_oom]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync[plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_sweep_j_guard_switch_failure_names_cudaSetDevice_not_the_sync[message_oom]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync[plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_sweep_j_guard_read_failure_names_cudaGetDevice_not_the_sync[message_oom]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_real_module_names_the_failed_call_once[cuda:event_query-plain]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v702_real_module_names_the_failed_call_once[cuda:event_query-message_oom]
+12 failed, 15 passed, 41 deselected in 24.35s

@@ -199,8 +199,45 @@ inline std::vector<std::string> arg_str_list(const CallArgs& c, size_t i) {
 // step 4b; a typed binding called with a keyword gets a PyDict_Copy, step 2); if CPython exits the waiting thread (a
 // non-main thread re-taking the GIL after finalization began) the unwind deallocates it with the thread's state freed
 // (core's version of this wait: rc -11 in 3 of 5 runs, ledger 08:40-09:05). A raw function's args / kwargs are owned
-// by the caller's frame. The value is read at C level, as above. Returns false with a Python error set.
-inline bool raw_one_real_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double* out) {
+// by the caller's frame. P1T-FIX7: its argument reader is raw_exit_diag_arg below (FIX6's raw_one_real_arg, which
+// refused an unreadable value before the close, is replaced by it).
+// P1T-FIX7, round-7 review finding V7-01 (MAJOR): the argument of the EXIT entry (_exit_close_admission), whose
+// argument is diagnostics only. FIX6 refused an unreadable value (TypeError, or OverflowError for an int beyond the
+// double range) BEFORE closing, so a knob holding 1 << 4096 made the exit hook skip its close (the Python hook's
+// float() raised first; reviewer probe knob_exit_cpu.py rc 134). Now:
+//  * the call's SHAPE is still checked first (at most one positional argument, only the keyword `name`, no duplicate,
+//    present): a malformed call raises TypeError and does nothing, as any Python call would. The hook's call shape is
+//    fixed (one positional argument), so this never gates exit;
+//  * the VALUE never prevents the close: a float or an int (subclasses included) is read at C level, without calling
+//    any of its Python methods; anything else (None, str, objects with __float__, numpy scalars that are not float
+//    subclasses, an int beyond the double range) selects `fallback` and sets *default_used. The caller then closes and
+//    waits as always. The error an unreadable int leaves (OverflowError) is cleared, never propagated.
+// Returns false only for a malformed call (Python TypeError set). Prior art: CPython's C argument parser
+// (Python/getargs.c: shape errors are TypeError before the body runs); "diagnostic configuration never gates the
+// safety path" is ours (no prior art known to me for the exact rule; closest: CPython's atexit, which runs every
+// callback whatever an earlier one raised).
+// The VALUE rule alone (P1T-FIX7): a float or an int (subclasses included) read at C level, never calling a Python
+// method; anything else, or an int beyond the double range, gives `fallback`. Returns true when the fallback was used.
+// Never leaves an error set. Also used by the exit runner to read the knob from the hook's globals (lead send-back L1).
+inline bool raw_exit_diag_value(PyObject* v, double fallback, double* out) {
+  if (PyFloat_Check(v)) {  // float and subclasses: the C value, no __float__
+    *out = PyFloat_AS_DOUBLE(v);
+    return false;
+  }
+  if (PyLong_Check(v)) {  // int and subclasses (bool included): the C value, no __index__ / __float__
+    const double d = PyLong_AsDouble(v);
+    if (!(d == -1.0 && PyErr_Occurred())) {
+      *out = d;
+      return false;
+    }
+    PyErr_Clear();  // beyond the double range: unreadable, the default applies
+  }
+  *out = fallback;
+  return true;
+}
+
+inline bool raw_exit_diag_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double fallback,
+                              double* out, bool* default_used) {
   PyObject* v = nullptr;
   const Py_ssize_t n = args ? PyTuple_GET_SIZE(args) : 0;
   if (n > 1) {
@@ -232,19 +269,8 @@ inline bool raw_one_real_arg(const char* fn, const char* name, PyObject* args, P
     PyErr_Format(PyExc_TypeError, "%s(): missing required argument '%s'", fn, name);
     return false;
   }
-  if (PyFloat_Check(v)) {
-    *out = PyFloat_AsDouble(v);
-    return true;
-  }
-  if (PyLong_Check(v)) {
-    *out = PyLong_AsDouble(v);
-    return !(*out == -1.0 && PyErr_Occurred());
-  }
-  PyErr_Format(PyExc_TypeError,
-               "%s(): argument '%s' must be a real number (float or int), not %s (P1T-FIX6: refused without calling "
-               "any of its Python methods)",
-               fn, name, Py_TYPE(v)->tp_name);
-  return false;
+  *default_used = raw_exit_diag_value(v, fallback, out);
+  return true;
 }
 
 }  // namespace tcs

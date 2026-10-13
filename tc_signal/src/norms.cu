@@ -66,14 +66,10 @@ namespace {
 
 constexpr cudaStream_t kLegacyStream = 0;  // the legacy default stream (TensorCUDA's only stream)
 
-void check_cuda(cudaError_t e, const char* what) {
-  if (e != cudaSuccess) {
-    std::ostringstream os;
-    os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
-    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
-    throw std::runtime_error(os.str());
-  }
-}
+// P1T-FIX7 (sweep (j), error attribution): the launch check names the device and the kernel, and never claims the
+// kernel failed when cudaGetLastError may be reporting an asynchronous error of earlier work (cuda_guard.h
+// check_launch_on; FIX6 said "<kernel> failed"). It consumes the slot entry it reports (cuda_guard.h rule 1).
+constexpr const char* kPrefix = "tc_signal: ";
 
 // DeviceGuard (makes `device` current for the call, restores the caller's device) is tc_signal's shared, checked guard
 // in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
@@ -157,7 +153,7 @@ void row_norm_forward(int device, const RowNormGeom& g, const float* x, const fl
   const unsigned int grid = static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(g.rows, tuning::kGridCap)));
   row_norm_kernel<B><<<grid, B, 0, kLegacyStream>>>(x, scale, bias, y, g.rows, g.L, g.eps, static_cast<int>(g.affine),
                                                     g.channels, g.groups, g.ch_per_group, g.T);
-  check_cuda(cudaGetLastError(), "row_norm_kernel");
+  check_launch_on(kPrefix, "row_norm_kernel", device);
   guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 

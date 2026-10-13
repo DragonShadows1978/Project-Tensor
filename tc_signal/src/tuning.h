@@ -47,6 +47,16 @@ constexpr int kSyncReportMax = 8;
 // exit hook waits.
 constexpr double kLifecycleMaxDiagDelayS = 86400.0;
 constexpr int kLifecyclePollMs = 10;
+// P1T-FIX7 (V7-01): the default first-diagnostic delay of the exit wait, in seconds. It is the initial value of the
+// Python knob tc_signal._RELEASE_EXIT_DIAG_S (exported as _tc_signal._RELEASE_EXIT_DIAG_DEFAULT_S, so the two cannot
+// drift apart), and the delay the exit entry uses when the knob holds anything it cannot read as a real number without
+// calling a Python method (another type, an int beyond the double range, the knob deleted). Diagnostics only: it never
+// bounds or gates the wait, and it changes no numerics.
+constexpr double kExitDiagDefaultS = 5.0;
+// P1T-FIX7, lead send-back L1: the polling interval of the diagnosed device wait at interpreter exit (inside the exit
+// runner only; dlpack_operand.cpp wait_device_work_diagnosed). It adds at most one interval of latency to each device
+// sync at exit; it never bounds the wait and changes no numerics.
+constexpr int kExitDevicePollMs = 1;
 
 }  // namespace tuning
 }  // namespace tcs

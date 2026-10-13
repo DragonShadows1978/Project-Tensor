@@ -1,0 +1,20 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_rev7/probes/run_cpu_checks.py
++++ /tmp/p1t_fix7_rev7/before/run_cpu_checks_paths.py
+@@ -3,7 +3,7 @@
+ """
+ from pathlib import Path
+ import os,sys,subprocess,json
+-root=Path(__file__).resolve().parents[3]; b=Path('/tmp/p1t_rev7_build'); out=root/'artifacts/p1t_rev7'
++root=Path('/tmp/p1t_fix7_before_tree'); b=Path('/tmp/p1t_fix7_rev7/before'); out=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_fix7/probe_runs/rev7_before')
+ env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',CUDA_VISIBLE_DEVICES='',PYTHONPATH=str(b)+':'+str(b/'tc_signal'))
+ jobs=[]
+ for m in ['query_once','multidevice_restore','prior_oom','inside_callback','deferred_exit','diagnostic_oom_query','diagnostic_oom_sync','diagnostic_oom_device']:
+@@ -16,7 +16,7 @@
+ for name,cmd,bound in jobs:
+     p=subprocess.run(['timeout',str(bound),*cmd],cwd=root,env=env,capture_output=True,text=True,timeout=bound+5)
+     row={'case':name,'rc':p.returncode,'stdout':p.stdout,'stderr':p.stderr}; rows.append(row)
+-    (root/'logs'/('p1t_rev7_'+name+'.log')).write_text(json.dumps(row,indent=2)+'\n')
++    (Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_fix7/probe_runs/rev7_before')/('rev7_'+name+'.log')).write_text(json.dumps(row,indent=2)+'\n')
+     (out/'cpu_results.json').write_text(json.dumps(rows,indent=2)+'\n')
+     print(name,'rc='+str(p.returncode),flush=True)
+ assert all(r['rc']==0 for r in rows),rows

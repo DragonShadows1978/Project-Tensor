@@ -283,19 +283,31 @@ void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept 
 // Prior art: PyTorch c10 CUDAGuardImpl::uncheckedSetDevice -> C10_CUDA_CHECK_WARN (consume with cudaGetLastError, warn,
 // never throw from the guard's destructor), read in the installed torch 2.11 headers. Taken: check, consume, do not
 // throw. Ours: counting instead of a warning line.
+// P1T-FIX7 (sweep (j), error attribution): the record names the ONE call that failed. FIX5/FIX6 recorded every drain
+// failure as "(cudaGetDevice / cudaSetDevice / cudaStreamSynchronize)", so the message never said which call had failed
+// and named two that had not. The device in the record is the imported Storage's device in all three cases.
 bool drain_device_legacy_stream(int dev) {
   int prev = -1;
+  const char* failed_step =
+      "draining an imported Storage's device before its DLPack release: the current-device query cudaGetDevice "
+      "failed, so nothing was drained; the release was deliberately leaked";
   cudaError_t e = cudaGetDevice(&prev);
   bool switched = false;
   if (e == cudaSuccess && prev != dev) {
+    failed_step =
+        "draining an imported Storage's device before its DLPack release: switching to that device (cudaSetDevice) "
+        "failed, so nothing was drained; the release was deliberately leaked";
     e = cudaSetDevice(dev);
     switched = (e == cudaSuccess);
   }
-  if (e == cudaSuccess) e = cudaStreamSynchronize(0);
+  if (e == cudaSuccess) {
+    failed_step =
+        "draining an imported Storage's device before its DLPack release: cudaStreamSynchronize of that device's "
+        "legacy stream failed; the release was deliberately leaked";
+    e = cudaStreamSynchronize(0);
+  }
   if (e != cudaSuccess) {
-    note_core_unraisable("draining an imported Storage's device before its DLPack release (cudaGetDevice / "
-                         "cudaSetDevice / cudaStreamSynchronize); the release was deliberately leaked",
-                         dev, e);
+    note_core_unraisable(failed_step, dev, e);  // recorded before the slot entry is consumed
     cudaGetLastError();
   }
   const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
@@ -432,7 +444,11 @@ std::string cuda_storage_device_mismatch(const NDArray& a, const char* who) {
   if (!a.defined() || !a.device.is_cuda() || a.numel() == 0 || a.storage->ptr == nullptr) return std::string();
   cudaPointerAttributes attr{};
   const cudaError_t e = cudaPointerGetAttributes(&attr, a.data_ptr());
-  if (e != cudaSuccess) raise_cuda_failure(std::string(who) + ": cudaPointerGetAttributes failed", e);
+  // P1T-FIX7 (sweep (j)): the failed query is about this pointer; which device holds it is what it could not tell.
+  if (e != cudaSuccess)
+    raise_cuda_failure(std::string(who) + ": cudaPointerGetAttributes failed for element 0 (the tensor is labeled cuda:" +
+                           std::to_string(a.device.index) + "; the device of its allocation is unknown)",
+                       e);
   if (attr.type == cudaMemoryTypeUnregistered)
     return std::string(who) + ": this tensor is labeled cuda:" + std::to_string(a.device.index) +
            " but its memory is not a CUDA allocation the driver knows; refused";
@@ -607,12 +623,26 @@ void fill_(NDArray& a, double value) {
   if (pending != cudaSuccess)
     throw std::runtime_error(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
                              cudaGetErrorName(pending) + ": " + cudaGetErrorString(pending) +
-                             "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched");
+                             "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
+                             "(P1T-FIX7: the call that set it and its device are unknown; the slot records neither)");
   DISPATCH_FLOAT(a.dtype, T, {
     // P1T-FIX5 V5-04: blocks <= 2^31-1 (checked above), so this conversion is exact and blocks * kT >= n.
     fill_kernel<T><<<static_cast<unsigned int>(blocks), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
   });
-  cuda_check_last("fill_");
+  // P1T-FIX7 (sweep (j), error attribution): the launch check names the kernel and the device, and does not claim the
+  // launch failed: cudaGetLastError right after a launch reports the launch's own error OR an asynchronous error of
+  // earlier work on that device (CUDA 12.6 Runtime API: it "may also return error codes from previous, asynchronous
+  // launches"). FIX6 called the baseline cuda_check_last("fill_"), which named neither. The message still starts
+  // "CUDA error at fill_" (that helper's text). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK note ("CUDA kernel
+  // errors might be asynchronously reported at some other API call").
+  {
+    const cudaError_t le = cudaGetLastError();  // consumes the entry it reports
+    if (le != cudaSuccess)
+      throw std::runtime_error(std::string("CUDA error at fill_: ") + cudaGetErrorName(le) + ": " +
+                               cudaGetErrorString(le) + " (cudaGetLastError right after launching fill_kernel on CUDA "
+                               "device " + std::to_string(a.device.index) +
+                               ": the launch's own error, or an asynchronous error of earlier work on that device)");
+  }
   a.mark_modified();  // the write is queued: bump the revision BEFORE a restore failure can raise
   guard.restore();
 }

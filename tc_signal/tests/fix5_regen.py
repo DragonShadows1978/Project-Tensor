@@ -5,7 +5,8 @@ tree's sources, so that they test that tree (FIX4 D9 precedent: core_interop_cpu
     verbatim (1475fae). regen_handle_probe() replaces each embedded function with the function extracted from the given
     conv.cu / lstm.cu (from its signature line to the first following line that is exactly "}"). If the extracted text
     calls note_cublas_handle_destroy_failure (P1T-FIX5), a counting stub of it is inserted before `namespace conv {`;
-    nothing else changes. Self-check: regenerating from 1475fae's sources reproduces the probe byte for byte.
+    if it calls check_cublas_on (P1T-FIX7), a throwing stub of it (the probe's own check_cublas, plus the device
+    argument) is inserted there too; nothing else changes. Self-check: regenerating from 1475fae's sources reproduces the probe byte for byte.
   * artifacts/p1t_rev5/probes/fill_grid_cpu.cpp embeds the baseline `nblk` helper that 1475fae's fill_ launched with.
     regen_fill_probe() reads the given kernels.cu fill_: if fill_ launches with nblk(n) (1475fae), the probe is returned
     unchanged; if it uses P1T-FIX5's fill_grid_blocks, that function and its kFillMaxGridX constant are extracted
@@ -41,6 +42,13 @@ def regen_handle_probe(probe, conv_src, lstm_src):
         stub = ('// P1T-FIX5 regeneration: counting stub for the product\'s note_cublas_handle_destroy_failure\n'
                 'static int note_destroy_failures=0;\n'
                 'void note_cublas_handle_destroy_failure(int) noexcept {++note_destroy_failures;}\n')
+        out = out.replace('namespace conv {\n', stub + 'namespace conv {\n', 1)
+    if 'check_cublas_on(' in new_conv + new_lstm:
+        # P1T-FIX7 (sweep (j)): the product's status check now also names the device (check_cublas_on); stub it the way
+        # the probe stubs check_cublas (any failure throws), so the extracted functions compile unchanged.
+        stub = ('// P1T-FIX7 regeneration: stub for the product\'s device-naming check_cublas_on\n'
+                'static void check_cublas_on(cublasStatus_t s,const char*,int) {if(s!=CUBLAS_STATUS_SUCCESS)'
+                'throw std::runtime_error("cuBLAS error");}\n')
         out = out.replace('namespace conv {\n', stub + 'namespace conv {\n', 1)
     return out
 

@@ -70,24 +70,15 @@ constexpr int64_t kGateO = 1;
 constexpr int64_t kGateF = 2;
 constexpr int64_t kGateC = 3;
 
-void check_cuda(cudaError_t e, const char* what) {
-  if (e != cudaSuccess) {
-    std::ostringstream os;
-    os << "tc_signal.lstm: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
-    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
-    throw std::runtime_error(os.str());
-  }
-}
+// P1T-FIX7 (sweep (j), error attribution): every check names the device, a failed runtime call names the call that
+// returned the error (cuda_guard.h check_call_on), and the check after a kernel launch or a cuBLAS call never claims
+// that the kernel or the cuBLAS call failed when cudaGetLastError may be reporting an asynchronous error of earlier work
+// (check_launch_on / check_after_cublas_on; FIX6 said "cublasSgemm (input projection) failed" after it had returned
+// success). Each consumes the slot entry it reports (cuda_guard.h rule 1).
+constexpr const char* kPrefix = "tc_signal.lstm: ";
 
-// Checked after every kernel launch and cuBLAS call (launch-configuration and sticky errors surface as RuntimeError).
-void check_launch(const char* what) { check_cuda(cudaGetLastError(), what); }
-
-void check_cublas(cublasStatus_t s, const char* what) {
-  if (s != CUBLAS_STATUS_SUCCESS) {
-    std::ostringstream os;
-    os << "tc_signal.lstm: " << what << " failed: cuBLAS status " << static_cast<int>(s);
-    throw std::runtime_error(os.str());
-  }
+void check_cublas_on(cublasStatus_t s, const char* what, int device) {
+  if (s != CUBLAS_STATUS_SUCCESS) raise_cublas_failure_on(kPrefix, what, device, static_cast<int>(s));
 }
 
 unsigned int grid_for(int64_t total, int block) {
@@ -109,7 +100,7 @@ cublasHandle_t lstm_handle_for(int device) {
   auto it = handles.find(device);
   if (it != handles.end()) return it->second;
   cublasHandle_t h = nullptr;
-  check_cublas(cublasCreate(&h), "cublasCreate");
+  check_cublas_on(cublasCreate(&h), "cublasCreate", device);
   // P1T-FIX5, round-5 review finding V5-03 (MINOR), same fix as conv.cu handle_for: the new handle is owned from creation
   // until the cache insertion commits; on any exception before the commit (handles.emplace throwing std::bad_alloc was
   // the leak: review probe handle_insert_oom_cpu.cpp, creates 1, destroys 0) the owner destroys it, checks the status
@@ -127,12 +118,13 @@ cublasHandle_t lstm_handle_for(int device) {
   // P1T-FIX4 (sweep): a setting that fails no longer leaks the new handle: it is destroyed (on this device, which the
   // caller's DeviceGuard keeps current), the destroy's own status is checked and named, and the call raises. Nothing is
   // cached, so the next call retries from cublasCreate.
-  auto settle = [&h](cublasStatus_t st, const char* what) {
+  auto settle = [&h, device](cublasStatus_t st, const char* what) {
     if (st == CUBLAS_STATUS_SUCCESS) return;
     const cublasStatus_t ds = cublasDestroy(h);
     h = nullptr;  // P1T-FIX5: destroyed here; the owner must not destroy it again
     std::ostringstream os;
-    os << "tc_signal.lstm: " << what << " failed: cuBLAS status " << static_cast<int>(st);
+    os << "tc_signal.lstm: " << what << " failed: cuBLAS status " << static_cast<int>(st)
+       << " (the new handle of CUDA device " << device << ")";  // P1T-FIX7 (sweep (j)): the device named
     if (ds != CUBLAS_STATUS_SUCCESS) os << "; destroying the new handle also failed: cuBLAS status " << static_cast<int>(ds);
     throw std::runtime_error(os.str());
   };
@@ -230,13 +222,15 @@ void lstm_forward(int device, const LstmGeom& g, const float* x, const float* W,
 
   // 1. Initial state into the outputs that carry the recurrence.
   if (h0 != nullptr)
-    check_cuda(cudaMemcpyAsync(Y_h, h0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream), "initial_h copy");
+    check_call_on(kPrefix, "initial_h copy", "cudaMemcpyAsync", device,
+                  cudaMemcpyAsync(Y_h, h0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));
   else
-    check_cuda(cudaMemsetAsync(Y_h, 0, state_bytes, kLegacyStream), "initial_h zero");
+    check_call_on(kPrefix, "initial_h zero", "cudaMemsetAsync", device, cudaMemsetAsync(Y_h, 0, state_bytes, kLegacyStream));
   if (c0 != nullptr)
-    check_cuda(cudaMemcpyAsync(Y_c, c0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream), "initial_c copy");
+    check_call_on(kPrefix, "initial_c copy", "cudaMemcpyAsync", device,
+                  cudaMemcpyAsync(Y_c, c0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));
   else
-    check_cuda(cudaMemsetAsync(Y_c, 0, state_bytes, kLegacyStream), "initial_c zero");
+    check_call_on(kPrefix, "initial_c zero", "cudaMemsetAsync", device, cudaMemsetAsync(Y_c, 0, state_bytes, kLegacyStream));
 
   // 2. Input projection of all steps, one SGEMM per direction (+ Wb through beta = 1 on the pre-filled buffer).
   //    Row-major G_x[d][rows, 4H] = X[rows, I] . W[d][4H, I]^T, as the column-major product
@@ -246,15 +240,15 @@ void lstm_forward(int device, const LstmGeom& g, const float* x, const float* W,
     const int64_t total = g.D * rows * H4;
     lstm_bias_fill_kernel<<<grid_for(total, lstm_tuning::kBiasFillBlock), lstm_tuning::kBiasFillBlock, 0,
                             kLegacyStream>>>(gx, B, g.D, rows, H4, kLstmBiasHalves * H4);
-    check_launch("lstm_bias_fill_kernel");
+    check_launch_on(kPrefix, "lstm_bias_fill_kernel", device);
     beta_x = one;
   }
   for (int64_t d = 0; d < g.D; ++d) {
-    check_cublas(cublasSgemm(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(rows),
+    check_cublas_on(cublasSgemm(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(rows),
                              static_cast<int>(g.I), &one, W + d * H4 * g.I, static_cast<int>(g.I), x,
                              static_cast<int>(g.I), &beta_x, gx + d * rows * H4, static_cast<int>(H4)),
-                 "cublasSgemm (input projection)");
-    check_launch("cublasSgemm (input projection)");
+                    "cublasSgemm (input projection)", device);
+    check_after_cublas_on(kPrefix, "cublasSgemm (input projection)", device);
   }
 
   // 3. The recurrence: a host loop over steps inside this one call. Per step, one strided-batched SGEMM over the D
@@ -263,16 +257,16 @@ void lstm_forward(int device, const LstmGeom& g, const float* x, const float* W,
   //    read the h that step s's cell kernel wrote.
   const unsigned int cell_grid = grid_for(state, lstm_tuning::kCellBlock);
   for (int64_t s = 0; s < g.T; ++s) {
-    check_cublas(cublasSgemmStridedBatched(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(g.N),
+    check_cublas_on(cublasSgemmStridedBatched(hdl, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(H4), static_cast<int>(g.N),
                                            static_cast<int>(g.H), &one, R, static_cast<int>(g.H),
                                            static_cast<long long>(H4 * g.H), Y_h, static_cast<int>(g.H),
                                            static_cast<long long>(g.N * g.H), &zero, gh, static_cast<int>(H4),
                                            static_cast<long long>(g.N * H4), static_cast<int>(g.D)),
-                 "cublasSgemmStridedBatched (recurrent)");
-    check_launch("cublasSgemmStridedBatched (recurrent)");
+                    "cublasSgemmStridedBatched (recurrent)", device);
+    check_after_cublas_on(kPrefix, "cublasSgemmStridedBatched (recurrent)", device);
     lstm_cell_kernel<<<cell_grid, lstm_tuning::kCellBlock, 0, kLegacyStream>>>(gx, gh, B, Y_h, Y_c, Y, g.T, s, g.D,
                                                                                  g.N, g.H, g.first_reverse);
-    check_launch("lstm_cell_kernel");
+    check_launch_on(kPrefix, "lstm_cell_kernel", device);
   }
   guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
@@ -285,10 +279,10 @@ LstmCublasConfig lstm_cublas_config(int device) {
   cublasAtomicsMode_t atomics;
   cublasPointerMode_t pmode;
   cudaStream_t s;
-  check_cublas(cublasGetMathMode(h, &math), "cublasGetMathMode");
-  check_cublas(cublasGetAtomicsMode(h, &atomics), "cublasGetAtomicsMode");
-  check_cublas(cublasGetPointerMode(h, &pmode), "cublasGetPointerMode");
-  check_cublas(cublasGetStream(h, &s), "cublasGetStream");
+  check_cublas_on(cublasGetMathMode(h, &math), "cublasGetMathMode", device);
+  check_cublas_on(cublasGetAtomicsMode(h, &atomics), "cublasGetAtomicsMode", device);
+  check_cublas_on(cublasGetPointerMode(h, &pmode), "cublasGetPointerMode", device);
+  check_cublas_on(cublasGetStream(h, &s), "cublasGetStream", device);
   LstmCublasConfig c;
   c.math_mode = static_cast<int>(math);
   c.atomics_mode = static_cast<int>(atomics);

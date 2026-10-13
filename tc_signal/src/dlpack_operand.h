@@ -244,6 +244,24 @@ void synchronize_and_release_all();
 // tc_signal/__init__.py and the README): the calling (exiting) thread must not hold a lock that an admitted callback
 // needs, the same rule CPython applies when it joins non-daemon threads at exit.
 py::dict close_admission_and_wait(double first_diag_s);
+// P1T-FIX7 (V7-01): the same close and wait, called by the raw exit entry, which has already read the diagnostic
+// argument at C level (falling back to tuning::kExitDiagDefaultS when it could not: `diag_default_used`). The result
+// adds first_diag_s and first_diag_default_used. The close and the wait never depend on the argument.
+py::dict exit_close_admission(double first_diag_s, bool diag_default_used);
+// P1T-FIX7 (V7-01): the atexit runner's own close and wait (default delay), used only when the Python exit hook raised
+// before it closed. Returns the admitted sections of other threads it found running (0 when the hook had already
+// closed and waited); `waited_us` receives the time waited. Counted apart from the hook (pending_stats
+// 'exit_runner_closes', 'exit_runner_in_flight_at_close').
+long long exit_runner_close_and_wait(long long* waited_us);
+// P1T-FIX7: how many exit-hook closes happened so far (the runner compares it around its call of the hook).
+unsigned long long exit_hook_closes() noexcept;
+// P1T-FIX7 L1 (lead send-back): the exit runner opens a window in which every device sync of synchronize() is preceded
+// by a diagnosed wait (stderr after first_diag_s, then each time the time waited doubles); it closes it on return.
+void exit_device_waits_diagnosed(double first_diag_s) noexcept;
+void exit_device_waits_undiagnosed() noexcept;
+// P1T-FIX7 (V7-01): the runner's stderr line (C stdio, no Python) naming every recorded CUDA failure nobody raised yet,
+// after the hook was interrupted; the records are cleared once written. Never throws.
+void exit_log_unreported() noexcept;
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
 // push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
 // (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that

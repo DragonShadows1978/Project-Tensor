@@ -201,12 +201,18 @@ def managed(versioned, flags=0, deleter=None, data=0x1000):
     t.strides = ctypes.POINTER(ctypes.c_int64)()
     KEEP.append(m)
     return m
-x = new(ctypes.addressof(managed(False)), b'dltensor', None)
+# P1T-FIX7 (a test defect found by this round's before-arm run): PyCapsule_New stores the NAME POINTER, which "must
+# outlive the capsule" (CPython C-API, Capsules). A bytes literal of this -c script's module-level code lives in that
+# code object, which CPython frees once the script body has run; these capsules are read at EXIT, so their names
+# dangled ('a capsule named '@JHu' is not a DLPack capsule', deterministically in /tmp/p1t_fix7_before_tree, at
+# random elsewhere). The names are now module globals (alive until finalization clears the module).
+NAME_L, NAME_V = b'dltensor', b'dltensor_versioned'
+x = new(ctypes.addressof(managed(False)), NAME_L, None)
 if MODE == 'deleter':
     # V6-01: the reviewer's addon_exit_full_cpu.py staging (refused read-only output; its deleter runs on the daemon).
     slow = P.DELETER(lambda _p: slow_body())
     KEEP.append(slow)
-    out = new(ctypes.addressof(managed(True, P.FLAG_READ_ONLY, slow, 0x2000)), b'dltensor_versioned', None)
+    out = new(ctypes.addressof(managed(True, P.FLAG_READ_ONLY, slow, 0x2000)), NAME_V, None)
     def worker():
         try:
             _C.rint_run(x, out)
@@ -547,9 +553,47 @@ _NO_ARG = ['rint_plan', 'rint_run', '_test_rint_then_raise', 'fp32_divide_probe'
            'm4_tuning', '_test_injection_armed']
 
 
+# P1T-FIX7: the exit entry's census in a fresh process (it closes admission for any value; see the test below).
+_EXIT_ENTRY_CENSUS_SCRIPT = r'''
+import json
+from tc_signal import _tc_signal as _C
+CALLS = []
+class Rec:
+    def __getattr__(self, n):
+        CALLS.append(n)
+        raise AttributeError(n)
+    def __index__(self): CALLS.append('__index__'); return 1
+    def __float__(self): CALLS.append('__float__'); return 1.0
+    def __int__(self): CALLS.append('__int__'); return 1
+    def __repr__(self): CALLS.append('__repr__'); return 'Rec()'
+class RecTuple(tuple):
+    def __len__(self): CALLS.append('tuple.__len__'); return 2
+class RecInt(int):
+    def __index__(self): CALLS.append('int.__index__'); return int(self)
+    def __float__(self): CALLS.append('int.__float__'); return 1.0
+out = []
+for v in (Rec(), RecTuple((1, 2)), 'text', b'\\x00', RecInt(3)):
+    r = _C._exit_close_admission(v)
+    out.append('default' if r['first_diag_default_used'] else 'read')
+print('RESULT ' + json.dumps({'calls': CALLS, 'outcomes': out,
+                              'closed': _C.pending_stats()['release_admission_closed']}), flush=True)
+'''
+
+
 @pytest.mark.parametrize('name,args,typed', _BINDINGS, ids=[b[0] for b in _BINDINGS])
 def test_fix6_sweep_g_typed_parameters_refuse_foreign_objects_without_calling_them(name, args, typed):
     from tc_signal import _tc_signal as _C
+    if name == '_exit_close_admission':
+        # P1T-FIX7 (round-7 review V7-01, order "Apply the same rule to the native raw entries"): the exit entry now
+        # CLOSES AND WAITS for any value of its diagnostic argument (an unreadable one selects the default delay), so
+        # calling it here would close release admission in this pytest process. The same foreign objects are passed
+        # to it in a fresh process instead: none of their methods may be called, each must close with the default.
+        r, res = _run(_EXIT_ENTRY_CENSUS_SCRIPT)
+        _ok(r, res)
+        assert res['calls'] == [], res
+        assert res['outcomes'] == ['default'] * 4 + ['read'], res          # 4 foreign objects; the int subclass is read
+        assert res['closed'] is True, res
+        return
     fn = getattr(_C, name)
     for i in typed:
         for bad in (Recorder(), RecordingTuple((1, 2)), 'text', b'\x00' if name != '_test_inject' else 7):
@@ -634,7 +678,10 @@ def worker():
         elif which == 'pending_stats':
             _C.pending_stats(reset_high_water=Slow())
         elif which == 'close':
-            _C._exit_close_admission(first_diag_s=Slow())
+            # P1T-FIX7 (V7-01): not refused any more: the exit entry reads the value at C level (Slow is neither a
+            # float nor an int: the default delay), closes and waits; Slow's methods are still never called.
+            r = _C._exit_close_admission(first_diag_s=Slow())
+            print('CLOSED default_used=%s' % r['first_diag_default_used'], flush=True)
     except (TypeError, ValueError):
         print('REFUSED', flush=True)
     print('WORKER ended', flush=True)
@@ -661,7 +708,9 @@ def test_fix6_sweep_g_keyword_conversion_at_exit_is_refused_not_run(which):
                        timeout=SUBPROC_TIMEOUT, env=_env())
     assert r.returncode == 0, f'rc={r.returncode}\n{r.stdout}\n{r.stderr}'
     _no_abort(r)
-    assert 'REFUSED' in r.stdout and 'INDEX started' not in r.stdout, r.stdout
+    # P1T-FIX7 (V7-01): the exit entry closes with the default delay instead of refusing; nothing is called either way.
+    expected = 'CLOSED default_used=True' if which == 'close' else 'REFUSED'
+    assert expected in r.stdout and 'INDEX started' not in r.stdout, r.stdout
 
 
 def test_fix6_sweep_g_consumed_capsule_drop_is_an_admitted_release():

@@ -1,0 +1,18 @@
+# P1T-FIX7: FIX6 test _EXIT_SCRIPT 'deleter' capsule-name lifetime defect. cwd=/tmp/p1t_fix7_before_tree, binaries = 429446d copies.
+# original (429446d test file copy) x3, then the FIX7-corrected script x3, same binaries:
+rc 0 ordered False 
+rc 0 ordered False 
+rc 0 ordered False 
+rc 0 ordered True 
+rc 0 ordered True 
+rc 0 ordered True 
+# earlier stderr of an original run (bt_1.txt):
+ERR Exception in thread Thread-1 (worker):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "<string>", line 45, in worker
+TypeError: tc_signal: operand 'out': a capsule named '@JHu' is not a DLPack capsule ('dltensor' or 'dltensor_versioned')
+Exception ignored in atexit callback: <function start at 0x757f483fa5c0>

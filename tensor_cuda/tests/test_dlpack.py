@@ -1792,6 +1792,7 @@ def test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing(torch):
     finally:
         ns["_rt"].cudaGetLastError()                              # never leave a staged error to later tests
     assert "cudaErrorInvalidDeviceFunction" in str(ei.value)
+    assert "the call that set it and its device are unknown" in str(ei.value)   # P1T-FIX7 sweep (j)
     assert staged == 98 and slot_after == 0                       # taken from the slot (reported once)
     assert np.all(t.numpy() == 5.0)                               # nothing was launched
     t.fill_(7.0)                                                  # and the next call is clean
@@ -2310,7 +2311,9 @@ def test_fix6_sweep_g_core_bindings_refuse_foreign_arguments_without_calling_the
         lambda: t.fill_(_Recorder()), lambda: t.fill_(value=_seq_only()), lambda: t.fill_("1"),
         lambda: tc._C.empty(_Recorder()), lambda: tc._C.empty(shape=_seq_only()), lambda: tc._C.empty([_Recorder()]),
         lambda: tc._C.empty([2], _Recorder()), lambda: tc._C.empty([2], "float32", _Recorder()),
-        lambda: tc._C._dlpack_begin_shutdown(_Recorder()), lambda: tc._C._dlpack_begin_shutdown(first_diag_s="5"),
+        # P1T-FIX7 (V7-01): _dlpack_begin_shutdown(<unreadable value>) now closes and waits with the default delay
+        # instead of raising TypeError, so it would close admission in this pytest process: checked in a subprocess
+        # (test_fix7_core_exit_entry_reads_any_value_without_calling_it_and_still_closes).
         lambda: tc.Tensor.data_ptr(_Recorder()), lambda: tc.Tensor.__dlpack_device__(_Recorder()),
         lambda: tc.Tensor.mark_modified(_Recorder()), lambda: tc.Tensor.revision.fget(_Recorder()),
         lambda: tc.Tensor.__dlpack__(_Recorder()), lambda: tc.Tensor.fill_(_Recorder(), 1.0),
@@ -2380,7 +2383,9 @@ def worker():
         elif which == "empty":
             tc._C.empty(shape=Slow(), dtype="float32", device="cuda")
         elif which == "shutdown":
-            tc._C._dlpack_begin_shutdown(first_diag_s=Slow())
+            # P1T-FIX7 (V7-01): read at C level (not a float or an int: the default delay), then close and wait.
+            r = tc._C._dlpack_begin_shutdown(first_diag_s=Slow())
+            print("CLOSED default_used=%s" % r["first_diag_default_used"], flush=True)
     except TypeError:
         print("REFUSED", flush=True)
 def start():
@@ -2408,7 +2413,9 @@ def test_fix6_sweep_g_core_keyword_conversion_at_exit_is_refused_not_run(which):
     r = subprocess.run([sys.executable, "-c", _FIX6_KW_EXIT_SCRIPT, which], capture_output=True, text=True,
                        timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
     _assert_ordinary_exit(r)
-    assert "REFUSED" in r.stdout and "CAST started" not in r.stdout, r.stdout
+    # P1T-FIX7 (V7-01): the exit entry closes with the default delay instead of refusing; nothing is called either way.
+    expected = "CLOSED default_used=True" if which == "shutdown" else "REFUSED"
+    assert expected in r.stdout and "CAST started" not in r.stdout, r.stdout
 
 
 _FIX6_R7_SCRIPT = _F05_SCRIPT.replace('print("RESULT " + json.dumps(res), flush=True)', r'''
@@ -2439,4 +2446,518 @@ def test_fix6_r7_recorded_core_failure_is_raised_once_or_logged_at_exit(f05_shim
         assert "cudaErrorInvalidDevice" in res["sync1"] and res["sync2"] is None, res      # exactly once
         assert "at exit" not in r.stderr, r.stderr                                          # nothing left to log
     else:
-        assert "tensor_cuda: at exit: tensor_cuda.synchronize: 1 CUDA failure(s)" in r.stderr, r.stderr
+        # P1T-FIX7 (sweep (j)): the message no longer names tensor_cuda.synchronize (it was not called at exit).
+        assert "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths" in r.stderr, r.stderr
+        assert "(logged by tensor_cuda's interpreter-exit hook)" in r.stderr, r.stderr
+        assert "tensor_cuda.synchronize: " not in r.stderr, r.stderr
+
+
+# ================================================================================================== P1T-FIX7
+# Round-7 review V7-01 (core half) and the core rows of the sweeps (i) "paths that reach an exit guarantee" and (j)
+# "error attribution" (order P1T_FIX7_EXIT_HOOK_REACHABILITY_AND_ATTRIBUTION.md). The add-on rows are in
+# tc_signal/tests/test_fix7_findings.py.
+#  * V7-01: at ordinary exit, with an imported Storage's finite producer deleter running on a daemon thread, the core
+#    exit hook closes admission and waits whatever _DLPACK_SHUTDOWN_WAIT_S holds (the order's value census, the knob
+#    deleted), when stderr is gone or raises, when the module lost `_C`, and when a KeyboardInterrupt is delivered at
+#    the hook's first bytecode (the native runner closes then); the knob's methods are never called. Mutant (b) = the
+#    core hook's knob fallback narrowed back to (TypeError, ValueError) with the close skipped on any other exception.
+#  * The raw entry _dlpack_begin_shutdown closes and waits for ANY value of its argument (an unreadable one selects the
+#    default delay) without calling it; a malformed call raises TypeError and closes nothing. The runner acts only when
+#    the hook raised, and then also logs the recorded P1-T failures nobody reported.
+#  * Sweep (j): the drain records name the one call that failed (cudaGetDevice / cudaSetDevice /
+#    cudaStreamSynchronize), fill_'s launch check names the kernel and device without claiming the launch failed, the
+#    label proof's failed query says the allocation's device is unknown.
+# Prior art: the round-7 reviewer's probes core_knob_exit_cpu.py / core_knob_exit_gpu.py (staging reused: a zero-size
+# imported capsule whose deleter sleeps, released on a daemon thread at exit); CPython 3.12 _thread.interrupt_main;
+# LD_PRELOAD interposition (FIX1's F05 shim). Ours: the value census and the interrupted-hook staging.
+_FIX7_CORE_EXIT_SCRIPT = r"""
+import atexit, json, resource, sys, threading, time, types, _thread
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+RESULTS = {}
+LOCK = None                                     # mode lock_fail: the LD_PRELOAD pthread_mutex_lock shim
+def _report():                                  # registered BEFORE tensor_cuda is imported: runs after its hook
+    sys.stderr = sys.__stderr__                 # the 'stderr' modes broke it for the hook only
+    st = dict(C_._dlpack_release_stats())
+    RESULTS["after"] = {k: st[k] for k in ("in_flight", "closing", "released", "shutdown_calls",
+                                           "shutdown_in_flight_at_close", "shutdown_diag_default_used",
+                                           "shutdown_runner_closes", "shutdown_runner_in_flight_at_close",
+                                           "shutdown_lock_retries", "shutdown_lock_diagnostics",
+                                           "shutdown_diagnostics")}
+    if LOCK is not None:
+        RESULTS["lock"] = {"failed": LOCK.shim_lock_failed(), "left": LOCK.shim_lock_left()}
+    RESULTS["calls"] = CALLS
+    print("RESULT " + json.dumps(RESULTS), flush=True)
+atexit.register(_report)
+""" + _SUBPROC_PRODUCER + r"""
+C_ = tc._C
+MODE, ARG = sys.argv[1], sys.argv[2]
+CALLS = []
+class Marker(BaseException):
+    pass
+class FSub(float):
+    def __float__(self): CALLS.append("FSub.__float__"); raise RuntimeError("never called")
+class ISub(int):
+    def __index__(self): CALLS.append("ISub.__index__"); raise RuntimeError("never called")
+    def __float__(self): CALLS.append("ISub.__float__"); raise RuntimeError("never called")
+class FloatRaises:
+    def __init__(self, exc): self.exc = exc
+    def __float__(self): CALLS.append("__float__"); raise self.exc
+    def __index__(self): CALLS.append("__index__"); raise self.exc
+class FloatNonFloat:
+    def __float__(self): CALLS.append("__float__"); return "not a float"
+class IndexOnly:
+    def __index__(self): CALLS.append("__index__"); return 2
+def knob_value(name):
+    return {
+        "huge_int": lambda: 1 << 4096, "neg_huge_int": lambda: -(1 << 4096), "inf": lambda: float("inf"),
+        "neg_inf": lambda: float("-inf"), "nan": lambda: float("nan"), "negative": lambda: -1.0, "zero": lambda: 0,
+        "float_subclass": lambda: FSub(2.0), "int_subclass": lambda: ISub(2), "bool": lambda: True,
+        "str": lambda: "7.5", "none": lambda: None, "float_raises": lambda: FloatRaises(RuntimeError("knob")),
+        "float_raises_keyboardinterrupt": lambda: FloatRaises(KeyboardInterrupt()),
+        "float_raises_systemexit": lambda: FloatRaises(SystemExit(3)),
+        "float_raises_base": lambda: FloatRaises(Marker()), "float_returns_nonfloat": lambda: FloatNonFloat(),
+        "index_only": lambda: IndexOnly(), "numpy_float32": lambda: __import__("numpy").float32(2.0),
+        "numpy_float64": lambda: __import__("numpy").float64(2.0),
+    }[name]()
+started = threading.Event()
+def slow(_p):
+    print("DELETER started", flush=True)
+    started.set()
+    time.sleep(0.6)
+    print("DELETER finished", flush=True)
+CB = DELETER(slow)
+SHAPE = (ctypes.c_int64 * 1)(0)
+M = MTV()
+M.version.major, M.version.minor = 1, 3
+M.deleter = CB
+t = M.dl_tensor
+t.data = None
+t.device.device_type, t.device.device_id = 2, 0
+t.ndim = 1
+t.dtype.code, t.dtype.bits, t.dtype.lanes = 2, 32, 1
+t.shape = ctypes.cast(SHAPE, ctypes.POINTER(ctypes.c_int64))
+CAP = PyCapsule_New(ctypes.addressof(M), NAME, None)
+box = [tc.from_dlpack(CAP)]                     # an imported Storage whose last reference dies on the daemon below
+def worker():
+    del box[0]
+if MODE == "knob":
+    if ARG == "deleted":
+        del tc._DLPACK_SHUTDOWN_WAIT_S
+    elif ARG != "default":
+        tc._DLPACK_SHUTDOWN_WAIT_S = knob_value(ARG)
+elif MODE == "interrupt_first_bytecode":
+    atexit.register(_thread.interrupt_main)     # runs right before the runner: KeyboardInterrupt at the hook's RESUME
+elif MODE == "c_deleted":
+    del tc._C                                   # the hook's first statement (C = _C) raises NameError
+elif MODE == "lock_fail":                      # ARG: "<failures>[:<first-diagnostic delay>[:<locks let through>]]"
+    LOCK = ctypes.CDLL(None)                    # the preloaded shim's functions are in the global scope
+    N_FAIL, DIAG, SKIP = (ARG.split(":") + ["", ""])[:3]
+    if DIAG:
+        tc._DLPACK_SHUTDOWN_WAIT_S = float(DIAG)
+    # Right before the runner: the close meets the lock failures (after SKIP successful locks: the re-lock after a
+    # diagnostic of the timed wait).
+    atexit.register(LOCK.shim_lock_arm_after, int(SKIP or 0), int(N_FAIL))
+elif MODE == "stderr":
+    tc._DLPACK_SHUTDOWN_WAIT_S = "7.5"          # unreadable: the hook has a line to write (after its close)
+    class Raising:
+        def __init__(self, exc): self.exc = exc
+        def write(self, s): raise self.exc
+        def flush(self): raise self.exc
+    def swap():
+        sys.stderr = {"none": None, "raises": Raising(RuntimeError("stderr broken")),
+                      "raises_keyboardinterrupt": Raising(KeyboardInterrupt())}[ARG]
+    atexit.register(swap)
+def start():
+    threading.Thread(target=worker, daemon=True).start()
+    assert started.wait(10)
+    RESULTS["before"] = {"in_flight": C_._dlpack_release_stats()["in_flight"]}
+atexit.register(start)
+class Final:
+    def __init__(self):
+        self.sleep, self.isf = time.sleep, sys.is_finalizing
+    def __del__(self):
+        print("FINALIZING %s" % self.isf(), flush=True)
+        self.sleep(1.5)
+_h = types.ModuleType("_fix7_core_final")
+_h.keep = Final()
+sys.modules[_h.__name__] = _h
+del _h
+print("ARMED %s %s" % (MODE, ARG), flush=True)
+"""
+
+_FIX7_KNOB_CLASSES = [
+    ("default", True), ("huge_int", False), ("neg_huge_int", False), ("inf", True), ("neg_inf", True),
+    ("nan", True), ("negative", True), ("zero", True), ("float_subclass", True), ("int_subclass", True),
+    ("bool", True), ("str", False), ("none", False), ("float_raises", False),
+    ("float_raises_keyboardinterrupt", False), ("float_raises_systemexit", False), ("float_raises_base", False),
+    ("float_returns_nonfloat", False), ("index_only", False), ("numpy_float32", False), ("numpy_float64", True),
+    ("deleted", False),
+]
+
+
+def _run_fix7_core_exit(mode, arg, **env):
+    r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+    lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+    res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+    assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    for bad in ("FATAL", "terminate called", "Aborted", "exception not rethrown", "core dumped"):
+        assert bad not in r.stderr, r.stderr
+    out = r.stdout
+    assert 0 <= out.find("DELETER finished") < out.find("FINALIZING True"), out   # finished before finalization
+    assert res["before"]["in_flight"] == 1, res                                   # admitted and running at exit
+    assert res["after"]["in_flight"] == 0 and res["after"]["released"] == 1, res
+    return r, res
+
+
+@pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+    _torch_or_skip()
+    r, res = _run_fix7_core_exit("knob", knob)
+    a = res["after"]
+    assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+    assert a["shutdown_runner_closes"] == 0, res
+    assert res["calls"] == [], res                                                # the knob's methods never ran
+    assert a["shutdown_diag_default_used"] == (0 if read else 1), res
+    if read or knob == "none":
+        assert "_DLPACK_SHUTDOWN_WAIT_S " not in r.stderr, r.stderr
+    else:
+        assert "_DLPACK_SHUTDOWN_WAIT_S " in r.stderr and "the close and the wait are never affected" in r.stderr, r.stderr
+
+
+def test_fix7_v701_core_keyboardinterrupt_at_the_hooks_first_bytecode_is_covered_by_the_runner():
+    _torch_or_skip()
+    r, res = _run_fix7_core_exit("interrupt_first_bytecode", "-")
+    a = res["after"]
+    assert a["shutdown_calls"] == 0, res                                          # the hook never ran
+    assert a["shutdown_runner_closes"] == 1 and a["shutdown_runner_in_flight_at_close"] == 1, res
+    assert "the native exit runner closed it and waited" in r.stderr and "KeyboardInterrupt" in r.stderr, r.stderr
+
+
+def test_fix7_v701_core_hook_whose_module_lost_C_is_covered_by_the_runner():
+    _torch_or_skip()
+    r, res = _run_fix7_core_exit("c_deleted", "-")
+    assert "NameError: name '_C' is not defined" in r.stderr, r.stderr
+    assert res["after"]["shutdown_runner_in_flight_at_close"] == 1, res
+
+
+@pytest.mark.parametrize("how", ["none", "raises", "raises_keyboardinterrupt"])
+def test_fix7_v701_core_exit_hook_closes_when_stderr_is_gone_or_raises(how):
+    _torch_or_skip()
+    r, res = _run_fix7_core_exit("stderr", how)
+    a = res["after"]
+    assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res
+    assert a["shutdown_runner_closes"] == (1 if how == "raises_keyboardinterrupt" else 0), res
+    assert a["shutdown_runner_in_flight_at_close"] == 0, res
+
+
+# Sweep (i) row i19: locking the lifecycle mutex inside the exit close can throw std::system_error (C++17
+# [thread.mutex.requirements.mutex]); FIX3-FIX6 rethrew it before `closing` was set, the hook logged it and returned,
+# and finalization overtook the running release. An LD_PRELOAD interposer of pthread_mutex_lock, armed by an atexit
+# callback that runs right before the runner, fails (EINVAL) the next N calls the main thread makes from code inside
+# _tensor_cuda*.so (the caller's return address, resolved with dladdr), so libstdc++'s std::mutex::lock throws there;
+# every other call is forwarded to glibc. Prior art: LD_PRELOAD symbol interposition with dlsym(RTLD_NEXT) (glibc
+# ld.so; FIX1's F05 shim); caller filtering by return address + dladdr (the classic allocation interposers). Ours:
+# the targeted lock-failure plan.
+_FIX7_LOCK_SHIM_C = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <errno.h>
+#include <pthread.h>
+#include <string.h>
+
+typedef int (*lock_fn)(pthread_mutex_t*);
+static lock_fn real_lock;
+static int left;                 /* failures still to inject */
+static int failed;               /* failures injected */
+static int skip;                 /* target locks of the armed thread let through first (that thread only) */
+static pthread_t armed_thread;
+
+__attribute__((constructor)) static void shim_init(void) { real_lock = (lock_fn)dlsym(RTLD_NEXT, "pthread_mutex_lock"); }
+
+int pthread_mutex_lock(pthread_mutex_t* m) {
+  if (__atomic_load_n(&left, __ATOMIC_ACQUIRE) > 0 && pthread_equal(pthread_self(), armed_thread)) {
+    Dl_info info;
+    if (dladdr(__builtin_return_address(0), &info) && info.dli_fname) {
+      const char* base = strrchr(info.dli_fname, '/');
+      base = base ? base + 1 : info.dli_fname;
+      if (strncmp(base, "_tensor_cuda", 12) == 0) {
+        if (skip > 0) {
+          --skip;
+        } else {
+          __atomic_sub_fetch(&left, 1, __ATOMIC_ACQ_REL);
+          __atomic_add_fetch(&failed, 1, __ATOMIC_ACQ_REL);
+          return EINVAL;
+        }
+      }
+    }
+  }
+  if (!real_lock) real_lock = (lock_fn)dlsym(RTLD_NEXT, "pthread_mutex_lock");
+  return real_lock(m);
+}
+void shim_lock_arm(int n) { armed_thread = pthread_self(); skip = 0; __atomic_store_n(&left, n, __ATOMIC_RELEASE); }
+void shim_lock_arm_after(int k, int n) {
+  armed_thread = pthread_self(); skip = k; __atomic_store_n(&left, n, __ATOMIC_RELEASE);
+}
+int shim_lock_failed(void) { return __atomic_load_n(&failed, __ATOMIC_ACQUIRE); }
+int shim_lock_left(void) { return __atomic_load_n(&left, __ATOMIC_ACQUIRE); }
+"""
+
+
+@pytest.fixture(scope="module")
+def fix7_lock_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix7_lock_shim")
+    src, so = d / "mutex_lock_shim.c", d / "mutex_lock_shim.so"
+    src.write_text(_FIX7_LOCK_SHIM_C)
+    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+@pytest.mark.parametrize("n", [1, 3])
+def test_fix7_sweep_i_core_exit_close_retries_a_failed_lifecycle_lock_instead_of_skipping_the_close(fix7_lock_shim, n):
+    _torch_or_skip()
+    r, res = _run_fix7_core_exit("lock_fail", str(n), LD_PRELOAD=fix7_lock_shim)   # + DELETER before FINALIZING
+    a = res["after"]
+    assert res["lock"] == {"failed": n, "left": 0}, res          # n lock calls of the core failed, all at the close
+    assert a["shutdown_lock_retries"] == n, res                  # each one retried; none rethrown
+    assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+    assert a["shutdown_runner_closes"] == 0, res
+    assert "DLPack exit hook" not in r.stderr, r.stderr
+
+
+# P1T-FIX7, lead send-back L1: the lock-retry loop is an exit wait and is diagnosed like one (FIX3 V3-01: the first
+# line once the retries have lasted the first-diagnostic delay, then each time the time spent retrying doubles; never
+# silent). 15 injected failures at the close's 10 ms retry pause outlast a 0.05 s delay about three times; then the
+# lock succeeds. Mutant (d) (the diagnostic removed from the retry loop) must fail here.
+@pytest.mark.parametrize("where", ["close", "relock_after_diagnostic"])
+def test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait(fix7_lock_shim, where):
+    # "close": the lock that precedes `closing = true`; "relock_after_diagnostic": the close's lock succeeds, the timed
+    # wait writes its first line (the 0.6 s deleter outlasts 0.05 s), and its re-lock then meets the failures.
+    _torch_or_skip()
+    n = 15
+    purpose = ("to close DLPack release admission" if where == "close"
+               else "again after a diagnostic (admission is already closed)")
+    arg = f"{n}:0.05" if where == "close" else f"{n}:0.05:1"
+    r, res = _run_fix7_core_exit("lock_fail", arg, LD_PRELOAD=fix7_lock_shim)   # + DELETER before FINALIZING
+    a = res["after"]
+    assert res["lock"] == {"failed": n, "left": 0}, res
+    assert a["shutdown_lock_retries"] == n, res
+    lines = [ln for ln in r.stderr.splitlines()
+             if "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock " in ln]
+    assert lines, r.stderr                                                        # diagnosed, not silent
+    assert all(f"lifecycle lock {purpose} (Invalid argument)" in ln and "failed attempt(s) over" in ln
+               and "it retries every" in ln and "never returns early" in ln for ln in lines), lines
+    assert a["shutdown_lock_diagnostics"] == len(lines), (res, lines)             # each line counted
+    assert a["shutdown_diagnostics"] >= len(lines), res                           # and in the exit wait's lines
+    assert (f"tensor_cuda: interpreter exit took the DLPack release lifecycle lock {purpose} after {n} failed "
+            f"attempt(s)") in r.stderr, r.stderr
+    assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+    assert a["shutdown_runner_closes"] == 0, res
+
+
+_FIX7_CORE_ENTRY_SCRIPT = r"""
+import json, math
+import numpy as np
+import tensor_cuda as tc
+C = tc._C
+CALLS = []
+class Rec:
+    def __float__(self): CALLS.append("__float__"); return 1.0
+    def __index__(self): CALLS.append("__index__"); return 1
+    def __repr__(self): CALLS.append("__repr__"); return "Rec()"
+class FSub(float):
+    def __float__(self): CALLS.append("FSub.__float__"); return 1.0
+class ISub(int):
+    def __index__(self): CALLS.append("ISub.__index__"); return 1
+res = {"malformed": []}
+for call in (lambda: C._dlpack_begin_shutdown(), lambda: C._dlpack_begin_shutdown(1.0, 2.0),
+             lambda: C._dlpack_begin_shutdown(bogus=Rec()), lambda: C._dlpack_begin_shutdown(1.0, first_diag_s=1.0)):
+    try:
+        call()
+        res["malformed"].append("accepted")
+    except TypeError:
+        res["malformed"].append("TypeError")
+res["open_after_malformed"] = not C._dlpack_release_stats()["closing"]
+res["values"] = {}
+for k, v in [("rec", Rec()), ("str", "5"), ("none", None), ("huge", 1 << 4096), ("np32", np.float32(3.0)),
+             ("fsub", FSub(2.5)), ("isub", ISub(3)), ("nan", float("nan")), ("np64", np.float64(2.0))]:
+    for style in ("pos", "kw"):
+        d = C._dlpack_begin_shutdown(v) if style == "pos" else C._dlpack_begin_shutdown(first_diag_s=v)
+        s = d["first_diag_s"]
+        res["values"][k + ":" + style] = [d["first_diag_default_used"], "nan" if math.isnan(s) else s]
+st = C._dlpack_release_stats()
+res["closing"] = st["closing"]
+res["calls"] = CALLS
+res["calls_count"] = st["shutdown_calls"]
+res["default"] = C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S
+res["knob"] = tc._DLPACK_SHUTDOWN_WAIT_S
+res["runner_returned"] = C._dlpack_exit_hook_runner(lambda: "value")
+class E(Exception):
+    pass
+err = E("mine")
+def raiser():
+    raise err
+try:
+    C._dlpack_exit_hook_runner(raiser)
+    res["runner_raised"] = None
+except E as e:
+    res["runner_raised"] = "same" if e is err else "other"
+res["runner_closes"] = C._dlpack_release_stats()["shutdown_runner_closes"]
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+
+def test_fix7_core_exit_entry_reads_any_value_without_calling_it_and_still_closes():
+    # Replaces FIX6's in-process "_dlpack_begin_shutdown(Recorder()) raises TypeError" cases (P1T-FIX7 V7-01: an
+    # unreadable diagnostic value now closes with the default delay, so it runs in a fresh process).
+    _torch_or_skip()
+    r = subprocess.run([sys.executable, "-c", _FIX7_CORE_ENTRY_SCRIPT], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["malformed"] == ["TypeError"] * 4 and res["open_after_malformed"] is True, res   # shape: no close
+    assert res["calls"] == [], res
+    d = res["default"]
+    want = {"rec": [True, d], "str": [True, d], "none": [True, d], "huge": [True, d], "np32": [True, d],
+            "fsub": [False, 2.5], "isub": [False, 3.0], "nan": [False, 0.0], "np64": [False, 2.0]}
+    for k, v in want.items():                       # NaN is reported as used: 0.0 (diagnose at once)
+        for style in ("pos", "kw"):
+            assert res["values"][f"{k}:{style}"] == v, (k, style, res["values"])
+    assert res["closing"] is True and res["calls_count"] == 18, res
+    assert d == 5.0 and res["knob"] == d, res
+    assert res["runner_returned"] == "value" and res["runner_raised"] == "same" and res["runner_closes"] == 1, res
+
+
+# Drain attribution (sweep (j)): the F05 staging (an imported Storage dropped while device 1 is "current") with a shim
+# that fails ONE of the drain's three calls. FIX5/FIX6 recorded "(cudaGetDevice / cudaSetDevice /
+# cudaStreamSynchronize)" for all three.
+_FIX7_DRAIN_SHIM_C = _F05_SHIM_C.replace(
+    "static char logbuf[4096];",
+    "static char logbuf[4096];\nstatic int fail_get = 0, fail_sync = 0;").replace(
+    "  if (fake >= 0) { *d = fake; return 0; }",
+    "  if (fail_get) { fail_get = 0; return 100; }\n  if (fake >= 0) { *d = fake; return 0; }").replace(
+    "  if (fake >= 0) { char b[32]; snprintf(b, sizeof b, \"sync@%d\", fake); note(b); }\n  return real(s);",
+    "  if (fake >= 0) { char b[32]; snprintf(b, sizeof b, \"sync@%d\", fake); note(b); }\n"
+    "  if (fail_sync) { fail_sync = 0; return 719; }\n  return real(s);").replace(
+    "void shim_fake(int d) { fake = d; }",
+    "void shim_fake(int d) { fake = d; }\nvoid shim_fail_get(void) { fail_get = 1; }\n"
+    "void shim_fail_sync(void) { fail_sync = 1; }")
+
+_FIX7_DRAIN_SCRIPT = _F05_SCRIPT.replace('if mode == "fail":\n    shim.shim_fail_set(0)', '''if mode == "fail_get":
+    shim.shim_fail_get()                       # the drain's current-device query fails
+elif mode == "fail_set":
+    shim.shim_fail_set(0)                      # its switch to the Storage's device 0 fails
+elif mode == "fail_sync":
+    shim.shim_fail_sync()                      # the stream sync of device 0 fails''')
+
+
+@pytest.fixture(scope="module")
+def fix7_drain_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix7_drain_shim")
+    src, so = d / "drain_shim.c", d / "drain_shim.so"
+    src.write_text(_FIX7_DRAIN_SHIM_C)
+    assert "shim_fail_sync" in _FIX7_DRAIN_SHIM_C and "fail_get = 0; return 100" in _FIX7_DRAIN_SHIM_C
+    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+@pytest.mark.parametrize("mode,named,err", [
+    ("fail_get", "the current-device query cudaGetDevice failed, so nothing was drained", "cudaErrorNoDevice"),
+    ("fail_set", "switching to that device (cudaSetDevice) failed, so nothing was drained", "cudaErrorInvalidDevice"),
+    ("fail_sync", "cudaStreamSynchronize of that device's legacy stream failed", "cudaErrorLaunchFailure"),
+])
+def test_fix7_sweep_j_core_drain_record_names_the_one_call_that_failed(fix7_drain_shim, mode, named, err):
+    assert "if mode == \"fail_get\":" in _FIX7_DRAIN_SCRIPT
+    r = subprocess.run([sys.executable, "-c", _FIX7_DRAIN_SCRIPT, fix7_drain_shim, mode], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=fix7_drain_shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    st = res["stats"]
+    assert st["leaked_drain_failure"] == 1 and res["deleter_calls"] == 0, res   # no drain proof: leaked
+    what = st["first_unraisable_what"]
+    assert "draining an imported Storage's device before its DLPack release" in what and named in what, res
+    others = {"fail_get": ("cudaSetDevice", "cudaStreamSynchronize"), "fail_set": ("cudaGetDevice", "cudaStreamSynchronize"),
+              "fail_sync": ("cudaGetDevice", "cudaSetDevice")}[mode]
+    for o in others:
+        assert o not in what, (o, what)                                          # never a call that did not fail
+    assert st["first_unraisable_device"] == 0 and st["first_unraisable_error"] == err, res
+
+
+def test_fix7_sweep_j_fill_launch_check_names_kernel_and_device_without_blaming_the_launch(fix4_shim):
+    res = _run_fix4(fix4_shim, "fill_fail_launch_and_restore")
+    m = res["msg"]
+    assert res["raised"] == "RuntimeError" and m.startswith("CUDA error at fill_: cudaErrorInvalidDevice"), res
+    assert "cudaGetLastError right after launching fill_kernel on CUDA device 0" in m, m
+    assert "or an asynchronous error of earlier work on that device" in m, m
+
+
+def test_fix7_sweep_j_label_proof_query_failure_says_the_device_is_unknown(fix4_shim):
+    res = _run_fix4(fix4_shim, "export_attr_fail")
+    assert ("cudaPointerGetAttributes failed for element 0 (the tensor is labeled cuda:0; the device of its allocation "
+            "is unknown)") in res["msg"], res
+
+
+_FIX7_R7_INTERRUPTED_SCRIPT = _FIX6_R7_SCRIPT.replace(
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())',
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())\n'
+    'if mode == "fail_interrupted":\n'
+    '    import atexit, _thread\n'
+    '    atexit.register(_thread.interrupt_main)     # the exit hook is interrupted at its first bytecode')
+
+
+def test_fix7_v701_interrupted_core_hook_still_reports_recorded_failures(f05_shim):
+    # The R7 record (a drain failure nobody raised) must still be reported at exit when the hook never ran: the runner
+    # logs it (FIX6's guarantee "the exit hook logs it" would otherwise be skipped by the interruption).
+    assert "fail_interrupted" in _FIX7_R7_INTERRUPTED_SCRIPT
+    r = subprocess.run([sys.executable, "-c", _FIX7_R7_INTERRUPTED_SCRIPT, f05_shim, "fail_interrupted"],
+                       capture_output=True, text=True, timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=f05_shim))
+    assert r.returncode == 0 and "RESULT " in r.stdout, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    assert "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths" in r.stderr, r.stderr
+    assert "(logged by the exit runner: the exit hook did not finish)" in r.stderr, r.stderr
+    assert "draining an imported Storage's device before its DLPack release" in r.stderr, r.stderr
+    assert "KeyboardInterrupt" in r.stderr, r.stderr
+
+
+# Sweep (i) rows i21 / i25(a): the exit entry raising AFTER its close and wait (building the result dict failed: a
+# MemoryError) must not skip the R7 logging of the recorded failure (FIX6's single outer try did). The hook's `_C` is a
+# proxy of the real module whose _dlpack_begin_shutdown calls the real one, then raises.
+_FIX7_R7_CLOSE_RAISES_SCRIPT = _FIX6_R7_SCRIPT.replace(
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())',
+    'res["stats_after"] = dict(tc._C._dlpack_release_stats())\n'
+    'if mode == "fail_close_raises":\n'
+    '    import types\n'
+    '    REAL_C = tc._C\n'
+    '    class _CloseRaises(types.ModuleType):\n'
+    '        def __getattr__(self, n):\n'
+    '            return getattr(REAL_C, n)\n'
+    '    def _begin(knob):\n'
+    '        REAL_C._dlpack_begin_shutdown(knob)\n'
+    '        print("CLOSED", flush=True)\n'
+    '        raise MemoryError("injected after the close")\n'
+    '    proxy = _CloseRaises("_C_close_raises")\n'
+    '    proxy._dlpack_begin_shutdown = _begin\n'
+    '    tc._C = proxy                             # the hook reads the module global _C')
+
+
+def test_fix7_sweep_i_core_close_step_raising_after_the_close_does_not_skip_the_recorded_failure_log(f05_shim):
+    assert "fail_close_raises" in _FIX7_R7_CLOSE_RAISES_SCRIPT
+    r = subprocess.run([sys.executable, "-c", _FIX7_R7_CLOSE_RAISES_SCRIPT, f05_shim, "fail_close_raises"],
+                       capture_output=True, text=True, timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=f05_shim))
+    assert r.returncode == 0 and "RESULT " in r.stdout, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    assert "CLOSED" in r.stdout, r.stdout                                          # the real close ran first
+    assert ("tensor_cuda: DLPack exit hook: admission was closed and the wait finished, then building its result "
+            "failed (MemoryError: injected after the close)") in r.stderr, r.stderr
+    assert "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths" in r.stderr, r.stderr
+    assert "draining an imported Storage's device before its DLPack release" in r.stderr, r.stderr
+    assert "(logged by tensor_cuda's interpreter-exit hook)" in r.stderr, r.stderr
+    assert "logged by the exit runner" not in r.stderr, r.stderr                  # the hook returned: no runner step
+
+
+def test_fix7_core_knob_default_is_the_native_default():
+    assert tc._DLPACK_SHUTDOWN_WAIT_S == tc._C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S == 5.0

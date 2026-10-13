@@ -19,6 +19,8 @@
 #include <new>
 #include <stdexcept>  // P1T-FIX6 sweep (g): std::overflow_error -> OverflowError
 #include <string>
+#include <system_error>  // P1T-FIX7: the lifecycle mutex's lock failure (retried in the exit close)
+#include <thread>  // P1T-FIX7: the retry pause
 #include <utility>
 #include <vector>
 
@@ -807,6 +809,25 @@ std::atomic<unsigned long long> g_shutdown_timeouts{0};
 std::atomic<unsigned long long> g_shutdown_still_in_flight{0};
 std::atomic<unsigned long long> g_shutdown_wait_us{0};
 std::atomic<unsigned long long> g_shutdown_diagnostics{0};       // V3-01: stderr lines written while waiting
+// P1T-FIX7 (V7-01): closes whose diagnostic argument could not be read (the default delay was used), the exit runner's
+// own closes after the Python hook raised before closing (and the releases of other threads it then found running),
+// and mutex failures retried by the close (never observed).
+std::atomic<unsigned long long> g_shutdown_diag_default_used{0};
+std::atomic<unsigned long long> g_shutdown_runner_closes{0};
+std::atomic<unsigned long long> g_shutdown_runner_in_flight_at_close{0};
+std::atomic<unsigned long long> g_shutdown_lock_retries{0};
+// P1T-FIX7, lead send-back L1: stderr lines written while the close retried a failed lifecycle-mutex lock (also
+// counted in g_shutdown_diagnostics when the hook's own close wrote them).
+std::atomic<unsigned long long> g_shutdown_lock_diagnostics{0};
+
+// P1T-FIX7 (V7-01) exit tunables of the import-release lifecycle (P1-T core; none bounds the wait, none changes
+// numerics): the default first-diagnostic delay (the initial value of the Python knob
+// tensor_cuda._DLPACK_SHUTDOWN_WAIT_S, exported as _C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S, and the delay used when the knob
+// cannot be read at C level); the cap that keeps the chrono conversion finite (FIX3's literal 86400, now named); the
+// pause between retries of the lifecycle mutex when locking it fails in the close (never observed).
+constexpr double kDlpackShutdownDiagDefaultS = 5.0;
+constexpr double kDlpackShutdownMaxDiagDelayS = 86400.0;
+constexpr int kDlpackShutdownLockRetryMs = 10;
 
 // V3-01: admitted releases on the CURRENT thread's stack (incremented on admission, decremented after leaving). The
 // exit hook does not wait for these: they cannot finish while the hook's thread waits (self-exclusion, see above).
@@ -896,10 +917,74 @@ void import_release_versioned(void* ctx) noexcept {
 // now means "the wait outlasted the first-diagnostic delay" (it no longer means the hook gave up), `still_in_flight`
 // (other threads' admitted releases still running at return) is always 0 now, and `own_thread_in_flight` is the
 // calling thread's own admitted releases that it did not wait for (0 at a real interpreter exit).
-py::dict dlpack_begin_shutdown(double first_diag_s) {
+// P1T-FIX7, round-7 review finding V7-01 (MAJOR): reached by the Python hook with ANY knob value (the raw entry reads
+// it at C level and falls back to kDlpackShutdownDiagDefaultS: `diag_default_used`), and by the atexit runner after the
+// hook raised before closing (`runner`: counted apart). Sweep (i) also found one path INSIDE this function that could
+// skip the close: locking the lifecycle mutex can throw std::system_error (C++17 [thread.mutex.requirements.mutex]),
+// and FIX3-FIX6 re-took the GIL and rethrew before `closing` was set (with one injected lock failure 429446d aborts at
+// exit, rc -6: artifacts/p1t_fix7/lock_failure_receipt_before_B.txt). The lock is now retried (GIL released,
+// kDlpackShutdownLockRetryMs apart, counted) until it succeeds, so the close is never skipped and the function never
+// returns before the wait has finished (a permanently broken mutex makes exit wait, as a deleter that never returns
+// does, instead of letting finalization overtake a release).
+// P1T-FIX7, lead send-back L1: that retry loop is an exit wait too, so it is diagnosed exactly like the timed wait
+// below (FIX3 V3-01: never silent). Once the retries of one lock attempt have lasted the first-diagnostic delay (the
+// caller's clamped first_diag_s), a line goes to stderr (C stdio, GIL released, no allocation: what() is the
+// exception's own string) naming what is waited for, how many attempts failed and for how long; then another each
+// time the time spent retrying has doubled. Each line is counted (g_shutdown_lock_diagnostics, and in the caller's
+// `diagnostics`). When the lock is finally taken after a diagnostic, one more line says so. Prior art: FIX3's V3-01
+// diagnostic schedule (first delay, then doubling), itself after the kernel's repeated stall warnings (RCU CPU stall
+// warnings, hung-task detector; unverified here, lead to check "RCU CPU stall warning repeated"); ours: applying it to
+// a lock-retry loop.
+namespace {
+void lock_retrying(std::unique_lock<std::mutex>& lk, std::chrono::steady_clock::duration first, const char* purpose,
+                   unsigned long long& diagnostics) {
+  using clock = std::chrono::steady_clock;
+  unsigned long long failed = 0;
+  unsigned long long written = 0;
+  clock::time_point r0{};
+  clock::time_point next{};
+  for (;;) {
+    try {
+      lk.lock();
+      if (written > 0) {
+        std::fprintf(stderr,
+                     "tensor_cuda: interpreter exit took the DLPack release lifecycle lock %s after %llu failed "
+                     "attempt(s) over %.1f s; exit continues\n",
+                     purpose, failed, std::chrono::duration<double>(clock::now() - r0).count());
+        std::fflush(stderr);
+      }
+      return;
+    } catch (const std::system_error& e) {
+      g_shutdown_lock_retries.fetch_add(1);
+      const auto now = clock::now();
+      if (failed++ == 0) {
+        r0 = now;
+        next = r0 + first;
+      }
+      if (now >= next) {
+        std::fprintf(stderr,
+                     "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock %s (%s): %llu failed "
+                     "attempt(s) over %.1f s; it retries every %d ms and waits (it never returns early)\n",
+                     purpose, e.what(), failed, std::chrono::duration<double>(now - r0).count(),
+                     kDlpackShutdownLockRetryMs);
+        std::fflush(stderr);
+        ++written;
+        ++diagnostics;
+        g_shutdown_lock_diagnostics.fetch_add(1);
+        const auto waited = now - r0;            // next line when the time spent retrying has doubled
+        const auto tick = clock::duration(1);    // (at least one clock tick later: no line per attempt at a zero delay)
+        next = now + (waited > tick ? waited : tick);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(kDlpackShutdownLockRetryMs));
+    }
+  }
+}
+}  // namespace
+
+py::dict dlpack_begin_shutdown_impl(double first_diag_s, bool diag_default_used, bool runner) {
   ImportReleaseLifecycle& lc = release_lifecycle();
   if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;           // NaN or negative: diagnose at once (the wait is the same)
-  if (first_diag_s > 86400.0) first_diag_s = 86400.0;       // keep the chrono conversion finite
+  if (first_diag_s > kDlpackShutdownMaxDiagDelayS) first_diag_s = kDlpackShutdownMaxDiagDelayS;  // finite chrono
   const auto first = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double>(first_diag_s));
   const long long own = t_admitted_depth;                   // this thread's own admitted releases: never waited for
@@ -915,17 +1000,20 @@ py::dict dlpack_begin_shutdown(double first_diag_s) {
   // destructor's implicit noexcept (std::terminate, abort). A non-main thread can be here: the hook is a plain Python
   // function (tensor_cuda._dlpack_shutdown_hook), and two waiters (it and the main thread's real atexit call) wake
   // together when the last admitted release leaves. Now such a thread's forced unwind travels through ordinary frames
-  // to pybind11's dispatcher, which rethrows abi::__forced_unwind (pybind11 v2.12 pybind11.h:1037). The mutex is still
-  // released before the GIL is re-taken. Same design as tc_signal's release lifecycle (dlpack_operand.cpp). Prior art:
-  // CPython's PyEval_SaveThread / PyEval_RestoreThread contract; glibc/libstdc++ forced unwinding (abi::__forced_unwind
-  // must propagate; a noexcept frame terminates); pybind11's gil_scoped_release::disarm note ("PyEval_RestoreThread()
-  // should not be called if runtime is finalizing"). Ours: the explicit restore placement.
+  // to the raw function's caller. The mutex is still released before the GIL is re-taken. Same design as tc_signal's
+  // release lifecycle (dlpack_operand.cpp). Prior art: CPython's PyEval_SaveThread / PyEval_RestoreThread contract;
+  // glibc/libstdc++ forced unwinding (abi::__forced_unwind must propagate; a noexcept frame terminates); pybind11's
+  // gil_scoped_release::disarm note ("PyEval_RestoreThread() should not be called if runtime is finalizing"). Ours:
+  // the explicit restore placement.
   PyThreadState* gil_state = PyEval_SaveThread();           // admitted releases need the GIL to finish
   try {
-    std::unique_lock<std::mutex> lk(lc.mu);
+    std::unique_lock<std::mutex> lk(lc.mu, std::defer_lock);
+    lock_retrying(lk, first, "to close DLPack release admission", diagnostics);  // P1T-FIX7: never skips the close
     lc.closing = true;                                      // admission closed for good: nothing new can start
     at_close = lc.in_flight;
     auto next = t0 + first;
+    // libstdc++'s wait_until on steady_clock does not throw (pthread_cond_clockwait errors other than a timeout are
+    // ignored) and the predicate reads two integers; the re-lock after a diagnostic is retried as above.
     while (!lc.cv.wait_until(lk, next, [&lc, own] { return lc.in_flight <= own; })) {
       // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01).
       overran = true;
@@ -942,33 +1030,46 @@ py::dict dlpack_begin_shutdown(double first_diag_s) {
       const auto waited = now - t0;
       const auto tick = std::chrono::steady_clock::duration(1);
       next = now + (waited > tick ? waited : tick);
-      lk.lock();
+      lock_retrying(lk, first, "again after a diagnostic (admission is already closed)", diagnostics);
     }
     remaining = lc.in_flight - own;
   } catch (...) {
-    // A mutex / condition-variable failure (never observed): re-take the GIL, then let it propagate (as the RAII guard
-    // did). No Python ran in the try block, so this is never a forced unwind of the interpreter's making.
+    // Not reachable (see above; FIX5's safety net, kept): never leave this frame without the GIL. No Python ran in the
+    // try block, so this is never a forced unwind of the interpreter's making; it is rethrown unchanged.
     PyEval_RestoreThread(gil_state);
     throw;
   }  // lk is released before the GIL is re-taken
   PyEval_RestoreThread(gil_state);                          // explicit, in this non-noexcept frame (see above)
   const long long waited_us =
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
-  g_shutdown_calls.fetch_add(1);
-  g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
-  if (overran) g_shutdown_timeouts.fetch_add(1);
-  g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
-  g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
-  g_shutdown_diagnostics.fetch_add(diagnostics);
-  py::dict d;
+  const long long others_at_close = at_close - own > 0 ? at_close - own : 0;
+  if (runner) {
+    g_shutdown_runner_closes.fetch_add(1);
+    g_shutdown_runner_in_flight_at_close.fetch_add(static_cast<unsigned long long>(others_at_close));
+  } else {
+    g_shutdown_calls.fetch_add(1);
+    g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
+    if (overran) g_shutdown_timeouts.fetch_add(1);
+    g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
+    g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
+    g_shutdown_diagnostics.fetch_add(diagnostics);
+    if (diag_default_used) g_shutdown_diag_default_used.fetch_add(1);
+  }
+  py::dict d;  // built after the close and the wait: a MemoryError here cannot skip them
   d["in_flight_at_close"] = at_close;
   d["still_in_flight"] = remaining;
   d["timed_out"] = overran;
   d["waited_us"] = waited_us;
   d["diagnostics"] = diagnostics;
   d["own_thread_in_flight"] = own;
+  d["others_in_flight_at_close"] = others_at_close;      // P1T-FIX7
+  d["first_diag_s"] = first_diag_s;                      // P1T-FIX7: the delay actually used (after NaN / cap handling)
+  d["first_diag_default_used"] = diag_default_used;      // P1T-FIX7: the knob could not be read; the default was used
   return d;
 }
+
+// The one-argument form (FIX2-FIX6 signature, kept: the reviewers' host slices bind it as `close`).
+py::dict dlpack_begin_shutdown(double first_diag_s) { return dlpack_begin_shutdown_impl(first_diag_s, false, false); }
 void import_release_noop(void*) {}
 
 Tensor tensor_from_dlpack_capsule(py::object obj) {
@@ -1380,7 +1481,19 @@ class CoreCallArgs {
 // owns no Python object across the wait (the result dict exists only after the GIL is back). No catch-all: a forced
 // unwind (not a std::exception) passes through the typed handlers. Prior art: CPython's METH_VARARGS | METH_KEYWORDS
 // calling convention (caller-owned argument tuple and dict). Ours: choosing it for the GIL-releasing exit wait.
-bool raw_one_real_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double* out) {
+// P1T-FIX7, round-7 review finding V7-01 (MAJOR): the exit entry's argument is diagnostics only. FIX6 read it with a
+// refusing reader (TypeError / OverflowError before the close), and the Python hook converted the knob with float()
+// first: a knob holding 1 << 4096 raised OverflowError there and the hook skipped the close (reviewer probes
+// core_knob_exit_cpu.py / core_knob_exit_gpu.py: rc 134 / -6 on 429446d). Now (same rule as the add-on's py_args.h
+// raw_exit_diag_arg): the call's SHAPE is checked first (at most one positional argument, only the keyword `name`, no
+// duplicate, present; a malformed call raises TypeError and does nothing, as any Python call would; the hook's call
+// shape is fixed); the VALUE never prevents the close: a float or an int (subclasses included) is read at C level, no
+// Python method called; anything else (None, str, objects with __float__, numpy scalars that are not float subclasses,
+// an int beyond the double range) selects `fallback` and sets *default_used. Returns false only for a malformed call.
+// Prior art: CPython's C argument parser (Python/getargs.c: shape errors are TypeError before the body runs). Ours:
+// the rule that a diagnostic value never gates the exit close (no prior art known to me).
+bool raw_exit_diag_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double fallback, double* out,
+                       bool* default_used) {
   PyObject* v = nullptr;
   const Py_ssize_t n = args ? PyTuple_GET_SIZE(args) : 0;
   if (n > 1) {
@@ -1412,26 +1525,32 @@ bool raw_one_real_arg(const char* fn, const char* name, PyObject* args, PyObject
     PyErr_Format(PyExc_TypeError, "%s(): missing required argument '%s'", fn, name);
     return false;
   }
-  if (PyFloat_Check(v)) {
-    *out = PyFloat_AsDouble(v);
+  *default_used = false;
+  if (PyFloat_Check(v)) {  // float and subclasses: the C value, no __float__
+    *out = PyFloat_AS_DOUBLE(v);
     return true;
   }
-  if (PyLong_Check(v)) {
-    *out = PyLong_AsDouble(v);
-    return !(*out == -1.0 && PyErr_Occurred());
+  if (PyLong_Check(v)) {  // int and subclasses (bool included): the C value, no __index__ / __float__
+    const double d = PyLong_AsDouble(v);
+    if (!(d == -1.0 && PyErr_Occurred())) {
+      *out = d;
+      return true;
+    }
+    PyErr_Clear();  // beyond the double range: unreadable, the default applies
   }
-  PyErr_Format(PyExc_TypeError,
-               "%s(): argument '%s' must be a real number (float or int), not %s (P1T-FIX6: refused without calling "
-               "any of its Python methods)",
-               fn, name, Py_TYPE(v)->tp_name);
-  return false;
+  *out = fallback;
+  *default_used = true;
+  return true;
 }
 
 PyObject* raw_dlpack_begin_shutdown(PyObject*, PyObject* args, PyObject* kwargs) {
-  double first_diag_s = 0.0;
-  if (!raw_one_real_arg("_dlpack_begin_shutdown", "first_diag_s", args, kwargs, &first_diag_s)) return nullptr;
+  double first_diag_s = kDlpackShutdownDiagDefaultS;
+  bool default_used = false;
+  if (!raw_exit_diag_arg("_dlpack_begin_shutdown", "first_diag_s", args, kwargs, kDlpackShutdownDiagDefaultS,
+                         &first_diag_s, &default_used))
+    return nullptr;
   try {
-    return dlpack_begin_shutdown(first_diag_s).release().ptr();
+    return dlpack_begin_shutdown_impl(first_diag_s, default_used, false).release().ptr();
   } catch (py::error_already_set& e) {
     e.restore();
   } catch (const std::bad_alloc&) {
@@ -1450,8 +1569,15 @@ const char kBeginShutdownDoc[] =
     "running, seconds waited), then another each time the time waited doubles. A producer deleter that never "
     "returns therefore makes interpreter exit wait (the producer's contract violation; the honest outcome, where a "
     "bounded return let finalization abort the process). Returns {in_flight_at_close, still_in_flight, timed_out, "
-    "waited_us, diagnostics, own_thread_in_flight}. P1T-FIX6: a raw CPython function (no pybind11 dispatcher frame "
-    "on the stack while it waits); first_diag_s must be a float or an int.";
+    "waited_us, diagnostics, own_thread_in_flight, others_in_flight_at_close, first_diag_s, first_diag_default_used}. "
+    "P1T-FIX6: a raw CPython function (no pybind11 dispatcher frame on the stack while it waits). P1T-FIX7 (V7-01): "
+    "first_diag_s is diagnostics only and never prevents the close: a float or an int (subclasses included) is read "
+    "without calling its methods; any other value, or an int beyond the double range, uses the default "
+    "(_DLPACK_SHUTDOWN_DIAG_DEFAULT_S) and the call still closes and waits (first_diag_default_used=True). Only a "
+    "malformed call (wrong arity or keyword) raises TypeError, doing nothing. P1T-FIX7 (lead send-back L1): if "
+    "locking the release lifecycle mutex fails (never observed), the close retries it and that retry wait is "
+    "diagnosed like the release wait (first line after first_diag_s, then each time the retrying time doubles; "
+    "_dlpack_release_stats() shutdown_lock_retries / shutdown_lock_diagnostics); diagnostics counts those lines too.";
 PyMethodDef kBeginShutdownDef = {"_dlpack_begin_shutdown",
                                  reinterpret_cast<PyCFunction>(reinterpret_cast<void (*)(void)>(&raw_dlpack_begin_shutdown)),
                                  METH_VARARGS | METH_KEYWORDS, kBeginShutdownDoc};
@@ -1463,20 +1589,29 @@ PyMethodDef kBeginShutdownDef = {"_dlpack_begin_shutdown",
 // the record is consumed only once the RuntimeError naming it exists and is captured, so a MemoryError while reporting
 // loses nothing. Prior art: tc_signal.synchronize()'s N1/V6-03 raise-once rule (this repository); PyTorch's
 // C10_CUDA_CHECK_WARN (an error in a destructor is reported, never dropped). Ours: deferring it to the next synchronize.
+// P1T-FIX7 (sweep (j)): the text no longer starts "tensor_cuda.synchronize:" (the exit hook logged it as
+// "tensor_cuda: at exit: tensor_cuda.synchronize: ...", naming a call that did not happen at exit); it names the
+// reporting paths instead, and each record's site string names the CUDA call that failed (kernels.cu), followed by
+// the device it concerned.
+std::string unraisable_message(unsigned long long n, const std::string& what, int dev, int err) {
+  std::string msg = "tensor_cuda: " + std::to_string(n) +
+                    " CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T "
+                    "core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: ";
+  if (what.empty())
+    msg += "(not named: recorded while an earlier report was being raised)";
+  else
+    msg += what + " [CUDA device " + std::to_string(dev) + ": " + cudaGetErrorName(static_cast<cudaError_t>(err)) +
+           ": " + cudaGetErrorString(static_cast<cudaError_t>(err)) + "]";
+  return msg;
+}
+
 void dlpack_raise_unraisable() {
   unsigned long long n = 0;
   std::string what;
   int dev = -1, err = 0;
   dlpack_unreported_unraisable(&n, &what, &dev, &err);
   if (n == 0) return;
-  std::string msg = "tensor_cuda.synchronize: " + std::to_string(n) +
-                    " CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T "
-                    "core), the first: ";
-  if (what.empty())
-    msg += "(not named: recorded while an earlier report was being raised)";
-  else
-    msg += what + " on device " + std::to_string(dev) + " (" + cudaGetErrorName(static_cast<cudaError_t>(err)) + ": " +
-           cudaGetErrorString(static_cast<cudaError_t>(err)) + ")";
+  const std::string msg = unraisable_message(n, what, dev, err);
   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
   if (!PyErr_ExceptionMatches(PyExc_RuntimeError)) {
     PyErr_Clear();
@@ -1491,6 +1626,64 @@ void dlpack_raise_unraisable() {
     throw;
   }
 }
+
+// P1T-FIX7 (V7-01 sweep (i), the guarantees a hook gives on the way out): what atexit calls, as
+// atexit.register(_dlpack_exit_hook_runner, _dlpack_shutdown_hook). The hook reaches its close on every path that
+// runs any of its statements. An exception that escapes it before its close (a KeyboardInterrupt delivered at its first
+// bytecode: CPython 3.12 checks for pending signals in the RESUME that starts every Python frame) is handled here:
+// close and wait with the default delay (a no-op wait when the hook had already closed), write the recorded P1-T
+// failures nobody reported (C stdio, no Python: the hook's own logging did not run), then hand the hook's exception to
+// atexit unchanged. When the hook RETURNS, nothing more happens: a hook that returns without closing is a hook defect
+// its tests and the round-7 probes must see, not one this runner hides. Raw METH_O: no pybind11 frame, no catch-all.
+// Prior art: CPython's atexit (an exception in one callback is printed, the rest still run); Python's try / finally,
+// which holds inside a frame but not at its first instruction. Ours: the native wrapper for that one boundary.
+PyObject* raw_dlpack_exit_hook_runner(PyObject*, PyObject* hook) {
+  PyObject* r = PyObject_CallNoArgs(hook);
+  if (r != nullptr) return r;
+  PyObject *type = nullptr, *value = nullptr, *tb = nullptr;
+  PyErr_Fetch(&type, &value, &tb);  // keep the hook's exception
+  try {
+    const py::dict d = dlpack_begin_shutdown_impl(kDlpackShutdownDiagDefaultS, false, true);
+    const long long others = d["others_in_flight_at_close"].cast<long long>();
+    if (others > 0) {
+      std::fprintf(stderr,
+                   "tensor_cuda: the DLPack exit hook raised before it closed release admission; the native exit "
+                   "runner closed it and waited %.1f s for %lld release(s) admitted on other threads\n",
+                   d["waited_us"].cast<long long>() / 1e6, others);
+      std::fflush(stderr);
+    }
+  } catch (py::error_already_set& e) {
+    e.discard_as_unraisable("tensor_cuda exit runner");  // the close and the wait had already happened
+  } catch (const std::exception&) {
+    // bad_alloc building the result: the close and the wait had already happened.
+  }
+  try {
+    unsigned long long n = 0;
+    std::string what;
+    int dev = -1, err = 0;
+    dlpack_unreported_unraisable(&n, &what, &dev, &err);
+    if (n > 0) {
+      const std::string msg = unraisable_message(n, what, dev, err);
+      std::fprintf(stderr, "%s (logged by the exit runner: the exit hook did not finish)\n", msg.c_str());
+      std::fflush(stderr);
+      dlpack_ack_unraisable(n);
+    }
+  } catch (const std::exception&) {
+    // bad_alloc: nothing written, the record kept.
+  }
+  PyErr_Restore(type, value, tb);
+  return nullptr;
+}
+
+const char kExitRunnerDoc[] =
+    "_dlpack_exit_hook_runner(hook)\n\n"
+    "P1T-FIX7 (V7-01): what tensor_cuda registers with atexit, as atexit.register(_dlpack_exit_hook_runner, "
+    "_dlpack_shutdown_hook). Calls hook(); if the hook raises (for example a KeyboardInterrupt delivered at its "
+    "first bytecode), closes DLPack release admission and waits itself (default diagnostic delay), writes any "
+    "recorded P1-T CUDA failure nobody reported to stderr, then re-raises the hook's exception. Does nothing more "
+    "when the hook returns. Remove it with atexit.unregister(tensor_cuda._C._dlpack_exit_hook_runner).";
+PyMethodDef kExitRunnerDef = {"_dlpack_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_dlpack_exit_hook_runner),
+                              METH_O, kExitRunnerDoc};
 
 }  // namespace
 
@@ -2365,6 +2558,13 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["shutdown_still_in_flight"] = g_shutdown_still_in_flight.load();
     d["shutdown_wait_us"] = g_shutdown_wait_us.load();
     d["shutdown_diagnostics"] = g_shutdown_diagnostics.load();  // P1T-FIX3 (V3-01)
+    // P1T-FIX7 (V7-01): hook closes whose knob could not be read (default delay used), the exit runner's own closes
+    // after the hook raised before closing (and the other threads' releases it then waited for), lock retries.
+    d["shutdown_diag_default_used"] = g_shutdown_diag_default_used.load();
+    d["shutdown_runner_closes"] = g_shutdown_runner_closes.load();
+    d["shutdown_runner_in_flight_at_close"] = g_shutdown_runner_in_flight_at_close.load();
+    d["shutdown_lock_retries"] = g_shutdown_lock_retries.load();
+    d["shutdown_lock_diagnostics"] = g_shutdown_lock_diagnostics.load();  // P1T-FIX7 L1
     d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
     // P1T-FIX5 (sweep d): every unraisable CUDA error of the P1-T core paths, recorded before its slot entry was
     // consumed (count), and the first one: site, device, CUDA error name ("" / -1 / "cudaSuccess" when none).
@@ -2385,7 +2585,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
      "device_restore_failures, restores of the caller's CUDA device that failed where nothing could raise (the "
      "external Storage drain, or a fill_ guard unwinding after another error); P1T-FIX5: unraisable_errors and the "
      "first one (first_unraisable_what / _device / _error), every CUDA error of those paths recorded before its "
-     "error-slot entry was consumed.");
+     "error-slot entry was consumed; P1T-FIX7: shutdown_diag_default_used (hook closes whose knob could not be read), "
+     "shutdown_runner_closes / shutdown_runner_in_flight_at_close (the exit runner's own closes after the hook raised "
+     "before closing), shutdown_lock_retries (failed lifecycle-mutex locks the exit close retried) and "
+     "shutdown_lock_diagnostics (the stderr lines that retry loop wrote: it is diagnosed like the exit wait).");
   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
   (void)release_lifecycle();
   m.def("_dlpack_raise_unraisable",
@@ -2403,6 +2606,11 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // across the GIL-released wait, whatever the calling style.
   m.add_object("_dlpack_begin_shutdown", py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kBeginShutdownDef,
                                                                                               nullptr, nullptr)));
+  // P1T-FIX7 (V7-01): the atexit runner (raw_dlpack_exit_hook_runner) and the default diagnostic delay, exported so the
+  // Python knob's initial value and the native fallback are one constant.
+  m.add_object("_dlpack_exit_hook_runner", py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kExitRunnerDef,
+                                                                                                nullptr, nullptr)));
+  m.attr("_DLPACK_SHUTDOWN_DIAG_DEFAULT_S") = kDlpackShutdownDiagDefaultS;
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }

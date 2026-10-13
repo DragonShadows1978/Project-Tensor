@@ -137,7 +137,13 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 - Everything is queued on the legacy default stream: the im2col, GEMM and bias work, and the ConvTranspose gather.
   This is TensorCUDA's only stream, and torch's default stream; both share the device's primary context.
   `tests/test_contract.py` proves the ordering both ways against torch with no explicit sync.
-- `cudaGetLastError` is checked after every launch, and any error raises a `RuntimeError`.
+- `cudaGetLastError` is checked after every launch, and any error raises a `RuntimeError`. P1T-FIX7 (round-7 sweep
+  (j), error attribution): the message names the kernel (or the cuBLAS call before it) and the CUDA device, and does
+  not claim that launch failed: right after a launch `cudaGetLastError` reports the launch's own error or an
+  asynchronous error of earlier work on that device ("CUDA error at the launch check of rint_kernel on CUDA device 0:
+  ..."). After a cuBLAS call that returned `CUBLAS_STATUS_SUCCESS` (cuBLAS never sets the CUDA runtime's error state)
+  the message says so. A failed runtime call names itself and the device ("initial_h zero failed: ... (cudaMemsetAsync
+  on CUDA device 0 returned it)"); a cuBLAS status names the device.
 - **Devices and CUDA error state (P1T-FIX4).** Every launch path makes the operands' device current through one
   checked guard (`src/cuda_guard.h`) and restores the caller's device; a failed restore raises on a success path, and
   where nothing can raise (a destructor) it is counted (`pending_stats()['device_restore_failures']`) and raised once
@@ -186,6 +192,15 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   - the `atexit` hook calls `synchronize()` and, on an error, writes one line to stderr
     (`tc_signal: synchronize() at exit failed (...)`) instead of raising. On a machine without a usable CUDA device,
     a process that imported tc_signal therefore logs that line at exit.
+  - **Which call failed (P1T-FIX7, round-7 review V7-02).** Every recorded failure carries the CUDA call that failed
+    and the device it concerned, and the message is built from that: a failed completion-event query reads "the
+    completion event of a pending entry on device 0 could not be queried (cudaEventQuery: ...)" (FIX6 reported it as
+    "the legacy stream of device 0 could not be synchronized", a sync that had succeeded); a failed stream sync names
+    `cudaStreamSynchronize`; a device switch or current-device read that failed inside a device guard names
+    `cudaSetDevice` / `cudaGetDevice` and says the guarded call (stream sync, event record, event destroy, event
+    creation) was not made; a device beyond the 64 tracked one by one is named (not "device -1"); a bound drain's first
+    failure is one consistent record (call, device, error). A CUDA error already pending in the thread says the call and
+    device that set it are unknown. Recording stays allocation-free and saturating.
 - **Allocation failure on the release paths (P1T-FIX2, N3)** never terminates the process. Releasing (the next-call
   drain, the fallback sync, the bound drain, `synchronize()`, the exit hook) allocates nothing, except the pending-list
   push, whose failure falls back to a synchronous release (`pending_stats()['push_alloc_failures']`). Everything else a
@@ -228,10 +243,41 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   `synchronize()` releases what is still pending. **The exit hook's contract:** the exiting thread must not hold a lock
   that an admitted callback needs (CPython's own rule for the non-daemon threads it joins at exit; atexit callbacks
   normally run with no application lock held).
+  **P1T-FIX7 (round-7 review V7-01): diagnostic configuration never gates exit quiescence.** The knob
+  `tc_signal._RELEASE_EXIT_DIAG_S` only sets when the first stderr diagnostic is written; nothing it holds can stop
+  the close and the wait:
+  - the hook never converts it (no `float()`, so no `__float__`, no `OverflowError`): it hands the object as is to the
+    native exit entry, which reads a `float` or an `int` (subclasses included) without calling any of their methods;
+    NaN or a negative value means "diagnose at once", a huge value is capped at a day. Anything else (`None`, a `str`,
+    an object with `__float__`, a NumPy scalar that is not a `float` subclass, an `int` beyond the range of a C double,
+    or the knob deleted) uses the default, 5 s (`_tc_signal._RELEASE_EXIT_DIAG_DEFAULT_S`, also the knob's initial
+    value), and stderr says so after the wait. (FIX6 called `float(knob)`: a knob of `1 << 4096` raised OverflowError,
+    the close was skipped, and a finite deleter still running on a daemon thread aborted the process at finalization.)
+  - the close is the hook's `finally`: an exception from `synchronize()` (any kind, KeyboardInterrupt included) cannot
+    skip it, and every stderr line is written after it (a closed or raising stderr cannot skip it either);
+  - atexit calls the hook through a native runner, `atexit.register(_tc_signal._exit_hook_runner,
+    _release_pending_at_exit)`: if the hook RAISES before closing (for example Ctrl-C delivered at its first bytecode,
+    before any of its statements ran, which no Python `try` can cover), the runner runs `synchronize()` (logging a
+    failure), closes and waits itself, and writes any recorded CUDA failure nobody reported; if the hook raised after
+    its close, the runner's wait is a no-op; if the hook returns, the runner does nothing. To remove the hook,
+    `atexit.unregister(tc_signal._C._exit_hook_runner)`.
+  - `_tc_signal._exit_close_admission(first_diag_s)` (the native entry) closes and waits for ANY value of its argument;
+    only a malformed call (wrong arity or keyword) raises TypeError, and then it closes nothing.
+  - **Every exit wait is diagnosed, never silent (P1T-FIX7, lead send-back L1).** The wait for admitted callbacks
+    writes a stderr line after the knob's delay, then each time the time waited doubles (FIX3 / FIX5), and so does
+    its fallback when the lifecycle mutex or condition variable fails (it polls every 10 ms and says so; FIX5-FIX7
+    polled silently): `exit_wait_poll_diagnostics`. The device syncs of exit (the hook's `synchronize()`, its retry
+    after a MemoryError, the runner's own `synchronize()`) wait for the work queued on each device's legacy stream; while
+    the native runner runs they are preceded by a polled wait with the same schedule (the knob read at C level from the
+    hook's module; default if unreadable), so a kernel that never finishes no longer keeps exit waiting silently:
+    `exit_device_wait_diagnostics`. An ordinary `synchronize()` during the run is unchanged.
   Counters: `release_admission_closed`, `releases_in_flight`, `callbacks_in_flight`, `admitted_releases`,
   `admitted_callbacks`, `exit_hook_calls`, `exit_in_flight_at_close`, `exit_wait_us`, `exit_wait_diagnostics`,
   `exit_wait_overruns`, `deleters_leaked_finalizing`, `capsules_kept_finalizing`, `lifecycle_lock_failures` (FIX5's
-  `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics` are gone with that wait).
+  `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics` are gone with that wait); P1T-FIX7:
+  `exit_diag_default_used` (closes whose knob could not be read), `exit_runner_closes` and
+  `exit_runner_in_flight_at_close` (the runner's own closes after the hook raised, and what it then waited for);
+  P1T-FIX7 L1: `exit_wait_poll_diagnostics`, `exit_device_wait_diagnostics`.
 - **Arguments are never converted by calling their Python methods (P1T-FIX6, sweep (g)).** Every `_tc_signal`
   binding takes `(*args, **kwargs)` and reads its arguments with C-level checks (`src/py_args.h`): ints are `int` or a
   subclass (an overridden `__index__` / `__int__` is not called), reals are `float` / `int` or subclasses, flags are
@@ -352,6 +398,16 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
   `synchronize()`, on the real module and on a host trace module of this source) and sweep (g) (every binding's typed
   parameters refuse a recording object without calling it; arity / keyword errors never call `repr()`; keyword
   conversions on a daemon thread at exit are refused, not run).
+- `test_fix7_findings.py` (P1T-FIX7) covers V7-01 (at ordinary exit with a finite deleter running on a daemon thread:
+  every knob value class of the round-7 order, the knob deleted, `synchronize()` raising any exception kind, stderr
+  gone or raising, `_C` gone, a KeyboardInterrupt at the hook's first bytecode; the native entry's value census and
+  the runner) and V7-02 / the error-attribution sweep (a host trace module of this source with per-call failure plans:
+  event query after a successful sync, stream sync, both, the spill device, the current-device query, guard
+  failures before a sync / record / destroy / event creation, the bound drain's first failure, the fallback sync, each
+  with a failed message allocation; the real module through the test hooks; the check after a successful cuBLAS call,
+  through an LD_PRELOAD shim), and the lead's send-back L1 (the exit wait's polling fallback, forced by an LD_PRELOAD
+  `pthread_mutex_lock` interposer, and the device wait of exit, staged with GPU work queued at exit, are diagnosed;
+  an ordinary `synchronize()` is not).
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 

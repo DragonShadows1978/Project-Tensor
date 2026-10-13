@@ -53,6 +53,61 @@ void note_cublas_handle_destroy_failure(int status) noexcept;
   throw std::runtime_error(os.str());
 }
 
+// P1T-FIX7, sweep (j) "error attribution": the messages of the launch paths name the call that actually returned the
+// error, and the device. Three cases, each with its own wording:
+//  * check_call_on: a CUDA runtime call returned an error (cudaMemcpyAsync, cudaMemsetAsync, ...): that call failed (its
+//    own documented contract is to return the error), so the message names it and the device it ran on.
+//  * check_launch_on: the check right after a kernel launch. A <<<...>>> launch returns nothing; cudaGetLastError then
+//    reports the launch's own error (a refused configuration, a missing kernel image) OR an asynchronous error of
+//    earlier work on the device (CUDA 12.6 Runtime API, cudaGetLastError: "Note that this function may also return
+//    error codes from previous, asynchronous launches"). FIX6 said "<kernel> failed", which is false in the second
+//    case; the message now says what was checked and both possibilities.
+//  * check_after_cublas_on: the same check after a cuBLAS call that returned CUBLAS_STATUS_SUCCESS. cuBLAS 12.6 imports
+//    no symbol of libcudart (nm -D libcublas.so.12 / libcublasLt.so.12: no undefined cuda* symbol, ledger), so it
+//    never sets this runtime's error state: an error here is an asynchronous error of earlier work on the device.
+//    FIX6 said "cublasSgemmStridedBatched failed", naming a call that had just succeeded.
+// Every helper consumes the slot entry it reports (rule 1). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK message
+// ("CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be
+// incorrect", c10/cuda/CUDAException.h, torch 2.11 headers; taken: stating the asynchronous possibility instead of
+// blaming the last launch); the CUDA 12.6 cudaGetLastError note quoted above. Ours: the cuBLAS case and naming the
+// device.
+[[noreturn]] inline void raise_call_failure_on(const char* prefix, const char* what, const char* api, int device,
+                                               cudaError_t e) {
+  cudaGetLastError();
+  std::ostringstream os;
+  os << prefix << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e) << " (" << api
+     << " on CUDA device " << device << " returned it)";
+  throw std::runtime_error(os.str());
+}
+inline void check_call_on(const char* prefix, const char* what, const char* api, int device, cudaError_t e) {
+  if (e != cudaSuccess) raise_call_failure_on(prefix, what, api, device, e);
+}
+inline void check_launch_on(const char* prefix, const char* kernel, int device) {
+  const cudaError_t e = cudaGetLastError();  // consumes the entry it reports
+  if (e == cudaSuccess) return;
+  std::ostringstream os;
+  os << prefix << "CUDA error at the launch check of " << kernel << " on CUDA device " << device << ": "
+     << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+     << " (cudaGetLastError right after the launch: the launch's own error, or an asynchronous error of earlier work "
+        "on that device, which CUDA reports at a later call)";
+  throw std::runtime_error(os.str());
+}
+inline void check_after_cublas_on(const char* prefix, const char* fn, int device) {
+  const cudaError_t e = cudaGetLastError();  // consumes the entry it reports
+  if (e == cudaSuccess) return;
+  std::ostringstream os;
+  os << prefix << "CUDA error found by the check after " << fn << " on CUDA device " << device
+     << ", which returned CUBLAS_STATUS_SUCCESS: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+     << " (cudaGetLastError; cuBLAS does not set the CUDA runtime's error state, so this is an asynchronous error of "
+        "earlier work on that device)";
+  throw std::runtime_error(os.str());
+}
+[[noreturn]] inline void raise_cublas_failure_on(const char* prefix, const char* fn, int device, int status) {
+  std::ostringstream os;
+  os << prefix << fn << " failed: cuBLAS status " << status << " (on CUDA device " << device << ")";
+  throw std::runtime_error(os.str());
+}
+
 // Makes `device` current for a launch path and restores the caller's device. The constructor raises RuntimeError (slot
 // entry consumed) if the current device cannot be read or the switch fails; nothing is switched then. restore() is the
 // success-path restore and raises if it fails. The destructor restores only if restore() was not reached (an exception
@@ -99,6 +154,9 @@ class DeviceGuard {
 
 // The never-throwing variant for release paths (destructors, noexcept drains). A failed query or switch is reported
 // through ok()/error() with its slot entry consumed; a failed restore follows rule 2.
+// P1T-FIX7 (V7-02 sweep (j)): failed_at_switch() says WHICH of the guard's two calls failed (cudaSetDevice of the
+// target device, or the cudaGetDevice before it), so a release path records the call that failed, not the call the
+// guard prevented (FIX6 reported a failed switch as a failed stream sync / event record / event destroy).
 class QuietDeviceGuard {
  public:
   explicit QuietDeviceGuard(int device) noexcept {
@@ -113,6 +171,7 @@ class QuietDeviceGuard {
       if (e != cudaSuccess) {
         cudaGetLastError();
         err_ = e;
+        switch_failed_ = true;
         return;
       }
       switched_ = true;
@@ -130,11 +189,13 @@ class QuietDeviceGuard {
   QuietDeviceGuard& operator=(const QuietDeviceGuard&) = delete;
   bool ok() const { return err_ == cudaSuccess; }
   cudaError_t error() const { return err_; }
+  bool failed_at_switch() const { return switch_failed_; }  // P1T-FIX7: false = the cudaGetDevice before it failed
 
  private:
   int prev_ = 0;
   cudaError_t err_ = cudaSuccess;
   bool switched_ = false;
+  bool switch_failed_ = false;
 };
 
 }  // namespace tcs

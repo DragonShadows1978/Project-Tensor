@@ -1,0 +1,21 @@
+--- addon_trace.cpp
++++ addon_trace.cpp (FIX6 copy)
+@@ -29,6 +29,7 @@
+  m.def("queue",[](py::object f){callback=f.ptr();Py_INCREF(callback);manager.deleter=producer_delete;tcs::PendingEntry e;e.event=reinterpret_cast<cudaEvent_t>(16);e.device=0;e.bytes=4;tcs::ManagedOwner o;o.legacy=&manager;e.owners.push_back(std::move(o));auto& st=tcs::pending();st.q.push_back(std::move(e));tcs::note_push(st,st.q.back());});
+  m.def("drain",&tcs::drain_completed);
+  m.def("synchronize",&tcs::synchronize_and_release_all);
++ m.def("close",&tcs::close_admission_and_wait);  // FIX6 copy: the real exit entry point
+  m.def("stats",[]{return tcs::pending_stats(false);});
+  m.def("fail_query",[]{fail_query=true;});
+  m.def("slot",[]{return int(slot);});
+--- addon_exit_cpu.py
++++ addon_exit_cpu.py (FIX6 copy)
+@@ -13,7 +13,7 @@
+     print('DELETER finished',flush=True)
+ n.queue(deleter)
+ def close():
+-    n.synchronize()
++    n.synchronize(); n.close(5.0)  # FIX6 copy: tc_signal's real exit sequence
+     print('HOOK returned entries='+str(n.stats()['entries']),flush=True)
+ atexit.register(close)
+ def start():

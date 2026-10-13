@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdio>  // P1T-FIX7: the exit runner's stderr line (C stdio, no Python)
 #include <sstream>
 #include <string>
 #include <vector>
@@ -346,14 +347,20 @@ void divide_probe(py::object x, py::object y, py::object out) {
   fp32_divide_probe(device, X.data(), Y.data(), O.data(), X.dim(0));
 }
 
-// P1T-FIX6: tc_signal's exit wait as a raw CPython function (see py_args.h raw_one_real_arg for why). No catch-all: a
+// P1T-FIX6: tc_signal's exit wait as a raw CPython function (see py_args.h raw_exit_diag_arg for why). No catch-all: a
 // forced unwind (not a std::exception) passes through the typed handlers. Prior art: CPython's METH_VARARGS |
 // METH_KEYWORDS convention (caller-owned argument tuple and dict); ours: choosing it for the GIL-released wait.
+// P1T-FIX7 (V7-01): the argument is diagnostics only. A malformed call (arity, keyword) is a TypeError that does
+// nothing; any VALUE closes and waits: one that cannot be read at C level selects tuning::kExitDiagDefaultS (py_args.h
+// raw_exit_diag_arg), never an error before the close.
 PyObject* raw_exit_close_admission(PyObject*, PyObject* args, PyObject* kwargs) {
-  double first_diag_s = 0.0;
-  if (!raw_one_real_arg("_exit_close_admission", "first_diag_s", args, kwargs, &first_diag_s)) return nullptr;
+  double first_diag_s = tuning::kExitDiagDefaultS;
+  bool default_used = false;
+  if (!raw_exit_diag_arg("_exit_close_admission", "first_diag_s", args, kwargs, tuning::kExitDiagDefaultS,
+                         &first_diag_s, &default_used))
+    return nullptr;
   try {
-    return close_admission_and_wait(first_diag_s).release().ptr();
+    return exit_close_admission(first_diag_s, default_used).release().ptr();
   } catch (py::error_already_set& e) {
     e.restore();
   } catch (const std::bad_alloc&) {
@@ -361,6 +368,88 @@ PyObject* raw_exit_close_admission(PyObject*, PyObject* args, PyObject* kwargs) 
   } catch (const std::exception& e) {
     PyErr_SetString(PyExc_RuntimeError, e.what());
   }
+  return nullptr;
+}
+
+// P1T-FIX7, round-7 review finding V7-01 and sweep (i): what atexit calls. `hook` is tc_signal._release_pending_at_exit.
+// The hook reaches its close on every path that runs any of its statements (try / finally, the knob passed as is).
+// One path it cannot cover: an exception delivered at its FIRST bytecode boundary (CPython 3.12 checks for pending
+// signals in the RESUME instruction that starts every Python frame, so a Ctrl-C that arrives just before the hook is
+// called raises KeyboardInterrupt there, before any statement of the hook has run), and generally any exception that
+// escapes the hook before its close. So: when the hook raises, this runner (if the hook had not closed yet: runs its
+// synchronize(), see below) closes admission and waits itself (default delay; it is a no-op wait when the hook had
+// already closed), writes the recorded CUDA failures nobody reported (exit_log_unreported), and then hands the hook's
+// exception to atexit unchanged (atexit prints it, as for any
+// callback). When the hook RETURNS, the runner does nothing: a hook that returns without closing is a defect in the
+// hook, which its tests and the round-7 probes must see, not one this runner hides. A raw METH_O function: no pybind11
+// dispatcher frame, the hook argument is owned by atexit, and no catch-all (a forced unwind is never swallowed).
+// Prior art: CPython's atexit (one callback's exception is printed and the remaining callbacks still run) and the
+// try / finally guarantee (language reference, "The try statement"), which holds inside a frame but not at its first
+// instruction; CPython 3.12 ceval RESUME / eval-breaker signal handling (unverified here, lead to check "CPython 3.12
+// RESUME eval_breaker _Py_HandlePending"). Ours: the native wrapper that keeps the close for that one boundary.
+// When the hook raised BEFORE its own close (no hook close was counted during the call: an exception at its first
+// bytecode, or before its finally reached the close), its synchronize() may not have run either: the runner then runs
+// it first (releasing what is pending, as the hook would have; a failure is written to stderr), before closing.
+// P1T-FIX7, lead send-back L1 (sweep (i) addendum): the runner also opens the window in which the device syncs of exit
+// (the hook's step 1, its post-close retry, the runner's own synchronize()) are diagnosed instead of silent
+// (dlpack_operand.cpp wait_device_work_diagnosed). Its delay is the hook's knob as the hook will pass it, read at C
+// level from the hook's module globals (PyDict_GetItemString: a dict lookup of a str key, errors suppressed; the value
+// read by raw_exit_diag_value, no Python method of it runs); absent or unreadable -> tuning::kExitDiagDefaultS. The
+// window closes when the runner returns (RAII), so no ordinary synchronize() is affected.
+double exit_diag_of_hook(PyObject* hook) {
+  double v = tuning::kExitDiagDefaultS;
+  if (!PyFunction_Check(hook)) return v;
+  PyObject* globals = PyFunction_GET_GLOBALS(hook);
+  if (globals == nullptr || !PyDict_Check(globals)) return v;
+  PyObject* knob = PyDict_GetItemString(globals, "_RELEASE_EXIT_DIAG_S");  // borrowed, or nullptr (deleted)
+  if (knob == nullptr) return v;
+  raw_exit_diag_value(knob, tuning::kExitDiagDefaultS, &v);
+  return v;
+}
+
+struct ExitDeviceWaitWindow {
+  explicit ExitDeviceWaitWindow(double first_diag_s) noexcept { exit_device_waits_diagnosed(first_diag_s); }
+  ~ExitDeviceWaitWindow() { exit_device_waits_undiagnosed(); }
+  ExitDeviceWaitWindow(const ExitDeviceWaitWindow&) = delete;
+  ExitDeviceWaitWindow& operator=(const ExitDeviceWaitWindow&) = delete;
+};
+
+PyObject* raw_exit_hook_runner(PyObject*, PyObject* hook) {
+  const ExitDeviceWaitWindow window(exit_diag_of_hook(hook));  // P1T-FIX7 L1: device waits of exit are diagnosed
+  const unsigned long long closes_before = exit_hook_closes();
+  PyObject* r = PyObject_CallNoArgs(hook);
+  if (r != nullptr) return r;
+  PyObject *type = nullptr, *value = nullptr, *tb = nullptr;
+  PyErr_Fetch(&type, &value, &tb);  // keep the hook's exception
+  if (exit_hook_closes() == closes_before) {
+    try {
+      synchronize_and_release_all();  // may run producer deleters (admission is still open): the hook's step 1
+    } catch (py::error_already_set& e) {
+      std::fprintf(stderr, "tc_signal: synchronize() at exit (run by the exit runner) failed (%s); operands without a "
+                   "completion proof were deliberately leaked, not released\n", e.what());
+      std::fflush(stderr);
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "tc_signal: synchronize() at exit (run by the exit runner) failed (%s)\n", e.what());
+      std::fflush(stderr);
+    }
+    PyErr_Clear();  // nothing of it may stay set: the hook's exception is restored below
+  }
+  long long waited_us = 0;
+  long long running = 0;
+  try {
+    running = exit_runner_close_and_wait(&waited_us);
+  } catch (const std::exception&) {
+    // Not reached (the close and wait allocate nothing and throw nothing); the hook's exception is still reported.
+  }
+  if (running > 0) {
+    std::fprintf(stderr,
+                 "tc_signal: the exit hook raised before it closed release admission; the native exit runner closed "
+                 "it and waited %.1f s for %lld producer callback(s) admitted on other threads\n",
+                 static_cast<double>(waited_us) / 1e6, running);
+    std::fflush(stderr);
+  }
+  exit_log_unreported();
+  PyErr_Restore(type, value, tb);
   return nullptr;
 }
 
@@ -373,11 +462,28 @@ const char kExitCloseDoc[] =
     "refused), then wait, GIL released and with NO time bound, until no admitted section of another thread is "
     "running (the calling thread's own are excluded). After first_diag_s seconds it writes a stderr line, then "
     "another each time the time waited doubles. Returns {in_flight_at_close, own_thread_in_flight, "
-    "pending_entries_at_close, waited_us, diagnostics, overran}. P1T-FIX6: the only tc_signal call that waits for "
-    "another thread; a raw CPython function (no pybind11 dispatcher frame on the stack while it waits).";
+    "pending_entries_at_close, waited_us, diagnostics, overran, first_diag_s, first_diag_default_used}. P1T-FIX6: "
+    "the only tc_signal call that waits for another thread; a raw CPython function (no pybind11 dispatcher frame on "
+    "the stack while it waits). P1T-FIX7 (V7-01): first_diag_s is diagnostics only and never prevents the close: a "
+    "float or int (subclasses included) is read without calling its methods; any other value, or an int beyond the "
+    "double range, uses the default (_RELEASE_EXIT_DIAG_DEFAULT_S) and the call still closes and waits "
+    "(first_diag_default_used=True). Only a malformed call (wrong arity or keyword) raises TypeError, doing nothing.";
 PyMethodDef kExitCloseDef = {"_exit_close_admission",
                              reinterpret_cast<PyCFunction>(reinterpret_cast<void (*)(void)>(&raw_exit_close_admission)),
                              METH_VARARGS | METH_KEYWORDS, kExitCloseDoc};
+const char kExitRunnerDoc[] =
+    "_exit_hook_runner(hook)\n\n"
+    "P1T-FIX7 (V7-01): what tc_signal registers with atexit, as atexit.register(_exit_hook_runner, "
+    "_release_pending_at_exit). Calls hook(); if the hook raises (for example a KeyboardInterrupt delivered at its "
+    "first bytecode, before any of its statements ran), runs synchronize() if the hook had not closed yet, closes "
+    "release admission and waits itself (default diagnostic delay), writes any recorded CUDA failure nobody "
+    "reported to stderr, then re-raises the hook's exception. Does nothing more when the hook returns. P1T-FIX7 "
+    "(lead send-back L1): while it runs, every device sync of exit (synchronize() in the hook or in the runner) is "
+    "diagnosed: a stderr line after the hook's _RELEASE_EXIT_DIAG_S (read at C level; default if unreadable), then "
+    "each time the time waited doubles (pending_stats() exit_device_wait_diagnostics). Remove it with "
+    "atexit.unregister(_exit_hook_runner).";
+PyMethodDef kExitRunnerDef = {"_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_exit_hook_runner), METH_O,
+                              kExitRunnerDoc};
 }  // namespace tcs
 
 namespace tcs { void register_lstm(py::module_& m); }  // P1T-M3: src/lstm_bindings.cpp
@@ -504,9 +610,14 @@ PYBIND11_MODULE(_tc_signal, m) {
   // P1T-FIX5 (round-5 review V5-01): the exit side of the release lifecycle, called by tc_signal's atexit hook
   // (tc_signal/__init__.py _release_pending_at_exit) after its final synchronize(). Not an API for other callers.
   // P1T-FIX6: a raw CPython function (raw_exit_close_admission, above the module): nothing on this stack owns a Python object
-  // across the GIL-released wait, whatever the calling style (py_args.h raw_one_real_arg).
+  // across the GIL-released wait, whatever the calling style (py_args.h raw_exit_diag_arg).
   m.add_object("_exit_close_admission",
                py::reinterpret_steal<py::object>(PyCFunction_NewEx(&tcs::kExitCloseDef, nullptr, nullptr)));
+  // P1T-FIX7 (V7-01): the atexit runner (raw_exit_hook_runner) and the default diagnostic delay, exported so the Python
+  // knob's initial value and the native fallback are one constant (tuning.h kExitDiagDefaultS).
+  m.add_object("_exit_hook_runner",
+               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&tcs::kExitRunnerDef, nullptr, nullptr)));
+  m.attr("_RELEASE_EXIT_DIAG_DEFAULT_S") = tuning::kExitDiagDefaultS;
   // P1T-FIX2 (N3): build the pending-list state now (it allocates), so no noexcept release path is the first to touch
   // it; a failure here fails the import (MemoryError), never a later release. P1T-FIX5: also the release lifecycle.
   init_pending_state();

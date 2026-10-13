@@ -414,7 +414,10 @@ def test_fix4_failed_restore_while_unwinding_is_counted_and_raised_once(shim):
     # DeviceGuard's destructor restores only when an exception is already unwinding (here: a refused launch). 62c8d9f
     # ignored that restore's result; now it is consumed, counted and raised once by the next synchronize().
     res = _shim(shim, 'launch_and_restore_fail')
-    assert res['call']['raised'] == 'RuntimeError' and 'rint_kernel failed: cudaErrorInvalidDevice' in res['call']['msg'], res
+    # P1T-FIX7 (sweep (j)): the launch check names the kernel and the device and no longer claims "rint_kernel failed"
+    # (cudaGetLastError after a launch may report an asynchronous error of earlier work).
+    assert res['call']['raised'] == 'RuntimeError', res
+    assert 'CUDA error at the launch check of rint_kernel on CUDA device 0: cudaErrorInvalidDevice' in res['call']['msg'], res
     assert res['call_log'][:3] == ['set0', 'launch@0!', 'set1!'] and res['call_slot'] == 0, res
     st = res['stats_after_call']
     assert st['device_restore_failures'] == 1 and st['unreported_unraisable_errors'] == 1, res
@@ -428,6 +431,7 @@ def test_fix4_check_cuda_raise_consumes_the_failed_call(shim):
     res = _shim(shim, 'lstm_memset_fail')
     assert res['call']['raised'] == 'RuntimeError', res
     assert 'initial_h zero failed: cudaErrorInvalidDevice' in res['call']['msg'] and res['call_slot'] == 0, res
+    assert '(cudaMemsetAsync on CUDA device 0 returned it)' in res['call']['msg'], res      # P1T-FIX7 sweep (j)
     assert res['next']['raised'] is None and res['final_sync']['raised'] is None, res
 
 
@@ -471,6 +475,7 @@ def test_fix4_failed_lstm_cublas_setting_destroys_the_new_handle_and_raises(shim
     res = _shim(shim, 'lstm_cublas_setting')
     assert res['call']['raised'] == 'RuntimeError', res
     assert 'tc_signal.lstm: cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14' in res['call']['msg'], res
+    assert '(the new handle of CUDA device 0)' in res['call']['msg'], res                  # P1T-FIX7 sweep (j)
     assert res['call_log'][:2] == ['cublasSetMathMode!', 'cublasDestroy'], res
     assert res['next']['raised'] is None and res['config']['default_math'] is True, res
 
@@ -479,5 +484,6 @@ def test_fix4_failed_cublas_setting_destroys_the_new_handle_and_raises(shim):
     res = _shim(shim, 'cublas_setting')
     assert res['call']['raised'] == 'RuntimeError', res
     assert 'cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14' in res['call']['msg'], res
+    assert '(the new handle of CUDA device 0)' in res['call']['msg'], res                  # P1T-FIX7 sweep (j)
     assert res['call_log'][:2] == ['cublasSetMathMode!', 'cublasDestroy'], res
     assert res['next']['raised'] is None and res['config']['default_math'] is True, res

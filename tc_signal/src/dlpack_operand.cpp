@@ -187,6 +187,7 @@ std::atomic<unsigned long long> g_exit_in_flight_at_close{0};
 std::atomic<unsigned long long> g_exit_wait_us{0};
 std::atomic<unsigned long long> g_exit_wait_diagnostics{0};
 std::atomic<unsigned long long> g_exit_wait_overruns{0};
+std::atomic<unsigned long long> g_exit_wait_poll_diagnostics{0};  // P1T-FIX7 L1: lines of the polling fallback
 // P1T-FIX6 (V6-01): FIX5's g_sync_waits / g_sync_wait_us / g_sync_wait_diagnostics counted synchronize()'s wait for
 // other threads; that wait is removed, and so are they (and their pending_stats keys).
 
@@ -265,14 +266,22 @@ long long others_running(const Lifecycle& lc, const long long own[kKinds]) noexc
 }
 
 // The part of the exit wait that runs with the GIL released: the mutex and condition variable only, no Python object.
+// P1T-FIX7, lead send-back L1 (sweep (i) addendum): FIX5's fallback for a failed lifecycle mutex / condition variable
+// (poll every kLifecyclePollMs until quiet) was a SILENT exit wait. It now keeps the same diagnostic schedule as the
+// condition-variable wait (FIX3 V3-01 / FIX5 V5-01: the first line after first_diag_s from the start of the wait, then
+// each time the time waited has doubled; C stdio, no allocation, GIL released), says that it is polling and why, and
+// counts each line (w.diagnostics -> pending_stats() exit_wait_diagnostics for the hook's close, and
+// exit_wait_poll_diagnostics for every polling line). It still never returns early. Prior art: FIX3 / FIX5's own
+// schedule (taken as is); ours: applying it to the fallback.
 void wait_without_gil(Lifecycle& lc, double first_diag_s, std::chrono::steady_clock::time_point t0,
                       WaitOutcome& w) noexcept {
   using clock = std::chrono::steady_clock;
   const auto first = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(first_diag_s));
+  const auto tick = clock::duration(1);  // next line at least one clock tick later: no busy loop at a zero delay
   auto quiet = [&lc, &w] { return others_running(lc, w.own) <= 0; };
+  auto next = t0 + first;
   try {
     std::unique_lock<std::mutex> lk(lc.mu);
-    auto next = t0 + first;
     while (!lc.cv.wait_until(lk, next, quiet)) {
       // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01, V5-01).
       w.overran = true;
@@ -286,15 +295,33 @@ void wait_without_gil(Lifecycle& lc, double first_diag_s, std::chrono::steady_cl
                    running, std::chrono::duration<double>(now - t0).count());
       std::fflush(stderr);
       ++w.diagnostics;
-      const auto waited = now - t0;  // next line when the time waited has doubled (at least one tick: no busy loop)
-      const auto tick = clock::duration(1);
+      const auto waited = now - t0;  // next line when the time waited has doubled
       next = now + (waited > tick ? waited : tick);
       lk.lock();
     }
+    return;
   } catch (const std::system_error&) {
     // A mutex / condition-variable failure (never observed): keep waiting by polling, never return early.
     g_lifecycle_lock_failures.fetch_add(1, std::memory_order_relaxed);
-    while (!quiet()) std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kLifecyclePollMs));
+  }
+  while (!quiet()) {
+    const auto now = clock::now();
+    if (now >= next) {  // the same schedule as above, continued from where it was: never a silent wait
+      w.overran = true;
+      std::fprintf(stderr,
+                   "tc_signal: %lld DLPack producer callback(s) (deleter, capsule destructor or __dlpack__) admitted "
+                   "on other threads before interpreter exit still running after %.1f s; interpreter exit waits for "
+                   "them (no new one is admitted; polling every %d ms because the lifecycle mutex or condition "
+                   "variable failed)\n",
+                   others_running(lc, w.own), std::chrono::duration<double>(now - t0).count(),
+                   tuning::kLifecyclePollMs);
+      std::fflush(stderr);
+      ++w.diagnostics;
+      g_exit_wait_poll_diagnostics.fetch_add(1, std::memory_order_relaxed);
+      const auto waited = now - t0;
+      next = now + (waited > tick ? waited : tick);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kLifecyclePollMs));
   }
 }
 
@@ -728,41 +755,189 @@ namespace {
 // TEST HOOK: the CUDA error an armed kCuda* site reports instead of calling CUDA (tests only; never in production).
 constexpr cudaError_t kTestInjectedCudaError = cudaErrorLaunchFailure;
 
+// Saturating counters (V6-03: recording never wraps, never allocates, never throws).
+void sat_inc(unsigned long long& c) noexcept {
+  if (c != ~0ULL) ++c;
+}
+void sat_add(unsigned long long& c, unsigned long long v) noexcept { c = (v > ~0ULL - c) ? ~0ULL : c + v; }
+
+// ------------------------------------------------------------------------------------------------ failure records (V7-02)
+// P1T-FIX7, round-7 review finding V7-02 (MINOR), and the sweep (j) "error attribution" of this file. FIX2-FIX6 kept a
+// recorded CUDA failure as (device, cudaError_t) only, so the message had to assume which call had failed: phase 2's
+// failed cudaEventQuery went into the same arrays as phase 1's stream syncs, and synchronize() then said "the legacy
+// stream of device 0 could not be synchronized" (that sync had succeeded; reviewer probe query_diagnostic_cpu.py rc 1
+// on 429446d). The sweep found the same assumption at four more sites: a failed switch (cudaSetDevice) or
+// current-device read (cudaGetDevice) inside a device guard was reported as the stream sync, event record or event
+// destroy it prevented; the spill path named "device -1"; and the bound drain paired the first failed device with the
+// current-device query's error. Now every record carries WHICH CUDA call failed and FOR WHAT, with the device that call
+// concerned and its error: a plain-data tag of two bytes, so recording stays a copy of a few words (allocation-free,
+// noexcept, saturating: V6-03) and `merge` keeps the tags. Every message is built from the tag (describe() below): it
+// names the failed CUDA call and its device, and never an operation that succeeded.
+// Prior art: std::error_code (C++11 <system_error>), which pairs an error value with its category so the same number
+// is never read in the wrong domain (taken: value + discriminating tag); tagged / discriminated records in general; the
+// distinct return contracts of cudaEventQuery and cudaStreamSynchronize (CUDA 12.6 Runtime API: why they must not share
+// one meaning). Ours: the (call, purpose) tag on the add-on's fixed-capacity, allocation-free failure records.
+enum class FailedCall : unsigned char {
+  kGetDevice,     // cudaGetDevice
+  kSetDevice,     // cudaSetDevice
+  kStreamSync,    // cudaStreamSynchronize(cudaStreamLegacy)
+  kEventQuery,    // cudaEventQuery
+  kEventRecord,   // cudaEventRecord(event, cudaStreamLegacy)
+  kEventDestroy,  // cudaEventDestroy
+};
+enum class Purpose : unsigned char {
+  kCurrentDevice,    // synchronize()'s current-device query (it reads which device is current: no device)
+  kSyncStream,       // synchronizing the legacy stream of `device` (the guard's read / switch, or the sync itself)
+  kSyncUntracked,    // the same, for a device beyond the kSyncMaxDevices tracked one by one (the spill path)
+  kQueryEvent,       // querying a pending entry's completion event (an event of `device`) in a sync drain
+  kDrainQueryEvent,  // the same query in the next-call drain (the entry stayed pending; synchronize() re-queries it)
+  kRecordEvent,      // recording a call's completion event on `device`'s legacy stream (the call then synchronized)
+  kDestroyEvent,     // destroying a completion event of `device` that could not be pooled
+  kRestoreDevice,    // restoring the caller's current device `device` after a switch
+  kUnnamed,          // never built from a real failure: failed() with no named record (capacity exhausted)
+};
+struct FailureRecord {
+  FailedCall call = FailedCall::kStreamSync;
+  Purpose purpose = Purpose::kUnnamed;
+  int device = -1;  // the device the failed call concerned; -1 only for kCurrentDevice / kUnnamed
+  cudaError_t err = cudaSuccess;
+};
+
+const char* call_name(FailedCall c) noexcept {
+  switch (c) {
+    case FailedCall::kGetDevice: return "cudaGetDevice";
+    case FailedCall::kSetDevice: return "cudaSetDevice";
+    case FailedCall::kStreamSync: return "cudaStreamSynchronize";
+    case FailedCall::kEventQuery: return "cudaEventQuery";
+    case FailedCall::kEventRecord: return "cudaEventRecord";
+    case FailedCall::kEventDestroy: return "cudaEventDestroy";
+  }
+  return "a CUDA call";
+}
+
+// The message text of one record (only ever called while building a diagnostic, where allocating is allowed). A device
+// guard's own failure (its cudaGetDevice, or its cudaSetDevice to the target) means the intended call never ran: the
+// text says so and names the guard's call.
+void describe(std::ostream& os, const FailureRecord& r) {
+  const auto error = [&os, &r] { os << cudaGetErrorName(r.err) << ": " << cudaGetErrorString(r.err); };
+  const bool guard_call = r.call == FailedCall::kGetDevice || r.call == FailedCall::kSetDevice;
+  switch (r.purpose) {
+    case Purpose::kCurrentDevice:
+      os << "the current-device query cudaGetDevice failed (";
+      error();
+      os << ")";
+      return;
+    case Purpose::kSyncStream:
+    case Purpose::kSyncUntracked:
+      if (guard_call) {
+        os << "the legacy stream of device " << r.device << " was not synchronized: ";
+        break;
+      }
+      os << "the legacy stream of device " << r.device << " could not be synchronized (cudaStreamSynchronize: ";
+      error();
+      os << ")";
+      if (r.purpose == Purpose::kSyncUntracked)
+        os << "; device " << r.device << " is beyond the first " << tuning::kSyncMaxDevices
+           << " devices whose sync results are tracked one by one, so the pending entries of every untracked device "
+              "that had no completion proof were treated as failed and leaked";
+      return;
+    case Purpose::kQueryEvent:
+      os << "the completion event of a pending entry on device " << r.device
+         << " could not be queried (cudaEventQuery: ";
+      error();
+      os << ")";
+      return;
+    case Purpose::kDrainQueryEvent:
+      os << "cudaEventQuery of a pending entry's completion event in the next-call drain (the entry stayed pending; "
+            "synchronize() re-queried it) on device "
+         << r.device << " (";
+      error();
+      os << ")";
+      return;
+    case Purpose::kRecordEvent:
+      if (guard_call) {
+        os << "a call's completion event on device " << r.device
+           << " was not recorded (the call's operands were synchronized instead): ";
+        break;
+      }
+      os << "recording a call's completion event (cudaEventRecord on the operands' device; the call's operands were "
+            "synchronized instead) on device "
+         << r.device << " (";
+      error();
+      os << ")";
+      return;
+    case Purpose::kDestroyEvent:
+      if (guard_call) {
+        os << "a completion event of device " << r.device << " was not destroyed: ";
+        break;
+      }
+      os << "cudaEventDestroy on device " << r.device << " (";
+      error();
+      os << ")";
+      return;
+    case Purpose::kRestoreDevice:
+      os << "restoring the caller's CUDA device (cudaSetDevice) on device " << r.device << " (";
+      error();
+      os << ")";
+      return;
+    case Purpose::kUnnamed:
+      os << "a CUDA failure whose call and device were not recorded (";
+      error();
+      os << ")";
+      return;
+  }
+  // A guard's failure (reached by `break` above).
+  if (r.call == FailedCall::kGetDevice)
+    os << "the current-device query before switching to device " << r.device << " failed (cudaGetDevice: ";
+  else
+    os << "switching to device " << r.device << " failed (cudaSetDevice: ";
+  error();
+  os << ")";
+}
+
+// A device guard's failure as the call that failed (QuietDeviceGuard::failed_at_switch).
+FailedCall guard_call(const QuietDeviceGuard& g) noexcept {
+  return g.failed_at_switch() ? FailedCall::kSetDevice : FailedCall::kGetDevice;
+}
+
 // What one sync_and_release_all_impl call found (fixed capacity: the first kSyncReportMax failures are named, the
 // rest only counted). P1T-FIX6 (V6-03): also the persisted record of synchronize() drains whose diagnostic was not
 // raised yet (PendingState::drain_unreported), so `merge` and the counts are allocation-free and saturating.
+// P1T-FIX7 (V7-02): each named failure is a tagged FailureRecord (which call, for what, device, error).
 struct SyncReport {
   bool query_failed = false;               // cudaGetDevice failed (N1: never a success)
   cudaError_t query_error = cudaSuccess;
   int n = 0;
-  int dev[tuning::kSyncReportMax];
-  cudaError_t err[tuning::kSyncReportMax];
+  FailureRecord rec[tuning::kSyncReportMax];
   unsigned long long unnamed = 0;          // failures beyond the named ones
   unsigned long long leaked_managers = 0;  // managers leaked by this call (no completion proof)
 
-  void add(int d, cudaError_t e) noexcept {
-    if (n < tuning::kSyncReportMax) {
-      dev[n] = d;
-      err[n] = e;
-      ++n;
-    } else if (unnamed < ~0ULL) {
-      ++unnamed;
-    }
+  void add(const FailureRecord& r) noexcept {
+    if (n < tuning::kSyncReportMax)
+      rec[n++] = r;
+    else
+      sat_inc(unnamed);
   }
   // P1T-FIX6 (V6-03): fold another report into this one (first query error kept; named failures appended up to the
-  // capacity, the rest counted). Never allocates, never throws, saturating counts.
+  // capacity, the rest counted). Never allocates, never throws, saturating counts. P1T-FIX7: the tags travel along.
   void merge(const SyncReport& o) noexcept {
     if (o.query_failed && !query_failed) {
       query_failed = true;
       query_error = o.query_error;
     }
-    for (int i = 0; i < o.n; ++i) add(o.dev[i], o.err[i]);
-    unnamed = (o.unnamed > ~0ULL - unnamed) ? ~0ULL : unnamed + o.unnamed;
-    leaked_managers = (o.leaked_managers > ~0ULL - leaked_managers) ? ~0ULL : leaked_managers + o.leaked_managers;
+    for (int i = 0; i < o.n; ++i) add(o.rec[i]);
+    sat_add(unnamed, o.unnamed);
+    sat_add(leaked_managers, o.leaked_managers);
   }
   bool failed() const noexcept { return query_failed || n > 0 || unnamed > 0 || leaked_managers > 0; }
-  int first_device() const noexcept { return n > 0 ? dev[0] : -1; }
-  cudaError_t first_error() const noexcept { return query_failed ? query_error : (n > 0 ? err[0] : cudaErrorUnknown); }
+  // P1T-FIX7 (sweep (j)): the first failure as ONE consistent record, for the bound drain's release-path record. FIX6
+  // paired first_device() (the first failed stream's device) with first_error() (the current-device query's error when
+  // that failed too): a device with another call's error. The current-device query ran first, so it is the first.
+  FailureRecord first() const noexcept {
+    if (query_failed) return {FailedCall::kGetDevice, Purpose::kCurrentDevice, -1, query_error};
+    if (n > 0) return rec[0];
+    return {FailedCall::kStreamSync, Purpose::kUnnamed, -1, cudaErrorUnknown};
+  }
 };
 
 struct PendingEntry {
@@ -798,18 +973,20 @@ struct PendingState {
   unsigned long long event_recycle_failures = 0;  // N3: an event could not be pooled (destroyed instead)
   unsigned long long release_errors = 0;          // N1: CUDA failures on the release paths (fallback sync, bound drain)
   // N1: release-path failures not yet raised by synchronize() (the first one is named; all are counted).
+  // P1T-FIX7 (V7-02 sweep (j)): the first one is a tagged record (which call failed, device, error) plus where it
+  // happened (FIX6 kept a device and an error, and the bound drain could pair them wrongly: SyncReport::first).
   unsigned long long unreported_count = 0;
   unsigned long long unreported_leaked = 0;
-  int unreported_device = -1;
-  cudaError_t unreported_error = cudaSuccess;
+  FailureRecord unreported_first;
+  bool unreported_in_bound_drain = false;  // false: the synchronous fallback of a call that could not queue its event
   // P1T-FIX4 (sweep): CUDA failures on paths that cannot raise and leak no operand (a restore of the caller's device,
   // an event destroy). Counted; the first is named and all are raised once by the next synchronize().
+  // P1T-FIX7: the first one is a tagged record (FIX6: a site string that named the guarded call even when the guard's
+  // own cudaGetDevice / cudaSetDevice was what failed).
   unsigned long long device_restore_failures = 0;
   unsigned long long event_destroy_failures = 0;
   unsigned long long unraisable_unreported = 0;
-  const char* unraisable_what = "";
-  int unraisable_device = -1;
-  cudaError_t unraisable_error = cudaSuccess;
+  FailureRecord unraisable_first;
   // P1T-FIX4 V4-04: the calling thread's pre-existing error taken by synchronize() on entry, held until its message
   // exists (so a MemoryError while building the message does not lose it: the next synchronize() raises it).
   unsigned long long prior_unreported = 0;
@@ -842,68 +1019,145 @@ PendingState& pending() {
 // QuietDeviceGuard (makes `device` current for its scope, never throws) moved to cuda_guard.h in P1T-FIX4, where its
 // restore is now checked (62c8d9f ignored the restoring cudaSetDevice's result).
 
+// The outcome of one legacy-stream sync: its error, and WHICH call returned it (P1T-FIX7, V7-02 sweep (j): the
+// guard's cudaGetDevice / cudaSetDevice, or cudaStreamSynchronize itself).
+struct SyncResult {
+  cudaError_t err = cudaSuccess;
+  FailedCall call = FailedCall::kStreamSync;
+};
+
+// P1T-FIX7, lead send-back L1 (sweep (i) addendum, "every exit wait that can block is diagnosed"): the device waits of
+// interpreter exit. The exit hook's step 1 (synchronize()) and the exit runner's own synchronize() wait in
+// cudaStreamSynchronize for the work queued on each device's legacy stream; a kernel that never finishes made exit
+// wait SILENTLY. While the exit runner runs (raw_exit_hook_runner opens this window around the hook and its own steps;
+// nothing else does), each such sync is preceded by a diagnosed wait: an event recorded on the legacy stream is polled
+// every tuning::kExitDevicePollMs; after the first-diagnostic delay (the hook's knob, read at C level by the runner)
+// a line goes to stderr naming the device and the seconds waited, then another each time the time waited has
+// doubled (FIX3 V3-01's schedule), each counted (pending_stats() exit_device_wait_diagnostics), and a last line says
+// when the work finished. The cudaStreamSynchronize that follows returns at once and keeps its own error and its
+// attribution (V7-02: a failure is still named as cudaStreamSynchronize). Only CUDA calls this file already makes
+// are used (cudaEventCreateWithFlags / Record / Query / Destroy, cudaPeekAtLastError / cudaGetLastError), so the
+// reviewers' host traces that compile this file link unchanged; an error of the diagnostic event is cleared and the
+// sync still runs (it then reports any sticky error itself). No allocation; never throws. Outside the window (every
+// ordinary synchronize(), bound drain or fallback) nothing changes: one relaxed atomic load. Prior art: FIX3 V3-01's
+// diagnostic schedule; event polling as a host-side progress check (cudaEventQuery's documented NotReady contract,
+// CUDA 12.6 Runtime API; unverified here, lead to check "cudaEventQuery cudaErrorNotReady"); ours: confining it to the
+// exit runner's window.
+std::atomic<long long> g_exit_device_wait_diag_ns{-1};  // < 0: outside the exit runner's window
+std::atomic<unsigned long long> g_exit_device_wait_diagnostics{0};
+
+void wait_device_work_diagnosed(int device, long long first_ns) noexcept {
+  using clock = std::chrono::steady_clock;
+  cudaEvent_t ev = nullptr;
+  if (cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) != cudaSuccess) {
+    cudaGetLastError();
+    return;  // the stream sync below still runs and reports any sticky error itself
+  }
+  if (cudaEventRecord(ev, cudaStreamLegacy) != cudaSuccess) {
+    cudaGetLastError();
+    if (cudaEventDestroy(ev) != cudaSuccess) cudaGetLastError();
+    return;
+  }
+  const auto t0 = clock::now();
+  const auto tick = clock::duration(1);
+  auto next = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::nanoseconds(first_ns));
+  unsigned long long written = 0;
+  for (;;) {
+    const cudaError_t q = cudaEventQuery(ev);
+    if (q != cudaErrorNotReady) {
+      if (q != cudaSuccess) cudaGetLastError();  // the sync below reports the device's state itself
+      break;
+    }
+    if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+    const auto now = clock::now();
+    if (now >= next) {
+      std::fprintf(stderr,
+                   "tc_signal: interpreter exit is waiting for the work queued on the legacy stream of CUDA device %d "
+                   "(synchronize() at exit, before the pending operands are released): still running after %.1f s; "
+                   "exit waits for it (a kernel that never finishes keeps exit waiting)\n",
+                   device, std::chrono::duration<double>(now - t0).count());
+      std::fflush(stderr);
+      ++written;
+      g_exit_device_wait_diagnostics.fetch_add(1, std::memory_order_relaxed);
+      const auto waited = now - t0;  // next line when the time waited has doubled
+      next = now + (waited > tick ? waited : tick);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kExitDevicePollMs));
+  }
+  if (written > 0) {
+    std::fprintf(stderr,
+                 "tc_signal: the work queued on the legacy stream of CUDA device %d finished after %.1f s; "
+                 "interpreter exit continues\n",
+                 device, std::chrono::duration<double>(clock::now() - t0).count());
+    std::fflush(stderr);
+  }
+  if (cudaEventDestroy(ev) != cudaSuccess) cudaGetLastError();
+}
+
 // Synchronizes the legacy stream of `device` (switching to it and back). Never throws, never allocates.
-cudaError_t sync_device_legacy(int device) noexcept {
+SyncResult sync_device_legacy(int device) noexcept {
   QuietDeviceGuard g(device);
-  if (!g.ok()) return g.error();
+  if (!g.ok()) return {g.error(), guard_call(g)};
+  const long long diag_ns = g_exit_device_wait_diag_ns.load(std::memory_order_relaxed);
+  if (diag_ns >= 0) wait_device_work_diagnosed(device, diag_ns);  // P1T-FIX7 L1: inside the exit runner only
   const cudaError_t r =
       test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
   if (r != cudaSuccess) cudaGetLastError();
-  return r;
+  return {r, FailedCall::kStreamSync};
 }
 
 // N1/N3: the devices one sync_and_release_all_impl call synchronized, with each result. Fixed capacity, no allocation.
 // A device beyond the capacity is still synchronized; its failure is remembered only as `spill_failed`, which makes
 // every unrecorded device count as failed (conservative: its not-yet-complete entries are leaked, never released).
+// P1T-FIX7 (V7-02 sweep (j)): each result keeps the call that failed, and the FIRST failure beyond the capacity is kept
+// as a named record of its own device (FIX6 reported it as "device -1").
 struct DeviceSyncSet {
   int dev[tuning::kSyncMaxDevices];
-  cudaError_t err[tuning::kSyncMaxDevices];
+  SyncResult res[tuning::kSyncMaxDevices];
   int n = 0;
   bool spill_failed = false;
-  cudaError_t spill_error = cudaSuccess;
+  FailureRecord spill;
 
   void sync(int d) noexcept {
     for (int i = 0; i < n; ++i)
       if (dev[i] == d) return;
-    const cudaError_t r = sync_device_legacy(d);
+    const SyncResult r = sync_device_legacy(d);
     if (n < tuning::kSyncMaxDevices) {
       dev[n] = d;
-      err[n] = r;
+      res[n] = r;
       ++n;
-    } else if (r != cudaSuccess) {
+    } else if (r.err != cudaSuccess) {
+      if (!spill_failed) spill = {r.call, Purpose::kSyncUntracked, d, r.err};
       spill_failed = true;
-      spill_error = r;
     }
   }
   bool failed(int d) const noexcept {
     for (int i = 0; i < n; ++i)
-      if (dev[i] == d) return err[i] != cudaSuccess;
+      if (dev[i] == d) return res[i].err != cudaSuccess;
     return spill_failed;
   }
 };
 
 
 // N1: a CUDA failure on a release path that cannot raise (inside the noexcept destructor). Raised by the next
-// synchronize(), logged at exit. Never allocates.
-void note_release_failure(PendingState& st, int device, cudaError_t err, unsigned long long leaked) noexcept {
-  ++st.release_errors;
+// synchronize(), logged at exit. Never allocates. P1T-FIX7 (V7-02 sweep (j)): the first failure is kept as one tagged
+// record (the call that failed, its device, its error) with the path it happened on; counts saturate.
+void note_release_failure(PendingState& st, const FailureRecord& first, bool in_bound_drain,
+                          unsigned long long leaked) noexcept {
+  sat_inc(st.release_errors);
   if (st.unreported_count == 0) {
-    st.unreported_device = device;
-    st.unreported_error = err;
+    st.unreported_first = first;
+    st.unreported_in_bound_drain = in_bound_drain;
   }
-  ++st.unreported_count;
-  st.unreported_leaked += leaked;
+  sat_inc(st.unreported_count);
+  sat_add(st.unreported_leaked, leaked);
 }
 
 // P1T-FIX4 (sweep): a failure that cannot raise where it happens and leaks no operand (see PendingState). Never
-// allocates.
-void note_unraisable_failure(PendingState& st, const char* what, int device, cudaError_t err) noexcept {
-  if (st.unraisable_unreported == 0) {
-    st.unraisable_what = what;
-    st.unraisable_device = device;
-    st.unraisable_error = err;
-  }
-  ++st.unraisable_unreported;
+// allocates. P1T-FIX7: a tagged record (FIX6 stored a site string naming the guarded call).
+void note_unraisable_failure(PendingState& st, const FailureRecord& r) noexcept {
+  if (st.unraisable_unreported == 0) st.unraisable_first = r;
+  sat_inc(st.unraisable_unreported);
 }
 
 // P1T-FIX4 (sweep): an event is destroyed on its own device (62c8d9f destroyed it on whatever device was current and
@@ -911,13 +1165,20 @@ void note_unraisable_failure(PendingState& st, const char* what, int device, cud
 // creating a CUDA context on other devices" (c10/cuda/CUDAEvent.h, torch 2.11 headers: CUDAGuard, then
 // C10_CUDA_CHECK_WARN(cudaEventDestroy)). Taken: destroy under the event's device, checked, never thrown. Ours: the
 // count and the deferred raise by the next synchronize().
+// P1T-FIX7 (sweep (j)): when the guard's own cudaGetDevice / cudaSetDevice fails, cudaEventDestroy is never called; the
+// record names the guard's call (FIX6 recorded "cudaEventDestroy" with the guard's error).
 void destroy_event_on_device(PendingState& st, int device, cudaEvent_t ev) noexcept {
   QuietDeviceGuard g(device);
-  const cudaError_t r = g.ok() ? cudaEventDestroy(ev) : g.error();
+  if (!g.ok()) {  // the guard consumed its own failure's slot entry
+    sat_inc(st.event_destroy_failures);
+    note_unraisable_failure(st, {guard_call(g), Purpose::kDestroyEvent, device, g.error()});
+    return;
+  }
+  const cudaError_t r = cudaEventDestroy(ev);
   if (r != cudaSuccess) {
-    cudaGetLastError();  // the guard consumed its own failure already; this consumes cudaEventDestroy's
-    ++st.event_destroy_failures;
-    note_unraisable_failure(st, "cudaEventDestroy", device, r);
+    note_unraisable_failure(st, {FailedCall::kEventDestroy, Purpose::kDestroyEvent, device, r});  // recorded first
+    cudaGetLastError();  // then this consumes cudaEventDestroy's slot entry
+    sat_inc(st.event_destroy_failures);
   }
 }
 
@@ -1039,9 +1300,12 @@ SyncReport sync_and_release_all_impl() noexcept {
     set.sync(cur);
   }
   for (const PendingEntry& e : st.q) set.sync(e.device);
+  // P1T-FIX7 (V7-02): each phase-1 failure is recorded with the call that failed (the guard's cudaGetDevice /
+  // cudaSetDevice, or cudaStreamSynchronize) and its device; the spill keeps its own device (FIX6: "device -1").
   for (int i = 0; i < set.n; ++i)
-    if (set.err[i] != cudaSuccess) rep.add(set.dev[i], set.err[i]);
-  if (set.spill_failed) rep.add(-1, set.spill_error);
+    if (set.res[i].err != cudaSuccess)
+      rep.add({set.res[i].call, Purpose::kSyncStream, set.dev[i], set.res[i].err});
+  if (set.spill_failed) rep.add(set.spill);
 
   while (!st.q.empty()) {
     // TEST HOOK kCudaEventQuery (P1T-FIX6 V6-03 regression): a one-shot query failure instead of calling CUDA.
@@ -1054,8 +1318,11 @@ SyncReport sync_and_release_all_impl() noexcept {
         if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
         if (!set.failed(dev)) break;  // pushed after phase 1 (re-entrant call): not ours to force
       } else {
-        cudaGetLastError();           // the event itself cannot be queried: no completion proof (N1: an error)
-        rep.add(dev, r);
+        // The event itself cannot be queried: no completion proof (N1: an error). P1T-FIX7 (V7-02): recorded AS an
+        // event-query failure of this entry's device (FIX6 put it in the stream-sync arrays: "could not be
+        // synchronized"), before its slot entry is consumed.
+        rep.add({FailedCall::kEventQuery, Purpose::kQueryEvent, dev, r});
+        cudaGetLastError();
       }
     }
     PendingEntry e = std::move(st.q.front());
@@ -1086,9 +1353,17 @@ cudaEvent_t acquire_event(int device) {
   cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : g.error();
   if (r != cudaSuccess) {
     cudaGetLastError();
+    // P1T-FIX7 (sweep (j)): name the call that failed: the guard's cudaGetDevice / cudaSetDevice (then no event was
+    // created at all), or cudaEventCreateWithFlags itself (FIX6 named neither).
     std::ostringstream os;
     os << "tc_signal: cannot create the completion event on CUDA device " << device << ": " << cudaGetErrorName(r)
-       << ": " << cudaGetErrorString(r);
+       << ": " << cudaGetErrorString(r) << " ("
+       << (g.ok() ? "cudaEventCreateWithFlags returned it"
+                  : (g.failed_at_switch()
+                         ? "switching to that device failed, cudaSetDevice returned it; no event was created"
+                         : "the current-device query before switching failed, cudaGetDevice returned it; no event "
+                           "was created"))
+       << ")";
     throw std::runtime_error(os.str());
   }
   ++de.created;
@@ -1116,32 +1391,97 @@ void note_cublas_handle_destroy_failure(int status) noexcept {
   g_cublas_destroy_failures.fetch_add(1, std::memory_order_relaxed);
 }
 
-py::dict close_admission_and_wait(double first_diag_s) {
+// P1T-FIX7, round-7 review finding V7-01 (MAJOR): the exit close-and-wait is reached on every path, whatever the
+// diagnostic knob holds. Native side of the fix (the Python side is tc_signal/__init__.py _release_pending_at_exit):
+//  * the close and the wait take a delay that is diagnostics only; the raw entry (bindings.cpp raw_exit_close_admission)
+//    reads the knob at C level and, for anything it cannot read (another type, an int beyond the double range, the
+//    knob deleted), uses tuning::kExitDiagDefaultS and STILL closes and waits (exit_close_admission below);
+//  * the atexit runner (bindings.cpp raw_exit_hook_runner) calls the Python hook and, if the hook raised (for example
+//    an asynchronous KeyboardInterrupt delivered at its first bytecode, before any statement of it ran), closes and
+//    waits itself with the default delay (exit_runner_close_and_wait), then logs the failures nobody reported
+//    (exit_log_unreported). It does nothing when the hook returned, so a hook that returns without closing is a
+//    hook defect the tests and the round-7 probes see, not one the runner hides.
+// The counts of the two exit paths are kept apart (exit_hook_calls / exit_runner_closes), so a test can tell which
+// one waited. Prior art: CPython's own atexit, which runs each callback, prints (does not propagate) an exception
+// escaping it and still runs the remaining callbacks (taken: an exception in one exit step does not cancel the next);
+// Python's try / finally guarantee, which also holds for KeyboardInterrupt (language reference, "The try statement")
+// but cannot cover a frame's first bytecode, hence the native runner; CPython's threading._shutdown (an unconditional
+// exit-time join). Ours: making the close independent of the knob's readability and of exceptions raised before it.
+namespace {
+std::atomic<unsigned long long> g_exit_runner_closes{0};
+std::atomic<unsigned long long> g_exit_runner_in_flight_at_close{0};
+std::atomic<unsigned long long> g_exit_diag_default_used{0};
+
+struct ExitClose {
+  WaitOutcome w;
+  long long pending_at_close = 0;
+};
+
+// Close admission for good, then wait for every admitted section of another thread. No Python object is touched (the
+// GIL is released for the wait inside wait_for_other_threads). Never returns before the wait has finished.
+ExitClose exit_close_and_wait(double first_diag_s) {
   Lifecycle& lc = lifecycle();
   lc.closing.store(true, std::memory_order_seq_cst);  // admission closed for good: nothing new is admitted
-  const long long pending_at_close = static_cast<long long>(pending().q.size());  // never released from here on
-  const WaitOutcome w = wait_for_other_threads(first_diag_s);
+  ExitClose c;
+  c.pending_at_close = static_cast<long long>(pending().q.size());  // never released from here on
+  c.w = wait_for_other_threads(first_diag_s);
+  return c;
+}
+}  // namespace
+
+py::dict exit_close_admission(double first_diag_s, bool diag_default_used) {
+  // The delay actually used (reported back): NaN or negative -> 0, diagnose at once; capped at the chrono-safe maximum.
+  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;
+  if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
+  const ExitClose c = exit_close_and_wait(first_diag_s);
+  const WaitOutcome& w = c.w;
   g_exit_hook_calls.fetch_add(1, std::memory_order_relaxed);
   if (w.running_at_start > 0)
     g_exit_in_flight_at_close.fetch_add(static_cast<unsigned long long>(w.running_at_start), std::memory_order_relaxed);
   g_exit_wait_us.fetch_add(static_cast<unsigned long long>(w.waited_us), std::memory_order_relaxed);
   g_exit_wait_diagnostics.fetch_add(w.diagnostics, std::memory_order_relaxed);
   if (w.overran) g_exit_wait_overruns.fetch_add(1, std::memory_order_relaxed);
-  py::dict d;
+  if (diag_default_used) g_exit_diag_default_used.fetch_add(1, std::memory_order_relaxed);
+  py::dict d;  // built after the close and the wait: a MemoryError here cannot skip them
   d["in_flight_at_close"] = w.running_at_start > 0 ? w.running_at_start : 0;
   d["own_thread_in_flight"] = w.own[kRelease] + w.own[kCallback];
-  d["pending_entries_at_close"] = pending_at_close;
+  d["pending_entries_at_close"] = c.pending_at_close;
   d["waited_us"] = w.waited_us;
   d["diagnostics"] = w.diagnostics;
   d["overran"] = w.overran;
+  d["first_diag_s"] = first_diag_s;                    // P1T-FIX7: the delay actually used (after NaN / cap handling)
+  d["first_diag_default_used"] = diag_default_used;    // P1T-FIX7: the knob could not be read; the default was used
   return d;
+}
+
+py::dict close_admission_and_wait(double first_diag_s) { return exit_close_admission(first_diag_s, false); }
+
+unsigned long long exit_hook_closes() noexcept { return g_exit_hook_calls.load(std::memory_order_relaxed); }
+
+// P1T-FIX7 L1: the exit runner's device-wait window (see wait_device_work_diagnosed). The delay is clamped as the exit
+// wait's is (NaN / negative -> 0: diagnose at once; capped at kLifecycleMaxDiagDelayS).
+void exit_device_waits_diagnosed(double first_diag_s) noexcept {
+  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;
+  if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
+  g_exit_device_wait_diag_ns.store(static_cast<long long>(first_diag_s * 1e9), std::memory_order_relaxed);
+}
+
+void exit_device_waits_undiagnosed() noexcept { g_exit_device_wait_diag_ns.store(-1, std::memory_order_relaxed); }
+
+long long exit_runner_close_and_wait(long long* waited_us) {
+  const ExitClose c = exit_close_and_wait(tuning::kExitDiagDefaultS);
+  const long long running = c.w.running_at_start > 0 ? c.w.running_at_start : 0;
+  g_exit_runner_closes.fetch_add(1, std::memory_order_relaxed);
+  g_exit_runner_in_flight_at_close.fetch_add(static_cast<unsigned long long>(running), std::memory_order_relaxed);
+  if (waited_us != nullptr) *waited_us = c.w.waited_us;
+  return running;
 }
 
 // P1T-FIX4 (cuda_guard.h rule 2): a restore of the caller's device that failed where nothing can raise.
 void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept {
   PendingState& st = pending();
-  ++st.device_restore_failures;
-  note_unraisable_failure(st, "restoring the caller's CUDA device (cudaSetDevice)", device, err);
+  sat_inc(st.device_restore_failures);
+  note_unraisable_failure(st, {FailedCall::kSetDevice, Purpose::kRestoreDevice, device, err});
 }
 
 int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops) {
@@ -1186,9 +1526,11 @@ RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Opera
     recycle_event(pending(), device_, event_);  // never allocates (its recycle slot was reserved by acquire_event)
     event_ = nullptr;
     std::ostringstream os;
+    // P1T-FIX7 (sweep (j)): the error slot does not say which call set the error, nor on which device: said so.
     os << "tc_signal: a CUDA error was already pending in this thread before this call's first launch ("
        << cudaGetErrorName(pending_err) << ": " << cudaGetErrorString(pending_err)
-       << "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched";
+       << "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
+          "(the call that set it and its device are unknown: the slot records neither)";
     throw std::runtime_error(os.str());
   }
 }
@@ -1204,8 +1546,10 @@ RetainUntilComplete::~RetainUntilComplete() {
   }
   e.owners = std::move(owners_);
   cudaError_t r = cudaSuccess;
+  FailedCall record_call = FailedCall::kEventRecord;  // P1T-FIX7 (sweep (j)): the call that failed, if one did
   {
     QuietDeviceGuard g(device_);
+    if (!g.ok()) record_call = guard_call(g);
     r = !g.ok() ? g.error()
                 : (test_hooks::take(test_hooks::kCudaEventRecord) ? kTestInjectedCudaError
                                                                   : cudaEventRecord(event_, cudaStreamLegacy));
@@ -1229,31 +1573,33 @@ RetainUntilComplete::~RetainUntilComplete() {
     // without a record, so when the fallback sync below succeeded the CUDA failure was never reported. It is a failure
     // where nothing can raise (a destructor) and no operand is leaked by it (the fallback releases or leaks on its own
     // proof), so it is an unraisable failure: raised once by the next synchronize().
-    ++st.event_record_failures;
-    note_unraisable_failure(st, "recording a call's completion event (cudaEventRecord on the operands' device; the "
-                                "call's operands were synchronized instead)",
-                            device_, r);
+    // P1T-FIX7 (sweep (j)): recorded as the call that failed: cudaEventRecord, or the guard's cudaGetDevice /
+    // cudaSetDevice, in which case no record was attempted (FIX6 named cudaEventRecord for both).
+    sat_inc(st.event_record_failures);
+    note_unraisable_failure(st, {record_call, Purpose::kRecordEvent, device_, r});
     cudaGetLastError();
   }
   if (r != cudaSuccess) {
     // Fallback: no queued event, so synchronize this device's legacy stream; release on success, leak on failure.
     ++st.fallback_syncs;
-    const cudaError_t sr = sync_device_legacy(device_);
-    if (sr == cudaSuccess) {
+    const SyncResult sr = sync_device_legacy(device_);
+    if (sr.err == cudaSuccess) {
       recycle_event(st, device_, event_);
       ++st.released_entries;
       st.released_managers += e.owners.size();
       for (ManagedOwner& o : e.owners) o.reset();  // N4: a throwing deleter is contained per manager
     } else {
       const unsigned long long leaked = leak_entry(st, e);
-      note_release_failure(st, device_, sr, leaked);  // N1: raised by the next synchronize()
+      // N1: raised by the next synchronize(). P1T-FIX7: as the call that failed (guard or stream sync).
+      note_release_failure(st, {sr.call, Purpose::kSyncStream, device_, sr.err}, false, leaked);
     }
     return;
   }
   if (pending_over_bound(st)) {  // V3-02: overflow-safe (saturating total), exact at the boundary
     ++st.bound_drains;
     const SyncReport rep = sync_and_release_all_impl();
-    if (rep.failed()) note_release_failure(st, rep.first_device(), rep.first_error(), rep.leaked_managers);  // N1
+    // N1. P1T-FIX7 (sweep (j)): the first failure as one consistent record (SyncReport::first).
+    if (rep.failed()) note_release_failure(st, rep.first(), true, rep.leaked_managers);
   }
 }
 
@@ -1284,10 +1630,8 @@ void drain_completed() noexcept {
       if (r == cudaErrorNotReady) {
         if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
       } else {
-        ++st.event_query_failures;
-        note_unraisable_failure(st, "cudaEventQuery of a pending entry's completion event in the next-call drain (the "
-                                    "entry stayed pending; synchronize() re-queried it)",
-                                st.q.front().device, r);
+        sat_inc(st.event_query_failures);
+        note_unraisable_failure(st, {FailedCall::kEventQuery, Purpose::kDrainQueryEvent, st.q.front().device, r});
         cudaGetLastError();
       }
       return;
@@ -1338,18 +1682,93 @@ namespace {
 void clear_reported_records(PendingState& st) noexcept {
   st.unreported_count = 0;
   st.unreported_leaked = 0;
-  st.unreported_device = -1;
-  st.unreported_error = cudaSuccess;
+  st.unreported_first = FailureRecord{};
+  st.unreported_in_bound_drain = false;
   st.unraisable_unreported = 0;
-  st.unraisable_what = "";
-  st.unraisable_device = -1;
-  st.unraisable_error = cudaSuccess;
+  st.unraisable_first = FailureRecord{};
   st.prior_unreported = 0;
   st.prior_error = cudaSuccess;
   st.drain_unreported = SyncReport{};
   st.drain_unreported_calls = 0;
 }
+
+bool has_unreported_records(const PendingState& st) noexcept {
+  return st.drain_unreported_calls != 0 || st.unreported_count != 0 || st.unraisable_unreported != 0 ||
+         st.prior_unreported != 0;
+}
+
+// The diagnostic naming every record not raised yet (P1T-FIX7: shared by synchronize() and the exit runner's log).
+// Allocates; a bad_alloc propagates and leaves every record in place (V6-03). Each failure is described from its tag
+// (V7-02, sweep (j)): the failed CUDA call, the device it concerned, and nothing that succeeded.
+std::string report_message(const PendingState& st, const char* head) {
+  const SyncReport& d = st.drain_unreported;
+  std::ostringstream os;
+  os << head;
+  const char* sep = " ";
+  if (st.prior_unreported > 0) {
+    os << sep << "a CUDA error was already pending in this thread when synchronize() was called ("
+       << cudaGetErrorName(st.prior_error) << ": " << cudaGetErrorString(st.prior_error)
+       << "), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot "
+          "and reported here (the call that set it and its device are unknown: the slot records neither)";
+    sep = "; ";
+  }
+  if (d.query_failed) {
+    os << sep;
+    describe(os, {FailedCall::kGetDevice, Purpose::kCurrentDevice, -1, d.query_error});  // the text FIX2 used
+    sep = "; ";
+  }
+  for (int i = 0; i < d.n; ++i) {
+    os << sep;
+    describe(os, d.rec[i]);
+    sep = "; ";
+  }
+  if (d.unnamed > 0) os << sep << d.unnamed << " more failure(s) of this drain, not named (the report names the first "
+                        << tuning::kSyncReportMax << ")";
+  if (d.leaked_managers > 0)
+    os << "; " << d.leaked_managers
+       << " consumed operand manager(s) still pending there were deliberately leaked, not released";
+  if (st.drain_unreported_calls > 1)
+    os << sep << "(these drain failures span " << st.drain_unreported_calls
+       << " synchronize() calls: an earlier call could not allocate its error message and raised MemoryError)";
+  if (st.unreported_count > 0) {
+    os << sep << st.unreported_count << " earlier release-path failure(s) since the last synchronize, the first ("
+       << (st.unreported_in_bound_drain ? "in a bound drain of the pending list"
+                                        : "in the synchronous fallback of a call that could not queue its completion "
+                                          "event")
+       << "): ";
+    describe(os, st.unreported_first);
+    os << "; deliberately leaked " << st.unreported_leaked << " operand manager(s)";
+    sep = "; ";
+  }
+  if (st.unraisable_unreported > 0) {
+    os << sep << st.unraisable_unreported
+       << " CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: ";
+    describe(os, st.unraisable_first);
+  }
+  // std::ostream swallows a bad_alloc from its buffer and only sets badbit (a truncated message would follow): report
+  // the allocation failure itself instead.
+  if (!os) throw std::bad_alloc();
+  return os.str();
+}
 }  // namespace
+
+// P1T-FIX7 (V7-01, the guarantees a hook gives on the way out): the exit runner's log of the records nobody raised
+// (the hook was interrupted before its synchronize() could raise them). Written with C stdio, the GIL held, no Python
+// called; cleared only once written. A bad_alloc writes nothing and keeps the records (there is no later reader at
+// exit; nothing is reported falsely).
+void exit_log_unreported() noexcept {
+  PendingState& st = pending();
+  if (!has_unreported_records(st)) return;
+  try {
+    const std::string msg = report_message(
+        st, "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet:");
+    std::fprintf(stderr, "%s\n", msg.c_str());
+    std::fflush(stderr);
+    clear_reported_records(st);
+  } catch (const std::exception&) {
+    // bad_alloc: nothing written, records kept.
+  }
+}
 
 void synchronize_and_release_all() {
   // P1T-FIX6 (V6-01): no wait for other threads here (FIX5's wait deadlocked against caller-held locks; see the release
@@ -1358,64 +1777,19 @@ void synchronize_and_release_all() {
   const cudaError_t prior = cudaGetLastError();
   if (prior != cudaSuccess) {
     if (st.prior_unreported == 0) st.prior_error = prior;
-    ++st.prior_unreported;
+    sat_inc(st.prior_unreported);
   }
   const SyncReport rep = sync_and_release_all_impl();
-  if (rep.failed()) {  // V6-03: persisted before any allocation
+  if (rep.failed()) {  // V6-03: persisted before any allocation (P1T-FIX7: with each failure's tag)
     st.drain_unreported.merge(rep);
-    ++st.drain_unreported_calls;
+    sat_inc(st.drain_unreported_calls);
   }
-  if (st.drain_unreported_calls == 0 && st.unreported_count == 0 && st.unraisable_unreported == 0 &&
-      st.prior_unreported == 0)
-    return;
+  if (!has_unreported_records(st)) return;
   // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
   // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate), and every record stays.
   if (test_hooks::take(test_hooks::kAllocErrorMessage)) throw std::bad_alloc();
-  const SyncReport& d = st.drain_unreported;
-  std::ostringstream os;
-  os << "tc_signal.synchronize: CUDA error, so the release is not reported as a success:";
-  const char* sep = " ";
-  if (st.prior_unreported > 0) {
-    os << sep << "a CUDA error was already pending in this thread when synchronize() was called ("
-       << cudaGetErrorName(st.prior_error) << ": " << cudaGetErrorString(st.prior_error)
-       << "), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot "
-          "and reported here";
-    sep = "; ";
-  }
-  if (d.query_failed) {
-    os << sep << "the current-device query cudaGetDevice failed (" << cudaGetErrorName(d.query_error) << ": "
-       << cudaGetErrorString(d.query_error) << ")";
-    sep = "; ";
-  }
-  for (int i = 0; i < d.n; ++i) {
-    os << sep << "the legacy stream of device " << d.dev[i] << " could not be synchronized ("
-       << cudaGetErrorName(d.err[i]) << ": " << cudaGetErrorString(d.err[i]) << ")";
-    sep = "; ";
-  }
-  if (d.unnamed > 0) os << sep << d.unnamed << " more device failure(s)";
-  if (d.leaked_managers > 0)
-    os << "; " << d.leaked_managers
-       << " consumed operand manager(s) still pending there were deliberately leaked, not released";
-  if (st.drain_unreported_calls > 1)
-    os << sep << "(these drain failures span " << st.drain_unreported_calls
-       << " synchronize() calls: an earlier call could not allocate its error message and raised MemoryError)";
-  if (st.unreported_count > 0) {
-    os << sep << st.unreported_count << " earlier release-path failure(s) since the last synchronize, the first on device "
-       << st.unreported_device << " (" << cudaGetErrorName(st.unreported_error) << ": "
-       << cudaGetErrorString(st.unreported_error) << "), deliberately leaked " << st.unreported_leaked
-       << " operand manager(s)";
-    sep = "; ";
-  }
-  if (st.unraisable_unreported > 0) {
-    os << sep << st.unraisable_unreported
-       << " CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: "
-       << st.unraisable_what << " on device " << st.unraisable_device << " (" << cudaGetErrorName(st.unraisable_error)
-       << ": " << cudaGetErrorString(st.unraisable_error) << ")";
-  }
-  // std::ostream swallows a bad_alloc from its buffer and only sets badbit (a truncated message would follow): report
-  // the allocation failure itself instead.
-  if (!os) throw std::bad_alloc();
-  const std::string msg = os.str();
+  const std::string msg =
+      report_message(st, "tc_signal.synchronize: CUDA error, so the release is not reported as a success:");
   // V6-03: raise first, clear second. The Python RuntimeError is created here (GIL held: every caller is a binding or
   // the exit hook); if its str cannot be allocated CPython sets MemoryError instead, and the records stay.
   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
@@ -1485,10 +1859,18 @@ py::dict pending_stats(bool reset_high_water) {
   d["exit_wait_us"] = g_exit_wait_us.load();
   d["exit_wait_diagnostics"] = g_exit_wait_diagnostics.load();
   d["exit_wait_overruns"] = g_exit_wait_overruns.load();
+  // P1T-FIX7 (V7-01): exit-hook closes whose diagnostic knob could not be read (the default delay was used; the close
+  // and the wait were not affected), and the atexit runner's own closes after the hook raised before closing (with the
+  // admitted sections of other threads it then found running and waited for).
+  d["exit_diag_default_used"] = g_exit_diag_default_used.load();
+  d["exit_runner_closes"] = g_exit_runner_closes.load();
+  d["exit_runner_in_flight_at_close"] = g_exit_runner_in_flight_at_close.load();
   // P1T-FIX6 (V6-03): synchronize() drains whose failure is persisted but not raised yet (0 or 1 normally; more only
   // after a message allocation failed).
   d["unreported_drain_failures"] = st.drain_unreported_calls;
   d["lifecycle_lock_failures"] = g_lifecycle_lock_failures.load();
+  d["exit_wait_poll_diagnostics"] = g_exit_wait_poll_diagnostics.load();  // P1T-FIX7 L1
+  d["exit_device_wait_diagnostics"] = g_exit_device_wait_diagnostics.load();  // P1T-FIX7 L1
   d["event_query_failures"] = st.event_query_failures;    // V5-02
   d["event_record_failures"] = st.event_record_failures;  // sweep (d)
   d["cublas_handle_destroy_failures"] = g_cublas_destroy_failures.load();             // V5-03
