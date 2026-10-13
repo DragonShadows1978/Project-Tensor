@@ -1,0 +1,10 @@
+--- a/tc_signal/CMakeLists.txt
++++ b/tc_signal/CMakeLists.txt
+@@ -54,6 +54,7 @@
+ 
+ target_include_directories(_tc_signal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ target_link_libraries(_tc_signal PRIVATE CUDA::cudart CUDA::cublas)
++target_compile_options(_tc_signal PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)  # MUTANT (e): fast-math past the configure guard
+ 
+ # RUNPATH = <real toolkit root>/lib64, the same string the production core module carries
+ # (/usr/local/cuda-12.6/lib64, from its scripts/apa_*_build.sh link line), so `ldd` resolves libcudart.so.12 to the
