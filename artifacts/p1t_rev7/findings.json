@@ -1,0 +1,522 @@
+{
+  "verdicts": {
+    "R1": "SAFE",
+    "R2": "UNSOUND",
+    "R3": "UNSOUND",
+    "R4": "CORRECT",
+    "R5": "PASS",
+    "R6": "REJECT"
+  },
+  "closure": [
+    {
+      "id": "F01",
+      "status": "CLOSED",
+      "evidence": "O:1160-1257; A:280-287; L:232-244; M:236-244,289-355. Prelaunch reserves, event retention, checked fallback and leak without completion proof intact."
+    },
+    {
+      "id": "F02",
+      "status": "CLOSED",
+      "evidence": "O:484-488,618-627; A:241-264; L:181-211; M:66-105. Required None refusals and absent-metadata guard intact; CPU census/argument refusals pass."
+    },
+    {
+      "id": "F03",
+      "status": "CLOSED",
+      "evidence": "C:322-346,1060-1111,1138-1188; O:414-480; CM:31-89; A:100-123,174-187. Checked rank/count/byte/address and geometry paths intact; UBSan census passes."
+    },
+    {
+      "id": "F04",
+      "status": "CLOSED",
+      "evidence": "C:829-879; O:193-227. Original finalizing-entry GIL refusal/leak remains. Admitted-before-finalizing coordination is separately PARTLY under N5/V5-01."
+    },
+    {
+      "id": "F05",
+      "status": "CLOSED",
+      "evidence": "K:286-308,447-473. Imported Storage drains its own device, checks restore, leaks on failed completion proof, records failures. FIX6 adds reporting without altering release order."
+    },
+    {
+      "id": "F06",
+      "status": "CLOSED",
+      "evidence": "C:635-674. Export context stays under unique_ptr through metadata/capsule allocation, then transfers ownership once."
+    },
+    {
+      "id": "F07",
+      "status": "CLOSED",
+      "evidence": "tensor_cuda/include/tc/core.h:80-92; docs/P1T_FIX1_M1_ADDENDUM.md:17-29. Coordinated native rebuild remains required; add-on includes/links no core ABI."
+    },
+    {
+      "id": "N1",
+      "status": "CLOSED",
+      "evidence": "O:1026-1069,1354-1433. Query/sync/prior/deferred failures raise, leak only without proof; 8 fresh host trace cases pass. V7-02 is distinct incorrect attribution."
+    },
+    {
+      "id": "N2",
+      "status": "CLOSED",
+      "evidence": "C:322-346,619-621; K:80-97; CM:63-89; O:440-480. Zero-neighbor extent/byte bounds checked; 18-case UBSan harness and operand census pass."
+    },
+    {
+      "id": "N3",
+      "status": "CLOSED",
+      "evidence": "O:924-938,1072-1095,1160-1257,1354-1433. Pre-reserved owners/event slots, caught push failure, nonallocating drains and persistent OOM report records intact; CPU OOM propagation passes."
+    },
+    {
+      "id": "N4",
+      "status": "CLOSED",
+      "evidence": "O:533-565; C:861-868. Ordinary C++ deleter exceptions contained, owner cleared before callback, never retried; fresh native throwing-deleter test passes."
+    },
+    {
+      "id": "N5",
+      "status": "PARTLY closed",
+      "evidence": "C:840-970; CI:217-240. Native admission/unbounded wait correct, default control passes; diagnostic conversion can skip the hook entirely (V7-01)."
+    },
+    {
+      "id": "V3-01",
+      "status": "PARTLY closed",
+      "evidence": "C:899-954; CI:217-222. Native wait has no bound and handles own-thread exclusion; configured diagnostic OverflowError bypasses that wait (V7-01)."
+    },
+    {
+      "id": "V3-02",
+      "status": "CLOSED",
+      "evidence": "O:961-995,1147-1169,1253-1257. Checked aggregate and sticky saturated total preserve bounds; 17-case accounting UBSan harness passes."
+    },
+    {
+      "id": "V4-01",
+      "status": "CLOSED",
+      "evidence": "C:426-485,624-633; K:431-444. Allocation-label proof and tensor-device fence/destroy/restore preserved. Physical two-device ordering remains lead-only."
+    },
+    {
+      "id": "V4-02",
+      "status": "CLOSED",
+      "evidence": "CI:98-116,201-213. Import documentation correctly distinguishes unbounded wait from diagnostic-delay knob. V7-01 concerns exception handling, not the old bounded-wait text."
+    },
+    {
+      "id": "V4-03",
+      "status": "CLOSED",
+      "evidence": "C:1039-1051,1116-1129. Device query checked before Storage ownership/rename; no FIX6 semantic regression at these sites."
+    },
+    {
+      "id": "V4-04",
+      "status": "CLOSED",
+      "evidence": "O:1357-1367,1378-1383,1421-1433. Prior slot captured before drain and retained until exception exists; fresh prior_oom passes."
+    },
+    {
+      "id": "V5-01",
+      "status": "PARTLY closed",
+      "evidence": "O:217-248,324-354,533-547,1119-1137; SI:186-209. All native callback kinds admitted and default hooks wait; FIX6 exposes diagnostic-conversion bypass (full add-on rc134; V7-01)."
+    },
+    {
+      "id": "V5-02",
+      "status": "CLOSED",
+      "evidence": "O:1260-1298,1409-1433; tc_signal/tests/test_fix5_findings.py (query regression); fresh query_once PASS. Non-NotReady drain failure recorded before clearing and raised once."
+    },
+    {
+      "id": "V5-03",
+      "status": "CLOSED",
+      "evidence": "tc_signal/src/conv.cu:84-128; tc_signal/src/lstm.cu:107-146; tc_signal/tests/test_fix5_findings.py:894-919. Scoped handle ownership survives cache-insertion OOM; regenerated CPU conv/LSTM creates=destroys=1."
+    },
+    {
+      "id": "V5-04",
+      "status": "CLOSED",
+      "evidence": "K:580-617; tensor_cuda/tests/test_dlpack.py:1935-1969. Wide grid calculation/refusal before launch/revision; regenerated CPU huge-grid witness passes."
+    },
+    {
+      "id": "V6-01",
+      "status": "CLOSED",
+      "evidence": "O:304-319,1119-1123,1354-1367; tc_signal/tests/test_fix6_findings.py:154-164,362-373. Ordinary sync no other-thread wait; fresh full-addon lock witness and trace late-release pass."
+    },
+    {
+      "id": "V6-02",
+      "status": "CLOSED",
+      "evidence": "C:542-598,1256-1354,1515-1521; tensor_cuda/tests/test_dlpack.py:2184-2209,2296-2303. C-level reads/refusal replace user conversion; actual-dispatch host census passes, no methods called."
+    },
+    {
+      "id": "V6-03",
+      "status": "CLOSED",
+      "evidence": "O:734-765,830-831,1363-1367,1415-1433; tc_signal/tests/test_fix6_findings.py:404-487. Drain failures persisted allocation-free before message, cleared after captured exception; all3 fresh diagnostic_oom probes pass."
+    }
+  ],
+  "sweep_check": [
+    {
+      "row": "g1",
+      "verdict": "CONFIRMED",
+      "evidence": "C:542-598,1515-1521; export C-level argument reads; core CPU census."
+    },
+    {
+      "row": "g2",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1526-1531,1298-1301; self type check before native cast."
+    },
+    {
+      "row": "g3",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1532-1539; data_ptr self/arity C-level."
+    },
+    {
+      "row": "g4",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1540-1546,1312-1320; fill real read; typed native kernel unchanged."
+    },
+    {
+      "row": "g5",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1562-1569; mark_modified self checked."
+    },
+    {
+      "row": "g6",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1570-1575; property getter wraps args/kwargs explicitly."
+    },
+    {
+      "row": "g7",
+      "verdict": "CONFIRMED",
+      "evidence": "C:974-1130,2328-2333; capsule-only native import; no producer method called."
+    },
+    {
+      "row": "g8",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1334-1354,2334-2343; shape/container/string reads bypass subclasses; CPU census."
+    },
+    {
+      "row": "g9",
+      "verdict": "CONFIRMED",
+      "evidence": "C:2345-2388; zero-arg stats reject extra args before body."
+    },
+    {
+      "row": "g10",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1383-1457,2404-2405; raw parser; no Python object owned across native wait."
+    },
+    {
+      "row": "g11",
+      "verdict": "CONFIRMED",
+      "evidence": "C:2391-2401; new raise binding uses zero-param CoreCallArgs; exact source registration tested."
+    },
+    {
+      "row": "g12",
+      "verdict": "CONFIRMED",
+      "evidence": "CI:137-151; producer calls in Python frame; native capsule import C-only."
+    },
+    {
+      "row": "g13",
+      "verdict": "QUALIFY: V7-01",
+      "evidence": "CI:217-222: Python-only conversion is correctly classified, but its OverflowError path bypasses mandatory wait. Original OK cannot establish hook safety."
+    },
+    {
+      "row": "g14",
+      "verdict": "CONFIRMED NATIVE MECHANISM",
+      "evidence": "C:840-879; admission brackets GIL acquire/deleter/release. Native mechanism remains right; Python hook reachability fails under V7-01."
+    },
+    {
+      "row": "g15",
+      "verdict": "CONFIRMED",
+      "evidence": "C:351-384; own export context C++ cleanup; imported last Storage delegates admitted g14."
+    },
+    {
+      "row": "g16",
+      "verdict": "CONFIRMED",
+      "evidence": "C:1290,1515-1575; borrower/caller retains args; no unadmitted last foreign-object drop found."
+    },
+    {
+      "row": "g17",
+      "verdict": "CONFIRMED; COUNT CORRECTED",
+      "evidence": "A:392-447; L:251-276; M:360-461. There are18 plan/run bindings (9 ops times2), not20; with g18 probes the count is20. All actual bindings accounted for."
+    },
+    {
+      "row": "g18",
+      "verdict": "CONFIRMED",
+      "evidence": "A:448-461; M:463-472; probe/test body operands routed through to_capsule; no-match repr removed."
+    },
+    {
+      "row": "g19",
+      "verdict": "CONFIRMED",
+      "evidence": "A:462-477; L:277-292; device C-level int32 read; positional/keyword census."
+    },
+    {
+      "row": "g20",
+      "verdict": "CONFIRMED",
+      "evidence": "A:478-503,504-519,528-558; M:473-488; stats/test-name/zero-arg checks C-level; all native functions enumerated."
+    },
+    {
+      "row": "g21",
+      "verdict": "CONFIRMED",
+      "evidence": "A:352-379,522-524; py_args.h:203-248; raw exit argument reader."
+    },
+    {
+      "row": "g22",
+      "verdict": "CONFIRMED",
+      "evidence": "O:356-399; CallbackSection constructed before attribute lookups, casts and locals; locals die before section leaves."
+    },
+    {
+      "row": "g23",
+      "verdict": "CONFIRMED",
+      "evidence": "O:533-565; manager cleared first, admitted producer deleter, ordinary exceptions contained."
+    },
+    {
+      "row": "g24",
+      "verdict": "CONFIRMED",
+      "evidence": "O:324-354; every last capsule drop including used capsules admitted/kept. No native site missed."
+    },
+    {
+      "row": "g25",
+      "verdict": "CONFIRMED",
+      "evidence": "A:198-206,250-252; L:194-196; M:215-223; CapsuleRef owns the other capsule ref through tuple construction/throws."
+    },
+    {
+      "row": "g26",
+      "verdict": "QUALIFY: V7-01",
+      "evidence": "SI:194-209: conversion is in Python, but unchecked ordinary conversion failure skips the raw close. Other wrappers stay Python-only as claimed."
+    },
+    {
+      "row": "g27",
+      "verdict": "CONFIRMED",
+      "evidence": "All29 add-on bindings + P1-T core registration use args/kwargs or raw waits. Native conversion/error matching census1067 cases, zero Python conversion calls."
+    },
+    {
+      "row": "h1",
+      "verdict": "CONFIRMED FIXED",
+      "evidence": "O:1354-1367. Cross-thread release wait absent from ordinary sync; lock and late-release probes PASS."
+    },
+    {
+      "row": "h2",
+      "verdict": "PARTLY: V7-01",
+      "evidence": "O:1119-1137,268-319 native exit wait correct; SI:194-209 can skip it. No-lock contract justified but reachability was not checked."
+    },
+    {
+      "row": "h3",
+      "verdict": "CONFIRMED",
+      "evidence": "O:294-298 polling fallback waits only at exit, atomics predicate, no callbacks under mutex."
+    },
+    {
+      "row": "h4",
+      "verdict": "CONFIRMED",
+      "evidence": "O:315-317; mutex gone before restore; raw exit caller owns no Python reference across wait."
+    },
+    {
+      "row": "h5",
+      "verdict": "CONFIRMED",
+      "evidence": "O:205-214; leave critical section empty; waiter drops mutex during wait/diagnostics; no GIL/callback dependency under lock."
+    },
+    {
+      "row": "h6",
+      "verdict": "CONFIRMED",
+      "evidence": "O:845-852; actual stream completion required; no host function launched by P1-T. N5 app-lock caveat correct."
+    },
+    {
+      "row": "h7",
+      "verdict": "CONFIRMED",
+      "evidence": "C:845-855,873-879; no GIL acquisition/callback under lifecycle mutex."
+    },
+    {
+      "row": "h8",
+      "verdict": "CONCLUSION OK; REASON CORRECTED",
+      "evidence": "C:359-364,840-868; K:447-473. A native DLPack consumer may drop an exported context without the GIL and release imported Storage, so PyGILState_Ensure is not always reentrant. No P1-T mutex held there; DLPack explicitly requires GIL acquisition for Python APIs. App-finalizer lock issues fall under corrected N6."
+    },
+    {
+      "row": "h9",
+      "verdict": "PARTLY: V7-01",
+      "evidence": "C:923-954 native cv/GIL ordering correct; CI:217-222 diagnostic OverflowError skips close/wait."
+    },
+    {
+      "row": "h10",
+      "verdict": "CONFIRMED",
+      "evidence": "C:2357-2361; lifecycle stats mutex cannot be held by a thread waiting for GIL."
+    },
+    {
+      "row": "h11",
+      "verdict": "CONFIRMED",
+      "evidence": "K:255-275,379-417; record mutex encloses no callback/GIL wait. New report/ack paths keep snapshot arithmetic serialized."
+    },
+    {
+      "row": "h12",
+      "verdict": "CONFIRMED",
+      "evidence": "K:286-308; own-device Storage stream drain is necessary; external app callbacks subject to N5."
+    },
+    {
+      "row": "h13",
+      "verdict": "CONFIRMED",
+      "evidence": "C:465-473; stream event dependency device-side; no host wait for another producer callback."
+    },
+    {
+      "row": "h14",
+      "verdict": "CONFIRMED WITH LEAD N6 CORRECTION",
+      "evidence": "O:997-1004; C:861-868. Callback runs on release caller, possibly different from original submitting thread. Arbitrary-finalizer app-lock issue, not FIX5 unrelated-thread wait."
+    }
+  ],
+  "behaviour_changes": [
+    {
+      "id": "U1",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Ordinary sync no longer waits on another thread; release stays on that thread. Correctly removes caller-lock inversion. O:1354-1367; fresh lock/late probes."
+    },
+    {
+      "id": "U2",
+      "verdict": "ACCEPTABLE",
+      "evidence": "DLPack typed protocol permits refusing conversion-only objects/numpy bool/int scalars; exact values/subclasses read safely. C:542-598; CPU census."
+    },
+    {
+      "id": "U3",
+      "verdict": "ACCEPTABLE",
+      "evidence": "All new native P1-T parameters use C-level matching/read/refusal. Public wrappers convert in Python. No existing baseline binding rebinding; 1067 CPU checks."
+    },
+    {
+      "id": "U4",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Retain drain error through reporting OOM and raise on retry; O:1363-1433; three trace probes pass."
+    },
+    {
+      "id": "U5",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Core deferred errors now have a public reporting path and exit logging; C:1466-1493; K:391-417; CI:1371-1383. Semantics intentional; V7-01 is separate hook reachability."
+    },
+    {
+      "id": "U6",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Close before waiting admits no new callbacks; later releases deliberately leak at process exit. Native mechanism correct; open V7-01 must be fixed for Python hook to reach it."
+    },
+    {
+      "id": "U7",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Consumed-capsule destructor remains producer code; admit last reference or keep after close. O:324-354. No manager double-release."
+    },
+    {
+      "id": "U8",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Raw CPython wait functions retain no dispatcher-owned Python objects across GIL release. C:1383-1457; A:352-379; py_args.h:203-248."
+    },
+    {
+      "id": "U9",
+      "verdict": "ACCEPTABLE",
+      "evidence": "Two bounded one-shot test hooks permit real-source regression testing; defaults unarmed, allocation-free flag consumption. O:1031-1033,1048-1049,1263-1264."
+    }
+  ],
+  "not_a_defect": [
+    {
+      "id": "N1",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Producer-initiated pthread_exit/cancellation violates returning C deleter contract; independent finite callback is V7-01, not cancellation. O:533-547; C:861-868; vendored dlpack.h:397."
+    },
+    {
+      "id": "N2",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "A nonreturning producer prolongs documented exit-only quiescence. Unbounded waiting is necessary; V7-01 is a different accidental skipped wait."
+    },
+    {
+      "id": "N3",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Ordinary count wait removed. Native exit closes admission before counting, so later releases back out. O:217-227,1119-1123."
+    },
+    {
+      "id": "N4",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Explicit unregister deliberately disables the documented hook; finalizing-entry checks remain. Repro V7-01 leaves hooks registered."
+    },
+    {
+      "id": "N5",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "No P1-T host function enqueued. App callback/app lock order remains app responsibility; lead CUDA host-function citation checked; stream waits are required for memory safety."
+    },
+    {
+      "id": "N6",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Accept lead correction: global FIFO lets another calling thread run a deleter; finalizers may run under arbitrary app locks. O:837-839,997-1004; README:157-160; Python finalizer docs."
+    },
+    {
+      "id": "N7",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Environment/performance limits are evidence boundaries, not implementation defects. Lead historical mutant/249-case/baseline claims independently audited; no new GPU run claimed."
+    },
+    {
+      "id": "N8",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "With lead correction: undeclared free-thread support reenables GIL; own-GIL interpreters reject single-phase modules; legacy shared-GIL mixing with PyGILState is already unsupported in baseline core. No free-thread/subinterpreter certification."
+    },
+    {
+      "id": "N9",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Former R7 was a defect and is fixed by deferred raise/ack; K:255-275,391-417; C:1466-1493; CI:1371-1383. Not a waiver."
+    }
+  ],
+  "findings": [
+    {
+      "id": "V7-01",
+      "severity": "MAJOR",
+      "file": "tc_signal/tc_signal/__init__.py",
+      "lines": "194-209; tensor_cuda/tensor_cuda/__init__.py:217-240",
+      "title": "Diagnostic-delay conversion failure bypasses mandatory shutdown quiescence",
+      "scenario": "Set the documented tc_signal._RELEASE_EXIT_DIAG_S to 1 << 4096. A daemon thread is inside a finite producer deleter (read-only output refusal before any launch); at ordinary exit float(knob) raises OverflowError. Only TypeError/ValueError are handled by the fallback, so the outer handler logs and returns without _exit_close_admission. Finalization overtakes the deleter and CPython 3.12 forced unwind aborts through the noexcept/catch-all release frame. Core has the same bypass for _DLPACK_SHUTDOWN_WAIT_S. This does not unregister or replace the shutdown hook.",
+      "fix": "Make close-and-wait unconditional with respect to diagnostic configuration: validate/clamp the knob before shutdown or handle conversion failures with an already available safe default and still call the raw close function. At minimum cover OverflowError; cover other ordinary conversion exceptions too. Add finite-callback shutdown regressions for both hooks.",
+      "evidence": "Fresh unchanged full add-on built in /tmp/p1t_rev7_build; logs/p1t_rev7_knob_exit.log: OverflowError: int too large to convert to float; FINALIZING True; FATAL: exception not rethrown; rc134. Default-knob control logs/p1t_rev7_knob_exit_control.log rc0. Core counterpart source-confirmed; additional probe in progress. Core actual-source lifecycle + actual Python hook also rc134, logs/p1t_rev7_core_knob_exit.log; default control rc0, logs/p1t_rev7_core_knob_exit_control.log. Full core lead probe pending; this is host slice evidence, not a full-core CUDA run.",
+      "prior_art": "CPython 3.12 (PSF2023) float overflow, atexit-before-finalizing and GIL/forced-unwind lifecycle; DLPack (DMLC2017) producer lifetime; C++17 noexcept. Taken: lifecycle invariant and REV5 finite-callback staging; contribution: diagnostic-only configuration failure bypass.",
+      "status": "OPEN"
+    },
+    {
+      "id": "V7-02",
+      "severity": "MINOR",
+      "status": "OPEN",
+      "file": "tc_signal/src/dlpack_operand.cpp",
+      "lines": "1048-1058; 1389-1392; SyncReport:734-759",
+      "title": "Completion-event query failure is reported as a failed stream synchronization",
+      "scenario": "The phase1 legacy-stream synchronization succeeds. A one-shot cudaEventQuery in phase2 fails; sync_and_release_all_impl puts its error into the same untyped SyncReport.dev/err arrays as stream errors. synchronize then says the legacy stream could not be synchronized. The failing API is absent and the named sync actually succeeded, misleading diagnosis. The operand is conservatively leaked and the error retained/raised, so this is a diagnostic defect, not a lifetime failure.",
+      "fix": "Carry an allocation-free failure-kind tag (stream sync vs event query) in SyncReport and preserve it through merge; build the diagnostic from that tag, naming cudaEventQuery and the affected device for query failures. Add a test distinguishing the two sites.",
+      "evidence": "Actual-source CPU trace; logs/p1t_rev7_query_diagnostic_rc.log: successful sync devices [0], then message says legacy stream of device 0 could not be synchronized; probe exits1. No GPU execution.",
+      "prior_art": "NVIDIA CUDA12.6 (2024) cudaEventQuery and cudaStreamSynchronize distinct return-code contracts; ordinary site-specific error reporting, no specific prior art known to me. Taken: API attribution; contribution: successful sync followed by one-shot query failure witness."
+    }
+  ],
+  "state": "COMPLETE",
+  "sweep_summary": "All27(g) and14(h) rows checked. No omitted native P1-T binding or wait primitive found. Missing analysis: diagnostic conversion error exits at both Python hooks (g13/g26,h2/h9), V7-01. h8 rationale corrected for native DLPack consumer threads; g17 count corrected to18 plan/run bindings. V7-02 is an error-attribution defect outside classes(g)/(h).",
+  "counts": {
+    "BLOCKING": 0,
+    "MAJOR": 1,
+    "MINOR": 1,
+    "NIT": 0
+  },
+  "probes": [
+    {
+      "path": "artifacts/p1t_rev7/probes/knob_exit_cpu.py",
+      "decides": "Actual full add-on diagnostic-overflow shutdown: pass iff child exits0 and finite deleter finishes before finalization; --control default. FIX6 rc134, control0, pre-FIX6 same input0. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/core_knob_exit_cpu.py",
+      "decides": "Actual-source core lifecycle + actual Python hook diagnostic overflow: same normal-exit rule; current rc134/control0. Host slice, not full core. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/core_knob_exit_gpu.py",
+      "decides": "Full rebuilt core V7-01: finite imported-manager deleter before finalization, child0; one GPU, unavailable3. LEAD PENDING."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/query_diagnostic_cpu.py",
+      "decides": "V7-02 actual-source phase2 query attribution after successful phase1 sync: must name cudaEventQuery, no false sync failure. Current rc1. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/query_diagnostic_gpu.py",
+      "decides": "V7-02 real module/pending entry with one-shot query test hook: same attribution rule; one GPU/unavailable3. LEAD PENDING."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/argument_census_cpu.py",
+      "decides": "Every add-on native typed position both call styles plus core actual dispatch slices: zero Python conversions/refusal callbacks;1067 checks PASS. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/run_cpu_checks.py",
+      "decides": "14 finite host trace/arithmetic/lock/exception checks, all must exit0; PASS. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/build_cpu.sh",
+      "decides": "Build current-source add-on trace, UBSan native harnesses, syntax-check core binding: compile/link success; PASS. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/build_core_host.py",
+      "decides": "Regenerate/hash exact source spans and actual core dispatch/raw wait/error registrations; compile with UBSan; PASS. CPU RUN."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/gpu_regressions.py fix56",
+      "decides": "Rebuilt core/add-on FIX5/FIX6 tests: zero failures/errors/skips; absence/skips3; singleGPU. LEAD PENDING."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/gpu_regressions.py semantics",
+      "decides": "Finite add-on Conv/ConvTranspose/LSTM/norm/small-op/stream contract tests: zero failures/errors/skips, absence/skips3; singleGPU. LEAD PENDING."
+    },
+    {
+      "path": "artifacts/p1t_rev7/probes/gpu_regressions.py multidevice",
+      "decides": "Physical multi-device DLPack/device checks: requires2 GPUs, exits3 on lead singleGPU; zero failures/errors/skips. One-GPU device/error interposition is in fix56. LEAD PENDING."
+    }
+  ]
+}
