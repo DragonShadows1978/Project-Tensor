@@ -211,7 +211,7 @@ def test_dlpack_returns_non_capsule():
 
 
 def test_foreign_capsule_name():
-    new = ctypes.pythonapi.PyCapsule_New
+    new = ctypes.pythonapi['PyCapsule_New']
     new.restype = ctypes.py_object
     new.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
     keep = ctypes.c_int(0)
@@ -368,6 +368,11 @@ def test_deleter_called_exactly_once_on_every_path():
     del x, w, b
     gc.collect()
     torch.cuda.synchronize()
+    # P1T-FIX1 F01 contract: a call that reached its launch keeps its consumed managers until the legacy stream has
+    # passed it; they are released at the next tc_signal call or by tc_signal.synchronize(). At least the last call's
+    # x and w producers are still pending here (no tc_signal call has run since); synchronize() releases them.
+    assert P.STATS['exported'] - P.STATS['deleted'] >= 2, P.STATS
+    ts.synchronize()
     assert P.STATS['unknown_delete'] == 0, P.STATS
     assert P.STATS['exported'] == P.STATS['deleted'], P.STATS
     assert not P.LIVE

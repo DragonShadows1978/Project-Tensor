@@ -8,7 +8,9 @@
 //                  the attributes are checked without consuming), returns (capsules..., out_shape);
 //   *_run(...)  -> consumes every capsule, re-derives the geometry from the consumed shapes, checks the output's shape,
 //                  the common device and that the output overlaps no input, launches on the legacy default stream, and
-//                  calls every producer deleter when the operands go out of scope.
+//                  hands every consumed manager to the deferred-release list (P1T-FIX1 F01, dlpack_operand.h).
+// P1T-FIX1: F02 (x is REQUIRED in all six ops: None -> TypeError before planning, in peek4 and consume4; scale and bias
+// are the only optional operands), F03 (rows, L, T*scale, T + pads and every output size checked, checked_math.h).
 //
 // Prior art: the DLPack consumer and the plan/run split are M2's (see dlpack_operand.h and bindings.cpp: DLPack v1.3,
 // the Python array API stream protocol, the cuDNN/cuBLASLt "size, then execute" pattern), reused here unchanged. The
@@ -22,9 +24,11 @@
 #include <cstdint>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "checked_math.h"
 #include "dlpack_operand.h"
 #include "m4_ops.h"
 
@@ -56,8 +60,11 @@ void check_rank(const char* role, int ndim, int rank, int min_rank) {
   }
 }
 
-Peek4 peek4(py::handle obj, const char* role, int rank, int min_rank) {
+enum class Need { kRequired, kOptional };
+
+Peek4 peek4(py::handle obj, const char* role, int rank, int min_rank, Need need) {
   Peek4 p;
+  if (need == Need::kRequired) require_operand(obj, role);  // F02: None is refused here, before any planning
   if (obj.is_none()) return p;
   p.capsule = to_capsule(obj, role, false);
   const DLTensor* t = peek(p.capsule, role);
@@ -87,7 +94,8 @@ void same_device4(const std::vector<std::pair<const Peek4*, const char*>>& ps) {
 }
 
 // Consumes a capsule returned by a *_plan call (its rank is read from the capsule, then fully re-validated).
-Operand consume4(py::handle cap, const char* role, int rank, int min_rank) {
+Operand consume4(py::handle cap, const char* role, int rank, int min_rank, Need need) {
+  if (need == Need::kRequired) require_operand(cap, role);  // F02
   if (cap.is_none()) return Operand();
   const DLTensor* t = peek(cap, role);
   const int nd = t->ndim;
@@ -108,11 +116,8 @@ py::tuple tuple4(const std::vector<int64_t>& v) {
   return t;
 }
 
-int64_t prod(const std::vector<int64_t>& s, size_t a, size_t b) {
-  int64_t p = 1;
-  for (size_t i = a; i < b; ++i) p *= s[i];
-  return p;
-}
+// F03: checked product (checked_math.h).
+int64_t prod(const std::vector<int64_t>& s, size_t a, size_t b, const char* what) { return ck_prod(s, a, b, what); }
 
 // ------------------------------------------------------------------------------------------------ norms: plan
 enum class NormKind { kInstance, kLayer, kGroup };
@@ -155,7 +160,7 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
     const int64_t N = xs[0], C = xs[1], T = xs[2];
     p.param_shape = {C};
     if (kind == NormKind::kInstance) {
-      g.rows = N * C;
+      g.rows = ck_mul(N, C, "instance_norm1d: rows N*C");
       g.L = T;
       g.affine = NormAffine::kPerRow;
       g.channels = C;
@@ -168,8 +173,8 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
         os << "group_norm: C (" << C << ") is not divisible by num_groups (" << arg << ")";
         bad_attr4(os.str());
       }
-      g.rows = N * arg;
-      g.L = (C / arg) * T;
+      g.rows = ck_mul(N, arg, "group_norm: rows N*num_groups");
+      g.L = ck_mul(C / arg, T, "group_norm: row length (C/num_groups)*T");
       g.affine = NormAffine::kPerChannel;
       g.groups = arg;
       g.ch_per_group = C / arg;
@@ -185,8 +190,8 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
       bad_attr4(os.str());
     }
     const int64_t a = arg < 0 ? arg + r : arg;
-    g.rows = prod(xs, 0, static_cast<size_t>(a));
-    g.L = prod(xs, static_cast<size_t>(a), xs.size());
+    g.rows = prod(xs, 0, static_cast<size_t>(a), "layer_norm: rows");
+    g.L = prod(xs, static_cast<size_t>(a), xs.size(), "layer_norm: row length");
     g.affine = NormAffine::kPerElem;
     p.param_shape.assign(xs.begin() + a, xs.end());
   }
@@ -200,24 +205,29 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
     }
   }
   p.out_shape = xs;
+  ck_shape_numel(p.out_shape, "norm: output size");
+  ck_mul(g.rows, g.L, "norm: rows*L");
   return p;
 }
 
 int x_rank(NormKind kind) { return kind == NormKind::kLayer ? -1 : 3; }
 
 py::tuple norm_plan(NormKind kind, py::object x, py::object scale, py::object bias, int64_t arg, double eps) {
-  Peek4 X = peek4(x, "x", x_rank(kind), 1);
-  Peek4 S = peek4(scale, "scale", -1, 1);
-  Peek4 B = peek4(bias, "bias", -1, 1);
+  drain_completed();
+  Peek4 X = peek4(x, "x", x_rank(kind), 1, Need::kRequired);
+  Peek4 S = peek4(scale, "scale", -1, 1, Need::kOptional);
+  Peek4 B = peek4(bias, "bias", -1, 1, Need::kOptional);
   same_device4({{&X, "x"}, {&S, "scale"}, {&B, "bias"}});
   NormPlan p = plan_norm(kind, X.shape, S.present ? &S.shape : nullptr, B.present ? &B.shape : nullptr, arg, eps);
   return py::make_tuple(X.capsule, S.capsule, B.capsule, tuple4(p.out_shape));
 }
 
 void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::object out, int64_t arg, double eps) {
-  Operand X = consume4(xc, "x", x_rank(kind), 1);
-  Operand S = consume4(sc, "scale", -1, 1);
-  Operand B = consume4(bc, "bias", -1, 1);
+  drain_completed();
+  require_operand(out, "out");
+  Operand X = consume4(xc, "x", x_rank(kind), 1, Need::kRequired);
+  Operand S = consume4(sc, "scale", -1, 1, Need::kOptional);
+  Operand B = consume4(bc, "bias", -1, 1, Need::kOptional);
   std::vector<int64_t> sshape, bshape;
   if (S.present()) sshape = shape4(S);
   if (B.present()) bshape = shape4(B);
@@ -226,9 +236,9 @@ void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::ob
   expect_shape(Y, p.out_shape);
   const int device = common_device({&X, &S, &B, &Y});
   for (const Operand* in : {&X, &S, &B}) expect_disjoint(Y, *in);
+  RetainUntilComplete keep(device, {&X, &S, &B, &Y});  // F01: deleters run after the legacy stream passes the launch
   row_norm_forward(device, p.g, X.data(), S.present() ? S.data() : nullptr, B.present() ? B.data() : nullptr,
                    Y.data());
-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launch.
 }
 
 // ------------------------------------------------------------------------------------------------ small ops: plan
@@ -239,14 +249,9 @@ std::vector<int64_t> upsample_shape(const std::vector<int64_t>& xs, int64_t scal
     bad_attr4(os.str());
   }
   const int64_t T = xs.back();
-  const int64_t lim = std::numeric_limits<int64_t>::max();
-  if (scale > lim / T || prod(xs, 0, xs.size() - 1) > lim / (T * scale)) {
-    std::ostringstream os;
-    os << "upsample_nearest1d: output size overflows int64 (T " << T << " x scale " << scale << ")";
-    bad_attr4(os.str());
-  }
   std::vector<int64_t> o = xs;
-  o.back() = T * scale;
+  o.back() = ck_mul(T, scale, "upsample_nearest1d: output length T*scale");  // F03
+  ck_shape_numel(o, "upsample_nearest1d: output size");
   return o;
 }
 
@@ -263,55 +268,88 @@ std::vector<int64_t> pad_shape(const std::vector<int64_t>& xs, int64_t pb, int64
     bad_attr4(os.str());
   }
   std::vector<int64_t> o = xs;
-  o.back() = T + pb + pe;
+  // F03: T + pb + pe checked (the review's CPU reproduction returned a negative extent here), then the output size.
+  o.back() = ck_add(ck_add(T, pb, "reflection_pad1d: output length"), pe, "reflection_pad1d: output length");
+  ck_shape_numel(o, "reflection_pad1d: output size");
   return o;
 }
 
 py::tuple upsample_plan(py::object x, int64_t scale) {
-  Peek4 X = peek4(x, "x", -1, 1);
+  drain_completed();
+  Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
   return py::make_tuple(X.capsule, tuple4(upsample_shape(X.shape, scale)));
 }
 
 void upsample_run(py::object xc, py::object out, int64_t scale) {
-  Operand X = consume4(xc, "x", -1, 1);
+  drain_completed();
+  require_operand(out, "out");
+  Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
   const std::vector<int64_t> os = upsample_shape(xs, scale);
   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
   expect_shape(Y, os);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
-  upsample_nearest1d_forward(device, prod(xs, 0, xs.size() - 1), xs.back(), scale, X.data(), Y.data());
+  const int64_t rows = prod(xs, 0, xs.size() - 1, "upsample_nearest1d: rows");
+  RetainUntilComplete keep(device, {&X, &Y});  // F01
+  upsample_nearest1d_forward(device, rows, xs.back(), scale, X.data(), Y.data());
 }
 
 py::tuple pad_plan(py::object x, int64_t pb, int64_t pe) {
-  Peek4 X = peek4(x, "x", -1, 1);
+  drain_completed();
+  Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
   return py::make_tuple(X.capsule, tuple4(pad_shape(X.shape, pb, pe)));
 }
 
 void pad_run(py::object xc, py::object out, int64_t pb, int64_t pe) {
-  Operand X = consume4(xc, "x", -1, 1);
+  drain_completed();
+  require_operand(out, "out");
+  Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
   const std::vector<int64_t> os = pad_shape(xs, pb, pe);
   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
   expect_shape(Y, os);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
-  reflection_pad1d_forward(device, prod(xs, 0, xs.size() - 1), xs.back(), pb, pe, X.data(), Y.data());
+  const int64_t rows = prod(xs, 0, xs.size() - 1, "reflection_pad1d: rows");
+  RetainUntilComplete keep(device, {&X, &Y});  // F01
+  reflection_pad1d_forward(device, rows, xs.back(), pb, pe, X.data(), Y.data());
 }
 
 py::tuple rint_plan(py::object x) {
-  Peek4 X = peek4(x, "x", -1, 0);
+  drain_completed();
+  Peek4 X = peek4(x, "x", -1, 0, Need::kRequired);
   return py::make_tuple(X.capsule, tuple4(X.shape));
 }
 
 void rint_run(py::object xc, py::object out) {
-  Operand X = consume4(xc, "x", -1, 0);
+  drain_completed();
+  require_operand(out, "out");
+  Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
   const std::vector<int64_t> xs = shape4(X);
   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
   expect_shape(Y, xs);
   const int device = common_device({&X, &Y});
   expect_disjoint(Y, X);
+  RetainUntilComplete keep(device, {&X, &Y});  // F01
   rint_forward(device, X.numel(), X.data(), Y.data());
+}
+
+// TEST HOOK (P1T-FIX1, F01 regression test only; not part of the API): rint_run whose call then throws AFTER its
+// launch, so the test can witness that a partial-launch exception path keeps the consumed managers alive until the
+// legacy stream has passed the launch (RetainUntilComplete's destructor runs during unwinding). No prior art claimed.
+void test_rint_then_raise(py::object xc, py::object out) {
+  drain_completed();
+  require_operand(out, "out");
+  Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
+  const std::vector<int64_t> xs = shape4(X);
+  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+  expect_shape(Y, xs);
+  const int device = common_device({&X, &Y});
+  expect_disjoint(Y, X);
+  RetainUntilComplete keep(device, {&X, &Y});
+  rint_forward(device, X.numel(), X.data(), Y.data());
+  throw std::runtime_error("tc_signal._test_rint_then_raise: injected failure after the launch (test hook)");
 }
 
 }  // namespace
@@ -368,6 +406,8 @@ void register_m4(py::module_& m) {
   m.def("rint_plan", &rint_plan, py::arg("x"), "Acquire and peek x; return (x_capsule, out_shape).");
   m.def("rint_run", &rint_run, py::arg("x_capsule"), py::arg("out"),
         "Consume, validate, launch on the legacy stream, release.");
+  m.def("_test_rint_then_raise", &test_rint_then_raise, py::arg("x_capsule"), py::arg("out"),
+        "TEST HOOK (P1T-FIX1 F01): rint_run, then raise RuntimeError after the launch.");
   m.def("m4_tuning", []() {
     py::dict d;
     d["norm_block"] = m4tuning::kNormBlock;

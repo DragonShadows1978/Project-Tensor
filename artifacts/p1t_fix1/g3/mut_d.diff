@@ -1,0 +1,13 @@
+# mutant (d): F05 device switch removed: the current device's legacy stream is drained, nothing is restored
+# tree: /tmp/p1t_fix1_mut_d/tensor_cuda
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -207,7 +207,7 @@
+   int prev = -1;
+   cudaError_t e = cudaGetDevice(&prev);
+   bool switched = false;
+-  if (e == cudaSuccess && prev != dev) {
++  if (false && e == cudaSuccess && prev != dev) {  // MUTANT (d): F05 device switch removed
+     e = cudaSetDevice(dev);
+     switched = (e == cudaSuccess);
+   }

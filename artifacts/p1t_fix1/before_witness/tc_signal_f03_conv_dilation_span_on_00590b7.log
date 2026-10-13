@@ -1,0 +1,35 @@
+FE                                                                       [100%]
+==================================== ERRORS ====================================
+_ ERROR at teardown of test_f03_overflowing_geometry_is_refused_not_wrapped[conv_dilation_span] _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+=================================== FAILURES ===================================
+___ test_f03_overflowing_geometry_is_refused_not_wrapped[conv_dilation_span] ___
+
+case = ('conv_dilation_span', <function <lambda> at 0x70c965479c60>, 'conv1d: dilation*(K-1)')
+
+    @pytest.mark.parametrize('case', F03_CASES, ids=[c[0] for c in F03_CASES])
+    def test_f03_overflowing_geometry_is_refused_not_wrapped(case):
+        _, call, frag = case
+        with pytest.raises(ValueError) as ei:
+            call()
+>       assert frag in str(ei.value), f'message {str(ei.value)!r} lacks {frag!r}'
+E       AssertionError: message 'tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes' lacks 'conv1d: dilation*(K-1)'
+E       assert 'conv1d: dilation*(K-1)' in 'tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes'
+E        +  where 'tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes' = str(ValueError('tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes'))
+E        +    where ValueError('tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes') = <ExceptionInfo ValueError('tc_signal: T_out (1100585369600) exceeds the 32-bit range cuBLAS takes') tblen=2>.value
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:402: AssertionError
+=========================== short test summary info ============================
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[conv_dilation_span]
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[conv_dilation_span]
+1 failed, 1 error in 1.67s

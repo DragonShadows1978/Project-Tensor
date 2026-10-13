@@ -1,0 +1,12 @@
+# mutant (b): F02 None guard removed (require_operand is a no-op; the absent-Operand accessor defence stays)
+# tree: /tmp/p1t_fix1_mut_b/tc_signal
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -187,6 +187,7 @@
+ }
+ 
+ void require_operand(py::handle obj, const char* role) {
++  return;  // MUTANT (b): F02 None guard removed
+   // F02 (P1T-FIX1): None is never a tensor. Refused with TypeError before any planning, allocation or consumption.
+   if (obj.is_none())
+     refuse_type(role, "is required: expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got "

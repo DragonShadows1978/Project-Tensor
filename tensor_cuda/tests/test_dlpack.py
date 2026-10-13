@@ -18,6 +18,18 @@ What each group pins, and the registered mutant it must kill (order P1T_M1_DLPAC
   * Amendment 1: empty's shape/dtype/requires_grad for (), [7], [1, 512, 7160] x fp32/fp16, zeros' shape conventions,
     data_ptr round-trip through DLPack both ways.
 
+P1T-FIX1 additions (review P1T-REV round 1; tests named test_fix1_*), with the registered mutant each one must kill:
+  * F02: tc.from_dlpack(None) raises TypeError.
+  * F03: empty refuses rank > 8 (mutant (c): the rank check removed), element-count and byte-size overflow; import
+    refuses count, byte, byte_offset + bytes and address overflow (ValueError, capsule left unconsumed).
+  * F04: an imported Storage's last reference released on a foreign (non-Python) thread, normally (deleter called once)
+    and during interpreter finalization (deleter NOT called: a counted deliberate leak, no GIL acquisition, no abort).
+  * F05: an imported Storage dropped while another device is current: an LD_PRELOAD shim over the shared CUDA runtime
+    simulates device 1 being current on this one-GPU host; the destructor must switch to device 0, sync there, restore
+    device 1, and on a failed switch must leak instead of releasing (mutant (d): the device switch removed).
+  * F06: the export context is owned exactly once (capsule GC and consumer deleter paths); the bad_alloc path itself is
+    verified by reasoning + RAII (unique_ptr until PyCapsule_New succeeds).
+
 Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
 (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
 
@@ -29,6 +41,10 @@ import-release-ordering race (case (d)) and the ctypes producer.
 """
 import ctypes
 import gc
+import json
+import os
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -95,10 +111,10 @@ _DLManagedTensorVersioned._fields_ = [("version", _DLPackVersion), ("manager_ctx
                                       ("deleter", _DELETER), ("flags", ctypes.c_uint64), ("dl_tensor", _DLTensor)]
 _DLManagedTensorVersioned_p = ctypes.POINTER(_DLManagedTensorVersioned)
 
-_PyCapsule_New = ctypes.pythonapi.PyCapsule_New
+_PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
 _PyCapsule_New.restype = ctypes.py_object
 _PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
-_PyCapsule_GetPointer = ctypes.pythonapi.PyCapsule_GetPointer
+_PyCapsule_GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
 _PyCapsule_GetPointer.restype = ctypes.c_void_p
 _PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
 _VERSIONED = b"dltensor_versioned"           # module-level: the capsule keeps a char* to it
@@ -518,3 +534,343 @@ def test_empty_shape_conventions_match_zeros(torch):
     with pytest.raises(RuntimeError):
         tc.empty(2, dtype="float99")
     assert "empty" in tc.__all__ and "from_dlpack" in tc.__all__
+
+
+# =================================================================================================== P1T-FIX1
+# Regression tests for the P1T-REV round-1 findings (order P1T_FIX1_REVIEW_FINDINGS.md). Prior art per test below;
+# the subprocess isolation for crash-prone paths follows the reviewer's host_checks.py / core_shutdown.py probes.
+_SUBPROC_TIMEOUT = 60
+
+
+def _subproc_env(**extra):
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.update(extra)
+    return env
+
+
+# A torch-free ctypes producer for the subprocess scripts (same v1.3 layout as _Producer above), over TensorCUDA memory.
+_SUBPROC_PRODUCER = r"""
+import ctypes, gc, json, sys
+import tensor_cuda as tc
+
+class DLDevice(ctypes.Structure):
+    _fields_ = [("device_type", ctypes.c_int32), ("device_id", ctypes.c_int32)]
+class DLDataType(ctypes.Structure):
+    _fields_ = [("code", ctypes.c_uint8), ("bits", ctypes.c_uint8), ("lanes", ctypes.c_uint16)]
+class DLTensor(ctypes.Structure):
+    _fields_ = [("data", ctypes.c_void_p), ("device", DLDevice), ("ndim", ctypes.c_int32), ("dtype", DLDataType),
+                ("shape", ctypes.POINTER(ctypes.c_int64)), ("strides", ctypes.POINTER(ctypes.c_int64)),
+                ("byte_offset", ctypes.c_uint64)]
+class Version(ctypes.Structure):
+    _fields_ = [("major", ctypes.c_uint32), ("minor", ctypes.c_uint32)]
+class MTV(ctypes.Structure):
+    pass
+DELETER = ctypes.CFUNCTYPE(None, ctypes.POINTER(MTV))
+MTV._fields_ = [("version", Version), ("manager_ctx", ctypes.c_void_p), ("deleter", DELETER),
+                ("flags", ctypes.c_uint64), ("dl_tensor", DLTensor)]
+PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
+PyCapsule_New.restype = ctypes.py_object
+PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+NAME = b"dltensor_versioned"
+
+class Producer:
+    def __init__(self, owner, n):
+        self.owner, self.calls = owner, 0
+        self.shape = (ctypes.c_int64 * 1)(n)
+        self.cb = DELETER(self._delete)
+        m = MTV()
+        m.version.major, m.version.minor = 1, 3
+        m.deleter = self.cb
+        t = m.dl_tensor
+        t.data = owner.data_ptr()
+        t.device.device_type, t.device.device_id = 2, 0
+        t.ndim = 1
+        t.dtype.code, t.dtype.bits, t.dtype.lanes = 2, 32, 1
+        t.shape = ctypes.cast(self.shape, ctypes.POINTER(ctypes.c_int64))
+        self.m = m
+    def _delete(self, _p):
+        self.calls += 1
+    def capsule(self):
+        return PyCapsule_New(ctypes.addressof(self.m), NAME, None)
+"""
+
+
+# ------------------------------------------------------------------------------------------------ F02
+def test_fix1_f02_from_dlpack_none_is_type_error():
+    with pytest.raises(TypeError):
+        tc.from_dlpack(None)
+    with pytest.raises(TypeError):
+        tc._C._from_dlpack_capsule(None)
+
+
+# ------------------------------------------------------------------------------------------------ F03
+# Prior art: checked arithmetic (__builtin_mul_overflow, GCC 5 2015; C23 ckd_mul); the shapes are the reviewer's
+# core_edges.py census plus import-side byte_offset/address cases. Descriptors only: nothing is allocated or read.
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_fix1_f03_empty_refuses_rank_above_8(device):
+    with pytest.raises(ValueError, match="maximum rank 8"):
+        tc.empty((1,) * 9, device=device)
+    assert tc.empty((1,) * 8, device=device).shape == (1,) * 8           # rank 8 is the maximum, still accepted
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("shape,dtype,frag", [
+    ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+    ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+    ((1 << 62,), "float16", "byte size"),
+    ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+    ((3, 1 << 62, 1 << 2), "float32", "element count"),
+], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+    with pytest.raises(ValueError, match=frag):
+        tc.empty(shape, dtype=dtype, device=device)
+
+
+def test_fix1_f03_empty_zero_extent_is_empty_not_overflow():
+    t = tc.empty((0, 1 << 62, 1 << 62), device="cpu")                     # count 0: a real empty tensor
+    assert t.shape == (0, 1 << 62, 1 << 62)
+
+
+def test_fix1_f03_import_refuses_overflow(torch):
+    owner = torch.zeros(4, device="cuda")
+    cases = []
+    p = _Producer(owner, (1 << 62,), None)                               # bytes wrap
+    cases.append(("byte size", p))
+    p = _Producer(owner, (1 << 32, 1 << 32), None)                       # count wraps
+    cases.append(("element count", p))
+    p = _Producer(owner, (1,), None, byte_offset=1 << 63)                # byte_offset beyond int64
+    cases.append(("byte_offset", p))
+    p = _Producer(owner, (2,), None, byte_offset=(1 << 63) - 4)          # byte_offset + bytes wraps int64
+    cases.append(("byte_offset", p))
+    p = _Producer(owner, (4,), None)
+    p._m.dl_tensor.data = (1 << 64) - 8                                  # data + bytes wraps the address space
+    cases.append(("address space", p))
+    for frag, prod in cases:
+        cap = prod.capsule()
+        with pytest.raises(ValueError, match=frag):
+            tc.from_dlpack(cap)
+        assert "used_" not in repr(cap) and prod.deleter_calls == 0     # refused before consumption
+    with pytest.raises(BufferError, match="ndim 9"):
+        tc.from_dlpack(_Producer(owner, (1,) * 9, None).capsule())
+
+
+# ------------------------------------------------------------------------------------------------ F04
+# A REAL imported Storage whose last reference is a TensorCUDA export manager; its deleter is called on a foreign
+# (pthread, non-Python) thread created through libc, once normally and once from a module-global __del__ during
+# interpreter finalization. Prior art: the reviewer's core_shutdown.py + release_worker.cpp (same scenario, native
+# helper); CPython 3.12 finalization rules. Ours: the torch-free ctypes/pthread form and the leak counter check.
+_F04_SCRIPT = _SUBPROC_PRODUCER + r"""
+mode = sys.argv[1]
+libc = ctypes.CDLL(None)
+pthread_create = libc.pthread_create
+pthread_create.argtypes = [ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+pthread_create.restype = ctypes.c_int
+pthread_join = libc.pthread_join
+pthread_join.argtypes = [ctypes.c_ulong, ctypes.c_void_p]
+pthread_join.restype = ctypes.c_int
+GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
+GetPointer.restype, GetPointer.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
+SetName = ctypes.pythonapi['PyCapsule_SetName']
+SetName.restype, SetName.argtypes = ctypes.c_int, [ctypes.py_object, ctypes.c_char_p]
+
+owner = tc.empty(16)
+owner.fill_(3.0)
+tc.synchronize()
+prod = Producer(owner, 16)
+u = tc.from_dlpack(prod.capsule())             # imported Storage: its release calls prod's deleter (GIL needed)
+cap = u.__dlpack__(max_version=(1, 3))         # TensorCUDA export manager: holds the imported Storage
+del u
+gc.collect()
+mptr = GetPointer(cap, NAME)
+assert SetName(cap, b"used_dltensor_versioned") == 0           # we own the manager now
+deleter_fp = ctypes.cast(mptr + 16, ctypes.POINTER(ctypes.c_void_p)).contents.value   # DLManagedTensorVersioned.deleter
+
+def foreign_release(pc=pthread_create, pj=pthread_join, fp=deleter_fp, m=mptr, byref=ctypes.byref,
+                    ulong=ctypes.c_ulong):
+    tid = ulong()
+    assert pc(byref(tid), None, fp, m) == 0
+    pj(tid.value, None)                        # ctypes releases the GIL for the call
+
+stats = tc._C._dlpack_release_stats
+if mode == "normal":
+    foreign_release()
+    print("RESULT " + json.dumps({"finalizing": sys.is_finalizing(), "deleter_calls": prod.calls,
+                                  "stats": dict(stats())}), flush=True)
+else:
+    class Finalizer:
+        def __init__(self):
+            self.isf, self.release, self.stats, self.prod, self.dumps = sys.is_finalizing, foreign_release, stats, prod, json.dumps
+        def __del__(self):
+            fin = self.isf()
+            self.release()
+            print("RESULT " + self.dumps({"finalizing": fin, "deleter_calls": self.prod.calls,
+                                          "stats": dict(self.stats())}), flush=True)
+    keep = Finalizer()
+    print("ARMED", flush=True)
+"""
+
+
+def _run_f04(mode):
+    r = subprocess.run([sys.executable, "-c", _F04_SCRIPT, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    return json.loads(lines[-1][len("RESULT "):]), r
+
+
+def test_fix1_f04_foreign_thread_release_normal_calls_deleter_once():
+    res, _ = _run_f04("normal")
+    assert res["finalizing"] is False
+    assert res["deleter_calls"] == 1, res
+    assert res["stats"]["released"] == 1 and res["stats"]["leaked_interpreter_shutdown"] == 0, res
+
+
+def test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil():
+    res, r = _run_f04("finalizing")
+    assert "ARMED" in r.stdout
+    assert res["finalizing"] is True, "precondition: the release must happen during interpreter finalization"
+    assert res["deleter_calls"] == 0, res                     # no PyGILState_Ensure, so no Python deleter
+    assert res["stats"]["leaked_interpreter_shutdown"] == 1, res
+    assert res["stats"]["released"] == 0, res
+
+
+# ------------------------------------------------------------------------------------------------ F05
+# The host has one GPU, so "device 1 is current" is simulated: an LD_PRELOAD shim interposes cudaGetDevice /
+# cudaSetDevice / cudaStreamSynchronize between _tensor_cuda and the shared libcudart.so.12 (core imports them as
+# cudaGetDevice@libcudart.so.12, ...). In fake mode the shim reports a simulated current device, logs every switch and
+# every stream sync with the simulated device, and always keeps the REAL device at 0. Prior art: LD_PRELOAD symbol
+# interposition (glibc ld.so; the classic malloc/syscall interposers); the order's "simulate with cudaSetDevice" brief.
+# Ours: this shim.
+_F05_SHIM_C = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
+typedef int (*get_fn)(int*);
+typedef int (*set_fn)(int);
+typedef int (*sync_fn)(void*);
+static int fake = -1;          /* -1: pass-through; else the simulated current device */
+static int fail_set_to = -1;   /* cudaSetDevice(fail_set_to) fails with cudaErrorInvalidDevice (101) */
+static char logbuf[4096];
+static void note(const char* s) {
+  size_t n = strlen(logbuf);
+  if (n + strlen(s) + 2 < sizeof logbuf) { strcat(logbuf, s); strcat(logbuf, " "); }
+}
+/* Python loads extension modules RTLD_LOCAL, so libcudart.so.12 (a dependency of _tensor_cuda) is not in the global
+   scope and dlsym(RTLD_NEXT, ...) finds nothing: resolve the real functions through a handle on the loaded runtime. */
+static void* real_sym(const char* name) {
+  void* h = dlopen("libcudart.so.12", RTLD_LAZY | RTLD_NOLOAD);
+  if (!h) h = dlopen("libcudart.so.12", RTLD_LAZY);
+  return h ? dlsym(h, name) : NULL;
+}
+int cudaGetDevice(int* d) {
+  static get_fn real;
+  if (!real) real = (get_fn)real_sym("cudaGetDevice");
+  if (fake >= 0) { *d = fake; return 0; }
+  return real(d);
+}
+int cudaSetDevice(int d) {
+  static set_fn real;
+  if (!real) real = (set_fn)real_sym("cudaSetDevice");
+  if (fake < 0) return real(d);
+  char b[32];
+  snprintf(b, sizeof b, "set%d%s", d, d == fail_set_to ? "!" : "");
+  note(b);
+  if (d == fail_set_to) return 101;
+  fake = d;
+  return real(0);
+}
+int cudaStreamSynchronize(void* s) {
+  static sync_fn real;
+  if (!real) real = (sync_fn)real_sym("cudaStreamSynchronize");
+  if (fake >= 0) { char b[32]; snprintf(b, sizeof b, "sync@%d", fake); note(b); }
+  return real(s);
+}
+void shim_fake(int d) { fake = d; }
+void shim_fail_set(int d) { fail_set_to = d; }
+int shim_current(void) { return fake; }
+const char* shim_log(void) { return logbuf; }
+void shim_clear(void) { logbuf[0] = 0; }
+"""
+
+_F05_SCRIPT = _SUBPROC_PRODUCER + r"""
+shim = ctypes.CDLL(sys.argv[1])                # already loaded through LD_PRELOAD: the same handle
+shim.shim_log.restype = ctypes.c_char_p
+mode = sys.argv[2]
+owner = tc.empty(16)
+owner.fill_(1.0)
+tc.synchronize()
+prod = Producer(owner, 16)
+u = tc.from_dlpack(prod.capsule())             # imported on (real and reported) device 0
+u.fill_(2.0)                                   # engine work queued on the imported memory
+shim.shim_fake(1)                              # from here the process "runs on device 1"
+if mode == "fail":
+    shim.shim_fail_set(0)                      # switching back to the Storage's device 0 fails
+shim.shim_clear()
+del u                                          # last reference: the external Storage destructor runs here
+gc.collect()
+res = {"log": shim.shim_log().decode().split(), "current": shim.shim_current(), "deleter_calls": prod.calls,
+       "stats": dict(tc._C._dlpack_release_stats())}
+shim.shim_fake(-1)
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+
+@pytest.fixture(scope="module")
+def f05_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("f05_shim")
+    src, so = d / "cudart_device_shim.c", d / "cudart_device_shim.so"
+    src.write_text(_F05_SHIM_C)
+    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+def _run_f05(shim, mode):
+    r = subprocess.run([sys.executable, "-c", _F05_SCRIPT, shim, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    return json.loads(lines[-1][len("RESULT "):])
+
+
+def test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores(f05_shim):
+    res = _run_f05(f05_shim, "ok")
+    # The destructor must switch to the Storage's device 0, sync ITS legacy stream, switch back to device 1.
+    assert res["log"] == ["set0", "sync@0", "set1"], res
+    assert res["current"] == 1, res                           # the caller's (simulated) device is restored
+    assert res["deleter_calls"] == 1, res                     # then the producer gets its memory back, once
+    assert res["stats"]["leaked_drain_failure"] == 0, res
+
+
+def test_fix1_f05_failed_switch_leaks_instead_of_releasing(f05_shim):
+    res = _run_f05(f05_shim, "fail")
+    assert res["log"] == ["set0!"], res                       # the switch was attempted and failed; no sync elsewhere
+    assert res["current"] == 1, res
+    assert res["deleter_calls"] == 0, res                     # no drain proof: leaked, never released
+    assert res["stats"]["leaked_drain_failure"] == 1, res
+
+
+# ------------------------------------------------------------------------------------------------ F06
+# Prior art: RAII / unique_ptr hand-off (C++11). The bad_alloc path itself is not injectable from Python; it is
+# verified by reasoning (the context is a unique_ptr until PyCapsule_New succeeds). This test pins the ownership
+# hand-off on every reachable path: unconsumed capsule collected, consumed capsule released by its consumer.
+def test_fix1_f06_export_context_owned_exactly_once(torch):
+    owner = torch.arange(8, dtype=torch.float32, device="cuda")
+    prod = _Producer(owner, (8,), (1,))
+    u = tc.from_dlpack(prod.capsule())               # the imported Storage calls prod's deleter at its last release
+    for k in range(50):
+        cap = u.__dlpack__(max_version=(1, 3)) if k % 2 else u.__dlpack__()
+        del cap                                      # unconsumed: the capsule destructor frees the context once
+    gc.collect()
+    assert prod.deleter_calls == 0
+    caps = [u.__dlpack__(), u.__dlpack__(max_version=(1, 0))]
+    xs = [torch.from_dlpack(c) for c in caps]        # consumed: torch calls each context's deleter later
+    del u
+    gc.collect()
+    assert prod.deleter_calls == 0                   # two contexts still hold the Storage
+    del xs, caps
+    gc.collect()
+    assert prod.deleter_calls == 1 and prod.owner is None

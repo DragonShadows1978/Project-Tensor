@@ -14,8 +14,11 @@
 #include <pybind11/pybind11.h>
 
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 #include <vector>
+
+struct CUevent_st;  // cudaEvent_t is `CUevent_st*` (CUDA driver_types.h); kept opaque in this header
 
 namespace tcs {
 namespace py = pybind11;
@@ -29,8 +32,14 @@ py::object to_capsule(py::handle obj, const char* role, bool writable);
 // TypeError for a capsule of another kind.
 const DLTensor* peek(py::handle capsule, const char* role);
 
-// Device / dtype / layout checks shared by peek-time and consume-time validation (raises TypeError/ValueError).
-void validate_tensor(const DLTensor* t, const char* role, int ndim);
+// Device / dtype / layout checks shared by peek-time and consume-time validation (raises TypeError/ValueError). Also
+// the F03 (P1T-FIX1) checked arithmetic: rank >= 0, a non-NULL shape array, the element count, the fp32 byte total and
+// data + byte_offset + bytes must not overflow (ValueError). Returns the element count.
+int64_t validate_tensor(const DLTensor* t, const char* role, int ndim);
+
+// F02 (P1T-FIX1): a REQUIRED operand passed as None raises TypeError, before any planning, allocation or consumption.
+// Optional operands (bias, scale, initial state) are the only ones a caller may pass as None.
+void require_operand(py::handle obj, const char* role);
 
 // Owner of one consumed managed tensor (legacy or versioned). Calls the producer's deleter exactly once, in reset() or
 // in the destructor. It is a separate member so that a throw from Operand's constructor (after the capsule has been
@@ -45,11 +54,21 @@ struct ManagedOwner {
   ManagedOwner(const ManagedOwner&) = delete;
   ManagedOwner& operator=(const ManagedOwner&) = delete;
   void reset() noexcept;
+  // F01: deliberately drop ownership WITHOUT calling the deleter (used only when tc_signal cannot prove the GPU is done
+  // with the memory, e.g. a broken CUDA context: a leak is safe, a release could be a use-after-free).
+  void leak() noexcept {
+    legacy = nullptr;
+    versioned = nullptr;
+  }
+  bool empty() const { return legacy == nullptr && versioned == nullptr; }
 };
 
 // One consumed DLPack operand. Owns the managed tensor (through ManagedOwner) and calls the producer's deleter exactly
 // once: in release() or in the destructor, so every exception path after consumption still returns the tensor to its
 // producer.
+//
+// Absent operands (default-constructed, for an optional None) report present() == false. Reading an absent operand's
+// metadata (dim, ndim, device, numel) raises TypeError instead of dereferencing NULL (F02's second line of defence).
 class Operand {
  public:
   Operand() = default;
@@ -62,21 +81,81 @@ class Operand {
 
   bool present() const { return t_ != nullptr; }
   float* data() const { return data_; }
-  int64_t dim(int i) const { return t_->shape[i]; }
-  int ndim() const { return t_->ndim; }
-  int device() const { return t_->device.device_id; }
+  int64_t dim(int i) const { return meta()->shape[i]; }
+  int ndim() const { return meta()->ndim; }
+  int device() const { return meta()->device.device_id; }
   int64_t numel() const;
+  // Validated at construction: begin + numel * 4 does not overflow (F03).
   uintptr_t byte_begin() const { return reinterpret_cast<uintptr_t>(data_); }
-  uintptr_t byte_end() const { return byte_begin() + static_cast<uintptr_t>(numel()) * sizeof(float); }
+  uintptr_t byte_end() const { return byte_begin() + static_cast<uintptr_t>(numel_) * sizeof(float); }
   const char* role() const { return role_; }
   void release();
+  // F01: hands the consumed manager to the deferred-release list (RetainUntilComplete); the operand becomes absent.
+  ManagedOwner take_owner();
 
  private:
+  const DLTensor* meta() const;  // t_, or TypeError when absent
   ManagedOwner owner_;
   const DLTensor* t_ = nullptr;
   float* data_ = nullptr;
+  int64_t numel_ = 0;
   const char* role_ = "";
 };
+
+// ------------------------------------------------------------------------------------------------ deferred release (F01)
+// P1T-FIX1, review finding F01 (BLOCKING): a consumed DLPack manager may be the LAST owner of its memory (a bare capsule,
+// or a producer's temporary copy). Calling its deleter right after the launches let a producer on another stream reuse
+// the block before the legacy stream had read or written it (use-after-free, reproduced by addon_lifetime.py). Now
+// every consumed manager of a call that reached the launch stays alive until the legacy stream has passed that call:
+//   * RetainUntilComplete (constructed right before the launch, destroyed on scope exit, success OR exception after a
+//     partial launch) records one CUDA event on the operand device's legacy stream and moves every operand's manager
+//     into a module-level FIFO pending list together with that event;
+//   * completed entries (cudaEventQuery == cudaSuccess) are released in FIFO order, on the calling host thread with
+//     the GIL held, at the start of the next tc_signal call (drain_completed), in tc_signal.synchronize(), and from an
+//     atexit hook (both: synchronize_and_release_all);
+//   * the list is bounded (tuning.h: kPendingMaxEntries, kPendingMaxBytes); when a push exceeds a bound, the legacy
+//     stream of every pending device is synchronized and the whole list is released;
+//   * deleters are NEVER called from a CUDA host callback (a deleter may call CUDA, e.g. torch's caching allocator);
+//   * if an event cannot be recorded, the legacy stream is synchronized instead; if that also fails (a broken context),
+//     the managers are deliberately leaked: tc_signal cannot prove the GPU is done with them, and a leak is safe where a
+//     release could be a use-after-free.
+// A call refused BEFORE the launch (validation, shape, overlap) still releases its managers immediately: nothing was
+// queued on them.
+//
+// Prior art: PyTorch's `Tensor.record_stream` and its CUDA caching allocator, which defers a block's reuse until CUDA
+// events recorded on every stream that used it have completed, polling them with cudaEventQuery from the allocating
+// host thread (c10/cuda/CUDACachingAllocator.cpp, "insert_events" / "process_events", 2017-; also its EventPool of
+// reusable events); CuPy's memory pool, which keeps freed blocks stream-ordered so a block is reused only in its own
+// stream's order (cupy/cuda/memory.pyx, 2017-); the DLPack consumer contract (dmlc/dlpack: the consumer calls the
+// deleter when it no longer needs the tensor); the CUDA rule that host callbacks must not call CUDA (CUDA Runtime API,
+// cudaLaunchHostFunc). Taken: event-fenced deferred release polled from the host, event reuse. Ours: applying it to
+// consumed DLPack managers on the consumer side, the GIL-held FIFO drain at every tc_signal entry point, the
+// count/bytes bound with a synchronize-and-drain fallback, and the leak-on-unfenceable rule.
+//
+// Construct it AFTER every validation and right BEFORE the first launch: the constructor may still throw (event
+// acquisition), and then nothing has been queued. Its destructor never throws.
+class RetainUntilComplete {
+ public:
+  RetainUntilComplete(int device, std::initializer_list<Operand*> ops);
+  ~RetainUntilComplete();
+  RetainUntilComplete(const RetainUntilComplete&) = delete;
+  RetainUntilComplete& operator=(const RetainUntilComplete&) = delete;
+
+ private:
+  int device_;
+  std::vector<Operand*> ops_;
+  std::vector<ManagedOwner> owners_;  // reserved in the constructor, so the destructor never allocates for it
+  CUevent_st* event_ = nullptr;       // a cudaEvent_t from the per-device pool, acquired in the constructor
+};
+
+// Releases every completed pending entry (FIFO, stops at the first incomplete one). Called first thing by every
+// _tc_signal entry point that takes operands. GIL held.
+void drain_completed() noexcept;
+// Synchronizes the legacy stream of the current device and of every device with pending entries, then releases all
+// entries. Raises RuntimeError naming the CUDA error if a synchronization failed (that device's entries are leaked).
+void synchronize_and_release_all();
+// Counters of the pending list (tests, G4 high-water mark).
+py::dict pending_stats(bool reset_high_water);
 
 std::vector<int64_t> shape_of(const DLTensor* t);
 std::string shape_str(const std::vector<int64_t>& s);

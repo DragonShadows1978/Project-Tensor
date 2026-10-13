@@ -1,0 +1,37 @@
+.................FF.                                                     [100%]
+=================================== FAILURES ===================================
+_ test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores _
+
+f05_shim = '/tmp/pytest-of-vader/pytest-28/f05_shim0/cudart_device_shim.so'
+
+    def test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores(f05_shim):
+        res = _run_f05(f05_shim, "ok")
+        # The destructor must switch to the Storage's device 0, sync ITS legacy stream, switch back to device 1.
+>       assert res["log"] == ["set0", "sync@0", "set1"], res
+E       AssertionError: {'current': 1, 'deleter_calls': 1, 'log': ['sync@1'], 'stats': {'leaked_drain_failure': 0, 'leaked_interpreter_shutdown': 0, 'released': 1}}
+E       assert ['sync@1'] == ['set0', 'sync@0', 'set1']
+E         
+E         At index 0 diff: 'sync@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'sync@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:842: AssertionError
+____________ test_fix1_f05_failed_switch_leaks_instead_of_releasing ____________
+
+f05_shim = '/tmp/pytest-of-vader/pytest-28/f05_shim0/cudart_device_shim.so'
+
+    def test_fix1_f05_failed_switch_leaks_instead_of_releasing(f05_shim):
+        res = _run_f05(f05_shim, "fail")
+>       assert res["log"] == ["set0!"], res                       # the switch was attempted and failed; no sync elsewhere
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'current': 1, 'deleter_calls': 1, 'log': ['sync@1'], 'stats': {'leaked_drain_failure': 0, 'leaked_interpreter_shutdown': 0, 'released': 1}}
+E       assert ['sync@1'] == ['set0!']
+E         
+E         At index 0 diff: 'sync@1' != 'set0!'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:850: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix1_f05_failed_switch_leaks_instead_of_releasing
+2 failed, 18 passed, 37 deselected in 4.79s

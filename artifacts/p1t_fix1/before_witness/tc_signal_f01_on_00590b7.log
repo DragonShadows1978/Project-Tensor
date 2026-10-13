@@ -1,0 +1,248 @@
+FEFEFEFEFEFEFEFE                                                         [100%]
+==================================== ERRORS ====================================
+_ ERROR at teardown of test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule] _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+_ ERROR at teardown of test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary] _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+_ ERROR at teardown of test_f01_partial_launch_exception_keeps_operands_until_complete _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+_ ERROR at teardown of test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+_ ERROR at teardown of test_f01_completed_call_released_at_next_call_not_before _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+___ ERROR at teardown of test_f01_refusal_before_launch_releases_immediately ___
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+____ ERROR at teardown of test_f01_bytes_bound_forces_synchronize_and_drain ____
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+_____ ERROR at teardown of test_f01_atexit_hook_releases_pending_operands ______
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+=================================== FAILURES ===================================
+___ test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule] ___
+
+source = 'bare_capsule'
+
+    @pytest.mark.parametrize('source', ['bare_capsule', 'producer_temporary'])
+    def test_f01_side_stream_last_owner_survives_until_legacy_read(source):
+        S = torch.cuda.Stream()
+>       _warm(S)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x36fd3240>
+
+    def _warm(S):
+        x = torch.full((RACE_NUMEL,), 1.25, device='cuda')
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        ts.rint(x, out=out)
+        with torch.cuda.stream(S):
+            torch.empty(RACE_NUMEL, device='cuda').fill_(0.0)
+        torch.cuda._sleep(1)
+        torch.cuda.synchronize()
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:73: AttributeError
+_ test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary] _
+
+source = 'producer_temporary'
+
+    @pytest.mark.parametrize('source', ['bare_capsule', 'producer_temporary'])
+    def test_f01_side_stream_last_owner_survives_until_legacy_read(source):
+        S = torch.cuda.Stream()
+>       _warm(S)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x36fdce40>
+
+    def _warm(S):
+        x = torch.full((RACE_NUMEL,), 1.25, device='cuda')
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        ts.rint(x, out=out)
+        with torch.cuda.stream(S):
+            torch.empty(RACE_NUMEL, device='cuda').fill_(0.0)
+        torch.cuda._sleep(1)
+        torch.cuda.synchronize()
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:73: AttributeError
+_______ test_f01_partial_launch_exception_keeps_operands_until_complete ________
+
+    def test_f01_partial_launch_exception_keeps_operands_until_complete():
+        S = torch.cuda.Stream()
+>       _warm(S)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x36fdd140>
+
+    def _warm(S):
+        x = torch.full((RACE_NUMEL,), 1.25, device='cuda')
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        ts.rint(x, out=out)
+        with torch.cuda.stream(S):
+            torch.empty(RACE_NUMEL, device='cuda').fill_(0.0)
+        torch.cuda._sleep(1)
+        torch.cuda.synchronize()
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:73: AttributeError
+________ test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize ________
+
+    def test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize():
+        T, N, I, H, D = 3, 2, 4, 5, 2
+        g = torch.Generator(device='cuda').manual_seed(20261012)
+    
+        def r(*s):
+            return torch.randn(*s, device='cuda', generator=g) * 0.1
+        x, W, R, B, h0, c0 = r(T, N, I), r(D, 4 * H, I), r(D, 4 * H, H), r(D, 8 * H), r(D, N, H), r(D, N, H)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:164: AttributeError
+___________ test_f01_completed_call_released_at_next_call_not_before ___________
+
+    def test_f01_completed_call_released_at_next_call_not_before():
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:179: AttributeError
+_____________ test_f01_refusal_before_launch_releases_immediately ______________
+
+    def test_f01_refusal_before_launch_releases_immediately():
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:191: AttributeError
+______________ test_f01_bytes_bound_forces_synchronize_and_drain _______________
+
+    def test_f01_bytes_bound_forces_synchronize_and_drain():
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:201: AttributeError
+________________ test_f01_atexit_hook_releases_pending_operands ________________
+
+    def test_f01_atexit_hook_releases_pending_operands():
+        r = subprocess.run([sys.executable, '-c', _ATEXIT_SCRIPT, os.path.dirname(os.path.abspath(__file__))],
+                           capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+>       assert r.returncode == 0, r.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 11, in <module>
+E         AttributeError: module 'tc_signal._tc_signal' has no attribute 'pending_stats'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, json, sys\nsys.path.insert(0, sys.argv[1])\nimport ...<string>", line 11, in <module>\nAttributeError: module \'tc_signal._tc_signal\' has no attribute \'pending_stats\'\n').returncode
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:240: AssertionError
+=========================== short test summary info ============================
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_partial_launch_exception_keeps_operands_until_complete
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_completed_call_released_at_next_call_not_before
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_refusal_before_launch_releases_immediately
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_bytes_bound_forces_synchronize_and_drain
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_atexit_hook_releases_pending_operands
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule]
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary]
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_partial_launch_exception_keeps_operands_until_complete
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_completed_call_released_at_next_call_not_before
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_refusal_before_launch_releases_immediately
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_bytes_bound_forces_synchronize_and_drain
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f01_atexit_hook_releases_pending_operands
+8 failed, 39 deselected, 8 errors in 3.97s

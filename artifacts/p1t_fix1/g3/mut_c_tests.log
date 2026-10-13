@@ -1,0 +1,26 @@
+.FF.................                                                     [100%]
+=================================== FAILURES ===================================
+________________ test_fix1_f03_empty_refuses_rank_above_8[cpu] _________________
+
+device = 'cpu'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_fix1_f03_empty_refuses_rank_above_8(device):
+>       with pytest.raises(ValueError, match="maximum rank 8"):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tensor_cuda/tests/test_dlpack.py:612: Failed
+________________ test_fix1_f03_empty_refuses_rank_above_8[cuda] ________________
+
+device = 'cuda'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_fix1_f03_empty_refuses_rank_above_8(device):
+>       with pytest.raises(ValueError, match="maximum rank 8"):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tensor_cuda/tests/test_dlpack.py:612: Failed
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_rank_above_8[cpu]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_rank_above_8[cuda]
+2 failed, 18 passed, 37 deselected in 4.77s

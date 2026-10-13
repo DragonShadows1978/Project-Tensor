@@ -7,7 +7,11 @@
 //   lstm_run(capsules, Y, Y_h, Y_c, scratch, hidden_size, direction)
 //       -> consumes every capsule, re-validates, checks devices and that no written operand aliases any other operand,
 //          runs the whole recurrence (lstm.cu: all T steps, every direction) on the legacy default stream inside this
-//          one call, then every producer deleter runs at scope exit.
+//          one call, then hands the call's whole capsule set (up to 10 managers: x, W, R, B, initial_h, initial_c,
+//          Y, Y_h, Y_c, scratch) to the deferred-release list as ONE entry (P1T-FIX1 F01, dlpack_operand.h): the
+//          deleters run once the legacy stream has passed the last step's cell kernel.
+// P1T-FIX1: F02 (required x/W/R and every run operand: None -> TypeError), F03 (T*N, D*N*H, the Y size and the
+// scratch size and bytes all checked before the int32 range checks and before any launch).
 // direction codes: 0 forward, 1 reverse, 2 bidirectional (the Python layer maps the ONNX strings).
 //
 // Prior art: the operand contract and the plan/run split are M2's (see dlpack_operand.h and bindings.cpp for their
@@ -22,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "checked_math.h"
 #include "dlpack_operand.h"
 #include "lstm_ops.h"
 
@@ -98,13 +103,21 @@ LstmPlan plan_lstm(const std::vector<int64_t>& xs, const std::vector<int64_t>& W
   if (h0s != nullptr) expect_dims("initial_h", *h0s, {g.D, g.N, g.H}, "initial_h is [D, N, H]");
   if (c0s != nullptr) expect_dims("initial_c", *c0s, {g.D, g.N, g.H}, "initial_c is [D, N, H]");
   check_int_range("4*hidden_size", H4);
-  check_int_range("T*N", g.T * g.N);
+  check_int_range("T*N", ck_mul(g.T, g.N, "lstm: T*N"));
   check_int_range("input size", g.I);
   check_int_range("batch size", g.N);
-  check_int_range("D*N*H", g.D * g.N * g.H);
+  check_int_range("D*N*H", ck_mul(ck_mul(g.D, g.N, "lstm: D*N"), g.H, "lstm: D*N*H"));
   p.y_shape = {g.T, g.D, g.N, g.H};
   p.state_shape = {g.D, g.N, g.H};
-  p.scratch_numel = lstm_scratch_numel(g);
+  ck_shape_numel(p.y_shape, "lstm: Y size T*D*N*H");
+  ck_shape_numel(p.state_shape, "lstm: Y_h/Y_c size D*N*H");
+  // F03: the scratch size G_x [D, T, N, 4H] + G_h [D, N, 4H] and its bytes, checked; lstm_scratch_numel (unchecked,
+  // used again by lstm.cu) is then known not to overflow.
+  const int64_t gx = ck_mul(ck_mul(ck_mul(g.D, g.T, "lstm: scratch G_x"), g.N, "lstm: scratch G_x"), H4,
+                            "lstm: scratch G_x");
+  const int64_t gh = ck_mul(ck_mul(g.D, g.N, "lstm: scratch G_h"), H4, "lstm: scratch G_h");
+  p.scratch_numel = ck_add(gx, gh, "lstm: scratch size");
+  ck_fp32_bytes(p.scratch_numel, "lstm: scratch bytes");
   return p;
 }
 
@@ -116,6 +129,7 @@ struct Peeked {
   bool present = false;
 };
 
+// Optional operands only (B, initial_h, initial_c); required ones go through require_operand first.
 Peeked peek_operand(py::handle obj, const char* role, int ndim) {
   Peeked p;
   if (obj.is_none()) {
@@ -163,9 +177,10 @@ py::tuple to_tuple(const std::vector<int64_t>& v) {
 // ------------------------------------------------------------------------------------------------ entry points
 py::tuple lstm_plan(py::object x, py::object W, py::object R, py::object B, py::object h0, py::object c0,
                     int64_t hidden_size, int64_t direction) {
-  if (x.is_none()) throw py::type_error("tc_signal: operand 'x': expected a DLPack producer or capsule, got None");
-  if (W.is_none()) throw py::type_error("tc_signal: operand 'W': expected a DLPack producer or capsule, got None");
-  if (R.is_none()) throw py::type_error("tc_signal: operand 'R': expected a DLPack producer or capsule, got None");
+  drain_completed();
+  require_operand(x, "x");
+  require_operand(W, "W");
+  require_operand(R, "R");
   Peeked X = peek_operand(x, "x", 3);
   Peeked Wp = peek_operand(W, "W", 3);
   Peeked Rp = peek_operand(R, "R", 3);
@@ -181,6 +196,14 @@ py::tuple lstm_plan(py::object x, py::object W, py::object R, py::object B, py::
 
 void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::object h0c, py::object c0c, py::object Y,
               py::object Y_h, py::object Y_c, py::object scratch, int64_t hidden_size, int64_t direction) {
+  drain_completed();
+  require_operand(xc, "x");
+  require_operand(Wc, "W");
+  require_operand(Rc, "R");
+  require_operand(Y, "Y");
+  require_operand(Y_h, "Y_h");
+  require_operand(Y_c, "Y_c");
+  require_operand(scratch, "scratch");
   Operand X(xc, "x", 3, false);
   Operand Wo(Wc, "W", 3, false);
   Operand Ro(Rc, "R", 3, false);
@@ -212,10 +235,11 @@ void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::ob
     for (const Operand* in : inputs) expect_disjoint(*written[a], *in);
     for (size_t b = a + 1; b < written.size(); ++b) expect_disjoint(*written[a], *written[b]);
   }
+  // F01: the whole per-call capsule set is one pending entry, released after the last step's launch has run.
+  RetainUntilComplete keep(device, {&X, &Wo, &Ro, &Bo, &H0, &C0, &Yo, &Yh, &Yc, &S});
   lstm_forward(device, p.g, X.data(), Wo.data(), Ro.data(), Bo.present() ? Bo.data() : nullptr,
                H0.present() ? H0.data() : nullptr, C0.present() ? C0.data() : nullptr, Yo.data(), Yh.data(), Yc.data(),
                S.data());
-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launches.
 }
 
 }  // namespace

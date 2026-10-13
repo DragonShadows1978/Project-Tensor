@@ -1,0 +1,397 @@
+.FFFFFFFFFFFF.FFFFF.                                                     [100%]
+=================================== FAILURES ===================================
+________________ test_fix1_f03_empty_refuses_rank_above_8[cpu] _________________
+
+device = 'cpu'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_fix1_f03_empty_refuses_rank_above_8(device):
+>       with pytest.raises(ValueError, match="maximum rank 8"):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:612: Failed
+________________ test_fix1_f03_empty_refuses_rank_above_8[cuda] ________________
+
+device = 'cuda'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_fix1_f03_empty_refuses_rank_above_8(device):
+>       with pytest.raises(ValueError, match="maximum rank 8"):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:612: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f32-cpu] _______
+
+device = 'cpu', shape = (4611686018427387904,), dtype = 'float32'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f32-cuda] ______
+
+device = 'cuda', shape = (4611686018427387904,), dtype = 'float32'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^61_f32-cpu] _______
+
+device = 'cpu', shape = (2305843009213693952,), dtype = 'float32'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^61_f32-cuda] ______
+
+device = 'cuda', shape = (2305843009213693952,), dtype = 'float32'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+        with pytest.raises(ValueError, match=frag):
+>           tc.empty(shape, dtype=dtype, device=device)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:627: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float32', device = 'cuda', shape = (2305843009213693952,)
+
+    def empty(*shape, dtype="float32", device="cuda"):
+        """Uninitialized tensor allocated on the device by the engine's allocator.
+    
+        Amendment 1 (P1T-M1): binds ``NDArray::empty`` with no host round-trip and
+        no fill, so the CONTENTS ARE UNINITIALIZED (whatever the allocator hands
+        back). Shape conventions match ``zeros``: ``empty(2, 3)``,
+        ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
+        Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
+        string raises instead of falling back to float32.
+        """
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+>       return _C.empty([operator.index(s) for s in shape], dtype, device)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: out of memory
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_int/tensor_cuda/tensor_cuda/__init__.py:140: RuntimeError
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f16-cpu] _______
+
+device = 'cpu', shape = (4611686018427387904,), dtype = 'float16'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f16-cuda] ______
+
+device = 'cuda', shape = (4611686018427387904,), dtype = 'float16'
+frag = 'byte size'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+        with pytest.raises(ValueError, match=frag):
+>           tc.empty(shape, dtype=dtype, device=device)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:627: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float16', device = 'cuda', shape = (4611686018427387904,)
+
+    def empty(*shape, dtype="float32", device="cuda"):
+        """Uninitialized tensor allocated on the device by the engine's allocator.
+    
+        Amendment 1 (P1T-M1): binds ``NDArray::empty`` with no host round-trip and
+        no fill, so the CONTENTS ARE UNINITIALIZED (whatever the allocator hands
+        back). Shape conventions match ``zeros``: ``empty(2, 3)``,
+        ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
+        Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
+        string raises instead of falling back to float32.
+        """
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+>       return _C.empty([operator.index(s) for s in shape], dtype, device)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: out of memory
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_int/tensor_cuda/tensor_cuda/__init__.py:140: RuntimeError
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^32x2^32-cpu] ______
+
+device = 'cpu', shape = (4294967296, 4294967296), dtype = 'float32'
+frag = 'element count'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+_____ test_fix1_f03_empty_refuses_count_and_byte_overflow[2^32x2^32-cuda] ______
+
+device = 'cuda', shape = (4294967296, 4294967296), dtype = 'float32'
+frag = 'element count'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[3x2^62x4-cpu] _______
+
+device = 'cpu', shape = (3, 4611686018427387904, 4), dtype = 'float32'
+frag = 'element count'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+______ test_fix1_f03_empty_refuses_count_and_byte_overflow[3x2^62x4-cuda] ______
+
+device = 'cuda', shape = (3, 4611686018427387904, 4), dtype = 'float32'
+frag = 'element count'
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    @pytest.mark.parametrize("shape,dtype,frag", [
+        ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
+        ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
+        ((1 << 62,), "float16", "byte size"),
+        ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
+        ((3, 1 << 62, 1 << 2), "float32", "element count"),
+    ], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
+    def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
+>       with pytest.raises(ValueError, match=frag):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:626: Failed
+____________________ test_fix1_f03_import_refuses_overflow _____________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_fix1_f03_import_refuses_overflow(torch):
+        owner = torch.zeros(4, device="cuda")
+        cases = []
+        p = _Producer(owner, (1 << 62,), None)                               # bytes wrap
+        cases.append(("byte size", p))
+        p = _Producer(owner, (1 << 32, 1 << 32), None)                       # count wraps
+        cases.append(("element count", p))
+        p = _Producer(owner, (1,), None, byte_offset=1 << 63)                # byte_offset beyond int64
+        cases.append(("byte_offset", p))
+        p = _Producer(owner, (2,), None, byte_offset=(1 << 63) - 4)          # byte_offset + bytes wraps int64
+        cases.append(("byte_offset", p))
+        p = _Producer(owner, (4,), None)
+        p._m.dl_tensor.data = (1 << 64) - 8                                  # data + bytes wraps the address space
+        cases.append(("address space", p))
+        for frag, prod in cases:
+            cap = prod.capsule()
+>           with pytest.raises(ValueError, match=frag):
+E           Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:651: Failed
+________ test_fix1_f04_foreign_thread_release_normal_calls_deleter_once ________
+
+    def test_fix1_f04_foreign_thread_release_normal_calls_deleter_once():
+>       res, _ = _run_f04("normal")
+                 ^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:723: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'normal'
+
+    def _run_f04(mode):
+        r = subprocess.run([sys.executable, "-c", _F04_SCRIPT, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 76, in <module>
+E         AttributeError: module 'tensor_cuda._tensor_cuda' has no attribute '_dlpack_release_stats'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...ine 76, in <module>\nAttributeError: module \'tensor_cuda._tensor_cuda\' has no attribute \'_dlpack_release_stats\'\n').returncode
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:718: AssertionError
+___ test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil ____
+
+    def test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil():
+>       res, r = _run_f04("finalizing")
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:730: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'finalizing'
+
+    def _run_f04(mode):
+        r = subprocess.run([sys.executable, "-c", _F04_SCRIPT, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 76, in <module>
+E         AttributeError: module 'tensor_cuda._tensor_cuda' has no attribute '_dlpack_release_stats'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...ine 76, in <module>\nAttributeError: module \'tensor_cuda._tensor_cuda\' has no attribute \'_dlpack_release_stats\'\n').returncode
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:718: AssertionError
+_ test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores _
+
+f05_shim = '/tmp/pytest-of-vader/pytest-30/f05_shim0/cudart_device_shim.so'
+
+    def test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores(f05_shim):
+>       res = _run_f05(f05_shim, "ok")
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:840: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+shim = '/tmp/pytest-of-vader/pytest-30/f05_shim0/cudart_device_shim.so'
+mode = 'ok'
+
+    def _run_f05(shim, mode):
+        r = subprocess.run([sys.executable, "-c", _F05_SCRIPT, shim, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 61, in <module>
+E         AttributeError: module 'tensor_cuda._tensor_cuda' has no attribute '_dlpack_release_stats'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...ine 61, in <module>\nAttributeError: module \'tensor_cuda._tensor_cuda\' has no attribute \'_dlpack_release_stats\'\n').returncode
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:835: AssertionError
+____________ test_fix1_f05_failed_switch_leaks_instead_of_releasing ____________
+
+f05_shim = '/tmp/pytest-of-vader/pytest-30/f05_shim0/cudart_device_shim.so'
+
+    def test_fix1_f05_failed_switch_leaks_instead_of_releasing(f05_shim):
+>       res = _run_f05(f05_shim, "fail")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:849: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+shim = '/tmp/pytest-of-vader/pytest-30/f05_shim0/cudart_device_shim.so'
+mode = 'fail'
+
+    def _run_f05(shim, mode):
+        r = subprocess.run([sys.executable, "-c", _F05_SCRIPT, shim, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 61, in <module>
+E         AttributeError: module 'tensor_cuda._tensor_cuda' has no attribute '_dlpack_release_stats'
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...ine 61, in <module>\nAttributeError: module \'tensor_cuda._tensor_cuda\' has no attribute \'_dlpack_release_stats\'\n').returncode
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py:835: AssertionError
+=========================== short test summary info ============================
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_rank_above_8[cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_rank_above_8[cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f32-cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f32-cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^61_f32-cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^61_f32-cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f16-cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^62_f16-cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^32x2^32-cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[2^32x2^32-cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[3x2^62x4-cpu]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_empty_refuses_count_and_byte_overflow[3x2^62x4-cuda]
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f03_import_refuses_overflow
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f04_foreign_thread_release_normal_calls_deleter_once
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tensor_cuda/tests/test_dlpack.py::test_fix1_f05_failed_switch_leaks_instead_of_releasing
+17 failed, 3 passed, 37 deselected in 4.40s

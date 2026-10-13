@@ -95,17 +95,26 @@ def from_dlpack(obj):
     The result aliases the producer's memory (``data_ptr()`` is the producer's
     element 0) and keeps the producer's DLPack manager alive. When the last
     TensorCUDA reference to that memory dies, TensorCUDA first drains its own
-    stream, so no queued TensorCUDA kernel can still touch the memory, and then
-    calls the producer's deleter with the GIL held. The memory is never
-    returned to TensorCUDA's pool and never ``cudaFree``-d by TensorCUDA.
+    stream on the memory's device (switching to that device if another one is
+    current, then restoring the caller's device), so no queued TensorCUDA
+    kernel can still touch the memory, and then calls the producer's deleter
+    with the GIL held. If that drain fails (a broken CUDA context), or the
+    last reference dies while the interpreter is finalizing, the deleter is
+    deliberately NOT called: the manager is leaked rather than risk a
+    use-after-free or a GIL acquisition during shutdown (P1T-FIX1 F04/F05).
+    The memory is never returned to TensorCUDA's pool and never
+    ``cudaFree``-d by TensorCUDA.
 
     Refused with ``BufferError``, never converted: non-CUDA devices (CPU
     included), another CUDA device than TensorCUDA's, non-contiguous strides
     (a size-1 dimension may carry any stride), read-only tensors, and dtypes
     with no exact TensorCUDA match (supported: float32, float16, bfloat16,
-    int64, uint8, bool). The result has ``requires_grad=False``. If anything
-    outside TensorCUDA later writes into it in place, call
-    ``mark_modified()`` (see ``Tensor.__dlpack__``).
+    int64, uint8, bool). Refused with ``ValueError``: an element count, byte
+    size, ``byte_offset`` + size or address range that overflows 64-bit
+    arithmetic (P1T-FIX1 F03); ``TypeError``: anything that is neither a DLPack
+    producer nor a capsule (``None`` included). The result has
+    ``requires_grad=False``. If anything outside TensorCUDA later writes into
+    it in place, call ``mark_modified()`` (see ``Tensor.__dlpack__``).
     """
     if not hasattr(obj, "__dlpack__"):
         return _C._from_dlpack_capsule(obj)   # bare capsule (TypeError otherwise)
@@ -133,7 +142,10 @@ def empty(*shape, dtype="float32", device="cuda"):
     back). Shape conventions match ``zeros``: ``empty(2, 3)``,
     ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
     Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
-    string raises instead of falling back to float32.
+    string raises instead of falling back to float32. More than 8 dimensions
+    (TensorCUDA's maximum rank), a negative extent, or an element count or
+    byte size that overflows 64-bit arithmetic raises ``ValueError`` before
+    anything is allocated (P1T-FIX1 F03).
     """
     if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
         shape = tuple(shape[0])

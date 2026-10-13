@@ -1,0 +1,217 @@
+FFFFF.FF.......................................                          [100%]
+=================================== FAILURES ===================================
+___ test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule] ___
+
+source = 'bare_capsule'
+
+    @pytest.mark.parametrize('source', ['bare_capsule', 'producer_temporary'])
+    def test_f01_side_stream_last_owner_survives_until_legacy_read(source):
+        S = torch.cuda.Stream()
+        _warm(S)
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        for k in range(RACE_TRIALS):
+            out.fill_(-1.0)
+            torch.cuda.synchronize()
+            before = _C.pending_stats()['retained_entries']
+            if source == 'bare_capsule':
+                cap, address = _side_stream_capsule(S, 1.25)
+                torch.cuda._sleep(SLEEP_CYCLES)        # legacy stream busy: the add-on's read is queued behind it
+                ts.rint(cap, out=out)
+            else:
+                prod = _TempProducer(S, 1.25)
+                torch.cuda._sleep(SLEEP_CYCLES)
+                ts.rint(prod, out=out)
+                address = prod.address
+            deferred = _C.pending_stats()['retained_entries'] == before + 1
+>           _bait_and_check(S, out, address, k)          # the race first: a mutant fails on the use-after-free itself
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix1_findings.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x48aa52e0>
+out = tensor([9., 9., 9.,  ..., 9., 9., 9.], device='cuda:0')
+address = 127948812189696, k = 0
+
+    def _bait_and_check(S, out, address, k):
+        """Allocate the same size on S and overwrite it at once (S is idle); a released block would be reused."""
+        with torch.cuda.stream(S):
+            replacement = torch.empty(RACE_NUMEL, device='cuda')
+            reused = replacement.data_ptr() == address
+            replacement.fill_(9.0)
+        torch.cuda.synchronize()
+        ok = bool(torch.all(out == 1.0).item())
+>       assert ok, f'trial {k}: the add-on read storage that was released and reused (reused={reused}) before its read'
+E       AssertionError: trial 0: the add-on read storage that was released and reused (reused=True) before its read
+E       assert False
+
+tc_signal/tests/test_fix1_findings.py:113: AssertionError
+_ test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary] _
+
+source = 'producer_temporary'
+
+    @pytest.mark.parametrize('source', ['bare_capsule', 'producer_temporary'])
+    def test_f01_side_stream_last_owner_survives_until_legacy_read(source):
+        S = torch.cuda.Stream()
+        _warm(S)
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        for k in range(RACE_TRIALS):
+            out.fill_(-1.0)
+            torch.cuda.synchronize()
+            before = _C.pending_stats()['retained_entries']
+            if source == 'bare_capsule':
+                cap, address = _side_stream_capsule(S, 1.25)
+                torch.cuda._sleep(SLEEP_CYCLES)        # legacy stream busy: the add-on's read is queued behind it
+                ts.rint(cap, out=out)
+            else:
+                prod = _TempProducer(S, 1.25)
+                torch.cuda._sleep(SLEEP_CYCLES)
+                ts.rint(prod, out=out)
+                address = prod.address
+            deferred = _C.pending_stats()['retained_entries'] == before + 1
+>           _bait_and_check(S, out, address, k)          # the race first: a mutant fails on the use-after-free itself
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix1_findings.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x48aaeee0>
+out = tensor([9., 9., 9.,  ..., 9., 9., 9.], device='cuda:0')
+address = 127948654903296, k = 0
+
+    def _bait_and_check(S, out, address, k):
+        """Allocate the same size on S and overwrite it at once (S is idle); a released block would be reused."""
+        with torch.cuda.stream(S):
+            replacement = torch.empty(RACE_NUMEL, device='cuda')
+            reused = replacement.data_ptr() == address
+            replacement.fill_(9.0)
+        torch.cuda.synchronize()
+        ok = bool(torch.all(out == 1.0).item())
+>       assert ok, f'trial {k}: the add-on read storage that was released and reused (reused={reused}) before its read'
+E       AssertionError: trial 0: the add-on read storage that was released and reused (reused=True) before its read
+E       assert False
+
+tc_signal/tests/test_fix1_findings.py:113: AssertionError
+_______ test_f01_partial_launch_exception_keeps_operands_until_complete ________
+
+    def test_f01_partial_launch_exception_keeps_operands_until_complete():
+        S = torch.cuda.Stream()
+        _warm(S)
+        out = torch.empty(RACE_NUMEL, device='cuda')
+        for k in range(RACE_TRIALS):
+            out.fill_(-1.0)
+            torch.cuda.synchronize()
+            cap, address = _side_stream_capsule(S, 1.25)
+            torch.cuda._sleep(SLEEP_CYCLES)
+            with pytest.raises(RuntimeError, match='injected failure after the launch'):
+                _C._test_rint_then_raise(cap, out.__dlpack__(stream=1))
+            assert 'used_' in repr(cap)                 # consumed: only tc_signal's deferred list keeps it alive now
+            pending = _C.pending_stats()['entries']
+>           _bait_and_check(S, out, address, k)
+
+tc_signal/tests/test_fix1_findings.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+S = <torch.cuda.Stream device=cuda:0 cuda_stream=0x48aaf1e0>
+out = tensor([9., 9., 9.,  ..., 9., 9., 9.], device='cuda:0')
+address = 127948657000448, k = 0
+
+    def _bait_and_check(S, out, address, k):
+        """Allocate the same size on S and overwrite it at once (S is idle); a released block would be reused."""
+        with torch.cuda.stream(S):
+            replacement = torch.empty(RACE_NUMEL, device='cuda')
+            reused = replacement.data_ptr() == address
+            replacement.fill_(9.0)
+        torch.cuda.synchronize()
+        ok = bool(torch.all(out == 1.0).item())
+>       assert ok, f'trial {k}: the add-on read storage that was released and reused (reused={reused}) before its read'
+E       AssertionError: trial 0: the add-on read storage that was released and reused (reused=True) before its read
+E       assert False
+
+tc_signal/tests/test_fix1_findings.py:113: AssertionError
+________ test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize ________
+
+    def test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize():
+        T, N, I, H, D = 3, 2, 4, 5, 2
+        g = torch.Generator(device='cuda').manual_seed(20261012)
+    
+        def r(*s):
+            return torch.randn(*s, device='cuda', generator=g) * 0.1
+        x, W, R, B, h0, c0 = r(T, N, I), r(D, 4 * H, I), r(D, 4 * H, H), r(D, 8 * H), r(D, N, H), r(D, N, H)
+        ts.synchronize()
+        s0 = _C.pending_stats()
+        assert s0['entries'] == 0 and s0['managers'] == 0
+        torch.cuda._sleep(SLEEP_CYCLES)
+        ts.lstm(x, W, R, B, hidden_size=H, direction='bidirectional', initial_h=h0, initial_c=c0)
+        s1 = _C.pending_stats()
+        # x, W, R, B, initial_h, initial_c, Y, Y_h, Y_c, scratch: one entry, ten managers.
+>       assert s1['entries'] == 1 and s1['managers'] == 10, s1
+E       AssertionError: {'bound_drains': 0, 'bytes': 0, 'entries': 0, 'fallback_syncs': 0, ...}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix1_findings.py:171: AssertionError
+___________ test_f01_completed_call_released_at_next_call_not_before ___________
+
+    def test_f01_completed_call_released_at_next_call_not_before():
+        ts.synchronize()
+        P.reset_stats()
+        base = torch.full((82,), 1.5, device='cuda')
+        y = ts.rint(P.Producer(base, (1, 82)))
+        torch.cuda.synchronize()                         # the GPU is done, but no tc_signal call has run since
+>       assert P.STATS == {'exported': 1, 'deleted': 0, 'unknown_delete': 0}, P.STATS
+E       AssertionError: {'deleted': 1, 'exported': 1, 'unknown_delete': 0}
+E       assert {'deleted': 1...wn_delete': 0} == {'deleted': 0...wn_delete': 0}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'deleted': 1} != {'deleted': 0}
+E         Use -v to get more diff
+
+tc_signal/tests/test_fix1_findings.py:184: AssertionError
+______________ test_f01_bytes_bound_forces_synchronize_and_drain _______________
+
+    def test_f01_bytes_bound_forces_synchronize_and_drain():
+        ts.synchronize()
+        s0 = _C.pending_stats()
+        max_bytes = s0['max_bytes']
+        n = max_bytes // 4 // 8                          # x and out are max_bytes/8 each: an entry holds max_bytes/4
+        x = torch.full((n,), 2.5, device='cuda')
+        outs = [torch.empty(n, device='cuda') for _ in range(6)]   # pre-allocated: the six calls are only plan + run
+        torch.cuda.synchronize()
+        torch.cuda._sleep(LONG_SLEEP_CYCLES)             # nothing completes while the calls are queued
+        for o in outs:
+            ts.rint(x, out=o)
+            st = _C.pending_stats()
+            assert st['bytes'] <= max_bytes and st['entries'] <= st['max_entries'], st   # after any forced drain
+        s1 = _C.pending_stats()
+        # The 5th push (5 x 64 MiB = 320 MiB) exceeded the 256 MiB bound: synchronize + drain. (The high-water mark records
+        # that 320 MiB instant, before the drain, by design.)
+>       assert s1['bound_drains'] > s0['bound_drains'], (s0, s1)
+E       AssertionError: ({'bound_drains': 0, 'bytes': 0, 'entries': 0, 'fallback_syncs': 0, ...}, {'bound_drains': 0, 'bytes': 0, 'entries': 0, 'fallback_syncs': 0, ...})
+E       assert 0 > 0
+
+tc_signal/tests/test_fix1_findings.py:216: AssertionError
+________________ test_f01_atexit_hook_releases_pending_operands ________________
+
+    def test_f01_atexit_hook_releases_pending_operands():
+        r = subprocess.run([sys.executable, '-c', _ATEXIT_SCRIPT, os.path.dirname(os.path.abspath(__file__))],
+                           capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, r.stderr
+        pend = json.loads(next(ln for ln in r.stdout.splitlines() if ln.startswith('PENDING '))[8:])
+        final = json.loads(next(ln for ln in r.stdout.splitlines() if ln.startswith('ATEXIT '))[7:])
+>       assert pend['entries'] == 1 and pend['managers'] == 2, pend      # x (the producer) and out, still held
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'bound_drains': 0, 'bytes': 0, 'entries': 0, 'fallback_syncs': 0, ...}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix1_findings.py:243: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[bare_capsule]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_side_stream_last_owner_survives_until_legacy_read[producer_temporary]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_partial_launch_exception_keeps_operands_until_complete
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_completed_call_released_at_next_call_not_before
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_bytes_bound_forces_synchronize_and_drain
+FAILED tc_signal/tests/test_fix1_findings.py::test_f01_atexit_hook_releases_pending_operands
+7 failed, 40 passed in 14.33s

@@ -6,8 +6,12 @@
 
 #include <cuda_runtime.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -275,6 +279,32 @@ std::string shape_str(const int64_t* v, int n) {
   return s + "]";
 }
 
+// P1T-FIX1, F03: checked element count and byte size for the two entry points that turn arbitrary caller shapes into
+// a Storage (empty, from_dlpack). Every extent is >= 0 here (callers refuse negatives first); a zero extent makes the
+// count 0 whatever the other extents are. Overflow raises ValueError and never wraps to an empty or short Storage.
+// The byte ceiling is INT64_MAX (every byte total, offset and pointer difference stays a valid int64/ptrdiff_t).
+// Prior art: GCC/Clang __builtin_mul_overflow / __builtin_add_overflow (GCC 5, 2015); C23 ckd_mul / ckd_add
+// (<stdckdint.h>, ISO/IEC 9899:2024); SEI CERT C INT30-C / INT32-C. Taken: the checked-operation primitive. Ours:
+// where it is applied. Unverified here (lead to check): "GCC 5 __builtin_mul_overflow", "C23 stdckdint".
+int64_t checked_numel(const int64_t* dims, int n, const char* who) {
+  for (int i = 0; i < n; ++i)
+    if (dims[i] == 0) return 0;
+  int64_t p = 1;
+  for (int i = 0; i < n; ++i)
+    if (__builtin_mul_overflow(p, dims[i], &p))
+      throw py::value_error(std::string(who) + ": the element count of shape " + shape_str(dims, n) +
+                            " overflows int64; refused");
+  return p;
+}
+
+int64_t checked_nbytes(int64_t numel, size_t itemsize, const int64_t* dims, int n, const char* who) {
+  int64_t b = 0;
+  if (__builtin_mul_overflow(numel, static_cast<int64_t>(itemsize), &b))
+    throw py::value_error(std::string(who) + ": the byte size of shape " + shape_str(dims, n) + " (" +
+                          std::to_string(itemsize) + "-byte elements) overflows int64; refused");
+  return b;
+}
+
 // ---- export: the manager context OWNS a reference to the Storage, so the
 // memory outlives the producer Tensor's last Python reference.
 struct DLPackExportCtx {
@@ -382,7 +412,11 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
 
   dlpack_fence_consumer(stream);
 
-  auto* ctx = new DLPackExportCtx();
+  // P1T-FIX1, F06: the context (and its shared Storage reference) is owned by a unique_ptr until the capsule takes it,
+  // so a throw anywhere below (bad_alloc in the vector assignments, a failed PyCapsule_New) frees it exactly once.
+  // Prior art: C++ RAII (Stroustrup) and std::unique_ptr's release() hand-off (C++11); pybind11/CPython capsule
+  // ownership. Nothing new.
+  auto ctx = std::make_unique<DLPackExportCtx>();
   ctx->owner = a.storage;
   ctx->shape.assign(a.shape.begin(), a.shape.end());
   Shape st = contiguous_strides(a.shape);
@@ -403,7 +437,7 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
     DLManagedTensorVersioned& mt = ctx->versioned;
     mt.version.major = DLPACK_MAJOR_VERSION;
     mt.version.minor = DLPACK_MINOR_VERSION;
-    mt.manager_ctx = ctx;
+    mt.manager_ctx = ctx.get();
     mt.deleter = export_deleter_versioned;
     mt.flags = 0;
     mt.dl_tensor = dl;
@@ -411,14 +445,12 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
   } else {
     DLManagedTensor& mt = ctx->legacy;
     mt.dl_tensor = dl;
-    mt.manager_ctx = ctx;
+    mt.manager_ctx = ctx.get();
     mt.deleter = export_deleter_legacy;
     cap = PyCapsule_New(&mt, kCapLegacy, capsule_destructor_legacy);
   }
-  if (!cap) {
-    delete ctx;
-    throw py::error_already_set();
-  }
+  if (!cap) throw py::error_already_set();  // ctx is freed by its unique_ptr
+  ctx.release();  // owned by the capsule from here: its destructor, or the consumer's deleter call, frees it
   return py::reinterpret_steal<py::object>(cap);
 }
 
@@ -431,20 +463,67 @@ py::tuple tensor_dlpack_device(Tensor& t) {
 }
 
 // ---- import: the Storage keeps the producer's manager alive; its destructor
-// drains the engine stream (kernels.cu) and then calls this, GIL held.
+// drains the Storage device's engine stream (kernels.cu) and then calls this,
+// which calls the producer's deleter with the GIL held.
+//
+// P1T-FIX1, F04 (finalization-safe release). The last reference can die on any
+// thread, including a non-Python thread while CPython is finalizing. Once
+// finalization has started (or the interpreter is gone), PyGILState_Ensure is
+// unsafe: CPython 3.12 terminates a non-main thread that tries to take the GIL
+// during finalization (in the middle of this deleter), and newer runtimes may
+// hang it. So in that state this function does NOT call PyGILState_Ensure and
+// DELIBERATELY LEAKS the producer's manager (the memory is not handed back; the
+// process is exiting). Ordinary releases are unchanged.
+// Detection: Py_IsInitialized() plus Py_IsFinalizing() (3.13+) / the exported
+// _Py_IsFinalizing() (3.12). Measured on CPython 3.12.3 (P1T_FIX1 ledger): during
+// module teardown Py_IsInitialized() is already 0 and _Py_IsFinalizing() is 1,
+// because 3.12 clears `initialized` when it sets the finalizing thread; the
+// explicit finalizing test keeps this correct if a runtime orders those two
+// stores differently. Residual (not closed here): a thread that passed this
+// test an instant before finalization starts can still reach
+// PyGILState_Ensure; closing that needs lifecycle coordination with the
+// interpreter, which the order does not ask for.
+// Prior art: the CPython 3.12 C-API docs (Initialization, Finalization, and
+// Threads: PyGILState_Ensure / Py_IsFinalizing, "calling this function from a
+// thread when the runtime is finalizing will terminate the thread"); pybind11's
+// guidance not to touch the GIL during interpreter shutdown. Taken: the rule.
+// Ours: the deliberate-leak policy at this call site and its counters.
+std::atomic<unsigned long long> g_import_released{0};
+std::atomic<unsigned long long> g_import_leaked_shutdown{0};
+
+bool interpreter_accepts_gil_state() {
+  if (!Py_IsInitialized()) return false;
+#if PY_VERSION_HEX >= 0x030D0000
+  if (Py_IsFinalizing()) return false;
+#else
+  if (_Py_IsFinalizing()) return false;
+#endif
+  return true;
+}
+
 void import_release_legacy(void* ctx) {
   auto* m = static_cast<DLManagedTensor*>(ctx);
-  if (!m || !m->deleter || !Py_IsInitialized()) return;
+  if (!m || !m->deleter) return;
+  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
+    g_import_leaked_shutdown.fetch_add(1);
+    return;
+  }
   PyGILState_STATE g = PyGILState_Ensure();
   m->deleter(m);
   PyGILState_Release(g);
+  g_import_released.fetch_add(1);
 }
 void import_release_versioned(void* ctx) {
   auto* m = static_cast<DLManagedTensorVersioned*>(ctx);
-  if (!m || !m->deleter || !Py_IsInitialized()) return;
+  if (!m || !m->deleter) return;
+  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
+    g_import_leaked_shutdown.fetch_add(1);
+    return;
+  }
   PyGILState_STATE g = PyGILState_Ensure();
   m->deleter(m);
   PyGILState_Release(g);
+  g_import_released.fetch_add(1);
 }
 void import_release_noop(void*) {}
 
@@ -517,6 +596,8 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
                            " is outside TensorCUDA's 0.." +
                            std::to_string(TC_MAX_DIMS));
   const int nd = dl->ndim;
+  if (nd > 0 && dl->shape == nullptr)
+    throw py::buffer_error("from_dlpack: NULL shape array for a tensor with dimensions");
   Shape shape(nd);
   for (int i = 0; i < nd; ++i) {
     if (dl->shape[i] < 0)
@@ -524,7 +605,8 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
                              shape_str(dl->shape, nd));
     shape[i] = dl->shape[i];
   }
-  const int64_t numel = numel_of(shape);
+  // F03 (P1T-FIX1): checked count (ValueError on overflow, never a wrapped size).
+  const int64_t numel = checked_numel(dl->shape, nd, "from_dlpack");
   // C-contiguous only; a size-1 dimension may carry any stride (it is never
   // stepped). Strides == NULL means compact row-major (DLPack < 1.2).
   if (nd > 0 && dl->strides && numel > 0) {
@@ -548,12 +630,25 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
                            std::to_string(isz));
   if (numel > 0 && dl->data == nullptr)
     throw py::buffer_error("from_dlpack: null data pointer for a non-empty tensor");
+  // F03 (P1T-FIX1): checked byte size, byte_offset + bytes (the Storage's
+  // nbytes) and data + byte_offset + bytes (one past the last byte); each
+  // overflow raises ValueError and leaves the capsule unconsumed.
+  const int64_t nbytes = checked_nbytes(numel, isz, dl->shape, nd, "from_dlpack");
+  int64_t storage_bytes = 0;
+  if (dl->byte_offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+      __builtin_add_overflow(static_cast<int64_t>(dl->byte_offset), nbytes, &storage_bytes))
+    throw py::value_error("from_dlpack: byte_offset " + std::to_string(dl->byte_offset) +
+                          " + byte size " + std::to_string(nbytes) + " overflows int64; refused");
+  uintptr_t end_address = 0;
+  if (__builtin_add_overflow(reinterpret_cast<uintptr_t>(dl->data),
+                             static_cast<uintptr_t>(storage_bytes), &end_address))
+    throw py::value_error("from_dlpack: data + byte_offset + byte size overflows the address space; refused");
 
   Device dev;
   dev.type = DeviceType::CUDA;
   dev.index = cur;
   auto storage = std::make_shared<Storage>(
-      dl->data, static_cast<size_t>(dl->byte_offset) + static_cast<size_t>(numel) * isz,
+      dl->data, static_cast<size_t>(storage_bytes),
       dev, versioned ? import_release_versioned : import_release_legacy, manager);
   // Consume the capsule only once the Storage owns the manager.
   if (PyCapsule_SetName(cap, versioned ? kCapUsedVersioned : kCapUsedLegacy) != 0) {
@@ -570,14 +665,25 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
 }
 
 // Amendment 1: device-side empty (no host round-trip, no fill).
+// P1T-FIX1, F03: refuses rank > TC_MAX_DIMS (the engine's op metadata arrays
+// hold 8 axes) and any element-count or byte-size overflow, with ValueError,
+// before allocating; a CPU allocation failure raises MemoryError instead of
+// returning a nonempty tensor over a NULL buffer.
 Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
                     const std::string& device) {
+  if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
+    throw py::value_error("empty: " + std::to_string(shape.size()) +
+                          " dimensions exceed TensorCUDA's maximum rank " +
+                          std::to_string(TC_MAX_DIMS) + " (TC_MAX_DIMS)");
   for (int64_t s : shape)
     if (s < 0) throw py::value_error("empty: negative dimensions are not allowed");
-  return Tensor::make(NDArray::empty(Shape(shape.begin(), shape.end()),
-                                     dtype_from_string(dtype),
-                                     Device::from_string(device)),
-                      false);
+  const DType dt = dtype_from_string(dtype);
+  const int nd = static_cast<int>(shape.size());
+  const int64_t numel = checked_numel(shape.data(), nd, "empty");
+  const int64_t nbytes = checked_nbytes(numel, dtype_size(dt), shape.data(), nd, "empty");
+  NDArray a = NDArray::empty(Shape(shape.begin(), shape.end()), dt, Device::from_string(device));
+  if (nbytes > 0 && a.storage->ptr == nullptr) throw std::bad_alloc();  // -> MemoryError
+  return Tensor::make(a, false);
 }
 
 const char* const kDlpackDoc = R"doc(Export this tensor zero-copy as a DLPack capsule (Python array API protocol).
@@ -1410,6 +1516,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("_from_dlpack_capsule", &tensor_from_dlpack_capsule, py::arg("capsule"));
   m.def("empty", &tensor_empty, py::arg("shape"), py::arg("dtype") = "float32",
         py::arg("device") = "cuda");
+  // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).
+  m.def("_dlpack_release_stats", []() {
+    py::dict d;
+    d["released"] = g_import_released.load();
+    d["leaked_interpreter_shutdown"] = g_import_leaked_shutdown.load();
+    d["leaked_drain_failure"] = storage_external_drain_leaks();
+    return d;
+  }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
+     "after a failed device drain (F05).");
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }

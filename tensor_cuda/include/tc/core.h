@@ -62,12 +62,23 @@ struct Storage {
   uint64_t revision = 0;
   // P1T-M1 (DLPack import): external memory owned by another library. When
   // `external_release` is set, the engine neither pools nor frees `ptr`: the
-  // destructor first drains the engine stream (so no queued engine kernel can
-  // still touch the memory), then calls external_release(external_ctx), which
-  // hands the memory back to its producer (bindings.cpp calls the DLPack
-  // deleter with the GIL held). Prior art: the owner-keepalive pattern of the
-  // PyTorch/CuPy DLPack importers (ATen's from_dlpack deleter-in-storage,
-  // 2017+); the drain-before-release ordering is ours (see kernels.cu).
+  // destructor first drains the engine stream OF THIS STORAGE'S DEVICE (P1T-FIX1
+  // F05: it switches to `device.index` if another device is current, syncs that
+  // device's legacy stream, and restores the caller's device), so no queued
+  // engine kernel can still touch the memory; then it calls
+  // external_release(external_ctx), which hands the memory back to its producer
+  // (bindings.cpp calls the DLPack deleter with the GIL held). If the drain
+  // fails, the release is NOT called: the memory is deliberately leaked
+  // (counted by storage_external_drain_leaks) rather than risk a use-after-free.
+  // Prior art: the owner-keepalive pattern of the PyTorch/CuPy DLPack importers
+  // (ATen's from_dlpack deleter-in-storage, 2017+); the drain-before-release
+  // ordering is ours (see kernels.cu).
+  //
+  // ABI NOTE (P1T-FIX1 F07): these two members grew sizeof(Storage) from 40 to
+  // 56 bytes (x86-64, CPU layout measurement in the P1T-REV review). Any native
+  // client compiled against an older core.h must be rebuilt together with this
+  // core; mixing layouts is undefined behaviour. None is known (tc_signal does
+  // not include core headers). Rollout note: docs/P1T_FIX1_M1_ADDENDUM.md.
   using ExternalRelease = void (*)(void* ctx);
   ExternalRelease external_release = nullptr;
   void* external_ctx = nullptr;
@@ -81,6 +92,10 @@ struct Storage {
   Storage(const Storage&) = delete;
   Storage& operator=(const Storage&) = delete;
 };
+
+// P1T-FIX1 (F05): external Storages whose device drain failed in the destructor
+// and whose producer memory was therefore deliberately leaked (process-wide).
+unsigned long long storage_external_drain_leaks();
 
 // --------------------------------------------------------------------- NDArray
 // A view-able handle over a Storage: shape + dtype + element offset. In Phase 1

@@ -53,13 +53,13 @@ CAPSULE_DESTRUCTOR = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
 _NAME = b'dltensor'
 _NAME_V = b'dltensor_versioned'
 
-_PyCapsule_New = ctypes.pythonapi.PyCapsule_New
+_PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
 _PyCapsule_New.restype = ctypes.py_object
 _PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, CAPSULE_DESTRUCTOR]
-_PyCapsule_IsValid = ctypes.pythonapi.PyCapsule_IsValid
+_PyCapsule_IsValid = ctypes.pythonapi['PyCapsule_IsValid']
 _PyCapsule_IsValid.restype = ctypes.c_int
 _PyCapsule_IsValid.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-_PyCapsule_GetPointer = ctypes.pythonapi.PyCapsule_GetPointer
+_PyCapsule_GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
 _PyCapsule_GetPointer.restype = ctypes.c_void_p
 _PyCapsule_GetPointer.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 

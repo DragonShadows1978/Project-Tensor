@@ -50,6 +50,7 @@ z = ts.conv_transpose1d(y, wt, bt, stride=10, padding=(5, 5))
 tc_signal.conv1d(x, w, b=None, *, stride=1, padding=0, dilation=1, groups=1, out=None)
 tc_signal.conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dilation=1, groups=1, out=None)
 tc_signal.set_allocator(fn)   # fn(shape: tuple) -> fp32 CUDA DLPack tensor; returns the previous allocator
+tc_signal.synchronize()       # P1T-FIX1: wait for the legacy stream, release every operand tc_signal still holds
 ```
 
 The semantics are ONNX `Conv` and `ConvTranspose`, 1-D.
@@ -93,10 +94,16 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
 
 **Consumption**
 - A capsule is consumed once: it is renamed to `"used_*"`, and tc_signal owns the managed tensor from then on.
-- Each producer deleter is called exactly once:
-  - after the launch on success;
-  - during unwinding on any error after consumption;
+- Each producer deleter is called exactly once (P1T-FIX1, F01: see "Streams and lifetimes" for when):
+  - for a call that reached its launch (success, or an error after a partial launch): only once the legacy stream
+    has passed that call's launches, from the deferred-release list;
+  - immediately, during unwinding, for a call refused after consumption but before any launch (nothing was queued);
   - by the producer's own capsule destructor if tc_signal never consumed the capsule (a refusal in the planning phase).
+
+**Required and optional operands** (P1T-FIX1, F02). `None` is accepted only for an optional operand: `b` (conv),
+`B` / `initial_h` / `initial_c` (lstm), `scale` / `bias` (norms), and `out` in the Python API (then the allocator makes
+it). `None` for any required operand (`x` of all nine ops, `w` of both convolutions, `W` and `R` of the LSTM, and every
+operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any planning, allocation or consumption.
 
 **Validation**, each failure a `TypeError` or `ValueError` (see Errors):
 - device `kDLCUDA`, with one ordinal for every operand;
@@ -108,7 +115,12 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
 - `data + byte_offset` used as the base pointer, 4-byte aligned;
 - exact shapes;
 - written operands must not be read-only or a producer copy (versioned flags);
-- the output's byte range must not overlap any input's or the scratch's, and the scratch must not overlap the inputs.
+- the output's byte range must not overlap any input's or the scratch's, and the scratch must not overlap the inputs;
+- checked 64-bit arithmetic (P1T-FIX1, F03): a negative rank, a NULL shape array, an element count, an fp32 byte total
+  above `INT64_MAX`, or `data + byte_offset + bytes` wrapping the address space is refused (`ValueError`), and so is
+  every planned size that overflows: output lengths (`conv1d`, `conv_transpose1d`, `T * scale`, `T + pads`), output
+  and scratch element counts and bytes (im2col, LSTM `G_x`/`G_h`), LSTM `T*N` and `D*N*H`, norm rows and row lengths.
+  A wrapped value is never used, never becomes an "empty" or negative extent, and no narrowing cast happens first.
 
 ## Streams and lifetimes
 
@@ -116,13 +128,26 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
   This is TensorCUDA's only stream, and torch's default stream; both share the device's primary context.
   `tests/test_contract.py` proves the ordering both ways against torch with no explicit sync.
 - `cudaGetLastError` is checked after every launch, and any error raises a `RuntimeError`.
-- Each capsule's deleter is called right after the launches, before the GPU has run them. This is safe when the
-  producer frees on the legacy stream, or later in stream order: TensorCUDA does, and so does torch's caching
-  allocator on its default stream.
-- **Cross-stream lifetime caveat:** a producer whose tensor lives on a non-legacy stream must keep that tensor alive,
-  and must not reuse its memory, until the legacy stream has passed the tc_signal op. For example, record an event on
-  the legacy stream after the call and make its own stream wait on it, or synchronize. Producers that are asked for
-  `stream=1` order their pending work before the op; DLPack has no mechanism for the reverse direction.
+- **Operand lifetime contract (P1T-FIX1, F01: event-backed deferred release).** A consumed DLPack manager can be the
+  LAST owner of its memory (a bare capsule, or a temporary copy a producer made for `__dlpack__`), and its producer
+  may allocate on another stream. So tc_signal keeps every consumed manager of a call (inputs, outputs and scratch;
+  the LSTM's whole set of up to 10) alive until the legacy stream has passed that call's last launch:
+  - after the launches (and also when a launch throws part-way), one CUDA event is recorded on the legacy stream of
+    the operands' device, and the call's managers go onto a module-level FIFO pending list with that event;
+  - completed entries (`cudaEventQuery` == success) are released in FIFO order, on the calling host thread with the
+    GIL held, at the start of the next tc_signal call; `tc_signal.synchronize()` synchronizes the legacy stream and
+    releases everything; an `atexit` hook does the same at interpreter exit;
+  - the list is bounded (`src/tuning.h`: 1024 entries, 256 MiB of operand bytes); a call that pushes it past a bound
+    synchronizes the legacy stream of every pending device and releases the whole list;
+  - deleters are never called from a CUDA host callback;
+  - if the completion event cannot be recorded, the legacy stream is synchronized instead; if that fails too (a broken
+    CUDA context), the managers are deliberately leaked: tc_signal never releases memory the GPU may still use.
+  So a producer may free or reuse its memory on any stream as soon as its deleter runs; the old cross-stream caveat
+  (keep non-legacy-stream tensors alive yourself) no longer applies. The cost: memory of the last calls is handed back
+  at the next tc_signal call (or `synchronize()`), not at the end of the call. Choice: the deferred release (the
+  order's preferred design) rather than a legacy-stream sync before release, which would block every call
+  (receipts and per-call cost: `docs/P1T_FIX1_REPORT.md`). Counters: `_tc_signal.pending_stats()`.
+- Producers that are asked for `stream=1` order their pending work before the op (DLPack's forward direction).
 - Outputs are written on the legacy stream. A consumer on another stream must order itself after it.
 
 ## cuBLAS
@@ -172,9 +197,9 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
 
 | Error | When |
 |---|---|
-| `TypeError` | an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
-| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1 |
-| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error |
+| `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
+| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03) |
+| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early) |
 
 ## Tests
 
@@ -196,6 +221,10 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
   - stream ordering against torch;
   - the cuBLAS settings;
   - the fast-math canary.
+- `test_fix1_findings.py` (P1T-FIX1) covers the review findings: the side-stream last-owner race (bare capsule and
+  producer temporary), a partial-launch exception, the LSTM capsule set, release at the next call / `synchronize()` /
+  `atexit`, the bytes bound, `None` for every required operand of the nine ops (each in its own process), and the
+  overflow refusals in validation and in every plan function.
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 
@@ -220,3 +249,10 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
 - **Plan/run split** (size the scratch, let the caller allocate, then execute): the workspace-query pattern of
   cuDNN/cuBLASLt.
 - **Fast-math canary:** no specific prior art known to me.
+- **Deferred operand release (P1T-FIX1, F01):** PyTorch's `Tensor.record_stream` and its CUDA caching allocator, which
+  defers a block's reuse until events recorded on the streams that used it complete, polled from the host
+  (`process_events`), with an event pool; CuPy's stream-ordered memory pool; the DLPack consumer contract. Ours: the
+  consumer-side FIFO of DLPack managers drained at tc_signal entry points with the GIL held, the count/bytes bound, and
+  the leak-on-unfenceable rule. Details: `src/dlpack_operand.h`.
+- **Checked arithmetic (P1T-FIX1, F03):** `__builtin_mul_overflow` / `__builtin_add_overflow` (GCC 5, 2015); C23
+  `ckd_mul` / `ckd_add`; SEI CERT C INT30-C / INT32-C. Ours: where it is applied. Details: `src/checked_math.h`.

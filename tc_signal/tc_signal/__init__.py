@@ -22,11 +22,12 @@ the allocator returns a DLPack tensor, not a raw pointer.
 """
 from __future__ import annotations
 
+import atexit
 import operator
 
 from . import _tc_signal as _C
 
-__all__ = ['conv1d', 'conv_transpose1d', 'set_allocator']
+__all__ = ['conv1d', 'conv_transpose1d', 'set_allocator', 'synchronize']
 
 _SET_ALLOCATOR_HINT = ('call tc_signal.set_allocator(fn), where fn(shape: tuple) returns a float32 CUDA tensor that '
                        'implements __dlpack__ (for example lambda s: torch.empty(s, device="cuda"))')
@@ -111,6 +112,33 @@ def conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dil
         out = _allocator(tuple(out_shape))
     _C.conv_transpose1d_run(xc, wc, bc, out, s, pb, pe, op, d, g)
     return out
+
+
+def synchronize():
+    """Wait until the legacy default stream has passed every tc_signal launch queued so far, then release every consumed
+    operand tc_signal still holds (P1T-FIX1, F01 deferred release; see README "Streams and lifetimes").
+
+    tc_signal keeps each call's consumed DLPack managers (inputs, outputs, scratch) alive until the legacy stream has
+    passed that call, and releases completed ones at the start of the next tc_signal call. Call synchronize() to release
+    them now (for example before measuring memory, or before handing a producer's memory back by other means). It
+    synchronizes the legacy stream of the current device and of every device with pending operands (stream syncs, not a
+    device-wide sync). Raises RuntimeError if a device cannot synchronize; its operands are then deliberately leaked,
+    never released early. Prior art: torch.cuda.synchronize / cupy.cuda.Stream.synchronize (API shape only)."""
+    _C.synchronize()
+
+
+def _release_pending_at_exit():
+    # atexit (runs before interpreter finalization, GIL held): release whatever is still pending. A CUDA error here
+    # (a broken context) leaves those operands deliberately leaked; there is nothing else safe to do at exit.
+    try:
+        _C.synchronize()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+atexit.register(_release_pending_at_exit)
+
+
 from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)
 __all__.append('lstm')
 

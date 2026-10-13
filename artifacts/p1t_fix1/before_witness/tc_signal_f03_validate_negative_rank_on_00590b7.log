@@ -1,0 +1,35 @@
+FE                                                                       [100%]
+==================================== ERRORS ====================================
+_ ERROR at teardown of test_f03_overflowing_geometry_is_refused_not_wrapped[validate_negative_rank] _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+=================================== FAILURES ===================================
+_ test_f03_overflowing_geometry_is_refused_not_wrapped[validate_negative_rank] _
+
+case = ('validate_negative_rank', <function <lambda> at 0x7883894818a0>, 'negative number of dimensions')
+
+    @pytest.mark.parametrize('case', F03_CASES, ids=[c[0] for c in F03_CASES])
+    def test_f03_overflowing_geometry_is_refused_not_wrapped(case):
+        _, call, frag = case
+        with pytest.raises(ValueError) as ei:
+            call()
+>       assert frag in str(ei.value), f'message {str(ei.value)!r} lacks {frag!r}'
+E       AssertionError: message "tc_signal: operand 'x': expected at least 0 dimensions, got -1" lacks 'negative number of dimensions'
+E       assert 'negative number of dimensions' in "tc_signal: operand 'x': expected at least 0 dimensions, got -1"
+E        +  where "tc_signal: operand 'x': expected at least 0 dimensions, got -1" = str(ValueError("tc_signal: operand 'x': expected at least 0 dimensions, got -1"))
+E        +    where ValueError("tc_signal: operand 'x': expected at least 0 dimensions, got -1") = <ExceptionInfo ValueError("tc_signal: operand 'x': expected at least 0 dimensions, got -1") tblen=2>.value
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:402: AssertionError
+=========================== short test summary info ============================
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[validate_negative_rank]
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[validate_negative_rank]
+1 failed, 1 error in 1.51s

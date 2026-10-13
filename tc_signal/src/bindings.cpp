@@ -7,7 +7,11 @@
 //                              device/dtype/layout/shapes/attributes without consuming), and returns
 //                              (x_capsule, w_capsule, b_capsule|None, out_shape[, scratch_numel]);
 //   *_run(capsules, out[, scratch], attrs) -> consumes every capsule, re-validates, checks devices and overlap,
-//                              launches on the legacy default stream, then calls every producer deleter (scope exit).
+//                              launches on the legacy default stream, then hands every consumed manager to the
+//                              deferred-release list (P1T-FIX1 F01, dlpack_operand.h RetainUntilComplete): the producer
+//                              deleters run once the legacy stream has passed the launches, never before.
+// P1T-FIX1 also adds: F02 (a required operand passed as None -> TypeError before planning), F03 (every size below is
+// computed with checked arithmetic, checked_math.h), and drain_completed() first thing in every entry point.
 //
 // Prior art: see dlpack_operand.h (DLPack, Python array API stream protocol) and conv.cu (im2col, gather-form
 // ConvTranspose, ONNX semantics). The plan/run split is ours (no prior art known to me for this exact split; it is the
@@ -21,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "checked_math.h"
 #include "conv_ops.h"
 #include "dlpack_operand.h"
 #include "tuning.h"
@@ -91,9 +96,13 @@ Conv1dPlan plan_conv1d(const std::vector<int64_t>& xs, const std::vector<int64_t
     os << "conv1d: b has shape " << shape_str(*bs) << ", expected [" << g.C_out << "]";
     bad_attr(os.str());
   }
-  // Integer arithmetic in int64 (attributes are <= INT_MAX, dimensions come from real tensors). Python's floor
-  // division and C++'s truncation differ for a negative numerator, so the sign is checked first.
-  const int64_t num = g.T + pb + pe - dilation * (g.K - 1) - 1;
+  // Integer arithmetic in int64, every step checked (F03: dimensions may come from synthetic descriptors). Python's
+  // floor division and C++'s truncation differ for a negative numerator, so the sign is checked first.
+  const int64_t dk = ck_mul(dilation, g.K - 1, "conv1d: dilation*(K-1)");
+  int64_t num = ck_add(g.T, pb, "conv1d: T + pad_begin");
+  num = ck_add(num, pe, "conv1d: T + pad_begin + pad_end");
+  num = ck_sub(num, dk, "conv1d: output length numerator");
+  num = ck_sub(num, 1, "conv1d: output length numerator");
   if (num < 0) {
     os << "conv1d: output length (T + pb + pe - dilation*(K-1) - 1)//stride + 1 = (" << g.T << " + " << pb << " + "
        << pe << " - " << dilation << "*" << (g.K - 1) << " - 1)//" << stride << " + 1 is <= 0";
@@ -107,7 +116,10 @@ Conv1dPlan plan_conv1d(const std::vector<int64_t>& xs, const std::vector<int64_t
   check_int_range("C_out/groups", Og);
   check_int_range("C_in/groups*K", CgK);
   p.out_shape = {g.N, g.C_out, g.T_out};
-  p.scratch_numel = g.direct ? 0 : g.C_in * g.K * g.T_out;
+  ck_shape_numel(p.out_shape, "conv1d: output size N*C_out*T_out");
+  p.scratch_numel =
+      g.direct ? 0 : ck_mul(ck_mul(g.C_in, g.K, "conv1d: im2col rows C_in*K"), g.T_out, "conv1d: im2col scratch size");
+  ck_fp32_bytes(p.scratch_numel, "conv1d: im2col scratch bytes");
   return p;
 }
 
@@ -153,18 +165,25 @@ ConvTranspose1dPlan plan_conv_transpose1d(const std::vector<int64_t>& xs, const 
     os << "conv_transpose1d: C_in (" << g.C_in << ") is not divisible by groups (" << groups << ")";
     bad_attr(os.str());
   }
-  g.C_out = ws[1] * groups;
+  g.C_out = ck_mul(ws[1], groups, "conv_transpose1d: C_out = w.shape[1]*groups");
   if (bs != nullptr && (bs->size() != 1 || (*bs)[0] != g.C_out)) {
     os << "conv_transpose1d: b has shape " << shape_str(*bs) << ", expected [" << g.C_out << "]";
     bad_attr(os.str());
   }
-  g.T_out = stride * (g.T - 1) + output_padding + dilation * (g.K - 1) + 1 - pb - pe;
+  // F03: every step checked.
+  int64_t t_out = ck_mul(stride, g.T - 1, "conv_transpose1d: stride*(T-1)");
+  t_out = ck_add(t_out, output_padding, "conv_transpose1d: output length");
+  t_out = ck_add(t_out, ck_mul(dilation, g.K - 1, "conv_transpose1d: dilation*(K-1)"), "conv_transpose1d: output length");
+  t_out = ck_add(t_out, 1, "conv_transpose1d: output length");
+  t_out = ck_sub(t_out, pb, "conv_transpose1d: output length");
+  g.T_out = ck_sub(t_out, pe, "conv_transpose1d: output length");
   if (g.T_out <= 0) {
     os << "conv_transpose1d: output length stride*(T-1) + output_padding + dilation*(K-1) + 1 - pb - pe = "
        << g.T_out << " is <= 0";
     bad_attr(os.str());
   }
   p.out_shape = {g.N, g.C_out, g.T_out};
+  ck_shape_numel(p.out_shape, "conv_transpose1d: output size N*C_out*T_out");
   return p;
 }
 
@@ -177,6 +196,7 @@ struct Peeked {
 
 Peeked peek_operand(py::handle obj, const char* role, int ndim) {
   Peeked p;
+  require_operand(obj, role);
   p.capsule = to_capsule(obj, role, false);
   const DLTensor* t = peek(p.capsule, role);
   validate_tensor(t, role, ndim);
@@ -217,6 +237,9 @@ py::tuple to_tuple(const std::vector<int64_t>& v) {
 // ------------------------------------------------------------------------------------------------ Conv1d entry points
 py::tuple conv1d_plan(py::object x, py::object w, py::object b, int64_t stride, int64_t pb, int64_t pe,
                       int64_t dilation, int64_t groups) {
+  drain_completed();
+  require_operand(x, "x");
+  require_operand(w, "w");
   Peeked X = peek_operand(x, "x", 3);
   Peeked W = peek_operand(w, "w", 3);
   Peeked B;
@@ -230,6 +253,10 @@ py::tuple conv1d_plan(py::object x, py::object w, py::object b, int64_t stride, 
 
 void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py::object scratch, int64_t stride,
                 int64_t pb, int64_t pe, int64_t dilation, int64_t groups) {
+  drain_completed();
+  require_operand(xc, "x");
+  require_operand(wc, "w");
+  require_operand(out, "out");
   Operand X(xc, "x", 3, false);
   Operand W(wc, "w", 3, false);
   Operand B;
@@ -252,14 +279,19 @@ void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py:
   const int device = common_device({&X, &W, &B, &Y, &S});
   for (const Operand* in : {&X, &W, &B, &S}) expect_disjoint(Y, *in);
   for (const Operand* in : {&X, &W, &B}) expect_disjoint(S, *in);
+  // F01: every consumed manager stays alive until the legacy stream has passed these launches (also when a launch
+  // throws part-way); the producer deleters run later, from drain_completed / synchronize / atexit.
+  RetainUntilComplete keep(device, {&X, &W, &B, &Y, &S});
   conv1d_forward(device, p.g, X.data(), W.data(), B.present() ? B.data() : nullptr, Y.data(),
                  S.present() ? S.data() : nullptr);
-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launches.
 }
 
 // ------------------------------------------------------------------------------------------------ ConvTranspose1d entry points
 py::tuple conv_transpose1d_plan(py::object x, py::object w, py::object b, int64_t stride, int64_t pb, int64_t pe,
                                 int64_t output_padding, int64_t dilation, int64_t groups) {
+  drain_completed();
+  require_operand(x, "x");
+  require_operand(w, "w");
   Peeked X = peek_operand(x, "x", 3);
   Peeked W = peek_operand(w, "w", 3);
   Peeked B;
@@ -273,6 +305,10 @@ py::tuple conv_transpose1d_plan(py::object x, py::object w, py::object b, int64_
 
 void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::object out, int64_t stride, int64_t pb,
                           int64_t pe, int64_t output_padding, int64_t dilation, int64_t groups) {
+  drain_completed();
+  require_operand(xc, "x");
+  require_operand(wc, "w");
+  require_operand(out, "out");
   Operand X(xc, "x", 3, false);
   Operand W(wc, "w", 3, false);
   Operand B;
@@ -287,10 +323,15 @@ void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::objec
   expect_shape(Y, p.out_shape);
   const int device = common_device({&X, &W, &B, &Y});
   for (const Operand* in : {&X, &W, &B}) expect_disjoint(Y, *in);
+  RetainUntilComplete keep(device, {&X, &W, &B, &Y});  // F01 (see conv1d_run)
   conv_transpose1d_forward(device, p.g, X.data(), W.data(), B.present() ? B.data() : nullptr, Y.data());
 }
 
 void divide_probe(py::object x, py::object y, py::object out) {
+  drain_completed();
+  require_operand(x, "x");
+  require_operand(y, "y");
+  require_operand(out, "out");
   Operand X(to_capsule(x, "x", false), "x", 1, false);
   Operand Y(to_capsule(y, "y", false), "y", 1, false);
   Operand O(to_capsule(out, "out", true), "out", 1, true);
@@ -299,6 +340,7 @@ void divide_probe(py::object x, py::object y, py::object out) {
   const int device = common_device({&X, &Y, &O});
   expect_disjoint(O, X);
   expect_disjoint(O, Y);
+  RetainUntilComplete keep(device, {&X, &Y, &O});  // F01
   fp32_divide_probe(device, X.data(), Y.data(), O.data(), X.dim(0));
 }
 
@@ -353,4 +395,13 @@ PYBIND11_MODULE(_tc_signal, m) {
   });
   register_lstm(m);
   register_m4(m);
+  // P1T-FIX1 F01: the deferred-release list (dlpack_operand.h). tc_signal.synchronize() and the package's atexit hook
+  // call `synchronize`; tests and the G4 high-water receipt read `pending_stats`.
+  m.def("synchronize", &synchronize_and_release_all,
+        "Synchronize the legacy default stream (current device and every device with pending operands), then release "
+        "every consumed DLPack operand tc_signal still holds. RuntimeError if a device cannot synchronize (its "
+        "operands are then deliberately leaked, never released early).");
+  m.def("pending_stats", &pending_stats, py::arg("reset_high_water") = false,
+        "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
+        "fallback syncs, deliberate leaks, and the bounds.");
 }

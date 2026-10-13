@@ -1,0 +1,13 @@
+# mutant (c): F03 empty() rank check removed (count/byte checks stay)
+# tree: /tmp/p1t_fix1_mut_c/tensor_cuda
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -671,7 +671,7 @@
+ // returning a nonempty tensor over a NULL buffer.
+ Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
+                     const std::string& device) {
+-  if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
++  if (false && shape.size() > static_cast<size_t>(TC_MAX_DIMS))  // MUTANT (c): F03 rank check removed
+     throw py::value_error("empty: " + std::to_string(shape.size()) +
+                           " dimensions exceed TensorCUDA's maximum rank " +
+                           std::to_string(TC_MAX_DIMS) + " (TC_MAX_DIMS)");

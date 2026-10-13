@@ -23,5 +23,14 @@ constexpr int kDlpackMaxMinor = 3;
 // DLPack stream argument for the consumer stream: 1 = the legacy default stream (Python array API convention).
 constexpr int kDlpackLegacyStream = 1;
 
+// P1T-FIX1 (F01) deferred release: bounds of the pending list of consumed DLPack managers that wait for the legacy
+// stream to pass their call (dlpack_operand.h, RetainUntilComplete). When a new entry pushes the list past either
+// bound, tc_signal synchronizes the legacy stream of every pending device and releases the whole list. These only
+// trade memory held (by producers' blocks waiting for release) against how often a call blocks; numerics never change.
+// Entries: one per tc_signal call that reached its launch.
+constexpr long long kPendingMaxEntries = 1024;
+// Bytes: the sum of the fp32 operand sizes held by the pending entries (inputs, outputs and scratch).
+constexpr long long kPendingMaxBytes = 256LL << 20;
+
 }  // namespace tuning
 }  // namespace tcs

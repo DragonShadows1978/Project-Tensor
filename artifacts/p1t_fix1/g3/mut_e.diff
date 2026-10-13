@@ -1,0 +1,12 @@
+# mutant (e): F04 lifecycle checks removed: PyGILState_Ensure is attempted even while the interpreter finalizes
+# tree: /tmp/p1t_fix1_mut_e/tensor_cuda
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -492,6 +492,7 @@
+ std::atomic<unsigned long long> g_import_leaked_shutdown{0};
+ 
+ bool interpreter_accepts_gil_state() {
++  return true;  // MUTANT (e): F04 finalization/initialized checks removed
+   if (!Py_IsInitialized()) return false;
+ #if PY_VERSION_HEX >= 0x030D0000
+   if (Py_IsFinalizing()) return false;

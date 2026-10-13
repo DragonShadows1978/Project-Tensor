@@ -6,6 +6,7 @@
 #include "tc/core.h"
 
 #include <cuda_runtime.h>
+#include <atomic>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <mma.h>  // EXP-APA-3: WMMA HMMA for the Q-tiled attention skeleton
@@ -183,6 +184,42 @@ Storage::Storage(void* external_ptr, size_t nbytes_, Device device_,
                  ExternalRelease release, void* release_ctx)
     : ptr(external_ptr), nbytes(nbytes_), device(device_),
       external_release(release), external_ctx(release_ctx) {}
+
+// P1T-FIX1, F05: device-correct drain for an external (imported) Storage.
+//  1. If `dev` is not the current device, switch to it (the caller may have
+//     switched devices since the import; draining the CURRENT device's legacy
+//     stream would leave this allocation's last use pending).
+//  2. Synchronize that device's legacy stream (stream 0 in this TU).
+//  3. Report failure (any step) so the caller does NOT release, and clear the
+//     runtime's last-error slot so an unrelated later launch check does not
+//     report this destructor's error.
+//  4. Restore the caller's device.
+// No device-wide sync (cudaDeviceSynchronize): one stream sync, as before.
+// Prior art: the CUDA runtime current-device model (cudaGetDevice/cudaSetDevice;
+// the legacy default stream is per device) and the scoped device guard of
+// PyTorch (c10::cuda::CUDAGuard) / CuPy (cupy.cuda.Device as a context manager).
+// Taken: switch-then-restore. Ours: its placement before the DLPack deleter and
+// the leak-on-failure rule.
+namespace {
+std::atomic<unsigned long long> g_external_drain_leaks{0};
+
+bool drain_device_legacy_stream(int dev) {
+  int prev = -1;
+  cudaError_t e = cudaGetDevice(&prev);
+  bool switched = false;
+  if (e == cudaSuccess && prev != dev) {
+    e = cudaSetDevice(dev);
+    switched = (e == cudaSuccess);
+  }
+  if (e == cudaSuccess) e = cudaStreamSynchronize(0);
+  if (switched) cudaSetDevice(prev);
+  if (e != cudaSuccess) cudaGetLastError();
+  return e == cudaSuccess;
+}
+}  // namespace
+
+unsigned long long storage_external_drain_leaks() { return g_external_drain_leaks.load(); }
+
 Storage::~Storage() {
   if (external_release) {
     // Imported (DLPack) memory belongs to its producer: never cudaFree it and
@@ -202,7 +239,12 @@ Storage::~Storage() {
     // array API's stream rules (2021+); the drain-then-delete order is the
     // standard CUDA "free only after last use" rule. Ours: its placement in
     // the Storage destructor.
-    if (device.is_cuda()) cudaStreamSynchronize(0);
+    // P1T-FIX1 F05: drain THIS Storage's device (drain_device_legacy_stream
+    // above); if the drain fails, deliberately leak instead of releasing.
+    if (device.is_cuda() && !drain_device_legacy_stream(device.index)) {
+      g_external_drain_leaks.fetch_add(1);
+      return;
+    }
     external_release(external_ctx);
     return;
   }

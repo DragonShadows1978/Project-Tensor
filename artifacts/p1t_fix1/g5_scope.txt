@@ -1,0 +1,135 @@
+== diff stat vs pristine snapshot (00590b7-identical for exercised paths); gitignored build products excluded
+ artifacts/p1t_fix1/before_witness/core_fix1_tests_on_00590b7.log | new +397 -0
+ artifacts/p1t_fix1/before_witness/modules.txt                  | new +2 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f01_on_00590b7.log | new +248 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f02_on_00590b7.log | new +724 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_conv_dilation_span_on_00590b7.log | new +35 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_conv_scratch_bytes_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_conv_scratch_count_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_conv_transpose_length_on_00590b7.log | new +35 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_lstm_scratch_bytes_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_norm_count_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_per_case_summary.txt | new +16 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_reflect_output_bytes_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_reflect_review_case_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_upsample_length_on_00590b7.log | new +35 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_upsample_output_bytes_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_validate_address_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_validate_bytes_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_validate_count_on_00590b7.log | new +30 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_validate_negative_rank_on_00590b7.log | new +35 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_f03_validate_null_shape_on_00590b7.log | new +40 -0
+ artifacts/p1t_fix1/before_witness/tc_signal_fix1_tests_on_00590b7.log | new +41 -0
+ artifacts/p1t_fix1/build_sha256.txt                            | new +2 -0
+ artifacts/p1t_fix1/g3/make_mutants.py                          | new +61 -0
+ artifacts/p1t_fix1/g3/mut_a.diff                               | new +12 -0
+ artifacts/p1t_fix1/g3/mut_a_addon_lifetime_run1.log            | new +67 -0
+ artifacts/p1t_fix1/g3/mut_a_addon_lifetime_run2.log            | new +67 -0
+ artifacts/p1t_fix1/g3/mut_a_addon_lifetime_run3.log            | new +67 -0
+ artifacts/p1t_fix1/g3/mut_a_build.log                          | new +38 -0
+ artifacts/p1t_fix1/g3/mut_a_summary.txt                        | new +14 -0
+ artifacts/p1t_fix1/g3/mut_a_tests.log                          | new +217 -0
+ artifacts/p1t_fix1/g3/mut_b.diff                               | new +12 -0
+ artifacts/p1t_fix1/g3/mut_b_build.log                          | new +38 -0
+ artifacts/p1t_fix1/g3/mut_b_summary.txt                        | new +28 -0
+ artifacts/p1t_fix1/g3/mut_b_tests.log                          | new +418 -0
+ artifacts/p1t_fix1/g3/mut_c.diff                               | new +13 -0
+ artifacts/p1t_fix1/g3/mut_c_build.log                          | new +47 -0
+ artifacts/p1t_fix1/g3/mut_c_core_edges.log                     | new +35 -0
+ artifacts/p1t_fix1/g3/mut_c_summary.txt                        | new +7 -0
+ artifacts/p1t_fix1/g3/mut_c_tests.log                          | new +26 -0
+ artifacts/p1t_fix1/g3/mut_d.diff                               | new +13 -0
+ artifacts/p1t_fix1/g3/mut_d_build.log                          | new +47 -0
+ artifacts/p1t_fix1/g3/mut_d_summary.txt                        | new +6 -0
+ artifacts/p1t_fix1/g3/mut_d_tests.log                          | new +37 -0
+ artifacts/p1t_fix1/g3/mut_e.diff                               | new +12 -0
+ artifacts/p1t_fix1/g3/mut_e_build.log                          | new +47 -0
+ artifacts/p1t_fix1/g3/mut_e_core_shutdown_final.log            | new +8 -0
+ artifacts/p1t_fix1/g3/mut_e_summary.txt                        | new +5 -0
+ artifacts/p1t_fix1/g3/mut_e_tests.log                          | new +30 -0
+ artifacts/p1t_fix1/g3/mutant_so_sha256.txt                     | new +5 -0
+ artifacts/p1t_fix1/g3/run_mutant.sh                            | new +28 -0
+ artifacts/p1t_fix1/g4/bench_conditions.txt                     | new +5 -0
+ artifacts/p1t_fix1/g4/g4_bench.py                              | new +46 -0
+ artifacts/p1t_fix1/g4/g4_bench_prealloc.py                     | new +45 -0
+ artifacts/p1t_fix1/g4/g4_bench_prealloc_runs.jsonl             | new +10 -0
+ artifacts/p1t_fix1/g4/g4_bench_runs.jsonl                      | new +6 -0
+ artifacts/p1t_fix1/g4/g4_summary.txt                           | new +9 -0
+ artifacts/p1t_fix1/g4/p1t_T1toT6_hwm_run.json                  | new +10957 -0
+ artifacts/p1t_fix1/g4/voice_hwm_run.log                        | new +67 -0
+ artifacts/p1t_fix1/g4/voice_hwm_wrapper.py                     | new +21 -0
+ artifacts/p1t_fix1/g4/voice_runner_pending_stats.json          | new +19 -0
+ artifacts/p1t_fix1/g5_scope.py                                 | new +108 -0
+ artifacts/p1t_fix1/g5_scope.txt                                | new +0 -0
+ artifacts/p1t_fix1/p1t_T1toT6.json                             | new +10957 -0
+ artifacts/p1t_fix1/probe_runs/addon_lifetime_run1.log          | new +63 -0
+ artifacts/p1t_fix1/probe_runs/addon_lifetime_run2.log          | new +63 -0
+ artifacts/p1t_fix1/probe_runs/addon_lifetime_run3.log          | new +63 -0
+ artifacts/p1t_fix1/probe_runs/core_device_drain.log            | new +1 -0
+ artifacts/p1t_fix1/probe_runs/core_edges.log                   | new +19 -0
+ artifacts/p1t_fix1/probe_runs/core_shutdown_final.log          | new +3 -0
+ artifacts/p1t_fix1/probe_runs/core_shutdown_normal.log         | new +1 -0
+ artifacts/p1t_fix1/probe_runs/host_checks_after.json           | new +50 -0
+ artifacts/p1t_fix1/probe_runs/host_checks_after.stderr         | new +0 -0
+ artifacts/p1t_fix1/probe_runs/inputs_sha256.txt                | new +10 -0
+ artifacts/p1t_fix1/probe_runs/numerics_and_streams.log         | new +1 -0
+ artifacts/p1t_fix1/probe_runs/release_worker_build.log         | new +0 -0
+ artifacts/p1t_fix1/probe_runs/summary.txt                      | new +10 -0
+ artifacts/p1t_fix1/run_g1_probes.sh                            | new +25 -0
+ docs/P1T_FIX1_LEDGER.md                                        | new +187 -0
+ docs/P1T_FIX1_M1_ADDENDUM.md                                   | new +31 -0
+ docs/P1T_FIX1_REPORT.md                                        | new +299 -0
+ logs/p1t_fix1_core_build_r1.log                                | new +51 -0
+ logs/p1t_fix1_g2_core_compare.txt                              | new +7 -0
+ logs/p1t_fix1_g2_core_suite.log                                | new +1827 -0
+ logs/p1t_fix1_g2_tc_signal_tests.log                           | new +9 -0
+ logs/p1t_fix1_g2_test_dlpack.log                               | new +2 -0
+ logs/p1t_fix1_g2_voice_T1toT6.log                              | new +66 -0
+ logs/p1t_fix1_tc_signal_build_r1.log                           | new +42 -0
+ logs/p1t_fix1_tc_signal_build_r2.log                           | new +12 -0
+ tc_signal/README.md                                            | mod +50 -14
+ tc_signal/src/bindings.cpp                                     | mod +60 -9
+ tc_signal/src/checked_math.h                                   | new +70 -0
+ tc_signal/src/dlpack_operand.cpp                               | mod +357 -8
+ tc_signal/src/dlpack_operand.h                                 | mod +85 -6
+ tc_signal/src/lstm_bindings.cpp                                | mod +32 -8
+ tc_signal/src/m4_bindings.cpp                                  | mod +76 -36
+ tc_signal/src/tuning.h                                         | mod +9 -0
+ tc_signal/tc_signal/__init__.py                                | mod +29 -1
+ tc_signal/tests/test_contract.py                               | mod +5 -0
+ tc_signal/tests/test_fix1_findings.py                          | new +402 -0
+ tensor_cuda/include/tc/core.h                                  | mod +21 -6
+ tensor_cuda/src/bindings.cpp                                   | mod +131 -16
+ tensor_cuda/src/kernels.cu                                     | mod +43 -1
+ tensor_cuda/tensor_cuda/__init__.py                            | mod +19 -7
+ tensor_cuda/tests/test_dlpack.py                               | mod +356 -0
+ 104 files changed, 30152 insertions(+), 112 deletions(-)   [code/tests/README only: 16 files, +1745 -112]
+== rewritten by the mandated core suite / runs with byte-identical content (no diff): 17
+    artifacts/wo12g_after.ppm (== 00590b7 checkout)
+    artifacts/wo12g_before.ppm (== 00590b7 checkout)
+    artifacts/wo8a_blocky.ppm (== 00590b7 checkout)
+    artifacts/wo8a_smooth.ppm (== 00590b7 checkout)
+    artifacts/wo8c_filter0.ppm (== 00590b7 checkout)
+    artifacts/wo8c_filter1.ppm (== 00590b7 checkout)
+    artifacts/wo8c_filter2.ppm (== 00590b7 checkout)
+    artifacts/wo9ae_far.ppm (== 00590b7 checkout)
+    artifacts/wo9ae_front.ppm (== 00590b7 checkout)
+    artifacts/wo9ae_ridge.ppm (== 00590b7 checkout)
+    artifacts/wo9br2_far.ppm (== 00590b7 checkout)
+    artifacts/wo9br2_macro.ppm (== 00590b7 checkout)
+    artifacts/wo9br2_mid.ppm (== 00590b7 checkout)
+    artifacts/wo9br2_near.ppm (== 00590b7 checkout)
+    artifacts/wo9e_below.ppm (== 00590b7 checkout)
+    artifacts/wo9e_edge.ppm (== 00590b7 checkout)
+    artifacts/wo9e_overhead.ppm (== 00590b7 checkout)
+== out-of-scope paths: none
+== new __global__ lines in core: 0
+== probe artifacts/p1t_rev/probes/addon_lifetime.py: identical (943a6c6873c4e45b)
+== probe artifacts/p1t_rev/probes/core_device_drain.py: identical (6dd2d2e9cdcc1218)
+== probe artifacts/p1t_rev/probes/core_edges.py: identical (f7ab8de5367ab85b)
+== probe artifacts/p1t_rev/probes/core_shutdown.py: identical (347b508058dbecda)
+== probe artifacts/p1t_rev/probes/numerics_and_streams.py: identical (2c83b928a5693845)
+== probe artifacts/p1t_rev/probes/README.md: identical (c47bc7a8d3509750)
+== probe artifacts/p1t_rev/probes/release_worker.cpp: identical (1b63ba7366a0ee93)
+== probe artifacts/p1t_rev/host_checks.py: identical (fa88a058be53fc7d)
+G5 PASS
