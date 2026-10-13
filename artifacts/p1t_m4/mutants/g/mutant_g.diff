@@ -1,0 +1,11 @@
+--- a/tc_signal/src/norms.cu
++++ b/tc_signal/src/norms.cu
+@@ -121,7 +121,7 @@
+   for (int64_t row = blockIdx.x; row < rows; row += gridDim.x) {
+     const float* __restrict__ xr = x + row * L;
+     float* __restrict__ yr = y + row * L;
+-    const float K = xr[0];
++    const float K = 0.0f;  // MUTANT (g): no shift (plain fp32 two-pass)
+ 
+     // Pass 1: the mean of the shifted row.
+     float acc = 0.0f;

@@ -1,0 +1,11 @@
+--- a/tc_signal/src/small_ops.cu
++++ b/tc_signal/src/small_ops.cu
+@@ -78,7 +78,7 @@
+        i += static_cast<int64_t>(gridDim.x) * blockDim.x) {
+     const int64_t t = i % T_out;
+     const int64_t r = i / T_out;
+-    y[i] = x[r * T + t / scale];
++    y[i] = x[r * T + min((t + scale / 2) / scale, T - 1)];  // MUTANT (f): rounding, clamped
+   }
+ }
+ 

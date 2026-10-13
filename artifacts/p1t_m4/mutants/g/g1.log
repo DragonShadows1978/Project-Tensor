@@ -1,0 +1,372 @@
+Mon Oct 12 09:17:24 PM EDT 2026
+..........................................F............................. [ 19%]
+........................................................................ [ 38%]
+........................................FFFF...........FFF..FF.......... [ 57%]
+........................................................................ [ 76%]
+..............F......................................................... [ 96%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+___________________ test_norm_census[edge-in_const_rows_N2] ____________________
+
+cell = ('edge', 'in_const_rows_N2', 'instance', (2, 8, 100), None, 9.999999747378752e-06, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 6.960e-05 > gate 1e-05
+E       assert 6.959648537748843e-05 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+_____________________ test_norm_census[edge-in_offset_N2] ______________________
+
+cell = ('edge', 'in_offset_N2', 'instance', (2, 8, 1193), None, 9.999999747378752e-06, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.656e-02 > gate 1e-05
+E       assert 0.016558863701404938 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+____________________ test_norm_census[edge-in_offset_long] _____________________
+
+cell = ('edge', 'in_offset_long', 'instance', (1, 4, 65536), None, 9.999999747378752e-06, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 9.137e-04 > gate 1e-05
+E       assert 0.0009137421337739215 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+___________________ test_norm_census[edge-in_neg_offset_N2] ____________________
+
+cell = ('edge', 'in_neg_offset_N2', 'instance', (2, 4, 3000), None, 9.999999747378752e-06, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.988e-02 > gate 1e-05
+E       assert 0.019880267841643134 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+_____________________ test_norm_census[edge-ln_offset_N2] ______________________
+
+cell = ('edge', 'ln_offset_N2', 'layer', (2, 30, 768), -1, 9.999999960041972e-13, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.723e-02 > gate 1e-05
+E       assert 0.027231244118248957 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+___________________ test_norm_census[edge-ln_const_rows_N2] ____________________
+
+cell = ('edge', 'ln_const_rows_N2', 'layer', (2, 30, 768), -1, 9.999999960041972e-13, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.182e-01 > gate 1e-05
+E       assert 0.21822896663906763 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+_________________ test_norm_census[edge-ln_small_var_eps1e-12] _________________
+
+cell = ('edge', 'ln_small_var_eps1e-12', 'layer', (2, 30, 768), -1, 9.999999960041972e-13, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.724e-04 > gate 1e-05
+E       assert 0.00017239029770961818 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+____________________ test_norm_census[edge-gn_offset_g8_N2] ____________________
+
+cell = ('edge', 'gn_offset_g8_N2', 'group', (2, 32, 500), 8, 1e-05, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 5.865e-03 > gate 1e-05
+E       assert 0.0058650714935333985 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+____________________ test_norm_census[edge-gn_const_g4_N2] _____________________
+
+cell = ('edge', 'gn_const_g4_N2', 'group', (2, 16, 50), 4, 1e-05, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', NORM_CELLS, ids=[f'{c[0]}-{c[1]}' for c in NORM_CELLS])
+    def test_norm_census(cell, receipt):
+        kind, name, op, shape, arg, eps, data, affine = cell
+        x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+        X, S, B = _dev(x), _dev(s), _dev(b)
+        y1 = _call(op, X, S, B, arg, eps)
+        y2 = _call(op, X, S, B, arg, eps)
+        torch.cuda.synchronize()
+        a1, a2 = y1.cpu().numpy(), y2.cpu().numpy()
+        o = O.norm_oracle(op, x, s, b, arg, eps)
+        shape_ok = a1.shape == o.shape
+        finite = bool(np.all(np.isfinite(a1)))
+        n = O.normwise(a1, o) if shape_ok else float('inf')
+        det = O.bits_equal_strict(a1, a2)
+        bias_exact = None
+        if name in C.NORM_BIAS_EXACT:
+            bias_exact = bool(np.array_equal(a1, O.bias_expected(op, shape, b)))
+        ok = bool(shape_ok and finite and n <= C.GATE_N and det and bias_exact is not False)
+        receipt.append({'op': op + '_norm' if op != 'layer' else 'layer_norm', 'kind': kind, 'cell': name,
+                        'attrs': {'shape': list(shape), 'arg': arg, 'eps': eps, 'data': data, 'affine': affine},
+                        'N': n, 'gate': C.GATE_N, 'deterministic': det, 'all_finite': finite,
+                        'bias_exact': bias_exact, 'pass': ok})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 3.976e-05 > gate 1e-05
+E       assert 3.9756409503999575e-05 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:74: AssertionError
+_____________ test_norm_tensorcuda_producer_and_default_allocator ______________
+
+    def test_norm_tensorcuda_producer_and_default_allocator():
+        """The production path: TensorCUDA tensors in, outputs from tc_signal's default allocator (tensor_cuda.empty)."""
+        tc = pytest.importorskip('tensor_cuda')
+        ts.set_allocator(None)
+        for name, op, shape, arg, eps, data, affine in [C.NORM_KOKORO[0], C.NORM_KOKORO[19], C.NORM_KOKORO[23],
+                                                        C.NORM_EDGE[3], C.NORM_EDGE[10]]:
+            x, s, b = O.norm_data(name, op, shape, arg, data, affine)
+            up = (lambda a: None if a is None else tc.tensor(a, dtype='float32'))
+            y = _call(op, up(x), up(s), up(b), arg, eps)
+            assert type(y).__module__.startswith('tensor_cuda'), type(y)
+>           assert O.normwise(np.asarray(y.numpy()), O.norm_oracle(op, x, s, b, arg, eps)) <= C.GATE_N, name
+E           AssertionError: in_offset_N2
+E           assert 0.016558863701404938 <= 1e-05
+E            +  where 0.016558863701404938 = <function normwise at 0x7e759f5c8900>(array([[[-0.8388812 ,  4.4103894 ,  3.6604936 , ...,  2.160702  ,\n          0.8483843 ,  0.8483843 ],\n        [-2.6591...4, -0.23685749, -0.28955272, ..., -0.2679956 ,\n         -0.24643844, -0.26080987]]], shape=(2, 8, 1193), dtype=float32), array([[[-0.79482758,  4.45577988,  3.7056931 , ...,  2.20551954,\n          0.89286767,  0.89286767],\n        [-2.6054...    [-0.27744423, -0.23672461, -0.28942059, ..., -0.26786314,\n         -0.24630569, -0.26067733]]], shape=(2, 8, 1193)))
+E            +    where <function normwise at 0x7e759f5c8900> = O.normwise
+E            +    and   array([[[-0.8388812 ,  4.4103894 ,  3.6604936 , ...,  2.160702  ,\n          0.8483843 ,  0.8483843 ],\n        [-2.6591...4, -0.23685749, -0.28955272, ..., -0.2679956 ,\n         -0.24643844, -0.26080987]]], shape=(2, 8, 1193), dtype=float32) = <built-in function asarray>(array([[[-0.8388812 ,  4.4103894 ,  3.6604936 , ...,  2.160702  ,\n          0.8483843 ,  0.8483843 ],\n        [-2.6591...4, -0.23685749, -0.28955272, ..., -0.2679956 ,\n         -0.24643844, -0.26080987]]], shape=(2, 8, 1193), dtype=float32))
+E            +      where <built-in function asarray> = np.asarray
+E            +      and   array([[[-0.8388812 ,  4.4103894 ,  3.6604936 , ...,  2.160702  ,\n          0.8483843 ,  0.8483843 ],\n        [-2.6591...4, -0.23685749, -0.28955272, ..., -0.2679956 ,\n         -0.24643844, -0.26080987]]], shape=(2, 8, 1193), dtype=float32) = numpy()
+E            +        where numpy = <tensor_cuda._tensor_cuda.Tensor object at 0x7e759d35bab0>.numpy
+E            +    and   array([[[-0.79482758,  4.45577988,  3.7056931 , ...,  2.20551954,\n          0.89286767,  0.89286767],\n        [-2.6054...    [-0.27744423, -0.23672461, -0.28942059, ..., -0.26786314,\n         -0.24630569, -0.26067733]]], shape=(2, 8, 1193)) = <function norm_oracle at 0x7e759f5c87c0>('instance', array([[[ 9999.991, 10000.019, 10000.015, ..., 10000.007, 10000.   ,\n         10000.   ],\n        [10000.015, 10000.00... [10000.006,  9999.989, 10000.011, ..., 10000.002,  9999.993,\n          9999.999]]], shape=(2, 8, 1193), dtype=float32), array([ 1.9706173 , -1.5582299 , -1.092812  , -0.4999636 ,  0.31371185,\n        1.7748009 , -0.6421669 , -0.0249759 ], dtype=float32), array([ 0.8483843 , -0.5409896 ,  0.03175214,  0.4269074 , -1.0576856 ,\n       -1.4941064 ,  0.22897212, -0.2632051 ], dtype=float32), None, 9.999999747378752e-06)
+E            +      where <function norm_oracle at 0x7e759f5c87c0> = O.norm_oracle
+E            +  and   1e-05 = C.GATE_N
+
+tc_signal/tests/test_norms.py:328: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-in_const_rows_N2]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-in_offset_N2] - A...
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-in_offset_long]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-in_neg_offset_N2]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-ln_offset_N2] - A...
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-ln_const_rows_N2]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-ln_small_var_eps1e-12]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-gn_offset_g8_N2]
+FAILED tc_signal/tests/test_norms.py::test_norm_census[edge-gn_const_g4_N2]
+FAILED tc_signal/tests/test_norms.py::test_norm_tensorcuda_producer_and_default_allocator
+11 failed, 364 passed in 7.96s
+pytest exit=1
+Mon Oct 12 09:17:34 PM EDT 2026

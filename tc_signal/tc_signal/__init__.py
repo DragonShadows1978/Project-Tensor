@@ -113,3 +113,8 @@ def conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dil
     return out
 from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)
 __all__.append('lstm')
+
+
+from ._norms import group_norm, instance_norm1d, layer_norm  # noqa: E402  (P1T-M4, T5)
+from ._small import reflection_pad1d, rint, upsample_nearest1d  # noqa: E402  (P1T-M4, T6)
+__all__ += ['instance_norm1d', 'layer_norm', 'group_norm', 'upsample_nearest1d', 'reflection_pad1d', 'rint']

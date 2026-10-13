@@ -1,0 +1,25 @@
+# P1T-M4 baseline: M2 suite at bbc4880 (no M4 edits yet), order PYTHONPATH, prebuilt _tc_signal sha256 3db14dc4af85e5376b850d21ec568f842189c1a4d76f47f87fcf80c6d23e4a25
+Mon Oct 12 08:28:54 PM EDT 2026
+..........................................F............................. [ 45%]
+........................................................................ [ 91%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+1 failed, 156 passed in 7.33s
+exit=1
+
+# diagnosis: same suite, PYTHONPATH without tensor_cuda (pre-M1 condition), only the default-allocator test
+.                                                                        [100%]
+1 passed, 73 deselected in 2.45s
+# diagnosis: with tensor_cuda: what does the default allocator return?
+tensor_cuda from /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m4/tensor_cuda/tensor_cuda/__init__.py has empty: True
+<class 'tensor_cuda._tensor_cuda.Tensor'> (1, 6, 18) True

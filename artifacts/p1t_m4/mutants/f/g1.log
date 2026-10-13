@@ -1,0 +1,557 @@
+Mon Oct 12 09:16:27 PM EDT 2026
+..........................................F............................. [ 19%]
+........................................................................ [ 38%]
+........................................................................ [ 57%]
+........................................................................ [ 76%]
+...............FFFFF.FF.FFF............................................. [ 96%]
+............F.F                                                          [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+__________________ test_upsample_census[kokoro-F0.1_x2_short] __________________
+
+cell = ('F0.1_x2_short', 'kokoro', (1, 512, 82), 2, 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'kokoro', name = 'F0.1_x2_short'
+attrs = {'scale': 2, 'shape': [1, 512, 82]}
+a1 = array([[[ 2.2475240e+00,  3.7149768e+00,  3.7149768e+00, ...,
+          6.0813338e-01,  6.0813338e-01,  6.0813338e-01]...8819948e+00, ...,
+          1.2561076e+00,  1.2561076e+00,  1.2561076e+00]]],
+      shape=(1, 512, 164), dtype=float32)
+a2 = array([[[ 2.2475240e+00,  3.7149768e+00,  3.7149768e+00, ...,
+          6.0813338e-01,  6.0813338e-01,  6.0813338e-01]...8819948e+00, ...,
+          1.2561076e+00,  1.2561076e+00,  1.2561076e+00]]],
+      shape=(1, 512, 164), dtype=float32)
+o = array([[[ 2.2475240e+00,  2.2475240e+00,  3.7149768e+00, ...,
+          1.6862332e+00,  6.0813338e-01,  6.0813338e-01]...8819948e+00, ...,
+          4.7346601e+00,  1.2561076e+00,  1.2561076e+00]]],
+      shape=(1, 512, 164), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 41472 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+__________________ test_upsample_census[kokoro-F0.1_x2_long] ___________________
+
+cell = ('F0.1_x2_long', 'kokoro', (1, 512, 1193), 2, 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'kokoro', name = 'F0.1_x2_long'
+attrs = {'scale': 2, 'shape': [1, 512, 1193]}
+a1 = array([[[-1.7716616 , -0.74617416, -0.74617416, ..., -0.8049926 ,
+         -0.8049926 , -0.8049926 ],
+        [ 1.9156...  0.57025146,  0.57025146, ...,  1.1631335 ,
+          1.1631335 ,  1.1631335 ]]], shape=(1, 512, 2386), dtype=float32)
+a2 = array([[[-1.7716616 , -0.74617416, -0.74617416, ..., -0.8049926 ,
+         -0.8049926 , -0.8049926 ],
+        [ 1.9156...  0.57025146,  0.57025146, ...,  1.1631335 ,
+          1.1631335 ,  1.1631335 ]]], shape=(1, 512, 2386), dtype=float32)
+o = array([[[-1.7716616 , -1.7716616 , -0.74617416, ...,  2.0401127 ,
+         -0.8049926 , -0.8049926 ],
+        [ 1.9156... -1.724734  ,  0.57025146, ...,  1.1799711 ,
+          1.1631335 ,  1.1631335 ]]], shape=(1, 512, 2386), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 610304 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_________________ test_upsample_census[kokoro-decode3_x2_long] _________________
+
+cell = ('decode3_x2_long', 'kokoro', (1, 1090, 961), 2, 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'kokoro', name = 'decode3_x2_long'
+attrs = {'scale': 2, 'shape': [1, 1090, 961]}
+a1 = array([[[ 1.1582519 , -0.67326844, -0.67326844, ..., -0.18774255,
+         -0.18774255, -0.18774255],
+        [ 2.2617...-4.3751144 , -4.3751144 , ..., -0.9724782 ,
+         -0.9724782 , -0.9724782 ]]], shape=(1, 1090, 1922), dtype=float32)
+a2 = array([[[ 1.1582519 , -0.67326844, -0.67326844, ..., -0.18774255,
+         -0.18774255, -0.18774255],
+        [ 2.2617...-4.3751144 , -4.3751144 , ..., -0.9724782 ,
+         -0.9724782 , -0.9724782 ]]], shape=(1, 1090, 1922), dtype=float32)
+o = array([[[ 1.1582519 ,  1.1582519 , -0.67326844, ..., -2.6062102 ,
+         -0.18774255, -0.18774255],
+        [ 2.2617...-0.79013115, -4.3751144 , ..., -1.5833167 ,
+         -0.9724782 , -0.9724782 ]]], shape=(1, 1090, 1922), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 1046400 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+______________ test_upsample_census[kokoro-f0_upsamp_x300_short] _______________
+
+cell = ('f0_upsamp_x300_short', 'kokoro', (1, 1, 164), 300, 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'kokoro', name = 'f0_upsamp_x300_short'
+attrs = {'scale': 300, 'shape': [1, 1, 164]}
+a1 = array([[[-2.5131154 , -2.5131154 , -2.5131154 , ..., -0.83426595,
+         -0.83426595, -0.83426595]]], shape=(1, 1, 49200), dtype=float32)
+a2 = array([[[-2.5131154 , -2.5131154 , -2.5131154 , ..., -0.83426595,
+         -0.83426595, -0.83426595]]], shape=(1, 1, 49200), dtype=float32)
+o = array([[[-2.5131154 , -2.5131154 , -2.5131154 , ..., -0.83426595,
+         -0.83426595, -0.83426595]]], shape=(1, 1, 49200), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 24450 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_______________ test_upsample_census[kokoro-f0_upsamp_x300_long] _______________
+
+cell = ('f0_upsamp_x300_long', 'kokoro', (1, 1, 2386), 300, 'act')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'kokoro', name = 'f0_upsamp_x300_long'
+attrs = {'scale': 300, 'shape': [1, 1, 2386]}
+a1 = array([[[ 1.0910345,  1.0910345,  1.0910345, ..., -3.2193396,
+         -3.2193396, -3.2193396]]], shape=(1, 1, 715800), dtype=float32)
+a2 = array([[[ 1.0910345,  1.0910345,  1.0910345, ..., -3.2193396,
+         -3.2193396, -3.2193396]]], shape=(1, 1, 715800), dtype=float32)
+o = array([[[ 1.0910345,  1.0910345,  1.0910345, ..., -3.2193396,
+         -3.2193396, -3.2193396]]], shape=(1, 1, 715800), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 357750 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_______________________ test_upsample_census[edge-x7_N2] _______________________
+
+cell = ('x7_N2', 'edge', (2, 3, 13), 7, 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'edge', name = 'x7_N2'
+attrs = {'scale': 7, 'shape': [2, 3, 13]}
+a1 = array([[[           nan,            nan,            nan,            nan,
+         -4.6019712e-03, -4.6019712e-03, -4.6...9629220e+00, -1.9629220e+00, -1.9629220e+00,
+         -1.9629220e+00, -1.9629220e+00, -1.9629220e+00]]], dtype=float32)
+a2 = array([[[           nan,            nan,            nan,            nan,
+         -4.6019712e-03, -4.6019712e-03, -4.6...9629220e+00, -1.9629220e+00, -1.9629220e+00,
+         -1.9629220e+00, -1.9629220e+00, -1.9629220e+00]]], dtype=float32)
+o = array([[[           nan,            nan,            nan,            nan,
+                    nan,            nan,     ...9629220e+00, -1.9629220e+00, -1.9629220e+00,
+         -1.9629220e+00, -1.9629220e+00, -1.9629220e+00]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 216 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________________ test_upsample_census[edge-x2_N2_special] ___________________
+
+cell = ('x2_N2_special', 'edge', (2, 4, 9), 2, 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'edge', name = 'x2_N2_special'
+attrs = {'scale': 2, 'shape': [2, 4, 9]}
+a1 = array([[[           nan,  4.6817046e-02,  4.6817046e-02,  4.1544579e-02,
+          4.1544579e-02,  3.0616039e-02,  3.0...0000000e+00,  1.1561603e-02,  1.1561603e-02, -1.1754942e-38,
+         -1.1754942e-38, -1.1754942e-38]]], dtype=float32)
+a2 = array([[[           nan,  4.6817046e-02,  4.6817046e-02,  4.1544579e-02,
+          4.1544579e-02,  3.0616039e-02,  3.0...0000000e+00,  1.1561603e-02,  1.1561603e-02, -1.1754942e-38,
+         -1.1754942e-38, -1.1754942e-38]]], dtype=float32)
+o = array([[[           nan,            nan,  4.6817046e-02,  4.6817046e-02,
+          4.1544579e-02,  4.1544579e-02,  3.0...0000000e+00,  0.0000000e+00,  1.1561603e-02,  1.1561603e-02,
+         -1.1754942e-38, -1.1754942e-38]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 64 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+_____________________ test_upsample_census[edge-x3_rank1] ______________________
+
+cell = ('x3_rank1', 'edge', (10,), 3, 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'edge', name = 'x3_rank1'
+attrs = {'scale': 3, 'shape': [10]}
+a1 = array([ 1.8024665e+00,  1.8024665e+00,  5.6298897e+01,  5.6298897e+01,
+        5.6298897e+01, -3.0606543e-04, -3.06065... -3.4175102e-02, -3.4175102e-02, -1.0538335e-02, -1.0538335e-02,
+       -1.0538335e-02, -1.0538335e-02], dtype=float32)
+a2 = array([ 1.8024665e+00,  1.8024665e+00,  5.6298897e+01,  5.6298897e+01,
+        5.6298897e+01, -3.0606543e-04, -3.06065... -3.4175102e-02, -3.4175102e-02, -1.0538335e-02, -1.0538335e-02,
+       -1.0538335e-02, -1.0538335e-02], dtype=float32)
+o = array([ 1.8024665e+00,  1.8024665e+00,  1.8024665e+00,  5.6298897e+01,
+        5.6298897e+01,  5.6298897e+01, -3.06065... -3.4175102e-02, -3.4175102e-02, -3.4175102e-02, -1.0538335e-02,
+       -1.0538335e-02, -1.0538335e-02], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 9 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+____________________ test_upsample_census[edge-x2_rank4_N2] ____________________
+
+cell = ('x2_rank4_N2', 'edge', (2, 2, 2, 5), 2, 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'edge', name = 'x2_rank4_N2'
+attrs = {'scale': 2, 'shape': [2, 2, 2, 5]}
+a1 = array([[[[            nan,  5.86061287e+01,  5.86061287e+01,
+                     -inf,            -inf, -5.64971641e-...4273224e+00,
+          -4.54273224e+00,  6.06742668e+01,  6.06742668e+01,
+           6.06742668e+01]]]], dtype=float32)
+a2 = array([[[[            nan,  5.86061287e+01,  5.86061287e+01,
+                     -inf,            -inf, -5.64971641e-...4273224e+00,
+          -4.54273224e+00,  6.06742668e+01,  6.06742668e+01,
+           6.06742668e+01]]]], dtype=float32)
+o = array([[[[            nan,             nan,  5.86061287e+01,
+           5.86061287e+01,            -inf,            -i...1532485e-01,
+          -4.54273224e+00, -4.54273224e+00,  6.06742668e+01,
+           6.06742668e+01]]]], dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 32 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+______________________ test_upsample_census[edge-x300_N2] ______________________
+
+cell = ('x300_N2', 'edge', (2, 1, 37), 300, 'special')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.UPSAMPLE_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.UPSAMPLE_CELLS])
+    def test_upsample_census(cell, receipt):
+        name, kind, shape, s, data = cell
+        x = _data('up/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.upsample_nearest1d(X, s)), _host(ts.upsample_nearest1d(X, s))
+>       _record(receipt, 'upsample_nearest1d', kind, name, {'shape': list(shape), 'scale': s}, a1, a2,
+                O.upsample_oracle(x, s), strict=True)
+
+tc_signal/tests/test_small_ops.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'upsample_nearest1d', kind = 'edge', name = 'x300_N2'
+attrs = {'scale': 300, 'shape': [2, 1, 37]}
+a1 = array([[[ 1.8278848e-02,  1.8278848e-02,  1.8278848e-02, ...,
+         -0.0000000e+00, -0.0000000e+00, -0.0000000e+00]...6110753e+00, ...,
+         -2.1926256e+01, -2.1926256e+01, -2.1926256e+01]]],
+      shape=(2, 1, 11100), dtype=float32)
+a2 = array([[[ 1.8278848e-02,  1.8278848e-02,  1.8278848e-02, ...,
+         -0.0000000e+00, -0.0000000e+00, -0.0000000e+00]...6110753e+00, ...,
+         -2.1926256e+01, -2.1926256e+01, -2.1926256e+01]]],
+      shape=(2, 1, 11100), dtype=float32)
+o = array([[[ 1.8278848e-02,  1.8278848e-02,  1.8278848e-02, ...,
+         -0.0000000e+00, -0.0000000e+00, -0.0000000e+00]...6110753e+00, ...,
+         -2.1926256e+01, -2.1926256e+01, -2.1926256e+01]]],
+      shape=(2, 1, 11100), dtype=float32)
+strict = True
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 10800 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________ test_small_ops_producer_kwargs_byte_offset_and_deleters ____________
+
+    def test_small_ops_producer_kwargs_byte_offset_and_deleters():
+        import gc
+        P.reset_stats()
+        base = _t(1000)
+        off = 13
+        xn = base[off:off + 80].view(2, 4, 10).cpu().numpy()
+        for mode in ('field', 'data'):
+            x = P.Producer(base, (2, 4, 10), offset_elems=off, byte_offset_mode=mode)
+            ob = _t(2 * 4 * 20)
+            op = P.Producer(ob, (2, 4, 20))
+            assert ts.upsample_nearest1d(x, 2, out=op) is op
+            torch.cuda.synchronize()
+            assert x.calls[0]['stream'] == 1 and x.calls[0]['copy'] is None
+            assert op.calls[0]['stream'] == 1 and op.calls[0]['copy'] is False
+>           assert O.bits_equal_strict(ob.view(2, 4, 20).cpu().numpy(), O.upsample_oracle(xn, 2))
+E           AssertionError: assert False
+E            +  where False = <function bits_equal_strict at 0x7765481e8f40>(array([[[ 1.0458182 , -0.7235096 , -0.7235096 , -1.8853993 ,\n         -1.8853993 ,  0.71064264,  0.71064264, -0.701113...8078023,  0.68078023,  1.7340394 ,\n          1.7340394 ,  0.45355663,  0.45355663,  0.45355663]]],\n      dtype=float32), array([[[ 1.0458182 ,  1.0458182 , -0.7235096 , -0.7235096 ,\n         -1.8853993 , -1.8853993 ,  0.71064264,  0.710642...846088 ,  0.68078023,  0.68078023,\n          1.7340394 ,  1.7340394 ,  0.45355663,  0.45355663]]],\n      dtype=float32))
+E            +    where <function bits_equal_strict at 0x7765481e8f40> = O.bits_equal_strict
+E            +    and   array([[[ 1.0458182 , -0.7235096 , -0.7235096 , -1.8853993 ,\n         -1.8853993 ,  0.71064264,  0.71064264, -0.701113...8078023,  0.68078023,  1.7340394 ,\n          1.7340394 ,  0.45355663,  0.45355663,  0.45355663]]],\n      dtype=float32) = <built-in method numpy of Tensor object at 0x776545d38aa0>()
+E            +      where <built-in method numpy of Tensor object at 0x776545d38aa0> = tensor([[[ 1.0458, -0.7235, -0.7235, -1.8854, -1.8854,  0.7106,  0.7106,\n          -0.7011, -0.7011, -0.0347, -0.0347,...0.0134,  0.6690,  0.6690,  1.6846,  1.6846,  0.6808,\n           0.6808,  1.7340,  1.7340,  0.4536,  0.4536,  0.4536]]]).numpy
+E            +        where tensor([[[ 1.0458, -0.7235, -0.7235, -1.8854, -1.8854,  0.7106,  0.7106,\n          -0.7011, -0.7011, -0.0347, -0.0347,...0.0134,  0.6690,  0.6690,  1.6846,  1.6846,  0.6808,\n           0.6808,  1.7340,  1.7340,  0.4536,  0.4536,  0.4536]]]) = <built-in method cpu of Tensor object at 0x776545d38960>()
+E            +          where <built-in method cpu of Tensor object at 0x776545d38960> = tensor([[[ 1.0458, -0.7235, -0.7235, -1.8854, -1.8854,  0.7106,  0.7106,\n          -0.7011, -0.7011, -0.0347, -0.0347,...,  1.6846,  1.6846,  0.6808,\n           0.6808,  1.7340,  1.7340,  0.4536,  0.4536,  0.4536]]],\n       device='cuda:0').cpu
+E            +            where tensor([[[ 1.0458, -0.7235, -0.7235, -1.8854, -1.8854,  0.7106,  0.7106,\n          -0.7011, -0.7011, -0.0347, -0.0347,...,  1.6846,  1.6846,  0.6808,\n           0.6808,  1.7340,  1.7340,  0.4536,  0.4536,  0.4536]]],\n       device='cuda:0') = <built-in method view of Tensor object at 0x776545f69b30>(2, 4, 20)
+E            +              where <built-in method view of Tensor object at 0x776545f69b30> = tensor([ 1.0458, -0.7235, -0.7235, -1.8854, -1.8854,  0.7106,  0.7106, -0.7011,\n        -0.7011, -0.0347, -0.0347, -0....6690,  1.6846,\n         1.6846,  0.6808,  0.6808,  1.7340,  1.7340,  0.4536,  0.4536,  0.4536],\n       device='cuda:0').view
+E            +    and   array([[[ 1.0458182 ,  1.0458182 , -0.7235096 , -0.7235096 ,\n         -1.8853993 , -1.8853993 ,  0.71064264,  0.710642...846088 ,  0.68078023,  0.68078023,\n          1.7340394 ,  1.7340394 ,  0.45355663,  0.45355663]]],\n      dtype=float32) = <function upsample_oracle at 0x7765481e8ae0>(array([[[ 1.0458182 , -0.7235096 , -1.8853993 ,  0.71064264,\n         -0.70111316, -0.03473776, -0.6357242 , -0.188720...9466,\n          0.01338205,  0.6689725 ,  1.6846088 ,  0.68078023,\n          1.7340394 ,  0.45355663]]], dtype=float32), 2)
+E            +      where <function upsample_oracle at 0x7765481e8ae0> = O.upsample_oracle
+
+tc_signal/tests/test_small_ops.py:251: AssertionError
+___________ test_small_ops_tensorcuda_producer_and_default_allocator ___________
+
+    def test_small_ops_tensorcuda_producer_and_default_allocator():
+        """The production path: TensorCUDA tensors in, outputs from tc_signal's default allocator (tensor_cuda.empty)."""
+        tc = pytest.importorskip('tensor_cuda')
+        ts.set_allocator(None)
+        x = O.special_data('tc/special', (2, 4, 9))
+        X = tc.tensor(x, dtype='float32')
+        u = ts.upsample_nearest1d(X, 300)
+        p = ts.reflection_pad1d(X, (8, 8))
+        r = ts.rint(X)
+        for t in (u, p, r):
+            assert type(t).__module__.startswith('tensor_cuda'), type(t)
+>       assert O.bits_equal_strict(np.asarray(u.numpy()), O.upsample_oracle(x, 300))
+E       assert False
+E        +  where False = <function bits_equal_strict at 0x7765481e8f40>(array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32), array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32))
+E        +    where <function bits_equal_strict at 0x7765481e8f40> = O.bits_equal_strict
+E        +    and   array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32) = <built-in function asarray>(array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32))
+E        +      where <built-in function asarray> = np.asarray
+E        +      and   array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32) = numpy()
+E        +        where numpy = <tensor_cuda._tensor_cuda.Tensor object at 0x7765481beeb0>.numpy
+E        +    and   array([[[-3.17067700e-03, -3.17067700e-03, -3.17067700e-03, ...,\n         -1.18968086e-02, -1.18968086e-02, -1.1896808...68318e-02, ...,\n         -1.83004704e+01, -1.83004704e+01, -1.83004704e+01]]],\n      shape=(2, 4, 2700), dtype=float32) = <function upsample_oracle at 0x7765481e8ae0>(array([[[-3.17067700e-03, -8.77896595e+00,  7.61925983e+00,\n         -8.27920341e+00,  1.40129846e-45,             nan...,  4.28815613e+01, -1.40129846e-45,\n          5.96181154e+00, -2.33618355e+00, -1.83004704e+01]]],\n      dtype=float32), 300)
+E        +      where <function upsample_oracle at 0x7765481e8ae0> = O.upsample_oracle
+
+tc_signal/tests/test_small_ops.py:291: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[kokoro-F0.1_x2_short]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[kokoro-F0.1_x2_long]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[kokoro-decode3_x2_long]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[kokoro-f0_upsamp_x300_short]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[kokoro-f0_upsamp_x300_long]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[edge-x7_N2] - ...
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[edge-x2_N2_special]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[edge-x3_rank1]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[edge-x2_rank4_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_upsample_census[edge-x300_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_small_ops_producer_kwargs_byte_offset_and_deleters
+FAILED tc_signal/tests/test_small_ops.py::test_small_ops_tensorcuda_producer_and_default_allocator
+13 failed, 362 passed in 8.59s
+pytest exit=1
+Mon Oct 12 09:16:37 PM EDT 2026
