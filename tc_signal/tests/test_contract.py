@@ -161,12 +161,39 @@ def test_set_allocator_non_callable():
         ts.set_allocator(42)
 
 
-def test_default_allocator_names_set_allocator():
-    ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+def test_default_allocator_names_set_allocator(monkeypatch):
+    # The default allocator is tensor_cuda.empty (P1T-M1). Simulate the two ways it can be unavailable, independent of
+    # which tensor_cuda is on PYTHONPATH (lead fix on voice-int: the original assumed a pre-M1 tensor_cuda and failed
+    # once M1's core was present).
+    import sys
+    import types
+    ts.set_allocator(None)
+    monkeypatch.setitem(sys.modules, 'tensor_cuda', types.ModuleType('tensor_cuda'))      # importable, no `empty`
     with pytest.raises(RuntimeError, match='set_allocator'):
         _c1()
     with pytest.raises(RuntimeError, match='set_allocator'):
         _ct()
+    monkeypatch.setitem(sys.modules, 'tensor_cuda', None)                                  # not importable
+    with pytest.raises(RuntimeError, match='set_allocator'):
+        _c1()
+
+
+def test_default_allocator_uses_tensor_cuda_empty():
+    # With M1's core on PYTHONPATH the default allocator returns TensorCUDA tensors and the conv matches the oracle.
+    try:
+        import tensor_cuda as tcore
+    except ImportError:
+        pytest.skip('tensor_cuda is not importable')
+    if not hasattr(tcore, 'empty') or not hasattr(tcore, 'from_dlpack'):
+        pytest.skip('this tensor_cuda predates P1T-M1 (no empty/from_dlpack)')
+    ts.set_allocator(None)
+    x = _t(1, 8, 20)
+    w = _t(1, 8, 3)
+    y = ts.conv1d(x, w, None, padding=1)
+    assert hasattr(y, 'numpy') and not isinstance(y, torch.Tensor)          # a TensorCUDA tensor, not torch
+    got = torch.from_numpy(np.ascontiguousarray(y.numpy())).double()
+    ref = conv1d_f64(x, w, None, stride=1, pads=(1, 1), dilation=1, groups=1)
+    assert normwise(got, ref) <= 1e-5
 
 
 def test_allocator_wrong_shape_or_dtype():
