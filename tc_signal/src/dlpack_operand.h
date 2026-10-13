@@ -136,6 +136,16 @@ class Operand {
 //
 // Construct it AFTER every validation and right BEFORE the first launch: the constructor may still throw (event
 // acquisition), and then nothing has been queued. Its destructor never throws.
+//
+// P1T-FIX3, round-3 review finding V3-02 (aggregate byte accounting). Every operand's own byte count is checked at
+// validation (F03), but their SUM was formed later, unchecked, inside this noexcept destructor (signed overflow for
+// two disjoint 2^61-1 element fp32 descriptors), and added unchecked to the pending-list total. Now:
+//  * the constructor's FIRST step (before any allocation, event or launch, in every entry point, since each one
+//    constructs a RetainUntilComplete right before its first launch) sums the present operands' fp32 byte counts with
+//    checked addition and refuses the call with ValueError on overflow (aggregate_operand_bytes); the destructor reuses
+//    that checked sum and performs no addition of its own;
+//  * the pending-list total is SATURATING (note_push / note_pop in dlpack_operand.cpp), never throwing, and the bound
+//    comparison stays exact below INT64_MAX and conservative (over the bound) once saturated.
 class RetainUntilComplete {
  public:
   RetainUntilComplete(int device, std::initializer_list<Operand*> ops);
@@ -146,9 +156,15 @@ class RetainUntilComplete {
  private:
   int device_;
   std::vector<Operand*> ops_;
+  int64_t bytes_ = 0;                 // V3-02: the present operands' fp32 bytes, summed with checked addition
   std::vector<ManagedOwner> owners_;  // reserved in the constructor, so the destructor never allocates for it
   CUevent_st* event_ = nullptr;       // a cudaEvent_t from the per-device pool, acquired in the constructor
 };
+
+// V3-02: the fp32 byte total of the present operands, summed with checked addition; ValueError ("... overflows 64-bit
+// arithmetic; refused") when it exceeds INT64_MAX. Each operand's own count was checked at validation (F03). Called by
+// the RetainUntilComplete constructor before anything is acquired or launched.
+int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops);
 
 // Releases every completed pending entry (FIFO, stops at the first incomplete one). Called first thing by every
 // _tc_signal entry point that takes operands. GIL held.
@@ -161,7 +177,9 @@ void drain_completed() noexcept;
 // the message propagates as MemoryError.
 void synchronize_and_release_all();
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
-// push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors).
+// push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
+// (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that
+// happened).
 py::dict pending_stats(bool reset_high_water);
 // P1T-FIX2 (N3): constructs the pending-list state (it allocates) at module import, so no noexcept release path is the
 // first to touch it.

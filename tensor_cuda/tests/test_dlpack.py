@@ -38,8 +38,16 @@ P1T-FIX2 additions (review P1T-REV2 round 2; tests named test_fix2_*), with the 
     and on a foreign pthread: contained, counted, called once, rc 0. Mutant (d2): the catch removed.
   * N5: interpreter-exit coordination of foreign-thread releases (the core_shutdown.py pattern, torch-free): a release
     already taking the GIL when the exit hook runs completes before finalization (in-flight wait); one that starts
-    during the wait, or after the hook, leaks without touching the GIL; a release that outlives the bounded wait is
-    reported. Mutant (e): the in-flight wait removed.
+    during the wait, or after the hook, leaks without touching the GIL. Mutant (e): the in-flight wait removed.
+    (FIX2's "the wait is bounded and reported" test is gone: it pinned round-3 finding V3-01, see below.)
+
+P1T-FIX3 additions (review P1T-REV3 round 3; tests named test_fix3_*):
+  * V3-01 (exit quiescence): the exit hook waits, with no bound, until every admitted release has finished, and logs
+    at a bounded rate meanwhile: foreign-thread deleters of 0.1 s, 5.5 s and 12 s across the default 5 s diagnostic
+    delay, ORDINARY interpreter exit (no os._exit): rc 0, deleter completed, then finalization; nothing in flight (no
+    wait); the hook called from inside the main thread's own admitted release (no self-wait). The "never admitted"
+    (nested) and "after closing" cases are the N5 tests above. Mutant (a): FIX2's bounded return restored.
+  * V3-02 (tc_signal aggregate byte accounting) is tested in tc_signal/tests/test_fix3_findings.py.
 
 Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
 (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
@@ -1074,6 +1082,12 @@ def test_fix2_n4_throwing_producer_deleter_is_contained(fix2_thrower, mode):
 # Prior art: the reviewer's core_shutdown.py + release_worker.cpp scenario (a real imported Storage released on a
 # foreign thread at shutdown); CPython 3.12.3 Py_FinalizeEx ordering (atexit before finalizing). Ours: the staging,
 # the nested and bounded variants, the torch-free form.
+# P1T-FIX3 (round-3 review V3-01): FIX2's "bounded" mode ended the process with os._exit(0) while its 2 s deleter was
+# still running, so it never exercised ordinary finalization, and it pinned the defect (the hook returned before the
+# deleter finished). It is replaced by "overrun" (a deleter of argv[2] seconds across the exit wait, ordinary exit, no
+# os._exit anywhere in this script), "idle" (nothing in flight at exit) and "self" (the exit hook called from inside the
+# main thread's own admitted release). The reviewer's probe artifacts/p1t_rev3/probes/core_exit_overrun.py is the
+# same staging with the default 5 s knob and a 5.5 s deleter.
 _FIX2_N5_SCRIPT = r"""
 import atexit, ctypes, gc, json, os, sys, time
 RESULTS = {}
@@ -1086,14 +1100,11 @@ def _after_hook():
         RESULTS["after_release"] = {"stats": dict(tc._C._dlpack_release_stats()),
                                     "deleter_calls": [p.calls for p in PRODS]}
     print("RESULT " + json.dumps(RESULTS), flush=True)
-    if MODE == "bounded":
-        os._exit(0)                             # the in-flight thread is still in its 2 s deleter: end here
 atexit.register(_after_hook)
 """ + _SUBPROC_PRODUCER + _FIX2_PTHREAD + r"""
 MODE = sys.argv[1]
-SLEEP = {"during": 1.0, "nested": 0.0, "bounded": 2.0}.get(MODE, 0.0)
-if MODE == "bounded":
-    tc._DLPACK_SHUTDOWN_WAIT_S = 0.3           # the knob, read by the hook at exit
+SLEEP = float(sys.argv[2]) if MODE == "overrun" else {"during": 1.0, "nested": 0.0}.get(MODE, 0.0)
+RESULTS["knob_s"] = tc._DLPACK_SHUTDOWN_WAIT_S  # the default knob, unchanged, read by the hook at exit
 class SlowProducer(Producer):
     def _delete(self, _p):
         self.calls += 1
@@ -1128,8 +1139,18 @@ def _start_in_flight():
     start_foreign(FP_A, M_A)
     _wait_for(lambda: prod_a.started, "the in-flight deleter to start")
     RESULTS["before_hook"] = {"stats": dict(tc._C._dlpack_release_stats())}
-if MODE in ("during", "nested", "bounded"):
+if MODE in ("during", "nested", "overrun"):
     atexit.register(_start_in_flight)
+def _self_hook_inside():                        # runs inside A's deleter, on the MAIN thread: A is its own release
+    RESULTS["self"] = {"inside_before": dict(tc._C._dlpack_release_stats())}
+    t0 = time.monotonic()
+    tc._dlpack_shutdown_hook()                  # the exit hook, called from inside this thread's admitted release
+    RESULTS["self"]["hook_s"] = time.monotonic() - t0
+    RESULTS["self"]["inside_after"] = dict(tc._C._dlpack_release_stats())
+if MODE == "self":
+    prod_a.on_delete = _self_hook_inside
+    ctypes.CFUNCTYPE(None, ctypes.c_void_p)(FP_A)(M_A)   # release A on the main thread (not a foreign pthread)
+    RESULTS["self_after_release"] = {"stats": dict(tc._C._dlpack_release_stats()), "deleter_done": prod_a.done}
 class Finalizer:                                # drops the GIL during finalization (the core_shutdown.py pattern)
     def __init__(self):
         self.sleep, self.isf = time.sleep, sys.is_finalizing
@@ -1148,8 +1169,8 @@ print("ARMED", flush=True)
 """
 
 
-def _run_n5(mode):
-    r = subprocess.run([sys.executable, "-c", _FIX2_N5_SCRIPT, mode], capture_output=True, text=True,
+def _run_n5(mode, *args):
+    r = subprocess.run([sys.executable, "-c", _FIX2_N5_SCRIPT, mode, *args], capture_output=True, text=True,
                        timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
     lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
     res = json.loads(lines[-1][len("RESULT "):]) if lines else None
@@ -1189,12 +1210,77 @@ def test_fix2_n5_release_after_the_exit_hook_leaks_without_gil():
     assert "FINAL finalizing=True" in r.stdout and "terminate called" not in r.stderr, r.stderr
 
 
-def test_fix2_n5_the_wait_is_bounded_and_reported():
-    t0 = __import__("time").monotonic()
-    r, res = _run_n5("bounded")
-    assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+# ------------------------------------------------------------------------------------------------ V3-01 (P1T-FIX3)
+# The exit hook waits, with no bound, until every admitted release has finished; after _DLPACK_SHUTDOWN_WAIT_S (the
+# default 5 s, unchanged here) it writes a stderr line, then another each time the time waited doubles (5 s, 10 s,
+# 20 s, ...). Ordinary interpreter exit (no os._exit): rc 0, the deleter completed before the hook returned, then CPython
+# finalized (the Finalizer's FINAL line). Registered mutant (a) = FIX2's bounded return restored: the 5.5 s and 12 s
+# cases then abort (rc -6, "FATAL: exception not rethrown") when the deleter re-takes the GIL during finalization.
+# Prior art: the reviewer's lifecycle_timeout.py / core_exit_overrun.py (finite overrun with normal finalization);
+# CPython's threading._shutdown (an unbounded join before finalizing). Ours: the deleter-length census, the diagnostic
+# schedule checks and the self-release case.
+_DIAG_RE = __import__("re").compile(r"DLPack release\(s\) admitted before exit still running after (\d+\.\d) s")
+
+
+def _assert_ordinary_exit(r):
+    assert r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    assert "FINAL finalizing=True" in r.stdout, r.stdout                      # CPython really finalized afterwards
+    for bad in ("FATAL", "terminate called", "Aborted", "exception not rethrown"):
+        assert bad not in r.stderr, r.stderr
+
+
+def test_fix3_v301_script_has_no_immediate_exit_escape():
+    assert "os._exit" not in _FIX2_N5_SCRIPT and "_exit(" not in _FIX2_N5_SCRIPT
+
+
+@pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+    r, res = _run_n5("overrun", repr(deleter_s))
+    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+    assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+    ah = res["after_hook"]
+    after = ah["stats"]
+    assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+    assert after["released"] == 1 and after["in_flight"] == 0 and after["closing"] is True, res
+    assert after["shutdown_still_in_flight"] == 0 and after["shutdown_in_flight_at_close"] == 1, res
+    assert ah["finalizing"] is False, res                                       # the hook ran before finalizing
+    assert after["shutdown_wait_us"] >= (deleter_s - 1.0) * 1e6, res            # it waited for the deleter
+    lines = [float(x) for x in _DIAG_RE.findall(r.stderr)]
+    if deleter_s > res["knob_s"]:
+        want = [5.0] if deleter_s < 10.0 else [5.0, 10.0]                       # doubling schedule: 5 s, 10 s, 20 s
+        assert len(lines) == len(want) and all(abs(a - b) < 0.5 for a, b in zip(lines, want)), r.stderr
+        assert after["shutdown_timeouts"] == 1 and after["shutdown_diagnostics"] == len(want), res
+        assert "finished after" in r.stderr and "interpreter exit continues" in r.stderr, r.stderr
+    else:
+        assert lines == [] and after["shutdown_timeouts"] == 0 and after["shutdown_diagnostics"] == 0, (res, r.stderr)
+    _assert_ordinary_exit(r)
+
+
+def test_fix3_v301_idle_exit_does_not_wait():
+    r, res = _run_n5("idle")
+    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
     after = res["after_hook"]["stats"]
-    assert after["shutdown_timeouts"] == 1 and after["shutdown_still_in_flight"] == 1, res
-    assert 300_000 <= after["shutdown_wait_us"] < 1_900_000, res  # 0.3 s bound, not the deleter's 2 s
-    assert "DLPack release(s) still running after 0.3 s at exit" in r.stderr, r.stderr
-    assert __import__("time").monotonic() - t0 < _SUBPROC_TIMEOUT
+    assert after["shutdown_calls"] == 1 and after["shutdown_in_flight_at_close"] == 0, res
+    assert after["shutdown_wait_us"] < 500_000 and after["shutdown_diagnostics"] == 0, res
+    assert res["after_hook"]["deleter_calls"] == [0, 0], res                    # never admitted, never released
+    assert _DIAG_RE.search(r.stderr) is None, r.stderr
+    _assert_ordinary_exit(r)
+
+
+def test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself():
+    # A deleter running in the main thread's own admitted release calls the exit hook: the unbounded wait must not
+    # wait for that release (it cannot finish while its own thread waits), and must not return while OTHER threads'
+    # releases run (covered above).
+    r, res = _run_n5("self")
+    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    inside = res["self"]
+    assert inside["inside_before"]["in_flight"] == 1 and inside["inside_before"]["closing"] is False, res
+    assert inside["hook_s"] < 1.0, res                                          # no self-wait (FIX2: 5 s; else hang)
+    ia = inside["inside_after"]
+    assert ia["closing"] is True and ia["in_flight"] == 1 and ia["shutdown_still_in_flight"] == 0, res  # own excluded
+    assert ia["shutdown_diagnostics"] == 0 and ia["shutdown_timeouts"] == 0, res
+    rel = res["self_after_release"]
+    assert rel["deleter_done"] is True and rel["stats"]["released"] == 1 and rel["stats"]["in_flight"] == 0, res
+    assert res["after_hook"]["stats"]["shutdown_calls"] == 2, res               # and the real exit hook ran again
+    _assert_ordinary_exit(r)

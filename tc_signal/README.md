@@ -125,6 +125,12 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   a zero counted as 1, and its fp32 byte size, must fit in int64, or the operand (or planned shape) is refused with
   `ValueError` before the empty-operand check; `[0, 2**62, 4]` is an overflow, not an empty operand. The same rule
   as NumPy's array constructor; core `tensor_cuda.empty` / `from_dlpack` / `__dlpack__` apply it too.
+- the aggregate byte count (P1T-FIX3, V3-02): the fp32 byte counts of all operands of one call (inputs, outputs and
+  scratch) are summed with checked addition before the first launch; a sum above `INT64_MAX` is refused with
+  `ValueError` ("the aggregate fp32 byte count of this call's operands (their sum) overflows 64-bit arithmetic"), and
+  the operands are released at once. Example: two disjoint fp32 descriptors of shape `(2**61 - 1,)` are each valid
+  (`2**63 - 4` bytes) but their sum is not. The check runs in every entry point (it is the first step of the
+  deferred-release retainer each one constructs right before its launch).
 
 ## Streams and lifetimes
 
@@ -142,7 +148,11 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
     GIL held, at the start of the next tc_signal call; `tc_signal.synchronize()` synchronizes the legacy stream and
     releases everything; an `atexit` hook does the same at interpreter exit;
   - the list is bounded (`src/tuning.h`: 1024 entries, 256 MiB of operand bytes); a call that pushes it past a bound
-    synchronizes the legacy stream of every pending device and releases the whole list;
+    synchronizes the legacy stream of every pending device and releases the whole list. The byte total is saturating
+    (P1T-FIX3, V3-02): a push whose sum would exceed `INT64_MAX` pins the total at `INT64_MAX` (which is over the
+    bound, so that push drains, as exact arithmetic would) until the list is empty again, and nothing on that path
+    throws (`pending_stats()['bytes_saturated']` / `['bytes_saturations']`). Below `INT64_MAX` the total is exact, so
+    a total of exactly 256 MiB stays within the bound and one byte more drains;
   - deleters are never called from a CUDA host callback;
   - if the completion event cannot be recorded, the legacy stream is synchronized instead; if that fails too (a broken
     CUDA context), the managers are deliberately leaked: tc_signal never releases memory the GPU may still use.
@@ -222,7 +232,7 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 | Error | When |
 |---|---|
 | `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
-| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03) |
+| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03); the operands of one call total more than `INT64_MAX` bytes (V3-02) |
 | `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early) |
 
 ## Tests
@@ -249,6 +259,12 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
   producer temporary), a partial-launch exception, the LSTM capsule set, release at the next call / `synchronize()` /
   `atexit`, the bytes bound, `None` for every required operand of the nine ops (each in its own process), and the
   overflow refusals in validation and in every plan function.
+- `test_fix2_findings.py` (P1T-FIX2) covers the round-2 findings N1-N4 (release-path CUDA errors, the zero-extent
+  rule, allocation failure and throwing deleters on every release path; native UBSan and fail-the-Nth-allocation
+  harness `fix2_native_harness.cpp`).
+- `test_fix3_findings.py` (P1T-FIX3) covers V3-02: the aggregate pre-launch refusal through real entry points (with
+  and without a visible GPU), and the native UBSan harness `fix3_native_harness.cpp` for the saturating pending-list
+  total, the bound comparison at the boundary and the real retainer destructor near `INT64_MAX`.
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 
@@ -280,3 +296,7 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
   the leak-on-unfenceable rule. Details: `src/dlpack_operand.h`.
 - **Checked arithmetic (P1T-FIX1, F03):** `__builtin_mul_overflow` / `__builtin_add_overflow` (GCC 5, 2015); C23
   `ckd_mul` / `ckd_add`; SEI CERT C INT30-C / INT32-C. Ours: where it is applied. Details: `src/checked_math.h`.
+- **Aggregate check and saturating pending total (P1T-FIX3, V3-02):** the same checked builtins for the per-call sum;
+  saturating arithmetic (DSP/SIMD saturated add, e.g. MMX/SSE `PADDS`, ARM `QADD`) for the pending-list total. Ours:
+  checking the aggregate before the first launch, and the sticky saturated state that keeps the bound comparison
+  conservative until the list empties. Details: `src/dlpack_operand.cpp` (`note_push`).

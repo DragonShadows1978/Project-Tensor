@@ -1,0 +1,102 @@
+.FFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[0.1] _
+
+deleter_s = 0.1
+
+    @pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+    def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+        r, res = _run_n5("overrun", repr(deleter_s))
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+        assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+        ah = res["after_hook"]
+        after = ah["stats"]
+        assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+        assert after["released"] == 1 and after["in_flight"] == 0 and after["closing"] is True, res
+        assert after["shutdown_still_in_flight"] == 0 and after["shutdown_in_flight_at_close"] == 1, res
+        assert ah["finalizing"] is False, res                                       # the hook ran before finalizing
+        assert after["shutdown_wait_us"] >= (deleter_s - 1.0) * 1e6, res            # it waited for the deleter
+        lines = [float(x) for x in _DIAG_RE.findall(r.stderr)]
+        if deleter_s > res["knob_s"]:
+            want = [5.0] if deleter_s < 10.0 else [5.0, 10.0]                       # doubling schedule: 5 s, 10 s, 20 s
+            assert len(lines) == len(want) and all(abs(a - b) < 0.5 for a, b in zip(lines, want)), r.stderr
+            assert after["shutdown_timeouts"] == 1 and after["shutdown_diagnostics"] == len(want), res
+            assert "finished after" in r.stderr and "interpreter exit continues" in r.stderr, r.stderr
+        else:
+>           assert lines == [] and after["shutdown_timeouts"] == 0 and after["shutdown_diagnostics"] == 0, (res, r.stderr)
+                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: 'shutdown_diagnostics'
+
+tensor_cuda/tests/test_dlpack.py:1256: KeyError
+_ test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[5.5] _
+
+deleter_s = 5.5
+
+    @pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+    def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+        r, res = _run_n5("overrun", repr(deleter_s))
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+        assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+        ah = res["after_hook"]
+        after = ah["stats"]
+>       assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru...hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}, 'knob_s': 5.0}
+E       assert (False is True)
+
+tensor_cuda/tests/test_dlpack.py:1244: AssertionError
+_ test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[12.0] _
+
+deleter_s = 12.0
+
+    @pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+    def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+        r, res = _run_n5("overrun", repr(deleter_s))
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+        assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+        ah = res["after_hook"]
+        after = ah["stats"]
+>       assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru...hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}, 'knob_s': 5.0}
+E       assert (False is True)
+
+tensor_cuda/tests/test_dlpack.py:1244: AssertionError
+____________________ test_fix3_v301_idle_exit_does_not_wait ____________________
+
+    def test_fix3_v301_idle_exit_does_not_wait():
+        r, res = _run_n5("idle")
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        after = res["after_hook"]["stats"]
+        assert after["shutdown_calls"] == 1 and after["shutdown_in_flight_at_close"] == 0, res
+>       assert after["shutdown_wait_us"] < 500_000 and after["shutdown_diagnostics"] == 0, res
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'shutdown_diagnostics'
+
+tensor_cuda/tests/test_dlpack.py:1265: KeyError
+_______ test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself ________
+
+    def test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself():
+        # A deleter running in the main thread's own admitted release calls the exit hook: the unbounded wait must not
+        # wait for that release (it cannot finish while its own thread waits), and must not return while OTHER threads'
+        # releases run (covered above).
+        r, res = _run_n5("self")
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        inside = res["self"]
+        assert inside["inside_before"]["in_flight"] == 1 and inside["inside_before"]["closing"] is False, res
+>       assert inside["hook_s"] < 1.0, res                                          # no self-wait (FIX2: 5 s; else hang)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [True, False], 'finalizing': False, 'stats': {'closing': True... {'deleter_done': True, 'stats': {'closing': True, 'deleter_exceptions': 0, 'in_flight': 0, 'leaked_closing': 0, ...}}}
+E       assert 5.000116522991448 < 1.0
+
+tensor_cuda/tests/test_dlpack.py:1279: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[0.1]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[5.5]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[12.0]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_idle_exit_does_not_wait
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself
+5 failed, 1 passed, 116 deselected in 26.07s

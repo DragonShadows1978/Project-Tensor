@@ -1,0 +1,52 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+___ test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-nogpu] ____
+
+op = 'rint', cond = 'nogpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+>       assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 40, in <module>
+E         KeyError: 'bytes_saturated'
+E         tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, json, sys\nsys.path.insert(0, '/mnt/ForgeRealm/Proj...e: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released\n').returncode
+
+tc_signal/tests/test_fix3_findings.py:124: AssertionError
+__ test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-nogpu] ___
+
+op = 'divide', cond = 'nogpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+>       assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 40, in <module>
+E         KeyError: 'bytes_saturated'
+E         tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, json, sys\nsys.path.insert(0, '/mnt/ForgeRealm/Proj...e: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released\n').returncode
+
+tc_signal/tests/test_fix3_findings.py:124: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-nogpu]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-nogpu]
+2 failed, 4 deselected in 1.56s

@@ -1,0 +1,12 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp (mutant b)
+@@ -765,7 +765,8 @@
+   for (const Operand* op : ops) {
+     if (op == nullptr || !op->present()) continue;
+     const int64_t b = op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
+-    total = ck_add(total, b, "the aggregate fp32 byte count of this call's operands (their sum)");
++    if (__builtin_add_overflow(total, b, &total)) total = std::numeric_limits<int64_t>::max();  // MUTANT (b): V3-02,
++    // the aggregate pre-launch check removed (no refusal; the call goes on to its launch)
+   }
+   return total;
+ }

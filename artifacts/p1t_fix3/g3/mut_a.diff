@@ -1,0 +1,10 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp (mutant a)
+@@ -743,6 +743,7 @@
+       const auto tick = std::chrono::steady_clock::duration(1);
+       next = now + (waited > tick ? waited : tick);
+       lk.lock();
++      break;  // MUTANT (a): V3-01, FIX2's bounded return restored (return after the first-diagnostic delay)
+     }
+     remaining = lc.in_flight - own;
+   }  // lk is released before nogil re-takes the GIL

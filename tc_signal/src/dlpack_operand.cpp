@@ -440,7 +440,9 @@ struct DeviceEvents {
 
 struct PendingState {
   std::deque<PendingEntry> q;
-  int64_t bytes = 0;
+  int64_t bytes = 0;            // V3-02: saturating sum of the queued entries' bytes (exact while !bytes_saturated)
+  bool bytes_saturated = false;            // V3-02: a push overflowed; `bytes` is pinned at INT64_MAX until empty
+  unsigned long long bytes_saturations = 0;  // V3-02: how many times the total saturated
   long long managers = 0;
   long long high_water_entries = 0;
   long long high_water_managers = 0;
@@ -598,8 +600,33 @@ void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
   }
 }
 
-void note_push(PendingState& st, const PendingEntry& e) {
-  st.bytes += e.bytes;
+// P1T-FIX3, round-3 review finding V3-02: the pending-list byte total is SATURATING. note_push / note_pop run inside the
+// noexcept RetainUntilComplete destructor and the drain loops, so they may neither throw nor drain; an unchecked
+// signed addition here was undefined behaviour for near-limit totals (review probe pending_bytes queue: 4 +
+// 9223372036854775804), and a wrapped negative total could have suppressed the bound drain.
+//  * Push: checked addition; on overflow the total is pinned at INT64_MAX and marked saturated (counted). Every entry's
+//    own bytes is a checked int64 sum >= 0 (aggregate_operand_bytes, before the launch), so only the queue total can
+//    overflow.
+//  * Pop: exact subtraction while not saturated (the total is then the exact sum of the queued entries, so it never
+//    goes below 0); while saturated the total stays pinned at INT64_MAX until the list is empty, where the true total is
+//    0 again. A pinned total over-reports, never under-reports, so the bound comparison (pending_over_bound) is exact
+//    below INT64_MAX and conservative above it: a push that would overflow always drains, as the exact arithmetic would
+//    have (any total above INT64_MAX is far above kPendingMaxBytes).
+// Chosen over drain-before-add because these functions are pure accounting: draining runs producer deleters (Python,
+// possibly re-entering tc_signal) and cannot run in the middle of a push; and a drain cannot guarantee headroom anyway
+// (entries pushed by a re-entrant call during the drain stay queued), so a non-throwing, non-overflowing rule is needed
+// in any case. Saturation is that rule; the drain itself is left to the bound comparison right after the push.
+// Prior art: saturating arithmetic (DSP/SIMD saturated add, e.g. Intel MMX/SSE PADDS, 1997-; ARM QADD) and the checked
+// builtins it is built from (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add); SEI CERT INT32-C. Taken: checked
+// add with a saturated result. Ours: the sticky saturated state that is cleared only when the list empties, so pops
+// never make a saturated total under-report. Unverified here (lead to check): "PADDSW saturating add MMX 1997".
+void note_push(PendingState& st, const PendingEntry& e) noexcept {
+  int64_t sum = 0;
+  if (!st.bytes_saturated && __builtin_add_overflow(st.bytes, e.bytes, &sum)) {
+    st.bytes_saturated = true;
+    ++st.bytes_saturations;
+  }
+  st.bytes = st.bytes_saturated ? std::numeric_limits<int64_t>::max() : sum;
   st.managers += static_cast<long long>(e.owners.size());
   ++st.retained_entries;
   st.high_water_entries = std::max<long long>(st.high_water_entries, static_cast<long long>(st.q.size()));
@@ -607,9 +634,26 @@ void note_push(PendingState& st, const PendingEntry& e) {
   st.high_water_bytes = std::max(st.high_water_bytes, st.bytes);
 }
 
-void note_pop(PendingState& st, const PendingEntry& e) {
-  st.bytes -= e.bytes;
+// Called right after the entry was taken off the list.
+void note_pop(PendingState& st, const PendingEntry& e) noexcept {
+  if (st.bytes_saturated) {
+    if (st.q.empty()) {  // the true total is 0 again
+      st.bytes = 0;
+      st.bytes_saturated = false;
+    }
+  } else {
+    int64_t rest = 0;
+    // Exact while not saturated (e.bytes <= st.bytes); the guard only keeps a corrupted total from wrapping.
+    st.bytes = (__builtin_sub_overflow(st.bytes, e.bytes, &rest) || rest < 0) ? 0 : rest;
+  }
   st.managers -= static_cast<long long>(e.owners.size());
+}
+
+// V3-02: the bound comparison after a push. Exact below INT64_MAX (a total of exactly kPendingMaxBytes is within the
+// bound, one byte more is over it, as before); a saturated total is over it.
+bool pending_over_bound(const PendingState& st) noexcept {
+  return static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes_saturated ||
+         st.bytes > tuning::kPendingMaxBytes;
 }
 
 // Runs the entry's deleters (they may run Python and re-enter tc_signal; the entry is already off the list). A throwing
@@ -713,8 +757,24 @@ cudaEvent_t acquire_event(int device) {
 
 void init_pending_state() { (void)pending(); }
 
+int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops) {
+  // V3-02 (see dlpack_operand.h): checked sum of the present operands' fp32 bytes; ValueError on overflow (ck_add).
+  // Prior art: the checked builtins (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add), as in checked_math.h. Ours:
+  // checking the per-call aggregate before the first launch, where a refusal can still raise.
+  int64_t total = 0;
+  for (const Operand* op : ops) {
+    if (op == nullptr || !op->present()) continue;
+    const int64_t b = op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
+    total = ck_add(total, b, "the aggregate fp32 byte count of this call's operands (their sum)");
+  }
+  return total;
+}
+
 RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Operand*> ops)
     : device_(device), ops_(ops) {
+  // V3-02: refuse a call whose operands' aggregate byte count overflows int64, FIRST: before any allocation, event or
+  // launch (ValueError; the operands are then released at once by their own destructors, nothing was queued).
+  bytes_ = aggregate_operand_bytes(ops_);
   // N3: every allocation the release needs happens here (may throw: then nothing has been launched and the operands
   // are released at once by their own destructors); the destructor below allocates only for the pending-list push.
   if (test_hooks::take(test_hooks::kAllocOwnerReserve)) throw std::bad_alloc();
@@ -726,10 +786,10 @@ RetainUntilComplete::~RetainUntilComplete() {
   PendingState& st = pending();
   PendingEntry e;
   e.device = device_;
+  e.bytes = bytes_;  // V3-02: summed with checked addition in the constructor; no addition here
   for (Operand* op : ops_) {
     if (op == nullptr || !op->present()) continue;
-    e.bytes += op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
-    owners_.push_back(op->take_owner());                           // reserved: no allocation
+    owners_.push_back(op->take_owner());  // reserved: no allocation
   }
   e.owners = std::move(owners_);
   cudaError_t r = cudaSuccess;
@@ -770,7 +830,7 @@ RetainUntilComplete::~RetainUntilComplete() {
     }
     return;
   }
-  if (static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes > tuning::kPendingMaxBytes) {
+  if (pending_over_bound(st)) {  // V3-02: overflow-safe (saturating total), exact at the boundary
     ++st.bound_drains;
     const SyncReport rep = sync_and_release_all_impl();
     if (rep.failed()) note_release_failure(st, rep.first_device(), rep.first_error(), rep.leaked_managers);  // N1
@@ -858,6 +918,8 @@ py::dict pending_stats(bool reset_high_water) {
   d["deleter_exceptions"] = deleter_exceptions();           // N4
   d["push_alloc_failures"] = st.push_alloc_failures;        // N3
   d["event_recycle_failures"] = st.event_recycle_failures;  // N3
+  d["bytes_saturated"] = st.bytes_saturated;                // P1T-FIX3 V3-02
+  d["bytes_saturations"] = st.bytes_saturations;            // P1T-FIX3 V3-02
   d["release_errors"] = st.release_errors;                  // N1
   d["unreported_release_errors"] = st.unreported_count;     // N1
   if (reset_high_water) {

@@ -170,23 +170,47 @@ def empty(*shape, dtype="float32", device="cuda"):
 # callbacks before it marks the runtime finalizing (v3.12.3 pylifecycle.c,
 # Py_FinalizeEx: _PyAtExit_Call at line 1815, _PyRuntimeState_SetFinalizing at
 # 1833), so this hook closes admission while taking the GIL is still safe and
-# waits for the releases already admitted. Knob: the bound on that wait, in
-# seconds (a release normally finishes in microseconds; the bound only matters
-# for a producer deleter that blocks). Prior art: CPython's own
-# threading._shutdown (join non-daemon threads before finalizing), the same
-# "stop admitting, then wait" order; ours: applying it to the DLPack release.
+# waits for the releases already admitted.
+# P1T-FIX3 (round-3 review V3-01): that wait has NO bound any more; FIX2's
+# bounded return let finalization start while an admitted deleter was still
+# running, and the process aborted when the deleter re-took the GIL. Knob: the
+# time waited, in seconds, before the first stderr diagnostic (a release
+# normally finishes in microseconds, so this only fires for a producer deleter
+# that blocks); later diagnostics are written each time the time waited has
+# doubled. Prior art: CPython's own threading._shutdown (joins non-daemon
+# threads before finalizing, with no bound), the same "stop admitting, then wait
+# for what already started" order; RCU-style grace periods (an unbounded wait
+# for pre-existing readers) and the kernel's repeated stall warnings. Ours:
+# applying them to the DLPack release at the atexit boundary.
 _DLPACK_SHUTDOWN_WAIT_S = 5.0
 
 
 def _dlpack_shutdown_hook():
-    # An exception from an atexit callback cannot be handled by anyone: log, never raise.
+    """atexit hook (P1T-FIX2 N5, P1T-FIX3 V3-01): close admission of GIL-taking
+    DLPack import releases, then wait until every release admitted before that
+    has finished. Interpreter finalization never starts while one is running.
+
+    The wait has no bound. After ``_DLPACK_SHUTDOWN_WAIT_S`` seconds a line goes
+    to stderr (how many are still running, seconds waited), and another each
+    time the time waited doubles; the wait goes on. Consequence: a producer
+    deleter that never returns makes interpreter exit wait forever. That is the
+    producer's DLPack contract violation (a deleter must return), and waiting is
+    the honest outcome: returning early would let CPython finalize under a
+    running callback and abort the process (round-3 review V3-01, rc -6). Ctrl-C
+    does not interrupt the wait; SIGTERM / SIGKILL still end the process.
+    Releases that start after admission closed are deliberately leaked (no GIL
+    is taken), as before. Never raises (an atexit exception has no handler).
+    """
     try:
-        r = _C._dlpack_begin_shutdown(float(_DLPACK_SHUTDOWN_WAIT_S))
+        try:
+            first_diag_s = float(_DLPACK_SHUTDOWN_WAIT_S)
+        except (TypeError, ValueError):
+            first_diag_s = float("nan")  # an unusable knob must not skip the wait: diagnose at once, still wait
+        r = _C._dlpack_begin_shutdown(first_diag_s)
         if r["timed_out"]:
             sys.stderr.write(
-                f"tensor_cuda: {r['still_in_flight']} DLPack release(s) still running after "
-                f"{_DLPACK_SHUTDOWN_WAIT_S} s at exit; the interpreter may terminate "
-                f"that thread during finalization\n")
+                f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
+                f"{r['waited_us'] / 1e6:.1f} s; interpreter exit continues\n")
             sys.stderr.flush()
     except Exception as e:  # noqa: BLE001
         try:

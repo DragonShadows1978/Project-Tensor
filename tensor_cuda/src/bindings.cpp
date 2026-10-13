@@ -11,6 +11,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>  // P1T-FIX3 V3-01: exit-wait diagnostics written without the GIL
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -536,8 +537,8 @@ py::tuple tensor_dlpack_device(Tensor& t) {
 //  * tensor_cuda registers a Python atexit callback (`_dlpack_shutdown_hook` in
 //    tensor_cuda/__init__.py) that calls dlpack_begin_shutdown: with the GIL
 //    RELEASED (in-flight releases need it to finish) it sets `closing` under the
-//    mutex and waits on a condition variable, bounded by a timeout, until
-//    `in_flight` is 0.
+//    mutex and waits on a condition variable until `in_flight` is 0 (FIX2 bounded
+//    this wait by a timeout; P1T-FIX3 V3-01 below removed the bound).
 //  * Ordering (verified in CPython v3.12.3 Python/pylifecycle.c, Py_FinalizeEx):
 //    _PyAtExit_Call (line 1815) runs every atexit callback BEFORE
 //    _PyInterpreterState_SetFinalizing / _PyRuntimeState_SetFinalizing (1832-1833)
@@ -548,11 +549,50 @@ py::tuple tensor_dlpack_device(Tensor& t) {
 //  * Lock order: no thread ever waits for the GIL while holding the mutex (the
 //    hook drops the mutex before re-taking the GIL; releasers never call Python
 //    under it), so the protocol cannot deadlock with the GIL.
-//  * Bounded: if an in-flight deleter does not finish within the timeout
-//    (tensor_cuda._DLPACK_SHUTDOWN_WAIT_S), the hook returns, reports it, and the
-//    exit proceeds; that thread may then still be terminated by CPython at
-//    finalization (honest residual: a deleter that blocks forever cannot be made
-//    safe from outside).
+//  * (FIX2 had a bound here: after tensor_cuda._DLPACK_SHUTDOWN_WAIT_S the hook
+//    returned with the release still running. Round-3 review V3-01 showed that a
+//    finite 5.5 s deleter then wakes during finalization and aborts the process.
+//    Replaced by P1T-FIX3 below: the wait has no bound.)
+//
+// P1T-FIX3, round-3 review finding V3-01 (MAJOR, exit quiescence). The hook never
+// returns to ordinary finalization while an admitted release is running:
+//  * dlpack_begin_shutdown waits until in_flight == 0, with NO bound. Its argument
+//    (tensor_cuda._DLPACK_SHUTDOWN_WAIT_S) is now only the delay of the first
+//    stderr diagnostic (count still running, seconds waited); later diagnostics
+//    follow a geometric schedule (each one when the time waited has doubled), so
+//    a deleter that hangs for hours logs a few dozen lines at most, and the wait
+//    goes on. Admission stays closed throughout (no new release is admitted).
+//  * GIL: the whole wait, diagnostics included, runs inside gil_scoped_release, so
+//    an admitted deleter that needs the GIL (PyGILState_Ensure, a ctypes or
+//    Python deleter, time.sleep re-taking it) can always finish; the condition
+//    variable wait drops the mutex; each diagnostic is written with the mutex
+//    dropped (a blocked stderr cannot stop a release from leaving); the GIL is
+//    re-taken only after the mutex is released. The lock order of FIX2 holds: no
+//    thread waits for the GIL while holding the mutex.
+//  * Self-exclusion: a thread that runs the hook from inside its own admitted
+//    release (a deleter that calls the exit hook, e.g. atexit._run_exitfuncs())
+//    does not wait for itself: releases on its own stack (thread-local depth)
+//    cannot finish while it waits, and they necessarily finish before that thread
+//    can go on to finalize. Without this, the unbounded wait would self-deadlock.
+//  * Consequence (documented in tensor_cuda._dlpack_shutdown_hook too): a producer
+//    deleter that never returns makes interpreter exit wait forever. That is the
+//    producer's contract violation (a DLPack deleter must return); waiting is the
+//    honest outcome, where FIX2's bound turned it into an abort (rc -6). Ctrl-C
+//    does not interrupt the wait (no bytecode runs on the main thread during it);
+//    SIGTERM / SIGKILL still end the process.
+// Prior art: CPython's threading._shutdown / Py_FinalizeEx wait_for_thread_shutdown,
+// which joins every non-daemon thread with no bound before finalizing (the same
+// "finalization waits for work already started" rule, one level up); RCU-style
+// grace periods (synchronize_rcu waits, unbounded, for every reader that entered
+// before the grace period began, while new readers do not delay it; McKenney &
+// Slingwine 1998) and the Linux kernel's percpu_ref (kill, then wait for zero);
+// rate-limited / backed-off diagnostics such as the kernel's hung-task and RCU
+// stall warnings (repeated at growing intervals while the wait goes on). Taken:
+// the unbounded quiescence wait with admission closed, and periodic stall
+// reports. Ours: its placement at the CPython atexit boundary of the DLPack
+// import release, the doubling report schedule and the same-thread exclusion.
+// Unverified here (lead to check): "synchronize_rcu grace period readers
+// McKenney 1998", "rcu_cpu_stall_timeout repeat interval", "hung_task_warnings".
 // Prior art: CPython's own atexit-before-finalizing ordering (above) and its
 // threading._shutdown join of non-daemon threads (pylifecycle.c
 // wait_for_thread_shutdown), which is the same "stop admitting, wait for the
@@ -578,6 +618,11 @@ std::atomic<unsigned long long> g_shutdown_in_flight_at_close{0};
 std::atomic<unsigned long long> g_shutdown_timeouts{0};
 std::atomic<unsigned long long> g_shutdown_still_in_flight{0};
 std::atomic<unsigned long long> g_shutdown_wait_us{0};
+std::atomic<unsigned long long> g_shutdown_diagnostics{0};       // V3-01: stderr lines written while waiting
+
+// V3-01: admitted releases on the CURRENT thread's stack (incremented on admission, decremented after leaving). The
+// exit hook does not wait for these: they cannot finish while the hook's thread waits (self-exclusion, see above).
+thread_local long long t_admitted_depth = 0;
 
 struct ImportReleaseLifecycle {
   std::mutex mu;
@@ -624,6 +669,7 @@ void import_release_impl(M* m) noexcept {
     g_import_lock_failures.fetch_add(1);
   }
   if (!admitted) return;
+  ++t_admitted_depth;                                // V3-01: this thread now has an admitted release on its stack
   PyGILState_STATE g = PyGILState_Ensure();
   try {
     m->deleter(m);
@@ -633,13 +679,16 @@ void import_release_impl(M* m) noexcept {
   }
   PyGILState_Release(g);
   // Leave only after PyGILState_Release: the exit hook must not let finalization start while this thread still
-  // touches the interpreter.
+  // touches the interpreter. notify_all on every leave (not only at zero): the hook may be waiting for a nonzero
+  // count, its own thread's admitted releases (V3-01 self-exclusion).
   try {
     std::lock_guard<std::mutex> lk(lc.mu);
-    if (--lc.in_flight == 0) lc.cv.notify_all();
+    --lc.in_flight;
+    lc.cv.notify_all();
   } catch (...) {
     g_import_lock_failures.fetch_add(1);
   }
+  --t_admitted_depth;
 }
 
 void import_release_legacy(void* ctx) noexcept {
@@ -649,36 +698,69 @@ void import_release_versioned(void* ctx) noexcept {
   import_release_impl(static_cast<DLManagedTensorVersioned*>(ctx));
 }
 
-// N5: the atexit side (tensor_cuda/__init__.py _dlpack_shutdown_hook). Called with the GIL held by the main thread.
-py::dict dlpack_begin_shutdown(double timeout_s) {
+// N5 + V3-01: the atexit side (tensor_cuda/__init__.py _dlpack_shutdown_hook). Called with the GIL held by the main
+// thread. Closes admission, then waits until every admitted release of OTHER threads has left (in_flight minus this
+// thread's own depth == 0). There is NO bound: it never returns while one is still running (V3-01). `first_diag_s`
+// (the knob tensor_cuda._DLPACK_SHUTDOWN_WAIT_S) is the time waited before the first stderr diagnostic; each later one
+// is written when the time waited has doubled since the previous one (geometric schedule: k lines take 2^(k-1) times
+// the first delay, so the line rate is bounded and falls as the wait goes on). NaN or negative: diagnose at once.
+// Returns {in_flight_at_close, still_in_flight, timed_out, waited_us, diagnostics, own_thread_in_flight}; `timed_out`
+// now means "the wait outlasted the first-diagnostic delay" (it no longer means the hook gave up), `still_in_flight`
+// (other threads' admitted releases still running at return) is always 0 now, and `own_thread_in_flight` is the
+// calling thread's own admitted releases that it did not wait for (0 at a real interpreter exit).
+py::dict dlpack_begin_shutdown(double first_diag_s) {
   ImportReleaseLifecycle& lc = release_lifecycle();
-  if (!(timeout_s >= 0.0)) timeout_s = 0.0;                 // NaN or negative: do not wait
-  if (timeout_s > 86400.0) timeout_s = 86400.0;             // keep the chrono conversion finite
-  const auto bound = std::chrono::microseconds(static_cast<long long>(timeout_s * 1e6));
+  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;           // NaN or negative: diagnose at once (the wait is the same)
+  if (first_diag_s > 86400.0) first_diag_s = 86400.0;       // keep the chrono conversion finite
+  const auto first = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+      std::chrono::duration<double>(first_diag_s));
+  const long long own = t_admitted_depth;                   // this thread's own admitted releases: never waited for
   long long at_close = 0;
   long long remaining = 0;
-  bool timed_out = false;
+  bool overran = false;
+  unsigned long long diagnostics = 0;
   const auto t0 = std::chrono::steady_clock::now();
   {
-    py::gil_scoped_release nogil;                           // in-flight releases need the GIL to finish
+    py::gil_scoped_release nogil;                           // admitted releases need the GIL to finish
     std::unique_lock<std::mutex> lk(lc.mu);
-    lc.closing = true;
+    lc.closing = true;                                      // admission closed for good: nothing new can start
     at_close = lc.in_flight;
-    if (at_close > 0) timed_out = !lc.cv.wait_for(lk, bound, [&lc] { return lc.in_flight == 0; });
-    remaining = lc.in_flight;
+    auto next = t0 + first;
+    while (!lc.cv.wait_until(lk, next, [&lc, own] { return lc.in_flight <= own; })) {
+      // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01).
+      overran = true;
+      const long long running = lc.in_flight - own;
+      lk.unlock();                                          // a blocked stderr must not stop a release from leaving
+      const auto now = std::chrono::steady_clock::now();
+      std::fprintf(stderr,
+                   "tensor_cuda: %lld DLPack release(s) admitted before exit still running after %.1f s; interpreter "
+                   "exit waits for them (no new release is admitted)\n",
+                   running, std::chrono::duration<double>(now - t0).count());
+      std::fflush(stderr);
+      ++diagnostics;
+      // Next line when the time waited has doubled (at least one clock tick later: no busy loop at a zero delay).
+      const auto waited = now - t0;
+      const auto tick = std::chrono::steady_clock::duration(1);
+      next = now + (waited > tick ? waited : tick);
+      lk.lock();
+    }
+    remaining = lc.in_flight - own;
   }  // lk is released before nogil re-takes the GIL
   const long long waited_us =
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
   g_shutdown_calls.fetch_add(1);
   g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
-  if (timed_out) g_shutdown_timeouts.fetch_add(1);
+  if (overran) g_shutdown_timeouts.fetch_add(1);
   g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
   g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
+  g_shutdown_diagnostics.fetch_add(diagnostics);
   py::dict d;
   d["in_flight_at_close"] = at_close;
   d["still_in_flight"] = remaining;
-  d["timed_out"] = timed_out;
+  d["timed_out"] = overran;
   d["waited_us"] = waited_us;
+  d["diagnostics"] = diagnostics;
+  d["own_thread_in_flight"] = own;
   return d;
 }
 void import_release_noop(void*) {}
@@ -1693,16 +1775,22 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["shutdown_timeouts"] = g_shutdown_timeouts.load();
     d["shutdown_still_in_flight"] = g_shutdown_still_in_flight.load();
     d["shutdown_wait_us"] = g_shutdown_wait_us.load();
+    d["shutdown_diagnostics"] = g_shutdown_diagnostics.load();  // P1T-FIX3 (V3-01)
     return d;
   }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
      "after a failed device drain (F05); P1T-FIX2: deleter exceptions contained (N4), leaks after the exit hook "
-     "closed, the in-flight count and the exit hook's wait (N5).");
+     "closed, the in-flight count and the exit hook's wait (N5); P1T-FIX3: stderr diagnostics written while the exit "
+     "hook waited (V3-01; shutdown_timeouts now counts waits that outlasted the first-diagnostic delay).");
   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
   (void)release_lifecycle();
-  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("timeout_s"),
-        "P1T-FIX2 (N5), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack import releases (later "
-        "ones leak, counted) and wait, GIL released, up to timeout_s for the in-flight ones to finish. Returns "
-        "{in_flight_at_close, still_in_flight, timed_out, waited_us}.");
+  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("first_diag_s"),
+        "P1T-FIX2 (N5) / P1T-FIX3 (V3-01), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack "
+        "import releases (later ones leak, counted) and wait, GIL released, with NO bound until every admitted one has "
+        "finished (never returns while one is running). After first_diag_s seconds it writes a stderr line (count "
+        "running, seconds waited), then another each time the time waited doubles. A producer deleter that never "
+        "returns therefore makes interpreter exit wait (the producer's contract violation; the honest outcome, where a "
+        "bounded return let finalization abort the process). Returns {in_flight_at_close, still_in_flight, timed_out, "
+        "waited_us, diagnostics, own_thread_in_flight}.");
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }
