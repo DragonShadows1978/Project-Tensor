@@ -1,0 +1,2660 @@
+diff --git a/tc_signal/README.md b/tc_signal/README.md
+index c0ad930..47aa62a 100644
+--- a/tc_signal/README.md
++++ b/tc_signal/README.md
+@@ -50,6 +50,7 @@ z = ts.conv_transpose1d(y, wt, bt, stride=10, padding=(5, 5))
+ tc_signal.conv1d(x, w, b=None, *, stride=1, padding=0, dilation=1, groups=1, out=None)
+ tc_signal.conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dilation=1, groups=1, out=None)
+ tc_signal.set_allocator(fn)   # fn(shape: tuple) -> fp32 CUDA DLPack tensor; returns the previous allocator
++tc_signal.synchronize()       # P1T-FIX1: wait for the legacy stream, release every operand tc_signal still holds
+ ```
+ 
+ The semantics are ONNX `Conv` and `ConvTranspose`, 1-D.
+@@ -93,11 +94,17 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
+ 
+ **Consumption**
+ - A capsule is consumed once: it is renamed to `"used_*"`, and tc_signal owns the managed tensor from then on.
+-- Each producer deleter is called exactly once:
+-  - after the launch on success;
+-  - during unwinding on any error after consumption;
++- Each producer deleter is called exactly once (P1T-FIX1, F01: see "Streams and lifetimes" for when):
++  - for a call that reached its launch (success, or an error after a partial launch): only once the legacy stream
++    has passed that call's launches, from the deferred-release list;
++  - immediately, during unwinding, for a call refused after consumption but before any launch (nothing was queued);
+   - by the producer's own capsule destructor if tc_signal never consumed the capsule (a refusal in the planning phase).
+ 
++**Required and optional operands** (P1T-FIX1, F02). `None` is accepted only for an optional operand: `b` (conv),
++`B` / `initial_h` / `initial_c` (lstm), `scale` / `bias` (norms), and `out` in the Python API (then the allocator makes
++it). `None` for any required operand (`x` of all nine ops, `w` of both convolutions, `W` and `R` of the LSTM, and every
++operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any planning, allocation or consumption.
++
+ **Validation**, each failure a `TypeError` or `ValueError` (see Errors):
+ - device `kDLCUDA`, with one ordinal for every operand;
+ - dtype float32 (`kDLFloat`, 32 bits, 1 lane);
+@@ -108,7 +115,12 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
+ - `data + byte_offset` used as the base pointer, 4-byte aligned;
+ - exact shapes;
+ - written operands must not be read-only or a producer copy (versioned flags);
+-- the output's byte range must not overlap any input's or the scratch's, and the scratch must not overlap the inputs.
++- the output's byte range must not overlap any input's or the scratch's, and the scratch must not overlap the inputs;
++- checked 64-bit arithmetic (P1T-FIX1, F03): a negative rank, a NULL shape array, an element count, an fp32 byte total
++  above `INT64_MAX`, or `data + byte_offset + bytes` wrapping the address space is refused (`ValueError`), and so is
++  every planned size that overflows: output lengths (`conv1d`, `conv_transpose1d`, `T * scale`, `T + pads`), output
++  and scratch element counts and bytes (im2col, LSTM `G_x`/`G_h`), LSTM `T*N` and `D*N*H`, norm rows and row lengths.
++  A wrapped value is never used, never becomes an "empty" or negative extent, and no narrowing cast happens first.
+ 
+ ## Streams and lifetimes
+ 
+@@ -116,13 +128,26 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
+   This is TensorCUDA's only stream, and torch's default stream; both share the device's primary context.
+   `tests/test_contract.py` proves the ordering both ways against torch with no explicit sync.
+ - `cudaGetLastError` is checked after every launch, and any error raises a `RuntimeError`.
+-- Each capsule's deleter is called right after the launches, before the GPU has run them. This is safe when the
+-  producer frees on the legacy stream, or later in stream order: TensorCUDA does, and so does torch's caching
+-  allocator on its default stream.
+-- **Cross-stream lifetime caveat:** a producer whose tensor lives on a non-legacy stream must keep that tensor alive,
+-  and must not reuse its memory, until the legacy stream has passed the tc_signal op. For example, record an event on
+-  the legacy stream after the call and make its own stream wait on it, or synchronize. Producers that are asked for
+-  `stream=1` order their pending work before the op; DLPack has no mechanism for the reverse direction.
++- **Operand lifetime contract (P1T-FIX1, F01: event-backed deferred release).** A consumed DLPack manager can be the
++  LAST owner of its memory (a bare capsule, or a temporary copy a producer made for `__dlpack__`), and its producer
++  may allocate on another stream. So tc_signal keeps every consumed manager of a call (inputs, outputs and scratch;
++  the LSTM's whole set of up to 10) alive until the legacy stream has passed that call's last launch:
++  - after the launches (and also when a launch throws part-way), one CUDA event is recorded on the legacy stream of
++    the operands' device, and the call's managers go onto a module-level FIFO pending list with that event;
++  - completed entries (`cudaEventQuery` == success) are released in FIFO order, on the calling host thread with the
++    GIL held, at the start of the next tc_signal call; `tc_signal.synchronize()` synchronizes the legacy stream and
++    releases everything; an `atexit` hook does the same at interpreter exit;
++  - the list is bounded (`src/tuning.h`: 1024 entries, 256 MiB of operand bytes); a call that pushes it past a bound
++    synchronizes the legacy stream of every pending device and releases the whole list;
++  - deleters are never called from a CUDA host callback;
++  - if the completion event cannot be recorded, the legacy stream is synchronized instead; if that fails too (a broken
++    CUDA context), the managers are deliberately leaked: tc_signal never releases memory the GPU may still use.
++  So a producer may free or reuse its memory on any stream as soon as its deleter runs; the old cross-stream caveat
++  (keep non-legacy-stream tensors alive yourself) no longer applies. The cost: memory of the last calls is handed back
++  at the next tc_signal call (or `synchronize()`), not at the end of the call. Choice: the deferred release (the
++  order's preferred design) rather than a legacy-stream sync before release, which would block every call
++  (receipts and per-call cost: `docs/P1T_FIX1_REPORT.md`). Counters: `_tc_signal.pending_stats()`.
++- Producers that are asked for `stream=1` order their pending work before the op (DLPack's forward direction).
+ - Outputs are written on the legacy stream. A consumer on another stream must order itself after it.
+ 
+ ## cuBLAS
+@@ -172,9 +197,9 @@ Every operand, the output and the scratch included, is an object with `__dlpack_
+ 
+ | Error | When |
+ |---|---|
+-| `TypeError` | an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
+-| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1 |
+-| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error |
++| `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
++| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03) |
++| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early) |
+ 
+ ## Tests
+ 
+@@ -196,6 +221,10 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
+   - stream ordering against torch;
+   - the cuBLAS settings;
+   - the fast-math canary.
++- `test_fix1_findings.py` (P1T-FIX1) covers the review findings: the side-stream last-owner race (bare capsule and
++  producer temporary), a partial-launch exception, the LSTM capsule set, release at the next call / `synchronize()` /
++  `atexit`, the bytes bound, `None` for every required operand of the nine ops (each in its own process), and the
++  overflow refusals in validation and in every plan function.
+ - The module skips only when torch is not importable or there is no CUDA device.
+ - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
+ 
+@@ -220,3 +249,10 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
+ - **Plan/run split** (size the scratch, let the caller allocate, then execute): the workspace-query pattern of
+   cuDNN/cuBLASLt.
+ - **Fast-math canary:** no specific prior art known to me.
++- **Deferred operand release (P1T-FIX1, F01):** PyTorch's `Tensor.record_stream` and its CUDA caching allocator, which
++  defers a block's reuse until events recorded on the streams that used it complete, polled from the host
++  (`process_events`), with an event pool; CuPy's stream-ordered memory pool; the DLPack consumer contract. Ours: the
++  consumer-side FIFO of DLPack managers drained at tc_signal entry points with the GIL held, the count/bytes bound, and
++  the leak-on-unfenceable rule. Details: `src/dlpack_operand.h`.
++- **Checked arithmetic (P1T-FIX1, F03):** `__builtin_mul_overflow` / `__builtin_add_overflow` (GCC 5, 2015); C23
++  `ckd_mul` / `ckd_add`; SEI CERT C INT30-C / INT32-C. Ours: where it is applied. Details: `src/checked_math.h`.
+diff --git a/tc_signal/src/bindings.cpp b/tc_signal/src/bindings.cpp
+index 8e72a2e..188a6fe 100644
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -7,7 +7,11 @@
+ //                              device/dtype/layout/shapes/attributes without consuming), and returns
+ //                              (x_capsule, w_capsule, b_capsule|None, out_shape[, scratch_numel]);
+ //   *_run(capsules, out[, scratch], attrs) -> consumes every capsule, re-validates, checks devices and overlap,
+-//                              launches on the legacy default stream, then calls every producer deleter (scope exit).
++//                              launches on the legacy default stream, then hands every consumed manager to the
++//                              deferred-release list (P1T-FIX1 F01, dlpack_operand.h RetainUntilComplete): the producer
++//                              deleters run once the legacy stream has passed the launches, never before.
++// P1T-FIX1 also adds: F02 (a required operand passed as None -> TypeError before planning), F03 (every size below is
++// computed with checked arithmetic, checked_math.h), and drain_completed() first thing in every entry point.
+ //
+ // Prior art: see dlpack_operand.h (DLPack, Python array API stream protocol) and conv.cu (im2col, gather-form
+ // ConvTranspose, ONNX semantics). The plan/run split is ours (no prior art known to me for this exact split; it is the
+@@ -21,6 +25,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "checked_math.h"
+ #include "conv_ops.h"
+ #include "dlpack_operand.h"
+ #include "tuning.h"
+@@ -91,9 +96,13 @@ Conv1dPlan plan_conv1d(const std::vector<int64_t>& xs, const std::vector<int64_t
+     os << "conv1d: b has shape " << shape_str(*bs) << ", expected [" << g.C_out << "]";
+     bad_attr(os.str());
+   }
+-  // Integer arithmetic in int64 (attributes are <= INT_MAX, dimensions come from real tensors). Python's floor
+-  // division and C++'s truncation differ for a negative numerator, so the sign is checked first.
+-  const int64_t num = g.T + pb + pe - dilation * (g.K - 1) - 1;
++  // Integer arithmetic in int64, every step checked (F03: dimensions may come from synthetic descriptors). Python's
++  // floor division and C++'s truncation differ for a negative numerator, so the sign is checked first.
++  const int64_t dk = ck_mul(dilation, g.K - 1, "conv1d: dilation*(K-1)");
++  int64_t num = ck_add(g.T, pb, "conv1d: T + pad_begin");
++  num = ck_add(num, pe, "conv1d: T + pad_begin + pad_end");
++  num = ck_sub(num, dk, "conv1d: output length numerator");
++  num = ck_sub(num, 1, "conv1d: output length numerator");
+   if (num < 0) {
+     os << "conv1d: output length (T + pb + pe - dilation*(K-1) - 1)//stride + 1 = (" << g.T << " + " << pb << " + "
+        << pe << " - " << dilation << "*" << (g.K - 1) << " - 1)//" << stride << " + 1 is <= 0";
+@@ -107,7 +116,10 @@ Conv1dPlan plan_conv1d(const std::vector<int64_t>& xs, const std::vector<int64_t
+   check_int_range("C_out/groups", Og);
+   check_int_range("C_in/groups*K", CgK);
+   p.out_shape = {g.N, g.C_out, g.T_out};
+-  p.scratch_numel = g.direct ? 0 : g.C_in * g.K * g.T_out;
++  ck_shape_numel(p.out_shape, "conv1d: output size N*C_out*T_out");
++  p.scratch_numel =
++      g.direct ? 0 : ck_mul(ck_mul(g.C_in, g.K, "conv1d: im2col rows C_in*K"), g.T_out, "conv1d: im2col scratch size");
++  ck_fp32_bytes(p.scratch_numel, "conv1d: im2col scratch bytes");
+   return p;
+ }
+ 
+@@ -153,18 +165,25 @@ ConvTranspose1dPlan plan_conv_transpose1d(const std::vector<int64_t>& xs, const
+     os << "conv_transpose1d: C_in (" << g.C_in << ") is not divisible by groups (" << groups << ")";
+     bad_attr(os.str());
+   }
+-  g.C_out = ws[1] * groups;
++  g.C_out = ck_mul(ws[1], groups, "conv_transpose1d: C_out = w.shape[1]*groups");
+   if (bs != nullptr && (bs->size() != 1 || (*bs)[0] != g.C_out)) {
+     os << "conv_transpose1d: b has shape " << shape_str(*bs) << ", expected [" << g.C_out << "]";
+     bad_attr(os.str());
+   }
+-  g.T_out = stride * (g.T - 1) + output_padding + dilation * (g.K - 1) + 1 - pb - pe;
++  // F03: every step checked.
++  int64_t t_out = ck_mul(stride, g.T - 1, "conv_transpose1d: stride*(T-1)");
++  t_out = ck_add(t_out, output_padding, "conv_transpose1d: output length");
++  t_out = ck_add(t_out, ck_mul(dilation, g.K - 1, "conv_transpose1d: dilation*(K-1)"), "conv_transpose1d: output length");
++  t_out = ck_add(t_out, 1, "conv_transpose1d: output length");
++  t_out = ck_sub(t_out, pb, "conv_transpose1d: output length");
++  g.T_out = ck_sub(t_out, pe, "conv_transpose1d: output length");
+   if (g.T_out <= 0) {
+     os << "conv_transpose1d: output length stride*(T-1) + output_padding + dilation*(K-1) + 1 - pb - pe = "
+        << g.T_out << " is <= 0";
+     bad_attr(os.str());
+   }
+   p.out_shape = {g.N, g.C_out, g.T_out};
++  ck_shape_numel(p.out_shape, "conv_transpose1d: output size N*C_out*T_out");
+   return p;
+ }
+ 
+@@ -177,6 +196,7 @@ struct Peeked {
+ 
+ Peeked peek_operand(py::handle obj, const char* role, int ndim) {
+   Peeked p;
++  require_operand(obj, role);
+   p.capsule = to_capsule(obj, role, false);
+   const DLTensor* t = peek(p.capsule, role);
+   validate_tensor(t, role, ndim);
+@@ -217,6 +237,9 @@ py::tuple to_tuple(const std::vector<int64_t>& v) {
+ // ------------------------------------------------------------------------------------------------ Conv1d entry points
+ py::tuple conv1d_plan(py::object x, py::object w, py::object b, int64_t stride, int64_t pb, int64_t pe,
+                       int64_t dilation, int64_t groups) {
++  drain_completed();
++  require_operand(x, "x");
++  require_operand(w, "w");
+   Peeked X = peek_operand(x, "x", 3);
+   Peeked W = peek_operand(w, "w", 3);
+   Peeked B;
+@@ -230,6 +253,10 @@ py::tuple conv1d_plan(py::object x, py::object w, py::object b, int64_t stride,
+ 
+ void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py::object scratch, int64_t stride,
+                 int64_t pb, int64_t pe, int64_t dilation, int64_t groups) {
++  drain_completed();
++  require_operand(xc, "x");
++  require_operand(wc, "w");
++  require_operand(out, "out");
+   Operand X(xc, "x", 3, false);
+   Operand W(wc, "w", 3, false);
+   Operand B;
+@@ -252,14 +279,19 @@ void conv1d_run(py::object xc, py::object wc, py::object bc, py::object out, py:
+   const int device = common_device({&X, &W, &B, &Y, &S});
+   for (const Operand* in : {&X, &W, &B, &S}) expect_disjoint(Y, *in);
+   for (const Operand* in : {&X, &W, &B}) expect_disjoint(S, *in);
++  // F01: every consumed manager stays alive until the legacy stream has passed these launches (also when a launch
++  // throws part-way); the producer deleters run later, from drain_completed / synchronize / atexit.
++  RetainUntilComplete keep(device, {&X, &W, &B, &Y, &S});
+   conv1d_forward(device, p.g, X.data(), W.data(), B.present() ? B.data() : nullptr, Y.data(),
+                  S.present() ? S.data() : nullptr);
+-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launches.
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ ConvTranspose1d entry points
+ py::tuple conv_transpose1d_plan(py::object x, py::object w, py::object b, int64_t stride, int64_t pb, int64_t pe,
+                                 int64_t output_padding, int64_t dilation, int64_t groups) {
++  drain_completed();
++  require_operand(x, "x");
++  require_operand(w, "w");
+   Peeked X = peek_operand(x, "x", 3);
+   Peeked W = peek_operand(w, "w", 3);
+   Peeked B;
+@@ -273,6 +305,10 @@ py::tuple conv_transpose1d_plan(py::object x, py::object w, py::object b, int64_
+ 
+ void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::object out, int64_t stride, int64_t pb,
+                           int64_t pe, int64_t output_padding, int64_t dilation, int64_t groups) {
++  drain_completed();
++  require_operand(xc, "x");
++  require_operand(wc, "w");
++  require_operand(out, "out");
+   Operand X(xc, "x", 3, false);
+   Operand W(wc, "w", 3, false);
+   Operand B;
+@@ -287,10 +323,15 @@ void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::objec
+   expect_shape(Y, p.out_shape);
+   const int device = common_device({&X, &W, &B, &Y});
+   for (const Operand* in : {&X, &W, &B}) expect_disjoint(Y, *in);
++  RetainUntilComplete keep(device, {&X, &W, &B, &Y});  // F01 (see conv1d_run)
+   conv_transpose1d_forward(device, p.g, X.data(), W.data(), B.present() ? B.data() : nullptr, Y.data());
+ }
+ 
+ void divide_probe(py::object x, py::object y, py::object out) {
++  drain_completed();
++  require_operand(x, "x");
++  require_operand(y, "y");
++  require_operand(out, "out");
+   Operand X(to_capsule(x, "x", false), "x", 1, false);
+   Operand Y(to_capsule(y, "y", false), "y", 1, false);
+   Operand O(to_capsule(out, "out", true), "out", 1, true);
+@@ -299,6 +340,7 @@ void divide_probe(py::object x, py::object y, py::object out) {
+   const int device = common_device({&X, &Y, &O});
+   expect_disjoint(O, X);
+   expect_disjoint(O, Y);
++  RetainUntilComplete keep(device, {&X, &Y, &O});  // F01
+   fp32_divide_probe(device, X.data(), Y.data(), O.data(), X.dim(0));
+ }
+ 
+@@ -353,4 +395,13 @@ PYBIND11_MODULE(_tc_signal, m) {
+   });
+   register_lstm(m);
+   register_m4(m);
++  // P1T-FIX1 F01: the deferred-release list (dlpack_operand.h). tc_signal.synchronize() and the package's atexit hook
++  // call `synchronize`; tests and the G4 high-water receipt read `pending_stats`.
++  m.def("synchronize", &synchronize_and_release_all,
++        "Synchronize the legacy default stream (current device and every device with pending operands), then release "
++        "every consumed DLPack operand tc_signal still holds. RuntimeError if a device cannot synchronize (its "
++        "operands are then deliberately leaked, never released early).");
++  m.def("pending_stats", &pending_stats, py::arg("reset_high_water") = false,
++        "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
++        "fallback syncs, deliberate leaks, and the bounds.");
+ }
+diff --git a/tc_signal/src/checked_math.h b/tc_signal/src/checked_math.h
+new file mode 100644
+index 0000000..b667182
+--- /dev/null
++++ b/tc_signal/src/checked_math.h
+@@ -0,0 +1,70 @@
++// Checked int64 shape / geometry / byte arithmetic for tc_signal (P1T-FIX1, review finding F03).
++//
++// Every plan function and every operand validation computes element counts, output lengths, scratch sizes and byte
++// totals through these helpers BEFORE any narrowing cast, allocation or launch. An overflow raises ValueError naming
++// the quantity; a wrapped value is never used (in particular it never turns into an "empty" or negative extent).
++// The byte ceiling is INT64_MAX (= PTRDIFF_MAX on LP64): every byte total and every pointer offset must stay a valid
++// signed pointer difference.
++//
++// Prior art: GCC/Clang `__builtin_mul_overflow` / `__builtin_add_overflow` / `__builtin_sub_overflow` (GCC 5, 2015),
++// which this file uses; C23 `ckd_mul` / `ckd_add` / `ckd_sub` (<stdckdint.h>, ISO/IEC 9899:2024), the standardized
++// form of the same builtins; the SEI CERT C rules INT30-C / INT32-C ("ensure that operations on (un)signed integers do
++// not wrap / overflow"). Taken: the checked-operation primitive. Ours: where tc_signal applies it (the list of
++// quantities in the plan functions) and the INT64_MAX byte ceiling. Unverified in this sandbox (lead to check):
++// "GCC 5 __builtin_mul_overflow release", "C23 stdckdint ckd_mul", "CERT INT32-C".
++#pragma once
++
++#include <pybind11/pybind11.h>
++
++#include <cstdint>
++#include <limits>
++#include <string>
++#include <vector>
++
++namespace tcs {
++
++[[noreturn]] inline void overflow_refusal(const char* what) {
++  throw pybind11::value_error(std::string("tc_signal: ") + what +
++                              " overflows 64-bit arithmetic; refused (no wrapped size is ever used)");
++}
++
++inline int64_t ck_mul(int64_t a, int64_t b, const char* what) {
++  int64_t r = 0;
++  if (__builtin_mul_overflow(a, b, &r)) overflow_refusal(what);
++  return r;
++}
++
++inline int64_t ck_add(int64_t a, int64_t b, const char* what) {
++  int64_t r = 0;
++  if (__builtin_add_overflow(a, b, &r)) overflow_refusal(what);
++  return r;
++}
++
++inline int64_t ck_sub(int64_t a, int64_t b, const char* what) {
++  int64_t r = 0;
++  if (__builtin_sub_overflow(a, b, &r)) overflow_refusal(what);
++  return r;
++}
++
++// Product of s[a, b), each factor >= 0 (callers have refused negative extents). A zero factor makes the product 0.
++inline int64_t ck_prod(const std::vector<int64_t>& s, size_t a, size_t b, const char* what) {
++  for (size_t i = a; i < b; ++i)
++    if (s[i] == 0) return 0;
++  int64_t p = 1;
++  for (size_t i = a; i < b; ++i) p = ck_mul(p, s[i], what);
++  return p;
++}
++
++// Bytes of `numel` fp32 elements, refused above INT64_MAX.
++inline int64_t ck_fp32_bytes(int64_t numel, const char* what) {
++  return ck_mul(numel, static_cast<int64_t>(sizeof(float)), what);
++}
++
++// Element count of a planned output/scratch shape, plus the check that its fp32 byte total fits; returns the count.
++inline int64_t ck_shape_numel(const std::vector<int64_t>& s, const char* what) {
++  const int64_t n = ck_prod(s, 0, s.size(), what);
++  ck_fp32_bytes(n, what);
++  return n;
++}
++
++}  // namespace tcs
+diff --git a/tc_signal/src/dlpack_operand.cpp b/tc_signal/src/dlpack_operand.cpp
+index a9c8522..0cb63af 100644
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -1,9 +1,18 @@
+ // DLPack consumer implementation. Prior art and design notes: see dlpack_operand.h.
+ #include "dlpack_operand.h"
+ 
++#include <cuda_runtime.h>
++
++#include <algorithm>
+ #include <cstring>
++#include <deque>
++#include <limits>
++#include <set>
+ #include <sstream>
++#include <stdexcept>
++#include <unordered_map>
+ 
++#include "checked_math.h"
+ #include "tuning.h"
+ 
+ namespace tcs {
+@@ -113,7 +122,7 @@ const DLTensor* peek(py::handle capsule, const char* role) {
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ validation
+-void validate_tensor(const DLTensor* t, const char* role, int ndim) {
++int64_t validate_tensor(const DLTensor* t, const char* role, int ndim) {
+   if (t->device.device_type != kDLCUDA) {
+     std::ostringstream os;
+     os << "device type " << static_cast<int>(t->device.device_type)
+@@ -127,6 +136,13 @@ void validate_tensor(const DLTensor* t, const char* role, int ndim) {
+        << ") is not float32; tc_signal computes in fp32 only (expand fp16 weights to fp32 first)";
+     refuse_type(role, os.str());
+   }
++  // F03 (P1T-FIX1): a negative rank or a NULL shape array (with rank > 0) is refused before the shape is read.
++  if (t->ndim < 0) {
++    std::ostringstream os;
++    os << "negative number of dimensions " << t->ndim;
++    refuse_value(role, os.str());
++  }
++  if (t->ndim > 0 && t->shape == nullptr) refuse_value(role, "NULL shape array for a tensor with dimensions");
+   if (t->ndim != ndim) {
+     std::ostringstream os;
+     os << "expected " << ndim << " dimensions, got " << t->ndim;
+@@ -134,6 +150,16 @@ void validate_tensor(const DLTensor* t, const char* role, int ndim) {
+   }
+   for (int i = 0; i < t->ndim; ++i)
+     if (t->shape[i] <= 0) refuse_value(role, "empty operand (shape " + shape_str(shape_of(t)) + ")");
++  // F03: checked element count and fp32 byte total (every extent is >= 1 here), before the stride walk below
++  // multiplies extents and before any later byte range is formed.
++  int64_t numel = 1;
++  for (int i = 0; i < t->ndim; ++i) {
++    if (__builtin_mul_overflow(numel, t->shape[i], &numel))
++      refuse_value(role, "element count of shape " + shape_str(shape_of(t)) + " overflows int64");
++  }
++  int64_t nbytes = 0;
++  if (__builtin_mul_overflow(numel, static_cast<int64_t>(sizeof(float)), &nbytes))
++    refuse_value(role, "byte size of shape " + shape_str(shape_of(t)) + " (fp32) overflows int64");
+   if (t->strides != nullptr) {
+     // C-contiguous: every dimension of extent > 1 has the compact stride; size-1 dimensions may carry any stride
+     // (they are never stepped), as the order and the DLPack/array API conventions allow.
+@@ -150,8 +176,21 @@ void validate_tensor(const DLTensor* t, const char* role, int ndim) {
+     }
+   }
+   if (t->data == nullptr) refuse_value(role, "NULL data pointer");
+-  const uintptr_t p = reinterpret_cast<uintptr_t>(t->data) + static_cast<uintptr_t>(t->byte_offset);
++  // F03: data + byte_offset (element 0) and element 0 + nbytes (one past the end) must not wrap the address space.
++  uintptr_t p = 0;
++  uintptr_t end = 0;
++  if (__builtin_add_overflow(reinterpret_cast<uintptr_t>(t->data), static_cast<uintptr_t>(t->byte_offset), &p) ||
++      __builtin_add_overflow(p, static_cast<uintptr_t>(nbytes), &end))
++    refuse_value(role, "data + byte_offset + byte size overflows the address space");
+   if (p % alignof(float) != 0) refuse_value(role, "data + byte_offset is not 4-byte aligned");
++  return numel;
++}
++
++void require_operand(py::handle obj, const char* role) {
++  // F02 (P1T-FIX1): None is never a tensor. Refused with TypeError before any planning, allocation or consumption.
++  if (obj.is_none())
++    refuse_type(role, "is required: expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got "
++                      "None (only optional operands such as a bias may be None)");
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ ManagedOwner
+@@ -208,15 +247,17 @@ Operand::Operand(py::handle capsule, const char* role, int ndim, bool writable)
+     owner_.legacy = m;
+     t_ = &m->dl_tensor;
+   }
+-  validate_tensor(t_, role, ndim);
++  numel_ = validate_tensor(t_, role, ndim);
+   data_ = reinterpret_cast<float*>(static_cast<char*>(t_->data) + t_->byte_offset);  // byte_offset honoured
+ }
+ 
+ Operand::~Operand() = default;
+ 
+-Operand::Operand(Operand&& o) noexcept : owner_(std::move(o.owner_)), t_(o.t_), data_(o.data_), role_(o.role_) {
++Operand::Operand(Operand&& o) noexcept
++    : owner_(std::move(o.owner_)), t_(o.t_), data_(o.data_), numel_(o.numel_), role_(o.role_) {
+   o.t_ = nullptr;
+   o.data_ = nullptr;
++  o.numel_ = 0;
+ }
+ 
+ Operand& Operand::operator=(Operand&& o) noexcept {
+@@ -224,23 +265,40 @@ Operand& Operand::operator=(Operand&& o) noexcept {
+     owner_ = std::move(o.owner_);
+     t_ = o.t_;
+     data_ = o.data_;
++    numel_ = o.numel_;
+     role_ = o.role_;
+     o.t_ = nullptr;
+     o.data_ = nullptr;
++    o.numel_ = 0;
+   }
+   return *this;
+ }
+ 
++const DLTensor* Operand::meta() const {
++  // F02 second line of defence: an absent (None) operand has no metadata; never dereference NULL.
++  if (t_ == nullptr)
++    refuse_type(role_[0] ? role_ : "?", "is absent (None); its shape/device cannot be read");
++  return t_;
++}
++
+ int64_t Operand::numel() const {
+-  int64_t n = 1;
+-  for (int i = 0; i < t_->ndim; ++i) n *= t_->shape[i];
+-  return n;
++  meta();
++  return numel_;  // checked at construction (validate_tensor)
+ }
+ 
+ void Operand::release() {
+   owner_.reset();
+   t_ = nullptr;
+   data_ = nullptr;
++  numel_ = 0;
++}
++
++ManagedOwner Operand::take_owner() {
++  ManagedOwner o(std::move(owner_));
++  t_ = nullptr;
++  data_ = nullptr;
++  numel_ = 0;
++  return o;
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ helpers
+@@ -285,4 +343,295 @@ void expect_disjoint(const Operand& written, const Operand& other) {
+                                      "'; the written operand must not alias any other operand");
+ }
+ 
++// ------------------------------------------------------------------------------------------------ deferred release (F01)
++// Design and prior art: dlpack_operand.h, RetainUntilComplete. Every function here runs on the calling host thread with
++// the GIL held (every _tc_signal entry point is a pybind11 function that keeps the GIL), so the pending list needs no
++// lock. Deleters may run Python (a ctypes producer) and may even re-enter tc_signal; therefore an entry is always taken
++// OFF the list before its deleters run, and nothing iterates the list across a deleter call.
++namespace {
++
++struct PendingEntry {
++  cudaEvent_t event = nullptr;   // recorded on `device`'s legacy stream right after the call's last launch
++  int device = -1;
++  int64_t bytes = 0;             // sum of the fp32 operand sizes this entry keeps alive
++  std::vector<ManagedOwner> owners;
++};
++
++struct PendingState {
++  std::deque<PendingEntry> q;
++  int64_t bytes = 0;
++  long long managers = 0;
++  long long high_water_entries = 0;
++  long long high_water_managers = 0;
++  int64_t high_water_bytes = 0;
++  unsigned long long retained_entries = 0;   // entries ever pushed
++  unsigned long long released_entries = 0;
++  unsigned long long released_managers = 0;
++  unsigned long long bound_drains = 0;       // a push exceeded a bound -> synchronize + release everything
++  unsigned long long fallback_syncs = 0;     // the event could not be recorded -> the legacy stream was synchronized
++  unsigned long long leaked_managers = 0;    // no completion proof (broken context): deliberately not released
++  std::unordered_map<int, std::vector<cudaEvent_t>> event_pool;   // completed events, reused per device
++};
++
++// Never destroyed: no static destructor may call a producer deleter at process exit (Python may be gone by then).
++PendingState& pending() {
++  static PendingState* state = new PendingState();
++  return *state;
++}
++
++// Makes `device` current for its scope and restores the caller's device; never throws (ok() reports failure, and a
++// failed switch clears the runtime's last-error slot so a later, unrelated launch check does not report it).
++class QuietDeviceGuard {
++ public:
++  explicit QuietDeviceGuard(int device) noexcept {
++    if (cudaGetDevice(&prev_) != cudaSuccess) {
++      cudaGetLastError();
++      ok_ = false;
++      return;
++    }
++    if (prev_ != device) {
++      if (cudaSetDevice(device) != cudaSuccess) {
++        cudaGetLastError();
++        ok_ = false;
++        return;
++      }
++      switched_ = true;
++    }
++  }
++  ~QuietDeviceGuard() {
++    if (switched_) cudaSetDevice(prev_);
++  }
++  QuietDeviceGuard(const QuietDeviceGuard&) = delete;
++  QuietDeviceGuard& operator=(const QuietDeviceGuard&) = delete;
++  bool ok() const { return ok_; }
++
++ private:
++  int prev_ = 0;
++  bool ok_ = true;
++  bool switched_ = false;
++};
++
++void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
++  if (ev == nullptr) return;
++  try {
++    st.event_pool[device].push_back(ev);
++  } catch (...) {
++    cudaEventDestroy(ev);
++  }
++}
++
++void note_push(PendingState& st, const PendingEntry& e) {
++  st.bytes += e.bytes;
++  st.managers += static_cast<long long>(e.owners.size());
++  ++st.retained_entries;
++  st.high_water_entries = std::max<long long>(st.high_water_entries, static_cast<long long>(st.q.size()));
++  st.high_water_managers = std::max(st.high_water_managers, st.managers);
++  st.high_water_bytes = std::max(st.high_water_bytes, st.bytes);
++}
++
++void note_pop(PendingState& st, const PendingEntry& e) {
++  st.bytes -= e.bytes;
++  st.managers -= static_cast<long long>(e.owners.size());
++}
++
++// Runs the entry's deleters (they may run Python and re-enter tc_signal; the entry is already off the list).
++void release_entry(PendingState& st, PendingEntry& e) noexcept {
++  recycle_event(st, e.device, e.event);
++  e.event = nullptr;
++  ++st.released_entries;
++  st.released_managers += e.owners.size();
++  for (ManagedOwner& o : e.owners) o.reset();
++}
++
++void leak_entry(PendingState& st, PendingEntry& e) noexcept {
++  for (ManagedOwner& o : e.owners) {
++    if (!o.empty()) ++st.leaked_managers;
++    o.leak();
++  }
++  // The event is not recycled either: it may belong to a broken context.
++  e.event = nullptr;
++}
++
++// Takes the whole list off, synchronizes the legacy stream of the current device and of every device in it, then
++// releases each entry whose device synchronized and leaks the others. Entries pushed by deleters while this runs (a
++// re-entrant tc_signal call) land on the fresh list and are not touched here. Returns the failed devices' errors.
++std::vector<std::pair<int, cudaError_t>> sync_and_release_all_impl() noexcept {
++  PendingState& st = pending();
++  std::deque<PendingEntry> taken;
++  taken.swap(st.q);
++  st.bytes = 0;
++  st.managers = 0;
++  std::vector<std::pair<int, cudaError_t>> failed;
++  try {
++    std::set<int> devices;
++    int cur = -1;
++    if (cudaGetDevice(&cur) == cudaSuccess)
++      devices.insert(cur);
++    else
++      cudaGetLastError();
++    for (const PendingEntry& e : taken) devices.insert(e.device);
++    for (int d : devices) {
++      QuietDeviceGuard g(d);
++      cudaError_t r = g.ok() ? cudaStreamSynchronize(cudaStreamLegacy) : cudaErrorInvalidDevice;
++      if (r != cudaSuccess) {
++        cudaGetLastError();
++        failed.emplace_back(d, r);
++      }
++    }
++  } catch (...) {
++    // Only bad_alloc can land here: without a completion proof, leak everything taken.
++    for (PendingEntry& e : taken) leak_entry(st, e);
++    failed.emplace_back(-1, cudaErrorMemoryAllocation);
++    return failed;
++  }
++  while (!taken.empty()) {
++    PendingEntry e = std::move(taken.front());
++    taken.pop_front();
++    bool ok = true;
++    for (const auto& f : failed)
++      if (f.first == e.device) ok = false;
++    if (ok)
++      release_entry(st, e);
++    else
++      leak_entry(st, e);
++  }
++  return failed;
++}
++
++cudaEvent_t acquire_event(int device) {
++  PendingState& st = pending();
++  auto it = st.event_pool.find(device);
++  if (it != st.event_pool.end() && !it->second.empty()) {
++    cudaEvent_t ev = it->second.back();
++    it->second.pop_back();
++    return ev;
++  }
++  QuietDeviceGuard g(device);
++  cudaEvent_t ev = nullptr;
++  cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : cudaErrorInvalidDevice;
++  if (r != cudaSuccess) {
++    cudaGetLastError();
++    std::ostringstream os;
++    os << "tc_signal: cannot create the completion event on CUDA device " << device << ": " << cudaGetErrorName(r)
++       << ": " << cudaGetErrorString(r);
++    throw std::runtime_error(os.str());
++  }
++  return ev;
++}
++
++}  // namespace
++
++RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Operand*> ops)
++    : device_(device), ops_(ops) {
++  owners_.reserve(ops_.size());
++  event_ = acquire_event(device_);  // last: if it throws, nothing else is held and nothing has been launched
++}
++
++RetainUntilComplete::~RetainUntilComplete() {
++  PendingState& st = pending();
++  PendingEntry e;
++  e.device = device_;
++  for (Operand* op : ops_) {
++    if (op == nullptr || !op->present()) continue;
++    e.bytes += op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
++    owners_.push_back(op->take_owner());                           // reserved: no allocation
++  }
++  e.owners = std::move(owners_);
++  cudaError_t r = cudaSuccess;
++  {
++    QuietDeviceGuard g(device_);
++    r = g.ok() ? cudaEventRecord(event_, cudaStreamLegacy) : cudaErrorInvalidDevice;
++  }
++  if (r == cudaSuccess) {
++    e.event = event_;
++    try {
++      st.q.push_back(std::move(e));
++      note_push(st, st.q.back());
++    } catch (...) {
++      r = cudaErrorMemoryAllocation;  // e was not moved (push_back's strong guarantee): use the fallback below
++      e.event = nullptr;
++    }
++  } else {
++    cudaGetLastError();
++  }
++  if (r != cudaSuccess) {
++    // Fallback: no event, so synchronize this device's legacy stream; release on success, leak on failure.
++    ++st.fallback_syncs;
++    bool synced = false;
++    {
++      QuietDeviceGuard g(device_);
++      synced = g.ok() && cudaStreamSynchronize(cudaStreamLegacy) == cudaSuccess;
++      if (!synced) cudaGetLastError();
++    }
++    if (synced) {
++      recycle_event(st, device_, event_);
++      ++st.released_entries;
++      st.released_managers += e.owners.size();
++      for (ManagedOwner& o : e.owners) o.reset();
++    } else {
++      leak_entry(st, e);
++    }
++    return;
++  }
++  if (static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes > tuning::kPendingMaxBytes) {
++    ++st.bound_drains;
++    sync_and_release_all_impl();
++  }
++}
++
++void drain_completed() noexcept {
++  PendingState& st = pending();
++  while (!st.q.empty()) {
++    const cudaError_t r = cudaEventQuery(st.q.front().event);
++    if (r != cudaSuccess) {
++      // cudaErrorNotReady: still pending (FIFO: later entries wait too). CUDA 12.6 does not leave NotReady in the
++      // last-error slot (ledger receipt); clear it defensively if a runtime ever does. Any other error (a broken
++      // context) leaves the entry for synchronize_and_release_all, which leaks it if the device cannot synchronize.
++      if (r == cudaErrorNotReady && cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
++      return;
++    }
++    PendingEntry e = std::move(st.q.front());
++    st.q.pop_front();
++    note_pop(st, e);
++    release_entry(st, e);
++  }
++}
++
++void synchronize_and_release_all() {
++  const auto failed = sync_and_release_all_impl();
++  if (!failed.empty()) {
++    std::ostringstream os;
++    os << "tc_signal.synchronize: the legacy stream could not be synchronized on";
++    for (const auto& f : failed)
++      os << " device " << f.first << " (" << cudaGetErrorName(f.second) << ": " << cudaGetErrorString(f.second) << ")";
++    os << "; the operands still pending there were deliberately leaked, not released";
++    throw std::runtime_error(os.str());
++  }
++}
++
++py::dict pending_stats(bool reset_high_water) {
++  PendingState& st = pending();
++  py::dict d;
++  d["entries"] = static_cast<long long>(st.q.size());
++  d["managers"] = st.managers;
++  d["bytes"] = st.bytes;
++  d["high_water_entries"] = st.high_water_entries;
++  d["high_water_managers"] = st.high_water_managers;
++  d["high_water_bytes"] = st.high_water_bytes;
++  d["retained_entries"] = st.retained_entries;
++  d["released_entries"] = st.released_entries;
++  d["released_managers"] = st.released_managers;
++  d["bound_drains"] = st.bound_drains;
++  d["fallback_syncs"] = st.fallback_syncs;
++  d["leaked_managers"] = st.leaked_managers;
++  d["max_entries"] = tuning::kPendingMaxEntries;
++  d["max_bytes"] = tuning::kPendingMaxBytes;
++  if (reset_high_water) {
++    st.high_water_entries = static_cast<long long>(st.q.size());
++    st.high_water_managers = st.managers;
++    st.high_water_bytes = st.bytes;
++  }
++  return d;
++}
++
+ }  // namespace tcs
+diff --git a/tc_signal/src/dlpack_operand.h b/tc_signal/src/dlpack_operand.h
+index ff9f51d..ff85c8c 100644
+--- a/tc_signal/src/dlpack_operand.h
++++ b/tc_signal/src/dlpack_operand.h
+@@ -14,9 +14,12 @@
+ #include <pybind11/pybind11.h>
+ 
+ #include <cstdint>
++#include <initializer_list>
+ #include <string>
+ #include <vector>
+ 
++struct CUevent_st;  // cudaEvent_t is `CUevent_st*` (CUDA driver_types.h); kept opaque in this header
++
+ namespace tcs {
+ namespace py = pybind11;
+ 
+@@ -29,8 +32,14 @@ py::object to_capsule(py::handle obj, const char* role, bool writable);
+ // TypeError for a capsule of another kind.
+ const DLTensor* peek(py::handle capsule, const char* role);
+ 
+-// Device / dtype / layout checks shared by peek-time and consume-time validation (raises TypeError/ValueError).
+-void validate_tensor(const DLTensor* t, const char* role, int ndim);
++// Device / dtype / layout checks shared by peek-time and consume-time validation (raises TypeError/ValueError). Also
++// the F03 (P1T-FIX1) checked arithmetic: rank >= 0, a non-NULL shape array, the element count, the fp32 byte total and
++// data + byte_offset + bytes must not overflow (ValueError). Returns the element count.
++int64_t validate_tensor(const DLTensor* t, const char* role, int ndim);
++
++// F02 (P1T-FIX1): a REQUIRED operand passed as None raises TypeError, before any planning, allocation or consumption.
++// Optional operands (bias, scale, initial state) are the only ones a caller may pass as None.
++void require_operand(py::handle obj, const char* role);
+ 
+ // Owner of one consumed managed tensor (legacy or versioned). Calls the producer's deleter exactly once, in reset() or
+ // in the destructor. It is a separate member so that a throw from Operand's constructor (after the capsule has been
+@@ -45,11 +54,21 @@ struct ManagedOwner {
+   ManagedOwner(const ManagedOwner&) = delete;
+   ManagedOwner& operator=(const ManagedOwner&) = delete;
+   void reset() noexcept;
++  // F01: deliberately drop ownership WITHOUT calling the deleter (used only when tc_signal cannot prove the GPU is done
++  // with the memory, e.g. a broken CUDA context: a leak is safe, a release could be a use-after-free).
++  void leak() noexcept {
++    legacy = nullptr;
++    versioned = nullptr;
++  }
++  bool empty() const { return legacy == nullptr && versioned == nullptr; }
+ };
+ 
+ // One consumed DLPack operand. Owns the managed tensor (through ManagedOwner) and calls the producer's deleter exactly
+ // once: in release() or in the destructor, so every exception path after consumption still returns the tensor to its
+ // producer.
++//
++// Absent operands (default-constructed, for an optional None) report present() == false. Reading an absent operand's
++// metadata (dim, ndim, device, numel) raises TypeError instead of dereferencing NULL (F02's second line of defence).
+ class Operand {
+  public:
+   Operand() = default;
+@@ -62,22 +81,82 @@ class Operand {
+ 
+   bool present() const { return t_ != nullptr; }
+   float* data() const { return data_; }
+-  int64_t dim(int i) const { return t_->shape[i]; }
+-  int ndim() const { return t_->ndim; }
+-  int device() const { return t_->device.device_id; }
++  int64_t dim(int i) const { return meta()->shape[i]; }
++  int ndim() const { return meta()->ndim; }
++  int device() const { return meta()->device.device_id; }
+   int64_t numel() const;
++  // Validated at construction: begin + numel * 4 does not overflow (F03).
+   uintptr_t byte_begin() const { return reinterpret_cast<uintptr_t>(data_); }
+-  uintptr_t byte_end() const { return byte_begin() + static_cast<uintptr_t>(numel()) * sizeof(float); }
++  uintptr_t byte_end() const { return byte_begin() + static_cast<uintptr_t>(numel_) * sizeof(float); }
+   const char* role() const { return role_; }
+   void release();
++  // F01: hands the consumed manager to the deferred-release list (RetainUntilComplete); the operand becomes absent.
++  ManagedOwner take_owner();
+ 
+  private:
++  const DLTensor* meta() const;  // t_, or TypeError when absent
+   ManagedOwner owner_;
+   const DLTensor* t_ = nullptr;
+   float* data_ = nullptr;
++  int64_t numel_ = 0;
+   const char* role_ = "";
+ };
+ 
++// ------------------------------------------------------------------------------------------------ deferred release (F01)
++// P1T-FIX1, review finding F01 (BLOCKING): a consumed DLPack manager may be the LAST owner of its memory (a bare capsule,
++// or a producer's temporary copy). Calling its deleter right after the launches let a producer on another stream reuse
++// the block before the legacy stream had read or written it (use-after-free, reproduced by addon_lifetime.py). Now
++// every consumed manager of a call that reached the launch stays alive until the legacy stream has passed that call:
++//   * RetainUntilComplete (constructed right before the launch, destroyed on scope exit, success OR exception after a
++//     partial launch) records one CUDA event on the operand device's legacy stream and moves every operand's manager
++//     into a module-level FIFO pending list together with that event;
++//   * completed entries (cudaEventQuery == cudaSuccess) are released in FIFO order, on the calling host thread with
++//     the GIL held, at the start of the next tc_signal call (drain_completed), in tc_signal.synchronize(), and from an
++//     atexit hook (both: synchronize_and_release_all);
++//   * the list is bounded (tuning.h: kPendingMaxEntries, kPendingMaxBytes); when a push exceeds a bound, the legacy
++//     stream of every pending device is synchronized and the whole list is released;
++//   * deleters are NEVER called from a CUDA host callback (a deleter may call CUDA, e.g. torch's caching allocator);
++//   * if an event cannot be recorded, the legacy stream is synchronized instead; if that also fails (a broken context),
++//     the managers are deliberately leaked: tc_signal cannot prove the GPU is done with them, and a leak is safe where a
++//     release could be a use-after-free.
++// A call refused BEFORE the launch (validation, shape, overlap) still releases its managers immediately: nothing was
++// queued on them.
++//
++// Prior art: PyTorch's `Tensor.record_stream` and its CUDA caching allocator, which defers a block's reuse until CUDA
++// events recorded on every stream that used it have completed, polling them with cudaEventQuery from the allocating
++// host thread (c10/cuda/CUDACachingAllocator.cpp, "insert_events" / "process_events", 2017-; also its EventPool of
++// reusable events); CuPy's memory pool, which keeps freed blocks stream-ordered so a block is reused only in its own
++// stream's order (cupy/cuda/memory.pyx, 2017-); the DLPack consumer contract (dmlc/dlpack: the consumer calls the
++// deleter when it no longer needs the tensor); the CUDA rule that host callbacks must not call CUDA (CUDA Runtime API,
++// cudaLaunchHostFunc). Taken: event-fenced deferred release polled from the host, event reuse. Ours: applying it to
++// consumed DLPack managers on the consumer side, the GIL-held FIFO drain at every tc_signal entry point, the
++// count/bytes bound with a synchronize-and-drain fallback, and the leak-on-unfenceable rule.
++//
++// Construct it AFTER every validation and right BEFORE the first launch: the constructor may still throw (event
++// acquisition), and then nothing has been queued. Its destructor never throws.
++class RetainUntilComplete {
++ public:
++  RetainUntilComplete(int device, std::initializer_list<Operand*> ops);
++  ~RetainUntilComplete();
++  RetainUntilComplete(const RetainUntilComplete&) = delete;
++  RetainUntilComplete& operator=(const RetainUntilComplete&) = delete;
++
++ private:
++  int device_;
++  std::vector<Operand*> ops_;
++  std::vector<ManagedOwner> owners_;  // reserved in the constructor, so the destructor never allocates for it
++  CUevent_st* event_ = nullptr;       // a cudaEvent_t from the per-device pool, acquired in the constructor
++};
++
++// Releases every completed pending entry (FIFO, stops at the first incomplete one). Called first thing by every
++// _tc_signal entry point that takes operands. GIL held.
++void drain_completed() noexcept;
++// Synchronizes the legacy stream of the current device and of every device with pending entries, then releases all
++// entries. Raises RuntimeError naming the CUDA error if a synchronization failed (that device's entries are leaked).
++void synchronize_and_release_all();
++// Counters of the pending list (tests, G4 high-water mark).
++py::dict pending_stats(bool reset_high_water);
++
+ std::vector<int64_t> shape_of(const DLTensor* t);
+ std::string shape_str(const std::vector<int64_t>& s);
+ 
+diff --git a/tc_signal/src/lstm_bindings.cpp b/tc_signal/src/lstm_bindings.cpp
+index e40baea..1253254 100644
+--- a/tc_signal/src/lstm_bindings.cpp
++++ b/tc_signal/src/lstm_bindings.cpp
+@@ -7,7 +7,11 @@
+ //   lstm_run(capsules, Y, Y_h, Y_c, scratch, hidden_size, direction)
+ //       -> consumes every capsule, re-validates, checks devices and that no written operand aliases any other operand,
+ //          runs the whole recurrence (lstm.cu: all T steps, every direction) on the legacy default stream inside this
+-//          one call, then every producer deleter runs at scope exit.
++//          one call, then hands the call's whole capsule set (up to 10 managers: x, W, R, B, initial_h, initial_c,
++//          Y, Y_h, Y_c, scratch) to the deferred-release list as ONE entry (P1T-FIX1 F01, dlpack_operand.h): the
++//          deleters run once the legacy stream has passed the last step's cell kernel.
++// P1T-FIX1: F02 (required x/W/R and every run operand: None -> TypeError), F03 (T*N, D*N*H, the Y size and the
++// scratch size and bytes all checked before the int32 range checks and before any launch).
+ // direction codes: 0 forward, 1 reverse, 2 bidirectional (the Python layer maps the ONNX strings).
+ //
+ // Prior art: the operand contract and the plan/run split are M2's (see dlpack_operand.h and bindings.cpp for their
+@@ -22,6 +26,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "checked_math.h"
+ #include "dlpack_operand.h"
+ #include "lstm_ops.h"
+ 
+@@ -98,13 +103,21 @@ LstmPlan plan_lstm(const std::vector<int64_t>& xs, const std::vector<int64_t>& W
+   if (h0s != nullptr) expect_dims("initial_h", *h0s, {g.D, g.N, g.H}, "initial_h is [D, N, H]");
+   if (c0s != nullptr) expect_dims("initial_c", *c0s, {g.D, g.N, g.H}, "initial_c is [D, N, H]");
+   check_int_range("4*hidden_size", H4);
+-  check_int_range("T*N", g.T * g.N);
++  check_int_range("T*N", ck_mul(g.T, g.N, "lstm: T*N"));
+   check_int_range("input size", g.I);
+   check_int_range("batch size", g.N);
+-  check_int_range("D*N*H", g.D * g.N * g.H);
++  check_int_range("D*N*H", ck_mul(ck_mul(g.D, g.N, "lstm: D*N"), g.H, "lstm: D*N*H"));
+   p.y_shape = {g.T, g.D, g.N, g.H};
+   p.state_shape = {g.D, g.N, g.H};
+-  p.scratch_numel = lstm_scratch_numel(g);
++  ck_shape_numel(p.y_shape, "lstm: Y size T*D*N*H");
++  ck_shape_numel(p.state_shape, "lstm: Y_h/Y_c size D*N*H");
++  // F03: the scratch size G_x [D, T, N, 4H] + G_h [D, N, 4H] and its bytes, checked; lstm_scratch_numel (unchecked,
++  // used again by lstm.cu) is then known not to overflow.
++  const int64_t gx = ck_mul(ck_mul(ck_mul(g.D, g.T, "lstm: scratch G_x"), g.N, "lstm: scratch G_x"), H4,
++                            "lstm: scratch G_x");
++  const int64_t gh = ck_mul(ck_mul(g.D, g.N, "lstm: scratch G_h"), H4, "lstm: scratch G_h");
++  p.scratch_numel = ck_add(gx, gh, "lstm: scratch size");
++  ck_fp32_bytes(p.scratch_numel, "lstm: scratch bytes");
+   return p;
+ }
+ 
+@@ -116,6 +129,7 @@ struct Peeked {
+   bool present = false;
+ };
+ 
++// Optional operands only (B, initial_h, initial_c); required ones go through require_operand first.
+ Peeked peek_operand(py::handle obj, const char* role, int ndim) {
+   Peeked p;
+   if (obj.is_none()) {
+@@ -163,9 +177,10 @@ py::tuple to_tuple(const std::vector<int64_t>& v) {
+ // ------------------------------------------------------------------------------------------------ entry points
+ py::tuple lstm_plan(py::object x, py::object W, py::object R, py::object B, py::object h0, py::object c0,
+                     int64_t hidden_size, int64_t direction) {
+-  if (x.is_none()) throw py::type_error("tc_signal: operand 'x': expected a DLPack producer or capsule, got None");
+-  if (W.is_none()) throw py::type_error("tc_signal: operand 'W': expected a DLPack producer or capsule, got None");
+-  if (R.is_none()) throw py::type_error("tc_signal: operand 'R': expected a DLPack producer or capsule, got None");
++  drain_completed();
++  require_operand(x, "x");
++  require_operand(W, "W");
++  require_operand(R, "R");
+   Peeked X = peek_operand(x, "x", 3);
+   Peeked Wp = peek_operand(W, "W", 3);
+   Peeked Rp = peek_operand(R, "R", 3);
+@@ -181,6 +196,14 @@ py::tuple lstm_plan(py::object x, py::object W, py::object R, py::object B, py::
+ 
+ void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::object h0c, py::object c0c, py::object Y,
+               py::object Y_h, py::object Y_c, py::object scratch, int64_t hidden_size, int64_t direction) {
++  drain_completed();
++  require_operand(xc, "x");
++  require_operand(Wc, "W");
++  require_operand(Rc, "R");
++  require_operand(Y, "Y");
++  require_operand(Y_h, "Y_h");
++  require_operand(Y_c, "Y_c");
++  require_operand(scratch, "scratch");
+   Operand X(xc, "x", 3, false);
+   Operand Wo(Wc, "W", 3, false);
+   Operand Ro(Rc, "R", 3, false);
+@@ -212,10 +235,11 @@ void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::ob
+     for (const Operand* in : inputs) expect_disjoint(*written[a], *in);
+     for (size_t b = a + 1; b < written.size(); ++b) expect_disjoint(*written[a], *written[b]);
+   }
++  // F01: the whole per-call capsule set is one pending entry, released after the last step's launch has run.
++  RetainUntilComplete keep(device, {&X, &Wo, &Ro, &Bo, &H0, &C0, &Yo, &Yh, &Yc, &S});
+   lstm_forward(device, p.g, X.data(), Wo.data(), Ro.data(), Bo.present() ? Bo.data() : nullptr,
+                H0.present() ? H0.data() : nullptr, C0.present() ? C0.data() : nullptr, Yo.data(), Yh.data(), Yc.data(),
+                S.data());
+-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launches.
+ }
+ 
+ }  // namespace
+diff --git a/tc_signal/src/m4_bindings.cpp b/tc_signal/src/m4_bindings.cpp
+index 7141ceb..4c7144c 100644
+--- a/tc_signal/src/m4_bindings.cpp
++++ b/tc_signal/src/m4_bindings.cpp
+@@ -8,7 +8,9 @@
+ //                  the attributes are checked without consuming), returns (capsules..., out_shape);
+ //   *_run(...)  -> consumes every capsule, re-derives the geometry from the consumed shapes, checks the output's shape,
+ //                  the common device and that the output overlaps no input, launches on the legacy default stream, and
+-//                  calls every producer deleter when the operands go out of scope.
++//                  hands every consumed manager to the deferred-release list (P1T-FIX1 F01, dlpack_operand.h).
++// P1T-FIX1: F02 (x is REQUIRED in all six ops: None -> TypeError before planning, in peek4 and consume4; scale and bias
++// are the only optional operands), F03 (rows, L, T*scale, T + pads and every output size checked, checked_math.h).
+ //
+ // Prior art: the DLPack consumer and the plan/run split are M2's (see dlpack_operand.h and bindings.cpp: DLPack v1.3,
+ // the Python array API stream protocol, the cuDNN/cuBLASLt "size, then execute" pattern), reused here unchanged. The
+@@ -22,9 +24,11 @@
+ #include <cstdint>
+ #include <limits>
+ #include <sstream>
++#include <stdexcept>
+ #include <string>
+ #include <vector>
+ 
++#include "checked_math.h"
+ #include "dlpack_operand.h"
+ #include "m4_ops.h"
+ 
+@@ -56,8 +60,11 @@ void check_rank(const char* role, int ndim, int rank, int min_rank) {
+   }
+ }
+ 
+-Peek4 peek4(py::handle obj, const char* role, int rank, int min_rank) {
++enum class Need { kRequired, kOptional };
++
++Peek4 peek4(py::handle obj, const char* role, int rank, int min_rank, Need need) {
+   Peek4 p;
++  if (need == Need::kRequired) require_operand(obj, role);  // F02: None is refused here, before any planning
+   if (obj.is_none()) return p;
+   p.capsule = to_capsule(obj, role, false);
+   const DLTensor* t = peek(p.capsule, role);
+@@ -87,7 +94,8 @@ void same_device4(const std::vector<std::pair<const Peek4*, const char*>>& ps) {
+ }
+ 
+ // Consumes a capsule returned by a *_plan call (its rank is read from the capsule, then fully re-validated).
+-Operand consume4(py::handle cap, const char* role, int rank, int min_rank) {
++Operand consume4(py::handle cap, const char* role, int rank, int min_rank, Need need) {
++  if (need == Need::kRequired) require_operand(cap, role);  // F02
+   if (cap.is_none()) return Operand();
+   const DLTensor* t = peek(cap, role);
+   const int nd = t->ndim;
+@@ -108,11 +116,8 @@ py::tuple tuple4(const std::vector<int64_t>& v) {
+   return t;
+ }
+ 
+-int64_t prod(const std::vector<int64_t>& s, size_t a, size_t b) {
+-  int64_t p = 1;
+-  for (size_t i = a; i < b; ++i) p *= s[i];
+-  return p;
+-}
++// F03: checked product (checked_math.h).
++int64_t prod(const std::vector<int64_t>& s, size_t a, size_t b, const char* what) { return ck_prod(s, a, b, what); }
+ 
+ // ------------------------------------------------------------------------------------------------ norms: plan
+ enum class NormKind { kInstance, kLayer, kGroup };
+@@ -155,7 +160,7 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
+     const int64_t N = xs[0], C = xs[1], T = xs[2];
+     p.param_shape = {C};
+     if (kind == NormKind::kInstance) {
+-      g.rows = N * C;
++      g.rows = ck_mul(N, C, "instance_norm1d: rows N*C");
+       g.L = T;
+       g.affine = NormAffine::kPerRow;
+       g.channels = C;
+@@ -168,8 +173,8 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
+         os << "group_norm: C (" << C << ") is not divisible by num_groups (" << arg << ")";
+         bad_attr4(os.str());
+       }
+-      g.rows = N * arg;
+-      g.L = (C / arg) * T;
++      g.rows = ck_mul(N, arg, "group_norm: rows N*num_groups");
++      g.L = ck_mul(C / arg, T, "group_norm: row length (C/num_groups)*T");
+       g.affine = NormAffine::kPerChannel;
+       g.groups = arg;
+       g.ch_per_group = C / arg;
+@@ -185,8 +190,8 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
+       bad_attr4(os.str());
+     }
+     const int64_t a = arg < 0 ? arg + r : arg;
+-    g.rows = prod(xs, 0, static_cast<size_t>(a));
+-    g.L = prod(xs, static_cast<size_t>(a), xs.size());
++    g.rows = prod(xs, 0, static_cast<size_t>(a), "layer_norm: rows");
++    g.L = prod(xs, static_cast<size_t>(a), xs.size(), "layer_norm: row length");
+     g.affine = NormAffine::kPerElem;
+     p.param_shape.assign(xs.begin() + a, xs.end());
+   }
+@@ -200,24 +205,29 @@ NormPlan plan_norm(NormKind kind, const std::vector<int64_t>& xs, const std::vec
+     }
+   }
+   p.out_shape = xs;
++  ck_shape_numel(p.out_shape, "norm: output size");
++  ck_mul(g.rows, g.L, "norm: rows*L");
+   return p;
+ }
+ 
+ int x_rank(NormKind kind) { return kind == NormKind::kLayer ? -1 : 3; }
+ 
+ py::tuple norm_plan(NormKind kind, py::object x, py::object scale, py::object bias, int64_t arg, double eps) {
+-  Peek4 X = peek4(x, "x", x_rank(kind), 1);
+-  Peek4 S = peek4(scale, "scale", -1, 1);
+-  Peek4 B = peek4(bias, "bias", -1, 1);
++  drain_completed();
++  Peek4 X = peek4(x, "x", x_rank(kind), 1, Need::kRequired);
++  Peek4 S = peek4(scale, "scale", -1, 1, Need::kOptional);
++  Peek4 B = peek4(bias, "bias", -1, 1, Need::kOptional);
+   same_device4({{&X, "x"}, {&S, "scale"}, {&B, "bias"}});
+   NormPlan p = plan_norm(kind, X.shape, S.present ? &S.shape : nullptr, B.present ? &B.shape : nullptr, arg, eps);
+   return py::make_tuple(X.capsule, S.capsule, B.capsule, tuple4(p.out_shape));
+ }
+ 
+ void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::object out, int64_t arg, double eps) {
+-  Operand X = consume4(xc, "x", x_rank(kind), 1);
+-  Operand S = consume4(sc, "scale", -1, 1);
+-  Operand B = consume4(bc, "bias", -1, 1);
++  drain_completed();
++  require_operand(out, "out");
++  Operand X = consume4(xc, "x", x_rank(kind), 1, Need::kRequired);
++  Operand S = consume4(sc, "scale", -1, 1, Need::kOptional);
++  Operand B = consume4(bc, "bias", -1, 1, Need::kOptional);
+   std::vector<int64_t> sshape, bshape;
+   if (S.present()) sshape = shape4(S);
+   if (B.present()) bshape = shape4(B);
+@@ -226,9 +236,9 @@ void norm_run(NormKind kind, py::object xc, py::object sc, py::object bc, py::ob
+   expect_shape(Y, p.out_shape);
+   const int device = common_device({&X, &S, &B, &Y});
+   for (const Operand* in : {&X, &S, &B}) expect_disjoint(Y, *in);
++  RetainUntilComplete keep(device, {&X, &S, &B, &Y});  // F01: deleters run after the legacy stream passes the launch
+   row_norm_forward(device, p.g, X.data(), S.present() ? S.data() : nullptr, B.present() ? B.data() : nullptr,
+                    Y.data());
+-  // Leaving scope runs each Operand's destructor: every producer deleter is called after the launch.
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ small ops: plan
+@@ -239,14 +249,9 @@ std::vector<int64_t> upsample_shape(const std::vector<int64_t>& xs, int64_t scal
+     bad_attr4(os.str());
+   }
+   const int64_t T = xs.back();
+-  const int64_t lim = std::numeric_limits<int64_t>::max();
+-  if (scale > lim / T || prod(xs, 0, xs.size() - 1) > lim / (T * scale)) {
+-    std::ostringstream os;
+-    os << "upsample_nearest1d: output size overflows int64 (T " << T << " x scale " << scale << ")";
+-    bad_attr4(os.str());
+-  }
+   std::vector<int64_t> o = xs;
+-  o.back() = T * scale;
++  o.back() = ck_mul(T, scale, "upsample_nearest1d: output length T*scale");  // F03
++  ck_shape_numel(o, "upsample_nearest1d: output size");
+   return o;
+ }
+ 
+@@ -263,55 +268,88 @@ std::vector<int64_t> pad_shape(const std::vector<int64_t>& xs, int64_t pb, int64
+     bad_attr4(os.str());
+   }
+   std::vector<int64_t> o = xs;
+-  o.back() = T + pb + pe;
++  // F03: T + pb + pe checked (the review's CPU reproduction returned a negative extent here), then the output size.
++  o.back() = ck_add(ck_add(T, pb, "reflection_pad1d: output length"), pe, "reflection_pad1d: output length");
++  ck_shape_numel(o, "reflection_pad1d: output size");
+   return o;
+ }
+ 
+ py::tuple upsample_plan(py::object x, int64_t scale) {
+-  Peek4 X = peek4(x, "x", -1, 1);
++  drain_completed();
++  Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
+   return py::make_tuple(X.capsule, tuple4(upsample_shape(X.shape, scale)));
+ }
+ 
+ void upsample_run(py::object xc, py::object out, int64_t scale) {
+-  Operand X = consume4(xc, "x", -1, 1);
++  drain_completed();
++  require_operand(out, "out");
++  Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
+   const std::vector<int64_t> xs = shape4(X);
+   const std::vector<int64_t> os = upsample_shape(xs, scale);
+   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+   expect_shape(Y, os);
+   const int device = common_device({&X, &Y});
+   expect_disjoint(Y, X);
+-  upsample_nearest1d_forward(device, prod(xs, 0, xs.size() - 1), xs.back(), scale, X.data(), Y.data());
++  const int64_t rows = prod(xs, 0, xs.size() - 1, "upsample_nearest1d: rows");
++  RetainUntilComplete keep(device, {&X, &Y});  // F01
++  upsample_nearest1d_forward(device, rows, xs.back(), scale, X.data(), Y.data());
+ }
+ 
+ py::tuple pad_plan(py::object x, int64_t pb, int64_t pe) {
+-  Peek4 X = peek4(x, "x", -1, 1);
++  drain_completed();
++  Peek4 X = peek4(x, "x", -1, 1, Need::kRequired);
+   return py::make_tuple(X.capsule, tuple4(pad_shape(X.shape, pb, pe)));
+ }
+ 
+ void pad_run(py::object xc, py::object out, int64_t pb, int64_t pe) {
+-  Operand X = consume4(xc, "x", -1, 1);
++  drain_completed();
++  require_operand(out, "out");
++  Operand X = consume4(xc, "x", -1, 1, Need::kRequired);
+   const std::vector<int64_t> xs = shape4(X);
+   const std::vector<int64_t> os = pad_shape(xs, pb, pe);
+   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+   expect_shape(Y, os);
+   const int device = common_device({&X, &Y});
+   expect_disjoint(Y, X);
+-  reflection_pad1d_forward(device, prod(xs, 0, xs.size() - 1), xs.back(), pb, pe, X.data(), Y.data());
++  const int64_t rows = prod(xs, 0, xs.size() - 1, "reflection_pad1d: rows");
++  RetainUntilComplete keep(device, {&X, &Y});  // F01
++  reflection_pad1d_forward(device, rows, xs.back(), pb, pe, X.data(), Y.data());
+ }
+ 
+ py::tuple rint_plan(py::object x) {
+-  Peek4 X = peek4(x, "x", -1, 0);
++  drain_completed();
++  Peek4 X = peek4(x, "x", -1, 0, Need::kRequired);
+   return py::make_tuple(X.capsule, tuple4(X.shape));
+ }
+ 
+ void rint_run(py::object xc, py::object out) {
+-  Operand X = consume4(xc, "x", -1, 0);
++  drain_completed();
++  require_operand(out, "out");
++  Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
++  const std::vector<int64_t> xs = shape4(X);
++  Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
++  expect_shape(Y, xs);
++  const int device = common_device({&X, &Y});
++  expect_disjoint(Y, X);
++  RetainUntilComplete keep(device, {&X, &Y});  // F01
++  rint_forward(device, X.numel(), X.data(), Y.data());
++}
++
++// TEST HOOK (P1T-FIX1, F01 regression test only; not part of the API): rint_run whose call then throws AFTER its
++// launch, so the test can witness that a partial-launch exception path keeps the consumed managers alive until the
++// legacy stream has passed the launch (RetainUntilComplete's destructor runs during unwinding). No prior art claimed.
++void test_rint_then_raise(py::object xc, py::object out) {
++  drain_completed();
++  require_operand(out, "out");
++  Operand X = consume4(xc, "x", -1, 0, Need::kRequired);
+   const std::vector<int64_t> xs = shape4(X);
+   Operand Y(to_capsule(out, "out", true), "out", X.ndim(), true);
+   expect_shape(Y, xs);
+   const int device = common_device({&X, &Y});
+   expect_disjoint(Y, X);
++  RetainUntilComplete keep(device, {&X, &Y});
+   rint_forward(device, X.numel(), X.data(), Y.data());
++  throw std::runtime_error("tc_signal._test_rint_then_raise: injected failure after the launch (test hook)");
+ }
+ 
+ }  // namespace
+@@ -368,6 +406,8 @@ void register_m4(py::module_& m) {
+   m.def("rint_plan", &rint_plan, py::arg("x"), "Acquire and peek x; return (x_capsule, out_shape).");
+   m.def("rint_run", &rint_run, py::arg("x_capsule"), py::arg("out"),
+         "Consume, validate, launch on the legacy stream, release.");
++  m.def("_test_rint_then_raise", &test_rint_then_raise, py::arg("x_capsule"), py::arg("out"),
++        "TEST HOOK (P1T-FIX1 F01): rint_run, then raise RuntimeError after the launch.");
+   m.def("m4_tuning", []() {
+     py::dict d;
+     d["norm_block"] = m4tuning::kNormBlock;
+diff --git a/tc_signal/src/tuning.h b/tc_signal/src/tuning.h
+index e87b7e4..0b55b8a 100644
+--- a/tc_signal/src/tuning.h
++++ b/tc_signal/src/tuning.h
+@@ -23,5 +23,14 @@ constexpr int kDlpackMaxMinor = 3;
+ // DLPack stream argument for the consumer stream: 1 = the legacy default stream (Python array API convention).
+ constexpr int kDlpackLegacyStream = 1;
+ 
++// P1T-FIX1 (F01) deferred release: bounds of the pending list of consumed DLPack managers that wait for the legacy
++// stream to pass their call (dlpack_operand.h, RetainUntilComplete). When a new entry pushes the list past either
++// bound, tc_signal synchronizes the legacy stream of every pending device and releases the whole list. These only
++// trade memory held (by producers' blocks waiting for release) against how often a call blocks; numerics never change.
++// Entries: one per tc_signal call that reached its launch.
++constexpr long long kPendingMaxEntries = 1024;
++// Bytes: the sum of the fp32 operand sizes held by the pending entries (inputs, outputs and scratch).
++constexpr long long kPendingMaxBytes = 256LL << 20;
++
+ }  // namespace tuning
+ }  // namespace tcs
+diff --git a/tc_signal/tc_signal/__init__.py b/tc_signal/tc_signal/__init__.py
+index 8063406..9cc659f 100644
+--- a/tc_signal/tc_signal/__init__.py
++++ b/tc_signal/tc_signal/__init__.py
+@@ -22,11 +22,12 @@ the allocator returns a DLPack tensor, not a raw pointer.
+ """
+ from __future__ import annotations
+ 
++import atexit
+ import operator
+ 
+ from . import _tc_signal as _C
+ 
+-__all__ = ['conv1d', 'conv_transpose1d', 'set_allocator']
++__all__ = ['conv1d', 'conv_transpose1d', 'set_allocator', 'synchronize']
+ 
+ _SET_ALLOCATOR_HINT = ('call tc_signal.set_allocator(fn), where fn(shape: tuple) returns a float32 CUDA tensor that '
+                        'implements __dlpack__ (for example lambda s: torch.empty(s, device="cuda"))')
+@@ -111,6 +112,33 @@ def conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dil
+         out = _allocator(tuple(out_shape))
+     _C.conv_transpose1d_run(xc, wc, bc, out, s, pb, pe, op, d, g)
+     return out
++
++
++def synchronize():
++    """Wait until the legacy default stream has passed every tc_signal launch queued so far, then release every consumed
++    operand tc_signal still holds (P1T-FIX1, F01 deferred release; see README "Streams and lifetimes").
++
++    tc_signal keeps each call's consumed DLPack managers (inputs, outputs, scratch) alive until the legacy stream has
++    passed that call, and releases completed ones at the start of the next tc_signal call. Call synchronize() to release
++    them now (for example before measuring memory, or before handing a producer's memory back by other means). It
++    synchronizes the legacy stream of the current device and of every device with pending operands (stream syncs, not a
++    device-wide sync). Raises RuntimeError if a device cannot synchronize; its operands are then deliberately leaked,
++    never released early. Prior art: torch.cuda.synchronize / cupy.cuda.Stream.synchronize (API shape only)."""
++    _C.synchronize()
++
++
++def _release_pending_at_exit():
++    # atexit (runs before interpreter finalization, GIL held): release whatever is still pending. A CUDA error here
++    # (a broken context) leaves those operands deliberately leaked; there is nothing else safe to do at exit.
++    try:
++        _C.synchronize()
++    except Exception:  # noqa: BLE001
++        pass
++
++
++atexit.register(_release_pending_at_exit)
++
++
+ from ._lstm import lstm  # noqa: E402,F401  (P1T-M3: tc_signal/_lstm.py)
+ __all__.append('lstm')
+ 
+diff --git a/tc_signal/tests/tcs_producer.py b/tc_signal/tests/tcs_producer.py
+index 1d9e796..330f6b9 100644
+--- a/tc_signal/tests/tcs_producer.py
++++ b/tc_signal/tests/tcs_producer.py
+@@ -53,13 +53,13 @@ CAPSULE_DESTRUCTOR = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
+ _NAME = b'dltensor'
+ _NAME_V = b'dltensor_versioned'
+ 
+-_PyCapsule_New = ctypes.pythonapi.PyCapsule_New
++_PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
+ _PyCapsule_New.restype = ctypes.py_object
+ _PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, CAPSULE_DESTRUCTOR]
+-_PyCapsule_IsValid = ctypes.pythonapi.PyCapsule_IsValid
++_PyCapsule_IsValid = ctypes.pythonapi['PyCapsule_IsValid']
+ _PyCapsule_IsValid.restype = ctypes.c_int
+ _PyCapsule_IsValid.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+-_PyCapsule_GetPointer = ctypes.pythonapi.PyCapsule_GetPointer
++_PyCapsule_GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
+ _PyCapsule_GetPointer.restype = ctypes.c_void_p
+ _PyCapsule_GetPointer.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+ 
+diff --git a/tc_signal/tests/test_contract.py b/tc_signal/tests/test_contract.py
+index b9ca923..7de6c1d 100644
+--- a/tc_signal/tests/test_contract.py
++++ b/tc_signal/tests/test_contract.py
+@@ -211,7 +211,7 @@ def test_dlpack_returns_non_capsule():
+ 
+ 
+ def test_foreign_capsule_name():
+-    new = ctypes.pythonapi.PyCapsule_New
++    new = ctypes.pythonapi['PyCapsule_New']
+     new.restype = ctypes.py_object
+     new.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+     keep = ctypes.c_int(0)
+@@ -368,6 +368,11 @@ def test_deleter_called_exactly_once_on_every_path():
+     del x, w, b
+     gc.collect()
+     torch.cuda.synchronize()
++    # P1T-FIX1 F01 contract: a call that reached its launch keeps its consumed managers until the legacy stream has
++    # passed it; they are released at the next tc_signal call or by tc_signal.synchronize(). At least the last call's
++    # x and w producers are still pending here (no tc_signal call has run since); synchronize() releases them.
++    assert P.STATS['exported'] - P.STATS['deleted'] >= 2, P.STATS
++    ts.synchronize()
+     assert P.STATS['unknown_delete'] == 0, P.STATS
+     assert P.STATS['exported'] == P.STATS['deleted'], P.STATS
+     assert not P.LIVE
+diff --git a/tc_signal/tests/test_fix1_findings.py b/tc_signal/tests/test_fix1_findings.py
+new file mode 100644
+index 0000000..0ac187e
+--- /dev/null
++++ b/tc_signal/tests/test_fix1_findings.py
+@@ -0,0 +1,402 @@
++"""P1T-FIX1 regression tests for the P1T-REV round-1 findings in tc_signal (order P1T_FIX1_REVIEW_FINDINGS.md).
++
++What each group pins, and the registered mutant it must kill (G3):
++  * F01 (BLOCKING), consumed operand ownership through GPU completion; mutant (a) = immediate release restored:
++      - a torch producer on a side stream whose ONLY owner is the consumed manager (a bare capsule, or a producer's
++        temporary made inside __dlpack__), read behind a legacy-stream sleep, then the side stream allocates the same
++        size and overwrites it: the output must be the producer's data (the reviewer's addon_lifetime.py scenario);
++      - the same with an exception raised AFTER the launch (test hook _C._test_rint_then_raise: partial-launch path);
++      - the LSTM's whole per-call capsule set (10 managers) is ONE pending entry, released by synchronize();
++      - a completed call's deleters run at the NEXT tc_signal call (not before), and synchronize()/atexit release the
++        rest; a refusal before the launch still releases at once; the bytes bound forces a synchronize-and-drain.
++  * F02, None for a required operand of each of the nine ops raises TypeError before planning (the allocator is never
++    called), also at the *_run level; each case runs in its own subprocess so a SIGSEGV is a failed case, not a dead
++    run; mutant (b) = the None guard (require_operand) removed.
++  * F03, checked arithmetic in validation and in every plan function (reflect, upsample, conv, conv_transpose, LSTM,
++    norms): synthetic descriptors that overflow must raise ValueError instead of returning a wrapped size.
++    Descriptor-only (CPU metadata, never launched), like the reviewer's host_checks.py.
++
++Skip guard (as test_contract.py): only when torch is not importable or there is no CUDA device.
++
++Prior art: the reviewer's probes (artifacts/p1t_rev/probes/addon_lifetime.py, host_checks.py), whose scenarios these
++tests reuse; PyTorch's caching-allocator stream semantics (a block freed without record_stream is reused at once on its
++allocation stream) as the reuse bait; DeMillo, Lipton & Sayward (1978) mutation testing for the registered mutants.
++Ours: the producer-temporary and partial-launch variants, the capsule-set and bound checks.
++"""
++import ctypes
++import json
++import os
++import subprocess
++import sys
++
++import pytest
++
++try:
++    import torch
++except ImportError as e:
++    pytest.skip(f'torch is not importable: {e}', allow_module_level=True)
++if not torch.cuda.is_available():
++    pytest.skip('no CUDA device', allow_module_level=True)
++
++import tc_signal as ts  # noqa: E402
++from tc_signal import _tc_signal as _C  # noqa: E402
++
++import tcs_producer as P  # noqa: E402
++
++SLEEP_CYCLES = 20_000_000        # torch.cuda._sleep cycles (~10 ms on the RTX 4070 SUPER), as the reviewer's probe
++LONG_SLEEP_CYCLES = 200_000_000  # ~100 ms: keeps the legacy stream busy across several host calls (bound test)
++RACE_NUMEL = 1 << 18             # the probe's size (1 MiB fp32)
++RACE_TRIALS = 8
++SUBPROC_TIMEOUT = 60
++
++
++def _torch_alloc(shape):
++    return torch.empty(shape, device='cuda', dtype=torch.float32)
++
++
++@pytest.fixture(autouse=True)
++def torch_allocator():
++    prev = ts.set_allocator(_torch_alloc)
++    yield
++    ts.set_allocator(prev)
++    ts.synchronize()
++
++
++def _warm(S):
++    x = torch.full((RACE_NUMEL,), 1.25, device='cuda')
++    out = torch.empty(RACE_NUMEL, device='cuda')
++    ts.rint(x, out=out)
++    with torch.cuda.stream(S):
++        torch.empty(RACE_NUMEL, device='cuda').fill_(0.0)
++    torch.cuda._sleep(1)
++    torch.cuda.synchronize()
++    ts.synchronize()
++
++
++# ------------------------------------------------------------------------------------------------ F01
++class _TempProducer:
++    """__dlpack__ makes a FRESH temporary on side stream S, so the capsule's manager is its only owner (the reviewer's
++    'producer temporaries' case: a reader may receive a copy the caller cannot retain)."""
++
++    def __init__(self, S, value):
++        self.S, self.value, self.address = S, value, None
++
++    def __dlpack_device__(self):
++        return (2, torch.cuda.current_device())
++
++    def __dlpack__(self, *, stream=None, max_version=None, copy=None):
++        with torch.cuda.stream(self.S):
++            t = torch.full((RACE_NUMEL,), self.value, device='cuda')
++            self.address = t.data_ptr()
++            return t.__dlpack__(stream=stream, max_version=max_version)   # torch orders `stream` after S
++
++
++def _side_stream_capsule(S, value):
++    """A bare capsule whose manager is the last owner of a side-stream allocation (addon_lifetime.py's setup)."""
++    with torch.cuda.stream(S):
++        p = torch.full((RACE_NUMEL,), value, device='cuda')
++    S.synchronize()
++    cap = p.__dlpack__(stream=1, max_version=(1, 3))
++    address = p.data_ptr()
++    del p
++    return cap, address
++
++
++def _bait_and_check(S, out, address, k):
++    """Allocate the same size on S and overwrite it at once (S is idle); a released block would be reused."""
++    with torch.cuda.stream(S):
++        replacement = torch.empty(RACE_NUMEL, device='cuda')
++        reused = replacement.data_ptr() == address
++        replacement.fill_(9.0)
++    torch.cuda.synchronize()
++    ok = bool(torch.all(out == 1.0).item())
++    assert ok, f'trial {k}: the add-on read storage that was released and reused (reused={reused}) before its read'
++    del replacement
++
++
++@pytest.mark.parametrize('source', ['bare_capsule', 'producer_temporary'])
++def test_f01_side_stream_last_owner_survives_until_legacy_read(source):
++    S = torch.cuda.Stream()
++    _warm(S)
++    out = torch.empty(RACE_NUMEL, device='cuda')
++    for k in range(RACE_TRIALS):
++        out.fill_(-1.0)
++        torch.cuda.synchronize()
++        before = _C.pending_stats()['retained_entries']
++        if source == 'bare_capsule':
++            cap, address = _side_stream_capsule(S, 1.25)
++            torch.cuda._sleep(SLEEP_CYCLES)        # legacy stream busy: the add-on's read is queued behind it
++            ts.rint(cap, out=out)
++        else:
++            prod = _TempProducer(S, 1.25)
++            torch.cuda._sleep(SLEEP_CYCLES)
++            ts.rint(prod, out=out)
++            address = prod.address
++        deferred = _C.pending_stats()['retained_entries'] == before + 1
++        _bait_and_check(S, out, address, k)          # the race first: a mutant fails on the use-after-free itself
++        assert deferred, "the call's consumed managers were not handed to the deferred-release list"
++
++
++def test_f01_partial_launch_exception_keeps_operands_until_complete():
++    S = torch.cuda.Stream()
++    _warm(S)
++    out = torch.empty(RACE_NUMEL, device='cuda')
++    for k in range(RACE_TRIALS):
++        out.fill_(-1.0)
++        torch.cuda.synchronize()
++        cap, address = _side_stream_capsule(S, 1.25)
++        torch.cuda._sleep(SLEEP_CYCLES)
++        with pytest.raises(RuntimeError, match='injected failure after the launch'):
++            _C._test_rint_then_raise(cap, out.__dlpack__(stream=1))
++        assert 'used_' in repr(cap)                 # consumed: only tc_signal's deferred list keeps it alive now
++        pending = _C.pending_stats()['entries']
++        _bait_and_check(S, out, address, k)
++        assert pending >= 1, 'the partial-launch path released its managers before the GPU finished'
++
++
++def test_f01_lstm_capsule_set_is_one_entry_released_by_synchronize():
++    T, N, I, H, D = 3, 2, 4, 5, 2
++    g = torch.Generator(device='cuda').manual_seed(20261012)
++
++    def r(*s):
++        return torch.randn(*s, device='cuda', generator=g) * 0.1
++    x, W, R, B, h0, c0 = r(T, N, I), r(D, 4 * H, I), r(D, 4 * H, H), r(D, 8 * H), r(D, N, H), r(D, N, H)
++    ts.synchronize()
++    s0 = _C.pending_stats()
++    assert s0['entries'] == 0 and s0['managers'] == 0
++    torch.cuda._sleep(SLEEP_CYCLES)
++    ts.lstm(x, W, R, B, hidden_size=H, direction='bidirectional', initial_h=h0, initial_c=c0)
++    s1 = _C.pending_stats()
++    # x, W, R, B, initial_h, initial_c, Y, Y_h, Y_c, scratch: one entry, ten managers.
++    assert s1['entries'] == 1 and s1['managers'] == 10, s1
++    ts.synchronize()
++    s2 = _C.pending_stats()
++    assert s2['entries'] == 0 and s2['managers'] == 0 and s2['bytes'] == 0, s2
++    assert s2['released_managers'] - s1['released_managers'] == 10, (s1, s2)
++
++
++def test_f01_completed_call_released_at_next_call_not_before():
++    ts.synchronize()
++    P.reset_stats()
++    base = torch.full((82,), 1.5, device='cuda')
++    y = ts.rint(P.Producer(base, (1, 82)))
++    torch.cuda.synchronize()                         # the GPU is done, but no tc_signal call has run since
++    assert P.STATS == {'exported': 1, 'deleted': 0, 'unknown_delete': 0}, P.STATS
++    ts.rint(torch.zeros(1, 82, device='cuda'))       # the next call drains the completed entry first
++    assert P.STATS['deleted'] == 1 and P.STATS['unknown_delete'] == 0, P.STATS
++    assert bool(torch.all(y == 2.0).item())          # rint(1.5) = 2 (ties to even)
++
++
++def test_f01_refusal_before_launch_releases_immediately():
++    ts.synchronize()
++    P.reset_stats()
++    base = torch.full((82,), 1.5, device='cuda')
++    with pytest.raises(ValueError, match='expected'):
++        ts.rint(P.Producer(base, (1, 82)), out=torch.empty(1, 81, device='cuda'))   # run-phase shape refusal
++    assert P.STATS['exported'] == 1 and P.STATS['deleted'] == 1, P.STATS            # nothing was launched
++    assert _C.pending_stats()['entries'] == 0
++
++
++def test_f01_bytes_bound_forces_synchronize_and_drain():
++    ts.synchronize()
++    s0 = _C.pending_stats()
++    max_bytes = s0['max_bytes']
++    n = max_bytes // 4 // 8                          # x and out are max_bytes/8 each: an entry holds max_bytes/4
++    x = torch.full((n,), 2.5, device='cuda')
++    outs = [torch.empty(n, device='cuda') for _ in range(6)]   # pre-allocated: the six calls are only plan + run
++    torch.cuda.synchronize()
++    torch.cuda._sleep(LONG_SLEEP_CYCLES)             # nothing completes while the calls are queued
++    for o in outs:
++        ts.rint(x, out=o)
++        st = _C.pending_stats()
++        assert st['bytes'] <= max_bytes and st['entries'] <= st['max_entries'], st   # after any forced drain
++    s1 = _C.pending_stats()
++    # The 5th push (5 x 64 MiB = 320 MiB) exceeded the 256 MiB bound: synchronize + drain. (The high-water mark records
++    # that 320 MiB instant, before the drain, by design.)
++    assert s1['bound_drains'] > s0['bound_drains'], (s0, s1)
++    torch.cuda.synchronize()
++    for o in outs:
++        assert bool(torch.all(o == 2.0).item())      # rint(2.5) = 2
++
++
++_ATEXIT_SCRIPT = r"""
++import atexit, json, sys
++sys.path.insert(0, sys.argv[1])
++import tcs_producer as P
++atexit.register(lambda: print('ATEXIT ' + json.dumps(P.STATS), flush=True))   # first registered: runs last (LIFO)
++import torch, tc_signal as ts
++ts.set_allocator(lambda s: torch.empty(s, device='cuda'))
++base = torch.full((82,), 1.5, device='cuda')
++ts.rint(P.Producer(base, (1, 82)))
++torch.cuda.synchronize()
++print('PENDING ' + json.dumps(dict(ts._tc_signal.pending_stats())), flush=True)
++"""
++
++
++def test_f01_atexit_hook_releases_pending_operands():
++    r = subprocess.run([sys.executable, '-c', _ATEXIT_SCRIPT, os.path.dirname(os.path.abspath(__file__))],
++                       capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
++                       env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
++    assert r.returncode == 0, r.stderr
++    pend = json.loads(next(ln for ln in r.stdout.splitlines() if ln.startswith('PENDING '))[8:])
++    final = json.loads(next(ln for ln in r.stdout.splitlines() if ln.startswith('ATEXIT '))[7:])
++    assert pend['entries'] == 1 and pend['managers'] == 2, pend      # x (the producer) and out, still held
++    assert final == {'exported': 1, 'deleted': 1, 'unknown_delete': 0}, final
++
++
++# ------------------------------------------------------------------------------------------------ F02
++# Fake capsules (CPU metadata only: device (2, 0), fp32, a host buffer as data). A None refusal comes before any
++# capsule is consumed, so nothing is ever launched on them.
++_F02_SCRIPT = r"""
++import ctypes, sys
++import tc_signal as ts
++from tc_signal import _tc_signal as C
++
++class Dev(ctypes.Structure): _fields_ = [('type', ctypes.c_int), ('id', ctypes.c_int)]
++class DT(ctypes.Structure): _fields_ = [('code', ctypes.c_uint8), ('bits', ctypes.c_uint8), ('lanes', ctypes.c_uint16)]
++class Tensor(ctypes.Structure):
++    _fields_ = [('data', ctypes.c_void_p), ('dev', Dev), ('ndim', ctypes.c_int), ('dtype', DT),
++                ('shape', ctypes.POINTER(ctypes.c_int64)), ('strides', ctypes.POINTER(ctypes.c_int64)),
++                ('offset', ctypes.c_uint64)]
++class Managed(ctypes.Structure): _fields_ = [('tensor', Tensor), ('ctx', ctypes.c_void_p), ('deleter', ctypes.c_void_p)]
++new = ctypes.pythonapi['PyCapsule_New']
++new.restype, new.argtypes = ctypes.py_object, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
++keep = []
++def cap(*shape):
++    dims = (ctypes.c_int64 * max(len(shape), 1))(*shape)
++    buf = (ctypes.c_float * 64)()
++    m = Managed(Tensor(ctypes.addressof(buf), Dev(2, 0), len(shape), DT(2, 32, 1), dims, None, 0), None, None)
++    keep.extend((dims, buf, m))
++    return new(ctypes.addressof(m), b'dltensor', None)
++
++class AllocatorCalled(Exception):
++    pass
++calls = []
++def alloc(shape):
++    calls.append(tuple(shape))
++    raise AllocatorCalled(shape)
++ts.set_allocator(alloc)
++H = 2
++CASES = {
++    'conv1d.x': lambda: ts.conv1d(None, cap(2, 1, 3)),
++    'conv1d.w': lambda: ts.conv1d(cap(1, 1, 8), None),
++    'conv_transpose1d.x': lambda: ts.conv_transpose1d(None, cap(1, 1, 3)),
++    'conv_transpose1d.w': lambda: ts.conv_transpose1d(cap(1, 1, 8), None),
++    'lstm.x': lambda: ts.lstm(None, cap(1, 4 * H, 3), cap(1, 4 * H, H), hidden_size=H),
++    'lstm.W': lambda: ts.lstm(cap(5, 1, 3), None, cap(1, 4 * H, H), hidden_size=H),
++    'lstm.R': lambda: ts.lstm(cap(5, 1, 3), cap(1, 4 * H, 3), None, hidden_size=H),
++    'instance_norm1d.x': lambda: ts.instance_norm1d(None),
++    'layer_norm.x': lambda: ts.layer_norm(None),
++    'group_norm.x': lambda: ts.group_norm(None, 1),
++    'upsample_nearest1d.x': lambda: ts.upsample_nearest1d(None, 2),
++    'reflection_pad1d.x': lambda: ts.reflection_pad1d(None, (0, 0)),
++    'rint.x': lambda: ts.rint(None),
++    'rint.x_out_given': lambda: ts.rint(None, out=cap()),                 # the reviewer's none_rint case
++    'run.conv1d.x': lambda: C.conv1d_run(None, cap(2, 1, 3), None, cap(1, 2, 6), None, 1, 0, 0, 1, 1),
++    'run.conv_transpose1d.x': lambda: C.conv_transpose1d_run(None, cap(1, 1, 3), None, cap(1, 1, 10), 1, 0, 0, 0, 1, 1),
++    'run.lstm.x': lambda: C.lstm_run(None, cap(1, 4 * H, 3), cap(1, 4 * H, H), None, None, None, cap(5, 1, 1, H),
++                                      cap(1, 1, H), cap(1, 1, H), cap(64), H, 0),
++    'run.instance_norm1d.x': lambda: C.instance_norm1d_run(None, None, None, cap(1, 2, 4), 1e-5),
++    'run.layer_norm.x': lambda: C.layer_norm_run(None, None, None, cap(1, 2, 4), -1, 1e-5),
++    'run.group_norm.x': lambda: C.group_norm_run(None, 1, None, None, cap(1, 2, 4), 1e-5),
++    'run.upsample_nearest1d.x': lambda: C.upsample_nearest1d_run(None, cap(1, 8), 2),
++    'run.reflection_pad1d.x': lambda: C.reflection_pad1d_run(None, cap(1, 4), 0, 0),
++    'run.rint.x': lambda: C.rint_run(None, cap(4)),
++    'run.rint.out': lambda: C.rint_run(cap(4), None),
++}
++try:
++    CASES[sys.argv[1]]()
++    print('RESULT none', calls)
++except Exception as e:
++    print('RESULT', type(e).__name__, calls, '|', e)
++"""
++
++F02_CASES = ['conv1d.x', 'conv1d.w', 'conv_transpose1d.x', 'conv_transpose1d.w', 'lstm.x', 'lstm.W', 'lstm.R',
++             'instance_norm1d.x', 'layer_norm.x', 'group_norm.x', 'upsample_nearest1d.x', 'reflection_pad1d.x',
++             'rint.x', 'rint.x_out_given', 'run.conv1d.x', 'run.conv_transpose1d.x', 'run.lstm.x',
++             'run.instance_norm1d.x', 'run.layer_norm.x', 'run.group_norm.x', 'run.upsample_nearest1d.x',
++             'run.reflection_pad1d.x', 'run.rint.x', 'run.rint.out']
++
++
++@pytest.mark.parametrize('case', F02_CASES)
++def test_f02_none_required_operand_is_type_error_before_planning(case):
++    r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
++                       timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
++    assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
++    line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
++    assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
++    assert 'is required' in line, f'{case}: {line}'
++
++
++# ------------------------------------------------------------------------------------------------ F03
++class _Dev(ctypes.Structure):
++    _fields_ = [('type', ctypes.c_int), ('id', ctypes.c_int)]
++
++
++class _DT(ctypes.Structure):
++    _fields_ = [('code', ctypes.c_uint8), ('bits', ctypes.c_uint8), ('lanes', ctypes.c_uint16)]
++
++
++class _Tensor(ctypes.Structure):
++    _fields_ = [('data', ctypes.c_void_p), ('dev', _Dev), ('ndim', ctypes.c_int), ('dtype', _DT),
++                ('shape', ctypes.POINTER(ctypes.c_int64)), ('strides', ctypes.POINTER(ctypes.c_int64)),
++                ('offset', ctypes.c_uint64)]
++
++
++class _Managed(ctypes.Structure):
++    _fields_ = [('tensor', _Tensor), ('ctx', ctypes.c_void_p), ('deleter', ctypes.c_void_p)]
++
++
++_new = ctypes.pythonapi['PyCapsule_New']
++_new.restype, _new.argtypes = ctypes.py_object, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
++_KEEP = []
++
++
++def _desc(*shape, data=None, ndim=None, null_shape=False):
++    """An unconsumable-by-design synthetic descriptor (no destructor; CPU metadata only, never launched)."""
++    dims = (ctypes.c_int64 * max(len(shape), 1))(*shape)
++    buf = (ctypes.c_float * 4)()
++    t = _Tensor(ctypes.addressof(buf) if data is None else data, _Dev(2, torch.cuda.current_device()),
++                len(shape) if ndim is None else ndim, _DT(2, 32, 1), None if null_shape else dims, None, 0)
++    m = _Managed(t, None, None)
++    _KEEP.extend((dims, buf, m))
++    return _new(ctypes.addressof(m), b'dltensor', None)
++
++
++F03_CASES = [
++    # (id, plan call, message fragment)
++    ('validate_count', lambda: _C.rint_plan(_desc(1 << 32, 1 << 32)), 'element count'),
++    ('validate_bytes', lambda: _C.rint_plan(_desc(1 << 62)), 'byte size'),
++    ('validate_address', lambda: _C.rint_plan(_desc(4, data=(1 << 64) - 8)), 'address space'),
++    ('validate_negative_rank', lambda: _C.rint_plan(_desc(4, ndim=-1)), 'negative number of dimensions'),
++    ('validate_null_shape', lambda: _C.rint_plan(_desc(4, null_shape=True)), 'NULL shape'),
++    ('reflect_review_case', lambda: _C.reflection_pad1d_plan(_desc(1, 1, 1 << 62), (1 << 62) - 1, (1 << 62) - 1),
++     'byte size'),
++    ('reflect_output_bytes', lambda: _C.reflection_pad1d_plan(_desc(1, 1, 1 << 60), (1 << 60) - 1, (1 << 60) - 1),
++     'reflection_pad1d: output size'),
++    ('upsample_output_bytes', lambda: _C.upsample_nearest1d_plan(_desc(1, 1, 1 << 40), 1 << 21),
++     'upsample_nearest1d: output size'),
++    ('upsample_length', lambda: _C.upsample_nearest1d_plan(_desc(1, 1, 1 << 40), 1 << 30),
++     'upsample_nearest1d: output length'),
++    ('conv_dilation_span', lambda: _C.conv1d_plan(_desc(1, 1, 1 << 40), _desc(1, 1, 1 << 40), None, 1, 0, 0,
++                                                  1 << 30, 1), 'conv1d: dilation*(K-1)'),
++    ('conv_scratch_bytes', lambda: _C.conv1d_plan(_desc(1, 65536, 2147450880), _desc(1, 65536, 32767), None, 1, 0, 0,
++                                                  1, 1), 'conv1d: im2col scratch bytes'),
++    ('conv_scratch_count', lambda: _C.conv1d_plan(_desc(1, 1 << 29, 1 << 31), _desc(1 << 29, 1, 1 << 10), None, 1, 0,
++                                                  0, 1, 1 << 29), 'conv1d: im2col scratch size'),
++    ('conv_transpose_length', lambda: _C.conv_transpose1d_plan(_desc(1, 1, 1 << 40), _desc(1, 1, 2), None,
++                                                               (1 << 31) - 1, 0, 0, 0, 1, 1),
++     'conv_transpose1d: stride*(T-1)'),
++    ('lstm_scratch_bytes', lambda: _C.lstm_plan(_desc((1 << 31) - 1, 1, 1), _desc(2, 1073741820, 1),
++                                                _desc(2, 1073741820, 268435455), None, None, None, 268435455, 2),
++     'lstm: scratch bytes'),
++    ('norm_count', lambda: _C.instance_norm1d_plan(_desc(1 << 32, 1 << 32, 1), None, None, 1e-5), 'element count'),
++]
++
++
++@pytest.mark.parametrize('case', F03_CASES, ids=[c[0] for c in F03_CASES])
++def test_f03_overflowing_geometry_is_refused_not_wrapped(case):
++    _, call, frag = case
++    with pytest.raises(ValueError) as ei:
++        call()
++    assert frag in str(ei.value), f'message {str(ei.value)!r} lacks {frag!r}'
+diff --git a/tensor_cuda/include/tc/core.h b/tensor_cuda/include/tc/core.h
+index f9595fa..cba7505 100644
+--- a/tensor_cuda/include/tc/core.h
++++ b/tensor_cuda/include/tc/core.h
+@@ -62,12 +62,23 @@ struct Storage {
+   uint64_t revision = 0;
+   // P1T-M1 (DLPack import): external memory owned by another library. When
+   // `external_release` is set, the engine neither pools nor frees `ptr`: the
+-  // destructor first drains the engine stream (so no queued engine kernel can
+-  // still touch the memory), then calls external_release(external_ctx), which
+-  // hands the memory back to its producer (bindings.cpp calls the DLPack
+-  // deleter with the GIL held). Prior art: the owner-keepalive pattern of the
+-  // PyTorch/CuPy DLPack importers (ATen's from_dlpack deleter-in-storage,
+-  // 2017+); the drain-before-release ordering is ours (see kernels.cu).
++  // destructor first drains the engine stream OF THIS STORAGE'S DEVICE (P1T-FIX1
++  // F05: it switches to `device.index` if another device is current, syncs that
++  // device's legacy stream, and restores the caller's device), so no queued
++  // engine kernel can still touch the memory; then it calls
++  // external_release(external_ctx), which hands the memory back to its producer
++  // (bindings.cpp calls the DLPack deleter with the GIL held). If the drain
++  // fails, the release is NOT called: the memory is deliberately leaked
++  // (counted by storage_external_drain_leaks) rather than risk a use-after-free.
++  // Prior art: the owner-keepalive pattern of the PyTorch/CuPy DLPack importers
++  // (ATen's from_dlpack deleter-in-storage, 2017+); the drain-before-release
++  // ordering is ours (see kernels.cu).
++  //
++  // ABI NOTE (P1T-FIX1 F07): these two members grew sizeof(Storage) from 40 to
++  // 56 bytes (x86-64, CPU layout measurement in the P1T-REV review). Any native
++  // client compiled against an older core.h must be rebuilt together with this
++  // core; mixing layouts is undefined behaviour. None is known (tc_signal does
++  // not include core headers). Rollout note: docs/P1T_FIX1_M1_ADDENDUM.md.
+   using ExternalRelease = void (*)(void* ctx);
+   ExternalRelease external_release = nullptr;
+   void* external_ctx = nullptr;
+@@ -82,6 +93,10 @@ struct Storage {
+   Storage& operator=(const Storage&) = delete;
+ };
+ 
++// P1T-FIX1 (F05): external Storages whose device drain failed in the destructor
++// and whose producer memory was therefore deliberately leaked (process-wide).
++unsigned long long storage_external_drain_leaks();
++
+ // --------------------------------------------------------------------- NDArray
+ // A view-able handle over a Storage: shape + dtype + element offset. In Phase 1
+ // the data is contiguous; shape/strides are kept in sync by contiguous_strides.
+diff --git a/tensor_cuda/src/bindings.cpp b/tensor_cuda/src/bindings.cpp
+index ad76dda..b4bb28b 100644
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -6,8 +6,12 @@
+ 
+ #include <cuda_runtime.h>
+ 
++#include <atomic>
+ #include <cmath>
+ #include <cstdint>
++#include <limits>
++#include <memory>
++#include <new>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -275,6 +279,32 @@ std::string shape_str(const int64_t* v, int n) {
+   return s + "]";
+ }
+ 
++// P1T-FIX1, F03: checked element count and byte size for the two entry points that turn arbitrary caller shapes into
++// a Storage (empty, from_dlpack). Every extent is >= 0 here (callers refuse negatives first); a zero extent makes the
++// count 0 whatever the other extents are. Overflow raises ValueError and never wraps to an empty or short Storage.
++// The byte ceiling is INT64_MAX (every byte total, offset and pointer difference stays a valid int64/ptrdiff_t).
++// Prior art: GCC/Clang __builtin_mul_overflow / __builtin_add_overflow (GCC 5, 2015); C23 ckd_mul / ckd_add
++// (<stdckdint.h>, ISO/IEC 9899:2024); SEI CERT C INT30-C / INT32-C. Taken: the checked-operation primitive. Ours:
++// where it is applied. Unverified here (lead to check): "GCC 5 __builtin_mul_overflow", "C23 stdckdint".
++int64_t checked_numel(const int64_t* dims, int n, const char* who) {
++  for (int i = 0; i < n; ++i)
++    if (dims[i] == 0) return 0;
++  int64_t p = 1;
++  for (int i = 0; i < n; ++i)
++    if (__builtin_mul_overflow(p, dims[i], &p))
++      throw py::value_error(std::string(who) + ": the element count of shape " + shape_str(dims, n) +
++                            " overflows int64; refused");
++  return p;
++}
++
++int64_t checked_nbytes(int64_t numel, size_t itemsize, const int64_t* dims, int n, const char* who) {
++  int64_t b = 0;
++  if (__builtin_mul_overflow(numel, static_cast<int64_t>(itemsize), &b))
++    throw py::value_error(std::string(who) + ": the byte size of shape " + shape_str(dims, n) + " (" +
++                          std::to_string(itemsize) + "-byte elements) overflows int64; refused");
++  return b;
++}
++
+ // ---- export: the manager context OWNS a reference to the Storage, so the
+ // memory outlives the producer Tensor's last Python reference.
+ struct DLPackExportCtx {
+@@ -382,7 +412,11 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
+ 
+   dlpack_fence_consumer(stream);
+ 
+-  auto* ctx = new DLPackExportCtx();
++  // P1T-FIX1, F06: the context (and its shared Storage reference) is owned by a unique_ptr until the capsule takes it,
++  // so a throw anywhere below (bad_alloc in the vector assignments, a failed PyCapsule_New) frees it exactly once.
++  // Prior art: C++ RAII (Stroustrup) and std::unique_ptr's release() hand-off (C++11); pybind11/CPython capsule
++  // ownership. Nothing new.
++  auto ctx = std::make_unique<DLPackExportCtx>();
+   ctx->owner = a.storage;
+   ctx->shape.assign(a.shape.begin(), a.shape.end());
+   Shape st = contiguous_strides(a.shape);
+@@ -403,7 +437,7 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
+     DLManagedTensorVersioned& mt = ctx->versioned;
+     mt.version.major = DLPACK_MAJOR_VERSION;
+     mt.version.minor = DLPACK_MINOR_VERSION;
+-    mt.manager_ctx = ctx;
++    mt.manager_ctx = ctx.get();
+     mt.deleter = export_deleter_versioned;
+     mt.flags = 0;
+     mt.dl_tensor = dl;
+@@ -411,14 +445,12 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
+   } else {
+     DLManagedTensor& mt = ctx->legacy;
+     mt.dl_tensor = dl;
+-    mt.manager_ctx = ctx;
++    mt.manager_ctx = ctx.get();
+     mt.deleter = export_deleter_legacy;
+     cap = PyCapsule_New(&mt, kCapLegacy, capsule_destructor_legacy);
+   }
+-  if (!cap) {
+-    delete ctx;
+-    throw py::error_already_set();
+-  }
++  if (!cap) throw py::error_already_set();  // ctx is freed by its unique_ptr
++  ctx.release();  // owned by the capsule from here: its destructor, or the consumer's deleter call, frees it
+   return py::reinterpret_steal<py::object>(cap);
+ }
+ 
+@@ -431,20 +463,67 @@ py::tuple tensor_dlpack_device(Tensor& t) {
+ }
+ 
+ // ---- import: the Storage keeps the producer's manager alive; its destructor
+-// drains the engine stream (kernels.cu) and then calls this, GIL held.
++// drains the Storage device's engine stream (kernels.cu) and then calls this,
++// which calls the producer's deleter with the GIL held.
++//
++// P1T-FIX1, F04 (finalization-safe release). The last reference can die on any
++// thread, including a non-Python thread while CPython is finalizing. Once
++// finalization has started (or the interpreter is gone), PyGILState_Ensure is
++// unsafe: CPython 3.12 terminates a non-main thread that tries to take the GIL
++// during finalization (in the middle of this deleter), and newer runtimes may
++// hang it. So in that state this function does NOT call PyGILState_Ensure and
++// DELIBERATELY LEAKS the producer's manager (the memory is not handed back; the
++// process is exiting). Ordinary releases are unchanged.
++// Detection: Py_IsInitialized() plus Py_IsFinalizing() (3.13+) / the exported
++// _Py_IsFinalizing() (3.12). Measured on CPython 3.12.3 (P1T_FIX1 ledger): during
++// module teardown Py_IsInitialized() is already 0 and _Py_IsFinalizing() is 1,
++// because 3.12 clears `initialized` when it sets the finalizing thread; the
++// explicit finalizing test keeps this correct if a runtime orders those two
++// stores differently. Residual (not closed here): a thread that passed this
++// test an instant before finalization starts can still reach
++// PyGILState_Ensure; closing that needs lifecycle coordination with the
++// interpreter, which the order does not ask for.
++// Prior art: the CPython 3.12 C-API docs (Initialization, Finalization, and
++// Threads: PyGILState_Ensure / Py_IsFinalizing, "calling this function from a
++// thread when the runtime is finalizing will terminate the thread"); pybind11's
++// guidance not to touch the GIL during interpreter shutdown. Taken: the rule.
++// Ours: the deliberate-leak policy at this call site and its counters.
++std::atomic<unsigned long long> g_import_released{0};
++std::atomic<unsigned long long> g_import_leaked_shutdown{0};
++
++bool interpreter_accepts_gil_state() {
++  if (!Py_IsInitialized()) return false;
++#if PY_VERSION_HEX >= 0x030D0000
++  if (Py_IsFinalizing()) return false;
++#else
++  if (_Py_IsFinalizing()) return false;
++#endif
++  return true;
++}
++
+ void import_release_legacy(void* ctx) {
+   auto* m = static_cast<DLManagedTensor*>(ctx);
+-  if (!m || !m->deleter || !Py_IsInitialized()) return;
++  if (!m || !m->deleter) return;
++  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
++    g_import_leaked_shutdown.fetch_add(1);
++    return;
++  }
+   PyGILState_STATE g = PyGILState_Ensure();
+   m->deleter(m);
+   PyGILState_Release(g);
++  g_import_released.fetch_add(1);
+ }
+ void import_release_versioned(void* ctx) {
+   auto* m = static_cast<DLManagedTensorVersioned*>(ctx);
+-  if (!m || !m->deleter || !Py_IsInitialized()) return;
++  if (!m || !m->deleter) return;
++  if (!interpreter_accepts_gil_state()) {  // deliberate leak (see above)
++    g_import_leaked_shutdown.fetch_add(1);
++    return;
++  }
+   PyGILState_STATE g = PyGILState_Ensure();
+   m->deleter(m);
+   PyGILState_Release(g);
++  g_import_released.fetch_add(1);
+ }
+ void import_release_noop(void*) {}
+ 
+@@ -517,6 +596,8 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
+                            " is outside TensorCUDA's 0.." +
+                            std::to_string(TC_MAX_DIMS));
+   const int nd = dl->ndim;
++  if (nd > 0 && dl->shape == nullptr)
++    throw py::buffer_error("from_dlpack: NULL shape array for a tensor with dimensions");
+   Shape shape(nd);
+   for (int i = 0; i < nd; ++i) {
+     if (dl->shape[i] < 0)
+@@ -524,7 +605,8 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
+                              shape_str(dl->shape, nd));
+     shape[i] = dl->shape[i];
+   }
+-  const int64_t numel = numel_of(shape);
++  // F03 (P1T-FIX1): checked count (ValueError on overflow, never a wrapped size).
++  const int64_t numel = checked_numel(dl->shape, nd, "from_dlpack");
+   // C-contiguous only; a size-1 dimension may carry any stride (it is never
+   // stepped). Strides == NULL means compact row-major (DLPack < 1.2).
+   if (nd > 0 && dl->strides && numel > 0) {
+@@ -548,12 +630,25 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
+                            std::to_string(isz));
+   if (numel > 0 && dl->data == nullptr)
+     throw py::buffer_error("from_dlpack: null data pointer for a non-empty tensor");
++  // F03 (P1T-FIX1): checked byte size, byte_offset + bytes (the Storage's
++  // nbytes) and data + byte_offset + bytes (one past the last byte); each
++  // overflow raises ValueError and leaves the capsule unconsumed.
++  const int64_t nbytes = checked_nbytes(numel, isz, dl->shape, nd, "from_dlpack");
++  int64_t storage_bytes = 0;
++  if (dl->byte_offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
++      __builtin_add_overflow(static_cast<int64_t>(dl->byte_offset), nbytes, &storage_bytes))
++    throw py::value_error("from_dlpack: byte_offset " + std::to_string(dl->byte_offset) +
++                          " + byte size " + std::to_string(nbytes) + " overflows int64; refused");
++  uintptr_t end_address = 0;
++  if (__builtin_add_overflow(reinterpret_cast<uintptr_t>(dl->data),
++                             static_cast<uintptr_t>(storage_bytes), &end_address))
++    throw py::value_error("from_dlpack: data + byte_offset + byte size overflows the address space; refused");
+ 
+   Device dev;
+   dev.type = DeviceType::CUDA;
+   dev.index = cur;
+   auto storage = std::make_shared<Storage>(
+-      dl->data, static_cast<size_t>(dl->byte_offset) + static_cast<size_t>(numel) * isz,
++      dl->data, static_cast<size_t>(storage_bytes),
+       dev, versioned ? import_release_versioned : import_release_legacy, manager);
+   // Consume the capsule only once the Storage owns the manager.
+   if (PyCapsule_SetName(cap, versioned ? kCapUsedVersioned : kCapUsedLegacy) != 0) {
+@@ -570,14 +665,25 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
+ }
+ 
+ // Amendment 1: device-side empty (no host round-trip, no fill).
++// P1T-FIX1, F03: refuses rank > TC_MAX_DIMS (the engine's op metadata arrays
++// hold 8 axes) and any element-count or byte-size overflow, with ValueError,
++// before allocating; a CPU allocation failure raises MemoryError instead of
++// returning a nonempty tensor over a NULL buffer.
+ Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
+                     const std::string& device) {
++  if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
++    throw py::value_error("empty: " + std::to_string(shape.size()) +
++                          " dimensions exceed TensorCUDA's maximum rank " +
++                          std::to_string(TC_MAX_DIMS) + " (TC_MAX_DIMS)");
+   for (int64_t s : shape)
+     if (s < 0) throw py::value_error("empty: negative dimensions are not allowed");
+-  return Tensor::make(NDArray::empty(Shape(shape.begin(), shape.end()),
+-                                     dtype_from_string(dtype),
+-                                     Device::from_string(device)),
+-                      false);
++  const DType dt = dtype_from_string(dtype);
++  const int nd = static_cast<int>(shape.size());
++  const int64_t numel = checked_numel(shape.data(), nd, "empty");
++  const int64_t nbytes = checked_nbytes(numel, dtype_size(dt), shape.data(), nd, "empty");
++  NDArray a = NDArray::empty(Shape(shape.begin(), shape.end()), dt, Device::from_string(device));
++  if (nbytes > 0 && a.storage->ptr == nullptr) throw std::bad_alloc();  // -> MemoryError
++  return Tensor::make(a, false);
+ }
+ 
+ const char* const kDlpackDoc = R"doc(Export this tensor zero-copy as a DLPack capsule (Python array API protocol).
+@@ -1410,6 +1516,15 @@ PYBIND11_MODULE(_tensor_cuda, m) {
+   m.def("_from_dlpack_capsule", &tensor_from_dlpack_capsule, py::arg("capsule"));
+   m.def("empty", &tensor_empty, py::arg("shape"), py::arg("dtype") = "float32",
+         py::arg("device") = "cuda");
++  // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).
++  m.def("_dlpack_release_stats", []() {
++    py::dict d;
++    d["released"] = g_import_released.load();
++    d["leaked_interpreter_shutdown"] = g_import_leaked_shutdown.load();
++    d["leaked_drain_failure"] = storage_external_drain_leaks();
++    return d;
++  }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
++     "after a failed device drain (F05).");
+   m.def("empty_cache", &empty_cache);
+   m.def("set_alloc_pooling", &set_alloc_pooling);
+ }
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index e02271a..53bcd90 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -6,6 +6,7 @@
+ #include "tc/core.h"
+ 
+ #include <cuda_runtime.h>
++#include <atomic>
+ #include <cuda_fp16.h>
+ #include <cuda_bf16.h>
+ #include <mma.h>  // EXP-APA-3: WMMA HMMA for the Q-tiled attention skeleton
+@@ -183,6 +184,42 @@ Storage::Storage(void* external_ptr, size_t nbytes_, Device device_,
+                  ExternalRelease release, void* release_ctx)
+     : ptr(external_ptr), nbytes(nbytes_), device(device_),
+       external_release(release), external_ctx(release_ctx) {}
++
++// P1T-FIX1, F05: device-correct drain for an external (imported) Storage.
++//  1. If `dev` is not the current device, switch to it (the caller may have
++//     switched devices since the import; draining the CURRENT device's legacy
++//     stream would leave this allocation's last use pending).
++//  2. Synchronize that device's legacy stream (stream 0 in this TU).
++//  3. Report failure (any step) so the caller does NOT release, and clear the
++//     runtime's last-error slot so an unrelated later launch check does not
++//     report this destructor's error.
++//  4. Restore the caller's device.
++// No device-wide sync (cudaDeviceSynchronize): one stream sync, as before.
++// Prior art: the CUDA runtime current-device model (cudaGetDevice/cudaSetDevice;
++// the legacy default stream is per device) and the scoped device guard of
++// PyTorch (c10::cuda::CUDAGuard) / CuPy (cupy.cuda.Device as a context manager).
++// Taken: switch-then-restore. Ours: its placement before the DLPack deleter and
++// the leak-on-failure rule.
++namespace {
++std::atomic<unsigned long long> g_external_drain_leaks{0};
++
++bool drain_device_legacy_stream(int dev) {
++  int prev = -1;
++  cudaError_t e = cudaGetDevice(&prev);
++  bool switched = false;
++  if (e == cudaSuccess && prev != dev) {
++    e = cudaSetDevice(dev);
++    switched = (e == cudaSuccess);
++  }
++  if (e == cudaSuccess) e = cudaStreamSynchronize(0);
++  if (switched) cudaSetDevice(prev);
++  if (e != cudaSuccess) cudaGetLastError();
++  return e == cudaSuccess;
++}
++}  // namespace
++
++unsigned long long storage_external_drain_leaks() { return g_external_drain_leaks.load(); }
++
+ Storage::~Storage() {
+   if (external_release) {
+     // Imported (DLPack) memory belongs to its producer: never cudaFree it and
+@@ -202,7 +239,12 @@ Storage::~Storage() {
+     // array API's stream rules (2021+); the drain-then-delete order is the
+     // standard CUDA "free only after last use" rule. Ours: its placement in
+     // the Storage destructor.
+-    if (device.is_cuda()) cudaStreamSynchronize(0);
++    // P1T-FIX1 F05: drain THIS Storage's device (drain_device_legacy_stream
++    // above); if the drain fails, deliberately leak instead of releasing.
++    if (device.is_cuda() && !drain_device_legacy_stream(device.index)) {
++      g_external_drain_leaks.fetch_add(1);
++      return;
++    }
+     external_release(external_ctx);
+     return;
+   }
+diff --git a/tensor_cuda/tensor_cuda/__init__.py b/tensor_cuda/tensor_cuda/__init__.py
+index 3132157..ef0ec70 100644
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -95,17 +95,26 @@ def from_dlpack(obj):
+     The result aliases the producer's memory (``data_ptr()`` is the producer's
+     element 0) and keeps the producer's DLPack manager alive. When the last
+     TensorCUDA reference to that memory dies, TensorCUDA first drains its own
+-    stream, so no queued TensorCUDA kernel can still touch the memory, and then
+-    calls the producer's deleter with the GIL held. The memory is never
+-    returned to TensorCUDA's pool and never ``cudaFree``-d by TensorCUDA.
++    stream on the memory's device (switching to that device if another one is
++    current, then restoring the caller's device), so no queued TensorCUDA
++    kernel can still touch the memory, and then calls the producer's deleter
++    with the GIL held. If that drain fails (a broken CUDA context), or the
++    last reference dies while the interpreter is finalizing, the deleter is
++    deliberately NOT called: the manager is leaked rather than risk a
++    use-after-free or a GIL acquisition during shutdown (P1T-FIX1 F04/F05).
++    The memory is never returned to TensorCUDA's pool and never
++    ``cudaFree``-d by TensorCUDA.
+ 
+     Refused with ``BufferError``, never converted: non-CUDA devices (CPU
+     included), another CUDA device than TensorCUDA's, non-contiguous strides
+     (a size-1 dimension may carry any stride), read-only tensors, and dtypes
+     with no exact TensorCUDA match (supported: float32, float16, bfloat16,
+-    int64, uint8, bool). The result has ``requires_grad=False``. If anything
+-    outside TensorCUDA later writes into it in place, call
+-    ``mark_modified()`` (see ``Tensor.__dlpack__``).
++    int64, uint8, bool). Refused with ``ValueError``: an element count, byte
++    size, ``byte_offset`` + size or address range that overflows 64-bit
++    arithmetic (P1T-FIX1 F03); ``TypeError``: anything that is neither a DLPack
++    producer nor a capsule (``None`` included). The result has
++    ``requires_grad=False``. If anything outside TensorCUDA later writes into
++    it in place, call ``mark_modified()`` (see ``Tensor.__dlpack__``).
+     """
+     if not hasattr(obj, "__dlpack__"):
+         return _C._from_dlpack_capsule(obj)   # bare capsule (TypeError otherwise)
+@@ -133,7 +142,10 @@ def empty(*shape, dtype="float32", device="cuda"):
+     back). Shape conventions match ``zeros``: ``empty(2, 3)``,
+     ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
+     Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
+-    string raises instead of falling back to float32.
++    string raises instead of falling back to float32. More than 8 dimensions
++    (TensorCUDA's maximum rank), a negative extent, or an element count or
++    byte size that overflows 64-bit arithmetic raises ``ValueError`` before
++    anything is allocated (P1T-FIX1 F03).
+     """
+     if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+         shape = tuple(shape[0])
+diff --git a/tensor_cuda/tests/test_dlpack.py b/tensor_cuda/tests/test_dlpack.py
+index ae3ac1c..e0ff8e9 100644
+--- a/tensor_cuda/tests/test_dlpack.py
++++ b/tensor_cuda/tests/test_dlpack.py
+@@ -18,6 +18,18 @@ What each group pins, and the registered mutant it must kill (order P1T_M1_DLPAC
+   * Amendment 1: empty's shape/dtype/requires_grad for (), [7], [1, 512, 7160] x fp32/fp16, zeros' shape conventions,
+     data_ptr round-trip through DLPack both ways.
+ 
++P1T-FIX1 additions (review P1T-REV round 1; tests named test_fix1_*), with the registered mutant each one must kill:
++  * F02: tc.from_dlpack(None) raises TypeError.
++  * F03: empty refuses rank > 8 (mutant (c): the rank check removed), element-count and byte-size overflow; import
++    refuses count, byte, byte_offset + bytes and address overflow (ValueError, capsule left unconsumed).
++  * F04: an imported Storage's last reference released on a foreign (non-Python) thread, normally (deleter called once)
++    and during interpreter finalization (deleter NOT called: a counted deliberate leak, no GIL acquisition, no abort).
++  * F05: an imported Storage dropped while another device is current: an LD_PRELOAD shim over the shared CUDA runtime
++    simulates device 1 being current on this one-GPU host; the destructor must switch to device 0, sync there, restore
++    device 1, and on a failed switch must leak instead of releasing (mutant (d): the device switch removed).
++  * F06: the export context is owned exactly once (capsule GC and consumer deleter paths); the bad_alloc path itself is
++    verified by reasoning + RAII (unique_ptr until PyCapsule_New succeeds).
++
+ Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
+ (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
+ 
+@@ -29,6 +41,10 @@ import-release-ordering race (case (d)) and the ctypes producer.
+ """
+ import ctypes
+ import gc
++import json
++import os
++import subprocess
++import sys
+ 
+ import numpy as np
+ import pytest
+@@ -95,10 +111,10 @@ _DLManagedTensorVersioned._fields_ = [("version", _DLPackVersion), ("manager_ctx
+                                       ("deleter", _DELETER), ("flags", ctypes.c_uint64), ("dl_tensor", _DLTensor)]
+ _DLManagedTensorVersioned_p = ctypes.POINTER(_DLManagedTensorVersioned)
+ 
+-_PyCapsule_New = ctypes.pythonapi.PyCapsule_New
++_PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
+ _PyCapsule_New.restype = ctypes.py_object
+ _PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+-_PyCapsule_GetPointer = ctypes.pythonapi.PyCapsule_GetPointer
++_PyCapsule_GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
+ _PyCapsule_GetPointer.restype = ctypes.c_void_p
+ _PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+ _VERSIONED = b"dltensor_versioned"           # module-level: the capsule keeps a char* to it
+@@ -518,3 +534,343 @@ def test_empty_shape_conventions_match_zeros(torch):
+     with pytest.raises(RuntimeError):
+         tc.empty(2, dtype="float99")
+     assert "empty" in tc.__all__ and "from_dlpack" in tc.__all__
++
++
++# =================================================================================================== P1T-FIX1
++# Regression tests for the P1T-REV round-1 findings (order P1T_FIX1_REVIEW_FINDINGS.md). Prior art per test below;
++# the subprocess isolation for crash-prone paths follows the reviewer's host_checks.py / core_shutdown.py probes.
++_SUBPROC_TIMEOUT = 60
++
++
++def _subproc_env(**extra):
++    env = os.environ.copy()
++    env["PYTHONDONTWRITEBYTECODE"] = "1"
++    env.update(extra)
++    return env
++
++
++# A torch-free ctypes producer for the subprocess scripts (same v1.3 layout as _Producer above), over TensorCUDA memory.
++_SUBPROC_PRODUCER = r"""
++import ctypes, gc, json, sys
++import tensor_cuda as tc
++
++class DLDevice(ctypes.Structure):
++    _fields_ = [("device_type", ctypes.c_int32), ("device_id", ctypes.c_int32)]
++class DLDataType(ctypes.Structure):
++    _fields_ = [("code", ctypes.c_uint8), ("bits", ctypes.c_uint8), ("lanes", ctypes.c_uint16)]
++class DLTensor(ctypes.Structure):
++    _fields_ = [("data", ctypes.c_void_p), ("device", DLDevice), ("ndim", ctypes.c_int32), ("dtype", DLDataType),
++                ("shape", ctypes.POINTER(ctypes.c_int64)), ("strides", ctypes.POINTER(ctypes.c_int64)),
++                ("byte_offset", ctypes.c_uint64)]
++class Version(ctypes.Structure):
++    _fields_ = [("major", ctypes.c_uint32), ("minor", ctypes.c_uint32)]
++class MTV(ctypes.Structure):
++    pass
++DELETER = ctypes.CFUNCTYPE(None, ctypes.POINTER(MTV))
++MTV._fields_ = [("version", Version), ("manager_ctx", ctypes.c_void_p), ("deleter", DELETER),
++                ("flags", ctypes.c_uint64), ("dl_tensor", DLTensor)]
++PyCapsule_New = ctypes.pythonapi['PyCapsule_New']
++PyCapsule_New.restype = ctypes.py_object
++PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
++NAME = b"dltensor_versioned"
++
++class Producer:
++    def __init__(self, owner, n):
++        self.owner, self.calls = owner, 0
++        self.shape = (ctypes.c_int64 * 1)(n)
++        self.cb = DELETER(self._delete)
++        m = MTV()
++        m.version.major, m.version.minor = 1, 3
++        m.deleter = self.cb
++        t = m.dl_tensor
++        t.data = owner.data_ptr()
++        t.device.device_type, t.device.device_id = 2, 0
++        t.ndim = 1
++        t.dtype.code, t.dtype.bits, t.dtype.lanes = 2, 32, 1
++        t.shape = ctypes.cast(self.shape, ctypes.POINTER(ctypes.c_int64))
++        self.m = m
++    def _delete(self, _p):
++        self.calls += 1
++    def capsule(self):
++        return PyCapsule_New(ctypes.addressof(self.m), NAME, None)
++"""
++
++
++# ------------------------------------------------------------------------------------------------ F02
++def test_fix1_f02_from_dlpack_none_is_type_error():
++    with pytest.raises(TypeError):
++        tc.from_dlpack(None)
++    with pytest.raises(TypeError):
++        tc._C._from_dlpack_capsule(None)
++
++
++# ------------------------------------------------------------------------------------------------ F03
++# Prior art: checked arithmetic (__builtin_mul_overflow, GCC 5 2015; C23 ckd_mul); the shapes are the reviewer's
++# core_edges.py census plus import-side byte_offset/address cases. Descriptors only: nothing is allocated or read.
++@pytest.mark.parametrize("device", ["cpu", "cuda"])
++def test_fix1_f03_empty_refuses_rank_above_8(device):
++    with pytest.raises(ValueError, match="maximum rank 8"):
++        tc.empty((1,) * 9, device=device)
++    assert tc.empty((1,) * 8, device=device).shape == (1,) * 8           # rank 8 is the maximum, still accepted
++
++
++@pytest.mark.parametrize("device", ["cpu", "cuda"])
++@pytest.mark.parametrize("shape,dtype,frag", [
++    ((1 << 62,), "float32", "byte size"),                                # numel fits, numel*4 wraps to 0
++    ((1 << 61,), "float32", "byte size"),                                # 2^63 bytes: one past INT64_MAX
++    ((1 << 62,), "float16", "byte size"),
++    ((1 << 32, 1 << 32), "float32", "element count"),                    # numel itself wraps
++    ((3, 1 << 62, 1 << 2), "float32", "element count"),
++], ids=["2^62_f32", "2^61_f32", "2^62_f16", "2^32x2^32", "3x2^62x4"])
++def test_fix1_f03_empty_refuses_count_and_byte_overflow(device, shape, dtype, frag):
++    with pytest.raises(ValueError, match=frag):
++        tc.empty(shape, dtype=dtype, device=device)
++
++
++def test_fix1_f03_empty_zero_extent_is_empty_not_overflow():
++    t = tc.empty((0, 1 << 62, 1 << 62), device="cpu")                     # count 0: a real empty tensor
++    assert t.shape == (0, 1 << 62, 1 << 62)
++
++
++def test_fix1_f03_import_refuses_overflow(torch):
++    owner = torch.zeros(4, device="cuda")
++    cases = []
++    p = _Producer(owner, (1 << 62,), None)                               # bytes wrap
++    cases.append(("byte size", p))
++    p = _Producer(owner, (1 << 32, 1 << 32), None)                       # count wraps
++    cases.append(("element count", p))
++    p = _Producer(owner, (1,), None, byte_offset=1 << 63)                # byte_offset beyond int64
++    cases.append(("byte_offset", p))
++    p = _Producer(owner, (2,), None, byte_offset=(1 << 63) - 4)          # byte_offset + bytes wraps int64
++    cases.append(("byte_offset", p))
++    p = _Producer(owner, (4,), None)
++    p._m.dl_tensor.data = (1 << 64) - 8                                  # data + bytes wraps the address space
++    cases.append(("address space", p))
++    for frag, prod in cases:
++        cap = prod.capsule()
++        with pytest.raises(ValueError, match=frag):
++            tc.from_dlpack(cap)
++        assert "used_" not in repr(cap) and prod.deleter_calls == 0     # refused before consumption
++    with pytest.raises(BufferError, match="ndim 9"):
++        tc.from_dlpack(_Producer(owner, (1,) * 9, None).capsule())
++
++
++# ------------------------------------------------------------------------------------------------ F04
++# A REAL imported Storage whose last reference is a TensorCUDA export manager; its deleter is called on a foreign
++# (pthread, non-Python) thread created through libc, once normally and once from a module-global __del__ during
++# interpreter finalization. Prior art: the reviewer's core_shutdown.py + release_worker.cpp (same scenario, native
++# helper); CPython 3.12 finalization rules. Ours: the torch-free ctypes/pthread form and the leak counter check.
++_F04_SCRIPT = _SUBPROC_PRODUCER + r"""
++mode = sys.argv[1]
++libc = ctypes.CDLL(None)
++pthread_create = libc.pthread_create
++pthread_create.argtypes = [ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
++pthread_create.restype = ctypes.c_int
++pthread_join = libc.pthread_join
++pthread_join.argtypes = [ctypes.c_ulong, ctypes.c_void_p]
++pthread_join.restype = ctypes.c_int
++GetPointer = ctypes.pythonapi['PyCapsule_GetPointer']
++GetPointer.restype, GetPointer.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
++SetName = ctypes.pythonapi['PyCapsule_SetName']
++SetName.restype, SetName.argtypes = ctypes.c_int, [ctypes.py_object, ctypes.c_char_p]
++
++owner = tc.empty(16)
++owner.fill_(3.0)
++tc.synchronize()
++prod = Producer(owner, 16)
++u = tc.from_dlpack(prod.capsule())             # imported Storage: its release calls prod's deleter (GIL needed)
++cap = u.__dlpack__(max_version=(1, 3))         # TensorCUDA export manager: holds the imported Storage
++del u
++gc.collect()
++mptr = GetPointer(cap, NAME)
++assert SetName(cap, b"used_dltensor_versioned") == 0           # we own the manager now
++deleter_fp = ctypes.cast(mptr + 16, ctypes.POINTER(ctypes.c_void_p)).contents.value   # DLManagedTensorVersioned.deleter
++
++def foreign_release(pc=pthread_create, pj=pthread_join, fp=deleter_fp, m=mptr, byref=ctypes.byref,
++                    ulong=ctypes.c_ulong):
++    tid = ulong()
++    assert pc(byref(tid), None, fp, m) == 0
++    pj(tid.value, None)                        # ctypes releases the GIL for the call
++
++stats = tc._C._dlpack_release_stats
++if mode == "normal":
++    foreign_release()
++    print("RESULT " + json.dumps({"finalizing": sys.is_finalizing(), "deleter_calls": prod.calls,
++                                  "stats": dict(stats())}), flush=True)
++else:
++    class Finalizer:
++        def __init__(self):
++            self.isf, self.release, self.stats, self.prod, self.dumps = sys.is_finalizing, foreign_release, stats, prod, json.dumps
++        def __del__(self):
++            fin = self.isf()
++            self.release()
++            print("RESULT " + self.dumps({"finalizing": fin, "deleter_calls": self.prod.calls,
++                                          "stats": dict(self.stats())}), flush=True)
++    keep = Finalizer()
++    print("ARMED", flush=True)
++"""
++
++
++def _run_f04(mode):
++    r = subprocess.run([sys.executable, "-c", _F04_SCRIPT, mode], capture_output=True, text=True,
++                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
++    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
++    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++    return json.loads(lines[-1][len("RESULT "):]), r
++
++
++def test_fix1_f04_foreign_thread_release_normal_calls_deleter_once():
++    res, _ = _run_f04("normal")
++    assert res["finalizing"] is False
++    assert res["deleter_calls"] == 1, res
++    assert res["stats"]["released"] == 1 and res["stats"]["leaked_interpreter_shutdown"] == 0, res
++
++
++def test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil():
++    res, r = _run_f04("finalizing")
++    assert "ARMED" in r.stdout
++    assert res["finalizing"] is True, "precondition: the release must happen during interpreter finalization"
++    assert res["deleter_calls"] == 0, res                     # no PyGILState_Ensure, so no Python deleter
++    assert res["stats"]["leaked_interpreter_shutdown"] == 1, res
++    assert res["stats"]["released"] == 0, res
++
++
++# ------------------------------------------------------------------------------------------------ F05
++# The host has one GPU, so "device 1 is current" is simulated: an LD_PRELOAD shim interposes cudaGetDevice /
++# cudaSetDevice / cudaStreamSynchronize between _tensor_cuda and the shared libcudart.so.12 (core imports them as
++# cudaGetDevice@libcudart.so.12, ...). In fake mode the shim reports a simulated current device, logs every switch and
++# every stream sync with the simulated device, and always keeps the REAL device at 0. Prior art: LD_PRELOAD symbol
++# interposition (glibc ld.so; the classic malloc/syscall interposers); the order's "simulate with cudaSetDevice" brief.
++# Ours: this shim.
++_F05_SHIM_C = r"""
++#define _GNU_SOURCE
++#include <dlfcn.h>
++#include <stdio.h>
++#include <string.h>
++typedef int (*get_fn)(int*);
++typedef int (*set_fn)(int);
++typedef int (*sync_fn)(void*);
++static int fake = -1;          /* -1: pass-through; else the simulated current device */
++static int fail_set_to = -1;   /* cudaSetDevice(fail_set_to) fails with cudaErrorInvalidDevice (101) */
++static char logbuf[4096];
++static void note(const char* s) {
++  size_t n = strlen(logbuf);
++  if (n + strlen(s) + 2 < sizeof logbuf) { strcat(logbuf, s); strcat(logbuf, " "); }
++}
++/* Python loads extension modules RTLD_LOCAL, so libcudart.so.12 (a dependency of _tensor_cuda) is not in the global
++   scope and dlsym(RTLD_NEXT, ...) finds nothing: resolve the real functions through a handle on the loaded runtime. */
++static void* real_sym(const char* name) {
++  void* h = dlopen("libcudart.so.12", RTLD_LAZY | RTLD_NOLOAD);
++  if (!h) h = dlopen("libcudart.so.12", RTLD_LAZY);
++  return h ? dlsym(h, name) : NULL;
++}
++int cudaGetDevice(int* d) {
++  static get_fn real;
++  if (!real) real = (get_fn)real_sym("cudaGetDevice");
++  if (fake >= 0) { *d = fake; return 0; }
++  return real(d);
++}
++int cudaSetDevice(int d) {
++  static set_fn real;
++  if (!real) real = (set_fn)real_sym("cudaSetDevice");
++  if (fake < 0) return real(d);
++  char b[32];
++  snprintf(b, sizeof b, "set%d%s", d, d == fail_set_to ? "!" : "");
++  note(b);
++  if (d == fail_set_to) return 101;
++  fake = d;
++  return real(0);
++}
++int cudaStreamSynchronize(void* s) {
++  static sync_fn real;
++  if (!real) real = (sync_fn)real_sym("cudaStreamSynchronize");
++  if (fake >= 0) { char b[32]; snprintf(b, sizeof b, "sync@%d", fake); note(b); }
++  return real(s);
++}
++void shim_fake(int d) { fake = d; }
++void shim_fail_set(int d) { fail_set_to = d; }
++int shim_current(void) { return fake; }
++const char* shim_log(void) { return logbuf; }
++void shim_clear(void) { logbuf[0] = 0; }
++"""
++
++_F05_SCRIPT = _SUBPROC_PRODUCER + r"""
++shim = ctypes.CDLL(sys.argv[1])                # already loaded through LD_PRELOAD: the same handle
++shim.shim_log.restype = ctypes.c_char_p
++mode = sys.argv[2]
++owner = tc.empty(16)
++owner.fill_(1.0)
++tc.synchronize()
++prod = Producer(owner, 16)
++u = tc.from_dlpack(prod.capsule())             # imported on (real and reported) device 0
++u.fill_(2.0)                                   # engine work queued on the imported memory
++shim.shim_fake(1)                              # from here the process "runs on device 1"
++if mode == "fail":
++    shim.shim_fail_set(0)                      # switching back to the Storage's device 0 fails
++shim.shim_clear()
++del u                                          # last reference: the external Storage destructor runs here
++gc.collect()
++res = {"log": shim.shim_log().decode().split(), "current": shim.shim_current(), "deleter_calls": prod.calls,
++       "stats": dict(tc._C._dlpack_release_stats())}
++shim.shim_fake(-1)
++print("RESULT " + json.dumps(res), flush=True)
++"""
++
++
++@pytest.fixture(scope="module")
++def f05_shim(tmp_path_factory):
++    d = tmp_path_factory.mktemp("f05_shim")
++    src, so = d / "cudart_device_shim.c", d / "cudart_device_shim.so"
++    src.write_text(_F05_SHIM_C)
++    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
++                       text=True, timeout=_SUBPROC_TIMEOUT)
++    assert r.returncode == 0, r.stderr
++    return str(so)
++
++
++def _run_f05(shim, mode):
++    r = subprocess.run([sys.executable, "-c", _F05_SCRIPT, shim, mode], capture_output=True, text=True,
++                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
++    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
++    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++    return json.loads(lines[-1][len("RESULT "):])
++
++
++def test_fix1_f05_drop_while_other_device_current_drains_storage_device_and_restores(f05_shim):
++    res = _run_f05(f05_shim, "ok")
++    # The destructor must switch to the Storage's device 0, sync ITS legacy stream, switch back to device 1.
++    assert res["log"] == ["set0", "sync@0", "set1"], res
++    assert res["current"] == 1, res                           # the caller's (simulated) device is restored
++    assert res["deleter_calls"] == 1, res                     # then the producer gets its memory back, once
++    assert res["stats"]["leaked_drain_failure"] == 0, res
++
++
++def test_fix1_f05_failed_switch_leaks_instead_of_releasing(f05_shim):
++    res = _run_f05(f05_shim, "fail")
++    assert res["log"] == ["set0!"], res                       # the switch was attempted and failed; no sync elsewhere
++    assert res["current"] == 1, res
++    assert res["deleter_calls"] == 0, res                     # no drain proof: leaked, never released
++    assert res["stats"]["leaked_drain_failure"] == 1, res
++
++
++# ------------------------------------------------------------------------------------------------ F06
++# Prior art: RAII / unique_ptr hand-off (C++11). The bad_alloc path itself is not injectable from Python; it is
++# verified by reasoning (the context is a unique_ptr until PyCapsule_New succeeds). This test pins the ownership
++# hand-off on every reachable path: unconsumed capsule collected, consumed capsule released by its consumer.
++def test_fix1_f06_export_context_owned_exactly_once(torch):
++    owner = torch.arange(8, dtype=torch.float32, device="cuda")
++    prod = _Producer(owner, (8,), (1,))
++    u = tc.from_dlpack(prod.capsule())               # the imported Storage calls prod's deleter at its last release
++    for k in range(50):
++        cap = u.__dlpack__(max_version=(1, 3)) if k % 2 else u.__dlpack__()
++        del cap                                      # unconsumed: the capsule destructor frees the context once
++    gc.collect()
++    assert prod.deleter_calls == 0
++    caps = [u.__dlpack__(), u.__dlpack__(max_version=(1, 0))]
++    xs = [torch.from_dlpack(c) for c in caps]        # consumed: torch calls each context's deleter later
++    del u
++    gc.collect()
++    assert prod.deleter_calls == 0                   # two contexts still hold the Storage
++    del xs, caps
++    gc.collect()
++    assert prod.deleter_calls == 1 and prod.owner is None
