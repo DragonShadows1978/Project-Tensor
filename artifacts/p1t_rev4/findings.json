@@ -1,0 +1,236 @@
+{
+  "status": "COMPLETE",
+  "verdicts": {
+    "R1": "RISK",
+    "R2": "UNSOUND",
+    "R3": "UNSOUND",
+    "R4": "CORRECT",
+    "R5": "PASS",
+    "R6": "REJECT"
+  },
+  "closure": [
+    {
+      "id": "F01",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:773-855; bindings.cpp:284-286,326-327,343-344; lstm_bindings.cpp:239-242; m4_bindings.cpp:239-241,294-295,315-316,334-335",
+      "evidence": "Event-fenced managers on success/partial launch; caught push fallback and leak without completion proof. Source reasoning; release GPU probe pending."
+    },
+    {
+      "id": "F02",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:196-201,314-323; m4_bindings.cpp:65-104; bindings.cpp:239-260; lstm_bindings.cpp:178-210",
+      "evidence": "Required None guards and safe absent metadata. CPU None cases raise TypeError without launch."
+    },
+    {
+      "id": "F03",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:307-331,832-883,910-924; tc_signal/src/checked_math.h:31-89; dlpack_operand.cpp:126-193,760-777; all plan functions",
+      "evidence": "Rank/count/bytes/address/geometry checked; FIX3 closes aggregate sums. CPU refusal census, UBSan and entry-point checks pass."
+    },
+    {
+      "id": "F04",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:641-691,711-764; tensor_cuda/tensor_cuda/__init__.py:188-223",
+      "evidence": "Finalizing/closing releases leak without GIL acquisition; admitted releases finish before ordinary finalization. Current CPU lifecycle slice passes."
+    },
+    {
+      "id": "F05",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/kernels.cu:221-264",
+      "evidence": "External destructor selects Storage device, syncs it and restores caller; failed drain leaks. Source closure; two-device GPU check pending. V4-01 is a separate export path."
+    },
+    {
+      "id": "F06",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:448-487",
+      "evidence": "unique_ptr owns export context through metadata/capsule construction; ownership transfers once. C++ RAII reasoning."
+    },
+    {
+      "id": "F07",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/include/tc/core.h:80-88; docs/P1T_FIX1_M1_ADDENDUM.md:20-33",
+      "evidence": "Coordinated native-client rebuild is documented. Closed as rollout prerequisite, not binary ABI compatibility."
+    },
+    {
+      "id": "N1",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:688-727,818-836,858-897; tc_signal/tc_signal/__init__.py:139-155",
+      "evidence": "Original failed-query/empty-list silent success fixed; CPU cudaErrorNoDevice is raised and logged. V4-04 separately covers an existing synchronous error slot."
+    },
+    {
+      "id": "N2",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:307-331,438-444; kernels.cu:80-98; tc_signal/src/checked_math.h:63-89; dlpack_operand.cpp:158-168",
+      "evidence": "Zero-neighbor extent/byte bound checked before empty treatment; prefix/suffix refusals and 18 UBSan census cases pass."
+    },
+    {
+      "id": "N3",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:469-472,519-572,586-600,688-727,773-837; bindings.cpp:408-410",
+      "evidence": "State initialized at import; fixed sync bookkeeping, reserved owners/recycle slots and caught pending push. CPU OOM safe; full release fault sweep remains GPU probe."
+    },
+    {
+      "id": "N4",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:238-261; tensor_cuda/src/bindings.cpp:672-680",
+      "evidence": "Each ordinary C++ deleter exception is caught and counted; owner cleared first. CPU throwing ManagedOwner survives. Full core foreign-thread check is pending."
+    },
+    {
+      "id": "N5",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:627-691,711-764; tensor_cuda/tensor_cuda/__init__.py:188-223",
+      "evidence": "Admission/closing/in-flight coordination with unbounded quiescence; no GIL wait under mutex. Finite overrun exits normally."
+    },
+    {
+      "id": "V3-01",
+      "status": "CLOSED",
+      "lines_read": "tensor_cuda/src/bindings.cpp:711-764; tensor_cuda/tensor_cuda/__init__.py:174-223; tensor_cuda/tests/test_dlpack.py:1232-1286",
+      "evidence": "5.5 s admitted deleter crosses 5 s diagnostic delay, finishes before finalization; CPU rc0, still_in_flight=0. No early-return timeout remains."
+    },
+    {
+      "id": "V3-02",
+      "status": "CLOSED",
+      "lines_read": "tc_signal/src/dlpack_operand.cpp:623-656,760-809,833-836; tc_signal/tests/fix3_native_harness.cpp:99-191",
+      "evidence": "Pre-launch aggregate refusal, nonthrowing sticky saturation and exact below-limit bound comparisons. 17 UBSan checks and two real entry-point refusals pass."
+    }
+  ],
+  "findings": [
+    {
+      "id": "V4-01",
+      "severity": "MAJOR",
+      "status": "OPEN",
+      "location": "tensor_cuda/src/bindings.cpp:376-400,446",
+      "title": "Export fence records on the current device rather than the tensor device",
+      "scenario": "Create or import tensor on device 0, enqueue its legacy-stream write, switch current device to 1, export to a nonblocking device-0 consumer stream. Event creation and record run on device 1; the device-0 consumer waits on that unrelated event, so it may read before device-0 writes finish.",
+      "fix": "Guard event creation/record with the tensor device and restore the caller device, or explicitly refuse a current-device mismatch before exporting.",
+      "evidence_class": "Source reasoning from verified primary API semantics; unchanged core export source traced with CPU CUDA-call replacements. No GPU witness claimed.",
+      "prior_art": "DLPack Python/Array API stream handoff; NVIDIA CUDA 12.6 device/event semantics",
+      "receipt": "logs/p1t_rev4_core_interop.log; artifacts/p1t_rev4/probes/core_export_device.py"
+    },
+    {
+      "id": "V4-02",
+      "severity": "NIT",
+      "status": "OPEN",
+      "location": "tensor_cuda/tensor_cuda/__init__.py:107-110",
+      "title": "from_dlpack still documents the removed bounded shutdown wait",
+      "scenario": "User reads from_dlpack help and expects the exit wait to end after _DLPACK_SHUTDOWN_WAIT_S, but FIX3 waits for quiescence without a bound.",
+      "fix": "Update the public docstring to describe the diagnostic delay and unbounded wait.",
+      "evidence_class": "source comparison",
+      "prior_art": "CPython 3.12 atexit and lifecycle documentation; no new algorithm"
+    },
+    {
+      "id": "V4-03",
+      "severity": "MINOR",
+      "status": "OPEN",
+      "location": "tensor_cuda/src/bindings.cpp:817-823,888-901",
+      "title": "Core import ignores cudaGetDevice failure and consumes the capsule",
+      "scenario": "With no usable CUDA device, cudaGetDevice returns cudaErrorNoDevice and does not supply an ordinal; cur remains initialized to 0. A zero-size device-0 capsule is accepted and renamed used_dltensor. Likewise a failed query from an earlier CUDA error is treated as a successful device-0 query.",
+      "fix": "Check cudaGetDevice return; raise a named RuntimeError before Storage construction or capsule renaming.",
+      "evidence_class": "CPU native reproduction using verbatim core import/storage source and real CUDA runtime; no GPU/data dereference",
+      "receipt": "logs/p1t_rev4_core_interop.log",
+      "prior_art": "NVIDIA CUDA 12.6 cudaGetDevice error semantics; DLPack ownership handoff"
+    },
+    {
+      "id": "V4-04",
+      "severity": "MINOR",
+      "status": "OPEN",
+      "location": "tc_signal/src/dlpack_operand.cpp:510-516,688-704,858-861",
+      "title": "synchronize omits the already-present synchronous CUDA error slot",
+      "scenario": "A launch is refused synchronously (for example invalid configuration), so there is no failed work queued on the stream but the calling host thread last-error slot is nonzero. If subsequent device queries and stream sync succeed, synchronize returns success without inspecting that slot.",
+      "fix": "Capture the calling thread existing CUDA error on entry, drain safely, and raise a named error even if every stream synchronization succeeds.",
+      "evidence_class": "Source reasoning from CUDA error-slot versus stream-completion APIs; actual-source CPU call tracing only. Real-CUDA witness pending; no GPU reproduction claimed.",
+      "receipt": "logs/p1t_rev4_sync_slot.log; artifacts/p1t_rev4/probes/sync_existing_error.py",
+      "prior_art": "NVIDIA CUDA 12.6 cudaPeekAtLastError/cudaGetLastError and cudaStreamSynchronize semantics"
+    }
+  ],
+  "counts": {
+    "BLOCKING": 0,
+    "MAJOR": 1,
+    "MINOR": 2,
+    "NIT": 1
+  },
+  "scope": {
+    "base": "9df5bef",
+    "target": "62c8d9f",
+    "fix3_base": "5f9f955",
+    "gpu_execution": false,
+    "evidence": "Source reasoning, CPU compilation/native checks, real fixture metadata, read-only historical receipt audit"
+  },
+  "probes": [
+    {
+      "path": "artifacts/p1t_rev4/probes/core_export_device.py",
+      "decides": "Two GPUs: decides V4-01 wrong-device export dependency; explicit mismatch refusal or correct producer completion and values must pass. timeout60; exit3 needs two GPUs.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_import_query_error.py",
+      "decides": "Full rebuilt core, CUDA_VISIBLE_DEVICES empty: decides V4-03 refusal before ownership transfer. timeout30.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/sync_existing_error.py",
+      "decides": "One GPU: decides V4-04 preexisting synchronous launch-error reporting, with no device-memory fault. timeout30; exit3 if staging is inconclusive.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/addon_lifetime.py",
+      "decides": "F01 side-stream capsule-only manager retention and finite reclamation/reuse stress. timeout60; all 12 outputs correct and entries retained.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_edges.py",
+      "decides": "Core scalar/zero/offset/singleton/used-capsule/stream and shape-refusal cases. timeout60; every assertion passes.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_device_drain.py",
+      "decides": "Two GPUs: F05 last-use completion before deleter and caller-device restoration. timeout60; exit3 needs two GPUs.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_exit_overrun.py",
+      "decides": "Full imported Storage foreign release at ordinary exit: run during and bounded, optionally nested/after. timeout25 per process; completed deleter before finalizing, rc0.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/numerics_and_streams.py",
+      "decides": "Finite ONNX fp64 parity, repeatability, dual handles, L=1/eps=0, special rounding and nondefault producer ordering. timeout90.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/release_failures.py",
+      "decides": "Actual FIX1/FIX2 OOM, producer exceptions, fallback/bound errors, partial launch and pending-at-exit tests. timeout650; rc0 and no skips.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/cuda_errors_multidevice.py",
+      "decides": "Multi-device FIFO retention, exact output, restore caller device plus existing-error census. timeout90; exit3 needs two GPUs.",
+      "status": "PENDING_LEAD"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/host_checks.py / operand_census.py / real_metadata_plans.py",
+      "decides": "CPU rebuilt add-on: 20 subprocess cases, 17 ownership/metadata cases and 129 live fixture geometries. timeout120/40/40; inspect each result, not collector rc alone.",
+      "status": "CPU_RUN"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/lifecycle.cpp / lifecycle_timeout.py",
+      "decides": "CPU current core admission/GIL/wait slice: default and short ordinary-finalization cases. timeout25/15; finite deleter completes first, still_in_flight=0, rc0.",
+      "status": "CPU_RUN"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_interop_cpu.cpp / build_core_interop_cpu.sh",
+      "decides": "CPU actual core import with real runtime (V4-03 witness); export call tracing (V4-01 mechanism only). timeout400; trace reproduces wrong-device record and failed-query consumption.",
+      "status": "CPU_RUN"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/sync_slot_cpu.cpp",
+      "decides": "CPU actual add-on sync with explicit successful API returns and a staged slot; decides whether source checks the slot (it does not). Trace only, not real CUDA validation. timeout15.",
+      "status": "CPU_RUN"
+    },
+    {
+      "path": "artifacts/p1t_rev4/probes/core_cpu.cpp / build_cpu.sh",
+      "decides": "CPU builds, core zero-extent source helpers and core syntax. Includes actual FIX2 ck_census and FIX3 accounting harness compilation; run only CPU modes, never dtor/sweep here. timeout1100 build.",
+      "status": "CPU_RUN"
+    }
+  ]
+}

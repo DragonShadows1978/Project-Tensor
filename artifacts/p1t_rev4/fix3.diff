@@ -1,0 +1,1205 @@
+diff --git a/tc_signal/README.md b/tc_signal/README.md
+index 6c05cf3..30633ce 100644
+--- a/tc_signal/README.md
++++ b/tc_signal/README.md
+@@ -125,6 +125,12 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
+   a zero counted as 1, and its fp32 byte size, must fit in int64, or the operand (or planned shape) is refused with
+   `ValueError` before the empty-operand check; `[0, 2**62, 4]` is an overflow, not an empty operand. The same rule
+   as NumPy's array constructor; core `tensor_cuda.empty` / `from_dlpack` / `__dlpack__` apply it too.
++- the aggregate byte count (P1T-FIX3, V3-02): the fp32 byte counts of all operands of one call (inputs, outputs and
++  scratch) are summed with checked addition before the first launch; a sum above `INT64_MAX` is refused with
++  `ValueError` ("the aggregate fp32 byte count of this call's operands (their sum) overflows 64-bit arithmetic"), and
++  the operands are released at once. Example: two disjoint fp32 descriptors of shape `(2**61 - 1,)` are each valid
++  (`2**63 - 4` bytes) but their sum is not. The check runs in every entry point (it is the first step of the
++  deferred-release retainer each one constructs right before its launch).
+ 
+ ## Streams and lifetimes
+ 
+@@ -142,7 +148,11 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
+     GIL held, at the start of the next tc_signal call; `tc_signal.synchronize()` synchronizes the legacy stream and
+     releases everything; an `atexit` hook does the same at interpreter exit;
+   - the list is bounded (`src/tuning.h`: 1024 entries, 256 MiB of operand bytes); a call that pushes it past a bound
+-    synchronizes the legacy stream of every pending device and releases the whole list;
++    synchronizes the legacy stream of every pending device and releases the whole list. The byte total is saturating
++    (P1T-FIX3, V3-02): a push whose sum would exceed `INT64_MAX` pins the total at `INT64_MAX` (which is over the
++    bound, so that push drains, as exact arithmetic would) until the list is empty again, and nothing on that path
++    throws (`pending_stats()['bytes_saturated']` / `['bytes_saturations']`). Below `INT64_MAX` the total is exact, so
++    a total of exactly 256 MiB stays within the bound and one byte more drains;
+   - deleters are never called from a CUDA host callback;
+   - if the completion event cannot be recorded, the legacy stream is synchronized instead; if that fails too (a broken
+     CUDA context), the managers are deliberately leaked: tc_signal never releases memory the GPU may still use.
+@@ -222,7 +232,7 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
+ | Error | When |
+ |---|---|
+ | `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
+-| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03) |
++| `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03); the operands of one call total more than `INT64_MAX` bytes (V3-02) |
+ | `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early) |
+ 
+ ## Tests
+@@ -249,6 +259,12 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
+   producer temporary), a partial-launch exception, the LSTM capsule set, release at the next call / `synchronize()` /
+   `atexit`, the bytes bound, `None` for every required operand of the nine ops (each in its own process), and the
+   overflow refusals in validation and in every plan function.
++- `test_fix2_findings.py` (P1T-FIX2) covers the round-2 findings N1-N4 (release-path CUDA errors, the zero-extent
++  rule, allocation failure and throwing deleters on every release path; native UBSan and fail-the-Nth-allocation
++  harness `fix2_native_harness.cpp`).
++- `test_fix3_findings.py` (P1T-FIX3) covers V3-02: the aggregate pre-launch refusal through real entry points (with
++  and without a visible GPU), and the native UBSan harness `fix3_native_harness.cpp` for the saturating pending-list
++  total, the bound comparison at the boundary and the real retainer destructor near `INT64_MAX`.
+ - The module skips only when torch is not importable or there is no CUDA device.
+ - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
+ 
+@@ -280,3 +296,7 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
+   the leak-on-unfenceable rule. Details: `src/dlpack_operand.h`.
+ - **Checked arithmetic (P1T-FIX1, F03):** `__builtin_mul_overflow` / `__builtin_add_overflow` (GCC 5, 2015); C23
+   `ckd_mul` / `ckd_add`; SEI CERT C INT30-C / INT32-C. Ours: where it is applied. Details: `src/checked_math.h`.
++- **Aggregate check and saturating pending total (P1T-FIX3, V3-02):** the same checked builtins for the per-call sum;
++  saturating arithmetic (DSP/SIMD saturated add, e.g. MMX/SSE `PADDS`, ARM `QADD`) for the pending-list total. Ours:
++  checking the aggregate before the first launch, and the sticky saturated state that keeps the bound comparison
++  conservative until the list empties. Details: `src/dlpack_operand.cpp` (`note_push`).
+diff --git a/tc_signal/src/dlpack_operand.cpp b/tc_signal/src/dlpack_operand.cpp
+index 181db44..03a3026 100644
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -440,7 +440,9 @@ struct DeviceEvents {
+ 
+ struct PendingState {
+   std::deque<PendingEntry> q;
+-  int64_t bytes = 0;
++  int64_t bytes = 0;            // V3-02: saturating sum of the queued entries' bytes (exact while !bytes_saturated)
++  bool bytes_saturated = false;            // V3-02: a push overflowed; `bytes` is pinned at INT64_MAX until empty
++  unsigned long long bytes_saturations = 0;  // V3-02: how many times the total saturated
+   long long managers = 0;
+   long long high_water_entries = 0;
+   long long high_water_managers = 0;
+@@ -598,8 +600,33 @@ void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
+   }
+ }
+ 
+-void note_push(PendingState& st, const PendingEntry& e) {
+-  st.bytes += e.bytes;
++// P1T-FIX3, round-3 review finding V3-02: the pending-list byte total is SATURATING. note_push / note_pop run inside the
++// noexcept RetainUntilComplete destructor and the drain loops, so they may neither throw nor drain; an unchecked
++// signed addition here was undefined behaviour for near-limit totals (review probe pending_bytes queue: 4 +
++// 9223372036854775804), and a wrapped negative total could have suppressed the bound drain.
++//  * Push: checked addition; on overflow the total is pinned at INT64_MAX and marked saturated (counted). Every entry's
++//    own bytes is a checked int64 sum >= 0 (aggregate_operand_bytes, before the launch), so only the queue total can
++//    overflow.
++//  * Pop: exact subtraction while not saturated (the total is then the exact sum of the queued entries, so it never
++//    goes below 0); while saturated the total stays pinned at INT64_MAX until the list is empty, where the true total is
++//    0 again. A pinned total over-reports, never under-reports, so the bound comparison (pending_over_bound) is exact
++//    below INT64_MAX and conservative above it: a push that would overflow always drains, as the exact arithmetic would
++//    have (any total above INT64_MAX is far above kPendingMaxBytes).
++// Chosen over drain-before-add because these functions are pure accounting: draining runs producer deleters (Python,
++// possibly re-entering tc_signal) and cannot run in the middle of a push; and a drain cannot guarantee headroom anyway
++// (entries pushed by a re-entrant call during the drain stay queued), so a non-throwing, non-overflowing rule is needed
++// in any case. Saturation is that rule; the drain itself is left to the bound comparison right after the push.
++// Prior art: saturating arithmetic (DSP/SIMD saturated add, e.g. Intel MMX/SSE PADDS, 1997-; ARM QADD) and the checked
++// builtins it is built from (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add); SEI CERT INT32-C. Taken: checked
++// add with a saturated result. Ours: the sticky saturated state that is cleared only when the list empties, so pops
++// never make a saturated total under-report. Unverified here (lead to check): "PADDSW saturating add MMX 1997".
++void note_push(PendingState& st, const PendingEntry& e) noexcept {
++  int64_t sum = 0;
++  if (!st.bytes_saturated && __builtin_add_overflow(st.bytes, e.bytes, &sum)) {
++    st.bytes_saturated = true;
++    ++st.bytes_saturations;
++  }
++  st.bytes = st.bytes_saturated ? std::numeric_limits<int64_t>::max() : sum;
+   st.managers += static_cast<long long>(e.owners.size());
+   ++st.retained_entries;
+   st.high_water_entries = std::max<long long>(st.high_water_entries, static_cast<long long>(st.q.size()));
+@@ -607,11 +634,28 @@ void note_push(PendingState& st, const PendingEntry& e) {
+   st.high_water_bytes = std::max(st.high_water_bytes, st.bytes);
+ }
+ 
+-void note_pop(PendingState& st, const PendingEntry& e) {
+-  st.bytes -= e.bytes;
++// Called right after the entry was taken off the list.
++void note_pop(PendingState& st, const PendingEntry& e) noexcept {
++  if (st.bytes_saturated) {
++    if (st.q.empty()) {  // the true total is 0 again
++      st.bytes = 0;
++      st.bytes_saturated = false;
++    }
++  } else {
++    int64_t rest = 0;
++    // Exact while not saturated (e.bytes <= st.bytes); the guard only keeps a corrupted total from wrapping.
++    st.bytes = (__builtin_sub_overflow(st.bytes, e.bytes, &rest) || rest < 0) ? 0 : rest;
++  }
+   st.managers -= static_cast<long long>(e.owners.size());
+ }
+ 
++// V3-02: the bound comparison after a push. Exact below INT64_MAX (a total of exactly kPendingMaxBytes is within the
++// bound, one byte more is over it, as before); a saturated total is over it.
++bool pending_over_bound(const PendingState& st) noexcept {
++  return static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes_saturated ||
++         st.bytes > tuning::kPendingMaxBytes;
++}
++
+ // Runs the entry's deleters (they may run Python and re-enter tc_signal; the entry is already off the list). A throwing
+ // deleter is contained in ManagedOwner::reset (N4) and the loop goes on with the remaining managers.
+ void release_entry(PendingState& st, PendingEntry& e) noexcept {
+@@ -713,8 +757,24 @@ cudaEvent_t acquire_event(int device) {
+ 
+ void init_pending_state() { (void)pending(); }
+ 
++int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops) {
++  // V3-02 (see dlpack_operand.h): checked sum of the present operands' fp32 bytes; ValueError on overflow (ck_add).
++  // Prior art: the checked builtins (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add), as in checked_math.h. Ours:
++  // checking the per-call aggregate before the first launch, where a refusal can still raise.
++  int64_t total = 0;
++  for (const Operand* op : ops) {
++    if (op == nullptr || !op->present()) continue;
++    const int64_t b = op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
++    total = ck_add(total, b, "the aggregate fp32 byte count of this call's operands (their sum)");
++  }
++  return total;
++}
++
+ RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Operand*> ops)
+     : device_(device), ops_(ops) {
++  // V3-02: refuse a call whose operands' aggregate byte count overflows int64, FIRST: before any allocation, event or
++  // launch (ValueError; the operands are then released at once by their own destructors, nothing was queued).
++  bytes_ = aggregate_operand_bytes(ops_);
+   // N3: every allocation the release needs happens here (may throw: then nothing has been launched and the operands
+   // are released at once by their own destructors); the destructor below allocates only for the pending-list push.
+   if (test_hooks::take(test_hooks::kAllocOwnerReserve)) throw std::bad_alloc();
+@@ -726,10 +786,10 @@ RetainUntilComplete::~RetainUntilComplete() {
+   PendingState& st = pending();
+   PendingEntry e;
+   e.device = device_;
++  e.bytes = bytes_;  // V3-02: summed with checked addition in the constructor; no addition here
+   for (Operand* op : ops_) {
+     if (op == nullptr || !op->present()) continue;
+-    e.bytes += op->numel() * static_cast<int64_t>(sizeof(float));  // checked at construction (F03)
+-    owners_.push_back(op->take_owner());                           // reserved: no allocation
++    owners_.push_back(op->take_owner());  // reserved: no allocation
+   }
+   e.owners = std::move(owners_);
+   cudaError_t r = cudaSuccess;
+@@ -770,7 +830,7 @@ RetainUntilComplete::~RetainUntilComplete() {
+     }
+     return;
+   }
+-  if (static_cast<long long>(st.q.size()) > tuning::kPendingMaxEntries || st.bytes > tuning::kPendingMaxBytes) {
++  if (pending_over_bound(st)) {  // V3-02: overflow-safe (saturating total), exact at the boundary
+     ++st.bound_drains;
+     const SyncReport rep = sync_and_release_all_impl();
+     if (rep.failed()) note_release_failure(st, rep.first_device(), rep.first_error(), rep.leaked_managers);  // N1
+@@ -858,6 +918,8 @@ py::dict pending_stats(bool reset_high_water) {
+   d["deleter_exceptions"] = deleter_exceptions();           // N4
+   d["push_alloc_failures"] = st.push_alloc_failures;        // N3
+   d["event_recycle_failures"] = st.event_recycle_failures;  // N3
++  d["bytes_saturated"] = st.bytes_saturated;                // P1T-FIX3 V3-02
++  d["bytes_saturations"] = st.bytes_saturations;            // P1T-FIX3 V3-02
+   d["release_errors"] = st.release_errors;                  // N1
+   d["unreported_release_errors"] = st.unreported_count;     // N1
+   if (reset_high_water) {
+diff --git a/tc_signal/src/dlpack_operand.h b/tc_signal/src/dlpack_operand.h
+index dacf52c..c699b7a 100644
+--- a/tc_signal/src/dlpack_operand.h
++++ b/tc_signal/src/dlpack_operand.h
+@@ -136,6 +136,16 @@ class Operand {
+ //
+ // Construct it AFTER every validation and right BEFORE the first launch: the constructor may still throw (event
+ // acquisition), and then nothing has been queued. Its destructor never throws.
++//
++// P1T-FIX3, round-3 review finding V3-02 (aggregate byte accounting). Every operand's own byte count is checked at
++// validation (F03), but their SUM was formed later, unchecked, inside this noexcept destructor (signed overflow for
++// two disjoint 2^61-1 element fp32 descriptors), and added unchecked to the pending-list total. Now:
++//  * the constructor's FIRST step (before any allocation, event or launch, in every entry point, since each one
++//    constructs a RetainUntilComplete right before its first launch) sums the present operands' fp32 byte counts with
++//    checked addition and refuses the call with ValueError on overflow (aggregate_operand_bytes); the destructor reuses
++//    that checked sum and performs no addition of its own;
++//  * the pending-list total is SATURATING (note_push / note_pop in dlpack_operand.cpp), never throwing, and the bound
++//    comparison stays exact below INT64_MAX and conservative (over the bound) once saturated.
+ class RetainUntilComplete {
+  public:
+   RetainUntilComplete(int device, std::initializer_list<Operand*> ops);
+@@ -146,10 +156,16 @@ class RetainUntilComplete {
+  private:
+   int device_;
+   std::vector<Operand*> ops_;
++  int64_t bytes_ = 0;                 // V3-02: the present operands' fp32 bytes, summed with checked addition
+   std::vector<ManagedOwner> owners_;  // reserved in the constructor, so the destructor never allocates for it
+   CUevent_st* event_ = nullptr;       // a cudaEvent_t from the per-device pool, acquired in the constructor
+ };
+ 
++// V3-02: the fp32 byte total of the present operands, summed with checked addition; ValueError ("... overflows 64-bit
++// arithmetic; refused") when it exceeds INT64_MAX. Each operand's own count was checked at validation (F03). Called by
++// the RetainUntilComplete constructor before anything is acquired or launched.
++int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops);
++
+ // Releases every completed pending entry (FIFO, stops at the first incomplete one). Called first thing by every
+ // _tc_signal entry point that takes operands. GIL held.
+ void drain_completed() noexcept;
+@@ -161,7 +177,9 @@ void drain_completed() noexcept;
+ // the message propagates as MemoryError.
+ void synchronize_and_release_all();
+ // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
+-// push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors).
++// push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
++// (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that
++// happened).
+ py::dict pending_stats(bool reset_high_water);
+ // P1T-FIX2 (N3): constructs the pending-list state (it allocates) at module import, so no noexcept release path is the
+ // first to touch it.
+diff --git a/tc_signal/tests/fix3_native_harness.cpp b/tc_signal/tests/fix3_native_harness.cpp
+new file mode 100644
+index 0000000..f62f23d
+--- /dev/null
++++ b/tc_signal/tests/fix3_native_harness.cpp
+@@ -0,0 +1,319 @@
++// P1T-FIX3 native harness for round-3 review finding V3-02 (aggregate deferred-release byte accounting). Compiled and
++// run by tests/test_fix3_findings.py (it is not part of the package). It compiles the REAL tc_signal/src/dlpack_operand.cpp
++// into this executable, as the round-3 reviewer's probe artifacts/p1t_rev3/probes/pending_bytes.cpp does, with UBSan
++// (-fsanitize=undefined -fno-sanitize-recover=undefined): any signed overflow aborts the run with a diagnostic.
++//
++// Modes:
++//   accounting  No CUDA call. The saturating pending-list total (note_push / note_pop) and the bound comparison
++//               (pending_over_bound) on a local PendingState whose queue holds real PendingEntry objects:
++//                 * the reviewer's queue case (4 + 9223372036854775804) saturates at INT64_MAX, is over the bound,
++//                   stays pinned while entries remain, and returns to an exact 0 when the list empties;
++//                 * an exact sum of exactly INT64_MAX is not saturated; one more byte saturates;
++//                 * the bound at the boundary: a total of exactly kPendingMaxBytes is within it, 4 more bytes are
++//                   over it (fp32 granularity), and popping back returns within it; kPendingMaxEntries entries are
++//                   within the entry bound, one more is over it;
++//                 * aggregate_operand_bytes on real Operands (synthetic descriptors, never dereferenced): the reviewer's
++//                   two disjoint (2^61-1,) fp32 operands are REFUSED (ValueError, "overflows"), as are three (2^60,)
++//                   ones; two (2^60-1,) ones sum exactly to 2^63-8.
++//   dtor        Real CUDA events and syncs, NO kernel launch (the operands' fake addresses are never dereferenced):
++//               the real RetainUntilComplete constructor and destructor near INT64_MAX:
++//                 * D1: a queued 8-byte entry plus a (2^60-1, 2^60-1) call (2^63-8 bytes, accepted): the push would
++//                   overflow -> saturated -> bound drain -> every manager released exactly once, the total back to an
++//                   exact 0 and unsaturated;
++//                 * D2: the reviewer's (2^61-1, 2^61-1) pair is refused by the CONSTRUCTOR (ValueError) before anything
++//                   is queued; both managers are released at once by the operands' own destructors;
++//                 * D3: entries totalling exactly kPendingMaxBytes stay queued (no drain); the next 4-byte call drains.
++// Output: one JSON object per line; the last line is {"summary": ...}; exit 0 iff every check held.
++//
++// Prior art: the round-3 reviewer's pending_bytes.cpp (actual Operand validation and note_push under UBSan; its two
++// boundary cases are reused here); saturating arithmetic (DSP/SIMD saturated add) and the checked builtins (GCC 5, 2015;
++// C23 ckd_add); UBSan (GCC/Clang, 2013-). Ours: the pop/empty sequence, the boundary cases and the real-destructor runs.
++#include <pybind11/embed.h>
++
++#include <cuda_runtime.h>
++
++#include <cstdint>
++#include <cstdio>
++#include <cstring>
++#include <limits>
++#include <string>
++#include <vector>
++
++// The implementation under test (resolved through -I<tree>/tc_signal/src).
++#include "dlpack_operand.cpp"
++
++namespace {
++namespace py = pybind11;
++
++int g_cases = 0;
++int g_failures = 0;
++
++void check(const char* name, bool ok, const std::string& detail = "") {
++  ++g_cases;
++  if (!ok) ++g_failures;
++  std::printf("{\"case\": \"%s\", \"ok\": %s, \"detail\": \"%s\"}\n", name, ok ? "true" : "false", detail.c_str());
++  std::fflush(stdout);
++}
++
++constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
++
++// ------------------------------------------------------------------------------------------------ accounting
++void push(tcs::PendingState& st, int64_t bytes) {
++  tcs::PendingEntry e;
++  e.bytes = bytes;
++  st.q.push_back(std::move(e));
++  tcs::note_push(st, st.q.back());  // as ~RetainUntilComplete does
++}
++
++void pop(tcs::PendingState& st) {
++  tcs::PendingEntry e = std::move(st.q.front());
++  st.q.pop_front();
++  tcs::note_pop(st, e);  // as drain_completed / sync_and_release_all_impl do
++}
++
++std::string state(const tcs::PendingState& st) {
++  return "bytes=" + std::to_string(st.bytes) + " saturated=" + (st.bytes_saturated ? "1" : "0") +
++         " entries=" + std::to_string(st.q.size()) + " over=" + (tcs::pending_over_bound(st) ? "1" : "0");
++}
++
++// Synthetic legacy managers (no deleter: nothing to release) over fake, never-dereferenced addresses.
++struct Desc {
++  DLManagedTensor m{};
++  int64_t shape = 0;
++};
++
++py::object capsule(Desc& d, int64_t n, uintptr_t addr) {
++  d.shape = n;
++  d.m.dl_tensor.data = reinterpret_cast<void*>(addr);
++  d.m.dl_tensor.device = {kDLCUDA, 0};
++  d.m.dl_tensor.ndim = 1;
++  d.m.dl_tensor.dtype = {kDLFloat, 32, 1};
++  d.m.dl_tensor.shape = &d.shape;
++  d.m.dl_tensor.strides = nullptr;
++  d.m.dl_tensor.byte_offset = 0;
++  PyObject* c = PyCapsule_New(&d.m, "dltensor", nullptr);
++  if (c == nullptr) throw py::error_already_set();
++  return py::reinterpret_steal<py::object>(c);
++}
++
++int accounting() {
++  {  // the reviewer's queue case, inside a real queue
++    tcs::PendingState st;
++    push(st, 4);
++    push(st, kMax - 3);  // 4 + 9223372036854775804 overflows int64
++    check("saturates_on_overflowing_push", st.bytes == kMax && st.bytes_saturated && st.bytes_saturations == 1,
++          state(st));
++    check("saturated_total_is_over_the_bound", tcs::pending_over_bound(st), state(st));
++    push(st, kMax);  // further pushes while saturated stay pinned, never overflow
++    check("pushes_while_saturated_stay_pinned", st.bytes == kMax && st.bytes_saturations == 1, state(st));
++    pop(st);
++    check("pop_keeps_saturated_total_pinned_while_entries_remain", st.bytes == kMax && st.bytes_saturated,
++          state(st));
++    pop(st);
++    pop(st);
++    check("empty_list_resets_to_exact_zero", st.bytes == 0 && !st.bytes_saturated && !tcs::pending_over_bound(st),
++          state(st));
++    push(st, 12);
++    check("exact_again_after_reset", st.bytes == 12 && !st.bytes_saturated, state(st));
++  }
++  {  // exact up to INT64_MAX itself; one more byte saturates
++    tcs::PendingState st;
++    push(st, kMax - 10);
++    push(st, 10);
++    check("exact_sum_of_int64_max_is_not_saturated", st.bytes == kMax && !st.bytes_saturated, state(st));
++    pop(st);
++    check("exact_pop_from_int64_max", st.bytes == 10 && !st.bytes_saturated, state(st));
++    push(st, kMax - 10);
++    push(st, 1);
++    check("one_byte_past_int64_max_saturates", st.bytes == kMax && st.bytes_saturated, state(st));
++  }
++  {  // the byte bound at the boundary (fp32 granularity: 4 bytes)
++    tcs::PendingState st;
++    push(st, tcs::tuning::kPendingMaxBytes - 4);
++    push(st, 4);
++    check("total_equal_to_the_byte_bound_is_within_it", st.bytes == tcs::tuning::kPendingMaxBytes &&
++                                                            !tcs::pending_over_bound(st), state(st));
++    push(st, 4);
++    check("four_bytes_over_the_byte_bound_is_over_it", tcs::pending_over_bound(st), state(st));
++    tcs::PendingEntry e = std::move(st.q.back());
++    st.q.pop_back();
++    tcs::note_pop(st, e);
++    check("back_within_the_byte_bound_after_pop", !tcs::pending_over_bound(st), state(st));
++  }
++  {  // the entry bound at the boundary
++    tcs::PendingState st;
++    for (long long i = 0; i < tcs::tuning::kPendingMaxEntries; ++i) push(st, 0);
++    check("entries_equal_to_the_entry_bound_are_within_it", !tcs::pending_over_bound(st), state(st));
++    push(st, 0);
++    check("one_entry_over_the_entry_bound_is_over_it", tcs::pending_over_bound(st), state(st));
++  }
++  {  // the per-call aggregate (pre-launch check) on real Operands
++    const int64_t n61 = (int64_t{1} << 61) - 1, n60 = int64_t{1} << 60;
++    Desc dx, dy, dz;
++    tcs::Operand X(capsule(dx, n61, 4), "x", 1, false), Y(capsule(dy, n61, uintptr_t{1} << 63), "out", 1, true);
++    tcs::expect_disjoint(Y, X);  // individually valid AND disjoint, as the reviewer staged them
++    std::string msg;
++    bool refused = false;
++    try {
++      tcs::aggregate_operand_bytes({&X, &Y});
++    } catch (const py::value_error& e) {
++      refused = true;
++      msg = e.what();
++    }
++    check("aggregate_of_two_2p61m1_operands_refused_as_overflow",
++          refused && msg.find("aggregate") != std::string::npos && msg.find("overflows") != std::string::npos, msg);
++    Desc a, b, c;
++    tcs::Operand A(capsule(a, n60, 0x1000), "x", 1, false), B(capsule(b, n60, 0x1000 + (uintptr_t{1} << 62)), "y", 1,
++                                                                false),
++        C(capsule(c, n60, 0x1000 + (uintptr_t{1} << 63)), "out", 1, true);
++    refused = false;
++    try {
++      tcs::aggregate_operand_bytes({&A, &B, &C});
++    } catch (const py::value_error&) {
++      refused = true;
++    }
++    check("aggregate_of_three_2p60_operands_refused", refused);
++    Desc p, q;
++    tcs::Operand P(capsule(p, n60 - 1, 0x1000), "x", 1, false), Q(capsule(q, n60 - 1, 0x1000 + (uintptr_t{1} << 62)),
++                                                                  "out", 1, true);
++    int64_t sum = -1;
++    try {
++      sum = tcs::aggregate_operand_bytes({&P, &Q, nullptr});
++    } catch (...) {
++    }
++    check("aggregate_that_fits_is_exact", sum == kMax - 7, std::to_string(sum));  // 2^63 - 8
++  }
++  return 0;
++}
++
++// ------------------------------------------------------------------------------------------------ dtor (real CUDA)
++int g_calls[64];
++extern "C" void count_deleter(DLManagedTensor* m) { g_calls[reinterpret_cast<intptr_t>(m->manager_ctx)] += 1; }
++
++struct Managed {
++  DLManagedTensor m{};
++  int64_t shape = 0;
++};
++Managed g_mgr[64];
++int g_next = 0;
++
++py::object counted_capsule(int64_t n, uintptr_t addr, int& idx) {
++  idx = g_next++;
++  Managed& d = g_mgr[idx];
++  d = Managed{};
++  d.shape = n;
++  d.m.manager_ctx = reinterpret_cast<void*>(static_cast<intptr_t>(idx));
++  d.m.deleter = count_deleter;
++  d.m.dl_tensor.data = reinterpret_cast<void*>(addr);
++  d.m.dl_tensor.device = {kDLCUDA, 0};
++  d.m.dl_tensor.ndim = 1;
++  d.m.dl_tensor.dtype = {kDLFloat, 32, 1};
++  d.m.dl_tensor.shape = &d.shape;
++  PyObject* c = PyCapsule_New(&d.m, "dltensor", nullptr);
++  if (c == nullptr) throw py::error_already_set();
++  return py::reinterpret_steal<py::object>(c);
++}
++
++long long stat(const char* k) { return tcs::pending_stats(false)[k].cast<long long>(); }
++bool flag(const char* k) { return tcs::pending_stats(false)[k].cast<bool>(); }
++
++// One "call": consume operands of the given element counts at adjacent, disjoint fake addresses (from 4 up, as the
++// reviewer staged them, so two (2^61-1,) operands end at 2^64-4 without wrapping) and run the real retainer
++// (constructor + destructor), launching nothing. Returns "" or the constructor's ValueError text.
++std::string call(const std::vector<int64_t>& numels, std::vector<int>& idx) {
++  std::vector<py::object> caps;
++  uintptr_t addr = 4;
++  for (int64_t n : numels) {
++    int i = 0;
++    caps.push_back(counted_capsule(n, addr, i));
++    idx.push_back(i);
++    addr += static_cast<uintptr_t>(n) * sizeof(float);
++  }
++  std::vector<tcs::Operand> ops;
++  ops.reserve(caps.size());
++  for (size_t k = 0; k < caps.size(); ++k) ops.emplace_back(caps[k], k + 1 == caps.size() ? "out" : "x", 1, k + 1 == caps.size());
++  try {
++    if (ops.size() == 1) {
++      tcs::RetainUntilComplete keep(0, {&ops[0]});
++    } else {
++      tcs::RetainUntilComplete keep(0, {&ops[0], &ops[1]});
++    }
++  } catch (const py::value_error& e) {
++    return e.what();
++  }
++  return "";
++}
++
++bool all_once(const std::vector<int>& idx) {
++  for (int i : idx)
++    if (g_calls[i] != 1) return false;
++  return true;
++}
++bool all_zero(const std::vector<int>& idx) {
++  for (int i : idx)
++    if (g_calls[i] != 0) return false;
++  return true;
++}
++
++int dtor() {
++  int dev = -1;
++  if (cudaGetDevice(&dev) != cudaSuccess) {
++    std::printf("{\"error\": \"no CUDA device\"}\n");
++    return 2;
++  }
++  tcs::init_pending_state();
++  tcs::synchronize_and_release_all();
++  const int64_t n60m1 = (int64_t{1} << 60) - 1, n61m1 = (int64_t{1} << 61) - 1;
++  {  // D1
++    std::vector<int> small, huge;
++    const long long drains0 = stat("bound_drains"), sat0 = stat("bytes_saturations");
++    const std::string e1 = call({1, 1}, small);
++    const bool queued = stat("entries") == 1 && stat("bytes") == 8 && all_zero(small);
++    const std::string e2 = call({n60m1, n60m1}, huge);  // 8 + (2^63 - 8) would overflow the total
++    check("D1_small_entry_queued", e1.empty() && queued, e1);
++    check("D1_huge_call_accepted_by_the_constructor", e2.empty(), e2);
++    check("D1_saturated_push_drained_the_list", stat("bound_drains") == drains0 + 1 &&
++                                                    stat("bytes_saturations") == sat0 + 1 && stat("entries") == 0,
++          "drains=" + std::to_string(stat("bound_drains") - drains0));
++    check("D1_total_back_to_exact_zero_unsaturated", stat("bytes") == 0 && !flag("bytes_saturated"));
++    check("D1_every_manager_released_exactly_once", all_once(small) && all_once(huge));
++  }
++  {  // D2
++    std::vector<int> pair;
++    const long long retained0 = stat("retained_entries");
++    const std::string e = call({n61m1, n61m1}, pair);
++    check("D2_constructor_refuses_the_reviewer_pair",
++          e.find("aggregate") != std::string::npos && e.find("overflows") != std::string::npos, e);
++    check("D2_nothing_queued", stat("retained_entries") == retained0 && stat("entries") == 0);
++    check("D2_both_managers_released_at_once", all_once(pair));
++  }
++  {  // D3
++    std::vector<int> a, b, c;
++    tcs::synchronize_and_release_all();
++    const long long drains0 = stat("bound_drains");
++    const int64_t first = tcs::tuning::kPendingMaxBytes / 4 - 2;  // + 1 element = kPendingMaxBytes - 4 bytes
++    call({first, 1}, a);
++    call({1}, b);  // total == kPendingMaxBytes exactly
++    check("D3_total_equal_to_the_bound_stays_queued", stat("bytes") == tcs::tuning::kPendingMaxBytes &&
++                                                          stat("bound_drains") == drains0 && stat("entries") == 2,
++          "bytes=" + std::to_string(stat("bytes")));
++    call({1}, c);  // 4 bytes over
++    check("D3_four_bytes_over_the_bound_drains", stat("bound_drains") == drains0 + 1 && stat("entries") == 0 &&
++                                                     stat("bytes") == 0);
++    check("D3_every_manager_released_exactly_once", all_once(a) && all_once(b) && all_once(c));
++  }
++  tcs::synchronize_and_release_all();
++  return 0;
++}
++}  // namespace
++
++int main(int argc, char** argv) {
++  py::scoped_interpreter python{};
++  if (argc != 2) return 2;
++  int rc = 2;
++  if (std::strcmp(argv[1], "accounting") == 0) rc = accounting();
++  if (std::strcmp(argv[1], "dtor") == 0) rc = dtor();
++  std::printf("{\"summary\": {\"mode\": \"%s\", \"cases\": %d, \"failures\": %d}}\n", argv[1], g_cases, g_failures);
++  std::fflush(stdout);
++  return rc != 0 ? rc : (g_failures == 0 && g_cases > 0 ? 0 : 1);
++}
+diff --git a/tc_signal/tests/test_fix3_findings.py b/tc_signal/tests/test_fix3_findings.py
+new file mode 100644
+index 0000000..3ffaccf
+--- /dev/null
++++ b/tc_signal/tests/test_fix3_findings.py
+@@ -0,0 +1,167 @@
++"""P1T-FIX3 regression tests for round-3 review finding V3-02 in tc_signal (order P1T_FIX3_EXIT_QUIESCENCE.md).
++
++V3-02 (MINOR): individually valid operand byte counts were summed unchecked (per call, inside the noexcept
++RetainUntilComplete destructor) and added unchecked to the pending-list total (note_push), so near-limit metadata was
++signed-overflow UB and a wrapped negative total could have suppressed the bound drain. What these tests pin:
++  * the per-call aggregate is checked BEFORE the first launch, through real entry points: the reviewer's two disjoint
++    fp32 descriptors of shape (2**61 - 1,) (rint) and three disjoint (2**60,) ones (fp32_divide_probe) are refused
++    with ValueError naming the aggregate overflow, both operands' deleters run exactly once at once, nothing is queued;
++    with no visible GPU (no CUDA call can precede the refusal) and with the GPU (real condition; the module still works
++    afterwards). Registered mutant (b) = the aggregate pre-launch check removed: these tests then fail (no ValueError).
++  * the native UBSan harness (fix3_native_harness.cpp, compiled here with the REAL dlpack_operand.cpp): the saturating
++    pending-list total, the bound comparison at the boundary (exactly kPendingMaxBytes stays, 4 more bytes drain; the
++    entry bound likewise), and the real retainer constructor/destructor near INT64_MAX with real CUDA events and no
++    kernel launch.
++
++Skip guard (as test_fix2_findings.py): only when torch is not importable or there is no CUDA device. A missing compiler
++or missing pybind11 headers for the native build FAILS (it is not a skip).
++
++Prior art: the round-3 reviewer's probe artifacts/p1t_rev3/probes/pending_bytes.cpp (its boundary operands are reused);
++the checked builtins (GCC 5, 2015; C23 ckd_add) and saturating arithmetic; UBSan (2013-); DeMillo, Lipton & Sayward
++(1978) mutation testing for the registered mutant. Ours: the entry-point staging, the pop/empty and boundary sequences.
++"""
++import glob
++import json
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++import pytest
++
++try:
++    import torch
++except ImportError as e:
++    pytest.skip(f'torch is not importable: {e}', allow_module_level=True)
++if not torch.cuda.is_available():
++    pytest.skip('no CUDA device', allow_module_level=True)
++
++TESTS_DIR = Path(__file__).resolve().parent
++SRC_DIR = TESTS_DIR.parent / 'src'
++INCLUDE_DIR = TESTS_DIR.parent / 'include'
++SUBPROC_TIMEOUT = 120
++PYBIND11_INCLUDE = os.environ.get('TC_SIGNAL_PYBIND11_INCLUDE',
++                                  '/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src/include')
++
++
++def _cuda_home():
++    home = os.environ.get('CUDA_HOME')
++    if not home:
++        cands = sorted(glob.glob('/usr/local/cuda-*/'), key=lambda p: [int(x) if x.isdigit() else x for x in
++                                                                      p.rstrip('/').split('-')[-1].split('.')])
++        home = cands[-1].rstrip('/') if cands else '/usr/local/cuda'
++    return home
++
++
++def _env(**extra):
++    env = os.environ.copy()
++    env['PYTHONDONTWRITEBYTECODE'] = '1'
++    env.update(extra)
++    return env
++
++
++# ================================================================================================== pre-launch check
++# Torch-free (so it also runs with no visible GPU): legacy capsules over FAKE addresses (never dereferenced when the
++# check holds) whose deleter records each call.
++_PRELAUNCH = r'''
++import ctypes, json, sys
++sys.path.insert(0, TESTS_DIR)
++import tcs_producer as P
++import tc_signal as ts
++from tc_signal import _tc_signal as _C
++new = ctypes.pythonapi['PyCapsule_New']
++new.restype, new.argtypes = ctypes.py_object, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
++calls, KEEP = [], []
++@P.DELETER
++def deleter(addr):
++    calls.append(addr)
++def cap(n, data):
++    sh = (ctypes.c_int64 * 1)(n)
++    m = P.DLManagedTensor()
++    t = m.dl_tensor
++    t.data, t.device, t.ndim, t.dtype = data, P.DLDevice(2, 0), 1, P.DLDataType(2, 32, 1)
++    t.shape, t.strides, t.byte_offset = sh, ctypes.POINTER(ctypes.c_int64)(), 0
++    m.manager_ctx, m.deleter = None, deleter
++    KEEP.append((sh, m))
++    return new(ctypes.addressof(m), b'dltensor', None)
++op, gpu = sys.argv[1], sys.argv[2] == 'gpu'
++s0 = dict(_C.pending_stats())
++res = {'op': op}
++try:
++    if op == 'rint':     # the reviewer's pair: (2**61-1,) at 4 and at 2**63; each 2**63-4 bytes, disjoint
++        n = (1 << 61) - 1
++        _C.rint_run(cap(n, 4), cap(n, 1 << 63))
++    else:                # three disjoint (2**60,) operands, 2**62 bytes each: x + y alone already overflows
++        n = 1 << 60
++        _C.fp32_divide_probe(cap(n, 0x1000), cap(n, 0x1000 + (1 << 62)), cap(n, 0x1000 + (1 << 63)))
++    res['outcome'] = 'returned'
++except ValueError as e:
++    res['outcome'], res['msg'] = 'ValueError', str(e)
++except Exception as e:  # noqa: BLE001
++    res['outcome'], res['msg'] = type(e).__name__, str(e)
++res['deleter_calls'], res['distinct'] = len(calls), len(set(calls))
++s1 = dict(_C.pending_stats())
++res['delta_retained'] = s1['retained_entries'] - s0['retained_entries']
++res['entries'], res['bytes'], res['saturated'] = s1['entries'], s1['bytes'], s1['bytes_saturated']
++if gpu:                  # the module still works after the refusal (real memory, real launch)
++    import torch
++    x = torch.tensor([1.4, 2.6, -0.5], device='cuda')
++    y = torch.empty(3, device='cuda')
++    ts.rint(x, out=y)
++    ts.synchronize()
++    res['after_ok'] = y.cpu().tolist() == [1.0, 3.0, -0.0]
++print('RESULT ' + json.dumps(res), flush=True)
++'''.replace('TESTS_DIR', repr(str(TESTS_DIR)))
++
++
++@pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
++@pytest.mark.parametrize('op', ['rint', 'divide'])
++def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
++    env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
++    r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
++                       timeout=SUBPROC_TIMEOUT, env=env)
++    lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
++    assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
++    res = json.loads(lines[-1][len('RESULT '):])
++    assert res['outcome'] == 'ValueError', res                                  # mutant (b): no ValueError
++    assert 'aggregate fp32 byte count' in res['msg'] and 'overflows' in res['msg'], res
++    n_ops = 2 if op == 'rint' else 3
++    assert res['deleter_calls'] == n_ops and res['distinct'] == n_ops, res      # each released once, at once
++    assert res['delta_retained'] == 0 and res['entries'] == 0 and res['bytes'] == 0, res   # nothing queued
++    assert res['saturated'] is False, res
++    if cond == 'gpu':
++        assert res['after_ok'] is True, res
++    assert 'runtime error' not in r.stderr, r.stderr
++
++
++# ================================================================================================== native harness
++@pytest.fixture(scope='module')
++def fix3_harness(tmp_path_factory):
++    d = tmp_path_factory.mktemp('fix3_harness')
++    exe = d / 'fix3_native_harness'
++    cuda = _cuda_home()
++    flags = subprocess.run(['python3-config', '--includes', '--embed', '--ldflags'], capture_output=True, text=True,
++                           check=True).stdout.split()
++    cmd = ['g++', '-std=c++17', '-O1', '-g', '-fsanitize=undefined', '-fno-sanitize-recover=undefined',
++           str(TESTS_DIR / 'fix3_native_harness.cpp'), f'-I{SRC_DIR}', f'-I{INCLUDE_DIR}', f'-I{PYBIND11_INCLUDE}',
++           f'-I{cuda}/include', *flags, f'-L{cuda}/lib64', f'-Wl,-rpath,{cuda}/lib64', '-lcudart', '-o', str(exe)]
++    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
++    assert r.returncode == 0, f'native harness build failed:\n{" ".join(cmd)}\n{r.stderr[-4000:]}'
++    return str(exe)
++
++
++def _harness(exe, mode):
++    r = subprocess.run([exe, mode], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT, env=_env())
++    lines = [json.loads(ln) for ln in r.stdout.splitlines() if ln.startswith('{')]
++    summary = lines[-1].get('summary') if lines else None
++    bad = [ln for ln in lines if ln.get('ok') is False]
++    return r, summary, bad
++
++
++@pytest.mark.parametrize('mode', ['accounting', 'dtor'])
++def test_fix3_v302_native_byte_accounting_overflow_safe(fix3_harness, mode):
++    r, summary, bad = _harness(fix3_harness, mode)
++    assert 'runtime error' not in r.stderr, r.stderr                            # UBSan (and -fno-sanitize-recover)
++    assert r.returncode == 0 and summary and summary['failures'] == 0 and not bad, (r.returncode, bad, r.stdout[-3000:],
++                                                                                    r.stderr[-2000:])
++    assert summary['cases'] == (17 if mode == 'accounting' else 11), summary
+diff --git a/tensor_cuda/src/bindings.cpp b/tensor_cuda/src/bindings.cpp
+index 7e848a7..193f854 100644
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -11,6 +11,7 @@
+ #include <cmath>
+ #include <condition_variable>
+ #include <cstdint>
++#include <cstdio>  // P1T-FIX3 V3-01: exit-wait diagnostics written without the GIL
+ #include <limits>
+ #include <memory>
+ #include <mutex>
+@@ -536,8 +537,8 @@ py::tuple tensor_dlpack_device(Tensor& t) {
+ //  * tensor_cuda registers a Python atexit callback (`_dlpack_shutdown_hook` in
+ //    tensor_cuda/__init__.py) that calls dlpack_begin_shutdown: with the GIL
+ //    RELEASED (in-flight releases need it to finish) it sets `closing` under the
+-//    mutex and waits on a condition variable, bounded by a timeout, until
+-//    `in_flight` is 0.
++//    mutex and waits on a condition variable until `in_flight` is 0 (FIX2 bounded
++//    this wait by a timeout; P1T-FIX3 V3-01 below removed the bound).
+ //  * Ordering (verified in CPython v3.12.3 Python/pylifecycle.c, Py_FinalizeEx):
+ //    _PyAtExit_Call (line 1815) runs every atexit callback BEFORE
+ //    _PyInterpreterState_SetFinalizing / _PyRuntimeState_SetFinalizing (1832-1833)
+@@ -548,11 +549,50 @@ py::tuple tensor_dlpack_device(Tensor& t) {
+ //  * Lock order: no thread ever waits for the GIL while holding the mutex (the
+ //    hook drops the mutex before re-taking the GIL; releasers never call Python
+ //    under it), so the protocol cannot deadlock with the GIL.
+-//  * Bounded: if an in-flight deleter does not finish within the timeout
+-//    (tensor_cuda._DLPACK_SHUTDOWN_WAIT_S), the hook returns, reports it, and the
+-//    exit proceeds; that thread may then still be terminated by CPython at
+-//    finalization (honest residual: a deleter that blocks forever cannot be made
+-//    safe from outside).
++//  * (FIX2 had a bound here: after tensor_cuda._DLPACK_SHUTDOWN_WAIT_S the hook
++//    returned with the release still running. Round-3 review V3-01 showed that a
++//    finite 5.5 s deleter then wakes during finalization and aborts the process.
++//    Replaced by P1T-FIX3 below: the wait has no bound.)
++//
++// P1T-FIX3, round-3 review finding V3-01 (MAJOR, exit quiescence). The hook never
++// returns to ordinary finalization while an admitted release is running:
++//  * dlpack_begin_shutdown waits until in_flight == 0, with NO bound. Its argument
++//    (tensor_cuda._DLPACK_SHUTDOWN_WAIT_S) is now only the delay of the first
++//    stderr diagnostic (count still running, seconds waited); later diagnostics
++//    follow a geometric schedule (each one when the time waited has doubled), so
++//    a deleter that hangs for hours logs a few dozen lines at most, and the wait
++//    goes on. Admission stays closed throughout (no new release is admitted).
++//  * GIL: the whole wait, diagnostics included, runs inside gil_scoped_release, so
++//    an admitted deleter that needs the GIL (PyGILState_Ensure, a ctypes or
++//    Python deleter, time.sleep re-taking it) can always finish; the condition
++//    variable wait drops the mutex; each diagnostic is written with the mutex
++//    dropped (a blocked stderr cannot stop a release from leaving); the GIL is
++//    re-taken only after the mutex is released. The lock order of FIX2 holds: no
++//    thread waits for the GIL while holding the mutex.
++//  * Self-exclusion: a thread that runs the hook from inside its own admitted
++//    release (a deleter that calls the exit hook, e.g. atexit._run_exitfuncs())
++//    does not wait for itself: releases on its own stack (thread-local depth)
++//    cannot finish while it waits, and they necessarily finish before that thread
++//    can go on to finalize. Without this, the unbounded wait would self-deadlock.
++//  * Consequence (documented in tensor_cuda._dlpack_shutdown_hook too): a producer
++//    deleter that never returns makes interpreter exit wait forever. That is the
++//    producer's contract violation (a DLPack deleter must return); waiting is the
++//    honest outcome, where FIX2's bound turned it into an abort (rc -6). Ctrl-C
++//    does not interrupt the wait (no bytecode runs on the main thread during it);
++//    SIGTERM / SIGKILL still end the process.
++// Prior art: CPython's threading._shutdown / Py_FinalizeEx wait_for_thread_shutdown,
++// which joins every non-daemon thread with no bound before finalizing (the same
++// "finalization waits for work already started" rule, one level up); RCU-style
++// grace periods (synchronize_rcu waits, unbounded, for every reader that entered
++// before the grace period began, while new readers do not delay it; McKenney &
++// Slingwine 1998) and the Linux kernel's percpu_ref (kill, then wait for zero);
++// rate-limited / backed-off diagnostics such as the kernel's hung-task and RCU
++// stall warnings (repeated at growing intervals while the wait goes on). Taken:
++// the unbounded quiescence wait with admission closed, and periodic stall
++// reports. Ours: its placement at the CPython atexit boundary of the DLPack
++// import release, the doubling report schedule and the same-thread exclusion.
++// Unverified here (lead to check): "synchronize_rcu grace period readers
++// McKenney 1998", "rcu_cpu_stall_timeout repeat interval", "hung_task_warnings".
+ // Prior art: CPython's own atexit-before-finalizing ordering (above) and its
+ // threading._shutdown join of non-daemon threads (pylifecycle.c
+ // wait_for_thread_shutdown), which is the same "stop admitting, wait for the
+@@ -578,6 +618,11 @@ std::atomic<unsigned long long> g_shutdown_in_flight_at_close{0};
+ std::atomic<unsigned long long> g_shutdown_timeouts{0};
+ std::atomic<unsigned long long> g_shutdown_still_in_flight{0};
+ std::atomic<unsigned long long> g_shutdown_wait_us{0};
++std::atomic<unsigned long long> g_shutdown_diagnostics{0};       // V3-01: stderr lines written while waiting
++
++// V3-01: admitted releases on the CURRENT thread's stack (incremented on admission, decremented after leaving). The
++// exit hook does not wait for these: they cannot finish while the hook's thread waits (self-exclusion, see above).
++thread_local long long t_admitted_depth = 0;
+ 
+ struct ImportReleaseLifecycle {
+   std::mutex mu;
+@@ -624,6 +669,7 @@ void import_release_impl(M* m) noexcept {
+     g_import_lock_failures.fetch_add(1);
+   }
+   if (!admitted) return;
++  ++t_admitted_depth;                                // V3-01: this thread now has an admitted release on its stack
+   PyGILState_STATE g = PyGILState_Ensure();
+   try {
+     m->deleter(m);
+@@ -633,13 +679,16 @@ void import_release_impl(M* m) noexcept {
+   }
+   PyGILState_Release(g);
+   // Leave only after PyGILState_Release: the exit hook must not let finalization start while this thread still
+-  // touches the interpreter.
++  // touches the interpreter. notify_all on every leave (not only at zero): the hook may be waiting for a nonzero
++  // count, its own thread's admitted releases (V3-01 self-exclusion).
+   try {
+     std::lock_guard<std::mutex> lk(lc.mu);
+-    if (--lc.in_flight == 0) lc.cv.notify_all();
++    --lc.in_flight;
++    lc.cv.notify_all();
+   } catch (...) {
+     g_import_lock_failures.fetch_add(1);
+   }
++  --t_admitted_depth;
+ }
+ 
+ void import_release_legacy(void* ctx) noexcept {
+@@ -649,36 +698,69 @@ void import_release_versioned(void* ctx) noexcept {
+   import_release_impl(static_cast<DLManagedTensorVersioned*>(ctx));
+ }
+ 
+-// N5: the atexit side (tensor_cuda/__init__.py _dlpack_shutdown_hook). Called with the GIL held by the main thread.
+-py::dict dlpack_begin_shutdown(double timeout_s) {
++// N5 + V3-01: the atexit side (tensor_cuda/__init__.py _dlpack_shutdown_hook). Called with the GIL held by the main
++// thread. Closes admission, then waits until every admitted release of OTHER threads has left (in_flight minus this
++// thread's own depth == 0). There is NO bound: it never returns while one is still running (V3-01). `first_diag_s`
++// (the knob tensor_cuda._DLPACK_SHUTDOWN_WAIT_S) is the time waited before the first stderr diagnostic; each later one
++// is written when the time waited has doubled since the previous one (geometric schedule: k lines take 2^(k-1) times
++// the first delay, so the line rate is bounded and falls as the wait goes on). NaN or negative: diagnose at once.
++// Returns {in_flight_at_close, still_in_flight, timed_out, waited_us, diagnostics, own_thread_in_flight}; `timed_out`
++// now means "the wait outlasted the first-diagnostic delay" (it no longer means the hook gave up), `still_in_flight`
++// (other threads' admitted releases still running at return) is always 0 now, and `own_thread_in_flight` is the
++// calling thread's own admitted releases that it did not wait for (0 at a real interpreter exit).
++py::dict dlpack_begin_shutdown(double first_diag_s) {
+   ImportReleaseLifecycle& lc = release_lifecycle();
+-  if (!(timeout_s >= 0.0)) timeout_s = 0.0;                 // NaN or negative: do not wait
+-  if (timeout_s > 86400.0) timeout_s = 86400.0;             // keep the chrono conversion finite
+-  const auto bound = std::chrono::microseconds(static_cast<long long>(timeout_s * 1e6));
++  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;           // NaN or negative: diagnose at once (the wait is the same)
++  if (first_diag_s > 86400.0) first_diag_s = 86400.0;       // keep the chrono conversion finite
++  const auto first = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
++      std::chrono::duration<double>(first_diag_s));
++  const long long own = t_admitted_depth;                   // this thread's own admitted releases: never waited for
+   long long at_close = 0;
+   long long remaining = 0;
+-  bool timed_out = false;
++  bool overran = false;
++  unsigned long long diagnostics = 0;
+   const auto t0 = std::chrono::steady_clock::now();
+   {
+-    py::gil_scoped_release nogil;                           // in-flight releases need the GIL to finish
++    py::gil_scoped_release nogil;                           // admitted releases need the GIL to finish
+     std::unique_lock<std::mutex> lk(lc.mu);
+-    lc.closing = true;
++    lc.closing = true;                                      // admission closed for good: nothing new can start
+     at_close = lc.in_flight;
+-    if (at_close > 0) timed_out = !lc.cv.wait_for(lk, bound, [&lc] { return lc.in_flight == 0; });
+-    remaining = lc.in_flight;
++    auto next = t0 + first;
++    while (!lc.cv.wait_until(lk, next, [&lc, own] { return lc.in_flight <= own; })) {
++      // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01).
++      overran = true;
++      const long long running = lc.in_flight - own;
++      lk.unlock();                                          // a blocked stderr must not stop a release from leaving
++      const auto now = std::chrono::steady_clock::now();
++      std::fprintf(stderr,
++                   "tensor_cuda: %lld DLPack release(s) admitted before exit still running after %.1f s; interpreter "
++                   "exit waits for them (no new release is admitted)\n",
++                   running, std::chrono::duration<double>(now - t0).count());
++      std::fflush(stderr);
++      ++diagnostics;
++      // Next line when the time waited has doubled (at least one clock tick later: no busy loop at a zero delay).
++      const auto waited = now - t0;
++      const auto tick = std::chrono::steady_clock::duration(1);
++      next = now + (waited > tick ? waited : tick);
++      lk.lock();
++    }
++    remaining = lc.in_flight - own;
+   }  // lk is released before nogil re-takes the GIL
+   const long long waited_us =
+       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+   g_shutdown_calls.fetch_add(1);
+   g_shutdown_in_flight_at_close.fetch_add(static_cast<unsigned long long>(at_close));
+-  if (timed_out) g_shutdown_timeouts.fetch_add(1);
++  if (overran) g_shutdown_timeouts.fetch_add(1);
+   g_shutdown_still_in_flight.store(static_cast<unsigned long long>(remaining));
+   g_shutdown_wait_us.fetch_add(static_cast<unsigned long long>(waited_us));
++  g_shutdown_diagnostics.fetch_add(diagnostics);
+   py::dict d;
+   d["in_flight_at_close"] = at_close;
+   d["still_in_flight"] = remaining;
+-  d["timed_out"] = timed_out;
++  d["timed_out"] = overran;
+   d["waited_us"] = waited_us;
++  d["diagnostics"] = diagnostics;
++  d["own_thread_in_flight"] = own;
+   return d;
+ }
+ void import_release_noop(void*) {}
+@@ -1693,16 +1775,22 @@ PYBIND11_MODULE(_tensor_cuda, m) {
+     d["shutdown_timeouts"] = g_shutdown_timeouts.load();
+     d["shutdown_still_in_flight"] = g_shutdown_still_in_flight.load();
+     d["shutdown_wait_us"] = g_shutdown_wait_us.load();
++    d["shutdown_diagnostics"] = g_shutdown_diagnostics.load();  // P1T-FIX3 (V3-01)
+     return d;
+   }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
+      "after a failed device drain (F05); P1T-FIX2: deleter exceptions contained (N4), leaks after the exit hook "
+-     "closed, the in-flight count and the exit hook's wait (N5).");
++     "closed, the in-flight count and the exit hook's wait (N5); P1T-FIX3: stderr diagnostics written while the exit "
++     "hook waited (V3-01; shutdown_timeouts now counts waits that outlasted the first-diagnostic delay).");
+   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
+   (void)release_lifecycle();
+-  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("timeout_s"),
+-        "P1T-FIX2 (N5), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack import releases (later "
+-        "ones leak, counted) and wait, GIL released, up to timeout_s for the in-flight ones to finish. Returns "
+-        "{in_flight_at_close, still_in_flight, timed_out, waited_us}.");
++  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("first_diag_s"),
++        "P1T-FIX2 (N5) / P1T-FIX3 (V3-01), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack "
++        "import releases (later ones leak, counted) and wait, GIL released, with NO bound until every admitted one has "
++        "finished (never returns while one is running). After first_diag_s seconds it writes a stderr line (count "
++        "running, seconds waited), then another each time the time waited doubles. A producer deleter that never "
++        "returns therefore makes interpreter exit wait (the producer's contract violation; the honest outcome, where a "
++        "bounded return let finalization abort the process). Returns {in_flight_at_close, still_in_flight, timed_out, "
++        "waited_us, diagnostics, own_thread_in_flight}.");
+   m.def("empty_cache", &empty_cache);
+   m.def("set_alloc_pooling", &set_alloc_pooling);
+ }
+diff --git a/tensor_cuda/tensor_cuda/__init__.py b/tensor_cuda/tensor_cuda/__init__.py
+index c69d29c..4c0f8c6 100644
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -170,23 +170,47 @@ def empty(*shape, dtype="float32", device="cuda"):
+ # callbacks before it marks the runtime finalizing (v3.12.3 pylifecycle.c,
+ # Py_FinalizeEx: _PyAtExit_Call at line 1815, _PyRuntimeState_SetFinalizing at
+ # 1833), so this hook closes admission while taking the GIL is still safe and
+-# waits for the releases already admitted. Knob: the bound on that wait, in
+-# seconds (a release normally finishes in microseconds; the bound only matters
+-# for a producer deleter that blocks). Prior art: CPython's own
+-# threading._shutdown (join non-daemon threads before finalizing), the same
+-# "stop admitting, then wait" order; ours: applying it to the DLPack release.
++# waits for the releases already admitted.
++# P1T-FIX3 (round-3 review V3-01): that wait has NO bound any more; FIX2's
++# bounded return let finalization start while an admitted deleter was still
++# running, and the process aborted when the deleter re-took the GIL. Knob: the
++# time waited, in seconds, before the first stderr diagnostic (a release
++# normally finishes in microseconds, so this only fires for a producer deleter
++# that blocks); later diagnostics are written each time the time waited has
++# doubled. Prior art: CPython's own threading._shutdown (joins non-daemon
++# threads before finalizing, with no bound), the same "stop admitting, then wait
++# for what already started" order; RCU-style grace periods (an unbounded wait
++# for pre-existing readers) and the kernel's repeated stall warnings. Ours:
++# applying them to the DLPack release at the atexit boundary.
+ _DLPACK_SHUTDOWN_WAIT_S = 5.0
+ 
+ 
+ def _dlpack_shutdown_hook():
+-    # An exception from an atexit callback cannot be handled by anyone: log, never raise.
++    """atexit hook (P1T-FIX2 N5, P1T-FIX3 V3-01): close admission of GIL-taking
++    DLPack import releases, then wait until every release admitted before that
++    has finished. Interpreter finalization never starts while one is running.
++
++    The wait has no bound. After ``_DLPACK_SHUTDOWN_WAIT_S`` seconds a line goes
++    to stderr (how many are still running, seconds waited), and another each
++    time the time waited doubles; the wait goes on. Consequence: a producer
++    deleter that never returns makes interpreter exit wait forever. That is the
++    producer's DLPack contract violation (a deleter must return), and waiting is
++    the honest outcome: returning early would let CPython finalize under a
++    running callback and abort the process (round-3 review V3-01, rc -6). Ctrl-C
++    does not interrupt the wait; SIGTERM / SIGKILL still end the process.
++    Releases that start after admission closed are deliberately leaked (no GIL
++    is taken), as before. Never raises (an atexit exception has no handler).
++    """
+     try:
+-        r = _C._dlpack_begin_shutdown(float(_DLPACK_SHUTDOWN_WAIT_S))
++        try:
++            first_diag_s = float(_DLPACK_SHUTDOWN_WAIT_S)
++        except (TypeError, ValueError):
++            first_diag_s = float("nan")  # an unusable knob must not skip the wait: diagnose at once, still wait
++        r = _C._dlpack_begin_shutdown(first_diag_s)
+         if r["timed_out"]:
+             sys.stderr.write(
+-                f"tensor_cuda: {r['still_in_flight']} DLPack release(s) still running after "
+-                f"{_DLPACK_SHUTDOWN_WAIT_S} s at exit; the interpreter may terminate "
+-                f"that thread during finalization\n")
++                f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
++                f"{r['waited_us'] / 1e6:.1f} s; interpreter exit continues\n")
+             sys.stderr.flush()
+     except Exception as e:  # noqa: BLE001
+         try:
+diff --git a/tensor_cuda/tests/test_dlpack.py b/tensor_cuda/tests/test_dlpack.py
+index a4a0910..8bc87f4 100644
+--- a/tensor_cuda/tests/test_dlpack.py
++++ b/tensor_cuda/tests/test_dlpack.py
+@@ -38,8 +38,16 @@ P1T-FIX2 additions (review P1T-REV2 round 2; tests named test_fix2_*), with the
+     and on a foreign pthread: contained, counted, called once, rc 0. Mutant (d2): the catch removed.
+   * N5: interpreter-exit coordination of foreign-thread releases (the core_shutdown.py pattern, torch-free): a release
+     already taking the GIL when the exit hook runs completes before finalization (in-flight wait); one that starts
+-    during the wait, or after the hook, leaks without touching the GIL; a release that outlives the bounded wait is
+-    reported. Mutant (e): the in-flight wait removed.
++    during the wait, or after the hook, leaks without touching the GIL. Mutant (e): the in-flight wait removed.
++    (FIX2's "the wait is bounded and reported" test is gone: it pinned round-3 finding V3-01, see below.)
++
++P1T-FIX3 additions (review P1T-REV3 round 3; tests named test_fix3_*):
++  * V3-01 (exit quiescence): the exit hook waits, with no bound, until every admitted release has finished, and logs
++    at a bounded rate meanwhile: foreign-thread deleters of 0.1 s, 5.5 s and 12 s across the default 5 s diagnostic
++    delay, ORDINARY interpreter exit (no os._exit): rc 0, deleter completed, then finalization; nothing in flight (no
++    wait); the hook called from inside the main thread's own admitted release (no self-wait). The "never admitted"
++    (nested) and "after closing" cases are the N5 tests above. Mutant (a): FIX2's bounded return restored.
++  * V3-02 (tc_signal aggregate byte accounting) is tested in tc_signal/tests/test_fix3_findings.py.
+ 
+ Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
+ (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
+@@ -1074,6 +1082,12 @@ def test_fix2_n4_throwing_producer_deleter_is_contained(fix2_thrower, mode):
+ # Prior art: the reviewer's core_shutdown.py + release_worker.cpp scenario (a real imported Storage released on a
+ # foreign thread at shutdown); CPython 3.12.3 Py_FinalizeEx ordering (atexit before finalizing). Ours: the staging,
+ # the nested and bounded variants, the torch-free form.
++# P1T-FIX3 (round-3 review V3-01): FIX2's "bounded" mode ended the process with os._exit(0) while its 2 s deleter was
++# still running, so it never exercised ordinary finalization, and it pinned the defect (the hook returned before the
++# deleter finished). It is replaced by "overrun" (a deleter of argv[2] seconds across the exit wait, ordinary exit, no
++# os._exit anywhere in this script), "idle" (nothing in flight at exit) and "self" (the exit hook called from inside the
++# main thread's own admitted release). The reviewer's probe artifacts/p1t_rev3/probes/core_exit_overrun.py is the
++# same staging with the default 5 s knob and a 5.5 s deleter.
+ _FIX2_N5_SCRIPT = r"""
+ import atexit, ctypes, gc, json, os, sys, time
+ RESULTS = {}
+@@ -1086,14 +1100,11 @@ def _after_hook():
+         RESULTS["after_release"] = {"stats": dict(tc._C._dlpack_release_stats()),
+                                     "deleter_calls": [p.calls for p in PRODS]}
+     print("RESULT " + json.dumps(RESULTS), flush=True)
+-    if MODE == "bounded":
+-        os._exit(0)                             # the in-flight thread is still in its 2 s deleter: end here
+ atexit.register(_after_hook)
+ """ + _SUBPROC_PRODUCER + _FIX2_PTHREAD + r"""
+ MODE = sys.argv[1]
+-SLEEP = {"during": 1.0, "nested": 0.0, "bounded": 2.0}.get(MODE, 0.0)
+-if MODE == "bounded":
+-    tc._DLPACK_SHUTDOWN_WAIT_S = 0.3           # the knob, read by the hook at exit
++SLEEP = float(sys.argv[2]) if MODE == "overrun" else {"during": 1.0, "nested": 0.0}.get(MODE, 0.0)
++RESULTS["knob_s"] = tc._DLPACK_SHUTDOWN_WAIT_S  # the default knob, unchanged, read by the hook at exit
+ class SlowProducer(Producer):
+     def _delete(self, _p):
+         self.calls += 1
+@@ -1128,8 +1139,18 @@ def _start_in_flight():
+     start_foreign(FP_A, M_A)
+     _wait_for(lambda: prod_a.started, "the in-flight deleter to start")
+     RESULTS["before_hook"] = {"stats": dict(tc._C._dlpack_release_stats())}
+-if MODE in ("during", "nested", "bounded"):
++if MODE in ("during", "nested", "overrun"):
+     atexit.register(_start_in_flight)
++def _self_hook_inside():                        # runs inside A's deleter, on the MAIN thread: A is its own release
++    RESULTS["self"] = {"inside_before": dict(tc._C._dlpack_release_stats())}
++    t0 = time.monotonic()
++    tc._dlpack_shutdown_hook()                  # the exit hook, called from inside this thread's admitted release
++    RESULTS["self"]["hook_s"] = time.monotonic() - t0
++    RESULTS["self"]["inside_after"] = dict(tc._C._dlpack_release_stats())
++if MODE == "self":
++    prod_a.on_delete = _self_hook_inside
++    ctypes.CFUNCTYPE(None, ctypes.c_void_p)(FP_A)(M_A)   # release A on the main thread (not a foreign pthread)
++    RESULTS["self_after_release"] = {"stats": dict(tc._C._dlpack_release_stats()), "deleter_done": prod_a.done}
+ class Finalizer:                                # drops the GIL during finalization (the core_shutdown.py pattern)
+     def __init__(self):
+         self.sleep, self.isf = time.sleep, sys.is_finalizing
+@@ -1148,8 +1169,8 @@ print("ARMED", flush=True)
+ """
+ 
+ 
+-def _run_n5(mode):
+-    r = subprocess.run([sys.executable, "-c", _FIX2_N5_SCRIPT, mode], capture_output=True, text=True,
++def _run_n5(mode, *args):
++    r = subprocess.run([sys.executable, "-c", _FIX2_N5_SCRIPT, mode, *args], capture_output=True, text=True,
+                        timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+     lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+     res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+@@ -1189,12 +1210,77 @@ def test_fix2_n5_release_after_the_exit_hook_leaks_without_gil():
+     assert "FINAL finalizing=True" in r.stdout and "terminate called" not in r.stderr, r.stderr
+ 
+ 
+-def test_fix2_n5_the_wait_is_bounded_and_reported():
+-    t0 = __import__("time").monotonic()
+-    r, res = _run_n5("bounded")
+-    assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++# ------------------------------------------------------------------------------------------------ V3-01 (P1T-FIX3)
++# The exit hook waits, with no bound, until every admitted release has finished; after _DLPACK_SHUTDOWN_WAIT_S (the
++# default 5 s, unchanged here) it writes a stderr line, then another each time the time waited doubles (5 s, 10 s,
++# 20 s, ...). Ordinary interpreter exit (no os._exit): rc 0, the deleter completed before the hook returned, then CPython
++# finalized (the Finalizer's FINAL line). Registered mutant (a) = FIX2's bounded return restored: the 5.5 s and 12 s
++# cases then abort (rc -6, "FATAL: exception not rethrown") when the deleter re-takes the GIL during finalization.
++# Prior art: the reviewer's lifecycle_timeout.py / core_exit_overrun.py (finite overrun with normal finalization);
++# CPython's threading._shutdown (an unbounded join before finalizing). Ours: the deleter-length census, the diagnostic
++# schedule checks and the self-release case.
++_DIAG_RE = __import__("re").compile(r"DLPack release\(s\) admitted before exit still running after (\d+\.\d) s")
++
++
++def _assert_ordinary_exit(r):
++    assert r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++    assert "FINAL finalizing=True" in r.stdout, r.stdout                      # CPython really finalized afterwards
++    for bad in ("FATAL", "terminate called", "Aborted", "exception not rethrown"):
++        assert bad not in r.stderr, r.stderr
++
++
++def test_fix3_v301_script_has_no_immediate_exit_escape():
++    assert "os._exit" not in _FIX2_N5_SCRIPT and "_exit(" not in _FIX2_N5_SCRIPT
++
++
++@pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
++def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
++    r, res = _run_n5("overrun", repr(deleter_s))
++    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++    assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
++    assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
++    ah = res["after_hook"]
++    after = ah["stats"]
++    assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
++    assert after["released"] == 1 and after["in_flight"] == 0 and after["closing"] is True, res
++    assert after["shutdown_still_in_flight"] == 0 and after["shutdown_in_flight_at_close"] == 1, res
++    assert ah["finalizing"] is False, res                                       # the hook ran before finalizing
++    assert after["shutdown_wait_us"] >= (deleter_s - 1.0) * 1e6, res            # it waited for the deleter
++    lines = [float(x) for x in _DIAG_RE.findall(r.stderr)]
++    if deleter_s > res["knob_s"]:
++        want = [5.0] if deleter_s < 10.0 else [5.0, 10.0]                       # doubling schedule: 5 s, 10 s, 20 s
++        assert len(lines) == len(want) and all(abs(a - b) < 0.5 for a, b in zip(lines, want)), r.stderr
++        assert after["shutdown_timeouts"] == 1 and after["shutdown_diagnostics"] == len(want), res
++        assert "finished after" in r.stderr and "interpreter exit continues" in r.stderr, r.stderr
++    else:
++        assert lines == [] and after["shutdown_timeouts"] == 0 and after["shutdown_diagnostics"] == 0, (res, r.stderr)
++    _assert_ordinary_exit(r)
++
++
++def test_fix3_v301_idle_exit_does_not_wait():
++    r, res = _run_n5("idle")
++    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+     after = res["after_hook"]["stats"]
+-    assert after["shutdown_timeouts"] == 1 and after["shutdown_still_in_flight"] == 1, res
+-    assert 300_000 <= after["shutdown_wait_us"] < 1_900_000, res  # 0.3 s bound, not the deleter's 2 s
+-    assert "DLPack release(s) still running after 0.3 s at exit" in r.stderr, r.stderr
+-    assert __import__("time").monotonic() - t0 < _SUBPROC_TIMEOUT
++    assert after["shutdown_calls"] == 1 and after["shutdown_in_flight_at_close"] == 0, res
++    assert after["shutdown_wait_us"] < 500_000 and after["shutdown_diagnostics"] == 0, res
++    assert res["after_hook"]["deleter_calls"] == [0, 0], res                    # never admitted, never released
++    assert _DIAG_RE.search(r.stderr) is None, r.stderr
++    _assert_ordinary_exit(r)
++
++
++def test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself():
++    # A deleter running in the main thread's own admitted release calls the exit hook: the unbounded wait must not
++    # wait for that release (it cannot finish while its own thread waits), and must not return while OTHER threads'
++    # releases run (covered above).
++    r, res = _run_n5("self")
++    assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
++    inside = res["self"]
++    assert inside["inside_before"]["in_flight"] == 1 and inside["inside_before"]["closing"] is False, res
++    assert inside["hook_s"] < 1.0, res                                          # no self-wait (FIX2: 5 s; else hang)
++    ia = inside["inside_after"]
++    assert ia["closing"] is True and ia["in_flight"] == 1 and ia["shutdown_still_in_flight"] == 0, res  # own excluded
++    assert ia["shutdown_diagnostics"] == 0 and ia["shutdown_timeouts"] == 0, res
++    rel = res["self_after_release"]
++    assert rel["deleter_done"] is True and rel["stats"]["released"] == 1 and rel["stats"]["in_flight"] == 0, res
++    assert res["after_hook"]["stats"]["shutdown_calls"] == 2, res               # and the real exit hook ran again
++    _assert_ordinary_exit(r)
