@@ -1,0 +1,1277 @@
+[
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 446,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "return std::string(cudaGetErrorName(err)) + \": \" + cudaGetErrorString(err);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 451,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaError_t e = cudaGetDevice(&prev);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 457,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "e = cudaSetDevice(device);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 466,
+    "calls": [
+      "cudaEventCreateWithFlags"
+    ],
+    "source": "e = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 469,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "e = cudaEventRecord(ev, cudaStreamLegacy);  // engine stream of `device`"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 473,
+    "calls": [
+      "cudaStreamWaitEvent"
+    ],
+    "source": "e = cudaStreamWaitEvent(consumer, ev, 0);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 477,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "const cudaError_t de = ev ? cudaEventDestroy(ev) : cudaSuccess;  // on its own device"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 478,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 483,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "if (de != cudaSuccess) msg += \" cudaEventDestroy (\" + name(de) + \");\";"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1143,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "const cudaError_t qe = cudaGetDevice(&cur);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1146,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorName(qe) + \": \" + cudaGetErrorString(qe) +"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1262,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "const cudaError_t qe = cudaGetDevice(&cur);"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1265,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorName(qe) + \": \" + cudaGetErrorString(qe) + \"); nothing was allocated\");"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1283,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "if (dev.is_cuda()) cudaGetLastError();"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1601,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "msg += what + \" [CUDA device \" + std::to_string(dev) + \": \" + cudaGetErrorName(static_cast<cudaError_t>(err)) +"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1602,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "\": \" + cudaGetErrorString(static_cast<cudaError_t>(err)) + \"]\";"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 1679,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "head, n, why, what, dev, cudaGetErrorName(static_cast<cudaError_t>(err)));"
+  },
+  {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "line": 2695,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "d[\"first_unraisable_error\"] = std::string(cudaGetErrorName(static_cast<cudaError_t>(err)));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 101,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaError_t e = cudaGetLastError();"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 104,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorString(e));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 108,
+    "calls": [
+      "cudaDeviceSynchronize"
+    ],
+    "source": "cudaDeviceSynchronize();"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 136,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaGetDevice(&dev);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 138,
+    "calls": [
+      "cudaDeviceGetDefaultMemPool"
+    ],
+    "source": "if (cudaDeviceGetDefaultMemPool(&pool, dev) == cudaSuccess) {"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 140,
+    "calls": [
+      "cudaMemPoolSetAttribute"
+    ],
+    "source": "cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &thr);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 148,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaGetDevice(&dev);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 150,
+    "calls": [
+      "cudaDeviceGetDefaultMemPool"
+    ],
+    "source": "if (cudaDeviceGetDefaultMemPool(&pool, dev) == cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 151,
+    "calls": [
+      "cudaMemPoolTrimTo"
+    ],
+    "source": "cudaMemPoolTrimTo(pool, 0);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 179,
+    "calls": [
+      "cudaMallocAsync"
+    ],
+    "source": "cudaError_t e = pooled ? cudaMallocAsync(&ptr, nbytes, 0)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 180,
+    "calls": [
+      "cudaMalloc"
+    ],
+    "source": ": cudaMalloc(&ptr, nbytes);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 184,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // clear sticky error"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 185,
+    "calls": [
+      "cudaStreamSynchronize"
+    ],
+    "source": "cudaStreamSynchronize(0);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 187,
+    "calls": [
+      "cudaMallocAsync",
+      "cudaMalloc"
+    ],
+    "source": "e = pooled ? cudaMallocAsync(&ptr, nbytes, 0) : cudaMalloc(&ptr, nbytes);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 192,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorString(e));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 294,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaError_t e = cudaGetDevice(&prev);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 300,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "e = cudaSetDevice(dev);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 307,
+    "calls": [
+      "cudaStreamSynchronize"
+    ],
+    "source": "e = cudaStreamSynchronize(0);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 311,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 313,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 317,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 333,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // consumed only now that the report exists"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 337,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "throw_after_consuming(what + \" (\" + cudaGetErrorName(e) + \": \" + cudaGetErrorString(e) + \")\");"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 350,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaError_t e = cudaGetDevice(&prev_);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 353,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "e = cudaSetDevice(device);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 364,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t e = cudaSetDevice(prev_);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 373,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t e = cudaSetDevice(prev_);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 378,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 476,
+    "calls": [
+      "cudaPointerGetAttributes"
+    ],
+    "source": "const cudaError_t e = cudaPointerGetAttributes(&attr, a.data_ptr());"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 523,
+    "calls": [
+      "cudaFreeAsync"
+    ],
+    "source": "if (pooled) cudaFreeAsync(ptr, 0);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 524,
+    "calls": [
+      "cudaFree"
+    ],
+    "source": "else cudaFree(ptr);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 577,
+    "calls": [
+      "cudaMemset"
+    ],
+    "source": "if (a.numel() > 0) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 652,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t pending = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 655,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorName(pending) + \": \" + cudaGetErrorString(pending) +"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 669,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t le = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 671,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "throw_after_consuming(std::string(\"CUDA error at fill_: \") + cudaGetErrorName(le) + \": \" +"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 672,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "cudaGetErrorString(le) + \" (cudaGetLastError right after launching fill_kernel on CUDA \""
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 683,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "if (device.is_cuda()) cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 691,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "if (device.is_cuda()) cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 698,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 706,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3403,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "auto event_check=[](cudaError_t e) {if(e!=cudaSuccess) throw std::runtime_error(cudaGetErrorString(e));};"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3406,
+    "calls": [
+      "cudaEventCreate"
+    ],
+    "source": "for(auto& e:events) event_check(cudaEventCreate(&e));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3407,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "event_check(cudaEventRecord(events[0]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3422,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "if(bk3::profile) event_check(cudaEventRecord(events[1]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3442,
+    "calls": [
+      "cudaEventRecord",
+      "cudaEventSynchronize"
+    ],
+    "source": "event_check(cudaEventRecord(events[2]));event_check(cudaEventSynchronize(events[2]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3444,
+    "calls": [
+      "cudaEventElapsedTime"
+    ],
+    "source": "for(int i=0;i<2;++i) event_check(cudaEventElapsedTime(&bk3::halves[i],events[i],events[i+1]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3446,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "} catch(...) {for(auto e:events) if(e) cudaEventDestroy(e);throw;}"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3447,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "for(auto e:events) if(e) cudaEventDestroy(e);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3623,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "auto check=[](cudaError_t e) {if(e!=cudaSuccess) throw std::runtime_error(cudaGetErrorString(e));};"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3626,
+    "calls": [
+      "cudaEventCreate"
+    ],
+    "source": "for(auto& e:events) check(cudaEventCreate(&e));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3627,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "check(cudaEventRecord(events[0]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3640,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "if(bk3::profile) check(cudaEventRecord(events[1]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3645,
+    "calls": [
+      "cudaEventRecord",
+      "cudaEventSynchronize"
+    ],
+    "source": "check(cudaEventRecord(events[2]));check(cudaEventSynchronize(events[2]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3647,
+    "calls": [
+      "cudaEventElapsedTime"
+    ],
+    "source": "for(int i=0;i<2;++i) check(cudaEventElapsedTime(&bk3::halves[i],events[i],events[i+1]));"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3649,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "} catch(...) {for(auto e:events) if(e) cudaEventDestroy(e);throw;}"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 3650,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "for(auto e:events) if(e) cudaEventDestroy(e);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 4222,
+    "calls": [
+      "cudaFuncSetAttribute"
+    ],
+    "source": "cudaFuncSetAttribute(int4_gemv_kernel<T>,"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 4661,
+    "calls": [
+      "cudaFuncSetAttribute"
+    ],
+    "source": "cudaFuncSetAttribute(intn_gemv_kernel<T>,"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 4906,
+    "calls": [
+      "cudaFuncSetAttribute"
+    ],
+    "source": "cudaFuncSetAttribute(mxfp4_gemv_kernel<T>,"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5143,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5730,
+    "calls": [
+      "cudaEventCreate"
+    ],
+    "source": "if (cudaEventCreate(&start_) != cudaSuccess ||"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5731,
+    "calls": [
+      "cudaEventCreate"
+    ],
+    "source": "cudaEventCreate(&stop_) != cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5733,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "if (cudaEventRecord(start_) != cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5734,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "throw std::runtime_error(\"APAMQ-DF1 cudaEventRecord(start) failed\");"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5738,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "if (cudaEventRecord(stop_) != cudaSuccess ||"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5739,
+    "calls": [
+      "cudaEventSynchronize"
+    ],
+    "source": "cudaEventSynchronize(stop_) != cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5742,
+    "calls": [
+      "cudaEventElapsedTime"
+    ],
+    "source": "if (cudaEventElapsedTime(&value, start_, stop_) != cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5748,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "if (start_) cudaEventDestroy(start_);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 5749,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "if (stop_) cudaEventDestroy(stop_);"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 7471,
+    "calls": [
+      "cudaMemcpy"
+    ],
+    "source": "if (cudaMemcpy(&refined, qtile::g_refine_dev, sizeof(refined),"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 7475,
+    "calls": [
+      "cudaMemset"
+    ],
+    "source": "cudaMemset(qtile::g_refine_dev, 0, sizeof(refined)) != cudaSuccess)"
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 7567,
+    "calls": [
+      "cudaMalloc"
+    ],
+    "source": "if (cudaMalloc(&qtile::g_refine_dev, sizeof(unsigned long long)) !="
+  },
+  {
+    "file": "tensor_cuda/src/kernels.cu",
+    "line": 7569,
+    "calls": [
+      "cudaMemset"
+    ],
+    "source": "cudaMemset(qtile::g_refine_dev, 0, sizeof(unsigned long long)) !="
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 845,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "const auto error = [&os, &r] { os << cudaGetErrorName(r.err) << \": \" << cudaGetErrorString(r.err); };"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1176,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "const cudaError_t real = cudaEventDestroy(ev);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1180,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1191,
+    "calls": [
+      "cudaEventCreateWithFlags"
+    ],
+    "source": ": cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1194,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1198,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": "test_hooks::take(test_hooks::kCudaMarkerRecord) ? kTestInjectedCudaError : cudaEventRecord(ev, cudaStreamLegacy);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1201,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1207,
+    "calls": [
+      "cudaEventQuery"
+    ],
+    "source": "test_hooks::take(test_hooks::kCudaMarkerQuery) ? kTestInjectedCudaError : cudaEventQuery(ev);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1211,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1215,
+    "calls": [
+      "cudaPeekAtLastError",
+      "cudaGetLastError"
+    ],
+    "source": "if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();  // NotReady: \"still running\", not a failure"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1334,
+    "calls": [
+      "cudaStreamSynchronize"
+    ],
+    "source": "r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1341,
+    "calls": [
+      "cudaStreamSynchronize"
+    ],
+    "source": "r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1344,
+    "calls": [
+      "cudaStreamSynchronize"
+    ],
+    "source": "r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1349,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "if (r != cudaSuccess) cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1421,
+    "calls": [
+      "cudaEventDestroy"
+    ],
+    "source": "const cudaError_t r = cudaEventDestroy(ev);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1424,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // then this consumes cudaEventDestroy's slot entry"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1538,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "test_hooks::take(test_hooks::kCudaCurrentDevice) ? kTestInjectedCudaError : cudaGetDevice(&cur);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1542,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();       // P1T-FIX8 (sweep (k)): consumed after it is recorded"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1557,
+    "calls": [
+      "cudaEventQuery"
+    ],
+    "source": ": cudaEventQuery(st.q.front().event);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1562,
+    "calls": [
+      "cudaPeekAtLastError",
+      "cudaGetLastError"
+    ],
+    "source": "if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1569,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1597,
+    "calls": [
+      "cudaEventCreateWithFlags"
+    ],
+    "source": "cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : g.error();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1606,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "os << \"tc_signal: cannot create the completion event on CUDA device \" << device << \": \" << cudaGetErrorName(r)"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1607,
+    "calls": [
+      "cudaGetErrorString"
+    ],
+    "source": "<< \": \" << cudaGetErrorString(r) << \" (\""
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1616,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // consumed only now that the report exists"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1621,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // recorded above: consumed so it is not reported twice"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1782,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t pending_err = cudaPeekAtLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1789,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "<< cudaGetErrorName(pending_err) << \": \" << cudaGetErrorString(pending_err)"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1813,
+    "calls": [
+      "cudaEventRecord"
+    ],
+    "source": ": cudaEventRecord(event_, cudaStreamLegacy));"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1838,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1868,
+    "calls": [
+      "cudaEventQuery"
+    ],
+    "source": ": cudaEventQuery(st.q.front().event);"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1889,
+    "calls": [
+      "cudaPeekAtLastError",
+      "cudaGetLastError"
+    ],
+    "source": "if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1893,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 1968,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "<< cudaGetErrorName(st.prior_error) << \": \" << cudaGetErrorString(st.prior_error)"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 2063,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "head, r.count, why, cudaGetErrorName(r.prior));"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 2068,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "cudaGetErrorName(r.first.err));"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 2073,
+    "calls": [
+      "cudaGetErrorName"
+    ],
+    "source": "cudaGetErrorName(r.first.err));"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 2154,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t prior = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): recorded below, THEN consumed"
+  },
+  {
+    "file": "tc_signal/src/dlpack_operand.cpp",
+    "line": 2158,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 60,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();  // consumed only now that the report exists"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 67,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "os << what << \" failed: \" << cudaGetErrorName(e) << \": \" << cudaGetErrorString(e);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 92,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "os << prefix << what << \" failed: \" << cudaGetErrorName(e) << \": \" << cudaGetErrorString(e) << \" (\" << api"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 100,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 104,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "<< cudaGetErrorName(e) << \": \" << cudaGetErrorString(e)"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 110,
+    "calls": [
+      "cudaPeekAtLastError"
+    ],
+    "source": "const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 114,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "<< \", which returned CUBLAS_STATUS_SUCCESS: \" << cudaGetErrorName(e) << \": \" << cudaGetErrorString(e)"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 133,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaError_t e = cudaGetDevice(&prev_);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 136,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "e = cudaSetDevice(device);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 137,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "if (e != cudaSuccess) raise_cuda_failure(\"tc_signal: cudaSetDevice(\" + std::to_string(device) + \")\", e);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 144,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t e = cudaSetDevice(prev_);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 154,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t e = cudaSetDevice(prev_);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 157,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 177,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "cudaError_t e = cudaGetDevice(&prev_);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 179,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 184,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "e = cudaSetDevice(device);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 186,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 196,
+    "calls": [
+      "cudaSetDevice"
+    ],
+    "source": "const cudaError_t e = cudaSetDevice(prev_);"
+  },
+  {
+    "file": "tc_signal/src/cuda_guard.h",
+    "line": 199,
+    "calls": [
+      "cudaGetLastError"
+    ],
+    "source": "cudaGetLastError();"
+  },
+  {
+    "file": "tc_signal/src/conv.cu",
+    "line": 55,
+    "calls": [
+      "cudaGetErrorName",
+      "cudaGetErrorString"
+    ],
+    "source": "os << \"tc_signal: \" << what << \" failed: \" << cudaGetErrorName(e) << \": \" << cudaGetErrorString(e);"
+  },
+  {
+    "file": "tc_signal/src/conv.cu",
+    "line": 309,
+    "calls": [
+      "cudaRuntimeGetVersion"
+    ],
+    "source": "check_cuda(cudaRuntimeGetVersion(&bi.cudart_version), \"cudaRuntimeGetVersion\");"
+  },
+  {
+    "file": "tc_signal/src/conv.cu",
+    "line": 313,
+    "calls": [
+      "cudaGetDevice"
+    ],
+    "source": "check_cuda(cudaGetDevice(&bi.current_device), \"cudaGetDevice\");"
+  },
+  {
+    "file": "tc_signal/src/lstm.cu",
+    "line": 226,
+    "calls": [
+      "cudaMemcpyAsync"
+    ],
+    "source": "cudaMemcpyAsync(Y_h, h0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));"
+  },
+  {
+    "file": "tc_signal/src/lstm.cu",
+    "line": 228,
+    "calls": [
+      "cudaMemsetAsync"
+    ],
+    "source": "check_call_on(kPrefix, \"initial_h zero\", \"cudaMemsetAsync\", device, cudaMemsetAsync(Y_h, 0, state_bytes, kLegacyStream));"
+  },
+  {
+    "file": "tc_signal/src/lstm.cu",
+    "line": 231,
+    "calls": [
+      "cudaMemcpyAsync"
+    ],
+    "source": "cudaMemcpyAsync(Y_c, c0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));"
+  },
+  {
+    "file": "tc_signal/src/lstm.cu",
+    "line": 233,
+    "calls": [
+      "cudaMemsetAsync"
+    ],
+    "source": "check_call_on(kPrefix, \"initial_c zero\", \"cudaMemsetAsync\", device, cudaMemsetAsync(Y_c, 0, state_bytes, kLegacyStream));"
+  }
+]

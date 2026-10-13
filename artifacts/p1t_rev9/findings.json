@@ -1,0 +1,593 @@
+{
+  "verdicts": {
+    "R1": "SAFE",
+    "R2": "UNSOUND",
+    "R3": "SOUND",
+    "R4": "CORRECT",
+    "R5": "PASS",
+    "R6": "REJECT"
+  },
+  "closure": [
+    {
+      "id": "F01",
+      "status": "CLOSED",
+      "lines_read": "O:1756-1861; A:256-288; L:209-244; M:226-242,284-336",
+      "evidence": "Prelaunch reservations, deferred ownership and checked fallback intact; release CPU gates pass."
+    },
+    {
+      "id": "F02",
+      "status": "CLOSED",
+      "lines_read": "O:511-516,645-649; A:258-261; L:202-208; M:66-105",
+      "evidence": "Required-None and absent metadata refused before launch; descriptor/argument checks pass."
+    },
+    {
+      "id": "F03",
+      "status": "CLOSED",
+      "lines_read": "C:328-352,1161-1212,1234-1250; O:455-507; CM:31-89; A:101-124,175-188",
+      "evidence": "Checked extents, bytes, addresses and geometry intact; UBSan/descriptor/build gates pass."
+    },
+    {
+      "id": "F04",
+      "status": "CLOSED",
+      "lines_read": "C:852-900; O:194-234",
+      "evidence": "Finalizing refusal and admission handshake unchanged; finite exit callbacks finish before finalization."
+    },
+    {
+      "id": "F05",
+      "status": "CLOSED",
+      "lines_read": "K:289-320,493-519",
+      "evidence": "Imported storage drains its own device, restores and leaks without completion proof; host multi-device trace passes."
+    },
+    {
+      "id": "F06",
+      "status": "CLOSED",
+      "lines_read": "C:357-390,639-678",
+      "evidence": "Export context stays in unique_ptr until capsule creation succeeds; allocation failure unwinds ownership."
+    },
+    {
+      "id": "F07",
+      "status": "CLOSED",
+      "lines_read": "H:80-92; FIX1 addendum:17-31; add-on CMake:50-63",
+      "evidence": "Native ABI rebuild requirement remains explicit; add-on includes/links no core ABI."
+    },
+    {
+      "id": "N1",
+      "status": "PARTLY closed",
+      "lines_read": "O:1531-1580,2104-2185; C:465-489,1632-1653",
+      "evidence": "Original and FIX8 error paths work; V9-01 still loses an error and V9-02 loses its known attribution."
+    },
+    {
+      "id": "N2",
+      "status": "CLOSED",
+      "lines_read": "C:328-352,624-625; K:80-98; CM:63-89; O:469-498",
+      "evidence": "Zero-neighbor extent bounds preserved; empty/scalar/huge metadata and UBSan checks pass."
+    },
+    {
+      "id": "N3",
+      "status": "CLOSED",
+      "lines_read": "O:1583-1626,1756-1861,2104-2185",
+      "evidence": "Reserved release bookkeeping and caught push OOM intact; reporting records persist through allocation failure."
+    },
+    {
+      "id": "N4",
+      "status": "CLOSED",
+      "lines_read": "O:559-591; C:862-903",
+      "evidence": "Ordinary throwing deleters contained and counted once; native throw-deleter gate passes."
+    },
+    {
+      "id": "N5",
+      "status": "CLOSED",
+      "lines_read": "C:862-903,986-1069,1544-1559,1732-1758; CI:253-308",
+      "evidence": "Unconditional close/wait and native runner retained; knob/interrupt/lock CPU stagings pass."
+    },
+    {
+      "id": "V3-01",
+      "status": "CLOSED",
+      "lines_read": "C:940-1044; CI:207-308",
+      "evidence": "Unbounded diagnosed wait and own-thread exclusion retained; finite callback exit gate passes."
+    },
+    {
+      "id": "V3-02",
+      "status": "CLOSED",
+      "lines_read": "O:1446-1499,1743-1760",
+      "evidence": "Checked aggregate and sticky saturated queue bytes intact; accounting UBSan gate passes."
+    },
+    {
+      "id": "V4-01",
+      "status": "CLOSED",
+      "lines_read": "C:432-489,633-637; K:473-489",
+      "evidence": "Own-device fence, destroy and restore intact; label proof retained. Physical ordering probe remains lead-only."
+    },
+    {
+      "id": "V4-02",
+      "status": "CLOSED",
+      "lines_read": "CI:107-117,207-249; SI:171-187",
+      "evidence": "Public docs still state an unbounded wait and a diagnostic delay."
+    },
+    {
+      "id": "V4-03",
+      "status": "CLOSED",
+      "lines_read": "C:1142-1152,1217-1223",
+      "evidence": "Checked device query precedes ownership/rename; failed import preserves capsule ownership."
+    },
+    {
+      "id": "V4-04",
+      "status": "CLOSED",
+      "lines_read": "O:2153-2185",
+      "evidence": "Prior slot error recorded before consumption and drain; prior/OOM host gate passes."
+    },
+    {
+      "id": "V5-01",
+      "status": "CLOSED",
+      "lines_read": "O:218-249,331-380,559-591; SI:226-239; A:458-503",
+      "evidence": "Deleter/capsule/producer admission retained; ordinary hooks and interrupted runners close/wait."
+    },
+    {
+      "id": "V5-02",
+      "status": "CLOSED",
+      "lines_read": "O:1864-1894",
+      "evidence": "Next-call query failure recorded before consumption; one-shot host gate passes."
+    },
+    {
+      "id": "V5-03",
+      "status": "CLOSED",
+      "lines_read": "conv.cu:91-136; lstm.cu:93-138",
+      "evidence": "New handle ownership survives cache-insertion OOM; unchanged by FIX8."
+    },
+    {
+      "id": "V5-04",
+      "status": "CLOSED",
+      "lines_read": "K:628-677",
+      "evidence": "Wide ceil/grid refusal precedes fill launch and revision bump; huge-grid host refusal and nvcc compile pass."
+    },
+    {
+      "id": "V6-01",
+      "status": "CLOSED",
+      "lines_read": "O:331-345,2150-2160",
+      "evidence": "Ordinary synchronize never waits for another thread; lock inversion and late-release gates pass."
+    },
+    {
+      "id": "V6-02",
+      "status": "CLOSED",
+      "lines_read": "C:546-600,1357-1452,1493-1559; PA:65-193,222-276",
+      "evidence": "C-level argument reads/raw exit entries intact; 1067 argument checks and exit-entry census pass."
+    },
+    {
+      "id": "V6-03",
+      "status": "CLOSED",
+      "lines_read": "O:962-996,2153-2185",
+      "evidence": "Drain failures persist before allocation and clear after captured RuntimeError; three drain/OOM gates pass."
+    },
+    {
+      "id": "V7-01",
+      "status": "CLOSED",
+      "lines_read": "C:1493-1559,1732-1758; A:356-407,458-503; CI:253-308; SI:226-278",
+      "evidence": "Unreadable/deleted knobs and hook exceptions cannot skip quiescence; 36 exit children and lock checks pass."
+    },
+    {
+      "id": "V7-02",
+      "status": "CLOSED",
+      "lines_read": "O:780-951,1531-1580,1961-2009; G:89-117",
+      "evidence": "Existing failed-call/purpose/device attribution retained; 22 host assertions pass. New core summary race is V9-02."
+    },
+    {
+      "id": "V8-01",
+      "status": "CLOSED",
+      "lines_read": "O:1169-1222,1248-1350",
+      "evidence": "Marker failures recorded; fallback diagnosed; completion has proof. Four marker cases, 15 FIX8 host tests and 5 watchdog stagings pass."
+    },
+    {
+      "id": "V8-02",
+      "status": "CLOSED",
+      "lines_read": "O:2029-2185; A:428-503; C:1674-1758; K:426-439",
+      "evidence": "Original final-report OOM silence fixed; both native OOM/control gates pass. New inconsistent-snapshot defect is V9-02."
+    }
+  ],
+  "sweep_check": {
+    "summary": "All 34 k rows, all 7 l readers plus13 catches, and L2 checked against fresh site inventory. Lexical site coverage confirmed; compound cleanup/report OOM missing from k29 verdict (V9-01), concurrent raw/rich snapshot missing from l6 verdict (V9-02). L2 confirmed. No additional product site omission found.",
+    "missing_scenarios": [
+      {
+        "row": "k29",
+        "finding": "V9-01",
+        "site": "C:465-489",
+        "missing": "More than one returned CUDA failure followed by combined-report allocation failure."
+      },
+      {
+        "row": "l6",
+        "finding": "V9-02",
+        "site": "C:1632-1653",
+        "missing": "First native record arrives after raw snapshot but before rich snapshot; hook cannot write."
+      }
+    ],
+    "k": [
+      [
+        "k1",
+        "O:1169-1222",
+        "CONFIRMED FIXED",
+        "All four marker failures record before consume; independent four-case and plain/OOM tests pass."
+      ],
+      [
+        "k2-k4",
+        "O:1215,1562,1889",
+        "CONFIRMED NOT A FAILURE",
+        "NotReady is incomplete work, not an error; only defensively consumed when slot equals NotReady."
+      ],
+      [
+        "k5-k8",
+        "O:1537-1569,1864-1894,2154-2158",
+        "CONFIRMED OK",
+        "Query/current/prior errors copied into plain records before consumption; prior/query/OOM checks pass."
+      ],
+      [
+        "k9-k12",
+        "O:1328-1350,1365-1375; G:152-158,176-199",
+        "CONFIRMED OK",
+        "Noexcept return/value storage cannot allocate between consumption and retaining error; all QuietGuard users record/raise it. Restore errors record first."
+      ],
+      [
+        "k13-k14",
+        "G:57-97",
+        "CONFIRMED FIXED",
+        "Message and runtime_error exist before consumption; four helper OOM/control tests pass."
+      ],
+      [
+        "k15",
+        "O:1595-1622",
+        "CONFIRMED FIXED",
+        "Failed event creation/guard recorded in bad_alloc catch; actual source acquire/OOM assertion passes."
+      ],
+      [
+        "k16-k18",
+        "G:99-117; conv.cu:52-59",
+        "CONFIRMED FIXED",
+        "Launch/cuBLAS-after checks peek and share report-first helper; host helper assertions pass."
+      ],
+      [
+        "k19",
+        "G:119-122",
+        "CONFIRMED OK",
+        "cuBLAS status reporting does not consume CUDA slot; scope distinguished."
+      ],
+      [
+        "k20",
+        "O:1756-1792",
+        "CONFIRMED FIXED IN PRODUCTION",
+        "Prior peek retained on allocation failure; recycled event has reserved capacity. Test-only forced recycle fallback is not production reachability."
+      ],
+      [
+        "k21-k22",
+        "O:1807-1838,1414-1425",
+        "CONFIRMED OK",
+        "Record/destroy failures noted before consume; guard-call attribution kept."
+      ],
+      [
+        "k23-k24",
+        "K:289-320,371-379",
+        "CONFIRMED OK",
+        "Imported drain and guard restore failures recorded before consumption."
+      ],
+      [
+        "k25-k28",
+        "K:331-337,421,652-674; C:450-461",
+        "CONFIRMED FIXED FOR SINGLE ERRORS",
+        "Report-first helpers retain slot through bad_alloc; no consuming call in these direct reporting steps."
+      ],
+      [
+        "k29",
+        "C:465-489",
+        "PARTLY \u2014 DEFECT (V9-01)",
+        "Failed fence and failed cleanup can overwrite each other before reporting; compound/OOM failure scenario omitted."
+      ],
+      [
+        "k30-k32",
+        "C:1142-1147,1260-1287",
+        "CONFIRMED FIXED / OK",
+        "Query raises share report-first helper; allocation catch rethrows already-built engine runtime_error without new reporting allocation."
+      ],
+      [
+        "k33-k34",
+        "K:255-275; O:1640-1647; conv.cu:108-127; lstm.cu:110-129",
+        "CONFIRMED OK",
+        "Atomic unnamed count survives record-lock/OOM failure; new-handle cleanup status counted, not CUDA-slot consumption."
+      ]
+    ],
+    "l": [
+      [
+        "l1",
+        "O:2104-2122",
+        "CONFIRMED FIXED",
+        "Full report else plain summary; record consumed; both original OOM/control cases pass."
+      ],
+      [
+        "l2",
+        "A:428-503",
+        "CONFIRMED FIXED",
+        "ASCII existing message avoids error_already_set::what; final readers reached on both normal/raised paths."
+      ],
+      [
+        "l3-l4",
+        "O:2083-2147; SI:240-278",
+        "CONFIRMED FIXED",
+        "Raised summary retained until lines acknowledged; actual add-on normal/None/raising/interrupt/closed-fd cases pass."
+      ],
+      [
+        "l5",
+        "C:1692-1758; K:426-439",
+        "CONFIRMED FIXED",
+        "Raw record snapshot and allocation-free fallback reached after hook on both paths; original core OOM/control probe passes."
+      ],
+      [
+        "l6",
+        "C:1632-1653,1715-1721; CI:282-300",
+        "PARTLY \u2014 DEFECT (V9-02)",
+        "Acknowledged rich report and retained summary use different snapshots; foreign native writer scenario omitted."
+      ],
+      [
+        "l7",
+        "A:466-503; C:1739-1758",
+        "CONFIRMED OK",
+        "First-bytecode exception preserved, admission closed before final reads; interrupted-hook CPU gates pass."
+      ],
+      [
+        "c1-c6",
+        "O:2115-2122; A:471-493; C:1701-1713; SI:264-278",
+        "CONFIRMED",
+        "Typed catches retain/report records and do not bypass final reader. Failed stderr acknowledgement tested."
+      ],
+      [
+        "c7-c13",
+        "C:1751-1758; K:255-275,426-458; O:569-574,2183-2185",
+        "CONFIRMED WITH l6 CAVEAT",
+        "Non-CUDA cleanup exceptions counted/reported or leave CUDA records for last reader. pybind11 discard_as_unraisable uses restore/WriteUnraisable, not allocating what(). Snapshot consistency still fails l6."
+      ]
+    ],
+    "L2": [
+      [
+        "last-access flag",
+        "O:1293-1315,1322",
+        "CONFIRMED",
+        "All schedule/mutex/CV access, including unlock destruction, ends before release-store exited_."
+      ],
+      [
+        "stop protocol",
+        "O:1267-1290",
+        "CONFIRMED",
+        "Repeated notify until acquire sees exited_; lock failures counted. Host lock1/3 with missed notify and held-writer join failure pass."
+      ],
+      [
+        "start failure",
+        "O:1250-1261",
+        "CONFIRMED",
+        "Host thread allocation failure prints immediate diagnostic and finite sync still finishes."
+      ],
+      [
+        "join fallback",
+        "O:1280-1287",
+        "CONFIRMED IN VALID-THREAD SCOPE",
+        "Detach after final state access is safe; no watchdog operation after detach in host interposer receipt. Stated stderr backpressure limitation retained."
+      ]
+    ],
+    "corrected_FIX7_rows": {
+      "i24": "CONFIRMED FIXED for add-on; original marker and OOM gaps closed.",
+      "i25": "PARTLY in new core snapshot race V9-02; original OOM gap closed.",
+      "j24": "CONFIRMED FIXED; no lazy allocating error_already_set::what.",
+      "a3": "CONFIRMED FIXED; source and host diagnosed fallback/L2 checks.",
+      "a9": "CONFIRMED corrected rationale: rich string copy can allocate under record mutex; raw snapshot copies only POD/static pointer."
+    }
+  },
+  "behaviour_changes": [
+    {
+      "id": "U1",
+      "verdict": "ACCEPTABLE",
+      "evidence": "O:1169-1222,2150-2185: marker failures recorded and raised once; fresh 4-case probe and 8 plain/OOM cases pass."
+    },
+    {
+      "id": "U2",
+      "verdict": "ACCEPTABLE",
+      "evidence": "O:1248-1350: watchdog touches no CUDA/Python, retains schedule and L2 handshake; control/lock1/lock3/join/start-OOM host cases pass."
+    },
+    {
+      "id": "U3",
+      "verdict": "ACCEPTABLE",
+      "evidence": "O:1208-1221,1345-1346: finished requires successful query or sync; failed-query+sync case never prints finished."
+    },
+    {
+      "id": "U4",
+      "verdict": "ACCEPTABLE",
+      "evidence": "A:458-503; C:1732-1758: final readers called after actual hook on normal and exceptional outcomes; original exit OOM controls pass."
+    },
+    {
+      "id": "U5",
+      "verdict": "ACCEPTABLE",
+      "evidence": "O:2029-2122; C:1674-1713; K:426-439: application allocation-free count/first summaries replace lost reports; both native OOM controls pass."
+    },
+    {
+      "id": "U6",
+      "verdict": "DEFECT \u2014 MINOR (V9-02)",
+      "evidence": "Core C:1632-1653 retains an earlier raw snapshot than the acknowledged rich report. A first native failure between snapshots loses its known call/device/error in fallback. Add-on acknowledgement cases pass."
+    },
+    {
+      "id": "U7",
+      "verdict": "DEFECT \u2014 MINOR (V9-01)",
+      "evidence": "Core C:465-489 cleanup overwrites an earlier failure before the combined report can allocate; reordered throw helper preserves only the last slot value. Single-error OOM paths pass."
+    },
+    {
+      "id": "U8",
+      "verdict": "ACCEPTABLE",
+      "evidence": "O:2253-2258; C:1763-1794, stats bindings; additive diagnostics/ack hooks exposed; raw noargs functions reject malformed calls through CPython."
+    }
+  ],
+  "not_a_defect": [
+    {
+      "id": "N1",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "CPython/pybind11 translation OOM after a C++ report exists still raises MemoryError; P1-T cannot guarantee interpreter allocation. V9-01 occurs earlier, before the C++ report exists, and is not excused by this item. Explicit report-record APIs preserve their records until a Python exception exists."
+    },
+    {
+      "id": "N2",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Direct hook calls/unregister intentionally bypass documented runner protection. Both actual packages register native runners (CI:308; SI:283). Our V9-02 reproducer runs the actual hook through its actual runner."
+    },
+    {
+      "id": "N3",
+      "verdict": "CORRECTLY NOT A DEFECT",
+      "evidence": "Closed fd2 leaves no delivery channel; attempted C stdio reporting consumes records without crash. A Python stderr=None while fd2 stays open is different and must retain named fallback, as V9-02 shows."
+    }
+  ],
+  "findings": [
+    {
+      "id": "V9-01",
+      "severity": "MINOR",
+      "status": "OPEN",
+      "title": "Export fence loses an earlier CUDA failure when cleanup also fails and report allocation fails",
+      "file": "tensor_cuda/src/bindings.cpp",
+      "line": 477,
+      "related_locations": [
+        "tensor_cuda/src/bindings.cpp:465-489",
+        "tensor_cuda/src/kernels.cu:331-334"
+      ],
+      "scenario": "cudaEventRecord returns cudaErrorInvalidValue; cudaEventDestroy returns cudaErrorInvalidResourceHandle and overwrites the same thread last-error slot. Building the combined message/exception throws bad_alloc. The earlier record error exists only in local e, not in persistent core records; after unwinding only error400 remains in the slot, and unreported count is0. A later check cannot report the original error1. Single-failure OOM preserves error1; plain compound failure reports both, so only compound+OOM fails.",
+      "fix": "Persist each failed fence/cleanup call in allocation-free tagged records before another CUDA call can overwrite the slot, retaining them through report-construction failure; acknowledge each only once the combined report exists.",
+      "evidence": "Actual current-source core spans compiled by build_core_fence_cpu.py; corrected four-arm probe core_fence_cpu.py exit1. logs/p1t_rev9_core_fence_corrected.log: compound/OOM [bad_alloc, empty message, slot400, unreported0], while both controls pass. Initial child SyntaxError corrected with unchanged assertions; old log retained.",
+      "prior_art": "NVIDIA CUDA12.6 Programming Guide3.2.12 (2024), one overwritable per-host-thread runtime error variable; FIX5 record-before-consume and SQLite OOM fault injection. Taken: persist errors before destructive side effects; reviewer contribution: compound fence-cleanup/report-allocation census."
+    },
+    {
+      "id": "V9-02",
+      "severity": "MINOR",
+      "status": "OPEN",
+      "title": "Core exit fallback retains a different snapshot from the report it acknowledges",
+      "file": "tensor_cuda/src/bindings.cpp",
+      "line": 1632,
+      "related_locations": [
+        "tensor_cuda/src/bindings.cpp:1632-1653",
+        "tensor_cuda/src/kernels.cu:411-438",
+        "tensor_cuda/src/bindings.cpp:1715-1721"
+      ],
+      "scenario": "A foreign native thread records the first CUDA failure after dlpack_raise_unraisable reads its allocation-free raw snapshot but before it reads the rich snapshot. The rich RuntimeError names that failure and n=1 is acknowledged, but the retained exit summary uses raw_what=nullptr/raw_device=-1/raw_error=0 from the earlier empty snapshot. If the actual Python hook cannot write (sys.stderr=None), the runner prints only an unnamed failure with a false concurrent-report explanation, and consumes the summary; the actual call, device and error disappear from delivered reporting. No lock or allocation failure is needed.",
+      "fix": "Take count, static site pointer, device and error once under the record mutex; construct the rich message from that same snapshot and retain that exact snapshot in CoreExitReport. Keep records if construction fails.",
+      "evidence": "Source-linked build_core_race_cpu.py, POSIX interposer schedules actual note_core_unraisable on a native writer thread after the raw snapshot unlock; actual Python _dlpack_shutdown_hook extracted by AST unchanged. core_snapshot_cpu.py exit1; written control names cudaStreamSynchronize/device0/cudaErrorInvalidValue, unwritten arm reports only first not named although first_unraisable stats retain the correct named record. logs/p1t_rev9_core_snapshot_after_unlock.log.",
+      "prior_art": "C++17 mutex synchronization/consistent snapshots (ISO2017), POSIX pthreads2008; FIX8 acknowledged exit reports. Taken: snapshot once under a lock; reviewer contribution: first-record arrival between FIX8 raw/rich snapshots."
+    }
+  ],
+  "state": "COMPLETE",
+  "counts": {
+    "BLOCKING": 0,
+    "MAJOR": 0,
+    "MINOR": 2,
+    "NIT": 0
+  },
+  "verdict_evidence": {
+    "R1": "Reasoning plus historical baseline comparison: ordinary valid core arithmetic unchanged, external_storage branch separate, no new baseline failure IDs (52 vs52). ABI clients require rebuild as already documented. No GPU regression suite rerun.",
+    "R2": "V9-01 compound fence/report OOM drops a CUDA error; V9-02 inconsistent core exit snapshot loses known attribution. Both independently reproduced CPU-only against regenerated current sources.",
+    "R3": "Source reasoning, current-source release/argument/descriptor/OOM/exit checks, actual 12.6 native hook acknowledgement cases and L2 host interposer pass. No add-on defect established; dismissed test-only recycle hypothesis is explicitly separated.",
+    "R4": "Source arithmetic/indexing/geometry reasoning, checked-arithmetic UBSan gates, fresh nvcc12.6 core compilation and complete add-on builds pass. Device numeric/ordering execution not performed; lead probes supplied.",
+    "R5": "Full unchanged add-on compiled/linked in /tmp with CUDA12.6 and shared libcudart RUNPATH. No core headers, ABI symbols or core binary dependency. Core bindings syntax, relevant kernel compilation and source-linked core host module link pass; whole core production build not rerun.",
+    "R6": "Two open real MINOR engineering defects; owner forbids treating real defects as waived residuals. REJECT follows round8 precedent; no open BLOCKING or MAJOR, but no APPROVE-WITH-NITS disguise for these defects."
+  },
+  "probe_ruling": {
+    "id": "D2 / D12",
+    "verdict": "SOUND",
+    "evidence": "Independent source comparison confirms exactly one stream-context line changed to torch.cuda.default_stream(). Recorded torch2.11 ExternalStream(0) has flags1/nonblocking and legacy sync returns without waiting; CUDA legacy/nonblocking semantics justify no waiting diagnostic. Historical lead before/after legacy-copy logs show all four before children fail and all four after children pass. No physical rerun here; not generalized to all torch versions."
+  },
+  "probes": [
+    {
+      "path": "artifacts/p1t_rev9/probes/build_cpu.sh",
+      "result": "PASS",
+      "decides": "Current-source release/UBSan harnesses and core bindings syntax."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/build_core_host.py + build_core_host_oom.py",
+      "result": "PASS",
+      "decides": "Current-source core spans compile/link; exact span hashes retained."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/run_cpu_checks.py",
+      "result": "PASS 14/14",
+      "decides": "Release, OOM, byte accounting, concurrent synchronize and throwing-deleter CPU cases."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/argument_census_cpu.py",
+      "result": "PASS 1067",
+      "decides": "Every add-on typed argument position/keyword style plus core dispatch; no Python conversion method entered."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/operand_census_cpu.py",
+      "result": "PASS 17",
+      "decides": "Scalars/empty/huge extents/offset/flags/consumed-twice/stride/grid metadata without launches."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/attribution_cpu.py",
+      "result": "PASS 22",
+      "decides": "Current-source failed-call/purpose/device attribution, plain/OOM."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/fix7_cpu_census.py",
+      "result": "PASS 36 children",
+      "decides": "Knob classes, deleted configuration, hook exceptions, both raw close entries and native runners; robust RESULT framing only."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/lock_checks_cpu.py",
+      "result": "PASS 3",
+      "decides": "Core close/relock retry and add-on lifecycle polling quiescence/diagnostics."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/knob_exit_cpu.py + core_knob_exit_cpu.py + query_diagnostic_cpu.py",
+      "result": "PASS",
+      "decides": "Finite callback exit despite huge knob; query failure names query after successful sync."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/diagnostic_errors_cpu.cpp + diagnostic_errors_cpu.py",
+      "result": "PASS 4",
+      "decides": "Original V8-01 marker error retention against current source."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/exit_log_oom_cpu.cpp + verify_exit_log_cpu.py + verify_core_exit_log_cpu.py",
+      "result": "PASS",
+      "decides": "Original V8-02 final logger control/allocation-OOM, both packages."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/compound_cleanup_cpu.cpp + watchdog_shim.c + watchdog_cpu.py",
+      "result": "PASS 5 watchdog stagings",
+      "decides": "Current-source L2 stop/start protocol: control, lock1/3 lost notify, join failure and thread-start allocation failure."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/acknowledgement_cpu.py",
+      "result": "PASS 5",
+      "decides": "Actual CUDA12.6 native add-on and actual hook: acknowledgement under normal/None/raising/interrupt/closed stderr, no launch."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/build_core_fence_cpu.py + core_fence_cpu.py",
+      "result": "RED (V9-01)",
+      "decides": "Four-arm export-fence error retention: compound CUDA cleanup failure plus report OOM loses prior error; other three controls pass."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/build_core_race_cpu.py + core_snapshot_shim.c + core_snapshot_cpu.py",
+      "result": "RED (V9-02)",
+      "decides": "Native first-record arrival after raw snapshot unlock must still deliver its known site/device/error when hook cannot write; written control passes."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/diagnostic_event_shim.cpp + diagnostic_events_gpu_legacy.py",
+      "result": "LEAD ONLY \u2014 NOT RUN",
+      "decides": "Single-GPU marker errors and real finite legacy-stream wait; exit3 with no GPU. Tests accepted D2/D12 scenario."
+    },
+    {
+      "path": "artifacts/p1t_rev9/probes/gpu_regressions.py fix8 / fix7 / fix56 / semantics / multidevice",
+      "result": "LEAD ONLY \u2014 NOT RUN",
+      "decides": "Current reviewed binaries run original regressions, arithmetic and producer-stream tests, zero skips; multidevice exits3 on one GPU. Other lanes single-GPU."
+    }
+  ],
+  "exploration": {
+    "test_only_recycle": "compound_cleanup_cpu.py was a dismissed hypothesis: forced alloc:event_recycle bypasses reserved capacity invariant; not a production defect. Source and failed first control retained in ledger/logs. It is not a merge gate or proof of a product defect."
+  },
+  "evidence_class": "Source reasoning, finite current-source CPU traces/UBSan/native-hook checks, compilation/ELF inspection, independently parsed historical lead receipts. No GPU execution.",
+  "scope": {
+    "baseline": "9df5bef",
+    "reviewed": "e4cf1d6",
+    "fix8_before": "6991939",
+    "observed_HEAD": "80e966220dfd4a02b54c176e8382c5207c88cc8f",
+    "verification": "read-only git diff e4cf1d6 -- tensor_cuda tc_signal empty; product bytes match requested revision.",
+    "GPU": "Not executed; probe lanes deferred to lead.",
+    "source_edits": "None; only authorized report/artifact/log/scratch paths written.",
+    "deletes": "None."
+  }
+}

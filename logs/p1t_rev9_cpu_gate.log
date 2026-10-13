@@ -1,0 +1,78 @@
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev9/artifacts/p1t_rev9/probes/diagnostic_errors_cpu.cpp:29:8: warning: ‘Held’ declared with greater visibility than the type of its field ‘Held::callback’ [-Wattributes]
+   29 | struct Held {DLManagedTensor m{};py::object callback;};
+      |        ^~~~
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev9/artifacts/p1t_rev9/probes/exit_log_oom_cpu.cpp:34:8: warning: ‘Held’ declared with greater visibility than the type of its field ‘Held::callback’ [-Wattributes]
+   34 | struct Held {DLManagedTensor m{};py::object callback;};
+      |        ^~~~
+run_cpu_checks 0 =0
+deferred_exit rc=0
+diagnostic_oom_query rc=0
+diagnostic_oom_sync rc=0
+diagnostic_oom_device rc=0
+fix2_harness_ck_census rc=0
+fix3_harness_accounting rc=0
+cpu_native_oom_sync rc=0
+cpu_native_throw_deleter rc=0
+sync_lock rc=0
+sync_late_release rc=0
+
+argument_census_cpu 0 PASS 1067 argument checks; 29 addon bindings, all typed positions both call styles; zero conversion calls
+
+operand_census_cpu 0 PASS 17 actual-source CPU descriptor checks
+
+attribution_cpu 0 PASS 22 current-source attribution assertions
+
+fix7_cpu_census 0 ASS addon_stderr:none
+PASS addon_stderr:raises
+PASS addon_stderr:raises_keyboardinterrupt
+PASS addon_interrupt_first_bytecode
+PASS addon_c_deleted
+PASS addon_close_raises
+PASS addon_native_entry
+PASS addon_native_runner
+PASS core_native_entry_runner
+
+lock_checks_cpu 0 PASS core_close
+PASS core_relock
+PASS addon_poll
+
+knob_exit_cpu 0 ARMED
+DELETER started
+IN_FLIGHT 1
+DELETER finished
+REFUSED
+FINALIZING True
+
+core_knob_exit_cpu 0 ARMED core actual-source host lifecycle
+DELETER started
+IN_FLIGHT 1
+DELETER finished
+FINALIZING True
+
+query_diagnostic_cpu 0 etion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: injected failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released
+PASS query error attributed correctly
+
+diagnostic_errors_cpu 0 ailures": 4,
+      "exit_log_fallbacks": 0,
+      "exit_report_unwritten": false,
+      "event_query_failures": 0,
+      "event_record_failures": 0,
+      "cublas_handle_destroy_failures": 0,
+      "cublas_handle_destroy_first_status": 0
+    }
+  }
+]
+
+verify_exit_log_cpu 0 DA failure(s) (the full report could not be built: it failed to allocate; allocation-free summary), the first: cudaEventQuery failed, querying a pending entry's completion event, on CUDA device 0: cudaErrorInvalidValue\n",
+    "reported": true
+  }
+]
+
+verify_core_exit_log_cpu 0 xit, 1 CUDA failure(s) on DLPack release / fill_ paths (P1-T core; the full report could not be built: it failed to allocate; allocation-free summary), the first: host probe error [CUDA device 0: cudaErrorInvalidValue]\n",
+    "reported": true
+  }
+]
+
+fix8_host 0 ...............                                                          [100%]
+15 passed in 6.63s
+

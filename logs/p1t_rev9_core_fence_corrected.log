@@ -1,0 +1,35 @@
+[
+  {
+    "oom": "plain",
+    "cleanup": "single",
+    "rc": 0,
+    "stdout": "[\"runtime_error\", \"__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaEventRecord on the legacy stream (cudaErrorInvalidValue: invalid argument);\", 0, 0]\n",
+    "stderr": ""
+  },
+  {
+    "oom": "oom",
+    "cleanup": "single",
+    "rc": 0,
+    "stdout": "[\"bad_alloc\", \"\", 1, 0]\n",
+    "stderr": ""
+  },
+  {
+    "oom": "plain",
+    "cleanup": "compound",
+    "rc": 0,
+    "stdout": "[\"runtime_error\", \"__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaEventRecord on the legacy stream (cudaErrorInvalidValue: invalid argument); cudaEventDestroy (cudaErrorInvalidResourceHandle: invalid resource handle);\", 0, 0]\n",
+    "stderr": ""
+  },
+  {
+    "oom": "oom",
+    "cleanup": "compound",
+    "rc": 0,
+    "stdout": "[\"bad_alloc\", \"\", 400, 0]\n",
+    "stderr": ""
+  }
+]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev9/artifacts/p1t_rev9/probes/core_fence_cpu.py", line 19, in <module>
+    assert v[3][2]==1 or v[3][3]>=1, 'cudaEventRecord failure is only local; cleanup overwrote its slot and reporting OOM erased it'
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: cudaEventRecord failure is only local; cleanup overwrote its slot and reporting OOM erased it

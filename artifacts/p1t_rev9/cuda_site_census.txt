@@ -1,0 +1,374 @@
+tc_signal/src/small_ops.cu:5:// atomic operations: each output element is written by exactly one thread. TensorCUDA core's `round` (half away from
+tc_signal/src/small_ops.cu:17:// reflection_pad1d and nearest upsample for the same index maps. Ours: nothing beyond the one-thread-per-output CUDA
+tc_signal/src/small_ops.cu:31:#ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
+tc_signal/src/small_ops.cu:39:constexpr cudaStream_t kLegacyStream = 0;  // the legacy default stream (TensorCUDA's only stream)
+tc_signal/src/small_ops.cu:42:// kernel failed when cudaGetLastError may be reporting an asynchronous error of earlier work (cuda_guard.h
+tc_signal/src/small_ops.cu:52:// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
+tc_signal/src/norms.cu:27:// order's 1e-5 normwise gate. rsqrtf (<= 2 ulp per the CUDA math documentation) would also pass; the IEEE pair is used
+tc_signal/src/norms.cu:38://    Taken: two-pass with a shift by the first sample. Ours: the CUDA mapping (one block per row, three passes over
+tc_signal/src/norms.cu:44://  * Deterministic shared-memory tree reduction: the standard CUDA reduction pattern (Harris, "Optimizing Parallel
+tc_signal/src/norms.cu:45://    Reduction in CUDA", NVIDIA 2007). Taken: the tree. Ours: nothing beyond fixing B.
+tc_signal/src/norms.cu:59:#ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
+tc_signal/src/norms.cu:67:constexpr cudaStream_t kLegacyStream = 0;  // the legacy default stream (TensorCUDA's only stream)
+tc_signal/src/norms.cu:70:// kernel failed when cudaGetLastError may be reporting an asynchronous error of earlier work (cuda_guard.h
+tc_signal/src/norms.cu:75:// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
+tc_signal/src/lstm.cu:22://  * transcendentals are the CUDA math library's accurate expf() and tanhf() (documented max error 2 ulp each); none of
+tc_signal/src/lstm.cu:55:#ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
+tc_signal/src/lstm.cu:64:// TensorCUDA queues on and the stream DLPack producers were asked to order against (stream=1).
+tc_signal/src/lstm.cu:65:constexpr cudaStream_t kLegacyStream = 0;
+tc_signal/src/lstm.cu:75:// that the kernel or the cuBLAS call failed when cudaGetLastError may be reporting an asynchronous error of earlier work
+tc_signal/src/lstm.cu:90:// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
+tc_signal/src/lstm.cu:93:// interpreter exit can race CUDA's own teardown), with M2's exact settings: legacy stream, CUBLAS_DEFAULT_MATH (never
+tc_signal/src/lstm.cu:96:// the GIL, so no extra lock is needed. cuBLAS allocates its own internal workspace for this handle (cudaMalloc inside
+tc_signal/src/lstm.cu:127:       << " (the new handle of CUDA device " << device << ")";  // P1T-FIX7 (sweep (j)): the device named
+tc_signal/src/lstm.cu:143:// (z >= 0: 1 / (1 + e^{-z}); z < 0: e^{z} / (1 + e^{z})). expf is the CUDA math library's accurate expf (2 ulp max),
+tc_signal/src/lstm.cu:225:    check_call_on(kPrefix, "initial_h copy", "cudaMemcpyAsync", device,
+tc_signal/src/lstm.cu:226:                  cudaMemcpyAsync(Y_h, h0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));
+tc_signal/src/lstm.cu:228:    check_call_on(kPrefix, "initial_h zero", "cudaMemsetAsync", device, cudaMemsetAsync(Y_h, 0, state_bytes, kLegacyStream));
+tc_signal/src/lstm.cu:230:    check_call_on(kPrefix, "initial_c copy", "cudaMemcpyAsync", device,
+tc_signal/src/lstm.cu:231:                  cudaMemcpyAsync(Y_c, c0, state_bytes, cudaMemcpyDeviceToDevice, kLegacyStream));
+tc_signal/src/lstm.cu:233:    check_call_on(kPrefix, "initial_c zero", "cudaMemsetAsync", device, cudaMemsetAsync(Y_c, 0, state_bytes, kLegacyStream));
+tc_signal/src/lstm.cu:281:  cudaStream_t s;
+tc_signal/src/dlpack_operand.h:1:// DLPack consumer side of tc_signal: turn any DLPack CUDA producer (or a bare capsule) into a validated fp32 operand.
+tc_signal/src/dlpack_operand.h:21:struct CUevent_st;  // cudaEvent_t is `CUevent_st*` (CUDA driver_types.h); kept opaque in this header
+tc_signal/src/dlpack_operand.h:104:  // with the memory, e.g. a broken CUDA context: a leak is safe, a release could be a use-after-free).
+tc_signal/src/dlpack_operand.h:157://     partial launch) records one CUDA event on the operand device's legacy stream and moves every operand's manager
+tc_signal/src/dlpack_operand.h:159://   * completed entries (cudaEventQuery == cudaSuccess) are released in FIFO order, on the calling host thread with
+tc_signal/src/dlpack_operand.h:164://   * deleters are NEVER called from a CUDA host callback (a deleter may call CUDA, e.g. torch's caching allocator);
+tc_signal/src/dlpack_operand.h:171:// Prior art: PyTorch's `Tensor.record_stream` and its CUDA caching allocator, which defers a block's reuse until CUDA
+tc_signal/src/dlpack_operand.h:172:// events recorded on every stream that used it have completed, polling them with cudaEventQuery from the allocating
+tc_signal/src/dlpack_operand.h:173:// host thread (c10/cuda/CUDACachingAllocator.cpp, "insert_events" / "process_events", 2017-; also its EventPool of
+tc_signal/src/dlpack_operand.h:176:// deleter when it no longer needs the tensor); the CUDA rule that host callbacks must not call CUDA (CUDA Runtime API,
+tc_signal/src/dlpack_operand.h:177:// cudaLaunchHostFunc). Taken: event-fenced deferred release polled from the host, event reuse. Ours: applying it to
+tc_signal/src/dlpack_operand.h:183:// P1T-FIX4: the constructor's last step takes any CUDA error already pending in the calling thread and raises it as
+tc_signal/src/dlpack_operand.h:207:  CUevent_st* event_ = nullptr;       // a cudaEvent_t from the per-device pool, acquired in the constructor
+tc_signal/src/dlpack_operand.h:219:// entries. P1T-FIX2 (N1): raises RuntimeError naming the CUDA error if the current-device query (cudaGetDevice) or a
+tc_signal/src/dlpack_operand.h:222:// it never reports a CUDA failure as success. N3: allocation-free up to the error message; a bad_alloc while building
+tc_signal/src/dlpack_operand.h:224:// P1T-FIX4 (V4-04): it first TAKES the calling thread's pre-existing CUDA error (cudaGetLastError), drains exactly as
+tc_signal/src/dlpack_operand.h:262:// P1T-FIX7 (V7-01): the runner's stderr line (C stdio, no Python) naming every recorded CUDA failure nobody raised yet,
+tc_signal/src/dlpack_operand.h:284:// (simulating an allocation failure there), kCuda* sites report cudaErrorLaunchFailure instead of calling CUDA. The
+tc_signal/src/dlpack_operand.h:295:  kCudaEventRecord = 1u << 5,        // ~RetainUntilComplete: cudaEventRecord (-> fallback sync)
+tc_signal/src/dlpack_operand.h:298:  kCudaCurrentDevice = 1u << 7,      // sync_and_release_all_impl: cudaGetDevice
+tc_signal/src/dlpack_operand.h:299:  kCudaEventQuery = 1u << 8,         // a pending entry's cudaEventQuery (synchronize's drain or the next-call drain)
+tc_signal/src/dlpack_operand.h:303:  kCudaMarkerCreate = 1u << 10,      // wait_device_work_diagnosed: cudaEventCreateWithFlags
+tc_signal/src/dlpack_operand.h:304:  kCudaMarkerRecord = 1u << 11,      // wait_device_work_diagnosed: cudaEventRecord
+tc_signal/src/dlpack_operand.h:305:  kCudaMarkerQuery = 1u << 12,       // wait_device_work_diagnosed: cudaEventQuery
+tc_signal/src/dlpack_operand.h:306:  kCudaMarkerDestroy = 1u << 13,     // destroy_marker: cudaEventDestroy (the event is still destroyed)
+tc_signal/src/dlpack_operand.h:319:// Same CUDA ordinal for every present operand (ValueError); returns the ordinal.
+tc_signal/src/conv.cu:37:#ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
+tc_signal/src/conv.cu:49:// same stream TensorCUDA queues on, and the stream DLPack producers were asked to order against (stream=1).
+tc_signal/src/conv.cu:50:constexpr cudaStream_t kLegacyStream = 0;
+tc_signal/src/conv.cu:52:void check_cuda(cudaError_t e, const char* what) {
+tc_signal/src/conv.cu:53:  if (e != cudaSuccess) {
+tc_signal/src/conv.cu:55:    os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+tc_signal/src/conv.cu:64:// device and never claim that a kernel or a cuBLAS call failed when cudaGetLastError may be reporting an asynchronous
+tc_signal/src/conv.cu:85:// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
+tc_signal/src/conv.cu:88:// interpreter exit can race CUDA's own teardown). All entry points run under the GIL, so no extra lock is needed.
+tc_signal/src/conv.cu:89:// cuBLAS allocates its own internal workspace for this handle on first use (cudaMalloc inside cuBLAS); that is the
+tc_signal/src/conv.cu:124:    os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(st) << " (the new handle of CUDA device "
+tc_signal/src/conv.cu:207:// observable effect" idea; denormal flushing as a fast-math symptom is documented in the CUDA C Programming Guide).
+tc_signal/src/conv.cu:291:  cudaStream_t s;
+tc_signal/src/conv.cu:309:  check_cuda(cudaRuntimeGetVersion(&bi.cudart_version), "cudaRuntimeGetVersion");
+tc_signal/src/conv.cu:313:  check_cuda(cudaGetDevice(&bi.current_device), "cudaGetDevice");
+tc_signal/src/m4_bindings.cpp:90:      os << "on CUDA device " << pr.first->device << " but operand '" << first << "' is on CUDA device " << dev
+tc_signal/src/lstm_bindings.cpp:159:      os << "tc_signal: operand '" << roles[i] << "': on CUDA device " << ps[i]->device << " but operand '" << first
+tc_signal/src/lstm_bindings.cpp:160:         << "' is on CUDA device " << dev << "; every operand must be on the same device";
+tc_signal/src/bindings.cpp:220:      os << "tc_signal: operand '" << roles[i] << "': on CUDA device " << ps[i]->device << " but operand '" << first
+tc_signal/src/bindings.cpp:221:         << "' is on CUDA device " << dev << "; every operand must be on the same device";
+tc_signal/src/bindings.cpp:381:// already closed), writes the recorded CUDA failures nobody reported (exit_log_unreported), and then hands the hook's
+tc_signal/src/bindings.cpp:536:    "release admission and waits itself (default diagnostic delay), writes any recorded CUDA failure nobody "
+tc_signal/src/bindings.cpp:538:    "P1T-FIX8 (V8-02): in every case, after the close and the wait, it is the last reader of recorded CUDA failures: "
+tc_signal/src/bindings.cpp:548:    "P1T-FIX8 (V8-02): called by tc_signal's exit hook once it has written every line, including a CUDA failure report "
+tc_signal/src/bindings.cpp:651:      "build_info()\n\nCUDA runtime / cuBLAS / DLPack versions this module was built and runs with.");
+tc_signal/src/cuda_guard.h:1:// P1T-FIX4: tc_signal's one device guard and its CUDA error-slot rules (replaces the four identical DeviceGuard copies
+tc_signal/src/cuda_guard.h:5:// and unchecked or ignored CUDA returns and error state (N1, V4-03, V4-04). The FIX4 sweep found these members here:
+tc_signal/src/cuda_guard.h:6://  * every guard IGNORED the result of the restoring cudaSetDevice (destructor), so a failed restore left the caller on
+tc_signal/src/cuda_guard.h:11://  1. Whoever reports a CUDA error consumes it: a raise after a failed CUDA call first takes the slot entry
+tc_signal/src/cuda_guard.h:12://     (cudaGetLastError), so the error is reported exactly once. CUDA 12.6 Programming Guide 3.2.12: the runtime keeps
+tc_signal/src/cuda_guard.h:14://     cudaGetLastError "returns this variable and resets it to cudaSuccess" (artifacts/p1t_fix4/cuda_doc_quotes.txt).
+tc_signal/src/cuda_guard.h:21:// Prior art: PyTorch c10::cuda::CUDAGuard / OptionalCUDAGuard (InlineDeviceGuard: switch in the constructor, restore in
+tc_signal/src/cuda_guard.h:22:// the destructor through CUDAGuardImpl::uncheckedSetDevice -> C10_CUDA_CHECK_WARN, which consumes the slot with
+tc_signal/src/cuda_guard.h:23:// cudaGetLastError and warns, never throws; read in the installed torch 2.11 headers, c10/cuda/impl/CUDAGuardImpl.h and
+tc_signal/src/cuda_guard.h:24:// c10/cuda/CUDAException.h); CuPy's cupy.cuda.Device context manager (__exit__ restores the previous device). Taken: the
+tc_signal/src/cuda_guard.h:41:void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept;
+tc_signal/src/cuda_guard.h:49:// P1T-FIX8 (sweep (k), consumed CUDA errors): the report exists BEFORE the slot entry it reports is consumed. Every
+tc_signal/src/cuda_guard.h:54:// cudaPeekAtLastError for the same reason. Prior art: FIX5 V5-02's record-before-consume rule; the CUDA 12.6 error-slot
+tc_signal/src/cuda_guard.h:55:// contract of cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset"). Ours: applying it
+tc_signal/src/cuda_guard.h:60:  cudaGetLastError();  // consumed only now that the report exists
+tc_signal/src/cuda_guard.h:64:// Rule 1: raise for a failed CUDA call of ours, consuming its slot entry once the report exists.
+tc_signal/src/cuda_guard.h:65:[[noreturn]] inline void raise_cuda_failure(const std::string& what, cudaError_t e) {
+tc_signal/src/cuda_guard.h:67:  os << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+tc_signal/src/cuda_guard.h:73://  * check_call_on: a CUDA runtime call returned an error (cudaMemcpyAsync, cudaMemsetAsync, ...): that call failed (its
+tc_signal/src/cuda_guard.h:75://  * check_launch_on: the check right after a kernel launch. A <<<...>>> launch returns nothing; cudaGetLastError then
+tc_signal/src/cuda_guard.h:77://    earlier work on the device (CUDA 12.6 Runtime API, cudaGetLastError: "Note that this function may also return
+tc_signal/src/cuda_guard.h:84:// Every helper consumes the slot entry it reports (rule 1). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK message
+tc_signal/src/cuda_guard.h:85:// ("CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be
+tc_signal/src/cuda_guard.h:86:// incorrect", c10/cuda/CUDAException.h, torch 2.11 headers; taken: stating the asynchronous possibility instead of
+tc_signal/src/cuda_guard.h:87:// blaming the last launch); the CUDA 12.6 cudaGetLastError note quoted above. Ours: the cuBLAS case and naming the
+tc_signal/src/cuda_guard.h:90:                                               cudaError_t e) {
+tc_signal/src/cuda_guard.h:92:  os << prefix << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e) << " (" << api
+tc_signal/src/cuda_guard.h:93:     << " on CUDA device " << device << " returned it)";
+tc_signal/src/cuda_guard.h:96:inline void check_call_on(const char* prefix, const char* what, const char* api, int device, cudaError_t e) {
+tc_signal/src/cuda_guard.h:97:  if (e != cudaSuccess) raise_call_failure_on(prefix, what, api, device, e);
+tc_signal/src/cuda_guard.h:100:  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
+tc_signal/src/cuda_guard.h:101:  if (e == cudaSuccess) return;
+tc_signal/src/cuda_guard.h:103:  os << prefix << "CUDA error at the launch check of " << kernel << " on CUDA device " << device << ": "
+tc_signal/src/cuda_guard.h:104:     << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+tc_signal/src/cuda_guard.h:105:     << " (cudaGetLastError right after the launch: the launch's own error, or an asynchronous error of earlier work "
+tc_signal/src/cuda_guard.h:106:        "on that device, which CUDA reports at a later call)";
+tc_signal/src/cuda_guard.h:110:  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
+tc_signal/src/cuda_guard.h:111:  if (e == cudaSuccess) return;
+tc_signal/src/cuda_guard.h:113:  os << prefix << "CUDA error found by the check after " << fn << " on CUDA device " << device
+tc_signal/src/cuda_guard.h:114:     << ", which returned CUBLAS_STATUS_SUCCESS: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+tc_signal/src/cuda_guard.h:115:     << " (cudaGetLastError; cuBLAS does not set the CUDA runtime's error state, so this is an asynchronous error of "
+tc_signal/src/cuda_guard.h:121:  os << prefix << fn << " failed: cuBLAS status " << status << " (on CUDA device " << device << ")";
+tc_signal/src/cuda_guard.h:133:    cudaError_t e = cudaGetDevice(&prev_);
+tc_signal/src/cuda_guard.h:134:    if (e != cudaSuccess) raise_cuda_failure("tc_signal: cudaGetDevice", e);
+tc_signal/src/cuda_guard.h:136:      e = cudaSetDevice(device);
+tc_signal/src/cuda_guard.h:137:      if (e != cudaSuccess) raise_cuda_failure("tc_signal: cudaSetDevice(" + std::to_string(device) + ")", e);
+tc_signal/src/cuda_guard.h:144:    const cudaError_t e = cudaSetDevice(prev_);
+tc_signal/src/cuda_guard.h:145:    if (e != cudaSuccess)
+tc_signal/src/cuda_guard.h:146:      raise_cuda_failure("tc_signal: restoring the caller's CUDA device " + std::to_string(prev_) +
+tc_signal/src/cuda_guard.h:148:                             " (cudaSetDevice; the calling thread's current device is still " +
+tc_signal/src/cuda_guard.h:154:    const cudaError_t e = cudaSetDevice(prev_);
+tc_signal/src/cuda_guard.h:155:    if (e != cudaSuccess) {
+tc_signal/src/cuda_guard.h:157:      cudaGetLastError();
+tc_signal/src/cuda_guard.h:171:// P1T-FIX7 (V7-02 sweep (j)): failed_at_switch() says WHICH of the guard's two calls failed (cudaSetDevice of the
+tc_signal/src/cuda_guard.h:172:// target device, or the cudaGetDevice before it), so a release path records the call that failed, not the call the
+tc_signal/src/cuda_guard.h:177:    cudaError_t e = cudaGetDevice(&prev_);
+tc_signal/src/cuda_guard.h:178:    if (e != cudaSuccess) {
+tc_signal/src/cuda_guard.h:179:      cudaGetLastError();
+tc_signal/src/cuda_guard.h:184:      e = cudaSetDevice(device);
+tc_signal/src/cuda_guard.h:185:      if (e != cudaSuccess) {
+tc_signal/src/cuda_guard.h:186:        cudaGetLastError();
+tc_signal/src/cuda_guard.h:196:    const cudaError_t e = cudaSetDevice(prev_);
+tc_signal/src/cuda_guard.h:197:    if (e != cudaSuccess) {
+tc_signal/src/cuda_guard.h:199:      cudaGetLastError();
+tc_signal/src/cuda_guard.h:204:  bool ok() const { return err_ == cudaSuccess; }
+tc_signal/src/cuda_guard.h:205:  cudaError_t error() const { return err_; }
+tc_signal/src/cuda_guard.h:206:  bool failed_at_switch() const { return switch_failed_; }  // P1T-FIX7: false = the cudaGetDevice before it failed
+tc_signal/src/cuda_guard.h:210:  cudaError_t err_ = cudaSuccess;
+tc_signal/src/conv_ops.h:48:  int cudart_version;      // cudaRuntimeGetVersion
+tc_signal/src/tuning.h:36:// flag), and CUDA failures named in one synchronize() error message (the rest are counted). Neither changes numerics.
+tc_signal/src/dlpack_operand.cpp:392:  // Array API order: ask the producer's device first. A non-CUDA producer is refused here, before __dlpack__ is
+tc_signal/src/dlpack_operand.cpp:393:  // called with a CUDA stream argument (CPU producers such as NumPy reject any stream other than None).
+tc_signal/src/dlpack_operand.cpp:402:    if (device_type != kDLCUDA) {
+tc_signal/src/dlpack_operand.cpp:404:      os << "device type " << device_type << " is not kDLCUDA (2); tc_signal takes CUDA device memory only";
+tc_signal/src/dlpack_operand.cpp:442:  if (t->device.device_type != kDLCUDA) {
+tc_signal/src/dlpack_operand.cpp:445:       << " is not kDLCUDA (2); tc_signal takes CUDA device memory only";
+tc_signal/src/dlpack_operand.cpp:699:      os << "on CUDA device " << op->device() << " but operand '" << first << "' is on CUDA device " << dev
+tc_signal/src/dlpack_operand.cpp:729://  * N1, no CUDA error is reported as success: a failed current-device query (cudaGetDevice) is now an error of
+tc_signal/src/dlpack_operand.cpp:734:// Prior art for the in-place two-phase drain: PyTorch's CUDA caching allocator processes its event list in place from
+tc_signal/src/dlpack_operand.cpp:755:// TEST HOOK: the CUDA error an armed kCuda* site reports instead of calling CUDA (tests only; never in production).
+tc_signal/src/dlpack_operand.cpp:756:constexpr cudaError_t kTestInjectedCudaError = cudaErrorLaunchFailure;
+tc_signal/src/dlpack_operand.cpp:766:// recorded CUDA failure as (device, cudaError_t) only, so the message had to assume which call had failed: phase 2's
+tc_signal/src/dlpack_operand.cpp:767:// failed cudaEventQuery went into the same arrays as phase 1's stream syncs, and synchronize() then said "the legacy
+tc_signal/src/dlpack_operand.cpp:769:// on 429446d). The sweep found the same assumption at four more sites: a failed switch (cudaSetDevice) or
+tc_signal/src/dlpack_operand.cpp:770:// current-device read (cudaGetDevice) inside a device guard was reported as the stream sync, event record or event
+tc_signal/src/dlpack_operand.cpp:772:// current-device query's error. Now every record carries WHICH CUDA call failed and FOR WHAT, with the device that call
+tc_signal/src/dlpack_operand.cpp:775:// names the failed CUDA call and its device, and never an operation that succeeded.
+tc_signal/src/dlpack_operand.cpp:778:// distinct return contracts of cudaEventQuery and cudaStreamSynchronize (CUDA 12.6 Runtime API: why they must not share
+tc_signal/src/dlpack_operand.cpp:781:  kGetDevice,     // cudaGetDevice
+tc_signal/src/dlpack_operand.cpp:782:  kSetDevice,     // cudaSetDevice
+tc_signal/src/dlpack_operand.cpp:783:  kStreamSync,    // cudaStreamSynchronize(cudaStreamLegacy)
+tc_signal/src/dlpack_operand.cpp:784:  kEventQuery,    // cudaEventQuery
+tc_signal/src/dlpack_operand.cpp:785:  kEventRecord,   // cudaEventRecord(event, cudaStreamLegacy)
+tc_signal/src/dlpack_operand.cpp:786:  kEventDestroy,  // cudaEventDestroy
+tc_signal/src/dlpack_operand.cpp:787:  kEventCreate,   // cudaEventCreateWithFlags (P1T-FIX8: the exit device wait's marker event)
+tc_signal/src/dlpack_operand.cpp:806:  cudaError_t err = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:811:    case FailedCall::kGetDevice: return "cudaGetDevice";
+tc_signal/src/dlpack_operand.cpp:812:    case FailedCall::kSetDevice: return "cudaSetDevice";
+tc_signal/src/dlpack_operand.cpp:813:    case FailedCall::kStreamSync: return "cudaStreamSynchronize";
+tc_signal/src/dlpack_operand.cpp:814:    case FailedCall::kEventQuery: return "cudaEventQuery";
+tc_signal/src/dlpack_operand.cpp:815:    case FailedCall::kEventRecord: return "cudaEventRecord";
+tc_signal/src/dlpack_operand.cpp:816:    case FailedCall::kEventDestroy: return "cudaEventDestroy";
+tc_signal/src/dlpack_operand.cpp:817:    case FailedCall::kEventCreate: return "cudaEventCreateWithFlags";
+tc_signal/src/dlpack_operand.cpp:819:  return "a CUDA call";
+tc_signal/src/dlpack_operand.cpp:823:// exit loggers (no std::string, no ostream: only static texts, cudaGetErrorName's static name and C stdio).
+tc_signal/src/dlpack_operand.cpp:833:    case Purpose::kRestoreDevice: return "restoring the caller's CUDA device";
+tc_signal/src/dlpack_operand.cpp:834:    case Purpose::kUnnamed: return "an unnamed CUDA failure";
+tc_signal/src/dlpack_operand.cpp:838:  return "a CUDA call";
+tc_signal/src/dlpack_operand.cpp:842:// guard's own failure (its cudaGetDevice, or its cudaSetDevice to the target) means the intended call never ran: the
+tc_signal/src/dlpack_operand.cpp:845:  const auto error = [&os, &r] { os << cudaGetErrorName(r.err) << ": " << cudaGetErrorString(r.err); };
+tc_signal/src/dlpack_operand.cpp:849:      os << "the current-device query cudaGetDevice failed (";
+tc_signal/src/dlpack_operand.cpp:859:      os << "the legacy stream of device " << r.device << " could not be synchronized (cudaStreamSynchronize: ";
+tc_signal/src/dlpack_operand.cpp:869:         << " could not be queried (cudaEventQuery: ";
+tc_signal/src/dlpack_operand.cpp:874:      os << "cudaEventQuery of a pending entry's completion event in the next-call drain (the entry stayed pending; "
+tc_signal/src/dlpack_operand.cpp:886:      os << "recording a call's completion event (cudaEventRecord on the operands' device; the call's operands were "
+tc_signal/src/dlpack_operand.cpp:897:      os << "cudaEventDestroy on device " << r.device << " (";
+tc_signal/src/dlpack_operand.cpp:902:      os << "restoring the caller's CUDA device (cudaSetDevice) on device " << r.device << " (";
+tc_signal/src/dlpack_operand.cpp:907:      os << "a CUDA failure whose call and device were not recorded (";
+tc_signal/src/dlpack_operand.cpp:912:      // P1T-FIX8 (sweep (k)): the call was refused with MemoryError (its RuntimeError could not be built); the CUDA
+tc_signal/src/dlpack_operand.cpp:920:         << " failed (cudaEventCreateWithFlags: ";
+tc_signal/src/dlpack_operand.cpp:930:        os << " could not be created (cudaEventCreateWithFlags: ";
+tc_signal/src/dlpack_operand.cpp:932:        os << " could not be recorded (cudaEventRecord: ";
+tc_signal/src/dlpack_operand.cpp:934:        os << " could not be queried (cudaEventQuery: ";
+tc_signal/src/dlpack_operand.cpp:936:        os << " could not be destroyed (cudaEventDestroy: ";
+tc_signal/src/dlpack_operand.cpp:946:    os << "the current-device query before switching to device " << r.device << " failed (cudaGetDevice: ";
+tc_signal/src/dlpack_operand.cpp:948:    os << "switching to device " << r.device << " failed (cudaSetDevice: ";
+tc_signal/src/dlpack_operand.cpp:963:  bool query_failed = false;               // cudaGetDevice failed (N1: never a success)
+tc_signal/src/dlpack_operand.cpp:964:  cudaError_t query_error = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:994:    return {FailedCall::kStreamSync, Purpose::kUnnamed, -1, cudaErrorUnknown};
+tc_signal/src/dlpack_operand.cpp:999:  cudaEvent_t event = nullptr;   // recorded on `device`'s legacy stream right after the call's last launch
+tc_signal/src/dlpack_operand.cpp:1008:  std::vector<cudaEvent_t> free;
+tc_signal/src/dlpack_operand.cpp:1029:  unsigned long long release_errors = 0;          // N1: CUDA failures on the release paths (fallback sync, bound drain)
+tc_signal/src/dlpack_operand.cpp:1037:  // P1T-FIX4 (sweep): CUDA failures on paths that cannot raise and leak no operand (a restore of the caller's device,
+tc_signal/src/dlpack_operand.cpp:1040:  // own cudaGetDevice / cudaSetDevice was what failed).
+tc_signal/src/dlpack_operand.cpp:1048:  cudaError_t prior_error = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1049:  // P1T-FIX5: CUDA failures that used to be consumed from the error slot without being recorded. Each is now counted
+tc_signal/src/dlpack_operand.cpp:1051:  // raises it exactly once: V5-02, a non-NotReady cudaEventQuery failure in the next-call drain (FIX4 rows 47/50);
+tc_signal/src/dlpack_operand.cpp:1057:  // SyncReport; when building the RuntimeError's message threw bad_alloc, the caller saw MemoryError and the CUDA
+tc_signal/src/dlpack_operand.cpp:1065:  // query, destroy). FIX7 L1 consumed them with cudaGetLastError and recorded nothing. Each is now counted here AND
+tc_signal/src/dlpack_operand.cpp:1076:  cudaError_t exit_report_prior = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1089:// restore is now checked (62c8d9f ignored the restoring cudaSetDevice's result).
+tc_signal/src/dlpack_operand.cpp:1092:// guard's cudaGetDevice / cudaSetDevice, or cudaStreamSynchronize itself).
+tc_signal/src/dlpack_operand.cpp:1094:  cudaError_t err = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1100:// cudaStreamSynchronize for the work queued on each device's legacy stream; a kernel that never finishes made exit
+tc_signal/src/dlpack_operand.cpp:1106:// when the work finished. The cudaStreamSynchronize that follows returns at once and keeps its own error and its
+tc_signal/src/dlpack_operand.cpp:1107:// attribution (V7-02: a failure is still named as cudaStreamSynchronize). Only CUDA calls this file already makes
+tc_signal/src/dlpack_operand.cpp:1108:// are used (cudaEventCreateWithFlags / Record / Query / Destroy, cudaPeekAtLastError / cudaGetLastError), so the
+tc_signal/src/dlpack_operand.cpp:1112:// diagnostic schedule; event polling as a host-side progress check (cudaEventQuery's documented NotReady contract,
+tc_signal/src/dlpack_operand.cpp:1113:// CUDA 12.6 Runtime API; unverified here, lead to check "cudaEventQuery cudaErrorNotReady"); ours: confining it to the
+tc_signal/src/dlpack_operand.cpp:1123:// P1T-FIX8, round-8 review finding V8-01 (MINOR): FIX7's L1 marker erased its own CUDA failures. Every failed marker
+tc_signal/src/dlpack_operand.cpp:1124:// call (cudaEventCreateWithFlags, cudaEventRecord, a non-NotReady cudaEventQuery, cudaEventDestroy) is now RECORDED as
+tc_signal/src/dlpack_operand.cpp:1128:// exit_marker_failures. A failed create, record or query no longer drops the wait to a silent cudaStreamSynchronize:
+tc_signal/src/dlpack_operand.cpp:1130:// "finished" is printed only when completion was proved: by cudaEventQuery returning cudaSuccess here, or by that
+tc_signal/src/dlpack_operand.cpp:1131:// stream sync returning cudaSuccess. cudaErrorNotReady from cudaEventQuery is not a failure: it is the documented
+tc_signal/src/dlpack_operand.cpp:1132:// "still running" answer (CUDA 12.6 Runtime API, cudaEventQuery: "cudaErrorNotReady if the event has not been
+tc_signal/src/dlpack_operand.cpp:1133:// completed yet"; unverified here, lead to check "cudaEventQuery cudaErrorNotReady"); it is taken out of the error
+tc_signal/src/dlpack_operand.cpp:1135:// rule (taken as is); the CUDA 12.6 error-slot contract of cudaGetLastError / cudaPeekAtLastError. Ours: the marker's
+tc_signal/src/dlpack_operand.cpp:1148:               "tc_signal: interpreter exit is waiting for the work queued on the legacy stream of CUDA device %d "
+tc_signal/src/dlpack_operand.cpp:1160:// Printed only after completion was proved (a cudaEventQuery or a cudaStreamSynchronize that returned cudaSuccess).
+tc_signal/src/dlpack_operand.cpp:1163:               "tc_signal: the work queued on the legacy stream of CUDA device %d finished after %.1f s (%s); "
+tc_signal/src/dlpack_operand.cpp:1169:void note_exit_marker_failure(FailedCall call, int device, cudaError_t err) noexcept {
+tc_signal/src/dlpack_operand.cpp:1175:void destroy_marker(int device, cudaEvent_t ev) noexcept {
+tc_signal/src/dlpack_operand.cpp:1176:  const cudaError_t real = cudaEventDestroy(ev);
+tc_signal/src/dlpack_operand.cpp:1177:  const cudaError_t e = test_hooks::take(test_hooks::kCudaMarkerDestroy) ? kTestInjectedCudaError : real;
+tc_signal/src/dlpack_operand.cpp:1178:  if (e != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1180:    cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1184:// The marker wait. Returns true when completion was PROVED (the query returned cudaSuccess; the stream sync that
+tc_signal/src/dlpack_operand.cpp:1188:  cudaEvent_t ev = nullptr;
+tc_signal/src/dlpack_operand.cpp:1189:  const cudaError_t ce = test_hooks::take(test_hooks::kCudaMarkerCreate)
+tc_signal/src/dlpack_operand.cpp:1191:                             : cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+tc_signal/src/dlpack_operand.cpp:1192:  if (ce != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1194:    cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1197:  const cudaError_t re =
+tc_signal/src/dlpack_operand.cpp:1198:      test_hooks::take(test_hooks::kCudaMarkerRecord) ? kTestInjectedCudaError : cudaEventRecord(ev, cudaStreamLegacy);
+tc_signal/src/dlpack_operand.cpp:1199:  if (re != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1201:    cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1206:    const cudaError_t q =
+tc_signal/src/dlpack_operand.cpp:1207:        test_hooks::take(test_hooks::kCudaMarkerQuery) ? kTestInjectedCudaError : cudaEventQuery(ev);
+tc_signal/src/dlpack_operand.cpp:1208:    if (q == cudaSuccess) break;  // completion proved
+tc_signal/src/dlpack_operand.cpp:1209:    if (q != cudaErrorNotReady) {
+tc_signal/src/dlpack_operand.cpp:1211:      cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1215:    if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();  // NotReady: "still running", not a failure
+tc_signal/src/dlpack_operand.cpp:1226:// is inside cudaStreamSynchronize), continuing the same schedule; it touches no CUDA state and no Python object, and is
+tc_signal/src/dlpack_operand.cpp:1256:                   "tc_signal: interpreter exit is waiting for the work queued on the legacy stream of CUDA device %d "
+tc_signal/src/dlpack_operand.cpp:1332:  cudaError_t r = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1334:    r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
+tc_signal/src/dlpack_operand.cpp:1341:      r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
+tc_signal/src/dlpack_operand.cpp:1344:      r = test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
+tc_signal/src/dlpack_operand.cpp:1346:      if (r == cudaSuccess && s.written > 0) device_wait_finished(device, s, "cudaStreamSynchronize returned");
+tc_signal/src/dlpack_operand.cpp:1349:  if (r != cudaSuccess) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1373:    } else if (r.err != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1380:      if (dev[i] == d) return res[i].err != cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1386:// N1: a CUDA failure on a release path that cannot raise (inside the noexcept destructor). Raised by the next
+tc_signal/src/dlpack_operand.cpp:1408:// ignored the result). Prior art: PyTorch's CUDAEvent destructor, "event destruction done on creating device to avoid
+tc_signal/src/dlpack_operand.cpp:1409:// creating a CUDA context on other devices" (c10/cuda/CUDAEvent.h, torch 2.11 headers: CUDAGuard, then
+tc_signal/src/dlpack_operand.cpp:1410:// C10_CUDA_CHECK_WARN(cudaEventDestroy)). Taken: destroy under the event's device, checked, never thrown. Ours: the
+tc_signal/src/dlpack_operand.cpp:1412:// P1T-FIX7 (sweep (j)): when the guard's own cudaGetDevice / cudaSetDevice fails, cudaEventDestroy is never called; the
+tc_signal/src/dlpack_operand.cpp:1413:// record names the guard's call (FIX6 recorded "cudaEventDestroy" with the guard's error).
+tc_signal/src/dlpack_operand.cpp:1414:void destroy_event_on_device(PendingState& st, int device, cudaEvent_t ev) noexcept {
+tc_signal/src/dlpack_operand.cpp:1421:  const cudaError_t r = cudaEventDestroy(ev);
+tc_signal/src/dlpack_operand.cpp:1422:  if (r != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1424:    cudaGetLastError();  // then this consumes cudaEventDestroy's slot entry
+tc_signal/src/dlpack_operand.cpp:1429:void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
+tc_signal/src/dlpack_operand.cpp:1536:  // TEST HOOK kCudaCurrentDevice (P1T-FIX6 V6-03 regression): report a one-shot failure instead of calling CUDA.
+tc_signal/src/dlpack_operand.cpp:1537:  const cudaError_t qe =
+tc_signal/src/dlpack_operand.cpp:1538:      test_hooks::take(test_hooks::kCudaCurrentDevice) ? kTestInjectedCudaError : cudaGetDevice(&cur);
+tc_signal/src/dlpack_operand.cpp:1539:  if (qe != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1542:    cudaGetLastError();       // P1T-FIX8 (sweep (k)): consumed after it is recorded
+tc_signal/src/dlpack_operand.cpp:1547:  // P1T-FIX7 (V7-02): each phase-1 failure is recorded with the call that failed (the guard's cudaGetDevice /
+tc_signal/src/dlpack_operand.cpp:1548:  // cudaSetDevice, or cudaStreamSynchronize) and its device; the spill keeps its own device (FIX6: "device -1").
+tc_signal/src/dlpack_operand.cpp:1550:    if (set.res[i].err != cudaSuccess)
+tc_signal/src/dlpack_operand.cpp:1555:    // TEST HOOK kCudaEventQuery (P1T-FIX6 V6-03 regression): a one-shot query failure instead of calling CUDA.
+tc_signal/src/dlpack_operand.cpp:1556:    const cudaError_t r = test_hooks::take(test_hooks::kCudaEventQuery) ? kTestInjectedCudaError
+tc_signal/src/dlpack_operand.cpp:1557:                                                                          : cudaEventQuery(st.q.front().event);
+tc_signal/src/dlpack_operand.cpp:1559:    const bool complete = (r == cudaSuccess);
+tc_signal/src/dlpack_operand.cpp:1561:      if (r == cudaErrorNotReady) {
+tc_signal/src/dlpack_operand.cpp:1562:        if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1569:        cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1583:cudaEvent_t acquire_event(int device) {
+tc_signal/src/dlpack_operand.cpp:1587:    cudaEvent_t ev = de.free.back();
+tc_signal/src/dlpack_operand.cpp:1596:  cudaEvent_t ev = nullptr;
+tc_signal/src/dlpack_operand.cpp:1597:  cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : g.error();
+tc_signal/src/dlpack_operand.cpp:1598:  if (r != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1603:    // P1T-FIX7 (sweep (j)): name the call that failed: the guard's cudaGetDevice / cudaSetDevice (then no event was
+tc_signal/src/dlpack_operand.cpp:1604:    // created at all), or cudaEventCreateWithFlags itself (FIX6 named neither).
+tc_signal/src/dlpack_operand.cpp:1606:    os << "tc_signal: cannot create the completion event on CUDA device " << device << ": " << cudaGetErrorName(r)
+tc_signal/src/dlpack_operand.cpp:1607:       << ": " << cudaGetErrorString(r) << " ("
+tc_signal/src/dlpack_operand.cpp:1608:       << (g.ok() ? "cudaEventCreateWithFlags returned it"
+tc_signal/src/dlpack_operand.cpp:1610:                         ? "switching to that device failed, cudaSetDevice returned it; no event was created"
+tc_signal/src/dlpack_operand.cpp:1611:                         : "the current-device query before switching failed, cudaGetDevice returned it; no event "
+tc_signal/src/dlpack_operand.cpp:1616:    cudaGetLastError();  // consumed only now that the report exists
+tc_signal/src/dlpack_operand.cpp:1621:      cudaGetLastError();  // recorded above: consumed so it is not reported twice
+tc_signal/src/dlpack_operand.cpp:1737:void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept {
+tc_signal/src/dlpack_operand.cpp:1766:  // P1T-FIX4 (sweep, CUDA error state): every launch of every entry point follows this constructor, and each launch is
+tc_signal/src/dlpack_operand.cpp:1774:  // completion event", cudaErrorNoDevice, which the runtime keeps in the slot permanently: receipt
+tc_signal/src/dlpack_operand.cpp:1776:  // Prior art: CUDA 12.6 Programming Guide 3.2.12: "one has to make sure that the runtime error variable is set to
+tc_signal/src/dlpack_operand.cpp:1777:  // cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel
+tc_signal/src/dlpack_operand.cpp:1780:  // P1T-FIX8 (sweep (k)): read with cudaPeekAtLastError and consumed only once the report exists, so a bad_alloc while
+tc_signal/src/dlpack_operand.cpp:1782:  const cudaError_t pending_err = cudaPeekAtLastError();
+tc_signal/src/dlpack_operand.cpp:1783:  if (pending_err != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1788:    os << "tc_signal: a CUDA error was already pending in this thread before this call's first launch ("
+tc_signal/src/dlpack_operand.cpp:1789:       << cudaGetErrorName(pending_err) << ": " << cudaGetErrorString(pending_err)
+tc_signal/src/dlpack_operand.cpp:1806:  cudaError_t r = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1813:                                                                  : cudaEventRecord(event_, cudaStreamLegacy));
+tc_signal/src/dlpack_operand.cpp:1815:  if (r == cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1825:      r = cudaErrorMemoryAllocation;  // e was not moved (push_back's strong guarantee): use the fallback below
+tc_signal/src/dlpack_operand.cpp:1831:    // without a record, so when the fallback sync below succeeded the CUDA failure was never reported. It is a failure
+tc_signal/src/dlpack_operand.cpp:1834:    // P1T-FIX7 (sweep (j)): recorded as the call that failed: cudaEventRecord, or the guard's cudaGetDevice /
+tc_signal/src/dlpack_operand.cpp:1835:    // cudaSetDevice, in which case no record was attempted (FIX6 named cudaEventRecord for both).
+tc_signal/src/dlpack_operand.cpp:1838:    cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1840:  if (r != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1844:    if (sr.err == cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1867:    const cudaError_t r = test_hooks::take(test_hooks::kCudaEventQuery) ? kTestInjectedCudaError
+tc_signal/src/dlpack_operand.cpp:1868:                                                                          : cudaEventQuery(st.q.front().event);
+tc_signal/src/dlpack_operand.cpp:1869:    if (r != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:1870:      // cudaErrorNotReady: still pending (FIFO: later entries wait too). CUDA 12.6 does not leave NotReady in the
+tc_signal/src/dlpack_operand.cpp:1884:      // releases on a successful query, or leaks it with no completion proof. NotReady is not recorded: CUDA 12.6
+tc_signal/src/dlpack_operand.cpp:1886:      // Prior art: NVIDIA CUDA 12.6 cudaEventQuery / cudaGetLastError contracts (a returned error vs the per-thread slot);
+tc_signal/src/dlpack_operand.cpp:1888:      if (r == cudaErrorNotReady) {
+tc_signal/src/dlpack_operand.cpp:1889:        if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1893:        cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:1904:// P1T-FIX4, round-4 review finding V4-04 (MINOR). 62c8d9f never looked at the calling thread's CUDA last-error slot:
+tc_signal/src/dlpack_operand.cpp:1905:// after a synchronous launch refusal (cudaErrorInvalidConfiguration, a NULL kernel, ...) that queued no work, every
+tc_signal/src/dlpack_operand.cpp:1907://  * FIRST, before any query, sync or release can replace it, the existing error is TAKEN (cudaGetLastError) and held;
+tc_signal/src/dlpack_operand.cpp:1911:// Clear (take), not peek (decision justified against the CUDA semantics, receipts artifacts/p1t_fix4/):
+tc_signal/src/dlpack_operand.cpp:1920://  * the runtime's own no-device state (cudaErrorNoDevice) is not reset by cudaGetLastError at all (measured).
+tc_signal/src/dlpack_operand.cpp:1921:// Prior art: NVIDIA CUDA 12.6 cudaGetLastError / cudaPeekAtLastError ("returns this variable and resets it" versus
+tc_signal/src/dlpack_operand.cpp:1922:// "does not reset"; Programming Guide 3.2.12) and cudaStreamSynchronize; PyTorch's convention of consuming the slot when
+tc_signal/src/dlpack_operand.cpp:1923:// it reports (C10_CUDA_KERNEL_LAUNCH_CHECK = C10_CUDA_CHECK(cudaGetLastError()); C10_CUDA_CHECK_WARN, torch 2.11
+tc_signal/src/dlpack_operand.cpp:1948:  st.prior_error = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:1960:// (V7-02, sweep (j)): the failed CUDA call, the device it concerned, and nothing that succeeded.
+tc_signal/src/dlpack_operand.cpp:1967:    os << sep << "a CUDA error was already pending in this thread when synchronize() was called ("
+tc_signal/src/dlpack_operand.cpp:1968:       << cudaGetErrorName(st.prior_error) << ": " << cudaGetErrorString(st.prior_error)
+tc_signal/src/dlpack_operand.cpp:2003:       << " CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: ";
+tc_signal/src/dlpack_operand.cpp:2017:// only (call_name, purpose_name, cudaGetErrorName, which returns a static string: CUDA 12.6 Runtime API; unverified
+tc_signal/src/dlpack_operand.cpp:2018:// here, lead to check "cudaGetErrorName returns static string"). Prior art: allocation-free last-chance reporting, as
+tc_signal/src/dlpack_operand.cpp:2026:  cudaError_t prior = cudaSuccess;
+tc_signal/src/dlpack_operand.cpp:2060:                 "%s %llu CUDA failure(s) (%s; allocation-free summary), the first: a CUDA error already pending in the "
+tc_signal/src/dlpack_operand.cpp:2063:                 head, r.count, why, cudaGetErrorName(r.prior));
+tc_signal/src/dlpack_operand.cpp:2065:    std::fprintf(stderr, "%s %llu CUDA failure(s) (%s; allocation-free summary), the first: %s failed, %s, on CUDA "
+tc_signal/src/dlpack_operand.cpp:2068:                 cudaGetErrorName(r.first.err));
+tc_signal/src/dlpack_operand.cpp:2070:    std::fprintf(stderr, "%s %llu CUDA failure(s) (%s; allocation-free summary), the first: %s failed, %s (no device): "
+tc_signal/src/dlpack_operand.cpp:2073:                 cudaGetErrorName(r.first.err));
+tc_signal/src/dlpack_operand.cpp:2101:// (the count and the first record: call, purpose, device, cudaGetErrorName) is written instead, and the records are
+tc_signal/src/dlpack_operand.cpp:2110:        st, "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet:");
+tc_signal/src/dlpack_operand.cpp:2118:  write_summary_line("tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported "
+tc_signal/src/dlpack_operand.cpp:2143:  write_summary_line("tc_signal: at interpreter exit, synchronize() raised a CUDA failure report that the exit hook "
+tc_signal/src/dlpack_operand.cpp:2154:  const cudaError_t prior = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): recorded below, THEN consumed
+tc_signal/src/dlpack_operand.cpp:2155:  if (prior != cudaSuccess) {
+tc_signal/src/dlpack_operand.cpp:2158:    cudaGetLastError();
+tc_signal/src/dlpack_operand.cpp:2166:  // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
+tc_signal/src/dlpack_operand.cpp:2170:      report_message(st, "tc_signal.synchronize: CUDA error, so the release is not reported as a success:");

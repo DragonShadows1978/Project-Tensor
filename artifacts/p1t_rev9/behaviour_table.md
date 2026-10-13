@@ -1,0 +1,10 @@
+| Item | Verdict |
+|---|---|
+| U1 | ACCEPTABLE |
+| U2 | ACCEPTABLE |
+| U3 | ACCEPTABLE |
+| U4 | ACCEPTABLE |
+| U5 | ACCEPTABLE |
+| U6 | DEFECT — MINOR (V9-02) |
+| U7 | DEFECT — MINOR (V9-01) |
+| U8 | ACCEPTABLE |
