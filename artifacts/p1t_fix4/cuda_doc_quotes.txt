@@ -1,0 +1,36 @@
+# Source: CUDA C++ Programming Guide, CUDA 12.6 archive, https://docs.nvidia.com/cuda/archive/12.6.0/cuda-c-programming-guide/index.html
+# fetched 2026-10-13 through the AtlasForge web proxy (cache fetch_77047b6c142aa0965fe2aceab5c0200bdcc00dedcec420ea6b88c306228cbabd.json )
+
+=== excerpt at 3.2.9.3. Stream and Event Behavior offset 136623
+3.2.9.3. Stream and Event Behavior
+A kernel launch will fail if it is issued to a stream that is not associated to the current device as illustrated in the following code sample.
+cudaSetDevice(0); // Set device 0 as current
+cudaStream_t s0;
+cudaStreamCreate(&s0); // Create stream s0 on device 0
+MyKernel<<<100, 64, 0, s0>>>(); // Launch kernel on device 0 in s0
+cudaSetDevice(1); // Set device 1 as current
+cudaStream_t s1;
+cudaStreamCreate(&s1); // Create stream s1 on device 1
+MyKernel<<<100, 64, 0, s1>>>(); // Launch kernel on device 1 in s1
+// This kernel launch will fail:
+MyKernel<<<100, 64, 0, s0>>>(); // Launch kernel on device 1 in s0
+A memory copy will succeed even if it is issued to a stream that is not associated to the current device.
+cudaEventRecord() will fail if the input event and input stream are associated to different devices.
+cudaEventElapsedTime() will fail if the two input events are associated to different devices.
+cudaEventSynchronize() and cudaEventQuery() will succeed even if the input event is associated to a device that is different from the current device.
+cudaStreamWaitEvent() will succeed even if the input stream and input event are associated to different devices. cudaStreamWaitEvent() can therefore be used to synchronize multiple devices with each other.
+Each device has its own default stream (see Default Stream), so commands issued to the default stream of a device may execute out of order or concurrently with respect to commands issued to the de
+
+=== excerpt at 3.2.12. Error Checking offset 145152
+3.2.12. Error Checking
+All runtime functions return an error code, but for an asynchronous function (see Asynchronous Concurrent Execution), this error code cannot possibly report any of the asynchronous errors that could occur on the device since the function returns before the device has completed the task; the error code only reports errors that occur on the host prior to executing the task, typically related to parameter validation; if an asynchronous error occurs, it will be reported by some subsequent unrelated runtime function call.
+The only way to check for asynchronous errors just after some asynchronous function call is therefore to synchronize just after the call by calling cudaDeviceSynchronize() (or by using any other synchronization mechanisms described in Asynchronous Concurrent Execution) and checking the error code returned by cudaDeviceSynchronize().
+The runtime maintains an error variable for each host thread that is initialized to cudaSuccess and is overwritten by the error code every time an error occurs (be it a parameter validation error or an asynchronous error). cudaPeekAtLastError() returns this variable. cudaGetLastError() returns this variable and resets it to cudaSuccess.
+Kernel launches do not return any error code, so cudaPeekAtLastError() or cudaGetLastError() must be called just after the kernel launch to retrieve any pre-launch errors. To ensure that any error returned by cudaPeekAtLastError() or cudaGetLastError() does not originate from calls prior to the kernel launch, one has to make sure that the runtime error variable is set to cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel launch. Kernel launches are asynchronous, so to check for asynchronous errors, the application must synchronize in-between the kernel launch and the call to cudaPeekAtLastError() or cudaGetLastErro
+
+=== continuation of 3.2.12 (characters 1900-2600 after the heading)
+r().
+Note that cudaErrorNotReady that may be returned by cudaStreamQuery() and cudaEventQuery() is not considered an error and is therefore not reported by cudaPeekAtLastError() or cudaGetLastError().
+3.2.13. Call Stack
+On devices of compute capability 2.x and higher, the size of the call stack can be queried usingcudaDeviceGetLimit() and set using cudaDeviceSetLimit().
+When the call stack overflows, the kernel call fails with a stack overflow error if the application is run via a CUDA debugger (CUDA-GDB, Nsight) or an unspecified launch error, otherwise. When the compiler cannot determine the stack size, it issues a warning saying Stack size cannot be statically determined. This is usually 

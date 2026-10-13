@@ -53,6 +53,7 @@
 #include <string>
 
 #include "m4_ops.h"
+#include "cuda_guard.h"  // P1T-FIX4: shared checked DeviceGuard
 #include "tuning.h"
 
 #ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
@@ -69,30 +70,13 @@ void check_cuda(cudaError_t e, const char* what) {
   if (e != cudaSuccess) {
     std::ostringstream os;
     os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
     throw std::runtime_error(os.str());
   }
 }
 
-// Makes `device` current for the call and restores the caller's device afterwards.
-class DeviceGuard {
- public:
-  explicit DeviceGuard(int device) {
-    check_cuda(cudaGetDevice(&prev_), "cudaGetDevice");
-    if (prev_ != device) {
-      check_cuda(cudaSetDevice(device), "cudaSetDevice");
-      changed_ = true;
-    }
-  }
-  ~DeviceGuard() {
-    if (changed_) cudaSetDevice(prev_);
-  }
-  DeviceGuard(const DeviceGuard&) = delete;
-  DeviceGuard& operator=(const DeviceGuard&) = delete;
-
- private:
-  int prev_ = 0;
-  bool changed_ = false;
-};
+// DeviceGuard (makes `device` current for the call, restores the caller's device) is tc_signal's shared, checked guard
+// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
 
 // Sum of every thread's `v` over the block, by a fixed tree (stride B/2, B/4, ..., 1); every thread gets the total.
 template <int B>
@@ -174,6 +158,7 @@ void row_norm_forward(int device, const RowNormGeom& g, const float* x, const fl
   row_norm_kernel<B><<<grid, B, 0, kLegacyStream>>>(x, scale, bias, y, g.rows, g.L, g.eps, static_cast<int>(g.affine),
                                                     g.channels, g.groups, g.ch_per_group, g.T);
   check_cuda(cudaGetLastError(), "row_norm_kernel");
+  guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
 }  // namespace tcs

@@ -25,6 +25,7 @@
 #include <string>
 
 #include "m4_ops.h"
+#include "cuda_guard.h"  // P1T-FIX4: shared checked DeviceGuard
 #include "tuning.h"
 
 #ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
@@ -41,6 +42,7 @@ void check_cuda(cudaError_t e, const char* what) {
   if (e != cudaSuccess) {
     std::ostringstream os;
     os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
     throw std::runtime_error(os.str());
   }
 }
@@ -50,26 +52,8 @@ unsigned int grid_for(int64_t total, int block) {
   return static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(blocks, tuning::kGridCap)));
 }
 
-// Makes `device` current for the call and restores the caller's device afterwards.
-class DeviceGuard {
- public:
-  explicit DeviceGuard(int device) {
-    check_cuda(cudaGetDevice(&prev_), "cudaGetDevice");
-    if (prev_ != device) {
-      check_cuda(cudaSetDevice(device), "cudaSetDevice");
-      changed_ = true;
-    }
-  }
-  ~DeviceGuard() {
-    if (changed_) cudaSetDevice(prev_);
-  }
-  DeviceGuard(const DeviceGuard&) = delete;
-  DeviceGuard& operator=(const DeviceGuard&) = delete;
-
- private:
-  int prev_ = 0;
-  bool changed_ = false;
-};
+// DeviceGuard (makes `device` current for the call, restores the caller's device) is tc_signal's shared, checked guard
+// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
 
 // y[r, i] = x[r, i / scale]: one thread per output element, a 32-bit word copy.
 __global__ void upsample_nearest1d_kernel(const uint32_t* __restrict__ x, uint32_t* __restrict__ y, int64_t total,
@@ -115,6 +99,7 @@ void upsample_nearest1d_forward(int device, int64_t rows, int64_t T, int64_t sca
   upsample_nearest1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
       reinterpret_cast<const uint32_t*>(x), reinterpret_cast<uint32_t*>(y), total, T, T_out, scale);
   check_cuda(cudaGetLastError(), "upsample_nearest1d_kernel");
+  guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
 void reflection_pad1d_forward(int device, int64_t rows, int64_t T, int64_t pad_begin, int64_t pad_end, const float* x,
@@ -126,6 +111,7 @@ void reflection_pad1d_forward(int device, int64_t rows, int64_t T, int64_t pad_b
   reflection_pad1d_kernel<<<grid_for(total, B), B, 0, kLegacyStream>>>(
       reinterpret_cast<const uint32_t*>(x), reinterpret_cast<uint32_t*>(y), total, T, T_out, pad_begin);
   check_cuda(cudaGetLastError(), "reflection_pad1d_kernel");
+  guard.restore();  // P1T-FIX4
 }
 
 void rint_forward(int device, int64_t n, const float* x, float* y) {
@@ -133,6 +119,7 @@ void rint_forward(int device, int64_t n, const float* x, float* y) {
   constexpr int B = m4tuning::kCopyBlock;
   rint_kernel<<<grid_for(n, B), B, 0, kLegacyStream>>>(x, y, n);
   check_cuda(cudaGetLastError(), "rint_kernel");
+  guard.restore();  // P1T-FIX4
 }
 
 }  // namespace tcs

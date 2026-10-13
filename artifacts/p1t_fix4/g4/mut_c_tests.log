@@ -1,0 +1,55 @@
+FFF...............                                                       [100%]
+=================================== FAILURES ===================================
+_ test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_null_kernel-98-cudaErrorInvalidDeviceFunction] _
+
+stager = '/tmp/pytest-of-vader/pytest-82/fix4_stager0/fix4_stage_kernel.so'
+mode = 'sync_null_kernel', staged = 98, name = 'cudaErrorInvalidDeviceFunction'
+
+    @pytest.mark.parametrize('mode, staged, name', [
+        ('sync_null_kernel', 98, 'cudaErrorInvalidDeviceFunction'),
+        ('sync_launch_config', 9, 'cudaErrorInvalidConfiguration'),
+    ])
+    def test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending(stager, mode, staged, name):
+        res = _run(_SLOT, mode, stager)
+        assert res['staged'] == staged, res                         # precondition: a synchronous launch refusal is staged
+>       assert res['sync']['raised'] == 'RuntimeError', res         # 62c8d9f / mutant (c): returned success
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleted': 0, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'mode': 'sync_null_kernel', 'second_sync': {'raised': None}, ...}
+E       assert None == 'RuntimeError'
+
+tc_signal/tests/test_fix4_findings.py:161: AssertionError
+_ test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_launch_config-9-cudaErrorInvalidConfiguration] _
+
+stager = '/tmp/pytest-of-vader/pytest-82/fix4_stager0/fix4_stage_kernel.so'
+mode = 'sync_launch_config', staged = 9, name = 'cudaErrorInvalidConfiguration'
+
+    @pytest.mark.parametrize('mode, staged, name', [
+        ('sync_null_kernel', 98, 'cudaErrorInvalidDeviceFunction'),
+        ('sync_launch_config', 9, 'cudaErrorInvalidConfiguration'),
+    ])
+    def test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending(stager, mode, staged, name):
+        res = _run(_SLOT, mode, stager)
+        assert res['staged'] == staged, res                         # precondition: a synchronous launch refusal is staged
+>       assert res['sync']['raised'] == 'RuntimeError', res         # 62c8d9f / mutant (c): returned success
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleted': 0, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'mode': 'sync_launch_config', 'second_sync': {'raised': None}, ...}
+E       assert None == 'RuntimeError'
+
+tc_signal/tests/test_fix4_findings.py:161: AssertionError
+_____ test_fix4_v404_synchronize_still_drains_pending_entries_then_raises ______
+
+stager = '/tmp/pytest-of-vader/pytest-82/fix4_stager0/fix4_stage_kernel.so'
+
+    def test_fix4_v404_synchronize_still_drains_pending_entries_then_raises(stager):
+        res = _run(_SLOT, 'sync_pending_entries', stager)
+        assert res['entries_before'] == 1 and res['staged'] == 98, res
+>       assert res['sync']['raised'] == 'RuntimeError' and 'cudaErrorInvalidDeviceFunction' in res['sync']['msg'], res
+E       AssertionError: {'deleted': 2, 'deleted_after_sync': 2, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'entries_after': 0, ...}
+E       assert (None == 'RuntimeError')
+
+tc_signal/tests/test_fix4_findings.py:170: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_null_kernel-98-cudaErrorInvalidDeviceFunction]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_launch_config-9-cudaErrorInvalidConfiguration]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_still_drains_pending_entries_then_raises
+3 failed, 15 passed in 24.73s

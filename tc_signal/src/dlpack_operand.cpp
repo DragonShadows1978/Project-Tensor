@@ -14,6 +14,7 @@
 #include <unordered_map>
 
 #include "checked_math.h"
+#include "cuda_guard.h"  // P1T-FIX4: DeviceGuard / QuietDeviceGuard and the error-slot rules
 #include "tuning.h"
 
 namespace tcs {
@@ -461,6 +462,18 @@ struct PendingState {
   unsigned long long unreported_leaked = 0;
   int unreported_device = -1;
   cudaError_t unreported_error = cudaSuccess;
+  // P1T-FIX4 (sweep): CUDA failures on paths that cannot raise and leak no operand (a restore of the caller's device,
+  // an event destroy). Counted; the first is named and all are raised once by the next synchronize().
+  unsigned long long device_restore_failures = 0;
+  unsigned long long event_destroy_failures = 0;
+  unsigned long long unraisable_unreported = 0;
+  const char* unraisable_what = "";
+  int unraisable_device = -1;
+  cudaError_t unraisable_error = cudaSuccess;
+  // P1T-FIX4 V4-04: the calling thread's pre-existing error taken by synchronize() on entry, held until its message
+  // exists (so a MemoryError while building the message does not lose it: the next synchronize() raises it).
+  unsigned long long prior_unreported = 0;
+  cudaError_t prior_error = cudaSuccess;
   std::unordered_map<int, DeviceEvents> event_pool;   // per device
 };
 
@@ -471,40 +484,8 @@ PendingState& pending() {
   return *state;
 }
 
-// Makes `device` current for its scope and restores the caller's device; never throws (ok()/error() report failure,
-// and a failed call clears the runtime's last-error slot so a later, unrelated launch check does not report it).
-class QuietDeviceGuard {
- public:
-  explicit QuietDeviceGuard(int device) noexcept {
-    cudaError_t e = cudaGetDevice(&prev_);
-    if (e != cudaSuccess) {
-      cudaGetLastError();
-      err_ = e;
-      return;
-    }
-    if (prev_ != device) {
-      e = cudaSetDevice(device);
-      if (e != cudaSuccess) {
-        cudaGetLastError();
-        err_ = e;
-        return;
-      }
-      switched_ = true;
-    }
-  }
-  ~QuietDeviceGuard() {
-    if (switched_) cudaSetDevice(prev_);
-  }
-  QuietDeviceGuard(const QuietDeviceGuard&) = delete;
-  QuietDeviceGuard& operator=(const QuietDeviceGuard&) = delete;
-  bool ok() const { return err_ == cudaSuccess; }
-  cudaError_t error() const { return err_; }
-
- private:
-  int prev_ = 0;
-  cudaError_t err_ = cudaSuccess;
-  bool switched_ = false;
-};
+// QuietDeviceGuard (makes `device` current for its scope, never throws) moved to cuda_guard.h in P1T-FIX4, where its
+// restore is now checked (62c8d9f ignored the restoring cudaSetDevice's result).
 
 // Synchronizes the legacy stream of `device` (switching to it and back). Never throws, never allocates.
 cudaError_t sync_device_legacy(int device) noexcept {
@@ -583,6 +564,32 @@ void note_release_failure(PendingState& st, int device, cudaError_t err, unsigne
   st.unreported_leaked += leaked;
 }
 
+// P1T-FIX4 (sweep): a failure that cannot raise where it happens and leaks no operand (see PendingState). Never
+// allocates.
+void note_unraisable_failure(PendingState& st, const char* what, int device, cudaError_t err) noexcept {
+  if (st.unraisable_unreported == 0) {
+    st.unraisable_what = what;
+    st.unraisable_device = device;
+    st.unraisable_error = err;
+  }
+  ++st.unraisable_unreported;
+}
+
+// P1T-FIX4 (sweep): an event is destroyed on its own device (62c8d9f destroyed it on whatever device was current and
+// ignored the result). Prior art: PyTorch's CUDAEvent destructor, "event destruction done on creating device to avoid
+// creating a CUDA context on other devices" (c10/cuda/CUDAEvent.h, torch 2.11 headers: CUDAGuard, then
+// C10_CUDA_CHECK_WARN(cudaEventDestroy)). Taken: destroy under the event's device, checked, never thrown. Ours: the
+// count and the deferred raise by the next synchronize().
+void destroy_event_on_device(PendingState& st, int device, cudaEvent_t ev) noexcept {
+  QuietDeviceGuard g(device);
+  const cudaError_t r = g.ok() ? cudaEventDestroy(ev) : g.error();
+  if (r != cudaSuccess) {
+    cudaGetLastError();  // the guard consumed its own failure already; this consumes cudaEventDestroy's
+    ++st.event_destroy_failures;
+    note_unraisable_failure(st, "cudaEventDestroy", device, r);
+  }
+}
+
 void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
   if (ev == nullptr) return;
   DeviceEvents* de = nullptr;
@@ -596,7 +603,7 @@ void recycle_event(PendingState& st, int device, cudaEvent_t ev) noexcept {
   } catch (...) {
     ++st.event_recycle_failures;
     if (de != nullptr && de->created > 0) --de->created;
-    cudaEventDestroy(ev);
+    destroy_event_on_device(st, device, ev);  // P1T-FIX4: on its own device, checked
   }
 }
 
@@ -757,6 +764,13 @@ cudaEvent_t acquire_event(int device) {
 
 void init_pending_state() { (void)pending(); }
 
+// P1T-FIX4 (cuda_guard.h rule 2): a restore of the caller's device that failed where nothing can raise.
+void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcept {
+  PendingState& st = pending();
+  ++st.device_restore_failures;
+  note_unraisable_failure(st, "restoring the caller's CUDA device (cudaSetDevice)", device, err);
+}
+
 int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops) {
   // V3-02 (see dlpack_operand.h): checked sum of the present operands' fp32 bytes; ValueError on overflow (ck_add).
   // Prior art: the checked builtins (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add), as in checked_math.h. Ours:
@@ -779,7 +793,31 @@ RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Opera
   // are released at once by their own destructors); the destructor below allocates only for the pending-list push.
   if (test_hooks::take(test_hooks::kAllocOwnerReserve)) throw std::bad_alloc();
   owners_.reserve(ops_.size());
-  event_ = acquire_event(device_);  // last: if it throws, nothing else is held and nothing has been launched
+  event_ = acquire_event(device_);  // if it throws, nothing else is held and nothing has been launched
+  // P1T-FIX4 (sweep, CUDA error state): every launch of every entry point follows this constructor, and each launch is
+  // checked by reading the calling thread's last-error slot. 62c8d9f never looked at the slot BEFORE the first launch,
+  // so an error already pending there (a refused launch elsewhere in this thread, a failure some other code did not
+  // consume) was reported after this call's launches as this call's own launch failure, with the work queued anyway.
+  // Now it is taken here, right before the first launch, and raised as what it is: RuntimeError naming the pending
+  // error, nothing launched, and the operands released at once by their own destructors (nothing was queued on them;
+  // the completion event goes back to its pool). From here on a launch check can only report this call's own error.
+  // Placed after acquire_event so a machine with no usable device keeps its earlier refusal ("cannot create the
+  // completion event", cudaErrorNoDevice, which the runtime keeps in the slot permanently: receipt
+  // artifacts/p1t_fix4/cuda_semantics.txt).
+  // Prior art: CUDA 12.6 Programming Guide 3.2.12: "one has to make sure that the runtime error variable is set to
+  // cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel
+  // launch" (artifacts/p1t_fix4/cuda_doc_quotes.txt). Taken: that rule. Ours: raising the pending error as pre-existing
+  // instead of discarding it, at the one constructor every launch path shares.
+  const cudaError_t pending_err = cudaGetLastError();
+  if (pending_err != cudaSuccess) {
+    recycle_event(pending(), device_, event_);  // never allocates (its recycle slot was reserved by acquire_event)
+    event_ = nullptr;
+    std::ostringstream os;
+    os << "tc_signal: a CUDA error was already pending in this thread before this call's first launch ("
+       << cudaGetErrorName(pending_err) << ": " << cudaGetErrorString(pending_err)
+       << "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched";
+    throw std::runtime_error(os.str());
+  }
 }
 
 RetainUntilComplete::~RetainUntilComplete() {
@@ -843,9 +881,16 @@ void drain_completed() noexcept {
     const cudaError_t r = cudaEventQuery(st.q.front().event);
     if (r != cudaSuccess) {
       // cudaErrorNotReady: still pending (FIFO: later entries wait too). CUDA 12.6 does not leave NotReady in the
-      // last-error slot (ledger receipt); clear it defensively if a runtime ever does. Any other error (a broken
-      // context) leaves the entry for synchronize_and_release_all, which leaks it if the device cannot synchronize.
-      if (r == cudaErrorNotReady && cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+      // last-error slot (ledger receipt; Programming Guide 3.2.12: NotReady "is not considered an error"); clear it
+      // defensively if a runtime ever does. Any other error (a broken context) leaves the entry for
+      // synchronize_and_release_all, which re-queries it and reports and leaks it if the device cannot synchronize.
+      // P1T-FIX4 (sweep): that other error's slot entry is consumed here (62c8d9f left it, so the next, unrelated
+      // launch check reported it as its own); the entry itself still carries the failure to synchronize().
+      if (r == cudaErrorNotReady) {
+        if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
+      } else {
+        cudaGetLastError();
+      }
       return;
     }
     PendingEntry e = std::move(st.q.front());
@@ -855,10 +900,36 @@ void drain_completed() noexcept {
   }
 }
 
+// P1T-FIX4, round-4 review finding V4-04 (MINOR). 62c8d9f never looked at the calling thread's CUDA last-error slot:
+// after a synchronous launch refusal (cudaErrorInvalidConfiguration, a NULL kernel, ...) that queued no work, every
+// stream sync succeeded and synchronize() returned success with the error still pending. Now:
+//  * FIRST, before any query, sync or release can replace it, the existing error is TAKEN (cudaGetLastError) and held;
+//  * the drain runs exactly as before (sync every relevant device's legacy stream, release what completed, leak what
+//    has no completion proof); a pending launch refusal does not stop the drain;
+//  * then RuntimeError is raised naming the pre-existing error (and any drain failure), even if every sync succeeded.
+// Clear (take), not peek (decision justified against the CUDA semantics, receipts artifacts/p1t_fix4/):
+//  * non-sticky errors (a refused launch, a failed API call) stay in the slot until someone takes them, survive
+//    successful calls, and are OVERWRITTEN by the next failing call (measured 98 -> 101). This function reports the
+//    error, so it consumes it: peeking would leave it for the next unrelated launch check of this shared
+//    libcudart.so.12 instance (any tc_signal op, or core's cuda_check_last) to report a second time as its own; and a
+//    failing sync here would overwrite it anyway, so a peek could not preserve it reliably.
+//  * sticky errors (a device-side fault) live in the CONTEXT: taking the slot entry resets only the slot (measured:
+//    710, then 0), every later call that touches the context still returns the error, so nothing is hidden; the drain's
+//    syncs fail and the pending operands are leaked and reported, as before.
+//  * the runtime's own no-device state (cudaErrorNoDevice) is not reset by cudaGetLastError at all (measured).
+// Prior art: NVIDIA CUDA 12.6 cudaGetLastError / cudaPeekAtLastError ("returns this variable and resets it" versus
+// "does not reset"; Programming Guide 3.2.12) and cudaStreamSynchronize; PyTorch's convention of consuming the slot when
+// it reports (C10_CUDA_KERNEL_LAUNCH_CHECK = C10_CUDA_CHECK(cudaGetLastError()); C10_CUDA_CHECK_WARN, torch 2.11
+// headers). Taken: report-and-consume. Ours: capturing at synchronize() entry and still draining before raising.
 void synchronize_and_release_all() {
-  const SyncReport rep = sync_and_release_all_impl();
   PendingState& st = pending();
-  if (!rep.failed() && st.unreported_count == 0) return;
+  const cudaError_t prior = cudaGetLastError();
+  if (prior != cudaSuccess) {
+    if (st.prior_unreported == 0) st.prior_error = prior;
+    ++st.prior_unreported;
+  }
+  const SyncReport rep = sync_and_release_all_impl();
+  if (!rep.failed() && st.unreported_count == 0 && st.unraisable_unreported == 0 && st.prior_unreported == 0) return;
   // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
   // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate). The earlier release-path
   // failures are cleared only once their message exists, so they are raised exactly once.
@@ -866,6 +937,13 @@ void synchronize_and_release_all() {
   std::ostringstream os;
   os << "tc_signal.synchronize: CUDA error, so the release is not reported as a success:";
   const char* sep = " ";
+  if (st.prior_unreported > 0) {
+    os << sep << "a CUDA error was already pending in this thread when synchronize() was called ("
+       << cudaGetErrorName(st.prior_error) << ": " << cudaGetErrorString(st.prior_error)
+       << "), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot "
+          "and reported here";
+    sep = "; ";
+  }
   if (rep.query_failed) {
     os << sep << "the current-device query cudaGetDevice failed (" << cudaGetErrorName(rep.query_error) << ": "
        << cudaGetErrorString(rep.query_error) << ")";
@@ -885,6 +963,13 @@ void synchronize_and_release_all() {
        << st.unreported_device << " (" << cudaGetErrorName(st.unreported_error) << ": "
        << cudaGetErrorString(st.unreported_error) << "), deliberately leaked " << st.unreported_leaked
        << " operand manager(s)";
+    sep = "; ";
+  }
+  if (st.unraisable_unreported > 0) {
+    os << sep << st.unraisable_unreported
+       << " CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: "
+       << st.unraisable_what << " on device " << st.unraisable_device << " (" << cudaGetErrorName(st.unraisable_error)
+       << ": " << cudaGetErrorString(st.unraisable_error) << ")";
   }
   // std::ostream swallows a bad_alloc from its buffer and only sets badbit (a truncated message would follow): report
   // the allocation failure itself instead.
@@ -894,6 +979,12 @@ void synchronize_and_release_all() {
   st.unreported_leaked = 0;
   st.unreported_device = -1;
   st.unreported_error = cudaSuccess;
+  st.unraisable_unreported = 0;
+  st.unraisable_what = "";
+  st.unraisable_device = -1;
+  st.unraisable_error = cudaSuccess;
+  st.prior_unreported = 0;
+  st.prior_error = cudaSuccess;
   throw std::runtime_error(msg);
 }
 
@@ -922,6 +1013,9 @@ py::dict pending_stats(bool reset_high_water) {
   d["bytes_saturations"] = st.bytes_saturations;            // P1T-FIX3 V3-02
   d["release_errors"] = st.release_errors;                  // N1
   d["unreported_release_errors"] = st.unreported_count;     // N1
+  d["device_restore_failures"] = st.device_restore_failures;  // P1T-FIX4 (sweep): caller-device restores that failed
+  d["event_destroy_failures"] = st.event_destroy_failures;    // P1T-FIX4 (sweep)
+  d["unreported_unraisable_errors"] = st.unraisable_unreported;  // P1T-FIX4: raised by the next synchronize()
   if (reset_high_water) {
     st.high_water_entries = static_cast<long long>(st.q.size());
     st.high_water_managers = st.managers;

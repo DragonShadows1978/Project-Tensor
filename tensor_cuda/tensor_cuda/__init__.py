@@ -104,14 +104,22 @@ def from_dlpack(obj):
     last reference dies while the interpreter is finalizing, the deleter is
     deliberately NOT called: the manager is leaked rather than risk a
     use-after-free or a GIL acquisition during shutdown (P1T-FIX1 F04/F05).
-    Interpreter exit (P1T-FIX2 N5): an atexit hook stops admitting such
-    releases and waits (GIL released, at most ``_DLPACK_SHUTDOWN_WAIT_S``
-    seconds) for the ones already taking the GIL to finish; every release
-    after it leaks (counted) without touching the GIL. A producer deleter that
-    raises a C++ exception is contained and counted (P1T-FIX2 N4).
+    Interpreter exit (P1T-FIX2 N5, P1T-FIX3 V3-01): an atexit hook stops
+    admitting such releases and waits, GIL released and with NO time bound,
+    until every release already admitted has finished (a release normally
+    takes microseconds); ``_DLPACK_SHUTDOWN_WAIT_S`` is only the delay before
+    the first stderr diagnostic, and another follows each time the time waited
+    doubles. So a producer deleter that never returns makes interpreter exit
+    wait for it (Ctrl-C does not interrupt that wait; SIGTERM / SIGKILL end the
+    process). Every release that starts after the hook leaks (counted) without
+    touching the GIL. A producer deleter that raises a C++ exception is
+    contained and counted (P1T-FIX2 N4).
     The memory is never returned to TensorCUDA's pool and never
     ``cudaFree``-d by TensorCUDA.
 
+    Refused with ``RuntimeError`` (P1T-FIX4 V4-03), before the capsule is
+    consumed: the current-device query ``cudaGetDevice`` fails (for example no
+    usable CUDA device); the producer keeps ownership.
     Refused with ``BufferError``, never converted: non-CUDA devices (CPU
     included), another CUDA device than TensorCUDA's, non-contiguous strides
     (a size-1 dimension may carry any stride), read-only tensors, and dtypes
@@ -159,6 +167,11 @@ def empty(*shape, dtype="float32", device="cuda"):
     zeros counted as 1, times the element size, must fit in int64, so
     ``empty(0, 2**62, 4)`` raises while ``empty(0, 2**60)`` is an empty tensor
     (NumPy's rule).
+
+    Device (P1T-FIX4): a CUDA tensor is allocated on the CURRENT CUDA device and
+    labeled with it (``cudaGetDevice``, checked: ``RuntimeError`` if it fails);
+    ``device="cuda:N"`` must name the current device (``ValueError``
+    otherwise: TensorCUDA does not switch devices to allocate).
     """
     if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
         shape = tuple(shape[0])

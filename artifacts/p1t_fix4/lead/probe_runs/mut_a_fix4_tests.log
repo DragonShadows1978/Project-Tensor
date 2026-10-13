@@ -1,0 +1,176 @@
+FF.FFFFF.F............                                                   [100%]
+=================================== FAILURES ===================================
+_ test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_switch] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_switch'
+
+    @pytest.mark.parametrize("mode", ["export_switch", "export_ptds"])
+    def test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores(fix4_shim, mode):
+        # V4-01: device 1 current, device-0 tensor, a consumer stream handle (or 2, the per-thread stream): the event must
+        # be created and recorded on device 0, the wait issued there, the event destroyed there, and device 1 restored.
+        # 62c8d9f / mutant (a): create@1 record@1 wait@1 destroy@1, no switch.
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] is None and res["capsule"], res
+>       assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert ['create@1', ..., 'destroy@1'] == ['set0', 'cre...oy@0', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1502: AssertionError
+_ test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_ptds] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_ptds'
+
+    @pytest.mark.parametrize("mode", ["export_switch", "export_ptds"])
+    def test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores(fix4_shim, mode):
+        # V4-01: device 1 current, device-0 tensor, a consumer stream handle (or 2, the per-thread stream): the event must
+        # be created and recorded on device 0, the wait issued there, the event destroyed there, and device 1 restored.
+        # 62c8d9f / mutant (a): create@1 record@1 wait@1 destroy@1, no switch.
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] is None and res["capsule"], res
+>       assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert ['create@1', ..., 'destroy@1'] == ['set0', 'cre...oy@0', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1502: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_record-logged0-cudaEventRecord] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_record'
+logged = ['set0', 'create@0', 'record@0!', 'destroy@0', 'set1']
+frag = 'cudaEventRecord'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+>       assert res["log"] == logged, res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1!', 'destroy@1'], ...}
+E       assert ['create@1', ..., 'destroy@1'] == ['set0', 'cre...oy@0', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1521: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_destroy-logged1-cudaEventDestroy] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_destroy'
+logged = ['set0', 'create@0', 'record@0', 'wait@0', 'destroy@0!', 'set1']
+frag = 'cudaEventDestroy'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+>       assert res["log"] == logged, res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1!'], ...}
+E       assert ['create@1', ... 'destroy@1!'] == ['set0', 'cre...y@0!', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0!'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1521: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_switch-logged2-cannot make the tensor's CUDA device 0 current] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_switch', logged = ['set0!']
+frag = "cannot make the tensor's CUDA device 0 current"
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1520: AssertionError
+_ test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_create-logged0-cudaEventCreateWithFlags] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_create', logged = ['set0', 'create@0!', 'set1']
+frag = 'cudaEventCreateWithFlags'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_create", ["set0", "create@0!", "set1"], "cudaEventCreateWithFlags"),
+        ("export_fail_wait", ["set0", "create@0", "record@0", "wait@0!", "destroy@0", "set1"], "cudaStreamWaitEvent"),
+    ])
+    def test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises(fix4_shim, mode, logged, frag):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "was restored" in res["msg"], res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1!'], ...}
+E       assert ('RuntimeError' == 'RuntimeError'
+E         
+E           RuntimeError and 'cudaEventCreateWithFlags' in "__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaEventCreateWithFlags (cudaErrorInvalidDevice: invalid device ordinal);" and 'was restored' in "__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaEventCreateWithFlags (cudaErrorInvalidDevice: invalid device ordinal);")
+
+tensor_cuda/tests/test_dlpack.py:1532: AssertionError
+_ test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_wait-logged1-cudaStreamWaitEvent] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_wait'
+logged = ['set0', 'create@0', 'record@0', 'wait@0!', 'destroy@0', 'set1']
+frag = 'cudaStreamWaitEvent'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_create", ["set0", "create@0!", "set1"], "cudaEventCreateWithFlags"),
+        ("export_fail_wait", ["set0", "create@0", "record@0", "wait@0!", "destroy@0", "set1"], "cudaStreamWaitEvent"),
+    ])
+    def test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises(fix4_shim, mode, logged, frag):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "was restored" in res["msg"], res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1!', 'destroy@1'], ...}
+E       assert ('RuntimeError' == 'RuntimeError'
+E         
+E           RuntimeError and 'cudaStreamWaitEvent' in "__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaStreamWaitEvent on the consumer's stream (cudaErrorInvalidDevice: invalid device ordinal);" and 'was restored' in "__dlpack__: stream fence on the tensor's CUDA device 0 failed: cudaStreamWaitEvent on the consumer's stream (cudaErrorInvalidDevice: invalid device ordinal);")
+
+tensor_cuda/tests/test_dlpack.py:1532: AssertionError
+________ test_fix4_v401_export_fence_failed_restore_is_raised_and_named ________
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-91/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_v401_export_fence_failed_restore_is_raised_and_named(fix4_shim):
+        res = _run_fix4(fix4_shim, "export_fail_restore")
+>       assert res["raised"] == "RuntimeError", res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert None == 'RuntimeError'
+
+tensor_cuda/tests/test_dlpack.py:1544: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_switch]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_ptds]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_record-logged0-cudaEventRecord]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_destroy-logged1-cudaEventDestroy]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_switch-logged2-cannot make the tensor's CUDA device 0 current]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_create-logged0-cudaEventCreateWithFlags]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_wait-logged1-cudaStreamWaitEvent]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failed_restore_is_raised_and_named
+8 failed, 14 passed, 122 deselected in 21.62s

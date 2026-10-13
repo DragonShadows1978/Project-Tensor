@@ -31,6 +31,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "cuda_guard.h"  // P1T-FIX4: shared checked DeviceGuard
 #include "tuning.h"
 
 #ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
@@ -52,6 +53,7 @@ void check_cuda(cudaError_t e, const char* what) {
   if (e != cudaSuccess) {
     std::ostringstream os;
     os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
     throw std::runtime_error(os.str());
   }
 }
@@ -72,26 +74,8 @@ unsigned int grid_for(int64_t total, int block) {
   return static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(blocks, tuning::kGridCap)));
 }
 
-// Makes `device` current for the call and restores the caller's device afterwards.
-class DeviceGuard {
- public:
-  explicit DeviceGuard(int device) {
-    check_cuda(cudaGetDevice(&prev_), "cudaGetDevice");
-    if (prev_ != device) {
-      check_cuda(cudaSetDevice(device), "cudaSetDevice");
-      changed_ = true;
-    }
-  }
-  ~DeviceGuard() {
-    if (changed_) cudaSetDevice(prev_);
-  }
-  DeviceGuard(const DeviceGuard&) = delete;
-  DeviceGuard& operator=(const DeviceGuard&) = delete;
-
- private:
-  int prev_ = 0;
-  bool changed_ = false;
-};
+// DeviceGuard (makes `device` current for the call, restores the caller's device) is tc_signal's shared, checked guard
+// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
 
 // One cuBLAS handle per device, created lazily on first use and kept for the life of the process (destroying it at
 // interpreter exit can race CUDA's own teardown). All entry points run under the GIL, so no extra lock is needed.
@@ -103,10 +87,21 @@ cublasHandle_t handle_for(int device) {
   if (it != handles.end()) return it->second;
   cublasHandle_t h = nullptr;
   check_cublas(cublasCreate(&h), "cublasCreate");
-  check_cublas(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
-  check_cublas(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
-  check_cublas(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
-  check_cublas(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
+  // P1T-FIX4 (sweep): a setting that fails no longer leaks the new handle: it is destroyed (on this device, which the
+  // caller's DeviceGuard keeps current), the destroy's own status is checked and named, and the call raises. Nothing is
+  // cached, so the next call retries from cublasCreate.
+  auto settle = [&h](cublasStatus_t st, const char* what) {
+    if (st == CUBLAS_STATUS_SUCCESS) return;
+    const cublasStatus_t ds = cublasDestroy(h);
+    std::ostringstream os;
+    os << "tc_signal: " << what << " failed: cuBLAS status " << static_cast<int>(st);
+    if (ds != CUBLAS_STATUS_SUCCESS) os << "; destroying the new handle also failed: cuBLAS status " << static_cast<int>(ds);
+    throw std::runtime_error(os.str());
+  };
+  settle(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
+  settle(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
+  settle(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
+  settle(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
   handles.emplace(device, h);
   return h;
 }
@@ -193,6 +188,7 @@ void fp32_divide_probe(int device, const float* x, const float* y, float* out, i
   DeviceGuard guard(device);
   fp32_divide_probe_kernel<<<grid_for(n, tuning::kProbeBlock), tuning::kProbeBlock, 0, kLegacyStream>>>(x, y, out, n);
   check_launch("fp32_divide_probe_kernel");
+  guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
 // ------------------------------------------------------------------------------------------------ Conv1d
@@ -240,6 +236,7 @@ void conv1d_forward(int device, const Conv1dGeom& g, const float* x, const float
                                                                                                    g.T_out, total);
     check_launch("bias_add_kernel");
   }
+  guard.restore();  // P1T-FIX4
 }
 
 // ------------------------------------------------------------------------------------------------ ConvTranspose1d
@@ -251,6 +248,7 @@ void conv_transpose1d_forward(int device, const ConvTranspose1dGeom& g, const fl
                                    kLegacyStream>>>(x, w, b, y, g.N, g.C_in, g.T, g.C_out, g.K, g.T_out, g.stride,
                                                     g.pad_begin, g.dilation, g.groups);
   check_launch("conv_transpose1d_gather_kernel");
+  guard.restore();  // P1T-FIX4
 }
 
 // ------------------------------------------------------------------------------------------------ introspection
@@ -272,6 +270,7 @@ CublasConfig cublas_config(int device) {
   c.legacy_stream = (s == kLegacyStream);
   c.default_math = (math == CUBLAS_DEFAULT_MATH);
   c.atomics_not_allowed = (atomics == CUBLAS_ATOMICS_NOT_ALLOWED);
+  guard.restore();  // P1T-FIX4
   return c;
 }
 

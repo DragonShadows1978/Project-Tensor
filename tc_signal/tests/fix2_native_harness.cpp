@@ -159,7 +159,13 @@ RunResult run_once(const std::string& path, int prefill, long k) {
   reset_managers();
   const unsigned long long leaked0 = leaked_now();
   for (int i = 0; i < prefill; ++i) push_entry();
-  cudaStreamSynchronize(cudaStreamLegacy);  // every pre-filled event is complete (no kernel was launched)
+  // every pre-filled event is complete (no kernel was launched). P1T-FIX4 sweep: the result is checked (it was ignored).
+  if (const cudaError_t se = cudaStreamSynchronize(cudaStreamLegacy); se != cudaSuccess) {
+    cudaGetLastError();
+    r.ok = false;
+    r.why = std::string("harness pre-drain cudaStreamSynchronize failed: ") + cudaGetErrorName(se);
+    return r;
+  }
   int ia = 0, ib = 0;
   py::object ca, cb;
   if (path == "dtor") {

@@ -138,6 +138,16 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   This is TensorCUDA's only stream, and torch's default stream; both share the device's primary context.
   `tests/test_contract.py` proves the ordering both ways against torch with no explicit sync.
 - `cudaGetLastError` is checked after every launch, and any error raises a `RuntimeError`.
+- **Devices and CUDA error state (P1T-FIX4).** Every launch path makes the operands' device current through one
+  checked guard (`src/cuda_guard.h`) and restores the caller's device; a failed restore raises on a success path, and
+  where nothing can raise (a destructor) it is counted (`pending_stats()['device_restore_failures']`) and raised once
+  by the next `synchronize()`. An event is destroyed on its own device. The calling thread's CUDA last-error slot
+  (shared with TensorCUDA core: one `libcudart.so.12` instance) follows two rules:
+  - whoever reports a CUDA error consumes it, so a failed call is reported exactly once, never again by a later,
+    unrelated launch check;
+  - right before a call's first launch, an error already pending in the slot (left by earlier work outside the call)
+    is taken and raised as pre-existing (`RuntimeError`, nothing launched, operands released at once); so a launch
+    check reports only that call's own error.
 - **Operand lifetime contract (P1T-FIX1, F01: event-backed deferred release).** A consumed DLPack manager can be the
   LAST owner of its memory (a bare capsule, or a temporary copy a producer made for `__dlpack__`), and its producer
   may allocate on another stream. So tc_signal keeps every consumed manager of a call (inputs, outputs and scratch;
@@ -165,6 +175,11 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   - `tc_signal.synchronize()` raises `RuntimeError` naming the CUDA error when the current-device query
     (`cudaGetDevice`) fails, even with nothing pending (for example on a machine with no usable device), or when a
     device's legacy stream cannot be synchronized (that device's pending operands are deliberately leaked);
+  - P1T-FIX4 (V4-04): `synchronize()` first takes the calling thread's pre-existing CUDA error (for example a refused
+    launch, which queues no work, so every stream sync succeeds), still drains (releases what completed, leaks what it
+    cannot prove done), and then raises `RuntimeError` naming that error. It takes the error (`cudaGetLastError`)
+    rather than peeking: it reports it, so leaving it would make the next unrelated launch check report it again; a
+    sticky error stays in the CUDA context anyway, and the no-device state is never reset by the runtime;
   - a release inside a tc_signal call cannot raise (it runs in a destructor). If its fallback sync or a bound drain
     fails there, the failure is recorded (`pending_stats()['unreported_release_errors']`) and the NEXT
     `synchronize()` raises it, once;
@@ -233,7 +248,7 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 |---|---|
 | `TypeError` | a required operand is `None` (F02); an operand is not a DLPack producer or capsule, or is a capsule of another kind; the dtype is not float32 (fp16 operands are refused: expand them first); an attribute is not an int (bool included); `padding` has the wrong type; `set_allocator` gets a non-callable; `__dlpack__` returns something other than a capsule |
 | `ValueError` | the device is not CUDA; the device ordinals differ; an operand is non-contiguous, misaligned, empty, of the wrong rank or of the wrong shape; the groups do not divide the channels; an attribute is out of range; the output length is <= 0; `output_padding >= max(stride, dilation)`; the output overlaps another operand; a written operand is read-only or a producer copy; a capsule was already consumed; the DLPack major version is not 1; a size, byte total, address range or planned geometry overflows 64-bit arithmetic (F03); the operands of one call total more than `INT64_MAX` bytes (V3-02) |
-| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early) |
+| `RuntimeError` | the default allocator is used without `tensor_cuda.empty` (the message names `set_allocator`); a CUDA launch or cuBLAS error; `synchronize()` cannot synchronize a device (its pending operands are then leaked, never released early); a CUDA error was already pending in the calling thread before a call's first launch, or when `synchronize()` was called (P1T-FIX4); the caller's CUDA device could not be restored (P1T-FIX4) |
 
 ## Tests
 
@@ -265,6 +280,11 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
 - `test_fix3_findings.py` (P1T-FIX3) covers V3-02: the aggregate pre-launch refusal through real entry points (with
   and without a visible GPU), and the native UBSan harness `fix3_native_harness.cpp` for the saturating pending-list
   total, the bound comparison at the boundary and the real retainer destructor near `INT64_MAX`.
+- `test_fix4_findings.py` (P1T-FIX4) covers V4-04 (`synchronize()` after a staged synchronous launch error, with
+  nothing pending and with entries pending), the pre-launch error check of the ops, and the device/error sweep through
+  an `LD_PRELOAD` shim over `libcudart.so.12` / `libcublas.so.12` that simulates a second current device on this
+  one-GPU host (every launch, event create/record/destroy and sync on the operands' device, the caller's device
+  restored; failed switch, failed restore, failed event destroy, failed cuBLAS setting).
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 

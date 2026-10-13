@@ -26,6 +26,11 @@
 #include "tc/ops.h"
 
 namespace tc {
+// P1T-FIX4 (defined in kernels.cu; declared here as the file does for its other cross-TU helpers, because core.h is
+// outside the FIX4 order's scope): the allocation-vs-label device proof of the P1-T surface, and the counter of
+// caller-device restores that failed where nothing could raise.
+std::string cuda_storage_device_mismatch(const NDArray& a, const char* who);
+unsigned long long dlpack_device_restore_failures();
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
 void bp_kernel_4_set_variant(const std::string&);
 std::string bp_kernel_4_get_variant();
@@ -373,7 +378,40 @@ void capsule_destructor_versioned(PyObject* cap) {
 // the legacy stream too (nothing to do); -1 = no synchronization; 2 = the
 // per-thread default stream; > 2 = a cudaStream_t. For 2 and handles, record
 // an event on the legacy stream and make the consumer wait on it.
-void dlpack_fence_consumer(const py::object& stream) {
+//
+// P1T-FIX4, round-4 review finding V4-01 (MAJOR). 62c8d9f created and recorded
+// the event on the CURRENT device: with device 1 current, a device-0 tensor's
+// consumer waited on device 1's legacy stream, and the device-0 writes were not
+// ordered. Now the fence runs on THE TENSOR'S DEVICE (`device`, a label that
+// tensor_dlpack has proven against the allocation, cuda_storage_device_mismatch):
+//  * the caller's device is read (checked) and, if it differs, `device` is made
+//    current (checked); then the event is created, recorded on the legacy
+//    stream (of `device` now), the consumer's stream waits on it, the event is
+//    destroyed on its own device, and the caller's device is restored;
+//  * every return is checked; on any failure the caller's device is restored
+//    FIRST, the failed calls' slot entry is consumed, and one RuntimeError names
+//    each failed step (and says whether the restore itself failed);
+//  * the wait is issued with `device` current, so stream=2 means the per-thread
+//    default stream of the tensor's device. That matches PyTorch 2.11's DLPack
+//    consumer, which passes the current stream OF THE TENSOR'S DEVICE
+//    (torch.utils.dlpack.from_dlpack: torch.cuda.current_stream(f'cuda:{ext_device[1]}'),
+//    read in the installed package). A handle (> 2) may belong to any device:
+//    CUDA 12.6 cudaStreamWaitEvent: "event may be from a different device than
+//    stream" (cuda_runtime_api.h); Programming Guide 3.2.9.3: "cudaStreamWaitEvent()
+//    will succeed even if the input stream and input event are associated to
+//    different devices", while "cudaEventRecord() will fail if the input event and
+//    input stream are associated to different devices", which is why creation and
+//    record need the tensor's device current (receipt artifacts/p1t_fix4/cuda_doc_quotes.txt).
+// No device-wide sync is added (one event, as before).
+// Prior art: PyTorch's scoped c10::cuda::CUDAGuard and CuPy's cupy.cuda.Device
+// context (switch, act, restore); PyTorch's CUDAEvent destroys an event on its
+// creating device ("to avoid creating a CUDA context on other devices",
+// c10/cuda/CUDAEvent.h, torch 2.11 headers). PyTorch 2.11's own Tensor.__dlpack__
+// does NOT switch: it refuses a current-device mismatch with BufferError
+// (torch/_tensor.py). The order chose the guard (switch, record, restore). Taken:
+// the scoped guard and destroy-on-own-device. Ours: placing the whole fence,
+// consumer wait included, inside the guard, and restore-before-raise.
+void dlpack_fence_consumer(const py::object& stream, int device) {
   if (stream.is_none()) return;
   if (!py::isinstance<py::int_>(stream))
     throw py::type_error("__dlpack__: stream must be an int or None");
@@ -388,18 +426,54 @@ void dlpack_fence_consumer(const py::object& stream) {
   cudaStream_t consumer =
       (s == 2) ? cudaStreamPerThread
                : reinterpret_cast<cudaStream_t>(static_cast<uintptr_t>(s));
-  cudaEvent_t ev = nullptr;
-  cudaError_t e = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
-  if (e == cudaSuccess) e = cudaEventRecord(ev, cudaStreamLegacy);  // engine stream
-  if (e == cudaSuccess) e = cudaStreamWaitEvent(consumer, ev, 0);
-  // Safe right after the wait is enqueued: the dependency is captured at the
-  // cudaStreamWaitEvent call and the runtime frees the event once it fires.
-  if (ev) cudaEventDestroy(ev);
+  const std::string dev = std::to_string(device);
+  auto name = [](cudaError_t err) {
+    return std::string(cudaGetErrorName(err)) + ": " + cudaGetErrorString(err);
+  };
+  int prev = -1;
+  cudaError_t e = cudaGetDevice(&prev);
   if (e != cudaSuccess) {
     cudaGetLastError();
-    throw std::runtime_error(std::string("__dlpack__: stream fence failed: ") +
-                             cudaGetErrorString(e));
+    throw std::runtime_error("__dlpack__: stream fence: cudaGetDevice failed (" + name(e) +
+                             "); nothing was switched or recorded");
   }
+  const bool switched = (prev != device);
+  if (switched) {
+    e = cudaSetDevice(device);
+    if (e != cudaSuccess) {
+      cudaGetLastError();
+      throw std::runtime_error("__dlpack__: stream fence: cannot make the tensor's CUDA device " + dev +
+                               " current (cudaSetDevice: " + name(e) + "); the caller's device " +
+                               std::to_string(prev) + " is unchanged and nothing was recorded");
+    }
+  }
+  // `device` is current from here until the restore below.
+  cudaEvent_t ev = nullptr;
+  const char* step = "cudaEventCreateWithFlags";
+  e = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+  if (e == cudaSuccess) {
+    step = "cudaEventRecord on the legacy stream";
+    e = cudaEventRecord(ev, cudaStreamLegacy);  // engine stream of `device`
+  }
+  if (e == cudaSuccess) {
+    step = "cudaStreamWaitEvent on the consumer's stream";
+    e = cudaStreamWaitEvent(consumer, ev, 0);
+  }
+  // Safe right after the wait is enqueued: the dependency is captured at the
+  // cudaStreamWaitEvent call and the runtime frees the event once it fires.
+  const cudaError_t de = ev ? cudaEventDestroy(ev) : cudaSuccess;  // on its own device
+  const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
+  if (e == cudaSuccess && de == cudaSuccess && re == cudaSuccess) return;
+  cudaGetLastError();  // the failed calls are reported by the raise below
+  std::string msg = "__dlpack__: stream fence on the tensor's CUDA device " + dev + " failed:";
+  if (e != cudaSuccess) msg += std::string(" ") + step + " (" + name(e) + ");";
+  if (de != cudaSuccess) msg += " cudaEventDestroy (" + name(de) + ");";
+  if (re != cudaSuccess)
+    msg += " restoring the caller's CUDA device " + std::to_string(prev) + " also failed (cudaSetDevice: " + name(re) +
+           "), so the calling thread's current device is still " + dev;
+  else if (switched)
+    msg += " the caller's CUDA device " + std::to_string(prev) + " was restored";
+  throw std::runtime_error(msg);
 }
 
 py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
@@ -443,7 +517,16 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
     checked_nbytes(n_ex, dtype_size(a.dtype), a.shape.data(), a.ndim(), "__dlpack__");
   }
 
-  dlpack_fence_consumer(stream);
+  // P1T-FIX4 (V4-01 and the device sweep): the device this export publishes (dl.device_id below) and fences on is the
+  // tensor's label, proven first against the allocation of element 0 (kernels.cu cuda_storage_device_mismatch:
+  // cudaPointerGetAttributes). A mismatch, which the engine's cuda:0 labeling produces for a tensor it allocated while
+  // another device was current, is refused (BufferError) before any fence or capsule; it would otherwise describe the
+  // memory with the wrong device and fence the wrong device's stream (the V4-01 race again).
+  {
+    const std::string mismatch = cuda_storage_device_mismatch(a, "__dlpack__");
+    if (!mismatch.empty()) throw py::buffer_error(mismatch);
+  }
+  dlpack_fence_consumer(stream, a.device.index);
 
   // P1T-FIX1, F06: the context (and its shared Storage reference) is owned by a unique_ptr until the capsule takes it,
   // so a throw anywhere below (bad_alloc in the vector assignments, a failed PyCapsule_New) frees it exactly once.
@@ -814,8 +897,30 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
         "from_dlpack: only CUDA device memory (kDLCUDA = 2) can be imported; "
         "got device type " + std::to_string(static_cast<int>(dl->device.device_type)) +
         (dl->device.device_type == kDLCPU ? " (CPU)" : ""));
-  int cur = 0;
-  cudaGetDevice(&cur);
+  // P1T-FIX4, round-4 review finding V4-03 (MINOR). 62c8d9f ignored this query's
+  // result: on failure (no usable device, or an initialization error) `cur`
+  // stayed 0, a device-0 capsule was accepted, a Storage was built on an
+  // unvalidated device and the capsule was renamed "used_*". Now the result is
+  // checked here, before the Storage exists and before the rename: a failure
+  // raises RuntimeError naming cudaGetDevice and the CUDA error, the capsule
+  // stays unconsumed (its own destructor returns the memory to the producer),
+  // and the failed call's slot entry is consumed (this raise reports it). This
+  // is the only CUDA call of the import (the sweep: no other query). A sticky
+  // context error does not make cudaGetDevice fail (measured, receipt
+  // artifacts/p1t_fix4/cuda_semantics.txt); such an import proceeds, and the
+  // Storage's release later finds the drain failing and leaks instead of
+  // releasing (P1T-FIX1 F05).
+  // Prior art: the CUDA 12.6 contract that cudaGetDevice returns an error code
+  // (cudaErrorNoDevice, cudaErrorInsufficientDriver, ...) and the DLPack rule that
+  // a refused capsule keeps its ownership. Nothing new.
+  int cur = -1;
+  const cudaError_t qe = cudaGetDevice(&cur);
+  if (qe != cudaSuccess) {
+    cudaGetLastError();
+    throw std::runtime_error(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
+                             cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
+                             "); refused before taking ownership (the capsule is not consumed)");
+  }
   if (dl->device.device_id != cur)
     throw py::buffer_error(
         "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +
@@ -919,7 +1024,43 @@ Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
   const int nd = static_cast<int>(shape.size());
   const int64_t numel = checked_numel(shape.data(), nd, "empty");
   const int64_t nbytes = checked_nbytes(numel, dtype_size(dt), shape.data(), nd, "empty");
-  NDArray a = NDArray::empty(Shape(shape.begin(), shape.end()), dt, Device::from_string(device));
+  // P1T-FIX4 (sweep, implicit current device). The engine's Storage constructor allocates on the CURRENT device, but
+  // Device::from_string (pre-existing core code) labels every CUDA string index 0, so with another device current
+  // 62c8d9f returned memory of that device labeled cuda:0 (and cuda:N was silently ignored). Now a CUDA tensor is
+  // labeled with the current device, read with a checked cudaGetDevice (RuntimeError naming it, slot entry consumed),
+  // and an explicit "cuda:N" must name the current device (ValueError otherwise; TensorCUDA does not switch devices to
+  // allocate). The label then equals the allocation's device, which the P1-T export and fill_ prove before use.
+  // Prior art: torch.empty(device=...) / cupy.empty under cupy.cuda.Device (an allocation belongs to an explicit,
+  // recorded device). Taken: label = allocation device. Ours: refusing an index other than the current device.
+  Device dev = Device::from_string(device);
+  if (dev.is_cuda()) {
+    int cur = -1;
+    const cudaError_t qe = cudaGetDevice(&cur);
+    if (qe != cudaSuccess) {
+      cudaGetLastError();
+      throw std::runtime_error(std::string("empty: the current-device query cudaGetDevice failed (") +
+                               cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) + "); nothing was allocated");
+    }
+    const std::string prefix = "cuda:";
+    if (device.compare(0, prefix.size(), prefix) == 0) {
+      const std::string idx = device.substr(prefix.size());
+      if (idx.empty() || idx.size() > 9 || idx.find_first_not_of("0123456789") != std::string::npos)
+        throw py::value_error("empty: device '" + device + "' is not 'cuda', 'cuda:<index>' or 'cpu'");
+      if (std::stoi(idx) != cur)
+        throw py::value_error("empty: device '" + device + "' is not the current CUDA device (cuda:" +
+                              std::to_string(cur) + "); TensorCUDA allocates on the current device only");
+    }
+    dev.index = cur;
+  }
+  NDArray a;
+  try {
+    a = NDArray::empty(Shape(shape.begin(), shape.end()), dt, dev);
+  } catch (const std::runtime_error&) {
+    // A failed CUDA allocation (the engine's Storage constructor raises without consuming the failed call's slot
+    // entry): this raise reports it, so it is consumed here (P1T-FIX4 sweep).
+    if (dev.is_cuda()) cudaGetLastError();
+    throw;
+  }
   if (nbytes > 0 && a.storage->ptr == nullptr) throw std::bad_alloc();  // -> MemoryError
   return Tensor::make(a, false);
 }
@@ -931,10 +1072,18 @@ stream: the CONSUMER's CUDA stream, as a DLPack int. TensorCUDA queues all of it
   * None or 1: the consumer is on the legacy default stream; nothing to do.
   * -1: no synchronization.
   * 2 (per-thread default stream) or any other handle (a cudaStream_t): TensorCUDA
-    records a CUDA event on the legacy default stream and makes the consumer's
-    stream wait on it before returning, so the consumer sees every TensorCUDA
-    write queued so far.
+    records a CUDA event on the legacy default stream of THIS TENSOR'S device and
+    makes the consumer's stream wait on it before returning, so the consumer sees
+    every TensorCUDA write queued so far. If another device is current, TensorCUDA
+    switches to the tensor's device for the fence and restores the caller's device
+    (also when the fence fails, before raising RuntimeError). With 2, the wait is
+    on the per-thread default stream of the tensor's device; a handle may belong
+    to any device (a cross-device event wait is legal in CUDA).
   * 0 is ambiguous under the protocol and raises ValueError.
+Device proof (P1T-FIX4): before anything else, the tensor's device label is
+checked against its allocation (cudaPointerGetAttributes); a tensor whose memory
+is on another device than its label (the engine labels its own allocations
+cuda:0, so one allocated while another device was current) raises BufferError.
 max_version: None (or major < 1) returns a legacy "dltensor" capsule; (1, x) or
   later returns "dltensor_versioned" (DLPack 1.3 header, flags 0).
 dl_device: None or (2, this tensor's device); anything else raises BufferError.
@@ -994,7 +1143,10 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            "Fill in place with `value`, queued on the legacy default stream "
            "(asynchronous; existing fill_kernel). float32/float16/bfloat16 CUDA "
            "tensors only. Bumps the storage revision. Not recorded by autograd. "
-           "Returns self.")
+           "Returns self. P1T-FIX4: launched on the tensor's own device (proven "
+           "against its allocation; the caller's device is switched to it and "
+           "restored), and a CUDA error already pending in the calling thread is "
+           "raised as such before the launch (RuntimeError, nothing launched).")
       .def("mark_modified", [](Tensor& t) { t.data().mark_modified(); },
            "Bump the Storage revision. Call after an external (non-TensorCUDA) "
            "in-place write, e.g. through DLPack or data_ptr(); see __dlpack__.")
@@ -1776,11 +1928,14 @@ PYBIND11_MODULE(_tensor_cuda, m) {
     d["shutdown_still_in_flight"] = g_shutdown_still_in_flight.load();
     d["shutdown_wait_us"] = g_shutdown_wait_us.load();
     d["shutdown_diagnostics"] = g_shutdown_diagnostics.load();  // P1T-FIX3 (V3-01)
+    d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
     return d;
   }, "P1T-FIX1: imported-Storage releases, deliberate leaks during interpreter shutdown (F04) and deliberate leaks "
      "after a failed device drain (F05); P1T-FIX2: deleter exceptions contained (N4), leaks after the exit hook "
      "closed, the in-flight count and the exit hook's wait (N5); P1T-FIX3: stderr diagnostics written while the exit "
-     "hook waited (V3-01; shutdown_timeouts now counts waits that outlasted the first-diagnostic delay).");
+     "hook waited (V3-01; shutdown_timeouts now counts waits that outlasted the first-diagnostic delay); P1T-FIX4: "
+     "device_restore_failures, restores of the caller's CUDA device that failed where nothing could raise (the "
+     "external Storage drain, or a fill_ guard unwinding after another error).");
   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
   (void)release_lifecycle();
   m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("first_diag_s"),

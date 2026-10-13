@@ -1284,3 +1284,507 @@ def test_fix3_v301_hook_inside_own_release_does_not_wait_for_itself():
     assert rel["deleter_done"] is True and rel["stats"]["released"] == 1 and rel["stats"]["in_flight"] == 0, res
     assert res["after_hook"]["stats"]["shutdown_calls"] == 2, res               # and the real exit hook ran again
     _assert_ordinary_exit(r)
+
+
+# ================================================================================================== P1T-FIX4
+# Round-4 review findings V4-01 (export fence on the wrong device), V4-03 (import ignored a failed cudaGetDevice) and
+# the device / CUDA-error sweep of the P1-T core surface (fill_, empty, the external Storage drain). V4-04 is in
+# tc_signal/tests/test_fix4_findings.py.
+#
+# The host has ONE GPU, so "another device is current" is simulated, as FIX1 did for F05: an LD_PRELOAD shim interposes
+# the libcudart.so.12 calls the P1-T core path makes. In fake mode it reports a simulated current device, logs each call
+# with the simulated device it would run on, and keeps the REAL device at 0. It can also fail one named call (or the
+# Nth cudaSetDevice(d)) with a GENUINE runtime error (it calls the real cudaSetDevice(-1), so the thread's last-error
+# slot really holds cudaErrorInvalidDevice) and can override the device cudaPointerGetAttributes reports.
+# Prior art: LD_PRELOAD symbol interposition (glibc ld.so; the classic malloc/syscall interposers) and the FIX1 F05 shim
+# above. Ours: this shim's call log, genuine-slot failure injection and attribute override.
+_FIX4_SHIM_C = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
+#include <stddef.h>
+typedef struct { unsigned x, y, z; } dim3_;
+typedef struct { int type; int device; void* devicePointer; void* hostPointer; } attrs_;
+static int fake = -1;                 /* -1: pass-through; else the simulated current device */
+static int fail_set_to = -1, fail_set_nth = 0, set_seen = 0;
+static char fail_name[64];
+static int attr_device = -100;        /* -100: report the real device */
+static char logbuf[8192];
+static void note(const char* s) {
+  size_t n = strlen(logbuf);
+  if (n + strlen(s) + 2 < sizeof logbuf) { strcat(logbuf, s); strcat(logbuf, " "); }
+}
+static void* real_sym(const char* name) {
+  void* h = dlopen("libcudart.so.12", RTLD_LAZY | RTLD_NOLOAD);
+  if (!h) h = dlopen("libcudart.so.12", RTLD_LAZY);
+  return h ? dlsym(h, name) : NULL;
+}
+#define REAL(R, n, A) static R (*real_##n) A; if (!real_##n) real_##n = (R (*) A)real_sym(#n)
+/* a GENUINE runtime failure: the real cudaSetDevice(-1) puts cudaErrorInvalidDevice (101) in the slot */
+static int genuine_failure(void) { REAL(int, cudaSetDevice, (int)); return real_cudaSetDevice(-1); }
+static int take_fail(const char* n) { if (fail_name[0] && strcmp(fail_name, n) == 0) { fail_name[0] = 0; return 1; } return 0; }
+static void lognote(const char* what, int failed) {
+  if (fake < 0) return;
+  char b[48]; snprintf(b, sizeof b, "%s@%d%s", what, fake, failed ? "!" : ""); note(b);
+}
+int cudaGetDevice(int* d) { REAL(int, cudaGetDevice, (int*)); if (fake >= 0) { *d = fake; return 0; } return real_cudaGetDevice(d); }
+int cudaSetDevice(int d) {
+  REAL(int, cudaSetDevice, (int));
+  if (fake < 0) return real_cudaSetDevice(d);
+  int fail = 0;
+  if (d == fail_set_to && ++set_seen == fail_set_nth) { fail = 1; fail_set_to = -1; }
+  char b[32]; snprintf(b, sizeof b, "set%d%s", d, fail ? "!" : ""); note(b);
+  if (fail) return genuine_failure();
+  fake = d;
+  return real_cudaSetDevice(0);
+}
+int cudaEventCreateWithFlags(void** e, unsigned f) {
+  REAL(int, cudaEventCreateWithFlags, (void**, unsigned));
+  if (take_fail("cudaEventCreateWithFlags")) { lognote("create", 1); return genuine_failure(); }
+  lognote("create", 0); return real_cudaEventCreateWithFlags(e, f);
+}
+int cudaEventRecord(void* e, void* s) {
+  REAL(int, cudaEventRecord, (void*, void*));
+  if (take_fail("cudaEventRecord")) { lognote("record", 1); return genuine_failure(); }
+  lognote("record", 0); return real_cudaEventRecord(e, s);
+}
+int cudaStreamWaitEvent(void* s, void* e, unsigned f) {
+  REAL(int, cudaStreamWaitEvent, (void*, void*, unsigned));
+  if (take_fail("cudaStreamWaitEvent")) { lognote("wait", 1); return genuine_failure(); }
+  lognote("wait", 0); return real_cudaStreamWaitEvent(s, e, f);
+}
+int cudaEventDestroy(void* e) {
+  REAL(int, cudaEventDestroy, (void*));
+  if (take_fail("cudaEventDestroy")) { lognote("destroy", 1); real_cudaEventDestroy(e); return genuine_failure(); }
+  lognote("destroy", 0); return real_cudaEventDestroy(e);
+}
+int cudaStreamSynchronize(void* s) { REAL(int, cudaStreamSynchronize, (void*)); lognote("sync", 0); return real_cudaStreamSynchronize(s); }
+int cudaLaunchKernel(const void* fn, dim3_ g, dim3_ b, void** a, size_t sh, void* s) {
+  REAL(int, cudaLaunchKernel, (const void*, dim3_, dim3_, void**, size_t, void*));
+  if (take_fail("cudaLaunchKernel")) { lognote("launch", 1); return genuine_failure(); }   /* nothing launched */
+  lognote("launch", 0); return real_cudaLaunchKernel(fn, g, b, a, sh, s);
+}
+int cudaPointerGetAttributes(attrs_* at, const void* p) {
+  REAL(int, cudaPointerGetAttributes, (attrs_*, const void*));
+  if (take_fail("cudaPointerGetAttributes")) { lognote("attr", 1); return genuine_failure(); }
+  int r = real_cudaPointerGetAttributes(at, p);
+  if (r == 0 && attr_device != -100) at->device = attr_device;
+  return r;
+}
+void shim_fake(int d) { fake = d; }
+void shim_fail_set(int d, int nth) { fail_set_to = d; fail_set_nth = nth; set_seen = 0; }
+void shim_fail(const char* n) { strncpy(fail_name, n, sizeof fail_name - 1); }
+void shim_attr_device(int d) { attr_device = d; }
+int shim_current(void) { return fake; }
+int shim_slot_peek(void) { REAL(int, cudaPeekAtLastError, (void)); return real_cudaPeekAtLastError(); }
+const char* shim_log(void) { return logbuf; }
+void shim_clear(void) { logbuf[0] = 0; }
+"""
+
+_FIX4_SCRIPT = _SUBPROC_PRODUCER + r"""
+shim = ctypes.CDLL(sys.argv[1])                # already loaded through LD_PRELOAD: the same handle
+shim.shim_log.restype = ctypes.c_char_p
+shim.shim_fail.argtypes = [ctypes.c_char_p]
+rt = ctypes.CDLL("libcudart.so.12")            # the same runtime instance as core (real, not interposed, functions)
+mode = sys.argv[2]
+N = 1 << 16
+owner = tc.empty(N)
+owner.fill_(1.0)
+tc.synchronize()
+prod = Producer(owner, N)
+u = tc.from_dlpack(prod.capsule())             # imported on (real and labeled) device 0
+consumer = ctypes.c_void_p()
+assert rt.cudaStreamCreateWithFlags(ctypes.byref(consumer), 1) == 0      # a real non-blocking stream on device 0
+res = {"mode": mode}
+
+def run(fn):
+    shim.shim_clear()
+    try:
+        out = fn()
+        res["raised"] = None
+        return out
+    except Exception as e:  # noqa: BLE001
+        res["raised"], res["msg"] = type(e).__name__, str(e)
+    finally:
+        res["log"] = shim.shim_log().decode().split()
+        res["current"] = shim.shim_current()
+        res["slot_after"] = shim.shim_slot_peek()
+
+if mode.startswith("export"):
+    stream = 2 if mode == "export_ptds" else consumer.value
+    shim.shim_fake(0 if mode in ("export_same", "export_mismatch") else 1)
+    if mode == "export_fail_create":
+        shim.shim_fail(b"cudaEventCreateWithFlags")
+    elif mode == "export_fail_wait":
+        shim.shim_fail(b"cudaStreamWaitEvent")
+    elif mode == "export_attr_fail":
+        shim.shim_fail(b"cudaPointerGetAttributes")
+    elif mode == "export_fail_record":
+        shim.shim_fail(b"cudaEventRecord")
+    elif mode == "export_fail_destroy":
+        shim.shim_fail(b"cudaEventDestroy")
+    elif mode == "export_fail_switch":
+        shim.shim_fail_set(0, 1)
+    elif mode == "export_fail_restore":
+        shim.shim_fail_set(1, 1)
+    elif mode == "export_mismatch":
+        shim.shim_attr_device(1)
+    cap = run(lambda: u.__dlpack__(stream=stream, max_version=(1, 3)))
+    res["capsule"] = cap is not None
+    shim.shim_fake(-1)
+    shim.shim_attr_device(-100)
+    del cap
+elif mode.startswith("fill_"):
+    shim.shim_fake(0 if mode == "fill_mismatch" else 1)
+    if mode == "fill_mismatch":
+        shim.shim_attr_device(1)
+    elif mode == "fill_fail_switch":
+        shim.shim_fail_set(0, 1)                   # the guard's switch to the tensor's device fails
+    elif mode == "fill_fail_restore":
+        shim.shim_fail_set(1, 1)                   # the success-path restore fails (the write is queued)
+    elif mode == "fill_fail_launch_and_restore":
+        shim.shim_fail(b"cudaLaunchKernel")        # the launch is refused, then the unwinding restore fails
+        shim.shim_fail_set(1, 1)
+    rev0 = u.revision
+    run(lambda: u.fill_(2.0))
+    res["revision_delta"] = u.revision - rev0
+    shim.shim_fake(-1)
+    shim.shim_attr_device(-100)
+    tc.synchronize()
+    res["values"] = sorted(set(u.numpy().tolist()))
+elif mode == "drain_restore_fail":
+    u.fill_(2.0)                                   # engine work queued on the imported memory
+    shim.shim_fake(1)
+    shim.shim_fail_set(1, 1)                       # the destructor's restore of device 1 fails
+    shim.shim_clear()
+    del u
+    gc.collect()
+    res["log"] = shim.shim_log().decode().split()
+    res["current"] = shim.shim_current()
+    res["slot_after"] = shim.shim_slot_peek()
+    shim.shim_fake(-1)
+res["deleter_calls"] = prod.calls
+res["stats"] = dict(tc._C._dlpack_release_stats())
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+
+@pytest.fixture(scope="module")
+def fix4_shim(tmp_path_factory):
+    d = tmp_path_factory.mktemp("fix4_shim")
+    src, so = d / "cudart_fix4_shim.c", d / "cudart_fix4_shim.so"
+    src.write_text(_FIX4_SHIM_C)
+    r = subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-o", str(so), str(src), "-ldl"], capture_output=True,
+                       text=True, timeout=_SUBPROC_TIMEOUT)
+    assert r.returncode == 0, r.stderr
+    return str(so)
+
+
+def _run_fix4(shim, mode):
+    r = subprocess.run([sys.executable, "-c", _FIX4_SCRIPT, shim, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    return json.loads(lines[-1][len("RESULT "):])
+
+
+_FENCE_ON_0 = ["create@0", "record@0", "wait@0", "destroy@0"]
+
+
+@pytest.mark.parametrize("mode", ["export_switch", "export_ptds"])
+def test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores(fix4_shim, mode):
+    # V4-01: device 1 current, device-0 tensor, a consumer stream handle (or 2, the per-thread stream): the event must
+    # be created and recorded on device 0, the wait issued there, the event destroyed there, and device 1 restored.
+    # 62c8d9f / mutant (a): create@1 record@1 wait@1 destroy@1, no switch.
+    res = _run_fix4(fix4_shim, mode)
+    assert res["raised"] is None and res["capsule"], res
+    assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1"], res
+    assert res["current"] == 1 and res["slot_after"] == 0, res
+
+
+def test_fix4_v401_export_fence_same_device_does_not_switch(fix4_shim):
+    res = _run_fix4(fix4_shim, "export_same")
+    assert res["raised"] is None and res["log"] == _FENCE_ON_0 and res["current"] == 0, res
+
+
+@pytest.mark.parametrize("mode, logged, frag", [
+    ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+    ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+    ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+])
+def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+    # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+    # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+    res = _run_fix4(fix4_shim, mode)
+    assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+    assert res["log"] == logged, res
+    assert res["current"] == 1, res                              # the caller's device, restored (or never left)
+    assert res["slot_after"] == 0, res
+
+
+@pytest.mark.parametrize("mode, logged, frag", [
+    ("export_fail_create", ["set0", "create@0!", "set1"], "cudaEventCreateWithFlags"),
+    ("export_fail_wait", ["set0", "create@0", "record@0", "wait@0!", "destroy@0", "set1"], "cudaStreamWaitEvent"),
+])
+def test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises(fix4_shim, mode, logged, frag):
+    res = _run_fix4(fix4_shim, mode)
+    assert res["raised"] == "RuntimeError" and frag in res["msg"] and "was restored" in res["msg"], res
+    assert res["log"] == logged and res["current"] == 1 and res["slot_after"] == 0, res
+
+
+def test_fix4_export_label_proof_query_failure_raises_and_consumes(fix4_shim):
+    res = _run_fix4(fix4_shim, "export_attr_fail")
+    assert res["raised"] == "RuntimeError" and "cudaPointerGetAttributes failed" in res["msg"], res
+    assert res["log"] == ["attr@1!"] and res["slot_after"] == 0 and res["capsule"] is False, res   # nothing fenced
+
+
+def test_fix4_v401_export_fence_failed_restore_is_raised_and_named(fix4_shim):
+    res = _run_fix4(fix4_shim, "export_fail_restore")
+    assert res["raised"] == "RuntimeError", res
+    assert "restoring the caller's CUDA device 1 also failed" in res["msg"], res
+    assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1!"] and res["current"] == 0, res   # honest: still device 0
+    assert res["slot_after"] == 0, res
+
+
+def test_fix4_export_refuses_a_label_that_is_not_the_allocation_device(fix4_shim):
+    # The label is proven against the allocation before it is published or fenced (the engine labels its own
+    # allocations cuda:0 while allocating on the current device). Mismatch: BufferError, nothing recorded.
+    res = _run_fix4(fix4_shim, "export_mismatch")
+    assert res["raised"] == "BufferError" and "labeled cuda:0 but its memory is on CUDA device 1" in res["msg"], res
+    assert res["log"] == [] and res["capsule"] is False, res
+
+
+def test_fix4_fill_launches_on_the_tensor_device_and_restores(fix4_shim):
+    # 62c8d9f launched fill_ on the CURRENT device (device 1 here: a kernel writing device-0 memory from device 1).
+    res = _run_fix4(fix4_shim, "fill_switch")
+    assert res["raised"] is None and res["log"] == ["set0", "launch@0", "set1"] and res["current"] == 1, res
+    assert res["values"] == [2.0], res
+
+
+@pytest.mark.parametrize("mode", ["fill_fail_switch", "fill_fail_restore", "fill_fail_launch_and_restore"])
+def test_fix4_fill_guard_failures_raise_count_and_consume(fix4_shim, mode):
+    res = _run_fix4(fix4_shim, mode)
+    assert res["raised"] == "RuntimeError" and res["slot_after"] == 0, res
+    if mode == "fill_fail_switch":                               # nothing switched, nothing launched
+        assert "fill_: cannot make the tensor's CUDA device 0 current" in res["msg"], res
+        assert res["log"] == ["set0!"] and res["current"] == 1 and res["values"] == [1.0], res
+        assert res["revision_delta"] == 0, res
+    elif mode == "fill_fail_restore":                            # the write is queued and counted in the revision
+        assert "fill_: restoring the caller's CUDA device 1 failed" in res["msg"], res
+        assert res["log"] == ["set0", "launch@0", "set1!"] and res["current"] == 0, res
+        assert res["values"] == [2.0] and res["revision_delta"] == 1, res
+    else:                                                        # launch refused; the unwinding restore is counted
+        assert "CUDA error at fill_" in res["msg"], res
+        assert res["log"] == ["set0", "launch@0!", "set1!"] and res["values"] == [1.0], res
+        assert res["stats"]["device_restore_failures"] == 1 and res["revision_delta"] == 0, res
+
+
+def test_fix4_fill_refuses_a_label_that_is_not_the_allocation_device(fix4_shim):
+    res = _run_fix4(fix4_shim, "fill_mismatch")
+    assert res["raised"] == "RuntimeError" and "labeled cuda:0 but its memory is on CUDA device 1" in res["msg"], res
+    assert res["log"] == [] and res["values"] == [1.0], res      # nothing launched: the old values remain
+
+
+def test_fix4_storage_drain_failed_restore_is_counted_not_ignored(fix4_shim):
+    # kernels.cu drain_device_legacy_stream ignored its restore's result in 62c8d9f. The drain itself succeeded, so the
+    # memory is released (once); the failed restore is counted and its slot entry consumed.
+    res = _run_fix4(fix4_shim, "drain_restore_fail")
+    assert res["log"] == ["set0", "sync@0", "set1!"], res
+    assert res["deleter_calls"] == 1 and res["stats"]["leaked_drain_failure"] == 0, res
+    assert res["stats"]["device_restore_failures"] == 1 and res["slot_after"] == 0, res
+
+
+# ---- V4-03: the import checks cudaGetDevice before any ownership transfer
+_FIX4_IMPORT_NODEV = r"""
+import ctypes, json, sys
+import tensor_cuda as tc
+class DLDevice(ctypes.Structure):
+    _fields_ = [("device_type", ctypes.c_int32), ("device_id", ctypes.c_int32)]
+class DLDataType(ctypes.Structure):
+    _fields_ = [("code", ctypes.c_uint8), ("bits", ctypes.c_uint8), ("lanes", ctypes.c_uint16)]
+class DLTensor(ctypes.Structure):
+    _fields_ = [("data", ctypes.c_void_p), ("device", DLDevice), ("ndim", ctypes.c_int32), ("dtype", DLDataType),
+                ("shape", ctypes.POINTER(ctypes.c_int64)), ("strides", ctypes.POINTER(ctypes.c_int64)),
+                ("byte_offset", ctypes.c_uint64)]
+class Version(ctypes.Structure):
+    _fields_ = [("major", ctypes.c_uint32), ("minor", ctypes.c_uint32)]
+class MTV(ctypes.Structure):
+    pass
+class MT(ctypes.Structure):
+    pass
+DEL_V = ctypes.CFUNCTYPE(None, ctypes.POINTER(MTV))
+DEL_L = ctypes.CFUNCTYPE(None, ctypes.POINTER(MT))
+MTV._fields_ = [("version", Version), ("manager_ctx", ctypes.c_void_p), ("deleter", DEL_V),
+                ("flags", ctypes.c_uint64), ("dl_tensor", DLTensor)]
+MT._fields_ = [("dl_tensor", DLTensor), ("manager_ctx", ctypes.c_void_p), ("deleter", DEL_L)]
+New = ctypes.pythonapi['PyCapsule_New']
+New.restype, New.argtypes = ctypes.py_object, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+GetName = ctypes.pythonapi['PyCapsule_GetName']
+GetName.restype, GetName.argtypes = ctypes.c_char_p, [ctypes.py_object]
+rt = ctypes.CDLL("libcudart.so.12")
+d = ctypes.c_int(-1)
+res = {"query": rt.cudaGetDevice(ctypes.byref(d))}
+calls = []
+shape = (ctypes.c_int64 * 1)(0)
+cb_v = DEL_V(lambda p: calls.append("v"))
+cb_l = DEL_L(lambda p: calls.append("l"))
+mv = MTV(); mv.version.major, mv.version.minor = 1, 3; mv.deleter = cb_v
+ml = MT(); ml.deleter = cb_l
+for t in (mv.dl_tensor, ml.dl_tensor):        # zero-size fp32 CUDA device-0 descriptors, NULL data: nothing to read
+    t.data, t.ndim, t.shape = None, 1, ctypes.cast(shape, ctypes.POINTER(ctypes.c_int64))
+    t.device.device_type, t.device.device_id = 2, 0
+    t.dtype.code, t.dtype.bits, t.dtype.lanes = 2, 32, 1
+for kind, m, name in (("versioned", mv, b"dltensor_versioned"), ("legacy", ml, b"dltensor")):
+    cap = New(ctypes.addressof(m), name, None)
+    try:
+        tc.from_dlpack(cap)
+        res[kind] = {"raised": None}
+    except Exception as e:  # noqa: BLE001
+        res[kind] = {"raised": type(e).__name__, "msg": str(e)}
+    res[kind]["name_after"] = GetName(cap).decode()
+res["deleter_calls"] = calls
+try:
+    tc.empty(4)
+    res["empty"] = {"raised": None}
+except Exception as e:  # noqa: BLE001
+    res["empty"] = {"raised": type(e).__name__, "msg": str(e)}
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+
+def test_fix4_v403_import_refuses_a_failed_device_query_before_consuming():
+    # CUDA_VISIBLE_DEVICES="" makes cudaGetDevice fail (cudaErrorNoDevice). 62c8d9f: cur stayed 0, the device-0
+    # capsule was accepted and renamed used_* (mutant (b) restores that). Now: RuntimeError naming cudaGetDevice and the
+    # error, the capsule NOT renamed, the producer deleter not called by the import (ownership stays with the capsule).
+    r = subprocess.run([sys.executable, "-c", _FIX4_IMPORT_NODEV], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(CUDA_VISIBLE_DEVICES=""))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["query"] == 100, res                               # precondition: no usable device
+    for kind, name in (("versioned", "dltensor_versioned"), ("legacy", "dltensor")):
+        k = res[kind]
+        assert k["raised"] == "RuntimeError", res
+        assert "cudaGetDevice" in k["msg"] and "cudaErrorNoDevice" in k["msg"], res
+        assert k["name_after"] == name, res                       # not consumed
+    assert res["deleter_calls"] == [], res
+    # empty labels the current device: its failed query is a named RuntimeError too (62c8d9f: cudaMalloc's error)
+    assert res["empty"]["raised"] == "RuntimeError" and "cudaGetDevice" in res["empty"]["msg"], res
+
+
+_FIX4_IMPORT_STICKY = _SUBPROC_PRODUCER + r"""
+import torch
+N = 1 << 12
+owner = tc.empty(N)
+owner.fill_(1.0)
+tc.synchronize()
+prod = Producer(owner, N)
+x = torch.zeros(4, device="cuda")
+idx = torch.tensor([100], device="cuda")
+try:
+    x[idx]                                        # device-side assert: the CUDA context is now broken (sticky)
+    torch.cuda.synchronize()
+    res = {"staged": False}
+except RuntimeError as e:
+    res = {"staged": "device-side assert" in str(e)}
+rt = ctypes.CDLL("libcudart.so.12")
+res["query_legacy"] = rt.cudaStreamQuery(ctypes.c_void_p(1))  # proves the context error is visible to core's runtime
+rt.cudaGetLastError()
+cap = prod.capsule()
+try:
+    u = tc.from_dlpack(cap)
+    res["import"] = "ok"
+except Exception as e:  # noqa: BLE001
+    res["import"], res["msg"] = type(e).__name__, str(e)
+    u = None
+GetName = ctypes.pythonapi['PyCapsule_GetName']
+GetName.restype, GetName.argtypes = ctypes.c_char_p, [ctypes.py_object]
+res["name_after"] = GetName(cap).decode()
+del u
+gc.collect()
+res["deleter_calls"] = prod.calls
+res["stats"] = dict(tc._C._dlpack_release_stats())
+print("RESULT " + json.dumps(res), flush=True)
+"""
+
+
+def test_fix4_v403_import_with_a_sticky_context_error_takes_ownership_once_and_release_leaks():
+    # The order's census: import with a sticky prior error. Measured (artifacts/p1t_fix4/cuda_semantics.txt):
+    # cudaGetDevice still succeeds in a broken context, so the import's one CUDA query passes and it takes ownership
+    # (once); the Storage's release then cannot drain the broken context and leaks deliberately (F05) instead of
+    # releasing. Runs in its own process (the context stays broken until that process exits).
+    r = subprocess.run([sys.executable, "-c", _FIX4_IMPORT_STICKY], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["staged"] is True and res["query_legacy"] == 710, res   # cudaErrorAssert: the context is broken
+    assert res["import"] == "ok" and res["name_after"] == "used_dltensor_versioned", res
+    assert res["deleter_calls"] == 0 and res["stats"]["leaked_drain_failure"] == 1, res
+    assert res["stats"]["released"] == 0, res
+
+
+# ---- sweep: fill_ checks the error slot right before its launch; empty labels with the current device
+_FIX4_STAGE = r"""
+import ctypes
+_rt = ctypes.CDLL("libcudart.so.12")
+class _Dim3(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_uint), ("y", ctypes.c_uint), ("z", ctypes.c_uint)]
+_rt.cudaLaunchKernel.argtypes = [ctypes.c_void_p, _Dim3, _Dim3, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+def stage_refused_launch():
+    # a synchronous launch refusal (NULL kernel): queues nothing, leaves cudaErrorInvalidDeviceFunction (98) in the slot
+    _rt.cudaGetLastError()
+    e = _rt.cudaLaunchKernel(None, _Dim3(1, 1, 1), _Dim3(1, 1, 1), None, 0, None)
+    assert e != 0 and _rt.cudaPeekAtLastError() == e, (e, _rt.cudaPeekAtLastError())
+    return e
+def slot():
+    return _rt.cudaPeekAtLastError()
+"""
+
+
+def test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing(torch):
+    ns = {}
+    exec(_FIX4_STAGE, ns)
+    t = tc.empty(64)
+    t.fill_(5.0)
+    tc.synchronize()
+    staged = ns["stage_refused_launch"]()
+    try:
+        with pytest.raises(RuntimeError, match="already pending in this thread before the launch") as ei:
+            t.fill_(7.0)
+        slot_after = ns["slot"]()
+    finally:
+        ns["_rt"].cudaGetLastError()                              # never leave a staged error to later tests
+    assert "cudaErrorInvalidDeviceFunction" in str(ei.value)
+    assert staged == 98 and slot_after == 0                       # taken from the slot (reported once)
+    assert np.all(t.numpy() == 5.0)                               # nothing was launched
+    t.fill_(7.0)                                                  # and the next call is clean
+    assert np.all(t.numpy() == 7.0)
+
+
+def test_fix4_empty_failed_allocation_is_reported_once(torch):
+    # The engine's Storage constructor raises on a failed cudaMalloc without consuming the failed call's slot entry;
+    # empty's raise reports it, so empty consumes it: no later, unrelated launch check reports it again.
+    ns = {}
+    exec(_FIX4_STAGE, ns)
+    try:
+        with pytest.raises(RuntimeError, match="cudaMalloc"):
+            tc.empty(1 << 40)                                     # 4 TiB of float32: refused by the driver
+        slot_after = ns["slot"]()
+    finally:
+        ns["_rt"].cudaGetLastError()
+    assert slot_after == 0
+    t = tc.empty(8)
+    t.fill_(3.0)                                                  # the next launch check is clean
+    assert np.all(t.numpy() == 3.0)
+
+
+def test_fix4_empty_labels_the_current_device_and_refuses_another_index(torch):
+    cur = torch.cuda.current_device()
+    t = tc.empty(4, device=f"cuda:{cur}")
+    assert t.device == f"cuda:{cur}"
+    for bad in (f"cuda:{cur + 1}", "cuda:x", "cuda:"):
+        with pytest.raises(ValueError):
+            tc.empty(4, device=bad)
+    assert tc.empty(4).device == f"cuda:{cur}"

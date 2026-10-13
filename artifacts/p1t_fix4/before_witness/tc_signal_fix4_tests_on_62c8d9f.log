@@ -1,0 +1,316 @@
+FFFF...FFFFFFFF.FF                                                       [100%]
+=================================== FAILURES ===================================
+_ test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_null_kernel-98-cudaErrorInvalidDeviceFunction] _
+
+stager = '/tmp/pytest-of-vader/pytest-81/fix4_stager0/fix4_stage_kernel.so'
+mode = 'sync_null_kernel', staged = 98, name = 'cudaErrorInvalidDeviceFunction'
+
+    @pytest.mark.parametrize('mode, staged, name', [
+        ('sync_null_kernel', 98, 'cudaErrorInvalidDeviceFunction'),
+        ('sync_launch_config', 9, 'cudaErrorInvalidConfiguration'),
+    ])
+    def test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending(stager, mode, staged, name):
+        res = _run(_SLOT, mode, stager)
+        assert res['staged'] == staged, res                         # precondition: a synchronous launch refusal is staged
+>       assert res['sync']['raised'] == 'RuntimeError', res         # 62c8d9f / mutant (c): returned success
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleted': 0, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'mode': 'sync_null_kernel', 'second_sync': {'raised': None}, ...}
+E       assert None == 'RuntimeError'
+
+tc_signal/tests/test_fix4_findings.py:161: AssertionError
+_ test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_launch_config-9-cudaErrorInvalidConfiguration] _
+
+stager = '/tmp/pytest-of-vader/pytest-81/fix4_stager0/fix4_stage_kernel.so'
+mode = 'sync_launch_config', staged = 9, name = 'cudaErrorInvalidConfiguration'
+
+    @pytest.mark.parametrize('mode, staged, name', [
+        ('sync_null_kernel', 98, 'cudaErrorInvalidDeviceFunction'),
+        ('sync_launch_config', 9, 'cudaErrorInvalidConfiguration'),
+    ])
+    def test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending(stager, mode, staged, name):
+        res = _run(_SLOT, mode, stager)
+        assert res['staged'] == staged, res                         # precondition: a synchronous launch refusal is staged
+>       assert res['sync']['raised'] == 'RuntimeError', res         # 62c8d9f / mutant (c): returned success
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleted': 0, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'mode': 'sync_launch_config', 'second_sync': {'raised': None}, ...}
+E       assert None == 'RuntimeError'
+
+tc_signal/tests/test_fix4_findings.py:161: AssertionError
+_____ test_fix4_v404_synchronize_still_drains_pending_entries_then_raises ______
+
+stager = '/tmp/pytest-of-vader/pytest-81/fix4_stager0/fix4_stage_kernel.so'
+
+    def test_fix4_v404_synchronize_still_drains_pending_entries_then_raises(stager):
+        res = _run(_SLOT, 'sync_pending_entries', stager)
+        assert res['entries_before'] == 1 and res['staged'] == 98, res
+>       assert res['sync']['raised'] == 'RuntimeError' and 'cudaErrorInvalidDeviceFunction' in res['sync']['msg'], res
+E       AssertionError: {'deleted': 2, 'deleted_after_sync': 2, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'entries_after': 0, ...}
+E       assert (None == 'RuntimeError')
+
+tc_signal/tests/test_fix4_findings.py:170: AssertionError
+___ test_fix4_op_reports_a_pending_error_as_preexisting_and_launches_nothing ___
+
+stager = '/tmp/pytest-of-vader/pytest-81/fix4_stager0/fix4_stage_kernel.so'
+
+    def test_fix4_op_reports_a_pending_error_as_preexisting_and_launches_nothing(stager):
+        res = _run(_SLOT, 'op_pending_error', stager)
+        assert res['op']['raised'] == 'RuntimeError', res
+>       assert 'already pending in this thread before this call' in res['op']['msg'], res
+E       AssertionError: {'deleted': 4, 'deleted_right_after': 0, 'delta': {'bound_drains': 0, 'bytes': 0, 'bytes_saturated': 0, 'bytes_saturations': 0, ...}, 'entries_after': 1, ...}
+E       assert 'already pending in this thread before this call' in 'tc_signal: rint_kernel failed: cudaErrorInvalidDeviceFunction: invalid device function'
+
+tc_signal/tests/test_fix4_findings.py:179: AssertionError
+__________ test_fix4_failed_switch_raises_and_consumes_its_slot_entry __________
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_switch_raises_and_consumes_its_slot_entry(shim):
+        res = _shim(shim, 'switch_fail')
+        assert res['call']['raised'] == 'RuntimeError', res
+>       assert 'cudaSetDevice(0) failed: cudaErrorInvalidDevice' in res['call']['msg'], res
+E       AssertionError: {'call': {'msg': 'tc_signal: cudaSetDevice failed: cudaErrorInvalidDevice: invalid device ordinal', 'raised': 'RuntimeError'}, 'call_current': 1, 'call_log': ['set0!', 'set0', 'record@0', 'set1'], 'call_slot': 101, ...}
+E       assert 'cudaSetDevice(0) failed: cudaErrorInvalidDevice' in 'tc_signal: cudaSetDevice failed: cudaErrorInvalidDevice: invalid device ordinal'
+
+tc_signal/tests/test_fix4_findings.py:384: AssertionError
+_____________ test_fix4_failed_restore_on_the_success_path_raises ______________
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_restore_on_the_success_path_raises(shim):
+>       res = _shim(shim, 'restore_fail_success_path')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix4_findings.py:392: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tc_signal/tests/test_fix4_findings.py:350: in _shim
+    return _run(_SHIM, shim, mode, env=_env(LD_PRELOAD=shim))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = "\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.insert(0, '/mnt/ForgeRealm/Project-Tensor/Fork/tensor...STATS['exported']\nres['unknown_delete'] = P.STATS['unknown_delete']\nprint('RESULT ' + json.dumps(res), flush=True)\n"
+env = {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLAUDECODE': '1', 'CLAUDE_CODE_BRIDGE_SESSION_ID': 'session_01QtMVXiWBbwvU3hp7w8VWwP', 'CLAUDE_CODE_CHILD_SESSION': '1', ...}
+args = ('/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so', 'restore_fail_success_path')
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n')
+
+    def _run(script, *args, env=None):
+        r = subprocess.run([sys.executable, '-c', script, *args], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env=env or _env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        res = json.loads(lines[-1][len('RESULT '):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 154, in <module>
+E         RuntimeError: CUDA error at to_host: invalid device ordinal
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n').returncode
+
+tc_signal/tests/test_fix4_findings.py:64: AssertionError
+_ test_fix4_failed_restore_where_nothing_can_raise_is_counted_and_raised_once __
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_restore_where_nothing_can_raise_is_counted_and_raised_once(shim):
+>       res = _shim(shim, 'restore_fail_unraisable')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix4_findings.py:401: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tc_signal/tests/test_fix4_findings.py:350: in _shim
+    return _run(_SHIM, shim, mode, env=_env(LD_PRELOAD=shim))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = "\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.insert(0, '/mnt/ForgeRealm/Project-Tensor/Fork/tensor...STATS['exported']\nres['unknown_delete'] = P.STATS['unknown_delete']\nprint('RESULT ' + json.dumps(res), flush=True)\n"
+env = {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLAUDECODE': '1', 'CLAUDE_CODE_BRIDGE_SESSION_ID': 'session_01QtMVXiWBbwvU3hp7w8VWwP', 'CLAUDE_CODE_CHILD_SESSION': '1', ...}
+args = ('/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so', 'restore_fail_unraisable')
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n')
+
+    def _run(script, *args, env=None):
+        r = subprocess.run([sys.executable, '-c', script, *args], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env=env or _env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        res = json.loads(lines[-1][len('RESULT '):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 154, in <module>
+E         RuntimeError: CUDA error at to_host: invalid device ordinal
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n').returncode
+
+tc_signal/tests/test_fix4_findings.py:64: AssertionError
+_____ test_fix4_failed_restore_while_unwinding_is_counted_and_raised_once ______
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_restore_while_unwinding_is_counted_and_raised_once(shim):
+        # DeviceGuard's destructor restores only when an exception is already unwinding (here: a refused launch). 62c8d9f
+        # ignored that restore's result; now it is consumed, counted and raised once by the next synchronize().
+>       res = _shim(shim, 'launch_and_restore_fail')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix4_findings.py:416: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tc_signal/tests/test_fix4_findings.py:350: in _shim
+    return _run(_SHIM, shim, mode, env=_env(LD_PRELOAD=shim))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = "\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.insert(0, '/mnt/ForgeRealm/Project-Tensor/Fork/tensor...STATS['exported']\nres['unknown_delete'] = P.STATS['unknown_delete']\nprint('RESULT ' + json.dumps(res), flush=True)\n"
+env = {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLAUDECODE': '1', 'CLAUDE_CODE_BRIDGE_SESSION_ID': 'session_01QtMVXiWBbwvU3hp7w8VWwP', 'CLAUDE_CODE_CHILD_SESSION': '1', ...}
+args = ('/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so', 'launch_and_restore_fail')
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n')
+
+    def _run(script, *args, env=None):
+        r = subprocess.run([sys.executable, '-c', script, *args], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env=env or _env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        res = json.loads(lines[-1][len('RESULT '):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 154, in <module>
+E         RuntimeError: CUDA error at to_host: invalid device ordinal
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n').returncode
+
+tc_signal/tests/test_fix4_findings.py:64: AssertionError
+_____________ test_fix4_check_cuda_raise_consumes_the_failed_call ______________
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_check_cuda_raise_consumes_the_failed_call(shim):
+        # lstm.cu check_cuda(cudaMemsetAsync(...)) raised without consuming the failed call's slot entry in 62c8d9f, so the
+        # next call's launch check reported it again as its own.
+        res = _shim(shim, 'lstm_memset_fail')
+        assert res['call']['raised'] == 'RuntimeError', res
+>       assert 'initial_h zero failed: cudaErrorInvalidDevice' in res['call']['msg'] and res['call_slot'] == 0, res
+E       AssertionError: {'call': {'msg': 'tc_signal.lstm: initial_h zero failed: cudaErrorInvalidDevice: invalid device ordinal', 'raised': 'RuntimeError'}, 'call_current': -1, 'call_log': ['memset@-1!'], 'call_slot': 101, ...}
+E       assert ('initial_h zero failed: cudaErrorInvalidDevice' in 'tc_signal.lstm: initial_h zero failed: cudaErrorInvalidDevice: invalid device ordinal' and 101 == 0)
+
+tc_signal/tests/test_fix4_findings.py:430: AssertionError
+_______ test_fix4_event_is_destroyed_on_its_own_device[event_destroy_ok] _______
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+mode = 'event_destroy_ok'
+
+    @pytest.mark.parametrize('mode', ['event_destroy_ok', 'event_destroy_fail'])
+    def test_fix4_event_is_destroyed_on_its_own_device(shim, mode):
+        res = _shim(shim, mode)
+        log = res['sync_log']
+        tail = 'destroy@0!' if mode == 'event_destroy_fail' else 'destroy@0'
+>       i = log.index(tail)
+            ^^^^^^^^^^^^^^^
+E       ValueError: 'destroy@0' is not in list
+
+tc_signal/tests/test_fix4_findings.py:439: ValueError
+______ test_fix4_event_is_destroyed_on_its_own_device[event_destroy_fail] ______
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+mode = 'event_destroy_fail'
+
+    @pytest.mark.parametrize('mode', ['event_destroy_ok', 'event_destroy_fail'])
+    def test_fix4_event_is_destroyed_on_its_own_device(shim, mode):
+>       res = _shim(shim, mode)
+              ^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix4_findings.py:436: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tc_signal/tests/test_fix4_findings.py:350: in _shim
+    return _run(_SHIM, shim, mode, env=_env(LD_PRELOAD=shim))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = "\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.insert(0, '/mnt/ForgeRealm/Project-Tensor/Fork/tensor...STATS['exported']\nres['unknown_delete'] = P.STATS['unknown_delete']\nprint('RESULT ' + json.dumps(res), flush=True)\n"
+env = {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLAUDECODE': '1', 'CLAUDE_CODE_BRIDGE_SESSION_ID': 'session_01QtMVXiWBbwvU3hp7w8VWwP', 'CLAUDE_CODE_CHILD_SESSION': '1', ...}
+args = ('/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so', 'event_destroy_fail')
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n')
+
+    def _run(script, *args, env=None):
+        r = subprocess.run([sys.executable, '-c', script, *args], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT,
+                           env=env or _env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        res = json.loads(lines[-1][len('RESULT '):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 154, in <module>
+E         RuntimeError: CUDA error at to_host: invalid device ordinal
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, json, sys, types\nimport numpy as np\nsys.path.inse... call last):\n  File "<string>", line 154, in <module>\nRuntimeError: CUDA error at to_host: invalid device ordinal\n').returncode
+
+tc_signal/tests/test_fix4_findings.py:64: AssertionError
+_________ test_fix4_failed_event_query_in_the_drain_is_consumed_there __________
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_event_query_in_the_drain_is_consumed_there(shim):
+        res = _shim(shim, 'query_fail')
+        assert 'query@-1!' in res['call_log'], res                                   # the injected drain failure happened
+>       assert res['call']['raised'] is None and res['call_slot'] == 0, res
+E       AssertionError: {'call': {'msg': 'tc_signal: rint_kernel failed: cudaErrorInvalidDevice: invalid device ordinal', 'raised': 'RuntimeError'}, 'call_current': -1, 'call_log': ['query@-1!'], 'call_slot': 0, ...}
+E       assert ('RuntimeError' is None)
+
+tc_signal/tests/test_fix4_findings.py:454: AssertionError
+___ test_fix4_failed_lstm_cublas_setting_destroys_the_new_handle_and_raises ____
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_lstm_cublas_setting_destroys_the_new_handle_and_raises(shim):
+        res = _shim(shim, 'lstm_cublas_setting')
+        assert res['call']['raised'] == 'RuntimeError', res
+        assert 'tc_signal.lstm: cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14' in res['call']['msg'], res
+>       assert res['call_log'][:2] == ['cublasSetMathMode!', 'cublasDestroy'], res
+E       AssertionError: {'call': {'msg': 'tc_signal.lstm: cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14', 'raised': 'RuntimeError'}, 'call_current': -1, 'call_log': ['cublasSetMathMode!'], 'call_slot': 0, ...}
+E       assert ['cublasSetMathMode!'] == ['cublasSetMa...ublasDestroy']
+E         
+E         Right contains one more item: 'cublasDestroy'
+E         Use -v to get more diff
+
+tc_signal/tests/test_fix4_findings.py:469: AssertionError
+______ test_fix4_failed_cublas_setting_destroys_the_new_handle_and_raises ______
+
+shim = '/tmp/pytest-of-vader/pytest-81/fix4_shim0/fix4_cudart_shim.so'
+
+    def test_fix4_failed_cublas_setting_destroys_the_new_handle_and_raises(shim):
+        res = _shim(shim, 'cublas_setting')
+        assert res['call']['raised'] == 'RuntimeError', res
+        assert 'cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14' in res['call']['msg'], res
+>       assert res['call_log'][:2] == ['cublasSetMathMode!', 'cublasDestroy'], res
+E       AssertionError: {'call': {'msg': 'tc_signal: cublasSetMathMode(CUBLAS_DEFAULT_MATH) failed: cuBLAS status 14', 'raised': 'RuntimeError'}, 'call_current': -1, 'call_log': ['cublasSetMathMode!'], 'call_slot': 0, ...}
+E       assert ['cublasSetMathMode!'] == ['cublasSetMa...ublasDestroy']
+E         
+E         Right contains one more item: 'cublasDestroy'
+E         Use -v to get more diff
+
+tc_signal/tests/test_fix4_findings.py:477: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tc_signal/tests/test_fix4_findings.py::test_fix4_device_rint_runs_on_the_operand_device_and_restores
+PASSED tc_signal/tests/test_fix4_findings.py::test_fix4_device_rint_warm_uses_the_pooled_event_and_restores
+PASSED tc_signal/tests/test_fix4_findings.py::test_fix4_device_conv1d_with_cublas_runs_on_the_operand_device
+PASSED tc_signal/tests/test_fix4_findings.py::test_fix4_device_lstm_runs_on_the_operand_device_and_restores
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_null_kernel-98-cudaErrorInvalidDeviceFunction]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_reports_a_preexisting_launch_error_with_nothing_pending[sync_launch_config-9-cudaErrorInvalidConfiguration]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_v404_synchronize_still_drains_pending_entries_then_raises
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_op_reports_a_pending_error_as_preexisting_and_launches_nothing
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_switch_raises_and_consumes_its_slot_entry
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_restore_on_the_success_path_raises
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_restore_where_nothing_can_raise_is_counted_and_raised_once
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_restore_while_unwinding_is_counted_and_raised_once
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_check_cuda_raise_consumes_the_failed_call
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_event_is_destroyed_on_its_own_device[event_destroy_ok]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_event_is_destroyed_on_its_own_device[event_destroy_fail]
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_event_query_in_the_drain_is_consumed_there
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_lstm_cublas_setting_destroys_the_new_handle_and_raises
+FAILED tc_signal/tests/test_fix4_findings.py::test_fix4_failed_cublas_setting_destroys_the_new_handle_and_raises
+14 failed, 4 passed in 25.14s

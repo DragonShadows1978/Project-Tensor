@@ -49,6 +49,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "cuda_guard.h"  // P1T-FIX4: shared checked DeviceGuard
 #include "lstm_tuning.h"
 
 #ifdef CUDA_API_PER_THREAD_DEFAULT_STREAM
@@ -73,6 +74,7 @@ void check_cuda(cudaError_t e, const char* what) {
   if (e != cudaSuccess) {
     std::ostringstream os;
     os << "tc_signal.lstm: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+    cudaGetLastError();  // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry
     throw std::runtime_error(os.str());
   }
 }
@@ -93,27 +95,8 @@ unsigned int grid_for(int64_t total, int block) {
   return static_cast<unsigned int>(std::max<int64_t>(1, std::min<int64_t>(blocks, lstm_tuning::kGridCap)));
 }
 
-// Makes `device` current for the call and restores the caller's device afterwards. (M2's DeviceGuard in conv.cu has
-// internal linkage and the order forbids editing conv.cu, so this is a copy.)
-class DeviceGuard {
- public:
-  explicit DeviceGuard(int device) {
-    check_cuda(cudaGetDevice(&prev_), "cudaGetDevice");
-    if (prev_ != device) {
-      check_cuda(cudaSetDevice(device), "cudaSetDevice");
-      changed_ = true;
-    }
-  }
-  ~DeviceGuard() {
-    if (changed_) cudaSetDevice(prev_);
-  }
-  DeviceGuard(const DeviceGuard&) = delete;
-  DeviceGuard& operator=(const DeviceGuard&) = delete;
-
- private:
-  int prev_ = 0;
-  bool changed_ = false;
-};
+// DeviceGuard (makes `device` current for the call, restores the caller's device) is tc_signal's shared, checked guard
+// in cuda_guard.h since P1T-FIX4 (this copy ignored the restoring cudaSetDevice's result).
 
 // cuBLAS handle: one per device, created lazily on first use and kept for the life of the process (destroying it at
 // interpreter exit can race CUDA's own teardown), with M2's exact settings: legacy stream, CUBLAS_DEFAULT_MATH (never
@@ -127,10 +110,21 @@ cublasHandle_t lstm_handle_for(int device) {
   if (it != handles.end()) return it->second;
   cublasHandle_t h = nullptr;
   check_cublas(cublasCreate(&h), "cublasCreate");
-  check_cublas(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
-  check_cublas(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
-  check_cublas(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
-  check_cublas(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
+  // P1T-FIX4 (sweep): a setting that fails no longer leaks the new handle: it is destroyed (on this device, which the
+  // caller's DeviceGuard keeps current), the destroy's own status is checked and named, and the call raises. Nothing is
+  // cached, so the next call retries from cublasCreate.
+  auto settle = [&h](cublasStatus_t st, const char* what) {
+    if (st == CUBLAS_STATUS_SUCCESS) return;
+    const cublasStatus_t ds = cublasDestroy(h);
+    std::ostringstream os;
+    os << "tc_signal.lstm: " << what << " failed: cuBLAS status " << static_cast<int>(st);
+    if (ds != CUBLAS_STATUS_SUCCESS) os << "; destroying the new handle also failed: cuBLAS status " << static_cast<int>(ds);
+    throw std::runtime_error(os.str());
+  };
+  settle(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
+  settle(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
+  settle(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
+  settle(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
   handles.emplace(device, h);
   return h;
 }
@@ -263,6 +257,7 @@ void lstm_forward(int device, const LstmGeom& g, const float* x, const float* W,
                                                                                  g.N, g.H, g.first_reverse);
     check_launch("lstm_cell_kernel");
   }
+  guard.restore();  // P1T-FIX4: success-path restore is checked (raises on failure)
 }
 
 // ------------------------------------------------------------------------------------------------ introspection
@@ -284,6 +279,7 @@ LstmCublasConfig lstm_cublas_config(int device) {
   c.legacy_stream = (s == kLegacyStream);
   c.default_math = (math == CUBLAS_DEFAULT_MATH);
   c.atomics_not_allowed = (atomics == CUBLAS_ATOMICS_NOT_ALLOWED);
+  guard.restore();  // P1T-FIX4
   return c;
 }
 

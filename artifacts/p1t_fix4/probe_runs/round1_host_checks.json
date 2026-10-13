@@ -1,0 +1,50 @@
+[
+  {
+    "action": "none_up",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 24, in <module>\n    if action=='none_up': ts.upsample_nearest1d(None,2)\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/tc_signal/tc_signal/_small.py\", line 39, in upsample_nearest1d\n    xc, out_shape = _C.upsample_nearest1d_plan(x, s)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: tc_signal: operand 'x': is required: expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got None (only optional operands such as a bias may be None)\n"
+  },
+  {
+    "action": "none_pad",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 25, in <module>\n    if action=='none_pad': ts.reflection_pad1d(None,(0,0))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/tc_signal/tc_signal/_small.py\", line 57, in reflection_pad1d\n    xc, out_shape = _C.reflection_pad1d_plan(x, pb, pe)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: tc_signal: operand 'x': is required: expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got None (only optional operands such as a bias may be None)\n"
+  },
+  {
+    "action": "none_rint",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 26, in <module>\n    if action=='none_rint': ts.rint(None,out=cap(()))\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/tc_signal/tc_signal/_small.py\", line 67, in rint\n    xc, out_shape = _C.rint_plan(x)\n                    ^^^^^^^^^^^^^^^\nTypeError: tc_signal: operand 'x': is required: expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got None (only optional operands such as a bias may be None)\n"
+  },
+  {
+    "action": "pad_overflow",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 27, in <module>\n    if action=='pad_overflow': print(ext.reflection_pad1d_plan(cap((1,1,1<<62)),(1<<62)-1,(1<<62)-1)[1])\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal: operand 'x': byte size of shape [1, 1, 4611686018427387904] (fp32) overflows int64\n"
+  },
+  {
+    "action": "conv_lda_guard",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 28, in <module>\n    if action=='conv_lda_guard': print(ext.conv1d_plan(cap((1,1,1<<31)),cap((1,1,1)),None,1,0,0,1,1))\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal: T_out (2147483648) exceeds the 32-bit range cuBLAS takes\n"
+  },
+  {
+    "action": "lstm_n_guard",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 29, in <module>\n    if action=='lstm_n_guard': print(ext.lstm_plan(cap((1<<31,1,1)),cap((1,4,1)),cap((1,4,1)),None,None,None,1,0))\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal.lstm: T*N (2147483648) exceeds the 32-bit range cuBLAS takes\n"
+  },
+  {
+    "action": "rint_scalar",
+    "returncode": 0,
+    "stdout": "()\n",
+    "stderr": ""
+  },
+  {
+    "action": "empty_refusal",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix4/artifacts/p1t_rev/host_checks.py\", line 31, in <module>\n    if action=='empty_refusal': print(ext.rint_plan(cap((0,)))[1])\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal: operand 'x': empty operand (shape [0])\n"
+  }
+]

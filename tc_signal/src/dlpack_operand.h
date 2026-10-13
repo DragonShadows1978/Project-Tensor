@@ -136,6 +136,8 @@ class Operand {
 //
 // Construct it AFTER every validation and right BEFORE the first launch: the constructor may still throw (event
 // acquisition), and then nothing has been queued. Its destructor never throws.
+// P1T-FIX4: the constructor's last step takes any CUDA error already pending in the calling thread and raises it as
+// pre-existing (RuntimeError, nothing launched), so every launch check after it reports only this call's own error.
 //
 // P1T-FIX3, round-3 review finding V3-02 (aggregate byte accounting). Every operand's own byte count is checked at
 // validation (F03), but their SUM was formed later, unchecked, inside this noexcept destructor (signed overflow for
@@ -175,11 +177,15 @@ void drain_completed() noexcept;
 // recorded since the last call (a fallback sync or bound drain that failed inside a destructor, which cannot raise);
 // it never reports a CUDA failure as success. N3: allocation-free up to the error message; a bad_alloc while building
 // the message propagates as MemoryError.
+// P1T-FIX4 (V4-04): it first TAKES the calling thread's pre-existing CUDA error (cudaGetLastError), drains exactly as
+// above, and then raises RuntimeError naming that error even when every synchronization succeeded; it also raises
+// (once) the failures recorded on paths that cannot raise and leak no operand (a failed caller-device restore, a failed
+// event destroy; cuda_guard.h).
 void synchronize_and_release_all();
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
 // push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
 // (bytes_saturated: the byte total is pinned at INT64_MAX until the list empties; bytes_saturations: times that
-// happened).
+// happened), and the P1T-FIX4 ones (device_restore_failures, event_destroy_failures, unreported_unraisable_errors).
 py::dict pending_stats(bool reset_high_water);
 // P1T-FIX2 (N3): constructs the pending-list state (it allocates) at module import, so no noexcept release path is the
 // first to touch it.

@@ -1,0 +1,24 @@
+.................F....                                                   [100%]
+=================================== FAILURES ===================================
+_____ test_fix4_v403_import_refuses_a_failed_device_query_before_consuming _____
+
+    def test_fix4_v403_import_refuses_a_failed_device_query_before_consuming():
+        # CUDA_VISIBLE_DEVICES="" makes cudaGetDevice fail (cudaErrorNoDevice). 62c8d9f: cur stayed 0, the device-0
+        # capsule was accepted and renamed used_* (mutant (b) restores that). Now: RuntimeError naming cudaGetDevice and the
+        # error, the capsule NOT renamed, the producer deleter not called by the import (ownership stays with the capsule).
+        r = subprocess.run([sys.executable, "-c", _FIX4_IMPORT_NODEV], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(CUDA_VISIBLE_DEVICES=""))
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+        assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        res = json.loads(lines[-1][len("RESULT "):])
+        assert res["query"] == 100, res                               # precondition: no usable device
+        for kind, name in (("versioned", "dltensor_versioned"), ("legacy", "dltensor")):
+            k = res[kind]
+>           assert k["raised"] == "RuntimeError", res
+E           AssertionError: {'deleter_calls': [], 'empty': {'msg': 'empty: the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CU...as allocated', 'raised': 'RuntimeError'}, 'legacy': {'name_after': 'used_dltensor', 'raised': None}, 'query': 100, ...}
+E           assert None == 'RuntimeError'
+
+tensor_cuda/tests/test_dlpack.py:1668: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v403_import_refuses_a_failed_device_query_before_consuming
+1 failed, 21 passed, 122 deselected in 21.23s

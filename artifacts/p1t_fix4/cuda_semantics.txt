@@ -1,0 +1,16 @@
+# 2026-10-13T02:20:28-04:00 CUDA 12.6 runtime semantics receipts (one GPU, driver 595.99.02)
+## semantics.py slot
+RESULT {"getdev": [0, 0], "launch_err": 98, "peek1": 98, "peek2_still": 98, "getdev_ok": 0, "peek_after_success": 98, "setdev_bad": 101, "peek_after_fail": 101, "get_consumes": 101, "peek_after_get": 0}
+## semantics.py sticky
+/pytorch/aten/src/ATen/native/cuda/IndexKernel.cu:111: operator(): block: [0,0,0], thread: [0,0,0] Assertion `-sizes[i] <= index && index < sizes[i] && "index out of bounds"` failed.
+RESULT {"torch_err": "CUDA error: device-side assert triggered", "peek_ours": 0, "getdev": [0, 0], "streamquery_legacy": 710, "peek_after_query": 710, "get1": 710, "get2_sticky": 0, "sync": 710, "evcreate": 710, "setdev0": 0}
+## semantics.py attrs (default allocator)
+RESULT {"torch_default": [0, 2, 0], "torch_offset": [0, 2, 0], "tc_empty_raw": [0, 2, 0], "tc_empty_pooled": [0, 2, 0], "host_ptr": [0, 0, -1], "null": [0, 0, -1], "bogus": [0, 0, -1], "peek_after": 0}
+## semantics.py attrs (PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True)
+RESULT {"torch_default": [0, 2, 0], "torch_offset": [0, 2, 0], "tc_empty_raw": [0, 2, 0], "tc_empty_pooled": [0, 2, 0], "host_ptr": [0, 0, -1], "null": [0, 0, -1], "bogus": [0, 0, -1], "peek_after": 0}
+## sticky_attrs.py
+RESULT {"attr_rc": 0, "type": 2, "device": 0, "peek": 0, "evcreate": 710, "streamcreate": 710, "query_legacy": 710}
+## no visible device (CUDA_VISIBLE_DEVICES='')
+get_first 100 peek 100
+getdev 100 -7 peek_after 100
+get 100 peek 100
