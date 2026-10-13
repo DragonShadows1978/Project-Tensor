@@ -60,6 +60,19 @@ P1T-FIX5 additions (review P1T-REV5 round 5; tests named test_fix5_*):
   * Sweep (c), core: the exit wait run by a NON-main thread never aborts (the GIL is re-taken explicitly, not in a
     destructor); 5 runs, each rc 0. V5-01..V5-03 are tc_signal findings: tc_signal/tests/test_fix5_findings.py.
 
+P1T-FIX6 additions (review P1T-REV6 round 6; tests named test_fix6_*):
+  * V6-02 (__dlpack__ argument conversions ran user Python): every argument x every method kind (a recording object,
+    sequences that are not tuples / lists, iterables, tuple / list / int subclasses whose overrides must NOT run,
+    IntEnum device types, numpy.bool_) is refused or accepted without any Python method of it being called; the
+    reviewer's daemon-thread-at-exit staging for stream / copy / max_version / dl_device x __bool__ / __index__ /
+    __len__ / __getitem__ / __iter__ exits rc 0 with the method never run; real torch consumers (torch.from_dlpack with
+    and without device / copy, torch.utils.dlpack) still import zero-copy. Mutant (b): the refusal removed.
+  * Sweep (g), core: fill_, empty, _from_dlpack_capsule, _dlpack_begin_shutdown and the Tensor methods refuse foreign
+    arguments / a foreign self without calling them; arity and keyword errors never call repr(); keyword conversions on a
+    daemon thread at exit are refused, not run.
+  * FIX5 residual R7: a recorded unraisable core CUDA failure is raised once by tensor_cuda.synchronize(), or logged by
+    the exit hook. The FIX4 / FIX5 fill tests now also assert that report (they called synchronize() expecting success).
+
 Availability guard (order: narrow): skip ONLY when torch is not importable (ImportError) or no CUDA device is present
 (torch.cuda.device_count() == 0). Any other exception from the probe propagates and the test FAILS.
 
@@ -1462,6 +1475,11 @@ elif mode.startswith("fill_"):
     res["revision_delta"] = u.revision - rev0
     shim.shim_fake(-1)
     shim.shim_attr_device(-100)
+    try:                                           # P1T-FIX6 (FIX5 residual R7): a recorded unraisable failure
+        tc.synchronize()                           # is raised by the next synchronize(), once
+        res["sync_reported"] = None
+    except RuntimeError as e:
+        res["sync_reported"] = str(e)
     tc.synchronize()
     res["values"] = sorted(set(u.numpy().tolist()))
 elif mode == "drain_restore_fail":
@@ -1589,6 +1607,12 @@ def test_fix4_fill_guard_failures_raise_count_and_consume(fix4_shim, mode):
         assert "CUDA error at fill_" in res["msg"], res
         assert res["log"] == ["set0", "launch@0!", "set1!"] and res["values"] == [1.0], res
         assert res["stats"]["device_restore_failures"] == 1 and res["revision_delta"] == 0, res
+    # P1T-FIX6 (FIX5 residual R7): only the unwinding restore failure is unraisable; it is reported once by the next
+    # tensor_cuda.synchronize() (the other two raised where they happened).
+    if mode == "fill_fail_launch_and_restore":
+        assert "while fill_ unwound after another error" in res["sync_reported"], res
+    else:
+        assert res["sync_reported"] is None, res
 
 
 def test_fix4_fill_refuses_a_label_that_is_not_the_allocation_device(fix4_shim):
@@ -1970,6 +1994,8 @@ def test_fix5_sweep_d_core_fill_unwinding_restore_failure_is_recorded(fix4_shim)
     assert res["raised"] == "RuntimeError" and st["unraisable_errors"] == 1, res
     assert "while fill_ unwound" in st["first_unraisable_what"], res
     assert st["first_unraisable_error"] == "cudaErrorInvalidDevice" and res["slot_after"] == 0, res
+    # P1T-FIX6 (FIX5 residual R7): and it is no longer only counted: tensor_cuda.synchronize() raised it, once.
+    assert "cudaErrorInvalidDevice" in res["sync_reported"], res
 
 
 # ------------------------------------------------------------------------------------------------ sweep (c), core
@@ -2035,3 +2061,382 @@ def test_fix5_sweep_c_core_exit_wait_on_a_non_main_thread_never_aborts(run):
     assert res["before_hook"]["stats"]["in_flight"] == 1, res
     assert res["after_hook"]["calls"] == 1 and res["after_hook"]["done"] is True, res   # finished before finalizing
     _assert_ordinary_exit(r)                     # rc 0, FINAL line, no FATAL / terminate / abort
+
+
+# ================================================================================================ P1T-FIX6
+# Round-6 review finding V6-02 (MAJOR; FIX5's residual R3) and the core rows of sweep (g) "user Python run from inside a
+# native frame", plus FIX5's residual R7 (a recorded core CUDA failure that nothing raised).
+#  * V6-02: Tensor.__dlpack__ converted its arguments with pybind11 casts that ran the argument's own Python methods
+#    (copy.__bool__, max_version / dl_device __len__ / __getitem__ / item __index__, stream __int__); on a daemon thread
+#    whose method slept across the start of finalization the process crashed (core_cast_exit_gpu.py rc 139 on acd42fa).
+#    FIX6 refuses, before invoking anything (the review's option (ii)): only None / int (subclasses read at C level) /
+#    tuple or list (read with the C macros) / bool are accepted. Registered mutant (b) = that refusal removed.
+#  * Sweep (g): every P1-T binding takes (*args, **kwargs) and converts with C-level checks only; wrong arity / unknown
+#    keyword raise TypeError without repr(); a foreign `self` is refused without calling it.
+#  * R7: tensor_cuda.synchronize() raises a recorded unraisable P1-T CUDA failure once; the exit hook logs it.
+# Prior art: the round-6 reviewer's core_cast_exit_gpu.py / core_host_cpu.py casts_exit staging (reused here); PyTorch
+# 2.11 Tensor.__dlpack__'s `type(stream) is not int` refusal (installed torch/_tensor.py); the Python array API
+# __dlpack__ signature. Ours: the all-methods recording object and the per-argument exit census.
+class _Recorder:
+    CALLS = []
+
+    def _hit(self, name):
+        _Recorder.CALLS.append(name)
+
+    def __index__(self):
+        self._hit("__index__"); return 1
+    def __int__(self):
+        self._hit("__int__"); return 1
+    def __float__(self):
+        self._hit("__float__"); return 1.0
+    def __bool__(self):
+        self._hit("__bool__"); return False
+    def __len__(self):
+        self._hit("__len__"); return 2
+    def __getitem__(self, i):
+        self._hit("__getitem__")
+        if i < 2:
+            return 1
+        raise IndexError
+    def __iter__(self):
+        self._hit("__iter__"); return iter([1, 0])
+    def __repr__(self):
+        self._hit("__repr__"); return "_Recorder()"
+    def __str__(self):
+        self._hit("__str__"); return "_Recorder"
+    def __eq__(self, other):
+        self._hit("__eq__"); return False
+    def __hash__(self):
+        self._hit("__hash__"); return 1
+
+
+class _RecTuple(tuple):
+    def __len__(self):
+        _Recorder.CALLS.append("tuple.__len__"); return tuple.__len__(self)
+    def __getitem__(self, i):
+        _Recorder.CALLS.append("tuple.__getitem__"); return tuple.__getitem__(self, i)
+    def __iter__(self):
+        _Recorder.CALLS.append("tuple.__iter__"); return tuple.__iter__(self)
+
+
+class _RecList(list):
+    def __len__(self):
+        _Recorder.CALLS.append("list.__len__"); return list.__len__(self)
+    def __getitem__(self, i):
+        _Recorder.CALLS.append("list.__getitem__"); return list.__getitem__(self, i)
+
+
+class _RecInt(int):
+    def __index__(self):
+        _Recorder.CALLS.append("int.__index__"); return int(self)
+    def __int__(self):
+        _Recorder.CALLS.append("int.__int__"); return int(self)
+    def __bool__(self):
+        _Recorder.CALLS.append("int.__bool__"); return int(self) != 0
+
+
+class _RecFloat(float):
+    def __float__(self):
+        _Recorder.CALLS.append("float.__float__"); return float.__float__(self)
+
+
+def _seq_only():
+    class Seq:                                       # a sequence that is not a tuple / list
+        def __len__(self):
+            _Recorder.CALLS.append("Seq.__len__"); return 2
+        def __getitem__(self, i):
+            _Recorder.CALLS.append("Seq.__getitem__")
+            if i < 2:
+                return (2, 0)[i]
+            raise IndexError
+    return Seq()
+
+
+def _iter_only():
+    class It:
+        def __iter__(self):
+            _Recorder.CALLS.append("It.__iter__"); return iter((2, 0))
+    return It()
+
+
+# (argument, value, expected): "refuse" = TypeError before any call; "accept" = a capsule; an exception type otherwise.
+_V602_CASES = [
+    ("stream", _Recorder(), "refuse"), ("stream", "1", "refuse"), ("stream", 1.0, "refuse"),
+    ("stream", _RecInt(1), "accept"), ("stream", True, "accept"), ("stream", -1, "accept"), ("stream", None, "accept"),
+    ("stream", 0, ValueError), ("stream", 1 << 80, ValueError),
+    ("max_version", _Recorder(), "refuse"), ("max_version", (_Recorder(), 3), "refuse"), ("max_version", _seq_only(),
+                                                                                         "refuse"),
+    ("max_version", _iter_only(), "refuse"), ("max_version", (1.0, 0), "refuse"), ("max_version", (), ValueError),
+    ("max_version", _RecTuple((1, 3)), "accept"), ("max_version", _RecList([1, 0]), "accept"),
+    ("max_version", (_RecInt(1), _Recorder()), "accept"), ("max_version", (0, 8), "accept"),
+    ("dl_device", _Recorder(), "refuse"), ("dl_device", (_Recorder(), 0), "refuse"), ("dl_device", (2, _Recorder()),
+                                                                                     "refuse"),
+    ("dl_device", _seq_only(), "refuse"), ("dl_device", _iter_only(), "refuse"), ("dl_device", (2,), ValueError),
+    ("dl_device", _RecTuple((2, 0)), "accept"), ("dl_device", (_RecInt(2), _RecInt(0)), "accept"),
+    ("dl_device", (1, 0), BufferError),
+    ("copy", _Recorder(), "refuse"), ("copy", "yes", "refuse"), ("copy", _RecInt(0), "accept"), ("copy", False, "accept"),
+    ("copy", True, BufferError), ("copy", _RecInt(1), BufferError),
+]
+
+
+@pytest.mark.parametrize("arg,value,expected", _V602_CASES,
+                         ids=[f"{a}-{i}" for i, (a, _v, _e) in enumerate(_V602_CASES)])
+def test_fix6_v602_dlpack_arguments_never_run_their_python_methods(arg, value, expected):
+    _torch_or_skip()
+    t = tc.empty(4)
+    _Recorder.CALLS.clear()
+    if expected == "refuse":
+        with pytest.raises(TypeError, match="refused without calling"):
+            t.__dlpack__(**{arg: value})
+    elif expected == "accept":
+        cap = t.__dlpack__(**{arg: value})
+        assert type(cap).__name__ == "PyCapsule"
+    else:
+        with pytest.raises(expected):
+            t.__dlpack__(**{arg: value})
+    assert _Recorder.CALLS == [], _Recorder.CALLS                       # acd42fa: __bool__ / __index__ / __len__ ...
+
+
+def test_fix6_v602_dlpack_intenum_device_and_numpy_bool():
+    _torch_or_skip()
+    import enum
+
+    class DLDeviceType(enum.IntEnum):
+        kDLCPU = 1
+        kDLCUDA = 2
+    t = tc.empty(4)
+    assert type(t.__dlpack__(dl_device=(DLDeviceType.kDLCUDA, 0))).__name__ == "PyCapsule"   # torch's annotation
+    with pytest.raises(TypeError, match="copy must be None or a bool"):
+        t.__dlpack__(copy=np.bool_(False))      # not readable without its nb_bool; bool | None per the array API
+
+
+def test_fix6_v602_real_torch_consumers_still_import_zero_copy():
+    torch = _torch_or_skip()
+    import torch.utils.dlpack as tud
+    for dt, tdt in (("float32", torch.float32), ("float16", torch.float16)):
+        t = tc.empty(3, 5, dtype=dt)
+        t.fill_(2.5)
+        for convert in (lambda s: torch.from_dlpack(s), lambda s: tud.from_dlpack(s),
+                        lambda s: torch.from_dlpack(s, device="cuda:0"), lambda s: torch.from_dlpack(s, copy=False),
+                        lambda s: torch.from_dlpack(s.__dlpack__()),
+                        lambda s: torch.from_dlpack(s.__dlpack__(stream=1, max_version=(1, 0)))):
+            x = convert(t)
+            assert x.dtype == tdt and tuple(x.shape) == (3, 5) and x.device.type == "cuda"
+            assert x.data_ptr() == t.data_ptr()                         # zero copy, same memory
+            assert bool(torch.all(x == 2.5).item())
+    back = tc.from_dlpack(torch.full((4,), 7.0, device="cuda"))          # and the other direction
+    tc.synchronize()
+    assert back.numpy().tolist() == [7.0] * 4
+
+
+_FIX6_CAST_EXIT_SCRIPT = r"""
+import atexit, sys, threading, time, types
+import tensor_cuda as tc
+arg, kind = sys.argv[1], sys.argv[2]
+started = threading.Event()
+def _slow(name):
+    print("CAST started " + name, flush=True); started.set(); time.sleep(0.6); print("CAST finished", flush=True)
+class Flag:
+    def __bool__(self):
+        _slow("__bool__"); return False
+class Index:
+    def __index__(self):
+        _slow("__index__"); return 1
+class SeqLen:
+    def __len__(self):
+        _slow("__len__"); return 2
+    def __getitem__(self, i):
+        if i < 2:
+            return (2, 0)[i]
+        raise IndexError
+class SeqItem:
+    def __len__(self):
+        return 2
+    def __getitem__(self, i):
+        _slow("__getitem__")
+        if i < 2:
+            return (2, 0)[i]
+        raise IndexError
+class Iter:
+    def __iter__(self):
+        _slow("__iter__"); return iter((2, 0))
+VALUES = {"bool": Flag, "index": Index, "len": SeqLen, "getitem": SeqItem, "iter": Iter}
+t = tc.empty(0)
+def value():
+    v = VALUES[kind]()
+    if kind == "index" and arg in ("max_version", "dl_device"):
+        return (v, 3) if arg == "max_version" else (v, 0)
+    return v
+def worker():
+    try:
+        t.__dlpack__(**{arg: value()})
+    except (TypeError, ValueError):
+        print("REFUSED", flush=True)
+    print("EXPORT ended", flush=True)
+def start():
+    th = threading.Thread(target=worker, daemon=True)
+    th.start()
+    if started.wait(2):
+        print("CAST IN PROGRESS", flush=True)
+    th.join(2)
+atexit.register(start)
+class Final:
+    def __init__(self):
+        self.sleep, self.fin = time.sleep, sys.is_finalizing
+    def __del__(self):
+        print("FINAL finalizing=%s" % self.fin(), flush=True); self.sleep(1.5)
+h = types.ModuleType("_fix6_cast_holder"); h.keep = Final(); sys.modules[h.__name__] = h
+print("ARMED", flush=True)
+"""
+_FIX6_CAST_EXIT_CASES = [("stream", "index"), ("copy", "bool"), ("copy", "index")] + [
+    (a, k) for a in ("max_version", "dl_device") for k in ("index", "len", "getitem", "iter")]
+
+
+@pytest.mark.parametrize("arg,kind", _FIX6_CAST_EXIT_CASES, ids=[f"{a}-{k}" for a, k in _FIX6_CAST_EXIT_CASES])
+def test_fix6_v602_argument_method_on_a_daemon_thread_at_exit_is_never_run(arg, kind):
+    # The reviewer's core_cast_exit_gpu.py, for every argument and every method kind: the method would sleep across the
+    # start of finalization (acd42fa: rc 139); FIX6 refuses the argument without calling it.
+    _torch_or_skip()
+    r = subprocess.run([sys.executable, "-c", _FIX6_CAST_EXIT_SCRIPT, arg, kind], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    _assert_ordinary_exit(r)
+    assert "REFUSED" in r.stdout and "CAST started" not in r.stdout, r.stdout
+
+
+def test_fix6_sweep_g_core_bindings_refuse_foreign_arguments_without_calling_them():
+    _torch_or_skip()
+    t = tc.empty(4)
+    cases = [
+        lambda: t.fill_(_Recorder()), lambda: t.fill_(value=_seq_only()), lambda: t.fill_("1"),
+        lambda: tc._C.empty(_Recorder()), lambda: tc._C.empty(shape=_seq_only()), lambda: tc._C.empty([_Recorder()]),
+        lambda: tc._C.empty([2], _Recorder()), lambda: tc._C.empty([2], "float32", _Recorder()),
+        lambda: tc._C._dlpack_begin_shutdown(_Recorder()), lambda: tc._C._dlpack_begin_shutdown(first_diag_s="5"),
+        lambda: tc.Tensor.data_ptr(_Recorder()), lambda: tc.Tensor.__dlpack_device__(_Recorder()),
+        lambda: tc.Tensor.mark_modified(_Recorder()), lambda: tc.Tensor.revision.fget(_Recorder()),
+        lambda: tc.Tensor.__dlpack__(_Recorder()), lambda: tc.Tensor.fill_(_Recorder(), 1.0),
+    ]
+    for i, case in enumerate(cases):
+        _Recorder.CALLS.clear()
+        with pytest.raises(TypeError, match="refused without calling"):
+            case()
+        assert _Recorder.CALLS == [], (i, _Recorder.CALLS)
+    _Recorder.CALLS.clear()
+    with pytest.raises(TypeError):
+        tc._C._from_dlpack_capsule(_Recorder())  # neither a capsule nor a producer: refused by type (C-level checks)
+    with pytest.raises(OverflowError):
+        tc._C.empty([1 << 80])
+    assert _Recorder.CALLS == [], _Recorder.CALLS
+    # accepted subclasses are read at C level: no override runs
+    assert t.fill_(_RecFloat(1.5)) is t and t.fill_(_RecInt(2)) is t
+    e = tc._C.empty(_RecTuple((_RecInt(2), 3)), "float32", "cuda")
+    assert tuple(e.shape) == (2, 3) and _Recorder.CALLS == [], _Recorder.CALLS
+    tc.synchronize()
+    assert t.numpy().tolist() == [2.0] * 4
+
+
+def test_fix6_sweep_g_core_arity_and_keyword_errors_never_call_repr():
+    _torch_or_skip()
+    t = tc.empty(4)
+    calls = [
+        lambda: t.__dlpack__(_Recorder()), lambda: t.__dlpack__(stream=1, bogus=_Recorder()),
+        lambda: t.fill_(1.0, _Recorder()), lambda: t.fill_(), lambda: t.data_ptr(_Recorder()),
+        lambda: t.__dlpack_device__(x=_Recorder()), lambda: tc._C.empty(), lambda: tc._C.empty([1], q=_Recorder()),
+        lambda: tc._C._from_dlpack_capsule(_Recorder(), _Recorder()), lambda: tc._C._dlpack_release_stats(_Recorder()),
+        lambda: tc._C._dlpack_raise_unraisable(_Recorder()), lambda: tc._C._dlpack_begin_shutdown(1.0, _Recorder()),
+        lambda: tc._C._dlpack_begin_shutdown(bogus=_Recorder()), lambda: tc._C._dlpack_begin_shutdown(),
+    ]
+    for i, call in enumerate(calls):
+        _Recorder.CALLS.clear()
+        with pytest.raises(TypeError) as ei:
+            call()
+        assert _Recorder.CALLS == [] and "_Recorder()" not in str(ei.value), (i, _Recorder.CALLS, str(ei.value))
+    with pytest.raises(TypeError, match="'bogus'"):
+        t.__dlpack__(bogus=1)
+
+
+_FIX6_KW_EXIT_SCRIPT = r"""
+import atexit, sys, threading, time, types
+import tensor_cuda as tc
+which = sys.argv[1]
+started = threading.Event()
+class Slow:
+    def _s(self):
+        print("CAST started", flush=True); started.set(); time.sleep(0.6); print("CAST finished", flush=True)
+    def __float__(self):
+        self._s(); return 1.0
+    def __index__(self):
+        self._s(); return 1
+    def __len__(self):
+        self._s(); return 1
+    def __getitem__(self, i):
+        if i == 0:
+            return 1
+        raise IndexError
+t = tc.empty(4)
+def worker():
+    try:
+        if which == "fill":
+            t.fill_(value=Slow())
+        elif which == "empty":
+            tc._C.empty(shape=Slow(), dtype="float32", device="cuda")
+        elif which == "shutdown":
+            tc._C._dlpack_begin_shutdown(first_diag_s=Slow())
+    except TypeError:
+        print("REFUSED", flush=True)
+def start():
+    th = threading.Thread(target=worker, daemon=True)
+    th.start()
+    if started.wait(2):
+        print("CAST IN PROGRESS", flush=True)
+    th.join(2)
+atexit.register(start)
+class Final:
+    def __init__(self):
+        self.sleep, self.fin = time.sleep, sys.is_finalizing
+    def __del__(self):
+        print("FINAL finalizing=%s" % self.fin(), flush=True); self.sleep(1.5)
+h = types.ModuleType("_fix6_kw_holder"); h.keep = Final(); sys.modules[h.__name__] = h
+print("ARMED", flush=True)
+"""
+
+
+@pytest.mark.parametrize("which", ["fill", "empty", "shutdown"])
+def test_fix6_sweep_g_core_keyword_conversion_at_exit_is_refused_not_run(which):
+    # The crashing shape found by this order's diagnosis: a typed conversion reached WITH KEYWORDS (pybind11's private
+    # kwargs copy is deallocated by the exit unwind; `_C.empty(shape=SeqLen())` rc 139 on acd42fa).
+    _torch_or_skip()
+    r = subprocess.run([sys.executable, "-c", _FIX6_KW_EXIT_SCRIPT, which], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+    _assert_ordinary_exit(r)
+    assert "REFUSED" in r.stdout and "CAST started" not in r.stdout, r.stdout
+
+
+_FIX6_R7_SCRIPT = _F05_SCRIPT.replace('print("RESULT " + json.dumps(res), flush=True)', r'''
+if mode == "fail_and_synchronize":
+    for key in ("sync1", "sync2"):
+        try:
+            tc.synchronize()
+            res[key] = None
+        except RuntimeError as e:
+            res[key] = str(e)
+res["stats_after"] = dict(tc._C._dlpack_release_stats())
+print("RESULT " + json.dumps(res), flush=True)
+''').replace('if mode == "fail":', 'if mode.startswith("fail"):')
+
+
+@pytest.mark.parametrize("mode", ["fail_and_synchronize", "fail"])
+def test_fix6_r7_recorded_core_failure_is_raised_once_or_logged_at_exit(f05_shim, mode):
+    # FIX5's residual R7: the drain failure of an imported Storage (its producer memory deliberately leaked) was recorded
+    # but raised by nothing. Now the next tensor_cuda.synchronize() raises it, once; unsynchronized, the exit hook logs.
+    r = subprocess.run([sys.executable, "-c", _FIX6_R7_SCRIPT, f05_shim, mode], capture_output=True, text=True,
+                       timeout=_SUBPROC_TIMEOUT, env=_subproc_env(LD_PRELOAD=f05_shim))
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    res = json.loads(lines[-1][len("RESULT "):])
+    assert res["stats"]["leaked_drain_failure"] == 1 and res["stats"]["unraisable_errors"] == 1, res
+    if mode == "fail_and_synchronize":
+        assert "draining an imported Storage's device before its DLPack release" in (res["sync1"] or ""), res
+        assert "cudaErrorInvalidDevice" in res["sync1"] and res["sync2"] is None, res      # exactly once
+        assert "at exit" not in r.stderr, r.stderr                                          # nothing left to log
+    else:
+        assert "tensor_cuda: at exit: tensor_cuda.synchronize: 1 CUDA failure(s)" in r.stderr, r.stderr

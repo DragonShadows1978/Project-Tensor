@@ -28,6 +28,7 @@
 
 #include "checked_math.h"
 #include "dlpack_operand.h"
+#include "py_args.h"  // P1T-FIX6 sweep (g): C-level argument matching and conversion
 #include "lstm_ops.h"
 
 namespace py = pybind11;
@@ -246,28 +247,47 @@ void lstm_run(py::object xc, py::object Wc, py::object Rc, py::object Bc, py::ob
 }  // namespace
 
 void register_lstm(py::module_& m) {
-  m.def("lstm_plan", &lstm_plan, py::arg("x"), py::arg("W"), py::arg("R"), py::arg("B"), py::arg("initial_h"),
-        py::arg("initial_c"), py::arg("hidden_size"), py::arg("direction"),
-        "Acquire and peek the LSTM inputs; return (x, W, R, B|None, initial_h|None, initial_c|None capsules, Y shape, "
-        "Y_h/Y_c shape, scratch numel, T, N).");
-  m.def("lstm_run", &lstm_run, py::arg("x_capsule"), py::arg("W_capsule"), py::arg("R_capsule"), py::arg("B_capsule"),
-        py::arg("initial_h_capsule"), py::arg("initial_c_capsule"), py::arg("Y"), py::arg("Y_h"), py::arg("Y_c"),
-        py::arg("scratch"), py::arg("hidden_size"), py::arg("direction"),
-        "Consume every operand, validate, run the whole LSTM recurrence on the legacy stream, release.");
+  // P1T-FIX6 (sweep (g)): (*args, **kwargs) + C-level conversion (py_args.h); first docstring line = the signature.
+  m.def(
+      "lstm_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("lstm_plan", a, k,
+                         {{"x"}, {"W"}, {"R"}, {"B"}, {"initial_h"}, {"initial_c"}, {"hidden_size"}, {"direction"}});
+        const int64_t hidden = arg_int64(c, 6), direction = arg_int64(c, 7);
+        return lstm_plan(c.object(0), c.object(1), c.object(2), c.object(3), c.object(4), c.object(5), hidden,
+                         direction);
+      },
+      "lstm_plan(x, W, R, B, initial_h, initial_c, hidden_size, direction)\n\n"
+      "Acquire and peek the LSTM inputs; return (x, W, R, B|None, initial_h|None, initial_c|None capsules, Y shape, "
+      "Y_h/Y_c shape, scratch numel, T, N).");
+  m.def(
+      "lstm_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("lstm_run", a, k,
+                         {{"x_capsule"}, {"W_capsule"}, {"R_capsule"}, {"B_capsule"}, {"initial_h_capsule"},
+                          {"initial_c_capsule"}, {"Y"}, {"Y_h"}, {"Y_c"}, {"scratch"}, {"hidden_size"}, {"direction"}});
+        const int64_t hidden = arg_int64(c, 10), direction = arg_int64(c, 11);
+        lstm_run(c.object(0), c.object(1), c.object(2), c.object(3), c.object(4), c.object(5), c.object(6),
+                 c.object(7), c.object(8), c.object(9), hidden, direction);
+      },
+      "lstm_run(x_capsule, W_capsule, R_capsule, B_capsule, initial_h_capsule, initial_c_capsule, Y, Y_h, Y_c, "
+      "scratch, hidden_size, direction)\n\n"
+      "Consume every operand, validate, run the whole LSTM recurrence on the legacy stream, release.");
   m.def(
       "lstm_cublas_config",
-      [](int device) {
-        LstmCublasConfig c = lstm_cublas_config(device);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("lstm_cublas_config", a, k, {{"device", false}});
+        LstmCublasConfig cfg = lstm_cublas_config(c.given(0) ? arg_int32(c, 0) : 0);
         py::dict d;
-        d["math_mode"] = c.math_mode;
-        d["atomics_mode"] = c.atomics_mode;
-        d["pointer_mode"] = c.pointer_mode;
-        d["legacy_stream"] = c.legacy_stream;
-        d["default_math"] = c.default_math;
-        d["atomics_not_allowed"] = c.atomics_not_allowed;
+        d["math_mode"] = cfg.math_mode;
+        d["atomics_mode"] = cfg.atomics_mode;
+        d["pointer_mode"] = cfg.pointer_mode;
+        d["legacy_stream"] = cfg.legacy_stream;
+        d["default_math"] = cfg.default_math;
+        d["atomics_not_allowed"] = cfg.atomics_not_allowed;
         return d;
       },
-      py::arg("device") = 0, "Settings of the LSTM's cuBLAS handle on `device` (creates it if needed).");
+      "lstm_cublas_config(device=0)\n\nSettings of the LSTM's cuBLAS handle on `device` (creates it if needed).");
 }
 
 }  // namespace tcs

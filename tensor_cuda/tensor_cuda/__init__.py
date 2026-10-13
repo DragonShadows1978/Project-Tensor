@@ -225,6 +225,13 @@ def _dlpack_shutdown_hook():
                 f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
                 f"{r['waited_us'] / 1e6:.1f} s; interpreter exit continues\n")
             sys.stderr.flush()
+        # P1T-FIX6 (FIX5 residual R7): a CUDA failure recorded on a P1-T path that could not raise, and not raised
+        # by a synchronize() since, is logged here (an exception from an atexit callback has no handler).
+        try:
+            _C._dlpack_raise_unraisable()
+        except RuntimeError as e:
+            sys.stderr.write(f"tensor_cuda: at exit: {e}\n")
+            sys.stderr.flush()
     except Exception as e:  # noqa: BLE001
         try:
             sys.stderr.write(f"tensor_cuda: DLPack exit hook failed ({type(e).__name__}: {e})\n")
@@ -1362,7 +1369,18 @@ def checkpoint(fn, *inputs):
 
 
 def synchronize():
+    """Wait for all queued device work (the engine's device synchronize), then report deferred P1-T errors.
+
+    P1T-FIX6 (FIX5 residual R7): a CUDA failure on a P1-T core path that cannot raise where it happens (an imported
+    tensor's device drain before its DLPack release, which then deliberately leaks the producer's memory; restoring the
+    caller's device after that drain; fill_'s device guard unwinding after another error) was only counted in
+    ``_C._dlpack_release_stats()``, so no API ever reported it. ``synchronize()`` now raises RuntimeError naming the
+    first such failure and how many there were, once: the record is consumed only after the RuntimeError exists (a
+    MemoryError while reporting leaves it for the next call). Same rule as ``tc_signal.synchronize()`` (P1T-FIX2 N1:
+    a CUDA failure is never reported as success). Prior art: tc_signal's raise-once records; PyTorch's
+    C10_CUDA_CHECK_WARN (an error found in a destructor is reported, not dropped)."""
     _C.synchronize()
+    _C._dlpack_raise_unraisable()
 
 
 def empty_cache():

@@ -12,10 +12,12 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>  // P1T-FIX3 V3-01: exit-wait diagnostics written without the GIL
+#include <initializer_list>  // P1T-FIX6 sweep (g): CoreCallArgs
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
+#include <stdexcept>  // P1T-FIX6 sweep (g): std::overflow_error -> OverflowError
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,6 +37,10 @@ unsigned long long dlpack_device_restore_failures();
 // drain and its restore, fill_'s guard unwinding), recorded before their slot entry is consumed: count, and the first.
 unsigned long long dlpack_unraisable_errors();
 void dlpack_first_unraisable(std::string* what, int* device, int* error);
+// P1T-FIX6 (FIX5 residual R7, a recorded error that nothing ever raised; defined in kernels.cu): the part of that
+// record not raised yet (count, and the first of them), and its consumption once a RuntimeError naming it exists.
+void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error);
+void dlpack_ack_unraisable(unsigned long long count) noexcept;
 // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
 void bp_kernel_4_set_variant(const std::string&);
 std::string bp_kernel_4_get_variant();
@@ -415,11 +421,10 @@ void capsule_destructor_versioned(PyObject* cap) {
 // (torch/_tensor.py). The order chose the guard (switch, record, restore). Taken:
 // the scoped guard and destroy-on-own-device. Ours: placing the whole fence,
 // consumer wait included, inside the guard, and restore-before-raise.
-void dlpack_fence_consumer(const py::object& stream, int device) {
-  if (stream.is_none()) return;
-  if (!py::isinstance<py::int_>(stream))
-    throw py::type_error("__dlpack__: stream must be an int or None");
-  const long long s = stream.cast<long long>();
+// P1T-FIX6 (V6-02): `stream` arrives already read by DlpackArgs (None -> has_stream false; an int's value): this
+// function calls no Python at all.
+void dlpack_fence_consumer(bool has_stream, long long s, int device) {
+  if (!has_stream) return;
   if (s == -1 || s == 1) return;
   if (s == 0)
     throw py::value_error(
@@ -480,8 +485,117 @@ void dlpack_fence_consumer(const py::object& stream, int device) {
   throw std::runtime_error(msg);
 }
 
+// P1T-FIX6, round-6 review finding V6-02 (MAJOR; FIX5's residual R3). tensor_dlpack converted its arguments with
+// pybind11 casts that run the argument's own Python methods: copy.cast<bool>() calls __bool__, dl_device /
+// max_version .cast<py::sequence>() + py::len() + item .cast<int>() call __len__, __getitem__ / __iter__ and __index__,
+// and stream.cast<long long>() may fall back to __int__. That user Python ran on this native stack. On a daemon thread
+// whose method released the GIL across the start of interpreter finalization, CPython 3.12 exits the thread when it
+// re-takes the GIL (pthread_exit, a forced unwind); the unwind deallocated the pybind11 dispatcher's private kwargs
+// copy with the thread's state already freed: SIGSEGV (core_cast_exit_gpu.py bool|index rc 139 on acd42fa and
+// 1475fae; gdb receipt artifacts/p1t_fix6). Core's exit hook could not see it (it waits only for import releases).
+// Choice: option (ii) of the review, REFUSE before invoking anything, rather than (i) admit and wait at exit:
+//  * (ii) adds no wait and no lock (sweep (h): no new place where an exit can hang), and leaves no user Python in a
+//    native frame at all, so there is nothing for the exit hook to coordinate;
+//  * every real consumer passes plain values (torch 2.11 from_dlpack: stream an int, max_version (1, 0), dl_device a
+//    tuple of ints from torch._C._torchDeviceToDLDevice, copy a bool or absent -- read in the installed torch; tc_signal:
+//    stream=1, max_version=(1, 3), copy=False; tensor_cuda.from_dlpack: stream=1, max_version=(1, 3)), all accepted;
+//  * (i) would make interpreter exit wait for arbitrary user __bool__/__index__ code (sweep (h): a new exit wait that
+//    any user method can extend) for no consumer that needs it.
+// Accepted argument types, each read with C-level calls that never call a Python method of the argument:
+//  * stream: None, or an int (int, bool, int subclasses such as IntEnum: PyLong_AsLongLongAndOverflow reads a
+//    PyLong_Check object's value directly, CPython 3.12 Objects/longobject.c); out of the int64 range -> ValueError;
+//  * max_version: None, or a tuple or list (PyTuple_GET_SIZE / PyList_GET_ITEM, which ignore a subclass's __len__ /
+//    __getitem__) of length >= 1 whose first item (the major version, the only item read, as before) is an int;
+//  * dl_device: None, or a tuple or list of exactly 2 ints (IntEnum device types accepted: torch annotates dl_device
+//    as tuple[IntEnum, int]);
+//  * copy: None, a bool, or an int (nonzero = true, read as above). Anything else, numpy.bool_ included, is refused:
+//    reading it needs its type's nb_bool, and recognising numpy's bool by type name is spoofable by any class named
+//    "numpy.bool" (pybind11's is_numpy_bool); the array API types copy as bool | None.
+// Every other type raises TypeError naming the argument and the type (tp_name), before anything else happens: no repr,
+// no __str__. The pybind11 binding of __dlpack__ itself takes (*args, **kwargs) (PYBIND11_MODULE below), so neither
+// the dispatcher nor a mismatch message runs Python either.
+// Prior art: PyTorch 2.11 Tensor.__dlpack__ (`if stream is not None and type(stream) is not int: raise
+// TypeError("stream must be ``int`` or ``none``")`, read in the installed torch/_tensor.py) refuses instead of converting;
+// the Python array API __dlpack__ signature (Consortium for Python Data API Standards, 2021-2023); CPython 3.12's
+// PyLong_AsLongLongAndOverflow / PyTuple_GET_ITEM contracts. Taken: refusal of non-int / non-tuple arguments. Ours:
+// the int-subclass and list acceptance read at C level, the numpy.bool_ refusal argument, and refusing for every
+// argument of every P1-T binding (sweep (g)).
+namespace {
+[[noreturn]] void dlpack_refuse_arg(const char* arg, const char* expected, PyObject* o) {
+  throw py::type_error(std::string("__dlpack__: ") + arg + " must be " + expected + ", not " + Py_TYPE(o)->tp_name +
+                       " (P1T-FIX6: refused without calling any of its Python methods)");
+}
+// An int argument's value, read without calling Python; `overflow` is -1 / +1 beyond the int64 range.
+long long dlpack_int(PyObject* o, int* overflow) {
+  *overflow = 0;
+  const long long v = PyLong_AsLongLongAndOverflow(o, overflow);
+  if (v == -1 && *overflow == 0 && PyErr_Occurred()) throw py::error_already_set();  // not reached for a PyLong
+  return v;
+}
+// A tuple's or list's size and items with the C macros (a subclass's __len__ / __getitem__ is never called).
+Py_ssize_t dlpack_seq_size(PyObject* o) { return PyTuple_Check(o) ? PyTuple_GET_SIZE(o) : PyList_GET_SIZE(o); }
+PyObject* dlpack_seq_item(PyObject* o, Py_ssize_t i) {
+  return PyTuple_Check(o) ? PyTuple_GET_ITEM(o, i) : PyList_GET_ITEM(o, i);
+}
+}  // namespace
+
 py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
                          py::object dl_device, py::object copy) {
+  // P1T-FIX6 (V6-02): read every argument first, with C-level calls only (see above).
+  bool has_stream = false;
+  long long stream_value = 0;
+  if (!stream.is_none()) {
+    if (!PyLong_Check(stream.ptr())) dlpack_refuse_arg("stream", "an int or None", stream.ptr());
+    int of = 0;
+    stream_value = dlpack_int(stream.ptr(), &of);
+    if (of != 0) throw py::value_error("__dlpack__: invalid stream (beyond the 64-bit range)");
+    has_stream = true;
+  }
+  bool versioned = false;
+  if (!max_version.is_none()) {
+    PyObject* mv = max_version.ptr();
+    if (!PyTuple_Check(mv) && !PyList_Check(mv))
+      dlpack_refuse_arg("max_version", "None or a (major, minor) tuple of ints", mv);
+    if (dlpack_seq_size(mv) < 1)
+      throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
+    PyObject* major = dlpack_seq_item(mv, 0);
+    if (!PyLong_Check(major)) dlpack_refuse_arg("max_version[0] (the major version)", "an int", major);
+    int of = 0;
+    const long long mj = dlpack_int(major, &of);
+    versioned = of > 0 || (of == 0 && mj >= 1);
+  }
+  bool has_dl_device = false;
+  long long dl_type = 0, dl_id = 0;
+  if (!dl_device.is_none()) {
+    PyObject* d = dl_device.ptr();
+    if (!PyTuple_Check(d) && !PyList_Check(d))
+      dlpack_refuse_arg("dl_device", "None or a (device_type, device_id) tuple of ints", d);
+    if (dlpack_seq_size(d) != 2)
+      throw py::value_error("__dlpack__: dl_device must be a (device_type, device_id) pair");
+    PyObject* d0 = dlpack_seq_item(d, 0);
+    PyObject* d1 = dlpack_seq_item(d, 1);
+    if (!PyLong_Check(d0)) dlpack_refuse_arg("dl_device[0] (the device type)", "an int", d0);
+    if (!PyLong_Check(d1)) dlpack_refuse_arg("dl_device[1] (the device id)", "an int", d1);
+    int of0 = 0, of1 = 0;
+    dl_type = dlpack_int(d0, &of0);
+    dl_id = dlpack_int(d1, &of1);
+    if (of0 != 0 || of1 != 0)
+      throw py::value_error("__dlpack__: dl_device entries must fit in 64-bit integers");
+    has_dl_device = true;
+  }
+  bool want_copy = false;
+  if (!copy.is_none()) {
+    PyObject* c = copy.ptr();
+    if (c == Py_True || c == Py_False) {
+      want_copy = (c == Py_True);
+    } else if (PyLong_Check(c)) {
+      int of = 0;
+      const long long v = dlpack_int(c, &of);
+      want_copy = of != 0 || v != 0;
+    } else {
+      dlpack_refuse_arg("copy", "None or a bool", c);
+    }
+  }
   if (!t.defined() || !t.data().defined())
     throw py::buffer_error("__dlpack__: undefined tensor");
   const NDArray& a = t.data();
@@ -489,30 +603,16 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
     throw py::buffer_error(
         "__dlpack__: TensorCUDA exports CUDA tensors only; this tensor is on "
         "cpu (CPU DLPack export is not supported)");
-  if (!copy.is_none() && copy.cast<bool>())
+  if (want_copy)
     throw py::buffer_error(
         "__dlpack__: copy=True is not supported; TensorCUDA exports zero-copy "
         "only (pass copy=None or copy=False)");
-  if (!dl_device.is_none()) {
-    py::sequence d = dl_device.cast<py::sequence>();
-    if (py::len(d) != 2)
-      throw py::value_error("__dlpack__: dl_device must be a (device_type, device_id) pair");
-    const int dt = d[0].cast<int>();
-    const int id = d[1].cast<int>();
-    if (dt != kDLCUDA || id != a.device.index)
-      throw py::buffer_error(
-          "__dlpack__: dl_device=(" + std::to_string(dt) + ", " +
-          std::to_string(id) + ") differs from this tensor's device (2, " +
-          std::to_string(a.device.index) +
-          "); a cross-device export needs a copy, which TensorCUDA does not make");
-  }
-  bool versioned = false;
-  if (!max_version.is_none()) {
-    py::sequence mv = max_version.cast<py::sequence>();
-    if (py::len(mv) < 1)
-      throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
-    versioned = mv[0].cast<int>() >= 1;
-  }
+  if (has_dl_device && (dl_type != kDLCUDA || dl_id != a.device.index))
+    throw py::buffer_error(
+        "__dlpack__: dl_device=(" + std::to_string(dl_type) + ", " +
+        std::to_string(dl_id) + ") differs from this tensor's device (2, " +
+        std::to_string(a.device.index) +
+        "); a cross-device export needs a copy, which TensorCUDA does not make");
   // P1T-FIX2, N2: a tensor whose shape breaks the zero-extent rule (reachable through reshape of an empty tensor, e.g.
   // empty((0,)).reshape([0, 2**62, 4])) cannot be described with int64 strides: refused (ValueError) before the
   // consumer fence and before contiguous_strides forms them.
@@ -530,7 +630,7 @@ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
     const std::string mismatch = cuda_storage_device_mismatch(a, "__dlpack__");
     if (!mismatch.empty()) throw py::buffer_error(mismatch);
   }
-  dlpack_fence_consumer(stream, a.device.index);
+  dlpack_fence_consumer(has_stream, stream_value, a.device.index);
 
   // P1T-FIX1, F06: the context (and its shared Storage reference) is owned by a unique_ptr until the capsule takes it,
   // so a throw anywhere below (bad_alloc in the vector assignments, a failed PyCapsule_New) frees it exactly once.
@@ -1130,6 +1230,268 @@ materials tensor; ops that read device memory directly (arithmetic, matmul,
 norms, attention) need nothing. Calling mark_modified() when it is not needed
 is harmless.)doc";
 
+// ------------------------------------------------------------------------------------------------ P1T-FIX6 sweep (g)
+// User Python run from inside a native frame. pybind11's typed argument casters convert in the dispatcher, before the
+// function body (an int parameter calls __index__, a double __float__ / __index__, a std::vector __len__ /
+// __getitem__ and each item's conversion), its no-match TypeError calls repr() on every argument, and its keyword
+// matching uses dict lookups that may call a str subclass's __eq__. Any of that user Python can release the GIL on a
+// daemon thread across the start of finalization; CPython 3.12 then exits the thread when it re-takes the GIL and the
+// forced unwind runs the dispatcher's C++ cleanup (its private kwargs copy is deallocated with the thread's state
+// freed: `_C.empty(shape=SeqLen())` rc 139 2/2 on acd42fa, ledger 07:32-07:40). Every P1-T binding of this module is
+// therefore declared as (*args, **kwargs) -- for that signature the dispatcher copies, converts and looks up nothing
+// and cannot mismatch (a method's self arrives as args[0]) -- and CoreCallArgs below matches positions and keyword
+// names with C-level comparisons (PyUnicode_CompareWithASCIIString reads the string data, also for a str subclass);
+// the converters accept exactly the types whose value is read without calling a Python method (int and subclasses via
+// PyLong_AsLongLongAndOverflow; float and subclasses via PyFloat_AsDouble; tuple / list via the C macros; str via
+// PyUnicode_AsUTF8AndSize; bytes via PyBytes_AS_STRING) and refuse everything else with TypeError naming the type.
+// Same design as the add-on's tc_signal/src/py_args.h (a copy: core includes nothing from the add-on, and this order
+// adds no core file). Prior art: CPython's C argument parser (Python/getargs.c: keyword matching without __eq__;
+// unverified, lead to check "getargs.c find_keyword"); PyTorch 2.11 Tensor.__dlpack__'s `type(stream) is not int`
+// refusal (installed torch/_tensor.py); pybind11's py::args / py::kwargs. Ours: applying it to every P1-T binding.
+struct CoreParam {
+  const char* name;
+  bool required = true;
+};
+
+class CoreCallArgs {
+ public:
+  static constexpr size_t kMax = 8;
+  CoreCallArgs(const char* fn, const py::args& args, const py::kwargs& kwargs, std::initializer_list<CoreParam> params,
+               size_t positional_max = kMax)
+      : fn_(fn) {
+    for (const CoreParam& p : params) params_[n_++] = p;
+    PyObject* a = args.ptr();
+    const size_t n_pos = static_cast<size_t>(PyTuple_GET_SIZE(a));
+    const size_t pos_ok = positional_max < n_ ? positional_max : n_;
+    if (n_pos > pos_ok)
+      throw py::type_error(prefix() + "takes at most " + std::to_string(pos_ok) + " positional argument(s) (" +
+                           std::to_string(n_pos) + " given)");
+    for (size_t i = 0; i < n_pos; ++i) v_[i] = PyTuple_GET_ITEM(a, static_cast<Py_ssize_t>(i));
+    PyObject* k = kwargs.ptr();
+    if (k != nullptr && PyDict_Check(k)) {
+      Py_ssize_t pos = 0;
+      PyObject* key = nullptr;
+      PyObject* value = nullptr;
+      while (PyDict_Next(k, &pos, &key, &value)) {
+        if (!PyUnicode_Check(key)) throw py::type_error(prefix() + "keywords must be strings");
+        size_t j = 0;
+        while (j < n_ && PyUnicode_CompareWithASCIIString(key, params_[j].name) != 0) ++j;
+        if (j == n_) throw py::type_error(prefix() + "got an unexpected keyword argument '" + utf8(key) + "'");
+        if (v_[j] != nullptr) throw py::type_error(prefix() + "got multiple values for argument '" + params_[j].name + "'");
+        v_[j] = value;
+      }
+    }
+    for (size_t j = 0; j < n_; ++j)
+      if (params_[j].required && v_[j] == nullptr)
+        throw py::type_error(prefix() + "missing required argument '" + params_[j].name + "'");
+  }
+  bool given(size_t i) const { return v_[i] != nullptr; }
+  PyObject* raw(size_t i) const { return v_[i]; }
+  py::object object(size_t i) const { return v_[i] ? py::reinterpret_borrow<py::object>(v_[i]) : py::none(); }
+  std::string prefix() const { return std::string(fn_) + "(): "; }
+  [[noreturn]] void refuse(size_t i, const char* expected) const {
+    throw py::type_error(prefix() + "argument '" + params_[i].name + "' must be " + expected + ", not " +
+                         Py_TYPE(v_[i])->tp_name + " (P1T-FIX6: refused without calling any of its Python methods)");
+  }
+  // `self` of a Tensor method (args[0]): a Tensor (or subclass) instance, checked with PyObject_TypeCheck (C level),
+  // so the cast below takes pybind11's exact / subtype path only (no implicit or foreign-module conversion).
+  Tensor& tensor(size_t i) const {
+    static PyTypeObject* tensor_type = reinterpret_cast<PyTypeObject*>(py::type::of<Tensor>().ptr());
+    if (!PyObject_TypeCheck(v_[i], tensor_type)) refuse(i, "a tensor_cuda Tensor");
+    return py::handle(v_[i]).cast<Tensor&>();
+  }
+  int64_t i64(size_t i) const {
+    PyObject* o = v_[i];
+    if (!PyLong_Check(o)) refuse(i, "an int");
+    int overflow = 0;
+    const long long v = PyLong_AsLongLongAndOverflow(o, &overflow);
+    if (overflow != 0)
+      throw std::overflow_error(prefix() + "argument '" + params_[i].name + "' does not fit in a signed 64-bit integer");
+    return static_cast<int64_t>(v);
+  }
+  double real(size_t i) const {
+    PyObject* o = v_[i];
+    if (PyFloat_Check(o)) return PyFloat_AsDouble(o);
+    if (PyLong_Check(o)) {
+      const double v = PyLong_AsDouble(o);
+      if (v == -1.0 && PyErr_Occurred()) throw py::error_already_set();  // OverflowError for a huge int
+      return v;
+    }
+    refuse(i, "a real number (float or int)");
+  }
+  std::string str(size_t i) const {
+    PyObject* o = v_[i];
+    if (PyUnicode_Check(o)) {
+      Py_ssize_t n = 0;
+      const char* p = PyUnicode_AsUTF8AndSize(o, &n);
+      if (p == nullptr) throw py::error_already_set();
+      return std::string(p, static_cast<size_t>(n));
+    }
+    if (PyBytes_Check(o)) return std::string(PyBytes_AS_STRING(o), static_cast<size_t>(PyBytes_GET_SIZE(o)));
+    refuse(i, "a str");
+  }
+  // A shape: a tuple or list of ints (items read with the C macros), at most kMaxRank checked by the caller.
+  std::vector<int64_t> shape(size_t i) const {
+    PyObject* o = v_[i];
+    const bool is_list = PyList_Check(o);
+    if (!is_list && !PyTuple_Check(o)) refuse(i, "a tuple or list of ints");
+    const Py_ssize_t n = is_list ? PyList_GET_SIZE(o) : PyTuple_GET_SIZE(o);
+    std::vector<int64_t> out;
+    out.reserve(static_cast<size_t>(n));
+    for (Py_ssize_t j = 0; j < n; ++j) {
+      PyObject* e = is_list ? PyList_GET_ITEM(o, j) : PyTuple_GET_ITEM(o, j);
+      if (!PyLong_Check(e))
+        throw py::type_error(prefix() + "argument '" + params_[i].name + "' must contain ints, not " +
+                             Py_TYPE(e)->tp_name + " (P1T-FIX6: refused without calling any of its Python methods)");
+      int overflow = 0;
+      const long long v = PyLong_AsLongLongAndOverflow(e, &overflow);
+      if (overflow != 0)
+        throw std::overflow_error(prefix() + "an extent of '" + params_[i].name +
+                                  "' does not fit in a signed 64-bit integer");
+      out.push_back(static_cast<int64_t>(v));
+    }
+    return out;
+  }
+
+ private:
+  static std::string utf8(PyObject* s) {
+    Py_ssize_t n = 0;
+    const char* p = PyUnicode_AsUTF8AndSize(s, &n);
+    if (p == nullptr) {
+      PyErr_Clear();
+      return "?";
+    }
+    return std::string(p, static_cast<size_t>(n));
+  }
+  const char* fn_;
+  CoreParam params_[kMax] = {};
+  PyObject* v_[kMax] = {};
+  size_t n_ = 0;
+};
+
+// P1T-FIX6 (found by this order's own test run; sweep (g) x sweep (c) of FIX5): the exit wait is the one P1-T body that
+// releases the GIL and may therefore be exited by CPython (a non-main thread that re-takes the GIL after finalization
+// began: pthread_exit, a forced unwind). Any Python object that only a C++ frame on that stack owns is deallocated by
+// the unwind with the thread's state freed (SIGSEGV). Through pybind11 there always is one: a (*args, **kwargs)
+// binding called positionally gets a NEW empty kwargs dict (pybind11.h step 4b), and FIX5's typed binding called with a
+// keyword got a PyDict_Copy (step 2). test_fix5_sweep_c_core_exit_wait_on_a_non_main_thread_never_aborts: rc -11 in 3
+// of 5 runs with the (*args, **kwargs) binding. So `_dlpack_begin_shutdown` is a raw CPython function: CPython passes
+// `args` / `kwargs` owned by the caller's frame, the argument is read at C level (as CoreCallArgs does), and this frame
+// owns no Python object across the wait (the result dict exists only after the GIL is back). No catch-all: a forced
+// unwind (not a std::exception) passes through the typed handlers. Prior art: CPython's METH_VARARGS | METH_KEYWORDS
+// calling convention (caller-owned argument tuple and dict). Ours: choosing it for the GIL-releasing exit wait.
+bool raw_one_real_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double* out) {
+  PyObject* v = nullptr;
+  const Py_ssize_t n = args ? PyTuple_GET_SIZE(args) : 0;
+  if (n > 1) {
+    PyErr_Format(PyExc_TypeError, "%s(): takes at most 1 positional argument (%zd given)", fn, n);
+    return false;
+  }
+  if (n == 1) v = PyTuple_GET_ITEM(args, 0);
+  if (kwargs != nullptr && PyDict_Check(kwargs)) {
+    Py_ssize_t pos = 0;
+    PyObject* key = nullptr;
+    PyObject* value = nullptr;
+    while (PyDict_Next(kwargs, &pos, &key, &value)) {
+      if (!PyUnicode_Check(key)) {
+        PyErr_Format(PyExc_TypeError, "%s(): keywords must be strings", fn);
+        return false;
+      }
+      if (PyUnicode_CompareWithASCIIString(key, name) != 0) {  // %U copies the str's data: no __str__ is called
+        PyErr_Format(PyExc_TypeError, "%s(): got an unexpected keyword argument '%U'", fn, key);
+        return false;
+      }
+      if (v != nullptr) {
+        PyErr_Format(PyExc_TypeError, "%s(): got multiple values for argument '%s'", fn, name);
+        return false;
+      }
+      v = value;
+    }
+  }
+  if (v == nullptr) {
+    PyErr_Format(PyExc_TypeError, "%s(): missing required argument '%s'", fn, name);
+    return false;
+  }
+  if (PyFloat_Check(v)) {
+    *out = PyFloat_AsDouble(v);
+    return true;
+  }
+  if (PyLong_Check(v)) {
+    *out = PyLong_AsDouble(v);
+    return !(*out == -1.0 && PyErr_Occurred());
+  }
+  PyErr_Format(PyExc_TypeError,
+               "%s(): argument '%s' must be a real number (float or int), not %s (P1T-FIX6: refused without calling "
+               "any of its Python methods)",
+               fn, name, Py_TYPE(v)->tp_name);
+  return false;
+}
+
+PyObject* raw_dlpack_begin_shutdown(PyObject*, PyObject* args, PyObject* kwargs) {
+  double first_diag_s = 0.0;
+  if (!raw_one_real_arg("_dlpack_begin_shutdown", "first_diag_s", args, kwargs, &first_diag_s)) return nullptr;
+  try {
+    return dlpack_begin_shutdown(first_diag_s).release().ptr();
+  } catch (py::error_already_set& e) {
+    e.restore();
+  } catch (const std::bad_alloc&) {
+    PyErr_NoMemory();
+  } catch (const std::exception& e) {
+    PyErr_SetString(PyExc_RuntimeError, e.what());
+  }
+  return nullptr;
+}
+
+const char kBeginShutdownDoc[] =
+    "_dlpack_begin_shutdown(first_diag_s)\n\n"
+    "P1T-FIX2 (N5) / P1T-FIX3 (V3-01), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack "
+    "import releases (later ones leak, counted) and wait, GIL released, with NO bound until every admitted one has "
+    "finished (never returns while one is running). After first_diag_s seconds it writes a stderr line (count "
+    "running, seconds waited), then another each time the time waited doubles. A producer deleter that never "
+    "returns therefore makes interpreter exit wait (the producer's contract violation; the honest outcome, where a "
+    "bounded return let finalization abort the process). Returns {in_flight_at_close, still_in_flight, timed_out, "
+    "waited_us, diagnostics, own_thread_in_flight}. P1T-FIX6: a raw CPython function (no pybind11 dispatcher frame "
+    "on the stack while it waits); first_diag_s must be a float or an int.";
+PyMethodDef kBeginShutdownDef = {"_dlpack_begin_shutdown",
+                                 reinterpret_cast<PyCFunction>(reinterpret_cast<void (*)(void)>(&raw_dlpack_begin_shutdown)),
+                                 METH_VARARGS | METH_KEYWORDS, kBeginShutdownDoc};
+
+// P1T-FIX6 (FIX5 residual R7): raises the recorded CUDA errors of the P1-T core paths that could not raise where they
+// happened (an imported Storage's drain or its device restore, fill_'s guard unwinding; FIX5 sweep (d) recorded them,
+// but only _dlpack_release_stats() showed them: a CUDA failure was reported nowhere). tensor_cuda.synchronize() calls
+// this after the engine sync, and tensor_cuda's exit hook logs it. Same discipline as tc_signal.synchronize() (V6-03):
+// the record is consumed only once the RuntimeError naming it exists and is captured, so a MemoryError while reporting
+// loses nothing. Prior art: tc_signal.synchronize()'s N1/V6-03 raise-once rule (this repository); PyTorch's
+// C10_CUDA_CHECK_WARN (an error in a destructor is reported, never dropped). Ours: deferring it to the next synchronize.
+void dlpack_raise_unraisable() {
+  unsigned long long n = 0;
+  std::string what;
+  int dev = -1, err = 0;
+  dlpack_unreported_unraisable(&n, &what, &dev, &err);
+  if (n == 0) return;
+  std::string msg = "tensor_cuda.synchronize: " + std::to_string(n) +
+                    " CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T "
+                    "core), the first: ";
+  if (what.empty())
+    msg += "(not named: recorded while an earlier report was being raised)";
+  else
+    msg += what + " on device " + std::to_string(dev) + " (" + cudaGetErrorName(static_cast<cudaError_t>(err)) + ": " +
+           cudaGetErrorString(static_cast<cudaError_t>(err)) + ")";
+  PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+  if (!PyErr_ExceptionMatches(PyExc_RuntimeError)) {
+    PyErr_Clear();
+    throw std::bad_alloc();  // -> MemoryError; the record stays for the next call
+  }
+  try {
+    py::error_already_set raised;  // captures the RuntimeError (a bad_alloc here consumes nothing)
+    dlpack_ack_unraisable(n);      // noexcept: consumed exactly once, now that the diagnostic exists
+    throw raised;
+  } catch (const std::bad_alloc&) {
+    PyErr_Clear();
+    throw;
+  }
+}
+
 }  // namespace
 
 PYBIND11_MODULE(_tensor_cuda, m) {
@@ -1148,21 +1510,42 @@ PYBIND11_MODULE(_tensor_cuda, m) {
       .def_property_readonly("grad", &grad_of)
       .def("numpy", &tensor_to_numpy)
       // P1T-M1: DLPack interop (see the DLPack section above for prior art).
-      .def("__dlpack__", &tensor_dlpack, py::kw_only(),
-           py::arg("stream") = py::none(), py::arg("max_version") = py::none(),
-           py::arg("dl_device") = py::none(), py::arg("copy") = py::none(),
-           kDlpackDoc)
-      .def("__dlpack_device__", &tensor_dlpack_device,
-           "(2, device_ordinal) for a CUDA tensor (kDLCUDA = 2); BufferError on CPU.")
-      .def("data_ptr", [](Tensor& t) -> uintptr_t {
+      // P1T-FIX6 (V6-02, sweep (g)): every P1-T method takes (*args, **kwargs) and converts with CoreCallArgs (C-level
+      // only; design above), so no Python method of an argument runs in the dispatcher or here.
+      .def("__dlpack__",
+           [](py::args a, py::kwargs k) {
+             const CoreCallArgs c("__dlpack__", a, k,
+                                  {{"self"}, {"stream", false}, {"max_version", false}, {"dl_device", false},
+                                   {"copy", false}},
+                                  /*positional_max=*/1);
+             return tensor_dlpack(c.tensor(0), c.object(1), c.object(2), c.object(3), c.object(4));
+           },
+           (std::string("__dlpack__(self, *, stream=None, max_version=None, dl_device=None, copy=None)\n\n") +
+            kDlpackDoc)
+               .c_str())
+      .def("__dlpack_device__",
+           [](py::args a, py::kwargs k) {
+             const CoreCallArgs c("__dlpack_device__", a, k, {{"self"}});
+             return tensor_dlpack_device(c.tensor(0));
+           },
+           "__dlpack_device__(self)\n\n(2, device_ordinal) for a CUDA tensor (kDLCUDA = 2); BufferError on CPU.")
+      .def("data_ptr",
+           [](py::args a, py::kwargs k) -> uintptr_t {
+             const CoreCallArgs c("data_ptr", a, k, {{"self"}});
+             Tensor& t = c.tensor(0);
              if (!t.defined() || !t.data().defined()) return 0;
              return reinterpret_cast<uintptr_t>(t.data().data_ptr());
            },
-           "Device address of element 0, as an int (storage base + offset).")
-      .def("fill_", [](py::object self, double value) {
-             tc::fill_(self.cast<Tensor&>().data(), value);
-             return self;
-           }, py::arg("value"),
+           "data_ptr(self)\n\nDevice address of element 0, as an int (storage base + offset).")
+      .def("fill_",
+           [](py::args a, py::kwargs k) {
+             const CoreCallArgs c("fill_", a, k, {{"self"}, {"value"}});
+             Tensor& t = c.tensor(0);
+             const double value = c.real(1);
+             tc::fill_(t.data(), value);
+             return c.object(0);
+           },
+           "fill_(self, value)\n\n"
            "Fill in place with `value`, queued on the legacy default stream "
            "(asynchronous; existing fill_kernel). float32/float16/bfloat16 CUDA "
            "tensors only. Bumps the storage revision. Not recorded by autograd. "
@@ -1173,11 +1556,22 @@ PYBIND11_MODULE(_tensor_cuda, m) {
            "P1T-FIX5: an extent whose one-thread-per-element launch would need "
            "more than 2^31-1 blocks of 256 threads (the CUDA grid x-dimension "
            "limit), i.e. more than 549755813632 elements, raises ValueError before "
-           "any launch; nothing is written and the revision is unchanged.")
-      .def("mark_modified", [](Tensor& t) { t.data().mark_modified(); },
+           "any launch; nothing is written and the revision is unchanged. "
+           "P1T-FIX6: `value` must be a float or an int (subclasses included); any "
+           "other type raises TypeError without any of its methods being called.")
+      .def("mark_modified",
+           [](py::args a, py::kwargs k) {
+             const CoreCallArgs c("mark_modified", a, k, {{"self"}});
+             c.tensor(0).data().mark_modified();
+           },
+           "mark_modified(self)\n\n"
            "Bump the Storage revision. Call after an external (non-TensorCUDA) "
            "in-place write, e.g. through DLPack or data_ptr(); see __dlpack__.")
-      .def_property_readonly("revision", [](Tensor& t) { return t.data().revision(); },
+      .def_property_readonly("revision",
+           py::cpp_function([](py::args a, py::kwargs k) {
+             const CoreCallArgs c("revision", a, k, {{"self"}});
+             return c.tensor(0).data().revision();
+           }),
            "Storage revision (read-only): bumped by TensorCUDA in-place ops and mark_modified().")
       .def("backward", [](Tensor& t) { t.backward(); })
       .def("zero_grad", &Tensor::zero_grad)
@@ -1930,11 +2324,27 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("synchronize", &cuda_sync);
   // P1T-M1: DLPack import of a capsule (tensor_cuda.from_dlpack wraps it), and
   // Amendment 1's device-side empty (tensor_cuda.empty wraps it).
-  m.def("_from_dlpack_capsule", &tensor_from_dlpack_capsule, py::arg("capsule"));
-  m.def("empty", &tensor_empty, py::arg("shape"), py::arg("dtype") = "float32",
-        py::arg("device") = "cuda");
+  // P1T-FIX6 (sweep (g)): (*args, **kwargs) + CoreCallArgs, as the P1-T methods above.
+  m.def("_from_dlpack_capsule",
+        [](py::args a, py::kwargs k) {
+          const CoreCallArgs c("_from_dlpack_capsule", a, k, {{"capsule"}});
+          return tensor_from_dlpack_capsule(c.object(0));
+        },
+        "_from_dlpack_capsule(capsule)\n\nImport a DLPack capsule (tensor_cuda.from_dlpack wraps it).");
+  m.def("empty",
+        [](py::args a, py::kwargs k) {
+          const CoreCallArgs c("empty", a, k, {{"shape"}, {"dtype", false}, {"device", false}});
+          std::vector<int64_t> shape = c.shape(0);
+          const std::string dtype = c.given(1) ? c.str(1) : std::string("float32");
+          const std::string device = c.given(2) ? c.str(2) : std::string("cuda");
+          return tensor_empty(std::move(shape), dtype, device);
+        },
+        "empty(shape, dtype='float32', device='cuda')\n\n"
+        "Uninitialized tensor (tensor_cuda.empty wraps it). P1T-FIX6: shape must be a tuple or list of ints.");
   // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).
-  m.def("_dlpack_release_stats", []() {
+  m.def("_dlpack_release_stats", [](py::args a, py::kwargs k) {
+    const CoreCallArgs c("_dlpack_release_stats", a, k, {});
+    (void)c;
     py::dict d;
     d["released"] = g_import_released.load();
     d["leaked_interpreter_shutdown"] = g_import_leaked_shutdown.load();
@@ -1978,14 +2388,21 @@ PYBIND11_MODULE(_tensor_cuda, m) {
      "error-slot entry was consumed.");
   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
   (void)release_lifecycle();
-  m.def("_dlpack_begin_shutdown", &dlpack_begin_shutdown, py::arg("first_diag_s"),
-        "P1T-FIX2 (N5) / P1T-FIX3 (V3-01), called by tensor_cuda's atexit hook: stop admitting GIL-acquiring DLPack "
-        "import releases (later ones leak, counted) and wait, GIL released, with NO bound until every admitted one has "
-        "finished (never returns while one is running). After first_diag_s seconds it writes a stderr line (count "
-        "running, seconds waited), then another each time the time waited doubles. A producer deleter that never "
-        "returns therefore makes interpreter exit wait (the producer's contract violation; the honest outcome, where a "
-        "bounded return let finalization abort the process). Returns {in_flight_at_close, still_in_flight, timed_out, "
-        "waited_us, diagnostics, own_thread_in_flight}.");
+  m.def("_dlpack_raise_unraisable",
+        [](py::args a, py::kwargs k) {
+          const CoreCallArgs c("_dlpack_raise_unraisable", a, k, {});
+          (void)c;
+          dlpack_raise_unraisable();
+        },
+        "_dlpack_raise_unraisable()\n\n"
+        "P1T-FIX6 (FIX5 residual R7): raise RuntimeError once for the CUDA failures recorded on P1-T core paths that "
+        "could not raise (imported Storage drain / restore, fill_ unwinding) and were not raised yet; called by "
+        "tensor_cuda.synchronize() and logged by the exit hook. The record is consumed only once the RuntimeError "
+        "exists (MemoryError leaves it in place).");
+  // P1T-FIX6: a raw CPython function (raw_dlpack_begin_shutdown above): nothing on this stack owns a Python object
+  // across the GIL-released wait, whatever the calling style.
+  m.add_object("_dlpack_begin_shutdown", py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kBeginShutdownDef,
+                                                                                              nullptr, nullptr)));
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }

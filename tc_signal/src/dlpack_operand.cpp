@@ -119,10 +119,23 @@ void check_version(const DLManagedTensorVersioned* m, const char* role) {
 //    py::gil_scoped_release's): if CPython exits a waiting daemon thread there during finalization, the forced unwind
 //    travels through ordinary frames to pybind11's dispatcher, which rethrows abi::__forced_unwind (pybind11 v2.12
 //    pybind11.h:1037), instead of meeting a noexcept boundary. No thread waits for the GIL while holding the mutex.
-//  * synchronize() (any thread) waits the same way, without closing, for releases already admitted on other threads
-//    (kRelease only), so that when it returns every consumed operand handed to tc_signal before the call has been
-//    released or deliberately leaked. It skips the wait when the calling thread is itself inside an admitted section
-//    (two threads each calling synchronize() from inside a deleter would otherwise wait for each other).
+//  * P1T-FIX6, round-6 review finding V6-01 (MAJOR): FIX5 also made synchronize() (any thread) wait, without closing,
+//    for releases already admitted on other threads. That wait deadlocked: thread A holds an application lock (a
+//    producer's allocator lock) and calls synchronize(); thread B is releasing a refused operand whose finite producer
+//    deleter needs that lock; A waits for B and B waits for A (releasing the GIL does not release A's lock; reviewer
+//    probe sync_lock_inversion_cpu.py, rc 1 on acd42fa). The wait is REMOVED: synchronize() never waits for another
+//    thread. A release that another thread popped off the pending list before this call is that thread's release:
+//    it finishes there (it was handed to that thread's call, not to this one), and synchronize() reports and releases
+//    only what is still on the list. The only waiter is the exit hook (close_admission_and_wait), which is where the
+//    wait is needed: there, finalization must not start under a running callback (V5-01). The exit hook's wait is
+//    documented (tc_signal/__init__.py, README): it waits for callbacks admitted before it closed admission, so the
+//    exiting thread must not hold a lock such a callback needs (CPython's own exit has the same rule for the
+//    non-daemon threads it joins, threading._shutdown).
+//    Prior art: Coffman, Elphick & Shoshani (1971) "System Deadlocks" (circular wait is one of the four necessary
+//    conditions; removing the wait from ordinary calls removes the cycle); lock-ordering discipline (never block on
+//    another thread's callback while the caller may hold locks it needs); RCU (McKenney & Slingwine 1998:
+//    synchronize_rcu waits only for readers that began before it) is why a separate "wait for releases" API would need a
+//    pre-call generation boundary and a no-locks-held contract; none is offered (no caller needs it).
 // The pending list itself is unchanged (still GIL-protected; nothing here holds a reference into it across a wait).
 //
 // Prior art: core's own ImportReleaseLifecycle (tensor_cuda/src/bindings.cpp, P1T-FIX2 N5 and P1T-FIX3 V3-01). Reused
@@ -130,7 +143,7 @@ void check_version(const DLManagedTensorVersioned* m, const char* role) {
 // doubling stderr diagnostic schedule, the thread-local depth for self-exclusion, "leak, never enter Python, after
 // closing", and the atexit-before-finalizing argument. Different here: the add-on's releasers already hold the GIL (no
 // PyGILState_Ensure), so admission is two seq_cst atomics instead of a mutex section; two section kinds (releases and
-// producer callbacks); the GIL is re-taken explicitly rather than by a destructor; synchronize() waits too. Further
+// producer callbacks); the GIL is re-taken explicitly rather than by a destructor; only the exit hook waits. Further
 // prior art: CPython's threading._shutdown / wait_for_thread_shutdown (finalization waits, unbounded, for non-daemon
 // threads already started); RCU grace periods (synchronize_rcu waits for every reader that entered before it, while new
 // readers do not delay it; McKenney & Slingwine 1998) and the Linux percpu_ref "kill, then wait for zero"; the
@@ -174,9 +187,8 @@ std::atomic<unsigned long long> g_exit_in_flight_at_close{0};
 std::atomic<unsigned long long> g_exit_wait_us{0};
 std::atomic<unsigned long long> g_exit_wait_diagnostics{0};
 std::atomic<unsigned long long> g_exit_wait_overruns{0};
-std::atomic<unsigned long long> g_sync_waits{0};
-std::atomic<unsigned long long> g_sync_wait_us{0};
-std::atomic<unsigned long long> g_sync_wait_diagnostics{0};
+// P1T-FIX6 (V6-01): FIX5's g_sync_waits / g_sync_wait_us / g_sync_wait_diagnostics counted synchronize()'s wait for
+// other threads; that wait is removed, and so are they (and their pending_stats keys).
 
 bool interpreter_accepts_python() noexcept {
   if (!Py_IsInitialized()) return false;
@@ -246,32 +258,32 @@ struct WaitOutcome {
   bool overran = false;            // outlasted the first-diagnostic delay
 };
 
-long long others_running(const Lifecycle& lc, bool callbacks_too, const long long own[kKinds]) noexcept {
-  long long r = lc.in_flight[kRelease].load(std::memory_order_seq_cst) - own[kRelease];
-  if (callbacks_too) r += lc.in_flight[kCallback].load(std::memory_order_seq_cst) - own[kCallback];
-  return r;
+// Admitted sections (releases and producer callbacks) of OTHER threads: the calling thread's own are excluded.
+long long others_running(const Lifecycle& lc, const long long own[kKinds]) noexcept {
+  return lc.in_flight[kRelease].load(std::memory_order_seq_cst) - own[kRelease] +
+         lc.in_flight[kCallback].load(std::memory_order_seq_cst) - own[kCallback];
 }
 
-// The part of the wait that runs with the GIL released: the mutex and condition variable only, no Python object.
-void wait_without_gil(Lifecycle& lc, bool callbacks_too, double first_diag_s, const char* who,
-                      std::chrono::steady_clock::time_point t0, WaitOutcome& w) noexcept {
+// The part of the exit wait that runs with the GIL released: the mutex and condition variable only, no Python object.
+void wait_without_gil(Lifecycle& lc, double first_diag_s, std::chrono::steady_clock::time_point t0,
+                      WaitOutcome& w) noexcept {
   using clock = std::chrono::steady_clock;
   const auto first = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(first_diag_s));
-  auto quiet = [&lc, callbacks_too, &w] { return others_running(lc, callbacks_too, w.own) <= 0; };
+  auto quiet = [&lc, &w] { return others_running(lc, w.own) <= 0; };
   try {
     std::unique_lock<std::mutex> lk(lc.mu);
     auto next = t0 + first;
     while (!lc.cv.wait_until(lk, next, quiet)) {
       // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01, V5-01).
       w.overran = true;
-      const long long running = others_running(lc, callbacks_too, w.own);
+      const long long running = others_running(lc, w.own);
       lk.unlock();  // a blocked stderr must not stop a callback from leaving
       const auto now = clock::now();
       std::fprintf(stderr,
                    "tc_signal: %lld DLPack producer callback(s) (deleter, capsule destructor or __dlpack__) admitted "
-                   "on other threads before %s still running after %.1f s; %s waits for them%s\n",
-                   running, who, std::chrono::duration<double>(now - t0).count(), who,
-                   callbacks_too ? " (no new one is admitted)" : "");
+                   "on other threads before interpreter exit still running after %.1f s; interpreter exit waits for "
+                   "them (no new one is admitted)\n",
+                   running, std::chrono::duration<double>(now - t0).count());
       std::fflush(stderr);
       ++w.diagnostics;
       const auto waited = now - t0;  // next line when the time waited has doubled (at least one tick: no busy loop)
@@ -286,21 +298,22 @@ void wait_without_gil(Lifecycle& lc, bool callbacks_too, double first_diag_s, co
   }
 }
 
-// Waits until no admitted section of another thread is running (kRelease; plus kCallback when callbacks_too). The GIL
-// is released for the wait and re-taken explicitly here (see the design block above for why not by a destructor).
-WaitOutcome wait_for_other_threads(bool callbacks_too, double first_diag_s, const char* who) {
+// The exit hook's wait (P1T-FIX6: its only caller; ordinary calls never wait for another thread, V6-01): until no
+// admitted section of another thread is running. The GIL is released for the wait and re-taken explicitly here (see
+// the design block above for why not by a destructor).
+WaitOutcome wait_for_other_threads(double first_diag_s) {
   Lifecycle& lc = lifecycle();
   WaitOutcome w;
   w.own[kRelease] = t_depth[kRelease];
   w.own[kCallback] = t_depth[kCallback];
-  w.running_at_start = others_running(lc, callbacks_too, w.own);
+  w.running_at_start = others_running(lc, w.own);
   if (w.running_at_start <= 0) return w;  // nothing to wait for: the GIL is not touched
   if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;   // NaN or negative: diagnose at once (the wait is the same)
   if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
   const auto t0 = std::chrono::steady_clock::now();
   const bool held = PyGILState_Check() != 0;
   PyThreadState* ts = held ? PyEval_SaveThread() : nullptr;  // GIL released: an admitted callback can finish
-  wait_without_gil(lc, callbacks_too, first_diag_s, who, t0, w);
+  wait_without_gil(lc, first_diag_s, t0, w);
   if (held) PyEval_RestoreThread(ts);  // the mutex is not held here; may exit a daemon thread during finalization
   w.waited_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
   return w;
@@ -317,11 +330,16 @@ void CapsuleRef::drop() noexcept {
     g_capsules_kept_finalizing.fetch_add(1, std::memory_order_relaxed);
     return;
   }
-  const char* name = PyCapsule_CheckExact(p) ? PyCapsule_GetName(p) : nullptr;
-  const bool unconsumed = name != nullptr && (std::strcmp(name, kCapsule) == 0 || std::strcmp(name, kCapsuleVersioned) == 0);
-  if (unconsumed && Py_REFCNT(p) == 1) {
-    // The last reference to an unconsumed DLPack capsule: dropping it runs the producer's destructor, which calls the
-    // producer's deleter. A release: admitted, or kept (never run) once admission has closed.
+  // P1T-FIX6 (sweep (g), user Python run from a native frame): FIX5 admitted only the last reference of an UNCONSUMED
+  // capsule. The last reference of a consumed ("used_*") capsule also runs the producer's PyCapsule destructor: per the
+  // DLPack Python spec that destructor only returns for a consumed capsule, but it is still producer code (a ctypes or
+  // Cython destructor runs Python, and may release and re-take the GIL), run from this native frame. Every
+  // last-reference drop of a capsule is therefore admitted (waited for by the exit hook), or kept once admission has
+  // closed (a consumed capsule kept at exit holds no producer memory: nothing is lost). A capsule with no destructor,
+  // or a drop that is not the last reference, runs no producer code either way.
+  if (PyCapsule_CheckExact(p) && Py_REFCNT(p) == 1) {
+    // The last reference to a DLPack capsule: dropping it runs the producer's destructor (which, for an unconsumed
+    // capsule, calls the producer's deleter). A release: admitted, or kept (never run) once admission has closed.
     const Admission a = admit(kRelease);
     if (a != Admission::kAdmitted) {
       (a == Admission::kClosed ? g_capsules_kept_after_close : g_capsules_kept_finalizing)
@@ -710,6 +728,43 @@ namespace {
 // TEST HOOK: the CUDA error an armed kCuda* site reports instead of calling CUDA (tests only; never in production).
 constexpr cudaError_t kTestInjectedCudaError = cudaErrorLaunchFailure;
 
+// What one sync_and_release_all_impl call found (fixed capacity: the first kSyncReportMax failures are named, the
+// rest only counted). P1T-FIX6 (V6-03): also the persisted record of synchronize() drains whose diagnostic was not
+// raised yet (PendingState::drain_unreported), so `merge` and the counts are allocation-free and saturating.
+struct SyncReport {
+  bool query_failed = false;               // cudaGetDevice failed (N1: never a success)
+  cudaError_t query_error = cudaSuccess;
+  int n = 0;
+  int dev[tuning::kSyncReportMax];
+  cudaError_t err[tuning::kSyncReportMax];
+  unsigned long long unnamed = 0;          // failures beyond the named ones
+  unsigned long long leaked_managers = 0;  // managers leaked by this call (no completion proof)
+
+  void add(int d, cudaError_t e) noexcept {
+    if (n < tuning::kSyncReportMax) {
+      dev[n] = d;
+      err[n] = e;
+      ++n;
+    } else if (unnamed < ~0ULL) {
+      ++unnamed;
+    }
+  }
+  // P1T-FIX6 (V6-03): fold another report into this one (first query error kept; named failures appended up to the
+  // capacity, the rest counted). Never allocates, never throws, saturating counts.
+  void merge(const SyncReport& o) noexcept {
+    if (o.query_failed && !query_failed) {
+      query_failed = true;
+      query_error = o.query_error;
+    }
+    for (int i = 0; i < o.n; ++i) add(o.dev[i], o.err[i]);
+    unnamed = (o.unnamed > ~0ULL - unnamed) ? ~0ULL : unnamed + o.unnamed;
+    leaked_managers = (o.leaked_managers > ~0ULL - leaked_managers) ? ~0ULL : leaked_managers + o.leaked_managers;
+  }
+  bool failed() const noexcept { return query_failed || n > 0 || unnamed > 0 || leaked_managers > 0; }
+  int first_device() const noexcept { return n > 0 ? dev[0] : -1; }
+  cudaError_t first_error() const noexcept { return query_failed ? query_error : (n > 0 ? err[0] : cudaErrorUnknown); }
+};
+
 struct PendingEntry {
   cudaEvent_t event = nullptr;   // recorded on `device`'s legacy stream right after the call's last launch
   int device = -1;
@@ -765,6 +820,15 @@ struct PendingState {
   // sweep (d), a failed completion-event record in ~RetainUntilComplete (the call then used the synchronous fallback).
   unsigned long long event_query_failures = 0;
   unsigned long long event_record_failures = 0;
+  // P1T-FIX6, round-6 review finding V6-03 (MINOR): synchronize()'s OWN drain failures (the current-device query, a
+  // device's stream sync, a completion-event query, managers leaked for lack of a completion proof) lived only in a local
+  // SyncReport; when building the RuntimeError's message threw bad_alloc, the caller saw MemoryError and the CUDA
+  // failure was gone (a one-shot failure: the next synchronize() succeeded). They are now persisted here, with no
+  // allocation, BEFORE any message is built, and cleared only once the RuntimeError carrying them exists (see
+  // synchronize_and_release_all). `drain_unreported_calls` counts the synchronize() calls whose drain failed and has
+  // not been raised yet (more than 1 only after a message allocation failed).
+  SyncReport drain_unreported;
+  unsigned long long drain_unreported_calls = 0;
   std::unordered_map<int, DeviceEvents> event_pool;   // per device
 };
 
@@ -818,30 +882,6 @@ struct DeviceSyncSet {
   }
 };
 
-// What one sync_and_release_all_impl call found (fixed capacity: the first kSyncReportMax failures are named, the
-// rest only counted).
-struct SyncReport {
-  bool query_failed = false;               // cudaGetDevice failed (N1: never a success)
-  cudaError_t query_error = cudaSuccess;
-  int n = 0;
-  int dev[tuning::kSyncReportMax];
-  cudaError_t err[tuning::kSyncReportMax];
-  int unnamed = 0;                         // failures beyond the named ones
-  unsigned long long leaked_managers = 0;  // managers leaked by this call (no completion proof)
-
-  void add(int d, cudaError_t e) noexcept {
-    if (n < tuning::kSyncReportMax) {
-      dev[n] = d;
-      err[n] = e;
-      ++n;
-    } else {
-      ++unnamed;
-    }
-  }
-  bool failed() const noexcept { return query_failed || n > 0 || unnamed > 0 || leaked_managers > 0; }
-  int first_device() const noexcept { return n > 0 ? dev[0] : -1; }
-  cudaError_t first_error() const noexcept { return query_failed ? query_error : (n > 0 ? err[0] : cudaErrorUnknown); }
-};
 
 // N1: a CUDA failure on a release path that cannot raise (inside the noexcept destructor). Raised by the next
 // synchronize(), logged at exit. Never allocates.
@@ -988,7 +1028,9 @@ SyncReport sync_and_release_all_impl() noexcept {
   SyncReport rep;
   DeviceSyncSet set;
   int cur = -1;
-  const cudaError_t qe = cudaGetDevice(&cur);
+  // TEST HOOK kCudaCurrentDevice (P1T-FIX6 V6-03 regression): report a one-shot failure instead of calling CUDA.
+  const cudaError_t qe =
+      test_hooks::take(test_hooks::kCudaCurrentDevice) ? kTestInjectedCudaError : cudaGetDevice(&cur);
   if (qe != cudaSuccess) {
     cudaGetLastError();
     rep.query_failed = true;  // N1: was silently skipped (synchronize() then "succeeded" with no device)
@@ -1002,7 +1044,9 @@ SyncReport sync_and_release_all_impl() noexcept {
   if (set.spill_failed) rep.add(-1, set.spill_error);
 
   while (!st.q.empty()) {
-    const cudaError_t r = cudaEventQuery(st.q.front().event);
+    // TEST HOOK kCudaEventQuery (P1T-FIX6 V6-03 regression): a one-shot query failure instead of calling CUDA.
+    const cudaError_t r = test_hooks::take(test_hooks::kCudaEventQuery) ? kTestInjectedCudaError
+                                                                          : cudaEventQuery(st.q.front().event);
     const int dev = st.q.front().device;
     const bool complete = (r == cudaSuccess);
     if (!complete) {
@@ -1076,7 +1120,7 @@ py::dict close_admission_and_wait(double first_diag_s) {
   Lifecycle& lc = lifecycle();
   lc.closing.store(true, std::memory_order_seq_cst);  // admission closed for good: nothing new is admitted
   const long long pending_at_close = static_cast<long long>(pending().q.size());  // never released from here on
-  const WaitOutcome w = wait_for_other_threads(true, first_diag_s, "interpreter exit");
+  const WaitOutcome w = wait_for_other_threads(first_diag_s);
   g_exit_hook_calls.fetch_add(1, std::memory_order_relaxed);
   if (w.running_at_start > 0)
     g_exit_in_flight_at_close.fetch_add(static_cast<unsigned long long>(w.running_at_start), std::memory_order_relaxed);
@@ -1216,7 +1260,8 @@ RetainUntilComplete::~RetainUntilComplete() {
 void drain_completed() noexcept {
   PendingState& st = pending();
   while (!st.q.empty()) {
-    const cudaError_t r = cudaEventQuery(st.q.front().event);
+    const cudaError_t r = test_hooks::take(test_hooks::kCudaEventQuery) ? kTestInjectedCudaError
+                                                                          : cudaEventQuery(st.q.front().event);
     if (r != cudaSuccess) {
       // cudaErrorNotReady: still pending (FIFO: later entries wait too). CUDA 12.6 does not leave NotReady in the
       // last-error slot (ledger receipt; Programming Guide 3.2.12: NotReady "is not considered an error"); clear it
@@ -1275,20 +1320,40 @@ void drain_completed() noexcept {
 // "does not reset"; Programming Guide 3.2.12) and cudaStreamSynchronize; PyTorch's convention of consuming the slot when
 // it reports (C10_CUDA_KERNEL_LAUNCH_CHECK = C10_CUDA_CHECK(cudaGetLastError()); C10_CUDA_CHECK_WARN, torch 2.11
 // headers). Taken: report-and-consume. Ours: capturing at synchronize() entry and still draining before raising.
+// P1T-FIX6, round-6 review finding V6-03 (MINOR): this call's own drain failures (rep) are persisted into
+// PendingState::drain_unreported BEFORE anything is allocated for the message, with allocation-free bookkeeping (a
+// fixed-capacity SyncReport merge), exactly like the earlier-failure records (N1, FIX4, FIX5) and the pre-existing error
+// (V4-04). Every record is cleared only once the diagnostic has been raised, i.e. once the Python RuntimeError carrying
+// the full message exists and is held by a captured py::error_already_set: a bad_alloc anywhere before that point (the
+// message string, the Python str, pybind11's error capture) propagates as MemoryError and leaves every record in place,
+// so the next synchronize() raises it, exactly once. (acd42fa cleared the records after building the message but
+// before the exception object existed, and never persisted `rep` at all: reviewer probes release_trace_cpu.py
+// diagnostic_oom_query / _sync / _device, rc 1.)
+// Prior art: SQLite's OOM testing discipline (fail each allocation in turn; an error must survive the failure of its own
+// reporting; "sqlite3 malloc failure testing", unverified here: lead to check "SQLite testing OOM anomaly"); ordinary
+// "commit after the side effect" ordering. Taken: persist before allocating, clear after the raise. Ours: capturing
+// the Python exception (PyErr_SetString, then py::error_already_set) before clearing, so pybind11's translation cannot
+// lose a cleared record.
+namespace {
+void clear_reported_records(PendingState& st) noexcept {
+  st.unreported_count = 0;
+  st.unreported_leaked = 0;
+  st.unreported_device = -1;
+  st.unreported_error = cudaSuccess;
+  st.unraisable_unreported = 0;
+  st.unraisable_what = "";
+  st.unraisable_device = -1;
+  st.unraisable_error = cudaSuccess;
+  st.prior_unreported = 0;
+  st.prior_error = cudaSuccess;
+  st.drain_unreported = SyncReport{};
+  st.drain_unreported_calls = 0;
+}
+}  // namespace
+
 void synchronize_and_release_all() {
-  // P1T-FIX5 (V5-01): first wait, GIL released, until every producer release already admitted on ANOTHER thread (a
-  // deleter call, or the drop of an unconsumed capsule's last reference) has returned, so that a release a daemon thread
-  // popped off the list before this call is not still running when synchronize() returns (the round-5 trace probe's
-  // hook is exactly this call). No CUDA call is made by the wait, so this thread's error slot is untouched and V4-04's
-  // capture below still sees the pre-existing error. Skipped when this thread is itself inside an admitted section.
-  if (t_depth[kRelease] == 0 && t_depth[kCallback] == 0) {
-    const WaitOutcome w = wait_for_other_threads(false, tuning::kSyncReleaseWaitFirstDiagS, "this synchronize()");
-    if (w.running_at_start > 0) {
-      g_sync_waits.fetch_add(1, std::memory_order_relaxed);
-      g_sync_wait_us.fetch_add(static_cast<unsigned long long>(w.waited_us), std::memory_order_relaxed);
-      g_sync_wait_diagnostics.fetch_add(w.diagnostics, std::memory_order_relaxed);
-    }
-  }
+  // P1T-FIX6 (V6-01): no wait for other threads here (FIX5's wait deadlocked against caller-held locks; see the release
+  // lifecycle block). This call releases what is on the pending list, on this thread.
   PendingState& st = pending();
   const cudaError_t prior = cudaGetLastError();
   if (prior != cudaSuccess) {
@@ -1296,11 +1361,17 @@ void synchronize_and_release_all() {
     ++st.prior_unreported;
   }
   const SyncReport rep = sync_and_release_all_impl();
-  if (!rep.failed() && st.unreported_count == 0 && st.unraisable_unreported == 0 && st.prior_unreported == 0) return;
+  if (rep.failed()) {  // V6-03: persisted before any allocation
+    st.drain_unreported.merge(rep);
+    ++st.drain_unreported_calls;
+  }
+  if (st.drain_unreported_calls == 0 && st.unreported_count == 0 && st.unraisable_unreported == 0 &&
+      st.prior_unreported == 0)
+    return;
   // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
-  // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate). The earlier release-path
-  // failures are cleared only once their message exists, so they are raised exactly once.
+  // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate), and every record stays.
   if (test_hooks::take(test_hooks::kAllocErrorMessage)) throw std::bad_alloc();
+  const SyncReport& d = st.drain_unreported;
   std::ostringstream os;
   os << "tc_signal.synchronize: CUDA error, so the release is not reported as a success:";
   const char* sep = " ";
@@ -1311,20 +1382,23 @@ void synchronize_and_release_all() {
           "and reported here";
     sep = "; ";
   }
-  if (rep.query_failed) {
-    os << sep << "the current-device query cudaGetDevice failed (" << cudaGetErrorName(rep.query_error) << ": "
-       << cudaGetErrorString(rep.query_error) << ")";
+  if (d.query_failed) {
+    os << sep << "the current-device query cudaGetDevice failed (" << cudaGetErrorName(d.query_error) << ": "
+       << cudaGetErrorString(d.query_error) << ")";
     sep = "; ";
   }
-  for (int i = 0; i < rep.n; ++i) {
-    os << sep << "the legacy stream of device " << rep.dev[i] << " could not be synchronized ("
-       << cudaGetErrorName(rep.err[i]) << ": " << cudaGetErrorString(rep.err[i]) << ")";
+  for (int i = 0; i < d.n; ++i) {
+    os << sep << "the legacy stream of device " << d.dev[i] << " could not be synchronized ("
+       << cudaGetErrorName(d.err[i]) << ": " << cudaGetErrorString(d.err[i]) << ")";
     sep = "; ";
   }
-  if (rep.unnamed > 0) os << sep << rep.unnamed << " more device failure(s)";
-  if (rep.leaked_managers > 0)
-    os << "; " << rep.leaked_managers
+  if (d.unnamed > 0) os << sep << d.unnamed << " more device failure(s)";
+  if (d.leaked_managers > 0)
+    os << "; " << d.leaked_managers
        << " consumed operand manager(s) still pending there were deliberately leaked, not released";
+  if (st.drain_unreported_calls > 1)
+    os << sep << "(these drain failures span " << st.drain_unreported_calls
+       << " synchronize() calls: an earlier call could not allocate its error message and raised MemoryError)";
   if (st.unreported_count > 0) {
     os << sep << st.unreported_count << " earlier release-path failure(s) since the last synchronize, the first on device "
        << st.unreported_device << " (" << cudaGetErrorName(st.unreported_error) << ": "
@@ -1341,18 +1415,22 @@ void synchronize_and_release_all() {
   // std::ostream swallows a bad_alloc from its buffer and only sets badbit (a truncated message would follow): report
   // the allocation failure itself instead.
   if (!os) throw std::bad_alloc();
-  std::string msg = os.str();
-  st.unreported_count = 0;
-  st.unreported_leaked = 0;
-  st.unreported_device = -1;
-  st.unreported_error = cudaSuccess;
-  st.unraisable_unreported = 0;
-  st.unraisable_what = "";
-  st.unraisable_device = -1;
-  st.unraisable_error = cudaSuccess;
-  st.prior_unreported = 0;
-  st.prior_error = cudaSuccess;
-  throw std::runtime_error(msg);
+  const std::string msg = os.str();
+  // V6-03: raise first, clear second. The Python RuntimeError is created here (GIL held: every caller is a binding or
+  // the exit hook); if its str cannot be allocated CPython sets MemoryError instead, and the records stay.
+  PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+  if (!PyErr_ExceptionMatches(PyExc_RuntimeError)) {
+    PyErr_Clear();
+    throw std::bad_alloc();  // -> MemoryError; every record kept for the next synchronize()
+  }
+  try {
+    py::error_already_set raised;  // captures the RuntimeError (may throw bad_alloc: then nothing is cleared)
+    clear_reported_records(st);    // noexcept: the diagnostic exists, so its records are consumed exactly once
+    throw raised;                  // copy is noexcept (shared state); pybind11 restores it as the RuntimeError
+  } catch (const std::bad_alloc&) {
+    PyErr_Clear();                 // the capture failed before or after fetching: no stale indicator is left behind
+    throw;
+  }
 }
 
 py::dict pending_stats(bool reset_high_water) {
@@ -1386,7 +1464,8 @@ py::dict pending_stats(bool reset_high_water) {
   // P1T-FIX5 counters. V5-01 release lifecycle: admission state, sections in flight (all threads), admitted totals,
   // releases refused after admission closed (deleters not called, capsule references kept: "a late release leaks
   // without entering Python, and is counted") or while finalizing, producer callbacks refused, the exit hook's wait and
-  // synchronize()'s wait for other threads, mutex failures. V5-02 / sweep (d): recorded query and record failures.
+  // mutex failures (P1T-FIX6: synchronize() no longer waits for other threads, its counters are gone). V5-02 / sweep
+  // (d): recorded query and record failures.
   // V5-03: cuBLAS handles whose destroy failed while an exception propagated.
   {
     const Lifecycle& lc = lifecycle();
@@ -1406,9 +1485,9 @@ py::dict pending_stats(bool reset_high_water) {
   d["exit_wait_us"] = g_exit_wait_us.load();
   d["exit_wait_diagnostics"] = g_exit_wait_diagnostics.load();
   d["exit_wait_overruns"] = g_exit_wait_overruns.load();
-  d["sync_waits_for_other_threads"] = g_sync_waits.load();
-  d["sync_wait_us"] = g_sync_wait_us.load();
-  d["sync_wait_diagnostics"] = g_sync_wait_diagnostics.load();
+  // P1T-FIX6 (V6-03): synchronize() drains whose failure is persisted but not raised yet (0 or 1 normally; more only
+  // after a message allocation failed).
+  d["unreported_drain_failures"] = st.drain_unreported_calls;
   d["lifecycle_lock_failures"] = g_lifecycle_lock_failures.load();
   d["event_query_failures"] = st.event_query_failures;    // V5-02
   d["event_record_failures"] = st.event_record_failures;  // sweep (d)

@@ -135,12 +135,16 @@ def synchronize():
     MemoryError if the error message itself cannot be allocated. Prior art: torch.cuda.synchronize /
     cupy.cuda.Stream.synchronize (API shape only).
 
-    P1T-FIX5: (V5-01) synchronize() first waits, GIL released, until every producer release (deleter call, or the drop
-    of an unconsumed capsule's last reference) already running on ANOTHER thread has returned, so when it returns every
-    operand handed to tc_signal before the call has been released or deliberately leaked; the wait is skipped inside
-    one of this thread's own producer callbacks. A release that never returns makes it wait (a stderr line after 5 s,
-    then each time the wait doubles). (V5-02) A failed completion-event query in an earlier call's drain, and a failed
-    completion-event record, are among the earlier failures raised here, exactly once."""
+    P1T-FIX5: (V5-02) A failed completion-event query in an earlier call's drain, and a failed completion-event
+    record, are among the earlier failures raised here, exactly once.
+
+    P1T-FIX6: (V6-01) synchronize() never waits for another thread. FIX5 made it wait for producer releases already
+    running on other threads; a caller holding a lock that such a release needed then deadlocked (round-6 review). A
+    release that another thread's tc_signal call already started is that call's release and finishes on that thread;
+    synchronize() releases what is still pending. Only the interpreter-exit hook waits for other threads (see
+    _release_pending_at_exit). (V6-03) If the RuntimeError's message cannot be allocated, MemoryError is raised and the
+    CUDA failures it would have named are kept: the next synchronize() raises them, once. Arguments: none (any argument
+    raises TypeError without any of its methods being called)."""
     _C.synchronize()
 
 
@@ -154,7 +158,7 @@ _RELEASE_EXIT_DIAG_S = 5.0
 def _release_pending_at_exit():
     """atexit hook (runs before CPython marks the runtime finalizing; GIL held).
 
-    1. synchronize(): release whatever is still pending, after waiting for releases already running on other threads.
+    1. synchronize(): release whatever is still pending (P1T-FIX6: it does not wait for other threads; step 2 does).
        P1T-FIX2 (N1): an error is never swallowed silently; it is LOGGED to stderr (one line) and not raised (an
        exception from an atexit callback cannot be handled by anyone). Operands without a completion proof stay
        deliberately leaked; there is nothing else safe to do at exit.
@@ -168,6 +172,9 @@ def _release_pending_at_exit():
        (RuntimeError, 'callbacks_refused_after_close'): no add-on code enters Python for them. Callbacks on this
        thread's own stack are excluded (the hook may be called from inside one). After _RELEASE_EXIT_DIAG_S seconds a
        line goes to stderr, then another each time the time waited doubles.
+       P1T-FIX6: this is the ONLY place tc_signal waits for another thread, and the wait's contract is: the exiting
+       thread must not hold a lock that such an admitted callback needs (the rule CPython applies when it joins
+       non-daemon threads at exit; atexit callbacks normally run with no application lock held).
        Consequence: a producer deleter, capsule destructor or __dlpack__ that never returns makes interpreter exit wait
        for it. That is the producer's contract violation (a DLPack deleter must return); waiting is the honest outcome,
        an early return aborts the process (rc -6, "FATAL: exception not rethrown"). Ctrl-C does not interrupt the wait;

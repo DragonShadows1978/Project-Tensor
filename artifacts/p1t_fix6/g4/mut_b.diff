@@ -1,0 +1,77 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp (mutant b)
+@@ -541,61 +541,29 @@
+ 
+ py::object tensor_dlpack(Tensor& t, py::object stream, py::object max_version,
+                          py::object dl_device, py::object copy) {
+-  // P1T-FIX6 (V6-02): read every argument first, with C-level calls only (see above).
+-  bool has_stream = false;
++  // MUTANT (b): acd42fa's pybind11 casts (they call the argument's own Python methods).
++  bool has_stream = !stream.is_none();
+   long long stream_value = 0;
+-  if (!stream.is_none()) {
+-    if (!PyLong_Check(stream.ptr())) dlpack_refuse_arg("stream", "an int or None", stream.ptr());
+-    int of = 0;
+-    stream_value = dlpack_int(stream.ptr(), &of);
+-    if (of != 0) throw py::value_error("__dlpack__: invalid stream (beyond the 64-bit range)");
+-    has_stream = true;
++  if (has_stream) {
++    if (!py::isinstance<py::int_>(stream)) throw py::type_error("__dlpack__: stream must be an int or None");
++    stream_value = stream.cast<long long>();
+   }
+   bool versioned = false;
+   if (!max_version.is_none()) {
+-    PyObject* mv = max_version.ptr();
+-    if (!PyTuple_Check(mv) && !PyList_Check(mv))
+-      dlpack_refuse_arg("max_version", "None or a (major, minor) tuple of ints", mv);
+-    if (dlpack_seq_size(mv) < 1)
+-      throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
+-    PyObject* major = dlpack_seq_item(mv, 0);
+-    if (!PyLong_Check(major)) dlpack_refuse_arg("max_version[0] (the major version)", "an int", major);
+-    int of = 0;
+-    const long long mj = dlpack_int(major, &of);
+-    versioned = of > 0 || (of == 0 && mj >= 1);
++    py::sequence mv = max_version.cast<py::sequence>();
++    if (py::len(mv) < 1) throw py::value_error("__dlpack__: max_version must be a (major, minor) pair");
++    versioned = mv[0].cast<int>() >= 1;
+   }
+   bool has_dl_device = false;
+   long long dl_type = 0, dl_id = 0;
+   if (!dl_device.is_none()) {
+-    PyObject* d = dl_device.ptr();
+-    if (!PyTuple_Check(d) && !PyList_Check(d))
+-      dlpack_refuse_arg("dl_device", "None or a (device_type, device_id) tuple of ints", d);
+-    if (dlpack_seq_size(d) != 2)
+-      throw py::value_error("__dlpack__: dl_device must be a (device_type, device_id) pair");
+-    PyObject* d0 = dlpack_seq_item(d, 0);
+-    PyObject* d1 = dlpack_seq_item(d, 1);
+-    if (!PyLong_Check(d0)) dlpack_refuse_arg("dl_device[0] (the device type)", "an int", d0);
+-    if (!PyLong_Check(d1)) dlpack_refuse_arg("dl_device[1] (the device id)", "an int", d1);
+-    int of0 = 0, of1 = 0;
+-    dl_type = dlpack_int(d0, &of0);
+-    dl_id = dlpack_int(d1, &of1);
+-    if (of0 != 0 || of1 != 0)
+-      throw py::value_error("__dlpack__: dl_device entries must fit in 64-bit integers");
++    py::sequence d = dl_device.cast<py::sequence>();
++    if (py::len(d) != 2) throw py::value_error("__dlpack__: dl_device must be a (device_type, device_id) pair");
++    dl_type = d[0].cast<int>();
++    dl_id = d[1].cast<int>();
+     has_dl_device = true;
+   }
+-  bool want_copy = false;
+-  if (!copy.is_none()) {
+-    PyObject* c = copy.ptr();
+-    if (c == Py_True || c == Py_False) {
+-      want_copy = (c == Py_True);
+-    } else if (PyLong_Check(c)) {
+-      int of = 0;
+-      const long long v = dlpack_int(c, &of);
+-      want_copy = of != 0 || v != 0;
+-    } else {
+-      dlpack_refuse_arg("copy", "None or a bool", c);
+-    }
+-  }
++  const bool want_copy = !copy.is_none() && copy.cast<bool>();
+   if (!t.defined() || !t.data().defined())
+     throw py::buffer_error("__dlpack__: undefined tensor");
+   const NDArray& a = t.data();

@@ -191,7 +191,10 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   push, whose failure falls back to a synchronous release (`pending_stats()['push_alloc_failures']`). Everything else a
   release needs (the owner vector, the completion event and its pool slot) is allocated before the launch, where a
   failure refuses the call with `MemoryError` and releases its operands at once. Building `synchronize()`'s error
-  message may allocate; a failure there is a `MemoryError`.
+  message may allocate; a failure there is a `MemoryError`. P1T-FIX6 (round-6 review V6-03): every CUDA failure that
+  message would have named (also those of `synchronize()`'s own drain: the current-device query, a stream sync, a
+  completion-event query) is kept, with no allocation, until the `RuntimeError` naming it exists; so after such a
+  `MemoryError` the next `synchronize()` raises it, exactly once (`pending_stats()['unreported_drain_failures']`).
 - **A throwing producer deleter (P1T-FIX2, N4)** is contained: tc_signal catches whatever it throws, counts it
   (`pending_stats()['deleter_exceptions']`), never calls it again and goes on with the remaining managers. The DLPack
   ABI declares the deleter as a C function, so such a producer is already out of contract; tc_signal neither touches
@@ -199,8 +202,9 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 - **Interpreter exit (P1T-FIX5, round-5 review V5-01).** Every add-on callback that may take the GIL is an *admitted
   section* of one release lifecycle (`src/dlpack_operand.cpp`), independent of the pending list: each producer deleter
   call (the immediate release of a refused call, the next-call drain, `synchronize()`, the bound drain, the fallback
-  sync), each drop of the last reference to a still-unconsumed capsule tc_signal holds (its destructor calls the
-  producer's deleter), and the producer's `__dlpack_device__` / `__dlpack__` calls. The `atexit` hook first runs
+  sync), each drop of the last reference to a capsule tc_signal holds (its destructor is producer code: for an
+  unconsumed capsule it calls the producer's deleter; P1T-FIX6 also admits consumed capsules, whose destructor may
+  still run Python), and the producer's `__dlpack_device__` / `__dlpack__` calls. The `atexit` hook first runs
   `synchronize()`, then closes admission for good and waits, GIL released and with **no time bound**, until no admitted
   section of another thread is running; sections on its own thread's stack are excluded (the hook may run inside a
   callback). CPython runs atexit hooks before it marks the runtime finalizing, so finalization never starts under a
@@ -215,13 +219,27 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
   early would abort the process). Ctrl-C does not interrupt that wait; SIGTERM / SIGKILL still end the process.
   The GIL is released with `PyEval_SaveThread` and re-taken with an explicit `PyEval_RestoreThread` in an ordinary
   (not noexcept) frame, after the wait's mutex is dropped, so an admitted deleter that needs the GIL can finish, and a
-  daemon thread that CPython exits while it re-takes the GIL unwinds cleanly. `synchronize()` (any thread) also waits
-  this way, without closing, for releases already running on other threads (skipped inside the caller's own callback),
-  so when it returns every operand handed to tc_signal before the call has been released or deliberately leaked.
+  daemon thread that CPython exits while it re-takes the GIL unwinds cleanly (P1T-FIX6: the exit wait is a raw
+  CPython function, so no pybind11 dispatcher frame owning a Python object is on that stack).
+  **P1T-FIX6 (round-6 review V6-01): only the exit hook waits for another thread.** FIX5 also made `synchronize()`
+  wait for releases running on other threads; a caller holding a lock that such a release needed then deadlocked
+  (thread A holds a producer's allocator lock and calls `synchronize()`; thread B's refused operand's deleter needs
+  that lock). That wait is removed: a release another thread's call already started finishes on that thread, and
+  `synchronize()` releases what is still pending. **The exit hook's contract:** the exiting thread must not hold a lock
+  that an admitted callback needs (CPython's own rule for the non-daemon threads it joins at exit; atexit callbacks
+  normally run with no application lock held).
   Counters: `release_admission_closed`, `releases_in_flight`, `callbacks_in_flight`, `admitted_releases`,
   `admitted_callbacks`, `exit_hook_calls`, `exit_in_flight_at_close`, `exit_wait_us`, `exit_wait_diagnostics`,
-  `exit_wait_overruns`, `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics`,
-  `deleters_leaked_finalizing`, `capsules_kept_finalizing`, `lifecycle_lock_failures`.
+  `exit_wait_overruns`, `deleters_leaked_finalizing`, `capsules_kept_finalizing`, `lifecycle_lock_failures` (FIX5's
+  `sync_waits_for_other_threads`, `sync_wait_us`, `sync_wait_diagnostics` are gone with that wait).
+- **Arguments are never converted by calling their Python methods (P1T-FIX6, sweep (g)).** Every `_tc_signal`
+  binding takes `(*args, **kwargs)` and reads its arguments with C-level checks (`src/py_args.h`): ints are `int` or a
+  subclass (an overridden `__index__` / `__int__` is not called), reals are `float` / `int` or subclasses, flags are
+  `bool` / `int`, string lists are a `list` / `tuple` of `str`; anything else raises `TypeError` naming the parameter
+  and the type, and a wrong arity or unknown keyword raises `TypeError` without calling `repr()`. Reason: such a method
+  runs on a native stack, and on a daemon thread at interpreter exit it could be exited by CPython mid-conversion
+  (core's `__dlpack__` crashed this way: round-6 review V6-02). The public wrappers (`tc_signal.conv1d`, ...) convert
+  their arguments in Python first (`operator.index`, `float`), so they behave as before.
 - **Recorded CUDA failures (P1T-FIX5, V5-02 and the class sweep).** A failed completion-event query in the next-call
   drain (anything but NotReady) and a failed completion-event record (the call then synchronizes instead) are recorded
   BEFORE their error-slot entry is consumed (`pending_stats()['event_query_failures']` / `['event_record_failures']`)
@@ -325,9 +343,15 @@ cd <Project-Tensor> && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<Project-Tensor>/tc_
 - `test_fix5_findings.py` (P1T-FIX5) covers V5-01 (a deleter, capsule destructor or producer `__dlpack__` in flight
   on a daemon thread at ordinary interpreter exit: 0.1 / 5.5 / 12 s on the immediate-refusal and deferred paths, no
   visible GPU, the doubling diagnostic schedule; releases and callbacks after the close; the hook inside its own
-  callback; a throwing C++ deleter; `synchronize()` waiting for another thread's release), V5-02 (one-shot query
+  callback; a throwing C++ deleter; `synchronize()` NOT waiting for another thread's release since P1T-FIX6), V5-02 (one-shot query
   failures, reported once) and the failed event record, and V5-03 (a real `operator new` failure at each cache's
   insertion through an `LD_PRELOAD` C++ shim; the reviewer's CPU probe regenerated from these sources, `fix5_regen.py`).
+- `test_fix6_findings.py` (P1T-FIX6) covers V6-01 (the reviewer's lock inversion with and without a visible GPU; a
+  release started after `synchronize()` began; the exit hook still waiting, also for a consumed capsule's destructor),
+  V6-03 (a drain failure of each kind followed by a message-allocation failure: raised once by the next
+  `synchronize()`, on the real module and on a host trace module of this source) and sweep (g) (every binding's typed
+  parameters refuse a recording object without calling it; arity / keyword errors never call `repr()`; keyword
+  conversions on a daemon thread at exit are refused, not run).
 - The module skips only when torch is not importable or there is no CUDA device.
 - `TC_SIGNAL_TEST_RECEIPT=<path>` writes each cell's N and determinism to JSON.
 
@@ -369,8 +393,17 @@ byte-for-byte from torch 2.11's `torch/include/ATen/dlpack.h` (sha256
   self-exclusion, leak-without-Python after closing; CPython's atexit-before-finalizing order and `threading._shutdown`;
   RCU grace periods (McKenney & Slingwine, 1998) and the Linux `percpu_ref` kill-then-wait; the store-buffering
   (Dekker / Dijkstra, 1965) flag-plus-counter handshake; glibc/libstdc++ forced unwinding (`abi::__forced_unwind`).
-  Ours: admitting the add-on's deleter, capsule-drop and producer-callback sites, `synchronize()`'s non-closing wait,
-  and the explicit GIL re-take. Details: `src/dlpack_operand.cpp` (release lifecycle block).
+  Ours: admitting the add-on's deleter, capsule-drop and producer-callback sites, and the explicit GIL re-take. Details:
+  `src/dlpack_operand.cpp` (release lifecycle block).
+- **No wait in ordinary calls (P1T-FIX6, V6-01):** Coffman, Elphick & Shoshani (1971), circular wait as a necessary
+  deadlock condition; lock-ordering discipline. Taken: an ordinary call never blocks on another thread's callback, so
+  no cycle through a caller-held lock can form. RCU (synchronize_rcu waits only for pre-existing readers) is why a
+  separate "wait for releases" API would need a generation boundary and a no-locks-held contract; none is offered.
+- **C-level argument reading (P1T-FIX6, sweep (g)):** CPython's C argument parser (keyword matching without `__eq__`),
+  PyTorch 2.11's `Tensor.__dlpack__` (`type(stream) is not int` -> `TypeError`), pybind11 `py::args` / `py::kwargs`.
+  Ours: applying it to every binding. Details: `src/py_args.h`.
+- **Persist before reporting (P1T-FIX6, V6-03):** SQLite's OOM testing discipline (an error must survive the failure of
+  its own report). Ours: clearing the records only after the Python `RuntimeError` exists.
 - **Handle ownership until commit (P1T-FIX5, V5-03):** RAII and the scope guard with dismissal (Alexandrescu &
   Marginean, C/C++ Users Journal, 2000). Ours: checking and counting the cleanup status during unwinding.
 - **Record before consume (P1T-FIX5, V5-02):** the CUDA 12.6 `cudaEventQuery` / per-thread error-slot contracts; no

@@ -1,0 +1,3 @@
+Source: https://docs.nvidia.com/cuda/archive/12.6.0/cuda-runtime-api/group__CUDART__EXECUTION.html (cudaLaunchHostFunc), fetched 2026-10-13 via the AtlasForge web proxy
+"Enqueues a host function to run in a stream. The function will be called after currently enqueued work and will block work added after it. The host function must not make any CUDA API calls. ... The host function must not perform any synchronization that may depend on outstanding CUDA work not mandated to run earlier."
+Lead note (FIX6 N5): a host function is stream work, so a stream synchronize waits for it; a host function the application enqueues that blocks on a lock its own caller holds while synchronizing is the application's lock order, not P1-T's. P1-T enqueues no host function (G5 grep).

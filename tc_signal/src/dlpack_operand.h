@@ -32,6 +32,9 @@ namespace py = pybind11;
 // py::object members (Peeked / Peek4) whose destructor ran the producer's destructor unadmitted, for example when a
 // plan refused an operand after acquiring its capsule. Prior art: pybind11's py::object (reference ownership, Jakob
 // 2015) and RAII; no prior art known to me for admitting the last-reference drop.
+// P1T-FIX6 (sweep (g)): the last reference of a CONSUMED ("used_*") capsule is admitted too: its drop still runs the
+// producer's capsule destructor, which is producer code (Python, for a ctypes/Cython producer) even though it only
+// returns for a consumed capsule. Every last-reference drop is now admitted or kept; non-last drops are plain decrefs.
 class CapsuleRef {
  public:
   CapsuleRef() = default;
@@ -222,11 +225,13 @@ void drain_completed() noexcept;
 // above, and then raises RuntimeError naming that error even when every synchronization succeeded; it also raises
 // (once) the failures recorded on paths that cannot raise and leak no operand (a failed caller-device restore, a failed
 // event destroy; cuda_guard.h).
-// P1T-FIX5: (V5-01) before anything else it waits, GIL released, until every producer release (deleter call or
-// capsule drop) already admitted on ANOTHER thread has returned (skipped when the calling thread is itself inside an
-// admitted callback: two threads each calling synchronize() from a deleter must not wait for each other); (V5-02) the
-// recorded failures include a non-NotReady event-query failure of the next-call drain and (sweep d) a failed
-// completion-event record, each reported exactly once.
+// P1T-FIX5: (V5-02) the recorded failures include a non-NotReady event-query failure of the next-call drain and
+// (sweep d) a failed completion-event record, each reported exactly once.
+// P1T-FIX6: (V6-01) it never waits for another thread (FIX5's wait for releases running on other threads deadlocked
+// against caller-held locks and is removed; a release another thread already popped finishes on that thread); (V6-03)
+// its own drain's failures are persisted before any message allocation and every record is cleared only once the
+// Python RuntimeError exists, so a MemoryError while reporting loses nothing (the next call raises it once). Raises
+// RuntimeError as a captured py::error_already_set (a std::exception). GIL held.
 void synchronize_and_release_all();
 // P1T-FIX5 (V5-01): the exit side of the release lifecycle, called by tc_signal's atexit hook with the GIL held. Closes
 // admission for good (from here on every producer deleter call and capsule drop is deliberately leaked without entering
@@ -235,6 +240,9 @@ void synchronize_and_release_all();
 // stack are excluded (self-exclusion: the hook may run inside its own callback). After `first_diag_s` seconds it writes
 // a stderr line, then another each time the time waited has doubled. Returns {in_flight_at_close, own_thread_in_flight,
 // pending_entries_at_close, waited_us, diagnostics, overran}.
+// P1T-FIX6 (V6-01): the ONLY tc_signal function that waits for another thread. Its contract (documented in
+// tc_signal/__init__.py and the README): the calling (exiting) thread must not hold a lock that an admitted callback
+// needs, the same rule CPython applies when it joins non-daemon threads at exit.
 py::dict close_admission_and_wait(double first_diag_s);
 // Counters of the pending list (tests, G4 high-water mark), plus the P1T-FIX2 counters (deleter_exceptions,
 // push_alloc_failures, event_recycle_failures, release_errors, unreported_release_errors) and the P1T-FIX3 V3-02 ones
@@ -262,6 +270,9 @@ enum : unsigned {
   kAllocErrorMessage = 1u << 4,      // synchronize_and_release_all: building the error message
   kCudaEventRecord = 1u << 5,        // ~RetainUntilComplete: cudaEventRecord (-> fallback sync)
   kCudaSync = 1u << 6,               // any legacy-stream sync on a release path (fallback, synchronize, bound drain)
+  // P1T-FIX6 (V6-03 regression tests): one-shot failures of synchronize()'s own drain.
+  kCudaCurrentDevice = 1u << 7,      // sync_and_release_all_impl: cudaGetDevice
+  kCudaEventQuery = 1u << 8,         // a pending entry's cudaEventQuery (synchronize's drain or the next-call drain)
 };
 void arm(unsigned bits) noexcept;
 void clear() noexcept;

@@ -1,0 +1,40 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix6/artifacts/p1t_rev4/probes/lifecycle.cpp	2026-10-13 07:20:08.229499893 -0400
++++ /tmp/p1t_fix6_probes/after/rev4/lifecycle_regen.cpp	2026-10-13 08:50:25.653521537 -0400
+@@ -120,8 +120,20 @@
+   bool overran = false;
+   unsigned long long diagnostics = 0;
+   const auto t0 = std::chrono::steady_clock::now();
+-  {
+-    py::gil_scoped_release nogil;                           // admitted releases need the GIL to finish
++  // P1T-FIX5 (sweep (c), callbacks during interpreter exit): the GIL is released with PyEval_SaveThread and re-taken
++  // with an explicit PyEval_RestoreThread in THIS frame (not noexcept), no longer by py::gil_scoped_release's
++  // destructor. CPython 3.12 exits a non-main thread that re-takes the GIL during finalization (take_gil ->
++  // PyThread_exit_thread -> pthread_exit, a forced unwind); started inside a destructor, that unwind meets the
++  // destructor's implicit noexcept (std::terminate, abort). A non-main thread can be here: the hook is a plain Python
++  // function (tensor_cuda._dlpack_shutdown_hook), and two waiters (it and the main thread's real atexit call) wake
++  // together when the last admitted release leaves. Now such a thread's forced unwind travels through ordinary frames
++  // to pybind11's dispatcher, which rethrows abi::__forced_unwind (pybind11 v2.12 pybind11.h:1037). The mutex is still
++  // released before the GIL is re-taken. Same design as tc_signal's release lifecycle (dlpack_operand.cpp). Prior art:
++  // CPython's PyEval_SaveThread / PyEval_RestoreThread contract; glibc/libstdc++ forced unwinding (abi::__forced_unwind
++  // must propagate; a noexcept frame terminates); pybind11's gil_scoped_release::disarm note ("PyEval_RestoreThread()
++  // should not be called if runtime is finalizing"). Ours: the explicit restore placement.
++  PyThreadState* gil_state = PyEval_SaveThread();           // admitted releases need the GIL to finish
++  try {
+     std::unique_lock<std::mutex> lk(lc.mu);
+     lc.closing = true;                                      // admission closed for good: nothing new can start
+     at_close = lc.in_flight;
+@@ -145,7 +157,13 @@
+       lk.lock();
+     }
+     remaining = lc.in_flight - own;
+-  }  // lk is released before nogil re-takes the GIL
++  } catch (...) {
++    // A mutex / condition-variable failure (never observed): re-take the GIL, then let it propagate (as the RAII guard
++    // did). No Python ran in the try block, so this is never a forced unwind of the interpreter's making.
++    PyEval_RestoreThread(gil_state);
++    throw;
++  }  // lk is released before the GIL is re-taken
++  PyEval_RestoreThread(gil_state);                          // explicit, in this non-noexcept frame (see above)
+   const long long waited_us =
+       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+   g_shutdown_calls.fetch_add(1);

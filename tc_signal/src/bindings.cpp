@@ -28,6 +28,7 @@
 #include "checked_math.h"
 #include "conv_ops.h"
 #include "dlpack_operand.h"
+#include "py_args.h"  // P1T-FIX6 sweep (g): C-level argument matching and conversion
 #include "tuning.h"
 
 namespace py = pybind11;
@@ -345,7 +346,38 @@ void divide_probe(py::object x, py::object y, py::object out) {
   fp32_divide_probe(device, X.data(), Y.data(), O.data(), X.dim(0));
 }
 
+// P1T-FIX6: tc_signal's exit wait as a raw CPython function (see py_args.h raw_one_real_arg for why). No catch-all: a
+// forced unwind (not a std::exception) passes through the typed handlers. Prior art: CPython's METH_VARARGS |
+// METH_KEYWORDS convention (caller-owned argument tuple and dict); ours: choosing it for the GIL-released wait.
+PyObject* raw_exit_close_admission(PyObject*, PyObject* args, PyObject* kwargs) {
+  double first_diag_s = 0.0;
+  if (!raw_one_real_arg("_exit_close_admission", "first_diag_s", args, kwargs, &first_diag_s)) return nullptr;
+  try {
+    return close_admission_and_wait(first_diag_s).release().ptr();
+  } catch (py::error_already_set& e) {
+    e.restore();
+  } catch (const std::bad_alloc&) {
+    PyErr_NoMemory();
+  } catch (const std::exception& e) {
+    PyErr_SetString(PyExc_RuntimeError, e.what());
+  }
+  return nullptr;
+}
+
 }  // namespace
+
+const char kExitCloseDoc[] =
+    "_exit_close_admission(first_diag_s)\n\n"
+    "P1T-FIX5 (V5-01), tc_signal's atexit hook: close admission for good (later producer deleter calls and capsule "
+    "drops are deliberately leaked without entering Python, counted; later producer __dlpack__ callbacks are "
+    "refused), then wait, GIL released and with NO time bound, until no admitted section of another thread is "
+    "running (the calling thread's own are excluded). After first_diag_s seconds it writes a stderr line, then "
+    "another each time the time waited doubles. Returns {in_flight_at_close, own_thread_in_flight, "
+    "pending_entries_at_close, waited_us, diagnostics, overran}. P1T-FIX6: the only tc_signal call that waits for "
+    "another thread; a raw CPython function (no pybind11 dispatcher frame on the stack while it waits).";
+PyMethodDef kExitCloseDef = {"_exit_close_admission",
+                             reinterpret_cast<PyCFunction>(reinterpret_cast<void (*)(void)>(&raw_exit_close_admission)),
+                             METH_VARARGS | METH_KEYWORDS, kExitCloseDoc};
 }  // namespace tcs
 
 namespace tcs { void register_lstm(py::module_& m); }  // P1T-M3: src/lstm_bindings.cpp
@@ -354,67 +386,127 @@ namespace tcs { void register_m4(py::module_& m); }  // P1T-M4 norms and small o
 PYBIND11_MODULE(_tc_signal, m) {
   m.doc() = "tc_signal C++ core: DLPack-consuming fp32 1-D convolutions on the legacy default stream (P1T-M2)";
   using namespace tcs;
-  m.def("conv1d_plan", &conv1d_plan, py::arg("x"), py::arg("w"), py::arg("b"), py::arg("stride"),
-        py::arg("pad_begin"), py::arg("pad_end"), py::arg("dilation"), py::arg("groups"),
-        "Acquire and peek x/w/b; return (x_capsule, w_capsule, b_capsule|None, out_shape, scratch_numel).");
-  m.def("conv1d_run", &conv1d_run, py::arg("x_capsule"), py::arg("w_capsule"), py::arg("b_capsule"), py::arg("out"),
-        py::arg("scratch"), py::arg("stride"), py::arg("pad_begin"), py::arg("pad_end"), py::arg("dilation"),
-        py::arg("groups"), "Consume every operand, validate, launch on the legacy stream, release.");
-  m.def("conv_transpose1d_plan", &conv_transpose1d_plan, py::arg("x"), py::arg("w"), py::arg("b"), py::arg("stride"),
-        py::arg("pad_begin"), py::arg("pad_end"), py::arg("output_padding"), py::arg("dilation"), py::arg("groups"),
-        "Acquire and peek x/w/b; return (x_capsule, w_capsule, b_capsule|None, out_shape).");
-  m.def("conv_transpose1d_run", &conv_transpose1d_run, py::arg("x_capsule"), py::arg("w_capsule"),
-        py::arg("b_capsule"), py::arg("out"), py::arg("stride"), py::arg("pad_begin"), py::arg("pad_end"),
-        py::arg("output_padding"), py::arg("dilation"), py::arg("groups"),
-        "Consume every operand, validate, launch on the legacy stream, release.");
-  m.def("fp32_divide_probe", &divide_probe, py::arg("x"), py::arg("y"), py::arg("out"),
-        "Fast-math canary: out = x / y in fp32 with the package's build flags (tests compare it to IEEE division).");
+  // P1T-FIX6 (sweep (g)): every binding takes (*args, **kwargs) and converts with py_args.h's C-level converters, so
+  // no Python method of an argument runs inside pybind11's dispatcher or a binding frame (design and prior art:
+  // py_args.h). The first docstring line is the real signature.
+  m.def(
+      "conv1d_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("conv1d_plan", a, k,
+                         {{"x"}, {"w"}, {"b"}, {"stride"}, {"pad_begin"}, {"pad_end"}, {"dilation"}, {"groups"}});
+        const int64_t stride = arg_int64(c, 3), pb = arg_int64(c, 4), pe = arg_int64(c, 5), d = arg_int64(c, 6),
+                      g = arg_int64(c, 7);
+        return conv1d_plan(c.object(0), c.object(1), c.object(2), stride, pb, pe, d, g);
+      },
+      "conv1d_plan(x, w, b, stride, pad_begin, pad_end, dilation, groups)\n\n"
+      "Acquire and peek x/w/b; return (x_capsule, w_capsule, b_capsule|None, out_shape, scratch_numel).");
+  m.def(
+      "conv1d_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("conv1d_run", a, k,
+                         {{"x_capsule"}, {"w_capsule"}, {"b_capsule"}, {"out"}, {"scratch"}, {"stride"}, {"pad_begin"},
+                          {"pad_end"}, {"dilation"}, {"groups"}});
+        const int64_t stride = arg_int64(c, 5), pb = arg_int64(c, 6), pe = arg_int64(c, 7), d = arg_int64(c, 8),
+                      g = arg_int64(c, 9);
+        conv1d_run(c.object(0), c.object(1), c.object(2), c.object(3), c.object(4), stride, pb, pe, d, g);
+      },
+      "conv1d_run(x_capsule, w_capsule, b_capsule, out, scratch, stride, pad_begin, pad_end, dilation, groups)\n\n"
+      "Consume every operand, validate, launch on the legacy stream, release.");
+  m.def(
+      "conv_transpose1d_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("conv_transpose1d_plan", a, k,
+                         {{"x"}, {"w"}, {"b"}, {"stride"}, {"pad_begin"}, {"pad_end"}, {"output_padding"},
+                          {"dilation"}, {"groups"}});
+        const int64_t stride = arg_int64(c, 3), pb = arg_int64(c, 4), pe = arg_int64(c, 5), op = arg_int64(c, 6),
+                      d = arg_int64(c, 7), g = arg_int64(c, 8);
+        return conv_transpose1d_plan(c.object(0), c.object(1), c.object(2), stride, pb, pe, op, d, g);
+      },
+      "conv_transpose1d_plan(x, w, b, stride, pad_begin, pad_end, output_padding, dilation, groups)\n\n"
+      "Acquire and peek x/w/b; return (x_capsule, w_capsule, b_capsule|None, out_shape).");
+  m.def(
+      "conv_transpose1d_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("conv_transpose1d_run", a, k,
+                         {{"x_capsule"}, {"w_capsule"}, {"b_capsule"}, {"out"}, {"stride"}, {"pad_begin"},
+                          {"pad_end"}, {"output_padding"}, {"dilation"}, {"groups"}});
+        const int64_t stride = arg_int64(c, 4), pb = arg_int64(c, 5), pe = arg_int64(c, 6), op = arg_int64(c, 7),
+                      d = arg_int64(c, 8), g = arg_int64(c, 9);
+        conv_transpose1d_run(c.object(0), c.object(1), c.object(2), c.object(3), stride, pb, pe, op, d, g);
+      },
+      "conv_transpose1d_run(x_capsule, w_capsule, b_capsule, out, stride, pad_begin, pad_end, output_padding, "
+      "dilation, groups)\n\nConsume every operand, validate, launch on the legacy stream, release.");
+  m.def(
+      "fp32_divide_probe",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("fp32_divide_probe", a, k, {{"x"}, {"y"}, {"out"}});
+        divide_probe(c.object(0), c.object(1), c.object(2));
+      },
+      "fp32_divide_probe(x, y, out)\n\n"
+      "Fast-math canary: out = x / y in fp32 with the package's build flags (tests compare it to IEEE division).");
   m.def(
       "cublas_config",
-      [](int device) {
-        CublasConfig c = cublas_config(device);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("cublas_config", a, k, {{"device", false}});
+        CublasConfig cfg = cublas_config(c.given(0) ? arg_int32(c, 0) : 0);
         py::dict d;
-        d["math_mode"] = c.math_mode;
-        d["atomics_mode"] = c.atomics_mode;
-        d["pointer_mode"] = c.pointer_mode;
-        d["legacy_stream"] = c.legacy_stream;
-        d["default_math"] = c.default_math;
-        d["atomics_not_allowed"] = c.atomics_not_allowed;
+        d["math_mode"] = cfg.math_mode;
+        d["atomics_mode"] = cfg.atomics_mode;
+        d["pointer_mode"] = cfg.pointer_mode;
+        d["legacy_stream"] = cfg.legacy_stream;
+        d["default_math"] = cfg.default_math;
+        d["atomics_not_allowed"] = cfg.atomics_not_allowed;
         return d;
       },
-      py::arg("device") = 0, "Settings of tc_signal's cuBLAS handle on `device` (creates it if needed).");
-  m.def("build_info", []() {
-    BuildInfo b = build_info();
-    py::dict d;
-    d["cudart_version"] = b.cudart_version;
-    d["cublas_version"] = py::make_tuple(b.cublas_major, b.cublas_minor, b.cublas_patch);
-    d["current_device"] = b.current_device;
-    d["dlpack_header_version"] = py::make_tuple(DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION);
-    d["dlpack_max_version_requested"] = py::make_tuple(tuning::kDlpackMaxMajor, tuning::kDlpackMaxMinor);
-    d["dlpack_consumer_stream"] = tuning::kDlpackLegacyStream;
-    return d;
-  });
+      "cublas_config(device=0)\n\nSettings of tc_signal's cuBLAS handle on `device` (creates it if needed).");
+  m.def(
+      "build_info",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("build_info", a, k, {});
+        (void)c;
+        BuildInfo b = build_info();
+        py::dict d;
+        d["cudart_version"] = b.cudart_version;
+        d["cublas_version"] = py::make_tuple(b.cublas_major, b.cublas_minor, b.cublas_patch);
+        d["current_device"] = b.current_device;
+        d["dlpack_header_version"] = py::make_tuple(DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION);
+        d["dlpack_max_version_requested"] = py::make_tuple(tuning::kDlpackMaxMajor, tuning::kDlpackMaxMinor);
+        d["dlpack_consumer_stream"] = tuning::kDlpackLegacyStream;
+        return d;
+      },
+      "build_info()\n\nCUDA runtime / cuBLAS / DLPack versions this module was built and runs with.");
   register_lstm(m);
   register_m4(m);
   // P1T-FIX1 F01: the deferred-release list (dlpack_operand.h). tc_signal.synchronize() and the package's atexit hook
   // call `synchronize`; tests and the G4 high-water receipt read `pending_stats`.
-  m.def("synchronize", &synchronize_and_release_all,
-        "Synchronize the legacy default stream (current device and every device with pending operands), then release "
-        "every consumed DLPack operand tc_signal still holds. RuntimeError if a device cannot synchronize (its "
-        "operands are then deliberately leaked, never released early).");
-  m.def("pending_stats", &pending_stats, py::arg("reset_high_water") = false,
-        "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
-        "fallback syncs, deliberate leaks, and the bounds; P1T-FIX2: deleter_exceptions, push_alloc_failures, "
-        "event_recycle_failures, release_errors, unreported_release_errors.");
+  m.def(
+      "synchronize",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("synchronize", a, k, {});
+        (void)c;
+        synchronize_and_release_all();
+      },
+      "synchronize()\n\n"
+      "Synchronize the legacy default stream (current device and every device with pending operands), then release "
+      "every consumed DLPack operand tc_signal still holds. RuntimeError if a device cannot synchronize (its "
+      "operands are then deliberately leaked, never released early). P1T-FIX6 (V6-01): it never waits for another "
+      "thread (a release already running on another thread finishes there).");
+  m.def(
+      "pending_stats",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("pending_stats", a, k, {{"reset_high_water", false}});
+        return pending_stats(c.given(0) ? arg_flag(c, 0) : false);
+      },
+      "pending_stats(reset_high_water=False)\n\n"
+      "Counters of the deferred-release list: entries/managers/bytes now, high-water marks, releases, bound drains, "
+      "fallback syncs, deliberate leaks, and the bounds; P1T-FIX2: deleter_exceptions, push_alloc_failures, "
+      "event_recycle_failures, release_errors, unreported_release_errors.");
   // P1T-FIX5 (round-5 review V5-01): the exit side of the release lifecycle, called by tc_signal's atexit hook
   // (tc_signal/__init__.py _release_pending_at_exit) after its final synchronize(). Not an API for other callers.
-  m.def("_exit_close_admission", &close_admission_and_wait, py::arg("first_diag_s"),
-        "P1T-FIX5 (V5-01), tc_signal's atexit hook: close admission for good (later producer deleter calls and capsule "
-        "drops are deliberately leaked without entering Python, counted; later producer __dlpack__ callbacks are "
-        "refused), then wait, GIL released and with NO time bound, until no admitted section of another thread is "
-        "running (the calling thread's own are excluded). After first_diag_s seconds it writes a stderr line, then "
-        "another each time the time waited doubles. Returns {in_flight_at_close, own_thread_in_flight, "
-        "pending_entries_at_close, waited_us, diagnostics, overran}.");
+  // P1T-FIX6: a raw CPython function (raw_exit_close_admission, above the module): nothing on this stack owns a Python object
+  // across the GIL-released wait, whatever the calling style (py_args.h raw_one_real_arg).
+  m.add_object("_exit_close_admission",
+               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&tcs::kExitCloseDef, nullptr, nullptr)));
   // P1T-FIX2 (N3): build the pending-list state now (it allocates), so no noexcept release path is the first to touch
   // it; a failure here fails the import (MemoryError), never a later release. P1T-FIX5: also the release lifecycle.
   init_pending_state();
@@ -422,7 +514,9 @@ PYBIND11_MODULE(_tc_signal, m) {
   // sites (dlpack_operand.h, test_hooks). `names` is a list of site names; "clear" disarms everything.
   m.def(
       "_test_inject",
-      [](const std::vector<std::string>& names) {
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("_test_inject", a, k, {{"names"}});
+        const std::vector<std::string> names = arg_str_list(c, 0);
         static const std::pair<const char*, unsigned> kSites[] = {
             {"alloc:event_pool_reserve", test_hooks::kAllocEventPoolReserve},
             {"alloc:event_recycle", test_hooks::kAllocEventRecycle},
@@ -431,6 +525,8 @@ PYBIND11_MODULE(_tc_signal, m) {
             {"alloc:error_message", test_hooks::kAllocErrorMessage},
             {"cuda:event_record", test_hooks::kCudaEventRecord},
             {"cuda:sync", test_hooks::kCudaSync},
+            {"cuda:current_device", test_hooks::kCudaCurrentDevice},
+            {"cuda:event_query", test_hooks::kCudaEventQuery},
         };
         unsigned bits = 0;
         for (const std::string& n : names) {
@@ -449,7 +545,15 @@ PYBIND11_MODULE(_tc_signal, m) {
         test_hooks::arm(bits);
         return test_hooks::armed();
       },
-      py::arg("names"), "TEST HOOK (P1T-FIX2): arm one-shot failures at named release-path sites; returns the armed bits.");
-  m.def("_test_injection_armed", []() { return test_hooks::armed(); },
-        "TEST HOOK (P1T-FIX2): the release-path injection bits still armed (a hit site disarms itself).");
+      "_test_inject(names)\n\n"
+      "TEST HOOK (P1T-FIX2): arm one-shot failures at named release-path sites; returns the armed bits.");
+  m.def(
+      "_test_injection_armed",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("_test_injection_armed", a, k, {});
+        (void)c;
+        return test_hooks::armed();
+      },
+      "_test_injection_armed()\n\n"
+      "TEST HOOK (P1T-FIX2): the release-path injection bits still armed (a hit site disarms itself).");
 }

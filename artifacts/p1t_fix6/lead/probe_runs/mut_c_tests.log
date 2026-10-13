@@ -1,0 +1,135 @@
+FFFFFFF                                                                  [100%]
+=================================== FAILURES ===================================
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[query] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-117/fix6_trace0', mode = 'query'
+
+    @pytest.mark.parametrize('mode', ['query', 'sync', 'device'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace(trace_module, mode):
+        # The reviewer's release_trace_cpu.py diagnostic_oom_{query,sync,device} on this tree's dlpack_operand.cpp.
+        r, res = _run(_TRACE_OOM_SCRIPT, trace_module, mode)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'deleter_calls': 0, 'first': 'MemoryError', 'persisted': 0, ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:408: AssertionError
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[sync] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-117/fix6_trace0', mode = 'sync'
+
+    @pytest.mark.parametrize('mode', ['query', 'sync', 'device'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace(trace_module, mode):
+        # The reviewer's release_trace_cpu.py diagnostic_oom_{query,sync,device} on this tree's dlpack_operand.cpp.
+        r, res = _run(_TRACE_OOM_SCRIPT, trace_module, mode)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'deleter_calls': 0, 'first': 'MemoryError', 'persisted': 0, ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:408: AssertionError
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[device] _
+
+trace_module = '/tmp/pytest-of-vader/pytest-117/fix6_trace0', mode = 'device'
+
+    @pytest.mark.parametrize('mode', ['query', 'sync', 'device'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace(trace_module, mode):
+        # The reviewer's release_trace_cpu.py diagnostic_oom_{query,sync,device} on this tree's dlpack_operand.cpp.
+        r, res = _run(_TRACE_OOM_SCRIPT, trace_module, mode)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'deleter_calls': 0, 'first': 'MemoryError', 'persisted': 0, ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:408: AssertionError
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:sync] _
+
+site = 'cuda:sync'
+
+    @pytest.mark.parametrize('site', ['cuda:sync', 'cuda:current_device', 'cuda:event_query'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure(site):
+        r, res = _run(_OOM_SCRIPT, site)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'armed_after': 0, 'entries_after': 0, 'first': 'MemoryError', ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:460: AssertionError
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:current_device] _
+
+site = 'cuda:current_device'
+
+    @pytest.mark.parametrize('site', ['cuda:sync', 'cuda:current_device', 'cuda:event_query'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure(site):
+        r, res = _run(_OOM_SCRIPT, site)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'armed_after': 0, 'entries_after': 0, 'first': 'MemoryError', ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:460: AssertionError
+_ test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:event_query] _
+
+site = 'cuda:event_query'
+
+    @pytest.mark.parametrize('site', ['cuda:sync', 'cuda:current_device', 'cuda:event_query'])
+    def test_fix6_v603_drain_failure_survives_a_message_allocation_failure(site):
+        r, res = _run(_OOM_SCRIPT, site)
+        _ok(r, res)
+>       assert res['first'] == 'MemoryError' and res['persisted'] == 1, res
+E       AssertionError: {'after': 0, 'armed_after': 0, 'entries_after': 0, 'first': 'MemoryError', ...}
+E       assert ('MemoryError' == 'MemoryError'
+E         
+E           MemoryError and 0 == 1)
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py:460: AssertionError
+_ test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:error_message] _
+
+site = 'alloc:error_message'
+
+    @pytest.mark.parametrize('site', ['alloc:owner_reserve', 'alloc:event_pool_reserve', 'alloc:pending_push',
+                                      'alloc:event_recycle', 'alloc:error_message'])
+    def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
+        r, res = _run(_N3, site)
+        _ok(r, res)                                                  # mutant (c) terminates here (rc -6)
+        assert res['armed_left'] == 0, res                           # the injected site was really reached
+        assert res['unknown_delete'] == 0, res                       # no deleter called twice
+        assert res['recovered_correct'] is True, res
+        if site in ('alloc:owner_reserve', 'alloc:event_pool_reserve'):
+            # constructor path, before any launch: MemoryError, both operands released at once
+            assert res['outcome'] == 'MemoryError' and res['deleted_right_after_call'] == 2, res
+        elif site == 'alloc:pending_push':
+            # release path inside the noexcept destructor: caught, synchronous fallback, released at once
+            assert res['outcome'] == 'returned' and res['deleted_right_after_call'] == 2, res
+            assert res['delta']['push_alloc_failures'] == 1 and res['delta']['fallback_syncs'] == 1, res
+        elif site == 'alloc:event_recycle':
+            assert res['outcome'] == 'returned' and res['delta']['event_recycle_failures'] == 1, res
+            assert res['deleted_before_recovery'] == 2, res
+        else:  # error message: an error (MemoryError), not success; the entry had no completion proof: leaked
+            assert res['outcome'] == 'MemoryError', res
+            assert res['deleted_before_recovery'] + res['leaked'] == 2, res
+            # P1T-FIX6 (V6-03): the persisted drain failure is raised by the next synchronize(), once.
+>           assert 'cudaErrorLaunchFailure' in res['reported_next'] and 'deliberately leaked' in res['reported_next'], res
+E           AssertionError: {'armed_left': 0, 'deleted': 2, 'deleted_before_recovery': 0, 'delta': {'admitted_callbacks': 4, 'admitted_releases': 4, 'bound_drains': 0, 'bytes': 0, ...}, ...}
+E           assert ('cudaErrorLaunchFailure' in 'returned')
+
+p1t_fix6_mut_c/tc_signal/tests/test_fix2_findings.py:413: AssertionError
+=========================== short test summary info ============================
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[query]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[sync]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure_host_trace[device]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:sync]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:current_device]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix6_findings.py::test_fix6_v603_drain_failure_survives_a_message_allocation_failure[cuda:event_query]
+FAILED p1t_fix6_mut_c/tc_signal/tests/test_fix2_findings.py::test_n3_allocation_failure_at_each_release_site_never_terminates[alloc:error_message]
+7 failed, 79 deselected in 21.17s

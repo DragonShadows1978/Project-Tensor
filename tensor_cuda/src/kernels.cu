@@ -238,8 +238,14 @@ struct CoreUnraisableRecord {
   const char* what = nullptr;
   int device = -1;
   int error = 0;
+  // P1T-FIX6 (FIX5 residual R7: recorded, but raised by nothing): the first failure not raised yet. Raised once by
+  // tensor_cuda.synchronize() (bindings.cpp dlpack_raise_unraisable), logged by the exit hook, then consumed.
+  const char* unreported_what = nullptr;
+  int unreported_device = -1;
+  int unreported_error = 0;
 };
 std::atomic<unsigned long long> g_core_unraisable_errors{0};
+std::atomic<unsigned long long> g_core_unraisable_unreported{0};  // P1T-FIX6 (R7): recorded, not raised yet
 
 CoreUnraisableRecord& core_unraisable_record() {
   static CoreUnraisableRecord* r = new CoreUnraisableRecord();  // never destroyed (a Storage may die at exit)
@@ -248,6 +254,7 @@ CoreUnraisableRecord& core_unraisable_record() {
 
 void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept {
   g_core_unraisable_errors.fetch_add(1);
+  bool counted = false;  // P1T-FIX6 (R7): the not-yet-raised count changes with its name, under the mutex
   try {
     CoreUnraisableRecord& r = core_unraisable_record();
     std::lock_guard<std::mutex> lk(r.mu);
@@ -256,7 +263,15 @@ void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept 
       r.device = device;
       r.error = static_cast<int>(e);
     }
+    if (g_core_unraisable_unreported.load() == 0) {
+      r.unreported_what = what;
+      r.unreported_device = device;
+      r.unreported_error = static_cast<int>(e);
+    }
+    g_core_unraisable_unreported.fetch_add(1);
+    counted = true;
   } catch (const std::exception&) {
+    if (!counted) g_core_unraisable_unreported.fetch_add(1);  // counted, unnamed
     // bad_alloc on the first use or a mutex failure: the counter above still records it.
   }
 }
@@ -367,6 +382,38 @@ void dlpack_first_unraisable(std::string* what, int* device, int* error) {
   *what = r.what ? r.what : "";
   *device = r.device;
   *error = r.error;
+}
+
+// P1T-FIX6 (FIX5 residual R7): the recorded failures not raised yet (count; the first of them, "" when it was recorded
+// while an earlier report was being raised and is therefore not named), and their consumption by the raise. The count
+// is atomic (a Storage may die on any thread); the named first one is kept under the record's mutex. Prior art: the
+// add-on's N1 / V6-03 raise-once records (tc_signal dlpack_operand.cpp); no specific external prior art known to me.
+void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error) {
+  CoreUnraisableRecord& r = core_unraisable_record();
+  std::lock_guard<std::mutex> lk(r.mu);
+  *count = g_core_unraisable_unreported.load();
+  *what = r.unreported_what ? r.unreported_what : "";
+  *device = r.unreported_device;
+  *error = r.unreported_error;
+}
+
+void dlpack_ack_unraisable(unsigned long long count) noexcept {
+  auto consume = [count] {
+    unsigned long long cur = g_core_unraisable_unreported.load();
+    while (!g_core_unraisable_unreported.compare_exchange_weak(cur, cur > count ? cur - count : 0ULL)) {
+    }
+  };
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    consume();
+    // The named one was just raised; a failure recorded since the snapshot stays counted, unnamed.
+    r.unreported_what = nullptr;
+    r.unreported_device = -1;
+    r.unreported_error = 0;
+  } catch (const std::exception&) {
+    consume();  // a mutex failure (never observed): consume the count; a stale name is only a label
+  }
 }
 
 // P1T-FIX4 (sweep, implicit current device): TensorCUDA labels its OWN allocations cuda:0 (Device::from_string, which

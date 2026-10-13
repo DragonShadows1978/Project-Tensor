@@ -30,6 +30,7 @@
 
 #include "checked_math.h"
 #include "dlpack_operand.h"
+#include "py_args.h"  // P1T-FIX6 sweep (g): C-level argument matching and conversion
 #include "m4_ops.h"
 
 namespace py = pybind11;
@@ -355,66 +356,136 @@ void test_rint_then_raise(py::object xc, py::object out) {
 }  // namespace
 
 void register_m4(py::module_& m) {
+  // P1T-FIX6 (sweep (g)): (*args, **kwargs) + C-level conversion (py_args.h); first docstring line = the signature.
   m.def(
       "instance_norm1d_plan",
-      [](py::object x, py::object s, py::object b, double eps) { return norm_plan(NormKind::kInstance, x, s, b, 0, eps); },
-      py::arg("x"), py::arg("scale"), py::arg("bias"), py::arg("eps"),
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("instance_norm1d_plan", a, k, {{"x"}, {"scale"}, {"bias"}, {"eps"}});
+        const double eps = arg_real(c, 3);
+        return norm_plan(NormKind::kInstance, c.object(0), c.object(1), c.object(2), 0, eps);
+      },
+      "instance_norm1d_plan(x, scale, bias, eps)\n\n"
       "Acquire and peek x/scale/bias; return (x_capsule, scale_capsule|None, bias_capsule|None, out_shape).");
   m.def(
       "instance_norm1d_run",
-      [](py::object xc, py::object sc, py::object bc, py::object out, double eps) {
-        norm_run(NormKind::kInstance, xc, sc, bc, out, 0, eps);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("instance_norm1d_run", a, k,
+                         {{"x_capsule"}, {"scale_capsule"}, {"bias_capsule"}, {"out"}, {"eps"}});
+        const double eps = arg_real(c, 4);
+        norm_run(NormKind::kInstance, c.object(0), c.object(1), c.object(2), c.object(3), 0, eps);
       },
-      py::arg("x_capsule"), py::arg("scale_capsule"), py::arg("bias_capsule"), py::arg("out"), py::arg("eps"),
+      "instance_norm1d_run(x_capsule, scale_capsule, bias_capsule, out, eps)\n\n"
       "Consume every operand, validate, launch on the legacy stream, release.");
   m.def(
       "layer_norm_plan",
-      [](py::object x, py::object s, py::object b, int64_t axis, double eps) {
-        return norm_plan(NormKind::kLayer, x, s, b, axis, eps);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("layer_norm_plan", a, k, {{"x"}, {"scale"}, {"bias"}, {"axis"}, {"eps"}});
+        const int64_t axis = arg_int64(c, 3);
+        const double eps = arg_real(c, 4);
+        return norm_plan(NormKind::kLayer, c.object(0), c.object(1), c.object(2), axis, eps);
       },
-      py::arg("x"), py::arg("scale"), py::arg("bias"), py::arg("axis"), py::arg("eps"),
+      "layer_norm_plan(x, scale, bias, axis, eps)\n\n"
       "Acquire and peek x/scale/bias; return (x_capsule, scale_capsule|None, bias_capsule|None, out_shape).");
   m.def(
       "layer_norm_run",
-      [](py::object xc, py::object sc, py::object bc, py::object out, int64_t axis, double eps) {
-        norm_run(NormKind::kLayer, xc, sc, bc, out, axis, eps);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("layer_norm_run", a, k,
+                         {{"x_capsule"}, {"scale_capsule"}, {"bias_capsule"}, {"out"}, {"axis"}, {"eps"}});
+        const int64_t axis = arg_int64(c, 4);
+        const double eps = arg_real(c, 5);
+        norm_run(NormKind::kLayer, c.object(0), c.object(1), c.object(2), c.object(3), axis, eps);
       },
-      py::arg("x_capsule"), py::arg("scale_capsule"), py::arg("bias_capsule"), py::arg("out"), py::arg("axis"),
-      py::arg("eps"), "Consume every operand, validate, launch on the legacy stream, release.");
+      "layer_norm_run(x_capsule, scale_capsule, bias_capsule, out, axis, eps)\n\n"
+      "Consume every operand, validate, launch on the legacy stream, release.");
   m.def(
       "group_norm_plan",
-      [](py::object x, int64_t groups, py::object s, py::object b, double eps) {
-        return norm_plan(NormKind::kGroup, x, s, b, groups, eps);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("group_norm_plan", a, k, {{"x"}, {"num_groups"}, {"scale"}, {"bias"}, {"eps"}});
+        const int64_t groups = arg_int64(c, 1);
+        const double eps = arg_real(c, 4);
+        return norm_plan(NormKind::kGroup, c.object(0), c.object(2), c.object(3), groups, eps);
       },
-      py::arg("x"), py::arg("num_groups"), py::arg("scale"), py::arg("bias"), py::arg("eps"),
+      "group_norm_plan(x, num_groups, scale, bias, eps)\n\n"
       "Acquire and peek x/scale/bias; return (x_capsule, scale_capsule|None, bias_capsule|None, out_shape).");
   m.def(
       "group_norm_run",
-      [](py::object xc, int64_t groups, py::object sc, py::object bc, py::object out, double eps) {
-        norm_run(NormKind::kGroup, xc, sc, bc, out, groups, eps);
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("group_norm_run", a, k,
+                         {{"x_capsule"}, {"num_groups"}, {"scale_capsule"}, {"bias_capsule"}, {"out"}, {"eps"}});
+        const int64_t groups = arg_int64(c, 1);
+        const double eps = arg_real(c, 5);
+        norm_run(NormKind::kGroup, c.object(0), c.object(2), c.object(3), c.object(4), groups, eps);
       },
-      py::arg("x_capsule"), py::arg("num_groups"), py::arg("scale_capsule"), py::arg("bias_capsule"), py::arg("out"),
-      py::arg("eps"), "Consume every operand, validate, launch on the legacy stream, release.");
-  m.def("upsample_nearest1d_plan", &upsample_plan, py::arg("x"), py::arg("scale"),
-        "Acquire and peek x; return (x_capsule, out_shape).");
-  m.def("upsample_nearest1d_run", &upsample_run, py::arg("x_capsule"), py::arg("out"), py::arg("scale"),
-        "Consume, validate, launch on the legacy stream, release.");
-  m.def("reflection_pad1d_plan", &pad_plan, py::arg("x"), py::arg("pad_begin"), py::arg("pad_end"),
-        "Acquire and peek x; return (x_capsule, out_shape).");
-  m.def("reflection_pad1d_run", &pad_run, py::arg("x_capsule"), py::arg("out"), py::arg("pad_begin"),
-        py::arg("pad_end"), "Consume, validate, launch on the legacy stream, release.");
-  m.def("rint_plan", &rint_plan, py::arg("x"), "Acquire and peek x; return (x_capsule, out_shape).");
-  m.def("rint_run", &rint_run, py::arg("x_capsule"), py::arg("out"),
-        "Consume, validate, launch on the legacy stream, release.");
-  m.def("_test_rint_then_raise", &test_rint_then_raise, py::arg("x_capsule"), py::arg("out"),
-        "TEST HOOK (P1T-FIX1 F01): rint_run, then raise RuntimeError after the launch.");
-  m.def("m4_tuning", []() {
-    py::dict d;
-    d["norm_block"] = m4tuning::kNormBlock;
-    d["norm_chunk"] = m4tuning::kNormChunk;
-    d["copy_block"] = m4tuning::kCopyBlock;
-    return d;
-  }, "The M4 kernels' tunables (the norm statistics' summation order depends on norm_block and norm_chunk).");
+      "group_norm_run(x_capsule, num_groups, scale_capsule, bias_capsule, out, eps)\n\n"
+      "Consume every operand, validate, launch on the legacy stream, release.");
+  m.def(
+      "upsample_nearest1d_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("upsample_nearest1d_plan", a, k, {{"x"}, {"scale"}});
+        const int64_t scale = arg_int64(c, 1);
+        return upsample_plan(c.object(0), scale);
+      },
+      "upsample_nearest1d_plan(x, scale)\n\nAcquire and peek x; return (x_capsule, out_shape).");
+  m.def(
+      "upsample_nearest1d_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("upsample_nearest1d_run", a, k, {{"x_capsule"}, {"out"}, {"scale"}});
+        const int64_t scale = arg_int64(c, 2);
+        upsample_run(c.object(0), c.object(1), scale);
+      },
+      "upsample_nearest1d_run(x_capsule, out, scale)\n\nConsume, validate, launch on the legacy stream, release.");
+  m.def(
+      "reflection_pad1d_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("reflection_pad1d_plan", a, k, {{"x"}, {"pad_begin"}, {"pad_end"}});
+        const int64_t pb = arg_int64(c, 1), pe = arg_int64(c, 2);
+        return pad_plan(c.object(0), pb, pe);
+      },
+      "reflection_pad1d_plan(x, pad_begin, pad_end)\n\nAcquire and peek x; return (x_capsule, out_shape).");
+  m.def(
+      "reflection_pad1d_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("reflection_pad1d_run", a, k, {{"x_capsule"}, {"out"}, {"pad_begin"}, {"pad_end"}});
+        const int64_t pb = arg_int64(c, 2), pe = arg_int64(c, 3);
+        pad_run(c.object(0), c.object(1), pb, pe);
+      },
+      "reflection_pad1d_run(x_capsule, out, pad_begin, pad_end)\n\n"
+      "Consume, validate, launch on the legacy stream, release.");
+  m.def(
+      "rint_plan",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("rint_plan", a, k, {{"x"}});
+        return rint_plan(c.object(0));
+      },
+      "rint_plan(x)\n\nAcquire and peek x; return (x_capsule, out_shape).");
+  m.def(
+      "rint_run",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("rint_run", a, k, {{"x_capsule"}, {"out"}});
+        rint_run(c.object(0), c.object(1));
+      },
+      "rint_run(x_capsule, out)\n\nConsume, validate, launch on the legacy stream, release.");
+  m.def(
+      "_test_rint_then_raise",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("_test_rint_then_raise", a, k, {{"x_capsule"}, {"out"}});
+        test_rint_then_raise(c.object(0), c.object(1));
+      },
+      "_test_rint_then_raise(x_capsule, out)\n\n"
+      "TEST HOOK (P1T-FIX1 F01): rint_run, then raise RuntimeError after the launch.");
+  m.def(
+      "m4_tuning",
+      [](py::args a, py::kwargs k) {
+        const CallArgs c("m4_tuning", a, k, {});
+        (void)c;
+        py::dict d;
+        d["norm_block"] = m4tuning::kNormBlock;
+        d["norm_chunk"] = m4tuning::kNormChunk;
+        d["copy_block"] = m4tuning::kCopyBlock;
+        return d;
+      },
+      "m4_tuning()\n\n"
+      "The M4 kernels' tunables (the norm statistics' summation order depends on norm_block and norm_chunk).");
 }
 
 }  // namespace tcs

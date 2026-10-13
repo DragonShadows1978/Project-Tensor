@@ -1,0 +1,33 @@
+before build_host_probes exit=0
+before build_core_host (regenerate) exit=1
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: 'artifacts/p1t_fix6/lead/probe_runs/rev6_before/source_slices.json'
+before compile core_host exit=0
+before run_cpu_checks exit=0
+  query_once rc=0 PASS query once | 
+  multidevice_restore rc=0 PASS per-device sync [1, 0, 2, 0] | 
+  prior_oom rc=0 PASS prior persisted through OOM | 
+  inside_callback rc=0 PASS self exclusion and late release | 
+  deferred_exit rc=0 DELETER started | DELETER finished | HOOK returned | FINALIZING True | 
+  diagnostic_oom_query rc=1 inalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "s
+  diagnostic_oom_sync rc=1 inalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sy
+  diagnostic_oom_device rc=1 inalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "
+  arithmetic rc=0 PASS fill grid rail, scalar/empty and zero-neighbor products | 
+  casts_exit_bool_--control rc=0 BOOL started | IN_FLIGHT 0 | BOOL finished | EXPORT returned | CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0} | FIN
+  casts_exit_index_--control rc=0 INDEX started | IN_FLIGHT 0 | INDEX finished | EXPORT returned | CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 2, 'diagnostics': 0, 'own_thread_in_flight': 0} | 
+  casts_exit_bool rc=-6 BOOL started | IN_FLIGHT 0 | CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 0, 'diagnostics': 0, 'own_thread_in_flight': 0} | FINALIZING True | ing an instance of 'std::run
+  casts_exit_index rc=-6 INDEX started | IN_FLIGHT 0 | CORE HOOK {'in_flight_at_close': 0, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 1, 'diagnostics': 0, 'own_thread_in_flight': 0} | FINALIZING True | ing an instance of 'std::r
+  fix2_harness_ck_census rc=0 lidate_refused_as_overflow": true, "validate_msg": "tc_signal: operand 'census': byte size of shape [2305843009213693952, 0, 1] (fp32) overflows int64", "ok": true} | {"control": "[0, 1048576, 4]", "count": 0, 
+  fix3_harness_accounting rc=0 0 saturated=0 entries=1025 over=1"} | {"case": "aggregate_of_two_2p61m1_operands_refused_as_overflow", "ok": true, "detail": "tc_signal: the aggregate fp32 byte count of this call's operands (their sum) overfl
+  cpu_native_oom_sync rc=0 PASS: allocation failure propagated safely | ARMED: next host allocation fails; no CUDA call reached yet | 
+  cpu_native_throw_deleter rc=0 PASS: producer exception contained | ARMED: real ManagedOwner reset calls throwing native producer | 
+  sync_lock rc=1 ntimeError tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected
+  operand_census rc=1 GetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released | 
+before sync_lock_inversion nogpu exit=1 :: BLOCKED_BEFORE_CUDA=1 finite deleter waits for caller-held lock RuntimeError tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CU
+before sync_lock_inversion gpu exit=1 :: BLOCKED_BEFORE_CUDA=1 finite deleter waits for caller-held lock elapsed=1.220 rescue=True release_finished=True 
+before sync_late_release exit=1 :: SYNCHRONIZE begins ADMIT later release AFTER synchronize began FIRST completed LATER completed elapsed=0.704 waited_for_later=True 
+before core_cast_exit_gpu bool  exit=139 :: ARMED real core CAST started CAST IN PROGRESS FINALIZING True timeout: the monitored command dumped core 
+before core_cast_exit_gpu bool --control exit=0 :: ARMED real core CAST started CAST IN PROGRESS CAST finished EXPORT ended FINALIZING True 
+before core_cast_exit_gpu index  exit=139 :: ARMED real core CAST started CAST IN PROGRESS FINALIZING True timeout: the monitored command dumped core 
+before core_cast_exit_gpu index --control exit=0 :: ARMED real core CAST started CAST IN PROGRESS CAST finished EXPORT ended FINALIZING True 

@@ -1,0 +1,114 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock[gpu] _
+
+cond = 'gpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    def test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock(cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r, res = _run(_LOCK_SCRIPT, env=env)
+        _ok(r, res)
+        _no_abort(r)
+        assert res['in_flight'] == 1, res                                   # B's deleter was admitted and running
+>       assert res['rescued'] is False and res['elapsed'] < 2.0, res        # no wait: no rescue needed
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleter_still_blocked_when_sync_returned': False, 'elapsed': 3.1401671129860915, 'err': None, 'in_flight': 1, ...}
+E       assert (True is False)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py:160: AssertionError
+_ test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock[nogpu] _
+
+cond = 'nogpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    def test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock(cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r, res = _run(_LOCK_SCRIPT, env=env)
+        _ok(r, res)
+        _no_abort(r)
+        assert res['in_flight'] == 1, res                                   # B's deleter was admitted and running
+>       assert res['rescued'] is False and res['elapsed'] < 2.0, res        # no wait: no rescue needed
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'deleter_still_blocked_when_sync_returned': False, 'elapsed': 3.0208525009802543, 'err': 'tc_signal.synchronize: CUDA... pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device', 'in_flight': 1, ...}
+E       assert (True is False)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py:160: AssertionError
+_ test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[deleter] _
+
+mode = 'deleter'
+
+    @pytest.mark.parametrize('mode', ['deleter', 'consumed_capsule_drop'])
+    def test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread(mode):
+        r, res = _run(_EXIT_SCRIPT, mode)
+        _ok(r, res)
+        _no_abort(r)
+        out = r.stdout
+        assert 0 <= out.find('CALLBACK finished') < out.find('FINALIZING True'), out
+        before, after = res['before_hook']['stats'], res['after_hook']
+        assert before['releases_in_flight'] == 1, res                        # admitted (a release) and running
+        st = after['stats']
+        assert after['done'] == 1 and after['finalizing'] is False, res
+>       assert st['exit_in_flight_at_close'] == 1 and st['releases_in_flight'] == 0, res   # the exit hook waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'done': 1, 'finalizing': False, 'stats': {'admitted_callbacks': 0, 'admitted_releases': 1, 'bound_drai......}}, 'before_hook': {'stats': {'admitted_callbacks': 0, 'admitted_releases': 1, 'bound_drains': 0, 'bytes': 0, ...}}}
+E       assert (0 == 1)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py:265: AssertionError
+_ test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[consumed_capsule_drop] _
+
+mode = 'consumed_capsule_drop'
+
+    @pytest.mark.parametrize('mode', ['deleter', 'consumed_capsule_drop'])
+    def test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread(mode):
+        r, res = _run(_EXIT_SCRIPT, mode)
+        _ok(r, res)
+        _no_abort(r)
+        out = r.stdout
+        assert 0 <= out.find('CALLBACK finished') < out.find('FINALIZING True'), out
+        before, after = res['before_hook']['stats'], res['after_hook']
+        assert before['releases_in_flight'] == 1, res                        # admitted (a release) and running
+        st = after['stats']
+        assert after['done'] == 1 and after['finalizing'] is False, res
+>       assert st['exit_in_flight_at_close'] == 1 and st['releases_in_flight'] == 0, res   # the exit hook waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'done': 1, 'finalizing': False, 'stats': {'admitted_callbacks': 1, 'admitted_releases': 1, 'bound_drai......}}, 'before_hook': {'stats': {'admitted_callbacks': 1, 'admitted_releases': 1, 'bound_drains': 0, 'bytes': 0, ...}}}
+E       assert (0 == 1)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py:265: AssertionError
+___ test_fix6_v601_release_started_after_synchronize_began_is_not_waited_for ___
+
+trace_module = '/tmp/pytest-of-vader/pytest-113/fix6_trace0'
+
+    def test_fix6_v601_release_started_after_synchronize_began_is_not_waited_for(trace_module):
+        # The reviewer's sync_late_release_cpu.py scenario on this tree's dlpack_operand.cpp (host trace module).
+        r, res = _run(_LATE_SCRIPT, trace_module)
+        _ok(r, res)
+>       assert res['waited_for_later'] is False and res['elapsed'] < 0.5, res   # acd42fa / mutant (a): True, ~0.7 s
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'elapsed': 0.7020232009817846, 'late_finished': True, 'waited_for_later': True}
+E       assert (True is False)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py:366: AssertionError
+_ test_fix5_v501_synchronize_does_not_wait_for_a_release_running_on_another_thread _
+
+    def test_fix5_v501_synchronize_does_not_wait_for_a_release_running_on_another_thread():
+        # P1T-FIX6, round-6 review V6-01: FIX5's version of this test asserted that synchronize() WAITED for a release
+        # running on another thread; that wait deadlocked against caller-held locks (sync_lock_inversion_cpu.py) and is
+        # removed. The release popped by the other thread is that thread's: it finishes there, after synchronize() returned.
+        # (The exit hook's wait is covered by the census tests above and test_fix6_findings.py.)
+        r, res = _run(_SYNC_WAIT_SCRIPT)
+        _ok(r, res)
+>       assert res['in_flight_before'] == 1 and res['returned_first'] is True, res
+E       AssertionError: {'closed': False, 'in_flight_before': 1, 'returned_first': False}
+E       assert (1 == 1 and False is True)
+
+p1t_fix6_mut_a/tc_signal/tests/test_fix5_findings.py:637: AssertionError
+=========================== short test summary info ============================
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py::test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock[gpu]
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py::test_fix6_v601_synchronize_does_not_wait_for_a_release_blocked_on_a_caller_held_lock[nogpu]
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py::test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[deleter]
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py::test_fix6_exit_hook_still_waits_for_an_admitted_callback_on_another_thread[consumed_capsule_drop]
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix6_findings.py::test_fix6_v601_release_started_after_synchronize_began_is_not_waited_for
+FAILED p1t_fix6_mut_a/tc_signal/tests/test_fix5_findings.py::test_fix5_v501_synchronize_does_not_wait_for_a_release_running_on_another_thread
+6 failed, 84 deselected in 23.30s

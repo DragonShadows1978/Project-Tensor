@@ -349,6 +349,13 @@ if site == 'alloc:error_message':
         res['outcome'] = 'MemoryError'
     except RuntimeError as e:
         res['outcome'], res['msg'] = 'RuntimeError', str(e)
+    # P1T-FIX6 (round-6 review V6-03): the drain failure behind that MemoryError is persisted, so the NEXT
+    # synchronize() reports it, exactly once (FIX2 expected it to succeed: the failure was lost).
+    try:
+        ts.synchronize()
+        res['reported_next'] = 'returned'
+    except RuntimeError as e:
+        res['reported_next'] = str(e)
 elif site == 'alloc:event_recycle':
     ts.rint(P.Producer(x, (N,)), out=P.Producer(y, (N,)))
     _C._test_inject([site])
@@ -402,6 +409,8 @@ def test_n3_allocation_failure_at_each_release_site_never_terminates(site):
     else:  # error message: an error (MemoryError), not success; the entry had no completion proof: leaked
         assert res['outcome'] == 'MemoryError', res
         assert res['deleted_before_recovery'] + res['leaked'] == 2, res
+        # P1T-FIX6 (V6-03): the persisted drain failure is raised by the next synchronize(), once.
+        assert 'cudaErrorLaunchFailure' in res['reported_next'] and 'deliberately leaked' in res['reported_next'], res
     assert res['deleted'] + res['delta']['leaked_managers'] == res['exported'], res
 
 

@@ -61,7 +61,7 @@ SRC_DIR = TESTS_DIR.parent / 'src'
 ROOT = TESTS_DIR.parents[1]
 SUBPROC_TIMEOUT = 120
 CUDA_HOME = '/usr/local/cuda-12.6'
-EXIT_DIAG_DEFAULT_S = 5.0          # tc_signal._RELEASE_EXIT_DIAG_S and tuning::kSyncReleaseWaitFirstDiagS (unchanged)
+EXIT_DIAG_DEFAULT_S = 5.0          # tc_signal._RELEASE_EXIT_DIAG_S (P1T-FIX6: synchronize() no longer waits, so its knob is gone)
 MATMUL_BACKLOG = 40                # 4096^3 fp32 matmuls (~0.3-0.5 s) queued ahead of the V5-02 entries ("not ready")
 _DIAG_RE = re.compile(r'tc_signal: \d+ DLPack producer callback\(s\) .* still running after (\d+\.\d) s')
 _ABORT_MARKERS = ('FATAL', 'terminate called', 'exception not rethrown', 'Aborted', 'core dumped')
@@ -77,7 +77,9 @@ def _env(**extra):
 def _run(script, *args, env=None, timeout=SUBPROC_TIMEOUT):
     r = subprocess.run([sys.executable, '-c', script, *args], capture_output=True, text=True, timeout=timeout,
                        env=env or _env())
-    lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+    # P1T-FIX6: the marker may follow another thread's partial line (print() writes the text and the newline
+    # separately, so a daemon thread's line can be cut by the main thread's RESULT line): find it anywhere in a line.
+    lines = [ln[ln.index('RESULT {'):] for ln in r.stdout.splitlines() if 'RESULT {' in ln]
     res = json.loads(lines[-1][len('RESULT '):]) if lines else None
     return r, res
 
@@ -256,7 +258,12 @@ def test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit(sleep_s):
     r, res = _census('immediate', sleep_s)
     st = res['after_hook']['stats']
     assert res['before_hook']['stats']['releases_in_flight'] == 1, res    # admitted and running when the hook ran
-    assert st['admitted_releases'] >= 1 and st['sync_waits_for_other_threads'] == 1, res   # the hook waited for it
+    # P1T-FIX6 (V6-01): the exit hook's close-and-wait waited for it (FIX5 asserted synchronize()'s removed wait). A
+    # 0.1 s deleter may legitimately finish before the close (the hook's synchronize() makes the process's first CUDA
+    # call, a context initialization of about 0.2 s): then nothing is in flight to wait for. The order check in _census
+    # (finished before FINALIZING, rc 0) holds for every duration; the wait is certain for 5.5 s and 12 s.
+    assert st['admitted_releases'] >= 1, res
+    assert st['exit_in_flight_at_close'] == 1 if sleep_s > 1 else st['exit_in_flight_at_close'] in (0, 1), res
     assert st['deleters_leaked_after_close'] == 0, res
 
 
@@ -266,7 +273,8 @@ def test_fix5_v501_deferred_release_in_flight_at_exit(sleep_s):
     st = res['after_hook']['stats']
     assert res['before_hook']['stats']['releases_in_flight'] == 1, res
     assert res['before_hook']['stats']['entries'] == 0, res               # popped: invisible to the pending list
-    assert st['sync_waits_for_other_threads'] == 1, res
+    # P1T-FIX6: the exit hook's wait (certain for 5.5 s and 12 s; a 0.1 s deleter may finish first, see above)
+    assert st['exit_in_flight_at_close'] == 1 if sleep_s > 1 else st['exit_in_flight_at_close'] in (0, 1), res
 
 
 def test_fix5_v501_immediate_refusal_with_no_visible_gpu():
@@ -279,7 +287,7 @@ def test_fix5_v501_capsule_destructor_in_flight_at_exit():
     after = res['after_hook']
     assert after['capsule_dtor_calls'] == 1, res                          # the drop ran the producer destructor once
     assert res['before_hook']['stats']['releases_in_flight'] == 1, res    # an admitted release (capsule drop)
-    assert after['stats']['sync_waits_for_other_threads'] == 1, res
+    assert after['stats']['exit_in_flight_at_close'] == 1, res          # P1T-FIX6: the exit hook's wait
 
 
 def test_fix5_v501_producer_dlpack_callback_in_flight_at_exit_and_late_capsule_drop_is_kept():
@@ -566,8 +574,13 @@ def test_fix5_v501_throwing_cpp_deleter_in_flight_at_exit_is_contained_once(thro
     assert 0 <= out.find('DELETER finished') < out.find('FINALIZING True'), out
     assert res['before_hook']['stats']['releases_in_flight'] == 1, res
     st = res['after_hook']['stats']
-    assert res['after_hook']['calls'] == 2 and st['deleter_exceptions'] == 2, res   # x's and out's, each once
-    assert st['releases_in_flight'] == 0 and st['sync_waits_for_other_threads'] == 1, res
+    # P1T-FIX6 (V6-01): the exit hook now closes admission at once (FIX5's synchronize() first waited for out's release,
+    # which let x's release start before the close). out's slow deleter, admitted and in flight, is waited for and its
+    # exception contained once; x's release starts only after out's deleter returned, i.e. after the close: it is
+    # deliberately leaked without entering the producer (V5-01's after-close rule), not called.
+    assert res['after_hook']['calls'] == 1 and st['deleter_exceptions'] == 1, res
+    assert st['deleters_leaked_after_close'] == 1, res
+    assert st['releases_in_flight'] == 0 and st['exit_in_flight_at_close'] == 1, res   # P1T-FIX6: the exit hook's wait
 
 
 # ================================================================================================== V5-01 synchronize()
@@ -602,22 +615,26 @@ th = threading.Thread(target=lambda: _C.rint_plan(dst))         # its drain runs
 th.start()
 assert started.wait(10)
 s0 = dict(_C.pending_stats())
-ts.synchronize()                                                # must not return while that release is running
+ts.synchronize()                                                # P1T-FIX6 (V6-01): returns at once, no wait
 T['sync_returned'] = time.monotonic()
+T['finished_at_return'] = 'deleter_finished' in T
 th.join()
 s1 = dict(_C.pending_stats())
-print('RESULT ' + json.dumps({'order_ok': T['sync_returned'] >= T['deleter_finished'],
+print('RESULT ' + json.dumps({'returned_first': (not T['finished_at_return']) and
+                                                T['sync_returned'] < T['deleter_finished'],
                               'in_flight_before': s0['releases_in_flight'],
-                              'sync_waits': s1['sync_waits_for_other_threads'] - s0['sync_waits_for_other_threads'],
                               'closed': s1['release_admission_closed']}), flush=True)
 '''.replace('TESTS_DIR', repr(str(TESTS_DIR)))
 
 
-def test_fix5_v501_synchronize_waits_for_a_release_running_on_another_thread():
-    # The reviewer's addon_exit_cpu.py trace calls exactly synchronize() as its exit hook.
+def test_fix5_v501_synchronize_does_not_wait_for_a_release_running_on_another_thread():
+    # P1T-FIX6, round-6 review V6-01: FIX5's version of this test asserted that synchronize() WAITED for a release
+    # running on another thread; that wait deadlocked against caller-held locks (sync_lock_inversion_cpu.py) and is
+    # removed. The release popped by the other thread is that thread's: it finishes there, after synchronize() returned.
+    # (The exit hook's wait is covered by the census tests above and test_fix6_findings.py.)
     r, res = _run(_SYNC_WAIT_SCRIPT)
     _ok(r, res)
-    assert res['in_flight_before'] == 1 and res['order_ok'] is True and res['sync_waits'] == 1, res
+    assert res['in_flight_before'] == 1 and res['returned_first'] is True, res
     assert res['closed'] is False, res                                    # synchronize() never closes admission
 
 

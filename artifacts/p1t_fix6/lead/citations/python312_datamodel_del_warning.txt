@@ -1,0 +1,18 @@
+Source: https://docs.python.org/3.12/reference/datamodel.html (object.__del__), fetched 2026-10-13 via the AtlasForge web proxy
+whether__del__() is called a second time when a resurrected object
+is about to be destroyed; the current CPython implementation
+only calls it once.It is not guaranteed that __del__() methods are called for objects
+that still exist when the interpreter exits.weakref.finalize provides a straightforward way to register
+a cleanup function to be called when an object is garbage collected.Note del x doesnât directly callx.__del__() â the former decrements
+the reference count forx by one, and the latter is only called whenx âs reference count reaches zero.CPython implementation detail: It is possible for a reference cycle to prevent the reference count of an object from going to zero. In this case, the cycle will be later detected and deleted by the cyclic garbage collector. A common cause of reference cycles is when an exception has been caught in a local variable. The frameâs locals then reference the exception, which references its own traceback, which references the locals of all frames caught in the traceback. See also Documentation for the gc module.Warning Due to the precarious circumstances under which __del__() methods are
+invoked, exceptions that occur during their execution are ignored, and a warning
+is printed tosys.stderr instead. In particular:
+ - __del__() can be invoked when arbitrary code is being executed,
+including from any arbitrary thread. If__del__() needs to take
+a lock or invoke any other blocking resource, it may deadlock as
+the resource may already be taken by the code that gets interrupted
+to execute__del__() .
+ - __del__() can be executed during interpreter shutdown. As a
+consequence, the global variables it needs to access (including other
+modules) may already have been deleted or set toNone . Python
+guarantees that globals whose name begins with a single underscore
