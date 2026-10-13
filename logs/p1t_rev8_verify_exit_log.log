@@ -1,0 +1,21 @@
+[
+  {
+    "arm": "--control",
+    "rc": 0,
+    "stdout": "record_still_pending= False\n",
+    "stderr": "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet: the completion event of a pending entry on device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: injected failure); 1 consumed operand manager(s) still pending there were deliberately leaked, not released\n",
+    "reported": true
+  },
+  {
+    "arm": "--oom",
+    "rc": 0,
+    "stdout": "record_still_pending= True\n",
+    "stderr": "",
+    "reported": false
+  }
+]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev8/artifacts/p1t_rev8/probes/verify_exit_log_cpu.py", line 11, in <module>
+    assert all(r['rc']==0 and r['reported'] for r in rows),'native exit logger failed its own reporting OOM'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: native exit logger failed its own reporting OOM
