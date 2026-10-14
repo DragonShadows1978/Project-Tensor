@@ -1,0 +1,17 @@
+after build trace exit=0
+after build handle_oom (as written) exit=0
+after build fill_grid (as written) exit=0
+after build handle_oom (regenerated) exit=0
+after build fill_grid (regenerated) exit=0
+after exit_gate full nogpu  exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished REFUSED FINALIZING True tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchroni
+after exit_gate full nogpu --control exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished REFUSED tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand FINALIZING True tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the r
+after exit_gate trace  exit=1 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 HOOK returned entries=0 FINALIZING True FATAL: exception not rethrown timeout: the monitored command dumped core Traceback (most recent call last):   File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/ar
+after exit_gate trace --control exit=1 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 HOOK returned entries=0 FINALIZING True FATAL: exception not rethrown timeout: the monitored command dumped core Traceback (most recent call last):   File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/ar
+after build trace (exit-entry copy) exit=0
+after exit_gate trace (copy: hook = synchronize + close, the real exit entry) exit=0 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished HOOK returned entries=0 FINALIZING True PASS: finite callback finished before ordinary finalization 
+after query_error_cpu exit=0 :: AFTER FAILED QUERY {'entries': 1, 'managers': 1, 'bytes': 4, 'high_water_entries': 1, 'high_water_managers': 1, 'high_water_bytes': 4, 'retained_entries': 1, 'released_entries': 0, 'released_managers': 0, 'bound_drains': 0, 'fallback_syncs': 0, 'leaked_managers': 0, 'max_entries': 1024, 'max_bytes':
+after handle_insert_oom_cpu (as written: 1475fae slices) exit=1 :: conv creates=1 destroys=0 lstm creates=1 destroys=0 
+after handle_insert_oom_cpu (regenerated from after) exit=0 :: conv creates=1 destroys=1 lstm creates=1 destroys=1 
+after fill_grid_cpu (as written: baseline nblk) exit=1 :: n=1 grid=1 covered=256 n=1099511627777 grid=1 covered=256 n=1099511628032 grid=1 covered=256 
+after fill_grid_cpu (regenerated from after) exit=0 :: n=1 grid=1 covered=256 n=1099511627777 refused: fill_: 1099511627777 elements need 4294967297 blocks of 256 threads, more than the CUDA grid x-dimension limit of 2147483647 (2^31-1) blocks; fill_ launches one thread per element (the existing fill_kernel), so it covers at most 549755813632 elements. 
+after core_import_query_error (nogpu) exit=0 :: PASS: failed device query refused before consumption 

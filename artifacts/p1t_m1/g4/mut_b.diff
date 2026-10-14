@@ -1,0 +1,20 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m1/tensor_cuda/src/bindings.cpp	2026-10-12 19:34:29.266773721 -0400
++++ /tmp/p1t_m1_mut_b/tensor_cuda/src/bindings.cpp	2026-10-12 19:48:47.221508884 -0400
+@@ -278,7 +278,7 @@
+ // ---- export: the manager context OWNS a reference to the Storage, so the
+ // memory outlives the producer Tensor's last Python reference.
+ struct DLPackExportCtx {
+-  std::shared_ptr<Storage> owner;
++  Storage* owner;  // MUTANT (b): raw pointer, no keepalive
+   std::vector<int64_t> shape;
+   std::vector<int64_t> strides;
+   DLManagedTensor legacy{};
+@@ -383,7 +383,7 @@
+   dlpack_fence_consumer(stream);
+ 
+   auto* ctx = new DLPackExportCtx();
+-  ctx->owner = a.storage;
++  ctx->owner = a.storage.get();  // MUTANT (b)
+   ctx->shape.assign(a.shape.begin(), a.shape.end());
+   Shape st = contiguous_strides(a.shape);
+   ctx->strides.assign(st.begin(), st.end());

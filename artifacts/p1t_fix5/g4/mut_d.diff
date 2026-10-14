@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -534,7 +534,7 @@
+ 
+ int64_t fill_grid_blocks(int64_t n) {
+   const int64_t blocks = n / kT + (n % kT != 0 ? 1 : 0);  // ceil(n / kT) for n >= 1, without forming n + kT - 1
+-  if (blocks > kFillMaxGridX)
++  if (false)  // MUTANT (d): the V5-04 refusal removed
+     throw std::invalid_argument(
+         "fill_: " + std::to_string(n) + " elements need " + std::to_string(blocks) + " blocks of " +
+         std::to_string(kT) + " threads, more than the CUDA grid x-dimension limit of " +

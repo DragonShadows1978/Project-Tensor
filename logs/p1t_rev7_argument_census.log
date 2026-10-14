@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev7/artifacts/p1t_rev7/probes/argument_census_cpu.py", line 43, in <module>
+    base=ast.literal_eval(next(x.value for x in tree.body if isinstance(x,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_BINDINGS' for t in x.targets)))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 112, in literal_eval
+    return _convert(node_or_string)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 92, in _convert
+    return list(map(_convert, node.elts))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 90, in _convert
+    return tuple(map(_convert, node.elts))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 104, in _convert
+    left = _convert_signed_num(node.left)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 85, in _convert_signed_num
+    return _convert_num(node)
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 76, in _convert_num
+    _raise_malformed_node(node)
+  File "/usr/lib/python3.12/ast.py", line 73, in _raise_malformed_node
+    raise ValueError(msg + f': {node!r}')
+ValueError: malformed node or string on line 524: <ast.BinOp object at 0x7d7fd07de2d0>
+tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here; the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released

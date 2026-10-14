@@ -1,0 +1,25 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp (mutant c)
+@@ -1361,16 +1361,17 @@
+     ++st.prior_unreported;
+   }
+   const SyncReport rep = sync_and_release_all_impl();
+-  if (rep.failed()) {  // V6-03: persisted before any allocation
+-    st.drain_unreported.merge(rep);
+-    ++st.drain_unreported_calls;
+-  }
+-  if (st.drain_unreported_calls == 0 && st.unreported_count == 0 && st.unraisable_unreported == 0 &&
++  // MUTANT (c): no persistence before the first message allocation.
++  if (!rep.failed() && st.drain_unreported_calls == 0 && st.unreported_count == 0 && st.unraisable_unreported == 0 &&
+       st.prior_unreported == 0)
+     return;
+   // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
+   // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate), and every record stays.
+   if (test_hooks::take(test_hooks::kAllocErrorMessage)) throw std::bad_alloc();
++  if (rep.failed()) {  // MUTANT (c): persisted only after the first allocation point
++    st.drain_unreported.merge(rep);
++    ++st.drain_unreported_calls;
++  }
+   const SyncReport& d = st.drain_unreported;
+   std::ostringstream os;
+   os << "tc_signal.synchronize: CUDA error, so the release is not reported as a success:";

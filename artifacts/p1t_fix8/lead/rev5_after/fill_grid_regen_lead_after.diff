@@ -1,0 +1,26 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev5/probes/fill_grid_cpu.cpp	2026-10-13 15:03:57.241451713 -0400
++++ /tmp/p1t_fix8_probes/lead_after/fill_grid_regen.cpp	2026-10-13 17:26:32.056639817 -0400
+@@ -3,7 +3,22 @@
+ // Taken: finite-width grid arithmetic; ours: test the new fill_ call at 2^40+1 using the unchanged baseline helper.
+ // CPU arithmetic only; synthetic metadata, no resident CUDA allocation or GPU execution.
+ #include <cstdint>
++#include <stdexcept>
++#include <string>
+ #include <iostream>
+ constexpr int kT = 256;
+ inline int nblk(int64_t n) { return static_cast<int>((n + kT - 1) / kT); }
+-int main(){int failures=0;for(int64_t n:{int64_t{1},(int64_t{1}<<40)+1,(int64_t{1}<<40)+256}){int blocks=nblk(n);int64_t coverage=static_cast<int64_t>(static_cast<unsigned int>(blocks))*kT;std::cout<<"n="<<n<<" grid="<<blocks<<" covered="<<coverage<<"\n";if(coverage<n)++failures;}return failures?1:0;}
++// P1T-FIX5 regeneration: the fill_ path's geometry, extracted verbatim
++constexpr int64_t kFillMaxGridX = 2147483647;  // 2^31-1: CUDA 12.6 grid x-dimension limit (see above)
++int64_t fill_grid_blocks(int64_t n) {
++  const int64_t blocks = n / kT + (n % kT != 0 ? 1 : 0);  // ceil(n / kT) for n >= 1, without forming n + kT - 1
++  if (blocks > kFillMaxGridX)
++    throw std::invalid_argument(
++        "fill_: " + std::to_string(n) + " elements need " + std::to_string(blocks) + " blocks of " +
++        std::to_string(kT) + " threads, more than the CUDA grid x-dimension limit of " +
++        std::to_string(kFillMaxGridX) + " (2^31-1) blocks; fill_ launches one thread per element (the existing "
++        "fill_kernel), so it covers at most " + std::to_string(kFillMaxGridX * kT) +
++        " elements. Refused before any launch: nothing was written and the revision is unchanged");
++  return blocks;
++}
++int main(){int failures=0;for(int64_t n:{int64_t{1},(int64_t{1}<<40)+1,(int64_t{1}<<40)+256}){int64_t blocks;try{blocks=fill_grid_blocks(n);}catch(const std::invalid_argument& e){std::cout<<"n="<<n<<" refused: "<<e.what()<<"\n";continue;}int64_t coverage=static_cast<int64_t>(static_cast<unsigned int>(blocks))*kT;std::cout<<"n="<<n<<" grid="<<blocks<<" covered="<<coverage<<"\n";if(coverage<n)++failures;}return failures?1:0;}

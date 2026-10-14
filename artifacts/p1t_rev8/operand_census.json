@@ -1,0 +1,81 @@
+[
+  {
+    "case": "addon_scalar",
+    "result": "accepted"
+  },
+  {
+    "case": "byte_offset",
+    "result": "accepted"
+  },
+  {
+    "case": "read_only_input",
+    "result": "accepted"
+  },
+  {
+    "case": "read_only_output",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand"
+  },
+  {
+    "case": "copied_output",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'out': the producer exported a copy; writes to it would not reach the caller's tensor"
+  },
+  {
+    "case": "zero_extent",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': empty operand (shape [0])"
+  },
+  {
+    "case": "zero_plus_huge",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': element count of shape [0, 4611686018427387904, 4] overflows int64 (every nonzero extent counts, also next to a zero extent)"
+  },
+  {
+    "case": "near_int64_byte_overflow",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': byte size of shape [9223372036854775807] (fp32) overflows int64"
+  },
+  {
+    "case": "pointer_offset_wrap",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': data + byte_offset + byte size overflows the address space"
+  },
+  {
+    "case": "singleton_arbitrary_stride",
+    "result": "accepted"
+  },
+  {
+    "case": "wrong_major_version",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': DLPack major version 2 is not supported (this consumer reads major 1)"
+  },
+  {
+    "case": "same_capsule_twice",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'out': the DLPack capsule was already consumed (name 'used_dltensor_versioned'); a capsule can be consumed once"
+  },
+  {
+    "case": "reuse_consumed_capsule",
+    "result": "ValueError",
+    "message": "tc_signal: operand 'x': the DLPack capsule was already consumed (name 'used_dltensor_versioned'); a capsule can be consumed once"
+  },
+  {
+    "case": "core_scalar_cpu_empty",
+    "result": "accepted"
+  },
+  {
+    "case": "core_zero_extent",
+    "result": "accepted"
+  },
+  {
+    "case": "core_zero_plus_huge",
+    "result": "ValueError",
+    "message": "empty: the element count of shape [0, 4611686018427387904, 4] overflows int64 (every nonzero extent counts, also next to a zero extent: strides and partial counts are formed from them); refused"
+  },
+  {
+    "case": "fill_grid_overflow",
+    "result": "ValueError",
+    "message": "fill_: 1099511627777 elements need 4294967297 blocks of 256 threads, more than the CUDA grid x-dimension limit of 2147483647 (2^31-1) blocks; fill_ launches one thread per element (the existing fill_kernel), so it covers at most 549755813632 elements. Refused before any launch: nothing was written and the revision is unchanged"
+  }
+]

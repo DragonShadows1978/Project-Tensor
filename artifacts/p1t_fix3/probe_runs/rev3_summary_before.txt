@@ -1,0 +1,28 @@
+before host_checks nogpu collector exit=0
+before ck_census nogpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+before lifecycle_timeout control nogpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 595127} FINALIZING True 
+before lifecycle_timeout short nogpu exit=134 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} HOOK {'in_flight_at_close': 1, 'still_in_flight': 1, 'timed_out': True, 'waited_us': 100064} FINALIZING True FATAL: exception not rethrown timeout: the monito
+before lifecycle_timeout default nogpu exit=134 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} HOOK {'in_flight_at_close': 1, 'still_in_flight': 1, 'timed_out': True, 'waited_us': 5000065} FINALIZING True FATAL: exception not rethrown timeout: the mon
+before pending_bytes entry (unmodified) nogpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix3/artifacts/p1t_rev3/probes/pending_bytes.cpp:28:14: runtime error: signed integer 
+before pending_bytes queue (unmodified) nogpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/tc_signal/src/dlpack_operand.cpp:602:12: runtime error: signed integer overflow: 
+before pending_bytes entry (adapted driver) nogpu exit=0 :: validated disjoint operands, bytes each=9223372036854775804 SAFE REFUSAL: tc_signal: cannot create the completion event on CUDA device 0: cudaErrorNoDevice: no CUDA-capable device is detected 
+before operand_census nogpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cudaGetDev
+before real_metadata_plans nogpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cud
+before host_checks gpu collector exit=0
+before ck_census gpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+before lifecycle_timeout control gpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 595132} FINALIZING True 
+before lifecycle_timeout short gpu exit=134 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} HOOK {'in_flight_at_close': 1, 'still_in_flight': 1, 'timed_out': True, 'waited_us': 100068} FINALIZING True FATAL: exception not rethrown timeout: the monito
+before lifecycle_timeout default gpu exit=134 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} HOOK {'in_flight_at_close': 1, 'still_in_flight': 1, 'timed_out': True, 'waited_us': 5000067} FINALIZING True FATAL: exception not rethrown timeout: the mon
+before pending_bytes entry (unmodified) gpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix3/artifacts/p1t_rev3/probes/pending_bytes.cpp:28:14: runtime error: signed integer 
+before pending_bytes queue (unmodified) gpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/tc_signal/src/dlpack_operand.cpp:602:12: runtime error: signed integer overflow: 
+before pending_bytes entry (adapted driver) gpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 retainer accepted the pair (destructor runs next) /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/tc_signal/src/dlpack_operand.cp
+before operand_census gpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters 
+before real_metadata_plans gpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim 
+before core_exit_overrun during exit=0 wall_s=3.0 :: ARMED FINAL finalizing=True 
+before core_exit_overrun bounded exit=134 wall_s=7.6 :: ARMED tensor_cuda: 1 DLPack release(s) still running after 5.0 s at exit; the interpreter may terminate that thread during finalization FATAL: exception not rethrown timeout: the monitored command dumped core 
+before addon_lifetime exit=0 incorrect=0 correct=12 reused=0 :: PASS:12 finite trials correct, every call retained; no universal race-free claim
+before core_device_drain (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two CUDA devices required 
+before core_edges exit=0 :: {   "byte_count_wrap": {     "accepted": false,     "error": "empty: the byte size of shape [4611686018427387904] (4-byte elements) overflows int64 (every nonzero extent counts, also next to a zero extent); refused"   },   "elemen
+before numerics_and_streams exit=0 :: PASS: finite determinism, handle settings, L=1, special rint, nonlegacy producer ordering 
+before cuda_errors_multidevice (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two devices required 
+before release_failures exit=0 :: 66 passed in 43.05s 

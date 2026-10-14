@@ -1,0 +1,418 @@
+........FFFFFFFFFFFFFFFFFFFFFFFF...............                          [100%]
+=================================== FAILURES ===================================
+____ test_f02_none_required_operand_is_type_error_before_planning[conv1d.x] ____
+
+case = 'conv1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: conv1d.x: RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+____ test_f02_none_required_operand_is_type_error_before_planning[conv1d.w] ____
+
+case = 'conv1d.w'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: conv1d.w: RESULT TypeError [] | tc_signal: operand 'w': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'w': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[conv_transpose1d.x] _
+
+case = 'conv_transpose1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: conv_transpose1d.x: RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[conv_transpose1d.w] _
+
+case = 'conv_transpose1d.w'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: conv_transpose1d.w: RESULT TypeError [] | tc_signal: operand 'w': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'w': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_____ test_f02_none_required_operand_is_type_error_before_planning[lstm.x] _____
+
+case = 'lstm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+>       assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+E       AssertionError: lstm.x: process died with -11 (a crash, not a clean refusal)
+E         
+E       assert -11 == 0
+E        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, sys\nimport tc_signal as ts\nfrom tc_signal import ...eption as e:\n    print('RESULT', type(e).__name__, calls, '|', e)\n", 'lstm.x'], returncode=-11, stdout='', stderr='').returncode
+
+tc_signal/tests/test_fix1_findings.py:325: AssertionError
+_____ test_f02_none_required_operand_is_type_error_before_planning[lstm.W] _____
+
+case = 'lstm.W'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+>       assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+E       AssertionError: lstm.W: process died with -11 (a crash, not a clean refusal)
+E         
+E       assert -11 == 0
+E        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, sys\nimport tc_signal as ts\nfrom tc_signal import ...eption as e:\n    print('RESULT', type(e).__name__, calls, '|', e)\n", 'lstm.W'], returncode=-11, stdout='', stderr='').returncode
+
+tc_signal/tests/test_fix1_findings.py:325: AssertionError
+_____ test_f02_none_required_operand_is_type_error_before_planning[lstm.R] _____
+
+case = 'lstm.R'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+>       assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: lstm.R: RESULT ValueError [] | tc_signal.lstm: R has shape [], expected [1, 8, 2] (R is [D, 4H, H])
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x70b1918836c0>('RESULT TypeError [] |')
+E        +    where <built-in method startswith of str object at 0x70b1918836c0> = 'RESULT ValueError [] | tc_signal.lstm: R has shape [], expected [1, 8, 2] (R is [D, 4H, H])'.startswith
+
+tc_signal/tests/test_fix1_findings.py:327: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[instance_norm1d.x] _
+
+case = 'instance_norm1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+>       assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: instance_norm1d.x: RESULT ValueError [] | tc_signal: instance_norm1d: x must be [N, C, T], got 0 dimensions
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x70b191882670>('RESULT TypeError [] |')
+E        +    where <built-in method startswith of str object at 0x70b191882670> = 'RESULT ValueError [] | tc_signal: instance_norm1d: x must be [N, C, T], got 0 dimensions'.startswith
+
+tc_signal/tests/test_fix1_findings.py:327: AssertionError
+__ test_f02_none_required_operand_is_type_error_before_planning[layer_norm.x] __
+
+case = 'layer_norm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+>       assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: layer_norm.x: RESULT ValueError [] | tc_signal: layer_norm: x must have at least 1 dimension, got 0
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x70b191810bb0>('RESULT TypeError [] |')
+E        +    where <built-in method startswith of str object at 0x70b191810bb0> = 'RESULT ValueError [] | tc_signal: layer_norm: x must have at least 1 dimension, got 0'.startswith
+
+tc_signal/tests/test_fix1_findings.py:327: AssertionError
+__ test_f02_none_required_operand_is_type_error_before_planning[group_norm.x] __
+
+case = 'group_norm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+>       assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: group_norm.x: RESULT ValueError [] | tc_signal: group_norm: x must be [N, C, T], got 0 dimensions
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x70b19181f330>('RESULT TypeError [] |')
+E        +    where <built-in method startswith of str object at 0x70b19181f330> = 'RESULT ValueError [] | tc_signal: group_norm: x must be [N, C, T], got 0 dimensions'.startswith
+
+tc_signal/tests/test_fix1_findings.py:327: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[upsample_nearest1d.x] _
+
+case = 'upsample_nearest1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+>       assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+E       AssertionError: upsample_nearest1d.x: process died with -11 (a crash, not a clean refusal)
+E         
+E       assert -11 == 0
+E        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, sys\nimport tc_signal as ts\nfrom tc_signal import ...    print('RESULT', type(e).__name__, calls, '|', e)\n", 'upsample_nearest1d.x'], returncode=-11, stdout='', stderr='').returncode
+
+tc_signal/tests/test_fix1_findings.py:325: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[reflection_pad1d.x] _
+
+case = 'reflection_pad1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+>       assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+E       AssertionError: reflection_pad1d.x: process died with -11 (a crash, not a clean refusal)
+E         
+E       assert -11 == 0
+E        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, sys\nimport tc_signal as ts\nfrom tc_signal import ...\n    print('RESULT', type(e).__name__, calls, '|', e)\n", 'reflection_pad1d.x'], returncode=-11, stdout='', stderr='').returncode
+
+tc_signal/tests/test_fix1_findings.py:325: AssertionError
+_____ test_f02_none_required_operand_is_type_error_before_planning[rint.x] _____
+
+case = 'rint.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+>       assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: rint.x: RESULT AllocatorCalled [()] | ()
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x70b19165ba50>('RESULT TypeError [] |')
+E        +    where <built-in method startswith of str object at 0x70b19165ba50> = 'RESULT AllocatorCalled [()] | ()'.startswith
+
+tc_signal/tests/test_fix1_findings.py:327: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[rint.x_out_given] _
+
+case = 'rint.x_out_given'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: rint.x_out_given: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+__ test_f02_none_required_operand_is_type_error_before_planning[run.conv1d.x] __
+
+case = 'run.conv1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.conv1d.x: RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.conv_transpose1d.x] _
+
+case = 'run.conv_transpose1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.conv_transpose1d.x: RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+___ test_f02_none_required_operand_is_type_error_before_planning[run.lstm.x] ___
+
+case = 'run.lstm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.lstm.x: RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'x': expected a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.instance_norm1d.x] _
+
+case = 'run.instance_norm1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.instance_norm1d.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.layer_norm.x] _
+
+case = 'run.layer_norm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.layer_norm.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.group_norm.x] _
+
+case = 'run.group_norm.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.group_norm.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.upsample_nearest1d.x] _
+
+case = 'run.upsample_nearest1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.upsample_nearest1d.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+_ test_f02_none_required_operand_is_type_error_before_planning[run.reflection_pad1d.x] _
+
+case = 'run.reflection_pad1d.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.reflection_pad1d.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+___ test_f02_none_required_operand_is_type_error_before_planning[run.rint.x] ___
+
+case = 'run.rint.x'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.rint.x: RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand '?': is absent (None); its shape/device cannot be read"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+__ test_f02_none_required_operand_is_type_error_before_planning[run.rint.out] __
+
+case = 'run.rint.out'
+
+    @pytest.mark.parametrize('case', F02_CASES)
+    def test_f02_none_required_operand_is_type_error_before_planning(case):
+        r = subprocess.run([sys.executable, '-c', _F02_SCRIPT, case], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        assert r.returncode == 0, f'{case}: process died with {r.returncode} (a crash, not a clean refusal)\n{r.stderr}'
+        line = next(ln for ln in r.stdout.splitlines() if ln.startswith('RESULT'))
+        assert line.startswith('RESULT TypeError [] |'), f'{case}: {line}'      # TypeError, and no allocation happened
+>       assert 'is required' in line, f'{case}: {line}'
+E       AssertionError: run.rint.out: RESULT TypeError [] | tc_signal: operand 'out': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType
+E       assert 'is required' in "RESULT TypeError [] | tc_signal: operand 'out': expected a DLPack producer (an object with __dlpack__) or a DLPack capsule, got NoneType"
+
+tc_signal/tests/test_fix1_findings.py:328: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[conv1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[conv1d.w]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[conv_transpose1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[conv_transpose1d.w]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[lstm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[lstm.W]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[lstm.R]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[instance_norm1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[layer_norm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[group_norm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[upsample_nearest1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[reflection_pad1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[rint.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[rint.x_out_given]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.conv1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.conv_transpose1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.lstm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.instance_norm1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.layer_norm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.group_norm.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.upsample_nearest1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.reflection_pad1d.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.rint.x]
+FAILED tc_signal/tests/test_fix1_findings.py::test_f02_none_required_operand_is_type_error_before_planning[run.rint.out]
+24 failed, 23 passed in 21.95s

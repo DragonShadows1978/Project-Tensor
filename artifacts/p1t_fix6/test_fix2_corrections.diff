@@ -1,0 +1,11 @@
+351a352,358
+>     # P1T-FIX6 (round-6 review V6-03): the drain failure behind that MemoryError is persisted, so the NEXT
+>     # synchronize() reports it, exactly once (FIX2 expected it to succeed: the failure was lost).
+>     try:
+>         ts.synchronize()
+>         res['reported_next'] = 'returned'
+>     except RuntimeError as e:
+>         res['reported_next'] = str(e)
+404a412,413
+>         # P1T-FIX6 (V6-03): the persisted drain failure is raised by the next synchronize(), once.
+>         assert 'cudaErrorLaunchFailure' in res['reported_next'] and 'deliberately leaked' in res['reported_next'], res

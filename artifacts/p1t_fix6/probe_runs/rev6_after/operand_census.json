@@ -1,0 +1,96 @@
+{
+  "cases": [
+    {
+      "case": "offset accepted",
+      "result": "accepted"
+    },
+    {
+      "case": "offset alignment refused",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': data + byte_offset is not 4-byte aligned"
+    },
+    {
+      "case": "singleton negative stride",
+      "result": "accepted"
+    },
+    {
+      "case": "scalar NULL shape",
+      "result": "accepted"
+    },
+    {
+      "case": "versioned read flags 1",
+      "result": "accepted"
+    },
+    {
+      "case": "versioned written flags 1",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand"
+    },
+    {
+      "case": "versioned read flags 2",
+      "result": "accepted"
+    },
+    {
+      "case": "versioned written flags 2",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'out': the producer exported a copy; writes to it would not reach the caller's tensor"
+    },
+    {
+      "case": "versioned read flags 3",
+      "result": "accepted"
+    },
+    {
+      "case": "versioned written flags 3",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand"
+    },
+    {
+      "case": "one capsule twice",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'y': the DLPack capsule was already consumed (name 'used_dltensor'); a capsule can be consumed once"
+    },
+    {
+      "case": "used capsule again",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': the DLPack capsule was already consumed (name 'used_dltensor'); a capsule can be consumed once"
+    },
+    {
+      "case": "overflow next to zero (0, 4611686018427387904, 4)",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': element count of shape [0, 4611686018427387904, 4] overflows int64 (every nonzero extent counts, also next to a zero extent)"
+    },
+    {
+      "case": "overflow next to zero (4611686018427387904, 0, 4)",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': element count of shape [4611686018427387904, 0, 4] overflows int64 (every nonzero extent counts, also next to a zero extent)"
+    },
+    {
+      "case": "overflow next to zero (4611686018427387904, 4, 0)",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': element count of shape [4611686018427387904, 4, 0] overflows int64 (every nonzero extent counts, also next to a zero extent)"
+    },
+    {
+      "case": "overflow next to zero (0, 9223372036854775807)",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': byte size of shape [0, 9223372036854775807] (fp32) overflows int64"
+    },
+    {
+      "case": "overflow next to zero (9223372036854775807, 0)",
+      "result": "refused",
+      "exception": "ValueError",
+      "message": "tc_signal: operand 'x': byte size of shape [9223372036854775807, 0] (fp32) overflows int64"
+    }
+  ],
+  "deleter_calls": 7,
+  "all_once": true
+}

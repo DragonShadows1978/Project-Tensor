@@ -1,0 +1,11 @@
+arm root: /tmp/p1t_fix7_before_tree; shim: /tmp/p1t_fix7_scratch/lockshim_receipt/mutex_lock_shim.so
+deleter finished before finalization: False
+rc -6
+--- stdout
+ARMED lock_fail 1
+DELETER started
+RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": null, "shutdown_runner_closes": null, "shutdown_runner_in_flight_at_close": null, "shutdown_lock_retries": null}, "lock": {"failed": 1, "left": 0}, "calls": []}
+FINALIZING True
+--- stderr
+tensor_cuda: DLPack exit hook failed (RuntimeError: Invalid argument)
+FATAL: exception not rethrown

@@ -1,0 +1,20 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix3/artifacts/p1t_rev3/probes/pending_bytes.cpp
++++ /tmp/p1t_fix3_probes/before/pending_bytes_adapt.cpp
+@@ -23,10 +23,13 @@
+    tcs::note_push(st,e); // unchanged production function, actual pending-list accounting
+    std::cout<<st.bytes<<std::endl;
+  } else {
+-   // Verbatim arithmetic statement from RetainUntilComplete destructor, dlpack_operand.cpp:731.
+-   for(tcs::Operand* op:{&X,&Y}) {
+-     e.bytes += op->numel() * static_cast<int64_t>(sizeof(float));
++   // P1T-FIX3 adaptation: the per-entry sum is formed by the REAL retainer (5f9f955: its destructor,
++   // dlpack_operand.cpp:731; FIX3: its constructor's checked pre-launch aggregate). No kernel is launched.
++   try {
++     tcs::RetainUntilComplete keep(0, {&X, &Y});
++     std::cout<<"retainer accepted the pair (destructor runs next)"<<std::endl;
++   } catch(const std::exception& ex) {
++     std::cout<<"SAFE REFUSAL: "<<ex.what()<<std::endl;
+    }
+-   std::cout<<e.bytes<<std::endl;
+  }
+ }

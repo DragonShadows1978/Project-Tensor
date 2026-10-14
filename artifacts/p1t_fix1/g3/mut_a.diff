@@ -1,0 +1,12 @@
+# mutant (a): F01 deferred release removed: every consumed manager is released right after the launches again
+# tree: /tmp/p1t_fix1_mut_a/tc_signal
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -528,6 +528,7 @@
+ }
+ 
+ RetainUntilComplete::~RetainUntilComplete() {
++  return;  // MUTANT (a): F01 fix removed: immediate release restored (the Operands release at scope exit)
+   PendingState& st = pending();
+   PendingEntry e;
+   e.device = device_;

@@ -1,0 +1,28 @@
+after host_checks nogpu collector exit=0
+after ck_census nogpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+after lifecycle_timeout control nogpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 595108, 'diagnostics': 0, 'own_thread_in_flight': 0} 
+after lifecycle_timeout short nogpu exit=0 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.1 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: 1 D
+after lifecycle_timeout default nogpu exit=0 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) DELETER finish
+after pending_bytes entry (unmodified) nogpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix3/artifacts/p1t_rev3/probes/pending_bytes.cpp:28:14: runtime error: signed integer 
+after pending_bytes queue (unmodified) nogpu exit=0 :: validated disjoint operands, bytes each=9223372036854775804 9223372036854775807 
+after pending_bytes entry (adapted driver) nogpu exit=0 :: validated disjoint operands, bytes each=9223372036854775804 SAFE REFUSAL: tc_signal: the aggregate fp32 byte count of this call's operands (their sum) overflows 64-bit arithmetic; refused (no wrapped size is ever used) 
+after operand_census nogpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cudaGetDev
+after real_metadata_plans nogpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the current-device query cud
+after host_checks gpu collector exit=0
+after ck_census gpu exit=0 :: {"summary": {"mode": "ck_census", "cases": 18, "failures": 0}} ubsan_lines=0
+after lifecycle_timeout control gpu exit=0 :: ARMED control DELETER started ADMITTED {'in_flight': 1, 'closing': False} DELETER finished HOOK {'in_flight_at_close': 1, 'still_in_flight': 0, 'timed_out': False, 'waited_us': 595152, 'diagnostics': 0, 'own_thread_in_flight': 0} 
+after lifecycle_timeout short gpu exit=0 :: ARMED short DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.1 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: 1 D
+after lifecycle_timeout default gpu exit=0 :: ARMED default DELETER started ADMITTED {'in_flight': 1, 'closing': False} tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) DELETER finish
+after pending_bytes entry (unmodified) gpu exit=1 :: validated disjoint operands, bytes each=9223372036854775804 /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix3/artifacts/p1t_rev3/probes/pending_bytes.cpp:28:14: runtime error: signed integer 
+after pending_bytes queue (unmodified) gpu exit=0 :: validated disjoint operands, bytes each=9223372036854775804 9223372036854775807 
+after pending_bytes entry (adapted driver) gpu exit=0 :: validated disjoint operands, bytes each=9223372036854775804 SAFE REFUSAL: tc_signal: the aggregate fp32 byte count of this call's operands (their sum) overflows 64-bit arithmetic; refused (no wrapped size is ever used) 
+after operand_census gpu exit=0 :: PASS operand census 17 cases, 7 once-only consumed deleters 
+after real_metadata_plans gpu exit=0 :: PASS real metadata geometry 129 cases; no GPU/data/numerical claim 
+after core_exit_overrun during exit=0 wall_s=3.0 :: ARMED FINAL finalizing=True 
+after core_exit_overrun bounded exit=0 wall_s=7.5 :: ARMED tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: the DLPack release(s) admitted before exit finished after 5.5 s; interpreter exit continues FINAL f
+after addon_lifetime exit=0 incorrect=0 correct=12 reused=0 :: PASS:12 finite trials correct, every call retained; no universal race-free claim
+after core_device_drain (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two CUDA devices required 
+after core_edges exit=0 :: {   "byte_count_wrap": {     "accepted": false,     "error": "empty: the byte size of shape [4611686018427387904] (4-byte elements) overflows int64 (every nonzero extent counts, also next to a zero extent); refused"   },   "elemen
+after numerics_and_streams exit=0 :: PASS: finite determinism, handle settings, L=1, special rint, nonlegacy producer ordering 
+after cuda_errors_multidevice (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two devices required 
+after release_failures exit=0 :: 66 passed in 42.84s 

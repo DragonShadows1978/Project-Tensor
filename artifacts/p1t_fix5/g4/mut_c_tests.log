@@ -1,0 +1,66 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_____ test_fix5_v503_cache_insertion_failure_destroys_the_new_handle[conv] _____
+
+alloc_shim = '/tmp/p1t_fix5_mut_c/pt/fix5_alloc_shim0/fix5_alloc_shim.so'
+mode = 'conv'
+
+    @pytest.mark.parametrize('mode', ['conv', 'lstm'])
+    def test_fix5_v503_cache_insertion_failure_destroys_the_new_handle(alloc_shim, mode):
+        r, res = _run(_V503_SCRIPT, alloc_shim, mode, env=_env(LD_PRELOAD=alloc_shim))
+        _ok(r, res)
+        assert res['before'] == {'creates': 0, 'destroys': 0, 'injected': 0}, res
+        assert res['call'] == 'MemoryError' and res['after_call']['injected'] == 1, res   # the insertion really failed
+>       assert res['after_call']['creates'] == 1 and res['after_call']['destroys'] == 1, res   # 1475fae: destroys 0
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_call': {'creates': 1, 'destroys': 0, 'injected': 1}, 'after_next': {'creates': 2, 'destroys': 0, 'injected': 1}, 'before': {'creates': 0, 'destroys': 0, 'injected': 0}, 'call': 'MemoryError', ...}
+E       assert (1 == 1 and 0 == 1)
+
+tc_signal/tests/test_fix5_findings.py:882: AssertionError
+_____ test_fix5_v503_cache_insertion_failure_destroys_the_new_handle[lstm] _____
+
+alloc_shim = '/tmp/p1t_fix5_mut_c/pt/fix5_alloc_shim0/fix5_alloc_shim.so'
+mode = 'lstm'
+
+    @pytest.mark.parametrize('mode', ['conv', 'lstm'])
+    def test_fix5_v503_cache_insertion_failure_destroys_the_new_handle(alloc_shim, mode):
+        r, res = _run(_V503_SCRIPT, alloc_shim, mode, env=_env(LD_PRELOAD=alloc_shim))
+        _ok(r, res)
+        assert res['before'] == {'creates': 0, 'destroys': 0, 'injected': 0}, res
+        assert res['call'] == 'MemoryError' and res['after_call']['injected'] == 1, res   # the insertion really failed
+>       assert res['after_call']['creates'] == 1 and res['after_call']['destroys'] == 1, res   # 1475fae: destroys 0
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_call': {'creates': 1, 'destroys': 0, 'injected': 1}, 'after_next': {'creates': 2, 'destroys': 0, 'injected': 1}, 'before': {'creates': 0, 'destroys': 0, 'injected': 0}, 'call': 'MemoryError', ...}
+E       assert (1 == 1 and 0 == 1)
+
+tc_signal/tests/test_fix5_findings.py:882: AssertionError
+___ test_fix5_v503_reviewer_cpu_probe_regenerated_from_these_sources_passes ____
+
+tmp_path = PosixPath('/tmp/p1t_fix5_mut_c/pt/test_fix5_v503_reviewer_cpu_pr0')
+
+    def test_fix5_v503_reviewer_cpu_probe_regenerated_from_these_sources_passes(tmp_path):
+        sys.path.insert(0, str(TESTS_DIR))
+        from fix5_regen import regen_handle_probe
+        probe = ROOT / 'artifacts' / 'p1t_rev5' / 'probes' / 'handle_insert_oom_cpu.cpp'
+        text = regen_handle_probe(probe.read_text(), (SRC_DIR / 'conv.cu').read_text(), (SRC_DIR / 'lstm.cu').read_text())
+        assert 'note_cublas_handle_destroy_failure' in text and 'NewHandleOwner' in text   # this tree's functions
+        src, exe = tmp_path / 'handle_insert_oom_regen.cpp', tmp_path / 'handle_insert_oom_regen'
+        src.write_text(text)
+        r = subprocess.run(['g++', '-std=c++17', '-O1', str(src), f'-I{CUDA_HOME}/include', '-o', str(exe)],
+                           capture_output=True, text=True, timeout=SUBPROC_TIMEOUT)
+        assert r.returncode == 0, r.stderr
+        r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=SUBPROC_TIMEOUT)
+>       assert r.returncode == 0, (r.stdout, r.stderr)                         # 1475fae's slices: rc 1, destroys=0
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: ('conv creates=1 destroys=0
+E         lstm creates=1 destroys=0
+E         ', '')
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/p1t_fix5_mut_c/pt/test_fix5_v503_reviewer_cpu_pr0/handle_insert_oom_regen'], returncode=1, stdout='conv creates=1 destroys=0\nlstm creates=1 destroys=0\n', stderr='').returncode
+
+tc_signal/tests/test_fix5_findings.py:901: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v503_cache_insertion_failure_destroys_the_new_handle[conv]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v503_cache_insertion_failure_destroys_the_new_handle[lstm]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v503_reviewer_cpu_probe_regenerated_from_these_sources_passes
+3 failed, 20 deselected in 4.66s

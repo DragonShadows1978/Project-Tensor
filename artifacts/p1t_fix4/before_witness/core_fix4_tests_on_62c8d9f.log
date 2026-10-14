@@ -1,0 +1,390 @@
+FF.FFFFFFFFFFFFFFF.FFF                                                   [100%]
+=================================== FAILURES ===================================
+_ test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_switch] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_switch'
+
+    @pytest.mark.parametrize("mode", ["export_switch", "export_ptds"])
+    def test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores(fix4_shim, mode):
+        # V4-01: device 1 current, device-0 tensor, a consumer stream handle (or 2, the per-thread stream): the event must
+        # be created and recorded on device 0, the wait issued there, the event destroyed there, and device 1 restored.
+        # 62c8d9f / mutant (a): create@1 record@1 wait@1 destroy@1, no switch.
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] is None and res["capsule"], res
+>       assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert ['create@1', ..., 'destroy@1'] == ['set0', 'cre...oy@0', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1502: AssertionError
+_ test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_ptds] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_ptds'
+
+    @pytest.mark.parametrize("mode", ["export_switch", "export_ptds"])
+    def test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores(fix4_shim, mode):
+        # V4-01: device 1 current, device-0 tensor, a consumer stream handle (or 2, the per-thread stream): the event must
+        # be created and recorded on device 0, the wait issued there, the event destroyed there, and device 1 restored.
+        # 62c8d9f / mutant (a): create@1 record@1 wait@1 destroy@1, no switch.
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] is None and res["capsule"], res
+>       assert res["log"] == ["set0"] + _FENCE_ON_0 + ["set1"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert ['create@1', ..., 'destroy@1'] == ['set0', 'cre...oy@0', 'set1']
+E         
+E         At index 0 diff: 'create@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'destroy@0'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:1502: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_record-logged0-cudaEventRecord] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_record'
+logged = ['set0', 'create@0', 'record@0!', 'destroy@0', 'set1']
+frag = 'cudaEventRecord'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1!', 'destroy@1'], ...}
+E       assert ('RuntimeError' == 'RuntimeError'
+E         
+E           RuntimeError and 'cudaEventRecord' in '__dlpack__: stream fence failed: invalid device ordinal')
+
+tensor_cuda/tests/test_dlpack.py:1520: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_destroy-logged1-cudaEventDestroy] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_destroy'
+logged = ['set0', 'create@0', 'record@0', 'wait@0', 'destroy@0!', 'set1']
+frag = 'cudaEventDestroy'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1!'], ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1520: AssertionError
+_ test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_switch-logged2-cannot make the tensor's CUDA device 0 current] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_switch', logged = ['set0!']
+frag = "cannot make the tensor's CUDA device 0 current"
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_record", ["set0", "create@0", "record@0!", "destroy@0", "set1"], "cudaEventRecord"),
+        ("export_fail_destroy", ["set0", "create@0", "record@0", "wait@0", "destroy@0!", "set1"], "cudaEventDestroy"),
+        ("export_fail_switch", ["set0!"], "cannot make the tensor's CUDA device 0 current"),
+    ])
+    def test_fix4_v401_export_fence_failure_raises_with_the_device_restored(fix4_shim, mode, logged, frag):
+        # The order: errors raised with the device restored. Each failure is a genuine runtime error (the slot really holds
+        # cudaErrorInvalidDevice), so the raise must also consume it (slot_after == 0).
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "cudaErrorInvalidDevice" in res["msg"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1520: AssertionError
+_ test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_create-logged0-cudaEventCreateWithFlags] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_create', logged = ['set0', 'create@0!', 'set1']
+frag = 'cudaEventCreateWithFlags'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_create", ["set0", "create@0!", "set1"], "cudaEventCreateWithFlags"),
+        ("export_fail_wait", ["set0", "create@0", "record@0", "wait@0!", "destroy@0", "set1"], "cudaStreamWaitEvent"),
+    ])
+    def test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises(fix4_shim, mode, logged, frag):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "was restored" in res["msg"], res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1!'], ...}
+E       assert ('RuntimeError' == 'RuntimeError'
+E         
+E           RuntimeError and 'cudaEventCreateWithFlags' in '__dlpack__: stream fence failed: invalid device ordinal')
+
+tensor_cuda/tests/test_dlpack.py:1532: AssertionError
+_ test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_wait-logged1-cudaStreamWaitEvent] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'export_fail_wait'
+logged = ['set0', 'create@0', 'record@0', 'wait@0!', 'destroy@0', 'set1']
+frag = 'cudaStreamWaitEvent'
+
+    @pytest.mark.parametrize("mode, logged, frag", [
+        ("export_fail_create", ["set0", "create@0!", "set1"], "cudaEventCreateWithFlags"),
+        ("export_fail_wait", ["set0", "create@0", "record@0", "wait@0!", "destroy@0", "set1"], "cudaStreamWaitEvent"),
+    ])
+    def test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises(fix4_shim, mode, logged, frag):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and frag in res["msg"] and "was restored" in res["msg"], res
+E       AssertionError: {'capsule': False, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1!', 'destroy@1'], ...}
+E       assert ('RuntimeError' == 'RuntimeError'
+E         
+E           RuntimeError and 'cudaStreamWaitEvent' in '__dlpack__: stream fence failed: invalid device ordinal')
+
+tensor_cuda/tests/test_dlpack.py:1532: AssertionError
+________ test_fix4_export_label_proof_query_failure_raises_and_consumes ________
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_export_label_proof_query_failure_raises_and_consumes(fix4_shim):
+        res = _run_fix4(fix4_shim, "export_attr_fail")
+>       assert res["raised"] == "RuntimeError" and "cudaPointerGetAttributes failed" in res["msg"], res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1538: AssertionError
+________ test_fix4_v401_export_fence_failed_restore_is_raised_and_named ________
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_v401_export_fence_failed_restore_is_raised_and_named(fix4_shim):
+        res = _run_fix4(fix4_shim, "export_fail_restore")
+>       assert res["raised"] == "RuntimeError", res
+E       AssertionError: {'capsule': True, 'current': 1, 'deleter_calls': 0, 'log': ['create@1', 'record@1', 'wait@1', 'destroy@1'], ...}
+E       assert None == 'RuntimeError'
+
+tensor_cuda/tests/test_dlpack.py:1544: AssertionError
+______ test_fix4_export_refuses_a_label_that_is_not_the_allocation_device ______
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_export_refuses_a_label_that_is_not_the_allocation_device(fix4_shim):
+        # The label is proven against the allocation before it is published or fenced (the engine labels its own
+        # allocations cuda:0 while allocating on the current device). Mismatch: BufferError, nothing recorded.
+        res = _run_fix4(fix4_shim, "export_mismatch")
+>       assert res["raised"] == "BufferError" and "labeled cuda:0 but its memory is on CUDA device 1" in res["msg"], res
+E       AssertionError: {'capsule': True, 'current': 0, 'deleter_calls': 0, 'log': ['create@0', 'record@0', 'wait@0', 'destroy@0'], ...}
+E       assert (None == 'BufferError')
+
+tensor_cuda/tests/test_dlpack.py:1554: AssertionError
+__________ test_fix4_fill_launches_on_the_tensor_device_and_restores ___________
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_fill_launches_on_the_tensor_device_and_restores(fix4_shim):
+        # 62c8d9f launched fill_ on the CURRENT device (device 1 here: a kernel writing device-0 memory from device 1).
+        res = _run_fix4(fix4_shim, "fill_switch")
+>       assert res["raised"] is None and res["log"] == ["set0", "launch@0", "set1"] and res["current"] == 1, res
+E       AssertionError: {'current': 1, 'deleter_calls': 0, 'log': ['launch@1'], 'mode': 'fill_switch', ...}
+E       assert (None is None and ['launch@1'] == ['set0', 'launch@0', 'set1']
+E         
+E         At index 0 diff: 'launch@1' != 'set0'
+E         Right contains 2 more items, first extra item: 'launch@0'
+E         Use -v to get more diff)
+
+tensor_cuda/tests/test_dlpack.py:1561: AssertionError
+___ test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_switch] ____
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'fill_fail_switch'
+
+    @pytest.mark.parametrize("mode", ["fill_fail_switch", "fill_fail_restore", "fill_fail_launch_and_restore"])
+    def test_fix4_fill_guard_failures_raise_count_and_consume(fix4_shim, mode):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and res["slot_after"] == 0, res
+E       AssertionError: {'current': 1, 'deleter_calls': 0, 'log': ['launch@1'], 'mode': 'fill_fail_switch', ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1568: AssertionError
+___ test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_restore] ___
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'fill_fail_restore'
+
+    @pytest.mark.parametrize("mode", ["fill_fail_switch", "fill_fail_restore", "fill_fail_launch_and_restore"])
+    def test_fix4_fill_guard_failures_raise_count_and_consume(fix4_shim, mode):
+        res = _run_fix4(fix4_shim, mode)
+>       assert res["raised"] == "RuntimeError" and res["slot_after"] == 0, res
+E       AssertionError: {'current': 1, 'deleter_calls': 0, 'log': ['launch@1'], 'mode': 'fill_fail_restore', ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1568: AssertionError
+_ test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_launch_and_restore] _
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+mode = 'fill_fail_launch_and_restore'
+
+    @pytest.mark.parametrize("mode", ["fill_fail_switch", "fill_fail_restore", "fill_fail_launch_and_restore"])
+    def test_fix4_fill_guard_failures_raise_count_and_consume(fix4_shim, mode):
+        res = _run_fix4(fix4_shim, mode)
+        assert res["raised"] == "RuntimeError" and res["slot_after"] == 0, res
+        if mode == "fill_fail_switch":                               # nothing switched, nothing launched
+            assert "fill_: cannot make the tensor's CUDA device 0 current" in res["msg"], res
+            assert res["log"] == ["set0!"] and res["current"] == 1 and res["values"] == [1.0], res
+            assert res["revision_delta"] == 0, res
+        elif mode == "fill_fail_restore":                            # the write is queued and counted in the revision
+            assert "fill_: restoring the caller's CUDA device 1 failed" in res["msg"], res
+            assert res["log"] == ["set0", "launch@0", "set1!"] and res["current"] == 0, res
+            assert res["values"] == [2.0] and res["revision_delta"] == 1, res
+        else:                                                        # launch refused; the unwinding restore is counted
+            assert "CUDA error at fill_" in res["msg"], res
+>           assert res["log"] == ["set0", "launch@0!", "set1!"] and res["values"] == [1.0], res
+E           AssertionError: {'current': 1, 'deleter_calls': 0, 'log': ['launch@1!'], 'mode': 'fill_fail_launch_and_restore', ...}
+E           assert (['launch@1!'] == ['set0', 'launch@0!', 'set1!']
+E             
+E             At index 0 diff: 'launch@1!' != 'set0'
+E             Right contains 2 more items, first extra item: 'launch@0!'
+E             Use -v to get more diff)
+
+tensor_cuda/tests/test_dlpack.py:1579: AssertionError
+_______ test_fix4_fill_refuses_a_label_that_is_not_the_allocation_device _______
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_fill_refuses_a_label_that_is_not_the_allocation_device(fix4_shim):
+        res = _run_fix4(fix4_shim, "fill_mismatch")
+>       assert res["raised"] == "RuntimeError" and "labeled cuda:0 but its memory is on CUDA device 1" in res["msg"], res
+E       AssertionError: {'current': 0, 'deleter_calls': 0, 'log': ['launch@0'], 'mode': 'fill_mismatch', ...}
+E       assert (None == 'RuntimeError')
+
+tensor_cuda/tests/test_dlpack.py:1585: AssertionError
+________ test_fix4_storage_drain_failed_restore_is_counted_not_ignored _________
+
+fix4_shim = '/tmp/pytest-of-vader/pytest-70/fix4_shim0/cudart_fix4_shim.so'
+
+    def test_fix4_storage_drain_failed_restore_is_counted_not_ignored(fix4_shim):
+        # kernels.cu drain_device_legacy_stream ignored its restore's result in 62c8d9f. The drain itself succeeded, so the
+        # memory is released (once); the failed restore is counted and its slot entry consumed.
+        res = _run_fix4(fix4_shim, "drain_restore_fail")
+        assert res["log"] == ["set0", "sync@0", "set1!"], res
+        assert res["deleter_calls"] == 1 and res["stats"]["leaked_drain_failure"] == 0, res
+>       assert res["stats"]["device_restore_failures"] == 1 and res["slot_after"] == 0, res
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'device_restore_failures'
+
+tensor_cuda/tests/test_dlpack.py:1595: KeyError
+_____ test_fix4_v403_import_refuses_a_failed_device_query_before_consuming _____
+
+    def test_fix4_v403_import_refuses_a_failed_device_query_before_consuming():
+        # CUDA_VISIBLE_DEVICES="" makes cudaGetDevice fail (cudaErrorNoDevice). 62c8d9f: cur stayed 0, the device-0
+        # capsule was accepted and renamed used_* (mutant (b) restores that). Now: RuntimeError naming cudaGetDevice and the
+        # error, the capsule NOT renamed, the producer deleter not called by the import (ownership stays with the capsule).
+        r = subprocess.run([sys.executable, "-c", _FIX4_IMPORT_NODEV], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(CUDA_VISIBLE_DEVICES=""))
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+        assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        res = json.loads(lines[-1][len("RESULT "):])
+        assert res["query"] == 100, res                               # precondition: no usable device
+        for kind, name in (("versioned", "dltensor_versioned"), ("legacy", "dltensor")):
+            k = res[kind]
+>           assert k["raised"] == "RuntimeError", res
+E           AssertionError: {'deleter_calls': [], 'empty': {'msg': 'cudaMalloc failed: no CUDA-capable device is detected', 'raised': 'RuntimeError'}, 'legacy': {'name_after': 'used_dltensor', 'raised': None}, 'query': 100, ...}
+E           assert None == 'RuntimeError'
+
+tensor_cuda/tests/test_dlpack.py:1668: AssertionError
+_____ test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing ______
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing(torch):
+        ns = {}
+        exec(_FIX4_STAGE, ns)
+        t = tc.empty(64)
+        t.fill_(5.0)
+        tc.synchronize()
+        staged = ns["stage_refused_launch"]()
+        try:
+            with pytest.raises(RuntimeError, match="already pending in this thread before the launch") as ei:
+>               t.fill_(7.0)
+E               RuntimeError: CUDA error at fill_: invalid device function
+
+tensor_cuda/tests/test_dlpack.py:1755: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing(torch):
+        ns = {}
+        exec(_FIX4_STAGE, ns)
+        t = tc.empty(64)
+        t.fill_(5.0)
+        tc.synchronize()
+        staged = ns["stage_refused_launch"]()
+        try:
+>           with pytest.raises(RuntimeError, match="already pending in this thread before the launch") as ei:
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'already pending in this thread before the launch'
+E             Actual message: 'CUDA error at fill_: invalid device function'
+
+tensor_cuda/tests/test_dlpack.py:1754: AssertionError
+______________ test_fix4_empty_failed_allocation_is_reported_once ______________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_fix4_empty_failed_allocation_is_reported_once(torch):
+        # The engine's Storage constructor raises on a failed cudaMalloc without consuming the failed call's slot entry;
+        # empty's raise reports it, so empty consumes it: no later, unrelated launch check reports it again.
+        ns = {}
+        exec(_FIX4_STAGE, ns)
+        try:
+            with pytest.raises(RuntimeError, match="cudaMalloc"):
+                tc.empty(1 << 40)                                     # 4 TiB of float32: refused by the driver
+            slot_after = ns["slot"]()
+        finally:
+            ns["_rt"].cudaGetLastError()
+>       assert slot_after == 0
+E       assert 2 == 0
+
+tensor_cuda/tests/test_dlpack.py:1777: AssertionError
+_____ test_fix4_empty_labels_the_current_device_and_refuses_another_index ______
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_fix4_empty_labels_the_current_device_and_refuses_another_index(torch):
+        cur = torch.cuda.current_device()
+        t = tc.empty(4, device=f"cuda:{cur}")
+        assert t.device == f"cuda:{cur}"
+        for bad in (f"cuda:{cur + 1}", "cuda:x", "cuda:"):
+>           with pytest.raises(ValueError):
+E           Failed: DID NOT RAISE <class 'ValueError'>
+
+tensor_cuda/tests/test_dlpack.py:1788: Failed
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_same_device_does_not_switch
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix4_v403_import_with_a_sticky_context_error_takes_ownership_once_and_release_leaks
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_switch]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_runs_on_the_tensor_device_and_restores[export_ptds]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_record-logged0-cudaEventRecord]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_destroy-logged1-cudaEventDestroy]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failure_raises_with_the_device_restored[export_fail_switch-logged2-cannot make the tensor's CUDA device 0 current]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_create-logged0-cudaEventCreateWithFlags]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_create_or_wait_failure_restores_and_raises[export_fail_wait-logged1-cudaStreamWaitEvent]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_export_label_proof_query_failure_raises_and_consumes
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v401_export_fence_failed_restore_is_raised_and_named
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_export_refuses_a_label_that_is_not_the_allocation_device
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_launches_on_the_tensor_device_and_restores
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_switch]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_restore]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_guard_failures_raise_count_and_consume[fill_fail_launch_and_restore]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_refuses_a_label_that_is_not_the_allocation_device
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_storage_drain_failed_restore_is_counted_not_ignored
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_v403_import_refuses_a_failed_device_query_before_consuming
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_fill_reports_a_pending_error_as_such_and_launches_nothing
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_empty_failed_allocation_is_reported_once
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix4_empty_labels_the_current_device_and_refuses_another_index
+20 failed, 2 passed, 122 deselected in 22.21s

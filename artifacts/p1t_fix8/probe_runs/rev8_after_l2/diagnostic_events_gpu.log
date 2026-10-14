@@ -1,0 +1,31 @@
+[
+  {
+    "site": "create",
+    "rc": 0,
+    "stdout": "RESULT {\"site\": \"create\", \"messages\": [\"tc_signal.synchronize: CUDA error, so the release is not reported as a success: 1 CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: the marker event of interpreter exit's diagnosed wait for the legacy stream of device 0 could not be created (cudaEventCreateWithFlags: cudaErrorMemoryAllocation: out of memory); that wait was diagnosed by a watchdog thread instead, around the stream sync that followed (its own result is reported as such)\"]}\n",
+    "stderr": "tc_signal: at interpreter exit, synchronize() raised a CUDA failure report that the exit hook could not write: 1 CUDA failure(s) (written here by the exit runner, its last reader; allocation-free summary), the first: cudaEventCreateWithFlags failed, the marker event of interpreter exit's diagnosed device wait, on CUDA device 0: cudaErrorMemoryAllocation\n"
+  },
+  {
+    "site": "record",
+    "rc": 0,
+    "stdout": "RESULT {\"site\": \"record\", \"messages\": [\"tc_signal.synchronize: CUDA error, so the release is not reported as a success: 1 CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: the marker event of interpreter exit's diagnosed wait for the legacy stream of device 0 could not be recorded (cudaEventRecord: cudaErrorInvalidValue: invalid argument); that wait was diagnosed by a watchdog thread instead, around the stream sync that followed (its own result is reported as such)\"]}\n",
+    "stderr": "tc_signal: at interpreter exit, synchronize() raised a CUDA failure report that the exit hook could not write: 1 CUDA failure(s) (written here by the exit runner, its last reader; allocation-free summary), the first: cudaEventRecord failed, the marker event of interpreter exit's diagnosed device wait, on CUDA device 0: cudaErrorInvalidValue\n"
+  },
+  {
+    "site": "query",
+    "rc": 0,
+    "stdout": "RESULT {\"site\": \"query\", \"messages\": [\"tc_signal.synchronize: CUDA error, so the release is not reported as a success: 1 CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: the marker event of interpreter exit's diagnosed wait for the legacy stream of device 0 could not be queried (cudaEventQuery: cudaErrorInvalidValue: invalid argument); that wait was diagnosed by a watchdog thread instead, around the stream sync that followed (its own result is reported as such)\"]}\n",
+    "stderr": "tc_signal: at interpreter exit, synchronize() raised a CUDA failure report that the exit hook could not write: 1 CUDA failure(s) (written here by the exit runner, its last reader; allocation-free summary), the first: cudaEventQuery failed, the marker event of interpreter exit's diagnosed device wait, on CUDA device 0: cudaErrorInvalidValue\n"
+  },
+  {
+    "site": "destroy",
+    "rc": 0,
+    "stdout": "RESULT {\"site\": \"destroy\", \"messages\": [\"tc_signal.synchronize: CUDA error, so the release is not reported as a success: 1 CUDA failure(s) since the last synchronize on paths that cannot raise and leak no operand, the first: the marker event of interpreter exit's diagnosed wait for the legacy stream of device 0 could not be destroyed (cudaEventDestroy: cudaErrorInvalidValue: invalid argument)\"]}\n",
+    "stderr": "tc_signal: at interpreter exit, synchronize() raised a CUDA failure report that the exit hook could not write: 1 CUDA failure(s) (written here by the exit runner, its last reader; allocation-free summary), the first: cudaEventDestroy failed, the marker event of interpreter exit's diagnosed device wait, on CUDA device 0: cudaErrorInvalidValue\n"
+  }
+]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_rev8/probes/diagnostic_events_gpu.py", line 18, in <module>
+    if r['site'] in ['create','record']:assert 'interpreter exit is waiting' in r['stderr'],'failed marker setup fell back to a silent wait'
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: failed marker setup fell back to a silent wait

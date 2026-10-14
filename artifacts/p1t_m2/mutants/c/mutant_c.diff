@@ -1,0 +1,11 @@
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -104,7 +104,7 @@
+   cublasHandle_t h = nullptr;
+   check_cublas(cublasCreate(&h), "cublasCreate");
+   check_cublas(cublasSetStream(h, kLegacyStream), "cublasSetStream(0)");
+-  check_cublas(cublasSetMathMode(h, CUBLAS_DEFAULT_MATH), "cublasSetMathMode(CUBLAS_DEFAULT_MATH)");
++  check_cublas(cublasSetMathMode(h, CUBLAS_TF32_TENSOR_OP_MATH), "cublasSetMathMode(TF32)");  // MUTANT (c)
+   check_cublas(cublasSetAtomicsMode(h, CUBLAS_ATOMICS_NOT_ALLOWED), "cublasSetAtomicsMode(NOT_ALLOWED)");
+   check_cublas(cublasSetPointerMode(h, CUBLAS_POINTER_MODE_HOST), "cublasSetPointerMode(HOST)");
+   handles.emplace(device, h);

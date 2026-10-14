@@ -1,0 +1,20 @@
+--- a/build_core_host.py
++++ b/build_core_host_paths.py
+@@ -4,7 +4,7 @@
+ """
+ from pathlib import Path
+ import hashlib,json,subprocess,sysconfig
+-root=Path.cwd();out=Path('/tmp/p1t_rev8_build'); rows=[]
++root=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8');out=Path('/tmp/p1t_fix8_rev8/lead_after'); rows=[]
+ def span(path,a,b):
+     s=(root/path).read_text();start=s.index(a);end=s.index(b,start);part=s[start:end]
+     rows.append({'path':path,'start_line':s[:start].count('\n')+1,'end_line':s[:end].count('\n'),'sha256':hashlib.sha256(part.encode()).hexdigest()});return part
+@@ -52,7 +52,7 @@
+ }
+ '''.replace('METHOD',method).replace('DEFS',defs)
+ (out/'core_host.cpp').write_text(preamble+k+'}\nnamespace tc {\n'+a+'\nconstexpr int kT=256;\n'+f+'\n}\nusing namespace tc;\n'+b+'\nconst char* kDlpackDoc="host dispatcher";\n'+c+module)
+-(root/'artifacts/p1t_rev8/core_source_slices.json').write_text(json.dumps(rows,indent=2)+'\n')
++(Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_fix8/lead/rev8_after')/'core_source_slices.json').write_text(json.dumps(rows,indent=2)+'\n')
+ pb='/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src/include';cu='/usr/local/cuda-12.6'
+ cmd=['timeout','180','g++','-std=c++17','-O1','-shared','-fPIC','-fsanitize=undefined','-fno-sanitize-recover=undefined',str(out/'core_host.cpp'),'-I'+str(root/'tensor_cuda/include'),'-I'+pb,'-I'+cu+'/include','-I'+sysconfig.get_path('include'),'-L'+cu+'/lib64','-Wl,-rpath,'+cu+'/lib64','-lcudart','-pthread','-o',str(out/('_p1t_rev7_core'+sysconfig.get_config_var('EXT_SUFFIX')))]
+ subprocess.run(cmd,check=True)

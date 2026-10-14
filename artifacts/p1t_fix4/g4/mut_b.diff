@@ -1,0 +1,19 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp (mutant b)
+@@ -913,14 +913,8 @@
+   // Prior art: the CUDA 12.6 contract that cudaGetDevice returns an error code
+   // (cudaErrorNoDevice, cudaErrorInsufficientDriver, ...) and the DLPack rule that
+   // a refused capsule keeps its ownership. Nothing new.
+-  int cur = -1;
+-  const cudaError_t qe = cudaGetDevice(&cur);
+-  if (qe != cudaSuccess) {
+-    cudaGetLastError();
+-    throw std::runtime_error(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
+-                             cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
+-                             "); refused before taking ownership (the capsule is not consumed)");
+-  }
++  int cur = 0;
++  cudaGetDevice(&cur);  // MUTANT (b): V4-03 check removed (result ignored, cur stays 0 on failure, as 62c8d9f)
+   if (dl->device.device_id != cur)
+     throw py::buffer_error(
+         "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +

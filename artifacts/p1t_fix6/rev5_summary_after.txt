@@ -1,0 +1,35 @@
+after build trace exit=0
+after build handle_oom (as written) exit=0
+after build fill_grid (as written) exit=0
+after build handle_oom (regenerated) exit=0
+after build fill_grid (regenerated) exit=0
+after exit_gate full nogpu  exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished FINALIZING True REFUSEDtc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchroniz
+after exit_gate full nogpu --control exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished REFUSED tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand FINALIZING True tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the r
+after exit_gate trace  exit=1 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 HOOK returned entries=0 FINALIZING True FATAL: exception not rethrown timeout: the monitored command dumped core Traceback (most recent call last):   File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix6/ar
+after exit_gate trace --control exit=1 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 HOOK returned entries=0 FINALIZING True FATAL: exception not rethrown timeout: the monitored command dumped core Traceback (most recent call last):   File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix6/ar
+after build trace (exit-entry copy) exit=0
+after exit_gate trace (copy: hook = synchronize + close, the real exit entry) exit=0 :: ARMED DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished HOOK returned entries=0 FINALIZING True PASS: finite callback finished before ordinary finalization 
+after query_error_cpu exit=0 :: AFTER FAILED QUERY {'entries': 1, 'managers': 1, 'bytes': 4, 'high_water_entries': 1, 'high_water_managers': 1, 'high_water_bytes': 4, 'retained_entries': 1, 'released_entries': 0, 'released_managers': 0, 'bound_drains': 0, 'fallback_syncs': 0, 'leaked_managers': 0, 'max_entries': 1024, 'max_bytes':
+after handle_insert_oom_cpu (as written: 1475fae slices) exit=1 :: conv creates=1 destroys=0 lstm creates=1 destroys=0 
+after handle_insert_oom_cpu (regenerated from after) exit=0 :: conv creates=1 destroys=1 lstm creates=1 destroys=1 
+after fill_grid_cpu (as written: baseline nblk) exit=1 :: n=1 grid=1 covered=256 n=1099511627777 grid=1 covered=256 n=1099511628032 grid=1 covered=256 
+after fill_grid_cpu (regenerated from after) exit=0 :: n=1 grid=1 covered=256 n=1099511627777 refused: fill_: 1099511627777 elements need 4294967297 blocks of 256 threads, more than the CUDA grid x-dimension limit of 2147483647 (2^31-1) blocks; fill_ launches one thread per element (the existing fill_kernel), so it covers at most 549755813632 elements. 
+after core_import_query_error (nogpu) exit=0 :: PASS: failed device query refused before consumption 
+after exit_gate full (GPU visible)  exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished REFUSED tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand FINALIZING True PASS: finite callback finished before ordinary finalization 
+after exit_gate full (GPU visible) --control exit=0 :: ARMED FULL CPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished REFUSED tc_signal: operand 'out': the producer marked this tensor read-only; tc_signal writes this operand FINALIZING True PASS: finite callback finished before ordinary finalization 
+after exit_gate gpu (GPU visible)  exit=0 :: ARMED GPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished FINALIZING True Exception in thread Thread-1 (<lambda>): Traceback (most recent call last):   File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner     self.run()   File "/usr/lib/python3.12/threading.py", li
+after exit_gate gpu (GPU visible) --control exit=0 :: ARMED GPU DELETER started CALLBACK IN PROGRESS entries=0 DELETER finished FINALIZING True PASS: finite callback finished before ordinary finalization 
+after query_error_single_gpu exit=0 :: PASS: query error retained and reported once; safe completion release 
+after fill_grid_single_gpu exit=0 :: REFUSAL fill_: 1099511627777 elements need 4294967297 blocks of 256 threads, more than the CUDA grid x-dimension limit of 2147483647 (2^31-1) blocks; fill_ launches one thread per element (the existing fill_kernel), so it covers at most 549755813632 elements. Refused before any launch: nothing was w
+after device_error_sweep_single_gpu (path copy, root /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix6) exit=0 :: ........................................                                 [100%] 40 passed, 189 deselected in 38.41s 
+after core_export_device (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two GPUs required 
+after sync_existing_error exit=0 :: PASS: staged error reported 98 98 tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorInvalidDeviceFunction: invalid device function), from earlier work (for example a refused kernel l
+after addon_lifetime exit=0 incorrect=0 correct=12 :: PASS:12 finite trials correct, every call retained; no universal race-free claim
+after core_edges exit=0 :: {   "byte_count_wrap": {     "accepted": false,     "error": "empty: the byte size of shape [4611686018427387904] (4-byte elements) overflows int64 (every nonzero extent counts, also next to a zero extent); refused"   },   "element_count_wrap": {     "accepted": false,     "error": "empty: the eleme
+after core_device_drain (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two CUDA devices required 
+after core_exit_overrun during exit=0 wall_s=3.2 :: ARMED FINAL finalizing=True 
+after core_exit_overrun bounded exit=0 wall_s=7.9 :: ARMED tensor_cuda: 1 DLPack release(s) admitted before exit still running after 5.0 s; interpreter exit waits for them (no new release is admitted) tensor_cuda: the DLPack release(s) admitted before e
+after numerics_and_streams exit=0 :: PASS: finite determinism, handle settings, L=1, special rint, nonlegacy producer ordering 
+after cuda_errors_multidevice (3 = INCONCLUSIVE, one GPU) exit=3 :: INCONCLUSIVE: two devices required 
+after build_cpu.sh (path copy, cwd /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix6) exit=0
+after release_failures exit=0 :: 66 passed in 78.75s (0:01:18) 

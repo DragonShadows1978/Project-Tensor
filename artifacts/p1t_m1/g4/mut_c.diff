@@ -1,0 +1,10 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m1/tensor_cuda/src/bindings.cpp	2026-10-12 19:34:29.266773721 -0400
++++ /tmp/p1t_m1_mut_c/tensor_cuda/src/bindings.cpp	2026-10-12 19:48:47.300690046 -0400
+@@ -329,6 +329,7 @@
+         "use None or 1 (legacy default stream), 2 (per-thread default stream) "
+         "or a cudaStream_t handle");
+   if (s < -1) throw py::value_error("__dlpack__: invalid stream " + std::to_string(s));
++  if (true) return;  // MUTANT (c): no event wait
+   cudaStream_t consumer =
+       (s == 2) ? cudaStreamPerThread
+                : reinterpret_cast<cudaStream_t>(static_cast<uintptr_t>(s));

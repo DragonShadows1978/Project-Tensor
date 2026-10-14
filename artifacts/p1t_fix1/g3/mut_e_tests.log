@@ -1,0 +1,30 @@
+................F...                                                     [100%]
+=================================== FAILURES ===================================
+___ test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil ____
+
+    def test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil():
+>       res, r = _run_f04("finalizing")
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:730: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'finalizing'
+
+    def _run_f04(mode):
+        r = subprocess.run([sys.executable, "-c", _F04_SCRIPT, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED
+E         
+E         stderr=terminate called without an active exception
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...lush=True)\n', 'finalizing'], returncode=-6, stdout='ARMED\n', stderr='terminate called without an active exception\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:718: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix1_f04_foreign_thread_release_while_finalizing_leaks_without_gil
+1 failed, 19 passed, 37 deselected in 7.22s

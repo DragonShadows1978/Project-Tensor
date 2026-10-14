@@ -1,0 +1,64 @@
+................................................................F
+=================================== FAILURES ===================================
+________________ test_deleter_called_exactly_once_on_every_path ________________
+
+    def test_deleter_called_exactly_once_on_every_path():
+        P.reset_stats()
+        xb, wb, bb = _t(160), _t(144), _t(6)
+    
+        def prods():
+            return P.Producer(xb, (1, 8, 20)), P.Producer(wb, (6, 8, 3)), P.Producer(bb, (6,))
+    
+        x, w, b = prods()
+        ts.conv1d(x, w, b, out=P.Producer(_t(108), (1, 6, 18)))     # success
+        x, w, b = prods()
+        with pytest.raises(ValueError):
+            ts.conv1d(x, w, b, stride=0)                                 # plan-phase refusal: capsules never consumed
+        x, w, b = prods()
+        with pytest.raises(ValueError):
+            ts.conv1d(x, w, b, out=P.Producer(_t(200), (1, 6, 17)))     # run-phase refusal after consumption
+        x, w, b = prods()
+        with pytest.raises(ValueError):
+            ts.conv1d(x, w, b, out=P.Producer(_t(108), (1, 6, 18), flags=P.FLAG_READ_ONLY))
+        x, w, b = prods()
+        with pytest.raises(ValueError):
+            ts.conv1d(x, P.Producer(wb, (6, 8, 3), major=2), b)         # version refusal at peek
+        x, w, b = prods()
+        ts.conv_transpose1d(x, P.Producer(_t(8 * 3 * 4), (8, 3, 4)), None, stride=2)
+        del x, w, b
+        gc.collect()
+        torch.cuda.synchronize()
+        # P1T-FIX1 F01 contract: a call that reached its launch keeps its consumed managers until the legacy stream has
+        # passed it; they are released at the next tc_signal call or by tc_signal.synchronize(). At least the last call's
+        # x and w producers are still pending here (no tc_signal call has run since); synchronize() releases them.
+        assert P.STATS['exported'] - P.STATS['deleted'] >= 2, P.STATS
+        ts.synchronize()
+        assert P.STATS['unknown_delete'] == 0, P.STATS
+>       assert P.STATS['exported'] == P.STATS['deleted'], P.STATS
+E       AssertionError: {'deleted': 14, 'exported': 19, 'unknown_delete': 0}
+E       assert 19 == 14
+
+tc_signal/tests/test_contract.py:377: AssertionError
+=============================== warnings summary ===============================
+tc_signal/tests/test_contract.py::test_device_ordinal_mismatch_refused
+tc_signal/tests/test_contract.py::test_dlpack_major_version_refused
+tc_signal/tests/test_contract.py::test_misaligned_refused
+tc_signal/tests/test_contract.py::test_explicit_noncompact_strides_refused
+tc_signal/tests/test_contract.py::test_deleter_called_exactly_once_on_every_path
+  /home/vader/.local/lib/python3.12/site-packages/_pytest/unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored on calling ctypes callback function: <function _capsule_destructor at 0x75970b853380>
+  
+  Traceback (most recent call last):
+    File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/tcs_producer.py", line 88, in _capsule_destructor
+      _delete(_PyCapsule_GetPointer(cap, name))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ValueError: PyCapsule_GetPointer called with invalid PyCapsule object
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_deleter_called_exactly_once_on_every_path
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 64 passed, 5 warnings in 2.16s

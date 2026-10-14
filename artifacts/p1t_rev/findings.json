@@ -1,0 +1,92 @@
+{
+  "schema": "p1t-rev-1",
+  "baseline": "9df5bef",
+  "reviewed": "00590b7",
+  "verdicts": {
+    "R1": "RISK",
+    "R2": "UNSOUND",
+    "R3": "UNSOUND",
+    "R4": "DEFECTS",
+    "R5": "PASS",
+    "R6": "REJECT"
+  },
+  "findings": [
+    {
+      "id": "F01",
+      "severity": "BLOCKING",
+      "location": "tc_signal/src/dlpack_operand.cpp:174-185; tc_signal/src/bindings.cpp:255-257; tc_signal/src/lstm_bindings.cpp:215-218; tc_signal/src/m4_bindings.cpp:229-231",
+      "title": "Operand ownership ends before asynchronous last use",
+      "scenario": "A bare capsule is the last owner of a tensor allocated on a nonlegacy stream. The add-on queues a legacy-stream read and immediately calls its deleter; the producer allocator can reclaim and overwrite that block on its own stream before the read runs. Keeping an already-consumed capsule alive does not keep its deleted manager alive. Inputs may also be producer-created temporary copies (copy is unspecified for readers), whose storage the caller cannot retain. The documented caveat therefore does not make the advertised arbitrary-producer/capsule contract memory-safe.",
+      "fix": "Retain all consumed managers through GPU completion, including partial-launch exception paths. The simplest correct repair is a checked synchronization of the operand device legacy stream before scope-exit deleters; an asynchronous repair needs event-backed deferred ownership and safe host-side release, rather than a CUDA host callback that calls CUDA.",
+      "evidence": "Source reasoning; no GPU race executed. README.md:119-126 and the later-read M2 report explicitly disclose immediate release. Probe addon_lifetime.py is pending.",
+      "prior_art": "DLPack consumer ownership and CUDA last-use/free ordering (dmlc 2017+; NVIDIA CUDA 12.6)."
+    },
+    {
+      "id": "F02",
+      "severity": "MAJOR",
+      "location": "tc_signal/src/m4_bindings.cpp:59-61,90-101,235-241,253-254,270-288,307-309; tc_signal/src/dlpack_operand.h:66",
+      "title": "None mandatory inputs crash the interpreter",
+      "scenario": "upsample_nearest1d(None, 2) and reflection_pad1d(None, (0, 0)) treat x as an absent optional operand, then dereference an empty shape via back(). rint(None, out=<valid scalar capsule>) reaches shape4 on an absent Operand and dereferences its null tensor metadata. All three isolated CPU processes exited -11 (SIGSEGV), without CUDA execution.",
+      "fix": "Distinguish required x from optional scale/bias in peek4 and consume4; reject None before planning or shape4. Make absent Operand metadata access fail safely as a second line of defense.",
+      "evidence": "CPU native-extension reproduction: artifacts/p1t_rev/host_checks.json (none_up, none_pad, none_rint).",
+      "prior_art": "DLPack producer contract and C++ vector/non-null object access preconditions."
+    },
+    {
+      "id": "F03",
+      "severity": "MAJOR",
+      "location": "tensor_cuda/src/bindings.cpp:527-540,555-568,573-579; tensor_cuda/src/kernels.cu:69-79,219-227; tc_signal/src/m4_bindings.cpp:111-114,253-267; tc_signal/src/dlpack_operand.cpp:149,234-237",
+      "title": "Unchecked rank, element, byte and geometry arithmetic",
+      "scenario": "The new empty accepts rank 9 although existing core op metadata arrays hold only 8 axes. empty((1<<62,), float32) has a representable element count but wraps numel*4 to zero on the reviewed 64-bit ABI, yielding null/zero storage for a nonempty tensor; empty((1<<32,1<<32)) also overflows signed element counting. New import uses the same unchecked products and unchecked offset-plus-bytes arithmetic. CPU planning for reflect shape (1,1,1<<62) and pads ((1<<62)-1,(1<<62)-1) returned (1,1,-4611686018427387906). Synthetic large descriptors test validation only, not real allocation validity. Normal >2^31 cuBLAS m/n/k/leading-dimension cases are guarded; these guards do not check all byte totals or signed products.",
+      "fix": "Before wrapping or allocating, enforce the core rank limit and checked nonnegative element multiplication, element-size multiplication, offset/address addition and all output/scratch geometry. Reject unsupported shapes clearly before narrowing casts or launches; do not treat a wrapped result as empty.",
+      "evidence": "CPU reflect metadata reproduction in host_checks.json; core overflow/rank consequences are source reasoning using the existing helper, newly exposed through empty/import. core_edges.py is pending for the reviewed core runtime.",
+      "prior_art": "DLPack int64 shape/uint64 offset ABI; C++ signed-overflow and size_t arithmetic; cuBLAS 12.6 integer dimension API."
+    },
+    {
+      "id": "F04",
+      "severity": "MAJOR",
+      "location": "tensor_cuda/src/bindings.cpp:435-447",
+      "title": "Initialization check is insufficient during interpreter finalization",
+      "scenario": "The last exported reference to an imported Storage can be released by a non-Python consumer thread while CPython is finalizing. Py_IsInitialized may still be true; PyGILState_Ensure is then unsafe. CPython 3.12 documents termination of that thread during finalization, interrupting the deleter; newer runtimes may hang it. The existing guard handles an already-finalized interpreter, not finalization in progress. Normal-thread GIL acquisition and main-thread ordinary cleanup are separate cases and are not asserted broken.",
+      "fix": "Define and implement a lifecycle-safe release policy: finish ordinary releases before interpreter teardown, avoid GIL acquisition once finalization starts, and deliberately retain/leak late Python-owned managers when safe release is impossible. Use version-appropriate finalization detection plus lifecycle coordination rather than Py_IsInitialized alone.",
+      "evidence": "Source reasoning plus official CPython API documentation; actual core shutdown/foreign-thread behavior is pending core_shutdown.py and release_worker.cpp.",
+      "prior_art": "CPython 3.12 Initialization, Finalization, and Threads; DLPack non-Python consumer deleters."
+    },
+    {
+      "id": "F05",
+      "severity": "MAJOR",
+      "location": "tensor_cuda/src/kernels.cu:205-206",
+      "title": "Imported Storage drains the current device instead of its recorded device",
+      "scenario": "Import on device 0, enqueue a long legacy-stream operation touching the imported memory, switch the current CUDA device to 1, then drop the last imported reference. cudaStreamSynchronize(0) drains device 1, after which the producer deleter may reclaim device-0 memory with its last use still pending. The import-time same-current-device check does not pin the device for the rest of the object lifetime. This is conditional on a multi-device process; it is not a claim of reproduction on the single-GPU target.",
+      "fix": "Guard the teardown with the Storage device ordinal, drain that device legacy stream and handle errors without unsafe release, then restore the caller device. Alternatively track and synchronize an allocation-device last-use event.",
+      "evidence": "Source reasoning from CUDA current-device stream semantics; core_device_drain.py requires two GPUs and is pending.",
+      "prior_art": "NVIDIA CUDA 12.6 current-device and default-stream semantics."
+    },
+    {
+      "id": "F06",
+      "severity": "MINOR",
+      "location": "tensor_cuda/src/bindings.cpp:385-389",
+      "title": "Export context is not exception-owned before capsule construction",
+      "scenario": "After raw new DLPackExportCtx, shape/stride vector allocation can throw bad_alloc. The context and its shared Storage reference leak because the cleanup only handles PyCapsule_New failure.",
+      "fix": "Own the context with a unique_ptr until all metadata and the capsule are constructed successfully, then transfer it to the capsule.",
+      "evidence": "C++ exception-path reasoning; import rename/no-op ownership handling and post-consumption Tensor construction have proper local-owner unwinding.",
+      "prior_art": "C++ RAII/exception ownership (Stroustrup, 1980s onward)."
+    },
+    {
+      "id": "F07",
+      "severity": "MINOR",
+      "location": "tensor_cuda/include/tc/core.h:63-78",
+      "title": "Native Storage ABI size changes require a coordinated rebuild",
+      "scenario": "CPU layout measurement gives sizeof(Storage)=40 at 9df5bef and 56 now; revision remains at offset 32. An old native client allocating the old Storage layout and invoking the new destructor would expose out-of-object external_release reads. No such client was found in tc_signal, which does not use core headers; a fully rebuilt core does not have this mixed-layout problem.",
+      "fix": "Require a clean/coordinated rebuild of all native core clients at promotion, or version/hide the native Storage ABI. Document this as a rollout prerequisite.",
+      "evidence": "artifacts/p1t_rev/layout_baseline.txt and layout_current.txt; core include/reference scan.",
+      "prior_art": "C++ native object-layout ABI compatibility."
+    }
+  ],
+  "counts": {
+    "BLOCKING": 1,
+    "MAJOR": 4,
+    "MINOR": 2,
+    "NIT": 0
+  },
+  "gpu_executed": false
+}

@@ -1,0 +1,22 @@
+--- worktree/tc_signal/src/dlpack_operand.cpp
++++ mut_c/tc_signal/src/dlpack_operand.cpp
+@@ -743,15 +743,10 @@
+     e.event = event_;
+     // N3: the push may allocate (a new deque node); this destructor is noexcept, so a failure must be caught here
+     // and turned into the synchronous fallback below (round-2 review: bad_alloc on the release path terminated).
+-    try {
+-      if (test_hooks::take(test_hooks::kAllocPendingPush)) throw std::bad_alloc();
+-      st.q.push_back(std::move(e));
+-      note_push(st, st.q.back());
+-    } catch (...) {
+-      ++st.push_alloc_failures;
+-      r = cudaErrorMemoryAllocation;  // e was not moved (push_back's strong guarantee): use the fallback below
+-      e.event = nullptr;
+-    }
++    // MUTANT (c): N3, the catch around the pending-list push removed (a bad_alloc leaves the noexcept destructor)
++    if (test_hooks::take(test_hooks::kAllocPendingPush)) throw std::bad_alloc();
++    st.q.push_back(std::move(e));
++    note_push(st, st.q.back());
+   } else {
+     cudaGetLastError();
+   }

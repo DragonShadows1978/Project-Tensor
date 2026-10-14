@@ -1,0 +1,11 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp (mutant c)
+@@ -923,7 +923,7 @@
+ // headers). Taken: report-and-consume. Ours: capturing at synchronize() entry and still draining before raising.
+ void synchronize_and_release_all() {
+   PendingState& st = pending();
+-  const cudaError_t prior = cudaGetLastError();
++  const cudaError_t prior = cudaSuccess;  // MUTANT (c): V4-04 capture removed (the slot is never read)
+   if (prior != cudaSuccess) {
+     if (st.prior_unreported == 0) st.prior_error = prior;
+     ++st.prior_unreported;

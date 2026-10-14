@@ -1,0 +1,13 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp (mutant a)
+@@ -1352,8 +1352,8 @@
+ }  // namespace
+ 
+ void synchronize_and_release_all() {
+-  // P1T-FIX6 (V6-01): no wait for other threads here (FIX5's wait deadlocked against caller-held locks; see the release
+-  // lifecycle block). This call releases what is on the pending list, on this thread.
++  // MUTANT (a): FIX5's wait for releases running on other threads restored.
++  if (t_depth[kRelease] == 0 && t_depth[kCallback] == 0) (void)wait_for_other_threads(5.0);
+   PendingState& st = pending();
+   const cudaError_t prior = cudaGetLastError();
+   if (prior != cudaSuccess) {

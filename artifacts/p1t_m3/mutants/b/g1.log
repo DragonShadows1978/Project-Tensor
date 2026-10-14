@@ -1,0 +1,2424 @@
+..........................................F............................. [ 25%]
+........................................................................ [ 50%]
+.................FF.FF.FFFF.FFF.FFF.FFFF.FFFFFFFFFFFF................... [ 75%]
+.................................................................F..F    [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+_______________________ test_lstm_census[edge-rev_T2_N3] _______________________
+
+cell = ('edge', 'rev_T2_N3', 'reverse', 2, 3, 5, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'rev_T2_N3'
+attrs = {'H': 12, 'I': 5, 'N': 3, 'T': 2, ...}
+outs1 = (tensor([[[[ 0.0519, -0.0827,  0.0460,  0.1029,  0.0740,  0.0447, -0.0106,
+            0.2733, -0.0722,  0.0568, -0.00...0.4191,  0.1734, -0.2756, -0.0617,  0.0803,
+          -0.4388,  0.3265, -0.7498,  0.0558,  0.2956]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.0519, -0.0827,  0.0460,  0.1029,  0.0740,  0.0447, -0.0106,
+            0.2733, -0.0722,  0.0568, -0.00...0.4191,  0.1734, -0.2756, -0.0617,  0.0803,
+          -0.4388,  0.3265, -0.7498,  0.0558,  0.2956]]], device='cuda:0'))
+oracle = (array([[[[ 0.03014056, -0.06267407, -0.05790617,  0.21829809,
+           0.11210291, -0.05091805,  0.00468533,  0.192...   -0.06509621,  0.13805338,  0.43368893, -0.32187438,
+          0.09458445, -0.96781028,  0.35838271, -0.02795705]]]))
+extra = {'z_absmax': 2.5805621739807147}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 5.514e-01 > gate 2e-05
+E           assert 0.5514072514927749 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_______________________ test_lstm_census[edge-bi_T2_N2] ________________________
+
+cell = ('edge', 'bi_T2_N2', 'bidirectional', 2, 2, 5, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_T2_N2', attrs = {'H': 12, 'I': 5, 'N': 2, 'T': 2, ...}
+outs1 = (tensor([[[[-0.1543, -0.0855, -0.1692, -0.1774,  0.2075, -0.1043,  0.0471,
+            0.2335, -0.0518,  0.0201,  0.09...0.0417,  0.3714, -0.0940, -0.2049,  0.0191,
+          -0.2550, -0.1050, -0.3469,  0.4644, -0.8812]]], device='cuda:0'))
+outs2 = (tensor([[[[-0.1543, -0.0855, -0.1692, -0.1774,  0.2075, -0.1043,  0.0471,
+            0.2335, -0.0518,  0.0201,  0.09...0.0417,  0.3714, -0.0940, -0.2049,  0.0191,
+          -0.2550, -0.1050, -0.3469,  0.4644, -0.8812]]], device='cuda:0'))
+oracle = (array([[[[-1.54345361e-01, -8.54615026e-02, -1.69210026e-01,
+          -1.77433907e-01,  2.07518508e-01, -1.04338964e...    0.01874593, -0.19725298,  0.02171384, -0.26584463,
+         -0.17453824, -0.37774556,  0.41021097, -0.61073581]]]))
+extra = {'z_absmax': 3.0073364153885116}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 4.104e-01 > gate 2e-05
+E           assert 0.4104231111215993 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+______________________ test_lstm_census[edge-rev_T17_N3] _______________________
+
+cell = ('edge', 'rev_T17_N3', 'reverse', 17, 3, 10, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'rev_T17_N3'
+attrs = {'H': 32, 'I': 10, 'N': 3, 'T': 17, ...}
+outs1 = (tensor([[[[-2.7432e-02,  4.4644e-03, -1.3157e-01,  ..., -7.6169e-02,
+           -7.2269e-02,  3.7699e-01],
+          ...0.2843,  0.2507,  0.2555, -0.5390,  0.4950, -0.4602,
+           0.5718,  0.0035,  0.0261, -0.2957]]], device='cuda:0'))
+outs2 = (tensor([[[[-2.7432e-02,  4.4644e-03, -1.3157e-01,  ..., -7.6169e-02,
+           -7.2269e-02,  3.7699e-01],
+          ...0.2843,  0.2507,  0.2555, -0.5390,  0.4950, -0.4602,
+           0.5718,  0.0035,  0.0261, -0.2957]]], device='cuda:0'))
+oracle = (array([[[[-3.24130204e-02,  4.94741453e-03, -2.90276627e-01, ...,
+          -3.58105567e-02, -1.02519484e-01,  3.4541...6156523e-01,
+         -2.87024842e-01, -5.54958061e-02, -5.02037152e-01,
+          1.66815021e-01,  3.22672286e-02]]]))
+extra = {'z_absmax': 4.722286988025835}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 8.481e-01 > gate 2e-05
+E           assert 0.8480850692819569 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_______________________ test_lstm_census[edge-bi_T33_N2] _______________________
+
+cell = ('edge', 'bi_T33_N2', 'bidirectional', 33, 2, 24, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_T33_N2'
+attrs = {'H': 48, 'I': 24, 'N': 2, 'T': 33, ...}
+outs1 = (tensor([[[[ 0.1336,  0.1002, -0.0795,  ...,  0.0171, -0.1583, -0.0099],
+          [-0.0336,  0.3455,  0.0692,  ...,  ...  0.0084,  0.3443,  0.1698,
+           0.4294, -0.9676, -0.1819, -0.5111,  0.0753, -0.3201]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[ 0.1336,  0.1002, -0.0795,  ...,  0.0171, -0.1583, -0.0099],
+          [-0.0336,  0.3455,  0.0692,  ...,  ...  0.0084,  0.3443,  0.1698,
+           0.4294, -0.9676, -0.1819, -0.5111,  0.0753, -0.3201]]],
+       device='cuda:0'))
+oracle = (array([[[[ 0.13357628,  0.10022033, -0.07954927, ...,  0.01710976,
+          -0.15828021, -0.00993043],
+         [-0....   -0.20129158, -0.02948736,  0.58449988, -1.03020384,
+         -0.4343183 , -0.01388998,  0.57590002, -0.56342857]]]))
+extra = {'z_absmax': 5.572199823131516}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.550e+00 > gate 2e-05
+E           assert 1.5504614849590048 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+____________________ test_lstm_census[edge-rev_init_T3_N3] _____________________
+
+cell = ('edge', 'rev_init_T3_N3', 'reverse', 3, 3, 6, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'rev_init_T3_N3'
+attrs = {'H': 16, 'I': 6, 'N': 3, 'T': 3, ...}
+outs1 = (tensor([[[[-0.1796, -0.7563,  0.2126, -0.6450,  0.0236, -0.2223, -0.0093,
+            0.3911, -0.0229, -0.0010, -0.11...         1.6224,  0.1575,  0.2622,  0.3852, -0.3148,  0.5119,  0.0144,
+          -0.1625,  0.5515]]], device='cuda:0'))
+outs2 = (tensor([[[[-0.1796, -0.7563,  0.2126, -0.6450,  0.0236, -0.2223, -0.0093,
+            0.3911, -0.0229, -0.0010, -0.11...         1.6224,  0.1575,  0.2622,  0.3852, -0.3148,  0.5119,  0.0144,
+          -0.1625,  0.5515]]], device='cuda:0'))
+oracle = (array([[[[-1.47610633e-01, -8.03506293e-02,  3.17161694e-01,
+          -2.24567223e-01,  2.84887739e-01, -1.16310488e...   -0.26813772, -0.11099358,  0.42916091,  0.23110528,
+          0.5072046 ,  0.65100865, -0.18430782,  0.61543936]]]))
+extra = {'z_absmax': 5.247574728888501}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.234e+00 > gate 2e-05
+E           assert 1.2343556707527805 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_____________________ test_lstm_census[edge-bi_init_T4_N2] _____________________
+
+cell = ('edge', 'bi_init_T4_N2', 'bidirectional', 4, 2, 6, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_init_T4_N2'
+attrs = {'H': 16, 'I': 6, 'N': 2, 'T': 4, ...}
+outs1 = (tensor([[[[-0.0047,  0.0725, -0.0720,  0.0743,  0.0895, -0.0010,  0.4103,
+            0.1420, -0.5792,  0.0546,  0.23...         0.7146,  0.1771, -0.3307, -0.3953,  0.1847,  0.4509, -0.0325,
+           0.2702,  0.0368]]], device='cuda:0'))
+outs2 = (tensor([[[[-0.0047,  0.0725, -0.0720,  0.0743,  0.0895, -0.0010,  0.4103,
+            0.1420, -0.5792,  0.0546,  0.23...         0.7146,  0.1771, -0.3307, -0.3953,  0.1847,  0.4509, -0.0325,
+           0.2702,  0.0368]]], device='cuda:0'))
+oracle = (array([[[[-0.00471959,  0.07254131, -0.0720317 ,  0.07432577,
+           0.08950451, -0.00097796,  0.41028061,  0.142...    0.17265036, -0.27106689,  0.11464592,  0.27170914,
+          0.00253713, -0.1533668 ,  0.01298714,  0.39540469]]]))
+extra = {'z_absmax': 6.2009456970784615}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.087e+00 > gate 2e-05
+E           assert 1.0873597722228474 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+___________________ test_lstm_census[edge-bi_init_T2_N3_H20] ___________________
+
+cell = ('edge', 'bi_init_T2_N3_H20', 'bidirectional', 2, 3, 6, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_init_T2_N3_H20'
+attrs = {'H': 20, 'I': 6, 'N': 3, 'T': 2, ...}
+outs1 = (tensor([[[[ 4.3043e-01, -1.4668e-01,  3.2897e-01,  2.3165e-01, -7.3046e-02,
+            1.3234e-01,  2.2053e-02,  4.7... -0.2919, -0.1374, -0.5514,
+          -0.4890,  0.1621,  0.1135, -0.3022,  0.3131, -0.0957]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[ 4.3043e-01, -1.4668e-01,  3.2897e-01,  2.3165e-01, -7.3046e-02,
+            1.3234e-01,  2.2053e-02,  4.7... -0.2919, -0.1374, -0.5514,
+          -0.4890,  0.1621,  0.1135, -0.3022,  0.3131, -0.0957]]],
+       device='cuda:0'))
+oracle = (array([[[[ 4.30431939e-01, -1.46681492e-01,  3.28967634e-01,
+           2.31649652e-01, -7.30462657e-02,  1.32337720e...    0.67797068,  0.54828702, -0.23537545,  0.50742835,
+          0.23704713,  0.47821038, -0.21127586,  0.23345651]]]))
+extra = {'z_absmax': 6.592879632073849}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 9.199e-01 > gate 2e-05
+E           assert 0.9198663606552206 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+__________________ test_lstm_census[edge-bi_init_T40_N3_H20] ___________________
+
+cell = ('edge', 'bi_init_T40_N3_H20', 'bidirectional', 40, 3, 12, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_init_T40_N3_H20'
+attrs = {'H': 20, 'I': 12, 'N': 3, 'T': 40, ...}
+outs1 = (tensor([[[[-1.9727e-01,  6.0477e-01, -6.2528e-01,  ..., -1.6719e-01,
+            5.7811e-01, -1.6880e-02],
+          ... -0.3886,  0.6321, -0.4794,
+           0.7095, -0.2102,  0.3774, -0.4735,  0.3868, -0.1791]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[-1.9727e-01,  6.0477e-01, -6.2528e-01,  ..., -1.6719e-01,
+            5.7811e-01, -1.6880e-02],
+          ... -0.3886,  0.6321, -0.4794,
+           0.7095, -0.2102,  0.3774, -0.4735,  0.3868, -0.1791]]],
+       device='cuda:0'))
+oracle = (array([[[[-1.97273985e-01,  6.04767511e-01, -6.25275285e-01, ...,
+          -1.67194490e-01,  5.78108158e-01, -1.6880...    0.32929723,  0.02630627,  0.34102305, -0.42180271,
+         -0.14939126, -0.13129331, -0.13636933,  0.49545749]]]))
+extra = {'z_absmax': 7.878559221923919}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.122e+00 > gate 2e-05
+E           assert 1.1215642360081592 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+___________________ test_lstm_census[edge-bi_noB_init_T9_N3] ___________________
+
+cell = ('edge', 'bi_noB_init_T9_N3', 'bidirectional', 9, 3, 8, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_noB_init_T9_N3'
+attrs = {'H': 16, 'I': 8, 'N': 3, 'T': 9, ...}
+outs1 = (tensor([[[[ 7.6808e-02, -4.1865e-03, -7.9859e-02,  8.2234e-02, -5.0856e-01,
+            6.3792e-03, -3.1289e-01,  1.4...        -0.0159,  0.0048,  0.2667,  0.2224, -0.8979, -0.3185, -0.5009,
+           0.2074, -0.6125]]], device='cuda:0'))
+outs2 = (tensor([[[[ 7.6808e-02, -4.1865e-03, -7.9859e-02,  8.2234e-02, -5.0856e-01,
+            6.3792e-03, -3.1289e-01,  1.4...        -0.0159,  0.0048,  0.2667,  0.2224, -0.8979, -0.3185, -0.5009,
+           0.2074, -0.6125]]], device='cuda:0'))
+oracle = (array([[[[ 7.68080563e-02, -4.18648302e-03, -7.98589355e-02,
+           8.22338042e-02, -5.08563964e-01,  6.37923061e...    0.02739037,  0.1972336 , -0.16025154,  0.31450297,
+          0.21691127, -0.14216324,  0.22564529, -0.15438962]]]))
+extra = {'z_absmax': 6.796264547742995}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.114e+00 > gate 2e-05
+E           assert 1.1143784084397572 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_____________________ test_lstm_census[edge-bi_H20_T25_N2] _____________________
+
+cell = ('edge', 'bi_H20_T25_N2', 'bidirectional', 25, 2, 12, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_H20_T25_N2'
+attrs = {'H': 20, 'I': 12, 'N': 2, 'T': 25, ...}
+outs1 = (tensor([[[[-5.4844e-02,  6.9490e-02,  1.6732e-02,  ...,  1.3884e-02,
+           -1.9408e-02,  1.8421e-01],
+          ... -0.3398,  0.5582,  0.0957,
+          -0.0167, -0.1110, -0.3437,  0.8741,  0.0268,  0.0309]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[-5.4844e-02,  6.9490e-02,  1.6732e-02,  ...,  1.3884e-02,
+           -1.9408e-02,  1.8421e-01],
+          ... -0.3398,  0.5582,  0.0957,
+          -0.0167, -0.1110, -0.3437,  0.8741,  0.0268,  0.0309]]],
+       device='cuda:0'))
+oracle = (array([[[[-5.48440834e-02,  6.94901512e-02,  1.67323077e-02, ...,
+           1.38836928e-02, -1.94076862e-02,  1.8420...   -0.47821443, -1.28898573,  0.03764833, -0.55887019,
+         -0.16554978, -0.02100857, -0.40591858,  0.22423193]]]))
+extra = {'z_absmax': 4.895382607585874}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.011e+00 > gate 2e-05
+E           assert 1.0114895262369905 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+__________________ test_lstm_census[edge-rev_H20_init_T25_N3] __________________
+
+cell = ('edge', 'rev_H20_init_T25_N3', 'reverse', 25, 3, 12, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'rev_H20_init_T25_N3'
+attrs = {'H': 20, 'I': 12, 'N': 3, 'T': 25, ...}
+outs1 = (tensor([[[[-1.5465e-01,  7.8986e-02,  8.8589e-02,  ...,  5.8547e-02,
+            5.7251e-02,  1.9041e-01],
+          ...  0.3878,  0.9188, -0.4250,
+          -0.2584, -0.5404, -0.0165, -0.0892,  0.8269, -0.2788]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[-1.5465e-01,  7.8986e-02,  8.8589e-02,  ...,  5.8547e-02,
+            5.7251e-02,  1.9041e-01],
+          ...  0.3878,  0.9188, -0.4250,
+          -0.2584, -0.5404, -0.0165, -0.0892,  0.8269, -0.2788]]],
+       device='cuda:0'))
+oracle = (array([[[[-0.19154287,  0.04079869, -0.04585361, ...,  0.13559618,
+           0.17828892,  0.09241906],
+         [-0....    0.02995878,  0.20059954, -0.14420267,  0.27391161,
+          0.41000631, -0.06831054, -0.04278929,  0.4179048 ]]]))
+extra = {'z_absmax': 5.451713570043639}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.150e+00 > gate 2e-05
+E           assert 1.1496210980238994 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_________________ test_lstm_census[edge-bi_I1_H20_init_T30_N3] _________________
+
+cell = ('edge', 'bi_I1_H20_init_T30_N3', 'bidirectional', 30, 3, 1, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_I1_H20_init_T30_N3'
+attrs = {'H': 20, 'I': 1, 'N': 3, 'T': 30, ...}
+outs1 = (tensor([[[[-2.4805e-01, -3.0513e-01,  2.9448e-04,  ..., -2.3243e-02,
+            4.7115e-01,  2.5147e-01],
+          ...  0.6759,  0.7814,  0.3979,
+          -0.3619, -0.2244,  1.7440, -0.5090, -0.2314, -0.5556]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[-2.4805e-01, -3.0513e-01,  2.9448e-04,  ..., -2.3243e-02,
+            4.7115e-01,  2.5147e-01],
+          ...  0.6759,  0.7814,  0.3979,
+          -0.3619, -0.2244,  1.7440, -0.5090, -0.2314, -0.5556]]],
+       device='cuda:0'))
+oracle = (array([[[[-2.48052476e-01, -3.05127368e-01,  2.94485882e-04, ...,
+          -2.32426676e-02,  4.71153936e-01,  2.5147...    0.10901567, -0.20575578,  0.11513475,  0.03115958,
+          0.21945986,  0.24703749,  0.28182279,  0.14358533]]]))
+extra = {'z_absmax': 7.060888423887844}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.087e+00 > gate 2e-05
+E           assert 1.086769676235793 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+___________________ test_lstm_census[edge-bi_H1_init_T6_N2] ____________________
+
+cell = ('edge', 'bi_H1_init_T6_N2', 'bidirectional', 6, 2, 3, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_H1_init_T6_N2'
+attrs = {'H': 1, 'I': 3, 'N': 2, 'T': 6, ...}
+outs1 = (tensor([[[[ 0.2009],
+          [-0.1937]],
+
+         [[-0.4812],
+          [-0.0573]]],
+
+
+        [[[ 0.4275],
+      ...device='cuda:0'), tensor([[[-0.3229],
+         [ 0.1057]],
+
+        [[-0.2150],
+         [-0.3835]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.2009],
+          [-0.1937]],
+
+         [[-0.4812],
+          [-0.0573]]],
+
+
+        [[[ 0.4275],
+      ...device='cuda:0'), tensor([[[-0.3229],
+         [ 0.1057]],
+
+        [[-0.2150],
+         [-0.3835]]], device='cuda:0'))
+oracle = (array([[[[ 0.20092751],
+         [-0.19370409]],
+
+        [[-0.19068869],
+         [ 0.02618461]]],
+
+
+       [[[ 0.42...     [ 0.02618461]]]), array([[[-0.32290466],
+        [ 0.10571382]],
+
+       [[-0.30541497],
+        [ 0.07049927]]]))
+extra = {'z_absmax': 5.259944709199857}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.113e+00 > gate 2e-05
+E           assert 1.1125366895409898 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+___________________ test_lstm_census[edge-bi_large_z_T12_N2] ___________________
+
+cell = ('edge', 'bi_large_z_T12_N2', 'bidirectional', 12, 2, 16, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'bi_large_z_T12_N2'
+attrs = {'H': 24, 'I': 16, 'N': 2, 'T': 12, ...}
+outs1 = (tensor([[[[ 3.0197e-08,  1.2530e-01, -8.2666e-02,  ..., -4.9746e-43,
+            6.7146e-04,  2.1295e-27],
+          ...01, -8.9329e-02, -2.2923e+00,
+          -4.9998e-01, -2.5725e-25,  1.7309e-01,  5.5607e-15]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[ 3.0197e-08,  1.2530e-01, -8.2666e-02,  ..., -4.9746e-43,
+            6.7146e-04,  2.1295e-27],
+          ...01, -8.9329e-02, -2.2923e+00,
+          -4.9998e-01, -2.5725e-25,  1.7309e-01,  5.5607e-15]]],
+       device='cuda:0'))
+oracle = (array([[[[ 3.01966917e-08,  1.25304136e-01, -8.26659174e-02, ...,
+          -4.97815023e-43,  6.71462242e-04,  2.1295...     -1.01103193e+00, -1.87867606e+00,  2.43600760e+00,
+         -3.31819764e-24,  1.08359113e-01,  1.75999985e-22]]]))
+extra = {'z_absmax': 88.44620444778258}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.516e+00 > gate 2e-05
+E           assert 1.5155839309516899 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+__________________ test_lstm_census[edge-rev_large_z_T20_N1] ___________________
+
+cell = ('edge', 'rev_large_z_T20_N1', 'reverse', 20, 1, 8, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'edge', name = 'rev_large_z_T20_N1'
+attrs = {'H': 40, 'I': 8, 'N': 1, 'T': 20, ...}
+outs1 = (tensor([[[[ 6.2867e-01, -1.0304e-24,  3.9802e-01, -2.0583e-31,  1.3559e-07,
+            1.8992e-02,  6.4146e-01, -3.6...01,  1.2503e+00,
+          -1.0395e-23,  4.1115e-04,  1.5081e-02,  5.2316e-02,  9.9211e-01]]],
+       device='cuda:0'))
+outs2 = (tensor([[[[ 6.2867e-01, -1.0304e-24,  3.9802e-01, -2.0583e-31,  1.3559e-07,
+            1.8992e-02,  6.4146e-01, -3.6...01,  1.2503e+00,
+          -1.0395e-23,  4.1115e-04,  1.5081e-02,  5.2316e-02,  9.9211e-01]]],
+       device='cuda:0'))
+oracle = (array([[[[ 6.23335585e-01, -6.81203723e-22, -7.47946885e-01,
+          -6.31860190e-31, -2.34091612e-02,  1.00145577e...9971432e+00, -1.87722253e-27,
+          1.00889130e+00,  2.06197136e-01,  3.77546707e-01,
+         -9.40704295e-01]]]))
+extra = {'z_absmax': 88.89116184958971}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.986e+00 > gate 2e-05
+E           assert 1.986435760124729 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+___________________ test_lstm_census[kokoro-kokoro_I640_T82] ___________________
+
+cell = ('kokoro', 'kokoro_I640_T82', 'bidirectional', 82, 1, 640, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'kokoro', name = 'kokoro_I640_T82'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 82, ...}
+outs1 = (tensor([[[[ 0.1266, -0.1550, -0.1095,  ...,  0.2998, -0.2678, -0.2721]],
+
+         [[-0.0828, -0.0017, -0.1300,  ...,...
+          -1.4872e-01,  1.9864e-01,  5.6848e-01, -1.6923e-01,  4.5136e-02,
+          -2.8846e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.1266, -0.1550, -0.1095,  ...,  0.2998, -0.2678, -0.2721]],
+
+         [[-0.0828, -0.0017, -0.1300,  ...,...
+          -1.4872e-01,  1.9864e-01,  5.6848e-01, -1.6923e-01,  4.5136e-02,
+          -2.8846e-01]]], device='cuda:0'))
+oracle = (array([[[[ 1.26618223e-01, -1.54968543e-01, -1.09502468e-01, ...,
+           2.99788826e-01, -2.67780835e-01, -2.7206...9428241e-01, -9.63706171e-01,
+         -2.21060361e-02, -5.10477695e-01, -2.51838169e-01,
+         -3.86317781e-01]]]))
+extra = {'z_absmax': 4.865416160823167}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.345e+00 > gate 2e-05
+E           assert 1.3447159746741835 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+__________________ test_lstm_census[kokoro-kokoro_I640_T1193] __________________
+
+cell = ('kokoro', 'kokoro_I640_T1193', 'bidirectional', 1193, 1, 640, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'kokoro', name = 'kokoro_I640_T1193'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 1193, ...}
+outs1 = (tensor([[[[ 0.1158, -0.0440, -0.0914,  ...,  0.0809,  0.0344, -0.1461]],
+
+         [[ 0.1335,  0.1486, -0.0557,  ...,...
+           1.8376e-02,  9.2360e-02, -5.1530e-01,  5.1152e-01, -6.8872e-01,
+          -1.7559e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.1158, -0.0440, -0.0914,  ...,  0.0809,  0.0344, -0.1461]],
+
+         [[ 0.1335,  0.1486, -0.0557,  ...,...
+           1.8376e-02,  9.2360e-02, -5.1530e-01,  5.1152e-01, -6.8872e-01,
+          -1.7559e-01]]], device='cuda:0'))
+oracle = (array([[[[ 0.11580355, -0.04396309, -0.09136074, ...,  0.08087295,
+           0.03444807, -0.14612492]],
+
+        [[ ...1702311e-01, -1.57086198e-01,
+          9.35651501e-02, -1.00633039e-01,  2.74207921e-01,
+         -4.82275358e-01]]]))
+extra = {'z_absmax': 6.113971780600043}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.541e+00 > gate 2e-05
+E           assert 1.5408274440471565 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+__________________ test_lstm_census[kokoro-kokoro_I512_T505] ___________________
+
+cell = ('kokoro', 'kokoro_I512_T505', 'bidirectional', 505, 1, 512, ...)
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CELLS, ids=[f'{c[0]}-{c[1]}' for c in CELLS])
+    def test_lstm_census(cell, receipt):
+        kind, c = cell[0], cell[1:]
+        d, direction, H = _cell_data(c)
+        outs1 = _call(d, direction, H)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+>       _check(receipt, kind, c[0], _attrs(c), outs1, outs2, (Y, Yh, Yc), extra={'z_absmax': zmax})
+
+tc_signal/tests/test_lstm.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'kokoro', name = 'kokoro_I512_T505'
+attrs = {'H': 256, 'I': 512, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[ 0.1252, -0.3553,  0.1671,  ...,  0.0112, -0.1351, -0.1083]],
+
+         [[-0.1257, -0.1323,  0.0528,  ...,...
+           9.9615e-01, -2.5714e-01, -6.5323e-01, -9.6030e-01, -9.7626e-02,
+           5.5702e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.1252, -0.3553,  0.1671,  ...,  0.0112, -0.1351, -0.1083]],
+
+         [[-0.1257, -0.1323,  0.0528,  ...,...
+           9.9615e-01, -2.5714e-01, -6.5323e-01, -9.6030e-01, -9.7626e-02,
+           5.5702e-01]]], device='cuda:0'))
+oracle = (array([[[[ 1.25227814e-01, -3.55333636e-01,  1.67136793e-01, ...,
+           1.11652139e-02, -1.35078624e-01, -1.0825...3728717e-01, -7.17420732e-01,
+          5.50918294e-01,  3.91040743e-01,  2.39017694e-01,
+          5.43016962e-01]]]))
+extra = {'z_absmax': 5.10928215070478}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.711e+00 > gate 2e-05
+E           assert 1.7108198663940355 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+______ test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/short_07] _______
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.0__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.0__LSTM/short_07'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 30, ...}
+outs1 = (tensor([[[[-1.7126e-01,  7.3195e-01, -2.0234e-01,  ..., -2.7205e-02,
+            2.4530e-02, -3.9518e-01]],
+
+        ...
+           2.9472e-01,  6.6688e-02, -1.4929e+00, -1.1831e+00, -4.0044e-01,
+          -3.1443e-02]]], device='cuda:0'))
+outs2 = (tensor([[[[-1.7126e-01,  7.3195e-01, -2.0234e-01,  ..., -2.7205e-02,
+            2.4530e-02, -3.9518e-01]],
+
+        ...
+           2.9472e-01,  6.6688e-02, -1.4929e+00, -1.1831e+00, -4.0044e-01,
+          -3.1443e-02]]], device='cuda:0'))
+oracle = (array([[[[-1.71262935e-01,  7.31953188e-01, -2.02338149e-01, ...,
+          -2.72048062e-02,  2.45296419e-02, -3.9518...0855479e+00,  1.01639546e+00,
+         -2.22318735e-01,  7.92906960e-02,  9.67543544e-01,
+         -6.99580301e-01]]]))
+extra = {'c_absmax': 5.37849123879577, 'z_absmax': 21.482089460810855}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.980e+00 > gate 2e-05
+E           assert 1.9798163253552514 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+________ test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/max_1] ________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.0__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.0__LSTM/max_1'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[ 7.1119e-03,  7.3944e-01, -1.2776e-01,  ..., -6.2973e-03,
+            1.3601e-01, -1.8778e-01]],
+
+        ...
+           8.5125e-01, -8.0923e-03, -1.0720e+00, -1.0159e+00, -9.8104e-01,
+          -8.7475e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[ 7.1119e-03,  7.3944e-01, -1.2776e-01,  ..., -6.2973e-03,
+            1.3601e-01, -1.8778e-01]],
+
+        ...
+           8.5125e-01, -8.0923e-03, -1.0720e+00, -1.0159e+00, -9.8104e-01,
+          -8.7475e-01]]], device='cuda:0'))
+oracle = (array([[[[ 7.11191958e-03,  7.39436063e-01, -1.27758515e-01, ...,
+          -6.29727283e-03,  1.36006806e-01, -1.8777...8685349e-01,  9.93096515e-01,
+          9.46286961e-01,  1.64394694e-01,  7.40191543e-01,
+         -4.05090456e-01]]]))
+extra = {'c_absmax': 7.8185970168863355, 'z_absmax': 26.029972880171385}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.990e+00 > gate 2e-05
+E           assert 1.989580416427572 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+______ test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/short_07] _______
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.2__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.2__LSTM/short_07'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 30, ...}
+outs1 = (tensor([[[[-6.5443e-01,  5.9876e-04, -7.2917e-01,  ..., -7.1436e-01,
+            4.6990e-05,  2.0748e-03]],
+
+        ...
+           8.9799e-02,  3.8991e-01, -9.5611e-01,  5.9000e-01,  9.0873e-01,
+          -2.4041e+00]]], device='cuda:0'))
+outs2 = (tensor([[[[-6.5443e-01,  5.9876e-04, -7.2917e-01,  ..., -7.1436e-01,
+            4.6990e-05,  2.0748e-03]],
+
+        ...
+           8.9799e-02,  3.8991e-01, -9.5611e-01,  5.9000e-01,  9.0873e-01,
+          -2.4041e+00]]], device='cuda:0'))
+oracle = (array([[[[-6.54425249e-01,  5.98757890e-04, -7.29165412e-01, ...,
+          -7.14364998e-01,  4.69905136e-05,  2.0748...2414966e-01, -2.82430825e-01,
+          5.02230077e-01,  8.20325193e-01, -3.39833729e-01,
+         -6.77311017e-01]]]))
+extra = {'c_absmax': 16.20265811517085, 'z_absmax': 14.320396889493516}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.961e+00 > gate 2e-05
+E           assert 1.9609995131524518 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+________ test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/max_1] ________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.2__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.2__LSTM/max_1'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[-6.9066e-01,  3.6201e-03, -6.0075e-01,  ..., -6.1528e-01,
+            1.5977e-03,  3.4647e-05]],
+
+        ...
+          -1.4233e-01,  8.1608e-01, -9.7795e-01,  4.9812e-01,  8.1327e-01,
+          -1.9627e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[-6.9066e-01,  3.6201e-03, -6.0075e-01,  ..., -6.1528e-01,
+            1.5977e-03,  3.4647e-05]],
+
+        ...
+          -1.4233e-01,  8.1608e-01, -9.7795e-01,  4.9812e-01,  8.1327e-01,
+          -1.9627e-01]]], device='cuda:0'))
+oracle = (array([[[[-6.90659501e-01,  3.62012019e-03, -6.00746952e-01, ...,
+          -6.15280523e-01,  1.59765966e-03,  3.4646...2676795e-01,  9.00136983e-01,
+         -1.76743016e-01, -3.17988245e-02,  9.41730665e-01,
+         -1.06932153e-02]]]))
+extra = {'c_absmax': 6.025728222963394, 'z_absmax': 12.280267836601418}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.963e+00 > gate 2e-05
+E           assert 1.9627503123735235 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+______ test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/short_07] _______
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.4__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.4__LSTM/short_07'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 30, ...}
+outs1 = (tensor([[[[-2.1069e-04, -4.1786e-03, -5.2254e-03,  ...,  4.6304e-03,
+           -7.2231e-02,  7.8735e-05]],
+
+        ...
+           2.0403e-03, -9.6857e-01,  2.3606e-01, -1.6280e+00,  5.4076e-01,
+           1.3405e+00]]], device='cuda:0'))
+outs2 = (tensor([[[[-2.1069e-04, -4.1786e-03, -5.2254e-03,  ...,  4.6304e-03,
+           -7.2231e-02,  7.8735e-05]],
+
+        ...
+           2.0403e-03, -9.6857e-01,  2.3606e-01, -1.6280e+00,  5.4076e-01,
+           1.3405e+00]]], device='cuda:0'))
+oracle = (array([[[[-2.10688361e-04, -4.17857378e-03, -5.22539129e-03, ...,
+           4.63036605e-03, -7.22311721e-02,  7.8734...0973961e-03,  1.05122331e+00,
+         -1.28831622e+00, -1.69332112e-01,  9.66008991e-01,
+          1.92017438e+00]]]))
+extra = {'c_absmax': 17.28984932585244, 'z_absmax': 13.402148463988116}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.940e+00 > gate 2e-05
+E           assert 1.9399089004309957 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+________ test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/max_1] ________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstms.4__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstms.4__LSTM/max_1'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[-3.7711e-04, -2.3870e-02, -6.6999e-03,  ...,  1.1143e-03,
+           -6.0295e-02,  1.7872e-04]],
+
+        ...
+           4.5937e-04, -9.7954e-01, -5.4505e-01, -9.8137e-01,  6.7412e-01,
+           1.7932e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[-3.7711e-04, -2.3870e-02, -6.6999e-03,  ...,  1.1143e-03,
+           -6.0295e-02,  1.7872e-04]],
+
+        ...
+           4.5937e-04, -9.7954e-01, -5.4505e-01, -9.8137e-01,  6.7412e-01,
+           1.7932e-01]]], device='cuda:0'))
+oracle = (array([[[[-3.77113073e-04, -2.38703446e-02, -6.69993283e-03, ...,
+           1.11432655e-03, -6.02951689e-02,  1.7871...0899406e-02, -1.88503616e-01,
+         -8.75698989e-03,  1.19710124e-01,  4.72321058e-02,
+          5.05153933e+00]]]))
+extra = {'c_absmax': 17.513085592064726, 'z_absmax': 12.870825323212504}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.977e+00 > gate 2e-05
+E           assert 1.976984744157267 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_______________ test_lstm_real_fixture[real-lstm__LSTM/short_07] _______________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/lstm__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/lstm__LSTM/short_07'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 30, ...}
+outs1 = (tensor([[[[ 3.6584e-01,  6.0322e-03, -3.6176e-01,  ...,  4.6030e-01,
+            5.0521e-01,  1.7176e-02]],
+
+        ...
+          -1.8773e-01,  4.2021e-01, -5.0770e-01,  1.2410e+00,  1.5880e-01,
+           2.3850e+00]]], device='cuda:0'))
+outs2 = (tensor([[[[ 3.6584e-01,  6.0322e-03, -3.6176e-01,  ...,  4.6030e-01,
+            5.0521e-01,  1.7176e-02]],
+
+        ...
+          -1.8773e-01,  4.2021e-01, -5.0770e-01,  1.2410e+00,  1.5880e-01,
+           2.3850e+00]]], device='cuda:0'))
+oracle = (array([[[[ 3.65837159e-01,  6.03223770e-03, -3.61764012e-01, ...,
+           4.60300639e-01,  5.05213213e-01,  1.7175...2310927e-01, -2.29370867e-01,
+         -5.62934645e+00,  7.85916083e-01,  4.88536765e-03,
+          1.15475322e-03]]]))
+extra = {'c_absmax': 26.19471052592602, 'z_absmax': 33.087195345785084}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.777e+00 > gate 2e-05
+E           assert 1.7770886921821232 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+________________ test_lstm_real_fixture[real-lstm__LSTM/max_1] _________________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/lstm__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/lstm__LSTM/max_1'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[ 2.9549e-01, -1.0463e-02, -1.9739e-01,  ...,  2.0952e-01,
+            5.5050e-01,  1.7144e-02]],
+
+        ...
+          -5.0088e-01,  2.8089e-01, -8.9912e-01,  1.8797e+00,  3.0583e-02,
+          -9.2561e-02]]], device='cuda:0'))
+outs2 = (tensor([[[[ 2.9549e-01, -1.0463e-02, -1.9739e-01,  ...,  2.0952e-01,
+            5.5050e-01,  1.7144e-02]],
+
+        ...
+          -5.0088e-01,  2.8089e-01, -8.9912e-01,  1.8797e+00,  3.0583e-02,
+          -9.2561e-02]]], device='cuda:0'))
+oracle = (array([[[[ 2.95490548e-01, -1.04628514e-02, -1.97393826e-01, ...,
+           2.09515007e-01,  5.50503098e-01,  1.7143...9547116e-01,  2.20540299e-01,
+         -4.80318824e+00,  1.18157266e-01,  2.66860500e-02,
+          6.98221346e-02]]]))
+extra = {'c_absmax': 342.3447026646849, 'z_absmax': 28.262099130296285}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.943e+00 > gate 2e-05
+E           assert 1.943299217552148 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+______________ test_lstm_real_fixture[real-shared__LSTM/short_07] ______________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/shared__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/shared__LSTM/short_07'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 82, ...}
+outs1 = (tensor([[[[ 0.0550, -0.7467,  0.0796,  ...,  0.0059, -0.4039,  0.0966]],
+
+         [[ 0.0349, -0.0118, -0.0199,  ...,...
+          -3.4058e-01, -1.3983e+00, -7.1016e-01, -2.8109e-02,  1.0740e+01,
+          -4.6845e-02]]], device='cuda:0'))
+outs2 = (tensor([[[[ 0.0550, -0.7467,  0.0796,  ...,  0.0059, -0.4039,  0.0966]],
+
+         [[ 0.0349, -0.0118, -0.0199,  ...,...
+          -3.4058e-01, -1.3983e+00, -7.1016e-01, -2.8109e-02,  1.0740e+01,
+          -4.6845e-02]]], device='cuda:0'))
+oracle = (array([[[[ 5.49599391e-02, -7.46692031e-01,  7.95565523e-02, ...,
+           5.92341714e-03, -4.03915402e-01,  9.6566...2451380e-02, -3.76106088e+00,
+         -4.14460863e-02, -2.21327275e+00,  1.84129913e-01,
+          2.38593684e-01]]]))
+extra = {'c_absmax': 57.36417156839481, 'z_absmax': 16.773276018059533}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.987e+00 > gate 2e-05
+E           assert 1.9871516095161348 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_______________ test_lstm_real_fixture[real-shared__LSTM/max_1] ________________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/shared__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/shared__LSTM/max_1'
+attrs = {'H': 256, 'I': 640, 'N': 1, 'T': 1193, ...}
+outs1 = (tensor([[[[ 2.6656e-01, -7.4016e-01,  5.5160e-02,  ...,  1.0912e-02,
+           -2.9204e-01,  4.2950e-02]],
+
+        ...
+          -2.4564e-01, -2.6093e+00, -9.3944e-01,  6.8979e-02,  1.6426e-01,
+          -1.1415e-01]]], device='cuda:0'))
+outs2 = (tensor([[[[ 2.6656e-01, -7.4016e-01,  5.5160e-02,  ...,  1.0912e-02,
+           -2.9204e-01,  4.2950e-02]],
+
+        ...
+          -2.4564e-01, -2.6093e+00, -9.3944e-01,  6.8979e-02,  1.6426e-01,
+          -1.1415e-01]]], device='cuda:0'))
+oracle = (array([[[[ 2.66561084e-01, -7.40163259e-01,  5.51598996e-02, ...,
+           1.09115822e-02, -2.92038654e-01,  4.2949...6232392e-02, -4.06143532e+00,
+          3.02446894e-02, -6.31535833e-01,  8.02334445e-02,
+          2.50589232e-01]]]))
+extra = {'c_absmax': 366.16071906431165, 'z_absmax': 15.232139213799423}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.982e+00 > gate 2e-05
+E           assert 1.9824499809053266 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+________ test_lstm_real_fixture[real-text_encoder__lstm__LSTM/short_07] ________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstm__LSTM__short_07.npz', 'case_id': 'short_07', 'case_label': 'short', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstm__LSTM/short_07'
+attrs = {'H': 256, 'I': 512, 'N': 1, 'T': 30, ...}
+outs1 = (tensor([[[[ 4.7659e-01,  3.5335e-02,  1.4717e-02,  ..., -3.9524e-02,
+           -2.6251e-01,  7.2433e-01]],
+
+        ...
+           4.4022e-01,  8.2718e-01, -2.4622e-01, -1.4532e-01, -6.1002e-01,
+          -1.2468e+00]]], device='cuda:0'))
+outs2 = (tensor([[[[ 4.7659e-01,  3.5335e-02,  1.4717e-02,  ..., -3.9524e-02,
+           -2.6251e-01,  7.2433e-01]],
+
+        ...
+           4.4022e-01,  8.2718e-01, -2.4622e-01, -1.4532e-01, -6.1002e-01,
+          -1.2468e+00]]], device='cuda:0'))
+oracle = (array([[[[ 4.76585351e-01,  3.53346477e-02,  1.47173074e-02, ...,
+          -3.95244060e-02, -2.62512984e-01,  7.2432...2086101e+00, -3.12211643e-01,
+         -2.96925149e-01, -8.05925467e-01, -3.88452777e-02,
+         -4.54354252e-02]]]))
+extra = {'c_absmax': 11.01425231908868, 'z_absmax': 14.561825374646464}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.901e+00 > gate 2e-05
+E           assert 1.900881210566317 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_________ test_lstm_real_fixture[real-text_encoder__lstm__LSTM/max_1] __________
+
+case = {'attrs': {'direction': 'bidirectional', 'hidden_size': 256}, 'case_file': 'cases/T4/text_encoder__lstm__LSTM__max_1.npz', 'case_id': 'max_1', 'case_label': 'long', ...}
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('case', FIXTURE_CASES, ids=[c['id'].replace('T4/', 'real-') for c in FIXTURE_CASES])
+    def test_lstm_real_fixture(case, receipt):
+        cz = np.load(os.path.join(L.FIXTURES_DIR, case['case_file']))
+        wz = np.load(os.path.join(L.FIXTURES_DIR, case['weights_file']))
+        at = case['attrs']
+        H, direction = int(at['hidden_size']), at.get('direction', 'forward')
+        assert int(at.get('layout', 0)) == 0
+        d = {'x': cz['x'], 'W': wz['W'], 'R': wz['R'], 'B': wz['B'],
+             'initial_h': cz['initial_h'] if 'initial_h' in cz.files else None,
+             'initial_c': cz['initial_c'] if 'initial_c' in cz.files else None}
+        T, N = d['x'].shape[:2]
+        seq = cz['sequence_lens'] if 'sequence_lens' in cz.files else None
+        outs1 = ts.lstm(_cu(d['x']), _cu(d['W']), _cu(d['R']), _cu(d['B']), hidden_size=H, direction=direction,
+                        initial_h=_cu(d['initial_h']), initial_c=_cu(d['initial_c']), sequence_lens=seq)
+        outs2 = _call(d, direction, H, fill=L.SECOND_FILL)
+        Y, Yh, Yc, zmax = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                                        initial_h=d['initial_h'], initial_c=d['initial_c'], return_zmax=True)
+        attrs = dict(direction=direction, T=int(T), N=int(N), I=int(d['x'].shape[2]), H=H, node=case['node'],
+                     case_id=case['case_id'], sequence_lens=None if seq is None else seq.tolist())
+>       _check(receipt, 'real', case['id'], attrs, outs1, outs2, (Y, Yh, Yc),
+               extra={'z_absmax': zmax, 'c_absmax': float(np.abs(Yc).max())})
+
+tc_signal/tests/test_lstm.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+kind = 'real', name = 'T4/text_encoder__lstm__LSTM/max_1'
+attrs = {'H': 256, 'I': 512, 'N': 1, 'T': 505, ...}
+outs1 = (tensor([[[[ 4.2934e-01,  1.0637e-02,  1.5729e-03,  ..., -2.6305e-02,
+           -1.4938e-01,  6.0969e-01]],
+
+        ...
+           5.5013e-01,  8.2195e-01, -1.5028e-01, -9.1562e-02, -6.6193e-01,
+          -1.3248e+00]]], device='cuda:0'))
+outs2 = (tensor([[[[ 4.2934e-01,  1.0637e-02,  1.5729e-03,  ..., -2.6305e-02,
+           -1.4938e-01,  6.0969e-01]],
+
+        ...
+           5.5013e-01,  8.2195e-01, -1.5028e-01, -9.1562e-02, -6.6193e-01,
+          -1.3248e+00]]], device='cuda:0'))
+oracle = (array([[[[ 4.29338776e-01,  1.06368686e-02,  1.57287262e-03, ...,
+          -2.63050387e-02, -1.49376315e-01,  6.0968...1593790e-02, -5.41376665e-01,
+         -5.59927493e-01, -6.47690509e-02, -1.48478195e+00,
+         -2.69528119e-02]]]))
+extra = {'c_absmax': 7.319784135166809, 'z_absmax': 14.952926777897469}
+
+    def _check(receipt, kind, name, attrs, outs1, outs2, oracle, extra=None):
+        torch.cuda.synchronize()
+        per = {}
+        ok = True
+        for nm, y1, y2, o in zip(OUTPUTS, outs1, outs2, oracle):
+            y = y1.cpu().numpy()
+            shape_ok = tuple(y.shape) == tuple(o.shape)
+            finite = bool(np.isfinite(y).all())
+            n = normwise(y, o) if shape_ok else float('inf')
+            det = _bits_equal(y1, y2)
+            per[nm] = {'shape': list(y.shape), 'N': n, 'deterministic': det,
+                       'mismatches': 0 if det else _mismatches(y1, y2), 'all_finite': finite}
+            ok &= shape_ok and finite and n <= L.GATE_N and det
+        rec = {'op': 'lstm', 'kind': kind, 'cell': name, 'attrs': attrs, 'N': max(p['N'] for p in per.values()),
+               'gate': L.GATE_N, 'deterministic': all(p['deterministic'] for p in per.values()),
+               'all_finite': all(p['all_finite'] for p in per.values()), 'outputs': per, 'pass': bool(ok)}
+        if extra:
+            rec.update(extra)
+        receipt.append(rec)
+        for nm, p in per.items():
+            assert p['all_finite'], f'{nm}: non-finite output (an element was never written: the allocator pre-fills NaN)'
+>           assert p['N'] <= L.GATE_N, f'{nm}: N {p["N"]:.3e} > gate {L.GATE_N:.0e}'
+E           AssertionError: Y: N 1.926e+00 > gate 2e-05
+E           assert 1.9263553888065867 <= 2e-05
+E            +  where 2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:131: AssertionError
+_____________________ test_lstm_last_step_state_matches_Y ______________________
+
+    def test_lstm_last_step_state_matches_Y():
+        """Y_h is Y at each direction's last step: Y[T-1, 0] (forward) and Y[0, 1] (reverse), bitwise."""
+        Y, Yh, Yc = _lstm_small()
+        torch.cuda.synchronize()
+>       assert _bits_equal(Yh[0], Y[-1, 0]) and _bits_equal(Yh[1], Y[0, 1])
+E       AssertionError: assert (True and False)
+E        +  where True = _bits_equal(tensor([[ 0.0378,  0.0062,  0.0411, -0.2316],\n        [-0.0005,  0.1712, -0.1596,  0.0679]], device='cuda:0'), tensor([[ 0.0378,  0.0062,  0.0411, -0.2316],\n        [-0.0005,  0.1712, -0.1596,  0.0679]], device='cuda:0'))
+E        +  and   False = _bits_equal(tensor([[-0.0658,  0.0009,  0.2021, -0.1342],\n        [ 0.2436,  0.0899, -0.0916,  0.0350]], device='cuda:0'), tensor([[ 0.0635,  0.3564, -0.0931,  0.0147],\n        [ 0.2539, -0.2773,  0.3093, -0.0760]], device='cuda:0'))
+
+tc_signal/tests/test_lstm.py:467: AssertionError
+____________ test_lstm_tensor_cuda_producers_and_default_allocator _____________
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    def test_lstm_tensor_cuda_producers_and_default_allocator(receipt):
+        """The production path: TensorCUDA tensors in, tc_signal's default allocator (tensor_cuda.empty) for outputs and
+        scratch, `.numpy()` download; same N gate as the census against the fp64 oracle, and two calls bitwise equal."""
+        try:
+            import tensor_cuda as tc
+        except ImportError as e:
+            pytest.skip(f'tensor_cuda is not importable: {e}')
+        if not hasattr(tc, 'empty'):
+            pytest.skip('this tensor_cuda has no empty() (P1T-M1 absent)')
+        cell = _edge('bi_init_T40_N3_H20')                       # bidirectional, init state, H 20, T 40, N 3
+        d, direction, H = _cell_data(cell)
+        prev = ts.set_allocator(None)
+        try:
+            def up(a):
+                return None if a is None else tc.tensor(np.ascontiguousarray(a), dtype='float32')
+            args = [up(d[k]) for k in ('x', 'W', 'R', 'B')]
+            outs = [ts.lstm(*args, hidden_size=H, direction=direction, initial_h=up(d['initial_h']),
+                            initial_c=up(d['initial_c'])) for _ in range(2)]
+        finally:
+            ts.set_allocator(prev)
+        o = lstm_onnx_f64(d['x'], d['W'], d['R'], d['B'], direction=direction, hidden_size=H,
+                          initial_h=d['initial_h'], initial_c=d['initial_c'])
+        host = [[np.ascontiguousarray(t.numpy()) for t in out] for out in outs]
+        ns = [normwise(y, oo) for y, oo in zip(host[0], o)]
+        det = all(a.tobytes() == b.tobytes() for a, b in zip(host[0], host[1]))
+        receipt.append({'op': 'lstm', 'kind': 'tensor_cuda', 'cell': cell[0], 'N': max(ns), 'gate': L.GATE_N,
+                        'deterministic': det, 'pass': bool(max(ns) <= L.GATE_N and det)})
+>       assert max(ns) <= L.GATE_N and det, (ns, det)
+E       AssertionError: ([1.1215642360081592, 1.1625639244864088, 1.0048847721340148], True)
+E       assert (1.1625639244864088 <= 2e-05)
+E        +  where 1.1625639244864088 = max([1.1215642360081592, 1.1625639244864088, 1.0048847721340148])
+E        +  and   2e-05 = L.GATE_N
+
+tc_signal/tests/test_lstm.py:535: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_list]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_numpy_cpu]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_cpu_tensor]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[w_fp64]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_noncontiguous]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_2d]
+PASSED tc_signal/tests/test_contract.py::test_refusal[x_empty_T]
+PASSED tc_signal/tests/test_contract.py::test_refusal[w_bad_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups_not_dividing_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups_not_dividing_cout]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_wrong_len]
+PASSED tc_signal/tests/test_contract.py::test_refusal[b_2d]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_wrong_shape]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_cpu]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_is_x]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_partial_overlap]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_over_w]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_len_le0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[out_len_le0_dilation]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[dilation0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[groups0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[neg_pad]
+PASSED tc_signal/tests/test_contract.py::test_refusal[neg_pad_end]
+PASSED tc_signal/tests/test_contract.py::test_refusal[padding_str]
+PASSED tc_signal/tests/test_contract.py::test_refusal[padding_len3]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride_bool]
+PASSED tc_signal/tests/test_contract.py::test_refusal[stride_float]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_op_ge_max]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_op_neg]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_w_bad_cin]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_groups_not_dividing]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_b_wrong_len]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_len_le0]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_wrong_shape]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_out_over_b]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_x_fp16]
+PASSED tc_signal/tests/test_contract.py::test_refusal[convt_x_cpu]
+PASSED tc_signal/tests/test_contract.py::test_set_allocator_non_callable
+PASSED tc_signal/tests/test_contract.py::test_allocator_wrong_shape_or_dtype
+PASSED tc_signal/tests/test_contract.py::test_dlpack_returns_non_capsule
+PASSED tc_signal/tests/test_contract.py::test_foreign_capsule_name
+PASSED tc_signal/tests/test_contract.py::test_consumed_capsule_refused
+PASSED tc_signal/tests/test_contract.py::test_written_operand_flags_refused[read_only]
+PASSED tc_signal/tests/test_contract.py::test_written_operand_flags_refused[is_copied]
+PASSED tc_signal/tests/test_contract.py::test_device_ordinal_mismatch_refused
+PASSED tc_signal/tests/test_contract.py::test_non_cuda_device_type_refused
+PASSED tc_signal/tests/test_contract.py::test_dlpack_major_version_refused
+PASSED tc_signal/tests/test_contract.py::test_misaligned_refused
+PASSED tc_signal/tests/test_contract.py::test_explicit_noncompact_strides_refused
+PASSED tc_signal/tests/test_contract.py::test_producer_kwargs_stream_1_and_copy_false
+PASSED tc_signal/tests/test_contract.py::test_legacy_only_producer_fallback
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-field]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-data]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-field]
+PASSED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-data]
+PASSED tc_signal/tests/test_contract.py::test_size1_dims_any_stride
+PASSED tc_signal/tests/test_contract.py::test_explicit_compact_strides_accepted
+PASSED tc_signal/tests/test_contract.py::test_bare_capsules_versioned_and_legacy
+PASSED tc_signal/tests/test_contract.py::test_deleter_called_exactly_once_on_every_path
+PASSED tc_signal/tests/test_contract.py::test_set_allocator_returns_previous
+PASSED tc_signal/tests/test_contract.py::test_allocator_calls_and_out_identity
+PASSED tc_signal/tests/test_contract.py::test_padding_int_equals_tuple
+PASSED tc_signal/tests/test_contract.py::test_adjacent_operands_allowed
+PASSED tc_signal/tests/test_contract.py::test_stream_order_torch_write_then_tc_signal_read
+PASSED tc_signal/tests/test_contract.py::test_stream_order_tc_signal_write_then_torch_read
+PASSED tc_signal/tests/test_contract.py::test_cublas_handle_config
+PASSED tc_signal/tests/test_contract.py::test_build_info
+PASSED tc_signal/tests/test_contract.py::test_fast_math_canary_ieee_division_and_subnormals
+PASSED tc_signal/tests/test_contract.py::test_convt_matches_oracle_with_torch_tensor_inputs_mixed_with_producer_out
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_512to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_514to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_512to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_256to1]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_22to128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_1090to1024]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k5_s1_p22_512to512]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s2_p11_1to1]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k20_s5_p00_1to11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k12_s6_p33_22to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_256to256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_128to22]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d3_p99_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d5_p1515_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d3_p33_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d5_p55_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d1_p55_256]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d3_p1515_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d5_p2525_128]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p20_k3]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p03_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-asym_p41_k3_s2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups4_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-stride_gt_K_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_direct_k1_Cout5]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_groups2_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-out_len1_T_eq_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-out_len1_T1_p11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-k1_pad10_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_census[edge-k1_s2_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s10_p55_512to256]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k12_s6_p33_256to128]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw512_k3_s2_p11_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-dw1090_k3_s2_p11_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[kokoro-k20_s5_p00_11to1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p20_k4_s2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p03_k5_s3_op1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-asym_p31_k3_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups4_s3_op2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-stride_gt_K_asym_op]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-N2_groups2_asym]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-out_len1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-op_dil_gt_stride]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_census[edge-Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups4_k5_d2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[N2_direct_k1_Cout5]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[out_len1_T_eq_K]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[out_len1_T1_p11]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[Cout11_no_bias]
+PASSED tc_signal/tests/test_conv.py::test_conv1d_oracle_matches_torch_native[k1_s2_im2col_path]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups_C_depthwise]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[groups_C_multiplier2]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[T_lt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[stride_gt_K]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[dil_span_ge_T]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[N2_Cout33]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[out_len1]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[op_dil_gt_stride]
+PASSED tc_signal/tests/test_conv.py::test_conv_transpose1d_oracle_matches_torch_native[Cout11_no_bias]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T1_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T1_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_T17_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_init_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_noB_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_I1_T30]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_census[edge-fwd_large_z_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_fixture_manifest
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T1_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T1_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T2_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T2_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_T17_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_T17_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_T33_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_init_T1_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T4_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T2_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_init_T40_N3_H20]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_noB_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_noB_init_T9_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_H20_T25_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_H20_init_T25_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_I1_T30]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_I1_H20_init_T30_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_H1_init_T6_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[bi_large_z_T12_N2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[fwd_large_z_init_T3_N3]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[rev_large_z_T20_N1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_matches_torch_f64[kokoro_I640_T82]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_oracle_gate_order_is_onnx
+PASSED tc_signal/tests/test_lstm.py::test_lstm_transcendental_probe
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_1]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_bool]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[layout_str]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_short]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_mixed]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_zero]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_len]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_float]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[seq_lens_cuda_short]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_bad]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_case]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[direction_vs_W]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_mismatch]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_float]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_bool]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_zero]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_negative]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_bad_input_size]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_2d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[R_bad]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[R_one_direction]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_half]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_1d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[initial_h_bad_N]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[initial_c_bad_H]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_2d]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_empty_T]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_fp64]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[B_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_cpu]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_numpy]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_noncontiguous]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_list]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[x_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[W_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[device_mismatch]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_not_tuple]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_len2]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_shape]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_c_rank]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_fp16]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_none]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_over_x]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_is_Y_c]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[out_Y_h_is_initial_h]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[clip_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[peepholes_P_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[input_forget_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[activations_kw]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_refusal[hidden_size_missing]
+PASSED tc_signal/tests/test_lstm.py::test_lstm_sequence_lens_equal_T_accepted
+PASSED tc_signal/tests/test_lstm.py::test_lstm_out_tuple_is_written_and_returned
+PASSED tc_signal/tests/test_lstm.py::test_lstm_allocations_go_through_the_allocator
+PASSED tc_signal/tests/test_lstm.py::test_lstm_cublas_handle_config
+PASSED tc_signal/tests/test_lstm.py::test_lstm_deleters_and_stream_every_path
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T2_N3] - Asser...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T2_N2] - Assert...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_T17_N3] - Asse...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_T33_N2] - Asser...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_init_T3_N3] - ...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T4_N2] - A...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T2_N3_H20]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_init_T40_N3_H20]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_noB_init_T9_N3]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_H20_T25_N2] - A...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_H20_init_T25_N3]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_I1_H20_init_T30_N3]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_H1_init_T6_N2]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-bi_large_z_T12_N2]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[edge-rev_large_z_T20_N1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I640_T82]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I640_T1193]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_census[kokoro-kokoro_I512_T505]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.0__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.2__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstms.4__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-lstm__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-lstm__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-shared__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-shared__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstm__LSTM/short_07]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_real_fixture[real-text_encoder__lstm__LSTM/max_1]
+FAILED tc_signal/tests/test_lstm.py::test_lstm_last_step_state_matches_Y - As...
+FAILED tc_signal/tests/test_lstm.py::test_lstm_tensor_cuda_producers_and_default_allocator
+33 failed, 252 passed in 8.71s

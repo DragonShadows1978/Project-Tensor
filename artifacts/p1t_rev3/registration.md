@@ -1,0 +1,4 @@
+# P1T-REV3 registration (immutable)
+Review scope: 9df5bef..5f9f955 tensor_cuda/ and tc_signal/; FIX2 d116ac0..5f9f955. Read-only git expressly authorized by order. No source/test/build edits, GPU execution, subagents, deletes or background jobs.
+Gates: source/metadata inventory; independent full changed-code inspection; CPU native build/probes in /tmp under timeout; binary dependency inspection; Python AST parse. PASS requires clear errors, no crashes/UB, once-only safe ownership, checked geometry, and independent package linkage. Any open BLOCKING/MAJOR => REJECT. GPU-dependent uncertainties get unexecuted probes with pass/fail rules; no GPU pass claimed. Read fix reports only after independent code view. Existing lead receipts are claims.
+Prior art: DLPack ownership/protocol, C++17 arithmetic/exception/RAII, CUDA 12 stream/event semantics, CPython 3.12 finalization, ONNX operator semantics. Probes exercise reviewed code, not performance or Voice acceptance.

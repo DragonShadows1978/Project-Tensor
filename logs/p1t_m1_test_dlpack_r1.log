@@ -1,0 +1,22 @@
+....................................F                                    [100%]
+=================================== FAILURES ===================================
+___________________ test_empty_shape_conventions_match_zeros ___________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_empty_shape_conventions_match_zeros(torch):
+        for args in [(2, 3), ((2, 3),), ([2, 3],), (), (0,), (np.int64(4),)]:
+>           assert tc.empty(*args).shape == tc.zeros(*args).shape
+E           assert () == (1,)
+E             
+E             Right contains one more item: 1
+E             Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:502: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_conventions_match_zeros
+1 failed, 36 passed in 3.75s
+
+real	0m5.334s
+user	0m4.703s
+sys	0m0.864s

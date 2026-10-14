@@ -1,0 +1,16 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m1/tensor_cuda/src/bindings.cpp	2026-10-12 19:34:29.266773721 -0400
++++ /tmp/p1t_m1_mut_a/tensor_cuda/src/bindings.cpp	2026-10-12 19:48:47.149886636 -0400
+@@ -552,6 +552,13 @@
+   Device dev;
+   dev.type = DeviceType::CUDA;
+   dev.index = cur;
++  if (true) {  // MUTANT (a): copy instead of alias
++    NDArray c = NDArray::empty(shape, dt, dev);
++    if (numel > 0)
++      cudaMemcpy(c.data_ptr(), static_cast<char*>(dl->data) + dl->byte_offset,
++                 static_cast<size_t>(numel) * isz, cudaMemcpyDeviceToDevice);
++    return Tensor::make(c, false);
++  }
+   auto storage = std::make_shared<Storage>(
+       dl->data, static_cast<size_t>(dl->byte_offset) + static_cast<size_t>(numel) * isz,
+       dev, versioned ? import_release_versioned : import_release_legacy, manager);

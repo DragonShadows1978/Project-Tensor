@@ -1,0 +1,30 @@
+FE                                                                       [100%]
+==================================== ERRORS ====================================
+_ ERROR at teardown of test_f03_overflowing_geometry_is_refused_not_wrapped[validate_count] _
+
+    @pytest.fixture(autouse=True)
+    def torch_allocator():
+        prev = ts.set_allocator(_torch_alloc)
+        yield
+        ts.set_allocator(prev)
+>       ts.synchronize()
+        ^^^^^^^^^^^^^^
+E       AttributeError: module 'tc_signal' has no attribute 'synchronize'
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:62: AttributeError
+=================================== FAILURES ===================================
+_____ test_f03_overflowing_geometry_is_refused_not_wrapped[validate_count] _____
+
+case = ('validate_count', <function <lambda> at 0x7108d305d6c0>, 'element count')
+
+    @pytest.mark.parametrize('case', F03_CASES, ids=[c[0] for c in F03_CASES])
+    def test_f03_overflowing_geometry_is_refused_not_wrapped(case):
+        _, call, frag = case
+>       with pytest.raises(ValueError) as ei:
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py:400: Failed
+=========================== short test summary info ============================
+FAILED ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[validate_count]
+ERROR ../../mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal/tests/test_fix1_findings.py::test_f03_overflowing_geometry_is_refused_not_wrapped[validate_count]
+1 failed, 1 error in 1.47s

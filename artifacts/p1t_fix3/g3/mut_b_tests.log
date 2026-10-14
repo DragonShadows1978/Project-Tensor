@@ -1,0 +1,150 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+____ test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-gpu] _____
+
+op = 'rint', cond = 'gpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+>       assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 43, in <module>
+E           File "/home/vader/.local/lib/python3.12/site-packages/torch/cuda/__init__.py", line 478, in _lazy_init
+E             torch._C._cuda_init()
+E         torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+E         Search for `cudaErrorIllegalAddress' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+E         CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E         For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E         Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+E         
+E         tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could not be synchronized (cudaErrorIllegalAddress: an illegal memory access was encountered); 1 earlier release-path failure(s) since the last synchronize, the first on device 0 (cudaErrorIllegalAddress: an illegal memory access was encountered), deliberately leaked 2 operand manager(s)); operands without a completion proof were deliberately leaked, not released
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, json, sys\nsys.path.insert(0, '/tmp/p1t_fix3_mut_b/...liberately leaked 2 operand manager(s)); operands without a completion proof were deliberately leaked, not released\n').returncode
+
+tc_signal/tests/test_fix3_findings.py:124: AssertionError
+___ test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-nogpu] ____
+
+op = 'rint', cond = 'nogpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+        res = json.loads(lines[-1][len('RESULT '):])
+>       assert res['outcome'] == 'ValueError', res                                  # mutant (b): no ValueError
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'bytes': 0, 'deleter_calls': 2, 'delta_retained': 0, 'distinct': 2, ...}
+E       assert 'RuntimeError' == 'ValueError'
+E         
+E         - ValueError
+E         + RuntimeError
+
+tc_signal/tests/test_fix3_findings.py:126: AssertionError
+___ test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-gpu] ____
+
+op = 'divide', cond = 'gpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+>       assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=1
+E         stdout=
+E         stderr=Traceback (most recent call last):
+E           File "<string>", line 43, in <module>
+E           File "/home/vader/.local/lib/python3.12/site-packages/torch/cuda/__init__.py", line 478, in _lazy_init
+E             torch._C._cuda_init()
+E         torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+E         Search for `cudaErrorIllegalAddress' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+E         CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E         For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E         Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+E         
+E         tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: the legacy stream of device 0 could not be synchronized (cudaErrorIllegalAddress: an illegal memory access was encountered); 1 earlier release-path failure(s) since the last synchronize, the first on device 0 (cudaErrorIllegalAddress: an illegal memory access was encountered), deliberately leaked 3 operand manager(s)); operands without a completion proof were deliberately leaked, not released
+E         
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport ctypes, json, sys\nsys.path.insert(0, '/tmp/p1t_fix3_mut_b/...liberately leaked 3 operand manager(s)); operands without a completion proof were deliberately leaked, not released\n').returncode
+
+tc_signal/tests/test_fix3_findings.py:124: AssertionError
+__ test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-nogpu] ___
+
+op = 'divide', cond = 'nogpu'
+
+    @pytest.mark.parametrize('cond', ['gpu', 'nogpu'])
+    @pytest.mark.parametrize('op', ['rint', 'divide'])
+    def test_fix3_v302_aggregate_overflow_refused_before_any_launch(op, cond):
+        env = _env(CUDA_VISIBLE_DEVICES='') if cond == 'nogpu' else _env()
+        r = subprocess.run([sys.executable, '-c', _PRELAUNCH, op, cond], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=env)
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith('RESULT ')]
+        assert r.returncode == 0 and lines, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+        res = json.loads(lines[-1][len('RESULT '):])
+>       assert res['outcome'] == 'ValueError', res                                  # mutant (b): no ValueError
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'bytes': 0, 'deleter_calls': 3, 'delta_retained': 0, 'distinct': 3, ...}
+E       assert 'RuntimeError' == 'ValueError'
+E         
+E         - ValueError
+E         + RuntimeError
+
+tc_signal/tests/test_fix3_findings.py:126: AssertionError
+_______ test_fix3_v302_native_byte_accounting_overflow_safe[accounting] ________
+
+fix3_harness = '/tmp/pytest-of-vader/pytest-56/fix3_harness0/fix3_native_harness'
+mode = 'accounting'
+
+    @pytest.mark.parametrize('mode', ['accounting', 'dtor'])
+    def test_fix3_v302_native_byte_accounting_overflow_safe(fix3_harness, mode):
+        r, summary, bad = _harness(fix3_harness, mode)
+        assert 'runtime error' not in r.stderr, r.stderr                            # UBSan (and -fno-sanitize-recover)
+>       assert r.returncode == 0 and summary and summary['failures'] == 0 and not bad, (r.returncode, bad, r.stdout[-3000:],
+                                                                                        r.stderr[-2000:])
+E       AssertionError: (1, [{'case': 'aggregate_of_two_2p61m1_operands_refused_as_overflow', 'detail': '', 'ok': False}, {'case': 'aggregate_..., "ok": true, "detail": "9223372036854775800"}
+E         {"summary": {"mode": "accounting", "cases": 17, "failures": 2}}
+E         ', '')
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/tmp/pytest-of-vader/pytest-56/fix3_harness0/fix3_native_harness', 'accounting'], returncode=1... true, "detail": "9223372036854775800"}\n{"summary": {"mode": "accounting", "cases": 17, "failures": 2}}\n', stderr='').returncode
+
+tc_signal/tests/test_fix3_findings.py:165: AssertionError
+__________ test_fix3_v302_native_byte_accounting_overflow_safe[dtor] ___________
+
+fix3_harness = '/tmp/pytest-of-vader/pytest-56/fix3_harness0/fix3_native_harness'
+mode = 'dtor'
+
+    @pytest.mark.parametrize('mode', ['accounting', 'dtor'])
+    def test_fix3_v302_native_byte_accounting_overflow_safe(fix3_harness, mode):
+        r, summary, bad = _harness(fix3_harness, mode)
+        assert 'runtime error' not in r.stderr, r.stderr                            # UBSan (and -fno-sanitize-recover)
+>       assert r.returncode == 0 and summary and summary['failures'] == 0 and not bad, (r.returncode, bad, r.stdout[-3000:],
+                                                                                        r.stderr[-2000:])
+E       AssertionError: (1, [{'case': 'D2_constructor_refuses_the_reviewer_pair', 'detail': '', 'ok': False}, {'case': 'D2_nothing_queued', 'd...er_released_exactly_once", "ok": true, "detail": ""}
+E         {"summary": {"mode": "dtor", "cases": 11, "failures": 2}}
+E         ', '')
+E       assert (1 == 0)
+E        +  where 1 = CompletedProcess(args=['/tmp/pytest-of-vader/pytest-56/fix3_harness0/fix3_native_harness', 'dtor'], returncode=1, stdo...ased_exactly_once", "ok": true, "detail": ""}\n{"summary": {"mode": "dtor", "cases": 11, "failures": 2}}\n', stderr='').returncode
+
+tc_signal/tests/test_fix3_findings.py:165: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-gpu]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[rint-nogpu]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-gpu]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_aggregate_overflow_refused_before_any_launch[divide-nogpu]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_native_byte_accounting_overflow_safe[accounting]
+FAILED tc_signal/tests/test_fix3_findings.py::test_fix3_v302_native_byte_accounting_overflow_safe[dtor]
+6 failed in 12.67s

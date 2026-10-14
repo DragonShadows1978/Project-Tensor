@@ -1,0 +1,18 @@
+--- a/operand_census_cpu.py
++++ b/operand_census_cpu_paths.py
+@@ -3,7 +3,7 @@
+ """
+ import sys,ctypes as C,json
+ from pathlib import Path
+-root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'tc_signal/tests'))
++root=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8');sys.path.insert(0,str(root/'tc_signal/tests'))
+ import tcs_producer as P
+ from tc_signal import _tc_signal as n
+ import _p1t_rev7_core as core
+@@ -39,5 +39,5 @@
+ check('core_zero_extent',lambda:core.empty([0,1<<60],'float32','cpu'))
+ check('core_zero_plus_huge',lambda:core.empty([0,1<<62,4],'float32','cpu'),ValueError)
+ check('fill_grid_overflow',lambda:core.fill_blocks((1<<40)+1),ValueError)
+-(root/'artifacts/p1t_rev8/operand_census.json').write_text(json.dumps(rows,indent=2)+'\n')
++(Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/artifacts/p1t_fix8/probe_runs/rev8_after')/'operand_census.json').write_text(json.dumps(rows,indent=2)+'\n')
+ print('PASS',len(rows),'actual-source CPU descriptor checks')

@@ -1,0 +1,46 @@
+......................................................FF....             [100%]
+=================================== FAILURES ===================================
+__________ test_fix2_n4_throwing_producer_deleter_is_contained[main] ___________
+
+fix2_thrower = '/tmp/pytest-of-vader/pytest-46/fix2_thrower0/fix2_thrower.so'
+mode = 'main'
+
+    @pytest.mark.parametrize("mode", ["main", "foreign"])
+    def test_fix2_n4_throwing_producer_deleter_is_contained(fix2_thrower, mode):
+        r = subprocess.run([sys.executable, "-c", _FIX2_N4_SCRIPT, fix2_thrower, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tensor_cuda/tests/test_dlpack.py:1056: AssertionError
+_________ test_fix2_n4_throwing_producer_deleter_is_contained[foreign] _________
+
+fix2_thrower = '/tmp/pytest-of-vader/pytest-46/fix2_thrower0/fix2_thrower.so'
+mode = 'foreign'
+
+    @pytest.mark.parametrize("mode", ["main", "foreign"])
+    def test_fix2_n4_throwing_producer_deleter_is_contained(fix2_thrower, mode):
+        r = subprocess.run([sys.executable, "-c", _FIX2_N4_SCRIPT, fix2_thrower, mode], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("RESULT ")]
+>       assert r.returncode == 0 and lines, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=
+E         stderr=terminate called after throwing an instance of 'std::runtime_error'
+E           what():  fix2 test producer deleter threw
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport ctypes, gc, json, sys\nimport tensor_cuda as tc\n\nclass DL...r="terminate called after throwing an instance of 'std::runtime_error'\n  what():  fix2 test producer deleter threw\n").returncode
+
+tensor_cuda/tests/test_dlpack.py:1056: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix2_n4_throwing_producer_deleter_is_contained[main]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix2_n4_throwing_producer_deleter_is_contained[foreign]
+2 failed, 58 passed, 57 deselected in 14.03s

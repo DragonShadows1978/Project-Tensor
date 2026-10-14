@@ -1,0 +1,22 @@
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -140,7 +140,7 @@
+ // (z >= 0: 1 / (1 + e^{-z}); z < 0: e^{z} / (1 + e^{z})). expf is the CUDA math library's accurate expf (2 ulp max),
+ // never the fast intrinsic. Prior art: the standard sign split (see the file header).
+ __device__ __forceinline__ float sigmoid_stable(float z) {
+-  if (z >= 0.0f) return 1.0f / (1.0f + expf(-z));
++  if (z >= 0.0f) return 1.0f / (1.0f + __expf(-z));  // MUTANT (e)
+   const float e = expf(z);
+   return e / (1.0f + e);
+ }
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -141,7 +141,7 @@
+ // never the fast intrinsic. Prior art: the standard sign split (see the file header).
+ __device__ __forceinline__ float sigmoid_stable(float z) {
+   if (z >= 0.0f) return 1.0f / (1.0f + __expf(-z));  // MUTANT (e)
+-  const float e = expf(z);
++  const float e = __expf(z);  // MUTANT (e)
+   return e / (1.0f + e);
+ }
+ 

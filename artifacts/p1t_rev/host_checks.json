@@ -1,0 +1,50 @@
+[
+  {
+    "action": "none_up",
+    "returncode": -11,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "action": "none_pad",
+    "returncode": -11,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "action": "none_rint",
+    "returncode": -11,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "action": "pad_overflow",
+    "returncode": 0,
+    "stdout": "(1, 1, -4611686018427387906)\n",
+    "stderr": ""
+  },
+  {
+    "action": "conv_lda_guard",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev/artifacts/p1t_rev/host_checks.py\", line 28, in <module>\n    if action=='conv_lda_guard': print(ext.conv1d_plan(cap((1,1,1<<31)),cap((1,1,1)),None,1,0,0,1,1))\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal: T_out (2147483648) exceeds the 32-bit range cuBLAS takes\n"
+  },
+  {
+    "action": "lstm_n_guard",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev/artifacts/p1t_rev/host_checks.py\", line 29, in <module>\n    if action=='lstm_n_guard': print(ext.lstm_plan(cap((1<<31,1,1)),cap((1,4,1)),cap((1,4,1)),None,None,None,1,0))\n                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal.lstm: T*N (2147483648) exceeds the 32-bit range cuBLAS takes\n"
+  },
+  {
+    "action": "rint_scalar",
+    "returncode": 0,
+    "stdout": "()\n",
+    "stderr": ""
+  },
+  {
+    "action": "empty_refusal",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev/artifacts/p1t_rev/host_checks.py\", line 31, in <module>\n    if action=='empty_refusal': print(ext.rint_plan(cap((0,)))[1])\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: tc_signal: operand 'x': empty operand (shape [0])\n"
+  }
+]

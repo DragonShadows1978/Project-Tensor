@@ -1,0 +1,26 @@
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -70,8 +70,8 @@
+   g.C_out = ws[0];
+   g.K = ws[2];
+   g.stride = stride;
+-  g.pad_begin = pb;
+-  g.pad_end = pe;
++  g.pad_begin = pe;  // MUTANT (b)
++  g.pad_end = pb;  // MUTANT (b)
+   g.dilation = dilation;
+   g.groups = groups;
+   std::ostringstream os;
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -139,8 +139,8 @@
+   g.T = xs[2];
+   g.K = ws[2];
+   g.stride = stride;
+-  g.pad_begin = pb;
+-  g.pad_end = pe;
++  g.pad_begin = pe;  // MUTANT (b)
++  g.pad_end = pb;  // MUTANT (b)
+   g.output_padding = output_padding;
+   g.dilation = dilation;
+   g.groups = groups;

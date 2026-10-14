@@ -1,0 +1,11 @@
+--- worktree/tc_signal/src/dlpack_operand.cpp
++++ mut_a/tc_signal/src/dlpack_operand.cpp
+@@ -649,7 +649,7 @@
+   const cudaError_t qe = cudaGetDevice(&cur);
+   if (qe != cudaSuccess) {
+     cudaGetLastError();
+-    rep.query_failed = true;  // N1: was silently skipped (synchronize() then "succeeded" with no device)
++    rep.query_failed = false;  // MUTANT (a): N1, the failed current-device query swallowed again
+     rep.query_error = qe;
+   } else {
+     set.sync(cur);

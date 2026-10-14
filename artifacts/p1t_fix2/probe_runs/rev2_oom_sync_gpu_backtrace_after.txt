@@ -1,0 +1,22 @@
+ARMED: next host allocation fails; no CUDA call reached yet
+PASS: nonallocating completion path
+terminate called after throwing an instance of 'std::bad_alloc'
+  what():  std::bad_alloc
+
+Thread 1 "cpu_native" received signal SIGABRT, Aborted.
+__pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff6a4527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff6a288ff in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff6ea5ff5 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#6  0x00007ffff6ebb0da in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#7  0x00007ffff6ea58e6 in __cxa_call_terminate () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#8  0x00007ffff6eba8ba in __gxx_personality_v0 () from /lib/x86_64-linux-gnu/libstdc++.so.6
+#9  0x00007ffff7f97b06 in ?? () from /lib/x86_64-linux-gnu/libgcc_s.so.1
+#10 0x00007ffff7f985cd in _Unwind_Resume () from /lib/x86_64-linux-gnu/libgcc_s.so.1
+#11 0x000055555556e83a in pybind11::detail::get_local_internals () at /mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src/include/pybind11/detail/../detail/internals.h:601
+#12 pybind11::finalize_interpreter () at /mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src/include/pybind11/embed.h:257
+#13 0x0000555555561f46 in pybind11::scoped_interpreter::~scoped_interpreter (this=<synthetic pointer>, __in_chrg=<optimized out>) at /mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src/include/pybind11/embed.h:308
+#14 main (argc=<optimized out>, argv=<optimized out>) at /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/artifacts/p1t_rev2/probes/cpu_native.cpp:42

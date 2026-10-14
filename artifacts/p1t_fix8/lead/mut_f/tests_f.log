@@ -1,0 +1,32 @@
+.FF..                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_fix8_v802_exit_logger_writes_an_allocation_free_summary_when_the_report_cannot_allocate _
+
+    def test_fix8_v802_exit_logger_writes_an_allocation_free_summary_when_the_report_cannot_allocate():
+        r, a = _exit('oom')
+        line = next((ln for ln in r.stderr.splitlines() if 'allocation-free summary' in ln), '')
+>       assert 'the full report could not be built: it failed to allocate' in line, r.stderr
+E       AssertionError: tc_signal: synchronize() at exit (run by the exit runner) failed (std::bad_alloc)
+E         Exception ignored in atexit callback: <built-in function _exit_hook_runner>
+E         Traceback (most recent call last):
+E           File "/tmp/p1t_fix8_mut_f_l2/tc_signal/tc_signal/__init__.py", line 163, in _release_pending_at_exit
+E             def _release_pending_at_exit():
+E             
+E         KeyboardInterrupt: 
+E         
+E       assert 'the full report could not be built: it failed to allocate' in ''
+
+tc_signal/tests/test_fix8_findings.py:433: AssertionError
+__ test_fix8_v802_exit_logger_with_stderr_closed_does_not_crash_and_consumes ___
+
+    def test_fix8_v802_exit_logger_with_stderr_closed_does_not_crash_and_consumes():
+        r, a = _exit('oom_stderr_closed')
+>       assert a['unreported_unraisable_errors'] == 0 and a['exit_log_fallbacks'] == 1 and a['exit_runner_closes'] == 1, a
+E       AssertionError: {'exit_hook_calls': 0, 'exit_log_fallbacks': 0, 'exit_report_unwritten': False, 'exit_runner_closes': 1, ...}
+E       assert (1 == 0)
+
+tc_signal/tests/test_fix8_findings.py:443: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v802_exit_logger_writes_an_allocation_free_summary_when_the_report_cannot_allocate
+FAILED tc_signal/tests/test_fix8_findings.py::test_fix8_v802_exit_logger_with_stderr_closed_does_not_crash_and_consumes
+2 failed, 3 passed, 28 deselected in 10.22s

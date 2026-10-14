@@ -1,0 +1,11 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m1/tensor_cuda/src/kernels.cu	2026-10-12 19:31:46.370616961 -0400
++++ /tmp/p1t_m1_mut_d/tensor_cuda/src/kernels.cu	2026-10-12 19:48:47.386861468 -0400
+@@ -202,7 +202,7 @@
+     // array API's stream rules (2021+); the drain-then-delete order is the
+     // standard CUDA "free only after last use" rule. Ours: its placement in
+     // the Storage destructor.
+-    if (device.is_cuda()) cudaStreamSynchronize(0);
++    // MUTANT (d): no engine-stream drain before the deleter
+     external_release(external_ctx);
+     return;
+   }

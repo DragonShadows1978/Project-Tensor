@@ -1,0 +1,97 @@
+--- tc_signal/tests/test_fix6_findings.py
++++ tc_signal/tests/test_fix6_findings.py
+@@ -550,6 +550,13 @@
+ @pytest.mark.parametrize('name,args,typed', _BINDINGS, ids=[b[0] for b in _BINDINGS])
+ def test_fix6_sweep_g_typed_parameters_refuse_foreign_objects_without_calling_them(name, args, typed):
+     from tc_signal import _tc_signal as _C
++    if name == '_exit_close_admission':
++        # P1T-FIX7 (round-7 review V7-01, order "Apply the same rule to the native raw entries"): the exit entry now
++        # CLOSES AND WAITS for any value of its diagnostic argument (an unreadable one selects the default delay), so
++        # calling it here would close release admission in this pytest process. Its no-method-called reading of the
++        # same foreign objects is checked in a subprocess: test_fix7_findings.py
++        # test_fix7_exit_entry_reads_any_value_without_calling_it_and_still_closes.
++        pytest.skip('covered in a subprocess by test_fix7_findings.py (the entry closes admission for any value)')
+     fn = getattr(_C, name)
+     for i in typed:
+         for bad in (Recorder(), RecordingTuple((1, 2)), 'text', b'\x00' if name != '_test_inject' else 7):
+@@ -634,7 +641,10 @@
+         elif which == 'pending_stats':
+             _C.pending_stats(reset_high_water=Slow())
+         elif which == 'close':
+-            _C._exit_close_admission(first_diag_s=Slow())
++            # P1T-FIX7 (V7-01): not refused any more: the exit entry reads the value at C level (Slow is neither a
++            # float nor an int: the default delay), closes and waits; Slow's methods are still never called.
++            r = _C._exit_close_admission(first_diag_s=Slow())
++            print('CLOSED default_used=%s' % r['first_diag_default_used'], flush=True)
+     except (TypeError, ValueError):
+         print('REFUSED', flush=True)
+     print('WORKER ended', flush=True)
+@@ -661,7 +671,9 @@
+                        timeout=SUBPROC_TIMEOUT, env=_env())
+     assert r.returncode == 0, f'rc={r.returncode}\n{r.stdout}\n{r.stderr}'
+     _no_abort(r)
+-    assert 'REFUSED' in r.stdout and 'INDEX started' not in r.stdout, r.stdout
++    # P1T-FIX7 (V7-01): the exit entry closes with the default delay instead of refusing; nothing is called either way.
++    expected = 'CLOSED default_used=True' if which == 'close' else 'REFUSED'
++    assert expected in r.stdout and 'INDEX started' not in r.stdout, r.stdout
+ 
+ 
+ def test_fix6_sweep_g_consumed_capsule_drop_is_an_admitted_release():
+--- tensor_cuda/tests/test_dlpack.py
++++ tensor_cuda/tests/test_dlpack.py
+@@ -2310,7 +2310,9 @@
+         lambda: t.fill_(_Recorder()), lambda: t.fill_(value=_seq_only()), lambda: t.fill_("1"),
+         lambda: tc._C.empty(_Recorder()), lambda: tc._C.empty(shape=_seq_only()), lambda: tc._C.empty([_Recorder()]),
+         lambda: tc._C.empty([2], _Recorder()), lambda: tc._C.empty([2], "float32", _Recorder()),
+-        lambda: tc._C._dlpack_begin_shutdown(_Recorder()), lambda: tc._C._dlpack_begin_shutdown(first_diag_s="5"),
++        # P1T-FIX7 (V7-01): _dlpack_begin_shutdown(<unreadable value>) now closes and waits with the default delay
++        # instead of raising TypeError, so it would close admission in this pytest process: checked in a subprocess
++        # (test_fix7_core_exit_entry_reads_any_value_without_calling_it_and_still_closes).
+         lambda: tc.Tensor.data_ptr(_Recorder()), lambda: tc.Tensor.__dlpack_device__(_Recorder()),
+         lambda: tc.Tensor.mark_modified(_Recorder()), lambda: tc.Tensor.revision.fget(_Recorder()),
+         lambda: tc.Tensor.__dlpack__(_Recorder()), lambda: tc.Tensor.fill_(_Recorder(), 1.0),
+@@ -2380,7 +2382,9 @@
+         elif which == "empty":
+             tc._C.empty(shape=Slow(), dtype="float32", device="cuda")
+         elif which == "shutdown":
+-            tc._C._dlpack_begin_shutdown(first_diag_s=Slow())
++            # P1T-FIX7 (V7-01): read at C level (not a float or an int: the default delay), then close and wait.
++            r = tc._C._dlpack_begin_shutdown(first_diag_s=Slow())
++            print("CLOSED default_used=%s" % r["first_diag_default_used"], flush=True)
+     except TypeError:
+         print("REFUSED", flush=True)
+ def start():
+@@ -2408,7 +2412,9 @@
+     r = subprocess.run([sys.executable, "-c", _FIX6_KW_EXIT_SCRIPT, which], capture_output=True, text=True,
+                        timeout=_SUBPROC_TIMEOUT, env=_subproc_env())
+     _assert_ordinary_exit(r)
+-    assert "REFUSED" in r.stdout and "CAST started" not in r.stdout, r.stdout
++    # P1T-FIX7 (V7-01): the exit entry closes with the default delay instead of refusing; nothing is called either way.
++    expected = "CLOSED default_used=True" if which == "shutdown" else "REFUSED"
++    assert expected in r.stdout and "CAST started" not in r.stdout, r.stdout
+ 
+ 
+ _FIX6_R7_SCRIPT = _F05_SCRIPT.replace('print("RESULT " + json.dumps(res), flush=True)', r'''
+@@ -2439,4 +2445,7 @@
+         assert "cudaErrorInvalidDevice" in res["sync1"] and res["sync2"] is None, res      # exactly once
+         assert "at exit" not in r.stderr, r.stderr                                          # nothing left to log
+     else:
+-        assert "tensor_cuda: at exit: tensor_cuda.synchronize: 1 CUDA failure(s)" in r.stderr, r.stderr
++        # P1T-FIX7 (sweep (j)): the message no longer names tensor_cuda.synchronize (it was not called at exit).
++        assert "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths" in r.stderr, r.stderr
++        assert "(logged by tensor_cuda's interpreter-exit hook)" in r.stderr, r.stderr
++        assert "tensor_cuda.synchronize: " not in r.stderr, r.stderr
+--- tc_signal/tests/test_fix4_findings.py
++++ tc_signal/tests/test_fix4_findings.py
+@@ -414,7 +414,10 @@
+     # DeviceGuard's destructor restores only when an exception is already unwinding (here: a refused launch). 62c8d9f
+     # ignored that restore's result; now it is consumed, counted and raised once by the next synchronize().
+     res = _shim(shim, 'launch_and_restore_fail')
+-    assert res['call']['raised'] == 'RuntimeError' and 'rint_kernel failed: cudaErrorInvalidDevice' in res['call']['msg'], res
++    # P1T-FIX7 (sweep (j)): the launch check names the kernel and the device and no longer claims "rint_kernel failed"
++    # (cudaGetLastError after a launch may report an asynchronous error of earlier work).
++    assert res['call']['raised'] == 'RuntimeError', res
++    assert 'CUDA error at the launch check of rint_kernel on CUDA device 0: cudaErrorInvalidDevice' in res['call']['msg'], res
+     assert res['call_log'][:3] == ['set0', 'launch@0!', 'set1!'] and res['call_slot'] == 0, res
+     st = res['stats_after_call']
+     assert st['device_restore_failures'] == 1 and st['unreported_unraisable_errors'] == 1, res

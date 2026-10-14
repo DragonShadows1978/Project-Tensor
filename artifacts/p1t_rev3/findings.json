@@ -1,0 +1,216 @@
+{
+  "status": "COMPLETE",
+  "verdicts": {
+    "R1": "RISK",
+    "R2": "UNSOUND",
+    "R3": "UNSOUND",
+    "R4": "DEFECTS",
+    "R5": "PASS",
+    "R6": "REJECT"
+  },
+  "closure": [
+    {
+      "id": "F01",
+      "status": "CLOSED",
+      "lines": "tc_signal/src/dlpack_operand.cpp:617-683,716-796; bindings.cpp:284-344; lstm_bindings.cpp:239-242; m4_bindings.cpp:239-355",
+      "evidence": "Event-fenced ownership on success/partial launch, synchronous fallback and deliberate leak without proof; source reasoning. Lead addon logs 12/12 correct per run; GPU probe pending."
+    },
+    {
+      "id": "F02",
+      "status": "CLOSED",
+      "lines": "tc_signal/src/dlpack_operand.cpp:196-201,314-323; m4_bindings.cpp:65-104; bindings.cpp:239-259; lstm_bindings.cpp:178-210",
+      "evidence": "Required guards and safe absent metadata; host_checks None cases clean TypeError, no allocator/launch."
+    },
+    {
+      "id": "F03",
+      "status": "PARTLY closed",
+      "lines": "tensor_cuda/src/bindings.cpp:306-330,750-820,828-843; tc_signal/src/checked_math.h:31-89; dlpack_operand.cpp:126-193,602,731",
+      "evidence": "Original rank/count/byte/address and plan overflow cases fixed. Aggregate retained bytes still overflow (V3-02 MINOR); metadata-only UBSan evidence."
+    },
+    {
+      "id": "F04",
+      "status": "PARTLY closed",
+      "lines": "tensor_cuda/src/bindings.cpp:596-643,653-682; tensor_cuda/tensor_cuda/__init__.py:178-201",
+      "evidence": "Finalizing/closing refusals and admitted-release drain work; finite timeout overrun still aborts (V3-01 MAJOR)."
+    },
+    {
+      "id": "F05",
+      "status": "CLOSED",
+      "lines": "tensor_cuda/src/kernels.cu:221-264",
+      "evidence": "Drain switches to Storage device and restores caller; failures leak. Source closure; actual two-device probe remains pending."
+    },
+    {
+      "id": "F06",
+      "status": "CLOSED",
+      "lines": "tensor_cuda/src/bindings.cpp:451-486",
+      "evidence": "unique_ptr owns export context through vector/capsule construction, then transfers once. RAII source reasoning; no live bad_alloc injection of full core."
+    },
+    {
+      "id": "F07",
+      "status": "CLOSED",
+      "lines": "tensor_cuda/include/tc/core.h:80-88; docs/P1T_FIX1_M1_ADDENDUM.md",
+      "evidence": "Documented coordinated rebuild prerequisite; closed as rollout documentation, not binary ABI compatibility."
+    },
+    {
+      "id": "N1",
+      "status": "CLOSED",
+      "lines": "tc_signal/src/dlpack_operand.cpp:471-518,573-582,644-683,768-837; tc_signal/tc_signal/__init__.py:139-155",
+      "evidence": "Original failed cudaGetDevice/empty-list silent success fixed: live CPU no-device sync raises named RuntimeError; destructor failures retained for next sync. Pending last-error-slot behavior remains lead probe."
+    },
+    {
+      "id": "N2",
+      "status": "CLOSED",
+      "lines": "tensor_cuda/src/bindings.cpp:306-330,440-443; kernels.cu:80-98; tc_signal/src/checked_math.h:63-89; dlpack_operand.cpp:158-168",
+      "evidence": "Zero-neighbor bound/bytes checked. CPU prefix/suffix refuse cleanly; native ck_census 18/18 with no UBSan diagnostic."
+    },
+    {
+      "id": "N3",
+      "status": "CLOSED",
+      "lines": "tc_signal/src/dlpack_operand.cpp:459-462,584-599,644-709,716-778,799-837; bindings.cpp:410-412",
+      "evidence": "No allocating take-all container; reserved owners/event recycle slots; caught queue push; import-time state. CPU oom_sync raises safely; deferred/push fault GPU gate pending."
+    },
+    {
+      "id": "N4",
+      "status": "CLOSED",
+      "lines": "tc_signal/src/dlpack_operand.cpp:237-261; tensor_cuda/src/bindings.cpp:627-634",
+      "evidence": "Catch per producer call, clear ownership before call; CPU throw_deleter survives. Core catch source-reviewed; full foreign-thread GPU path pending. Forced unwind is the N5 residual, not an ordinary C++ producer exception."
+    },
+    {
+      "id": "N5",
+      "status": "PARTLY closed",
+      "lines": "tensor_cuda/src/bindings.cpp:582-643,653-682; tensor_cuda/tests/test_dlpack.py:1089-1090,1192-1200",
+      "evidence": "Admission mutex/in-flight protocol closes ordinary race, but timeout returns before quiescence. Existing bounded regression exits via os._exit; V3-01 ordinary exit aborts."
+    }
+  ],
+  "findings": [
+    {
+      "id": "V3-01",
+      "severity": "MAJOR",
+      "title": "Shutdown timeout resumes finalization while admitted releases still need Python",
+      "locations": [
+        "tensor_cuda/src/bindings.cpp:627-634",
+        "tensor_cuda/src/bindings.cpp:653-682",
+        "tensor_cuda/tensor_cuda/__init__.py:181-199",
+        "tensor_cuda/tests/test_dlpack.py:1089-1090"
+      ],
+      "scenario": "A foreign-thread producer deleter sleeps 5.5 seconds, releasing the GIL. The five-second exit wait returns with in_flight=1. Normal CPython 3.12 finalization starts; the finite deleter wakes and re-acquires the GIL. The process aborts (rc -6, FATAL: exception not rethrown).",
+      "fix": "Keep finalization behind quiescence for every admitted Python-dependent release. A timeout may log diagnostics but must not return to ordinary finalization with admitted releases running. If bounded process exit is required, define a separate explicit process-exit policy; leaking a manager cannot cancel a deleter already running. Add a normal-exit overrun regression without os._exit.",
+      "evidence": [
+        "artifacts/p1t_rev3/lifecycle_results.json",
+        "artifacts/p1t_rev3/source_slices.json",
+        "logs/p1t_rev3_lifecycle.log"
+      ],
+      "evidence_class": "CPU reproduction of hash-pinned unchanged lifecycle slice; full Storage/GPU path pending",
+      "prior_art": "CPython 3.12 Py_FinalizeEx and GIL lifecycle; C++17 noexcept; admission/quiescence pattern. Original contribution: timeout-overrun review scenario.",
+      "origin": "FIX2 N5 incomplete closure; bounded timeout leaves the underlying lifecycle failure open"
+    },
+    {
+      "id": "V3-02",
+      "severity": "MINOR",
+      "title": "Aggregate deferred-release byte totals use unchecked signed additions",
+      "locations": [
+        "tc_signal/src/dlpack_operand.cpp:602",
+        "tc_signal/src/dlpack_operand.cpp:731",
+        "tc_signal/src/dlpack_operand.cpp:774"
+      ],
+      "scenario": "Two individually valid disjoint fp32 descriptors each have shape (2**61-1,), bytes 9223372036854775804. The per-call e.bytes sum overflows int64. Independently, actual note_push with 4 pending bytes plus one such entry overflows. These are synthetic metadata boundaries, not demonstrated resident GPU allocations; an overflowing negative total can bypass the byte-bound drain.",
+      "fix": "Check aggregate operand bytes before the first launch, where overflow can raise ValueError safely. Make queue accounting and the bound comparison overflow-safe without throwing from the release destructor (check remaining headroom or drain before addition). Do not add a throwing ck_add in the destructor.",
+      "evidence": [
+        "artifacts/p1t_rev3/pending_bytes_results.json",
+        "artifacts/p1t_rev3/probes/pending_bytes.cpp"
+      ],
+      "evidence_class": "CPU UBSan on actual validation/note_push and verbatim destructor arithmetic; full GPU call not executed",
+      "prior_art": "C++17 signed-overflow rule [expr]; GCC/Clang checked overflow builtins (GCC5,2015) and UBSan (2013+). Taken: checked additions and diagnostics; ours: aggregate boundary scenario.",
+      "origin": "FIX1 deferred queue, retained by FIX2; missed boundary robustness, not a new FIX2 regression"
+    }
+  ],
+  "counts": {
+    "BLOCKING": 0,
+    "MAJOR": 1,
+    "MINOR": 1,
+    "NIT": 0
+  },
+  "scope": {
+    "range": "9df5bef..5f9f955",
+    "fix2_range": "d116ac0..5f9f955",
+    "paths": [
+      "tensor_cuda/",
+      "tc_signal/"
+    ],
+    "gpu_execution": false,
+    "source_modifications": false,
+    "baseline_receipts": "Historical lead audited independently; not rerun"
+  },
+  "probes": [
+    {
+      "path": "artifacts/p1t_rev3/probes/host_checks.py",
+      "status": "CPU executed",
+      "decides": "Clean None/overflow/refusal/scalar checks, duplicate-capsule refusal, no-device sync error; dispatches core_cpu and cpu_native.20 cases rc0."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/core_cpu.cpp",
+      "status": "CPU executed",
+      "decides": "Current verbatim core helpers/empty: normal empty succeeds; prefix/suffix overflow refuses without UBSan.3 cases rc0."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/cpu_native.cpp",
+      "status": "CPU executed",
+      "decides": "Real release-path host allocation failure and throwing deleter do not abort.2 cases rc0 (included in host20)."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/lifecycle_timeout.py",
+      "status": "CPU executed",
+      "decides": "Finite admitted deleter must complete before normal finalization, exit0.Uses lifecycle_slice.cpp. Control rc0;0.1s and default5s overrun rc-6."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/pending_bytes.cpp",
+      "status": "CPU executed",
+      "decides": "Per-entry and queue-byte accumulation must avoid signed overflow for individually validated descriptors. Both modes rc1 under UBSan; entry statement copied verbatim, note_push actual source."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/operand_census.py",
+      "status": "CPU executed",
+      "decides": "Offsets/singleton strides/0-d/read-only-copied flags/duplicate consumption/zero-neighbor overflow obey contract;17 cases pass,7 consumed deleters called once."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/real_metadata_plans.py",
+      "status": "CPU executed",
+      "decides": "Recorded real fixture output geometry matches reviewed plans;129 cases pass. Metadata only, placeholders never launched."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/core_exit_overrun.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "Full real imported Storage + foreign pthread, during and bounded modes: ordinary exit0, no abort/hang, finite5.5s deleter across default5s wait. No os._exit escape."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/addon_lifetime.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "12 finite non-default-stream last-owner trials: all outputs correct and every launch increments retained entries. No universal race-freedom claim."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/core_device_drain.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "Two devices: producer deleter observes device0 work complete after drop on current device1; caller device restored. Fewer than2 devices => exit3 inconclusive."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/core_edges.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "Reject rank/count/byte wraps; scalar/empty/offset/singleton-stride interop and stream0 refusal obey contract."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/numerics_and_streams.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "Finite conv/LSTM determinism and parity, handle settings, L=1 norm, special rint, nonlegacy producer ordering; all assertions pass."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/cuda_errors_multidevice.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "Two-device FIFO releases once, outputs correct, caller device restored; synchronize raises for staged preexisting launch error. Exact runtime last-error behavior unresolved until run; fewer than2 devices => exit3."
+    },
+    {
+      "path": "artifacts/p1t_rev3/probes/release_failures.py",
+      "status": "LEAD GPU ONLY, pending",
+      "decides": "All existing FIX1/FIX2 add-on regressions execute without skips, including partial launch, queue OOM, event recycle, fallback/bound failures, throwing deleters and pending exit. Exit0 plus nonempty passing suite required."
+    }
+  ]
+}

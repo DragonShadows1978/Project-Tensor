@@ -1,0 +1,20 @@
+Mon Oct 12 08:50:25 PM EDT 2026
+baseline witness: M2 package copy /tmp/p1t_m3_baseline_m2/tc_signal (.so 3db14dc4..., no M3 code), core = M3 worktree's M1 build (09aa9076...)
+tc_signal from /tmp/p1t_m3_baseline_m2/tc_signal/tc_signal/__init__.py
+tensor_cuda from /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m3/tensor_cuda/tensor_cuda/__init__.py has empty: True
+..........................................F............................. [ 45%]
+........................................................................ [ 91%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+1 failed, 156 passed in 7.78s
+pytest exit=1

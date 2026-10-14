@@ -1,0 +1,20 @@
+# P1T-M4 G5 overhead (informational), run 2 (adds GPU event with out= and allocator-only columns; run 1 is kept below in the ledger); module sha256 85a80ed1d82d798542eeccc3182fd9a48e3d5e62458e1d307f7cbb5f2bcd38fa
+Mon Oct 12 09:20:48 PM EDT 2026
+NVIDIA GeForce RTX 4070 SUPER, 595.99.02, 218 MiB, 0 %
+cudart 12060; tc_signal /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m4/tc_signal/tc_signal/__init__.py; tensor_cuda /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m4/tensor_cuda/tensor_cuda/__init__.py; warmup 20, calls 200, median
+| op | size | x | wall us | GPU event us | wall+sync us | wall, out= us | GPU event, out= us | tensor_cuda.empty alone us |
+|---|---|---|---|---|---|---|---|---|
+| instance_norm1d | tiny | [1, 8, 16] | 32.4 | 37.7 | 35.5 | 24.3 | 28.6 | 3.8 |
+| instance_norm1d | kokoro | [1, 512, 7160] | 290.4 | 311.3 | 319.2 | 24.9 | 52.2 | 269.1 |
+| layer_norm | tiny | [1, 8, 16] | 35.0 | 39.0 | 27.6 | 25.9 | 23.6 | 3.7 |
+| layer_norm | kokoro | [1, 82, 768] | 32.3 | 34.8 | 34.2 | 22.2 | 21.4 | 2.7 |
+| group_norm (G=2) | tiny | [1, 8, 16] | 30.6 | 36.0 | 34.5 | 23.9 | 28.7 | 3.8 |
+| group_norm (G=8) | kokoro | [1, 256, 3000] | 118.4 | 220.2 | 206.7 | 24.9 | 130.3 | 78.7 |
+| upsample_nearest1d (x2) | tiny | [1, 8, 16] | 20.3 | 23.6 | 24.7 | 13.0 | 19.7 | 4.1 |
+| upsample_nearest1d (x300) | kokoro | [1, 1, 1193] | 88.0 | 105.5 | 109.5 | 10.1 | 18.5 | 73.9 |
+| reflection_pad1d (1, 0) | tiny | [1, 8, 16] | 23.8 | 29.7 | 24.0 | 11.0 | 18.4 | 5.3 |
+| reflection_pad1d (1, 0) | kokoro | [1, 22, 7160] | 24.8 | 29.7 | 29.1 | 16.5 | 21.2 | 5.3 |
+| rint | tiny | [1, 8, 16] | 18.8 | 23.6 | 21.4 | 12.6 | 16.5 | 3.8 |
+| rint | kokoro | [1, 82] | 19.7 | 24.6 | 22.6 | 12.9 | 16.4 | 3.1 |
+exit=0
+Mon Oct 12 09:20:50 PM EDT 2026

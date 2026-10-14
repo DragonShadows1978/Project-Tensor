@@ -1,0 +1,512 @@
+1. paths changed vs 1cd8824 (tracked, untracked, ignored non-build):
+   OK  M orders/P1T_FIX8_ERROR_VISIBILITY_AT_EXIT.md
+   OK  M tc_signal/README.md
+   OK  M tc_signal/src/bindings.cpp
+   OK  M tc_signal/src/conv.cu
+   OK  M tc_signal/src/cuda_guard.h
+   OK  M tc_signal/src/dlpack_operand.cpp
+   OK  M tc_signal/src/dlpack_operand.h
+   OK  M tc_signal/tc_signal/__init__.py
+   OK  M tensor_cuda/src/bindings.cpp
+   OK  M tensor_cuda/src/kernels.cu
+   OK  M tensor_cuda/tensor_cuda/__init__.py
+   OK  M tensor_cuda/tests/test_dlpack.py
+   OK  ? artifacts/p1t_fix8/build_sha256_at_combined.txt
+   OK  ? artifacts/p1t_fix8/build_sha256_at_probes.txt
+   OK  ? artifacts/p1t_fix8/citations/cpython_3.12.3_errors_c_PyErr_SetString.txt
+   OK  ? artifacts/p1t_fix8/citations/cuda126_runtime_api_error.txt
+   OK  ? artifacts/p1t_fix8/citations/cuda126_runtime_api_event.txt
+   OK  ? artifacts/p1t_fix8/citations/pybind11_2.12_translate_exception.txt
+   OK  ? artifacts/p1t_fix8/diff_stat.txt
+   OK  ? artifacts/p1t_fix8/extstream_receipt.txt
+   OK  ? artifacts/p1t_fix8/g4/make_mutants.py
+   OK  ? artifacts/p1t_fix8/g4/mut_e.diff
+   OK  ? artifacts/p1t_fix8/g4/mut_f.diff
+   OK  ? artifacts/p1t_fix8/g4/mut_g.diff
+   OK  ? artifacts/p1t_fix8/g4/run_e/binaries_e.txt
+   OK  ? artifacts/p1t_fix8/g4/run_f/binaries_f.txt
+   OK  ? artifacts/p1t_fix8/g4/run_g/binaries_g.txt
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/argument_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/attribution_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/build_core_host_oom_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/build_core_host_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/build_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/fix7_cpu_census_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/gpu_regressions_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/lock_checks_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/operand_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies/run_cpu_checks_paths.diff
+   OK  ? artifacts/p1t_fix8/g4/run_g/copies_g.txt
+   OK  ? artifacts/p1t_fix8/g4/run_mutant.sh
+   OK  ? artifacts/p1t_fix8/g4/summary_e.txt
+   OK  ? artifacts/p1t_fix8/g4/summary_f.txt
+   OK  ? artifacts/p1t_fix8/g4/summary_g.txt
+   OK  ? artifacts/p1t_fix8/g5_scope.py
+   OK  ? artifacts/p1t_fix8/g5_scope.txt
+   OK  ? artifacts/p1t_fix8/make_rev8_copies.py
+   OK  ? artifacts/p1t_fix8/probe_copies/diagnostic_events_gpu_legacy.diff
+   OK  ? artifacts/p1t_fix8/probe_copies/diagnostic_events_gpu_legacy.py
+   OK  ? artifacts/p1t_fix8/probe_files_before.sha256
+   OK  ? artifacts/p1t_fix8/probe_runs/all.done
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/core_interop_import_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/core_interop_import_regen_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/lifecycle_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/lifecycle_regen_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/lifecycle_slice_check_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/probe_build_sha256_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/probe_copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after/rev4_binaries_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/core_interop_import_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/core_interop_import_regen_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/lifecycle_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/lifecycle_regen_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/lifecycle_slice_check_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/probe_build_sha256_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/probe_copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_binaries_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/fill_grid_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/handle_insert_oom_regen_after.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/probe_build_sha256_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/probe_copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/probe_copies_buildcpu_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/regen_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/rev5_binaries_after_buildcpu.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/rev5_binaries_after_cpu.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/rev5_binaries_after_gpu.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/rev5_binaries_after_rf.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after/trace_exit_entry_copy_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after_buildcpu.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after_cpu.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after_gpu.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev5_after_rf.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev6_after.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev6_after/binaries_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev6_after/copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev6_after/slices_selfcheck_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after/binaries_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after/copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after/lead_fix56.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after/lead_semantics.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev7_after/slices_selfcheck_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/argument_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/attribution_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/binaries_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/build_core_host_oom_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/build_core_host_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/build_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/copies_after.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/fix7_cpu_census_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/gpu_regressions_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/lead_fix56.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/lead_fix7.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/lead_semantics.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/lock_checks_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/operand_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_after/run_cpu_checks_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/argument_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/attribution_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/binaries_before.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/build_core_host_oom_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/build_core_host_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/build_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/copies_before.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/fix7_cpu_census_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/gpu_regressions_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/lead_fix56.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/lead_fix7.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/lead_semantics.xml
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/lock_checks_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/operand_census_cpu_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rev8_before/run_cpu_checks_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after.summary
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after/round123_inputs_sha256.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after/round1_host_checks.stderr
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after/round2_core_cpu_regen.txt
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after/round2_core_cpu_regen_fix6.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/rounds123_after/round2_host_checks_paths.diff
+   OK  ? artifacts/p1t_fix8/probe_runs/started.txt
+   OK  ? artifacts/p1t_fix8/rev8_all_files_before.sha256
+   OK  ? artifacts/p1t_fix8/run_all_probes.sh
+   OK  ? artifacts/p1t_fix8/run_final_battery.sh
+   OK  ? artifacts/p1t_fix8/run_rev8_probes.sh
+   OK  ? artifacts/p1t_fix8/runners/make_probe_copies.py
+   OK  ? artifacts/p1t_fix8/runners/make_rev4_probe_copies.py
+   OK  ? artifacts/p1t_fix8/runners/make_rev6_copies.py
+   OK  ? artifacts/p1t_fix8/runners/make_rev7_copies.py
+   OK  ? artifacts/p1t_fix8/runners/regen_core_interop_import.py
+   OK  ? artifacts/p1t_fix8/runners/run_rev4_cpu_probes.sh
+   OK  ? artifacts/p1t_fix8/runners/run_rev5_probes.sh
+   OK  ? artifacts/p1t_fix8/runners/run_rev6_probes.sh
+   OK  ? artifacts/p1t_fix8/runners/run_rev7_probes.sh
+   OK  ? artifacts/p1t_fix8/runners/run_rounds123_probes.sh
+   OK  ? artifacts/p1t_fix8/test_files_sha256_at_combined.txt
+   OK  ? artifacts/p1t_fix8/test_files_sha256_final.txt
+   OK  ? docs/P1T_FIX8_LEDGER.md
+   OK  ? docs/P1T_FIX8_REPORT.md
+   OK  ? logs/p1t_fix8_final_battery.done
+   OK  ? logs/p1t_fix8_g3_compare.txt
+   OK  ? logs/p1t_fix8_voice_git_status_after.txt
+   OK  ? logs/p1t_fix8_voice_git_status_before.txt
+   OK  ? tc_signal/tests/test_fix8_findings.py
+   OK  ! artifacts/p1t_fix8/g4/run_e/build_diag.log
+   OK  ! artifacts/p1t_fix8/g4/run_e/build_e.log
+   OK  ! artifacts/p1t_fix8/g4/run_e/build_shim.log
+   OK  ! artifacts/p1t_fix8/g4/run_e/diagnostic_errors_cpu.log
+   OK  ! artifacts/p1t_fix8/g4/run_e/diagnostic_events_gpu.log
+   OK  ! artifacts/p1t_fix8/g4/run_e/tests_e.log
+   OK  ! artifacts/p1t_fix8/g4/run_f/build_f.log
+   OK  ! artifacts/p1t_fix8/g4/run_f/build_oom.log
+   OK  ! artifacts/p1t_fix8/g4/run_f/tests_f.log
+   OK  ! artifacts/p1t_fix8/g4/run_f/verify_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/g4/run_g/build_core_host_oom.log
+   OK  ! artifacts/p1t_fix8/g4/run_g/build_g.log
+   OK  ! artifacts/p1t_fix8/g4/run_g/copies/core_oom_source_slices.json
+   OK  ! artifacts/p1t_fix8/g4/run_g/tests_g.log
+   OK  ! artifacts/p1t_fix8/g4/run_g/verify_core_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/p1t_all.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_accounting_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_accounting_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_ck_census_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_ck_census_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_core_import_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_core_import_query_error_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_core_import_regen_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_core_spy_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_core_spy_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_host_checks_after_gpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_host_checks_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_host_checks_after_nogpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_host_checks_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_control_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_control_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_default_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_default_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_short_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_lifecycle_short_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_operand_census_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_operand_census_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_real_metadata_plans_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_real_metadata_plans_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_sync_slot_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after/rev4_sync_slot_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_accounting_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_accounting_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_ck_census_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_ck_census_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_core_import_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_core_import_query_error_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_core_import_regen_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_core_spy_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_core_spy_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_host_checks_after_gpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_host_checks_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_host_checks_after_nogpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_host_checks_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_control_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_control_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_default_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_default_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_short_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_lifecycle_short_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_operand_census_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_operand_census_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_real_metadata_plans_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_real_metadata_plans_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_sync_slot_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev4_after_first_run/rev4_sync_slot_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/fill_grid_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/fill_grid_regen_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/handle_oom_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/handle_oom_regen_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_addon_lifetime_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_build_cpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_device_drain_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_edges_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_exit_overrun_bounded_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_exit_overrun_during_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_export_device_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_core_import_query_error_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_cuda_errors_multidevice_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_device_error_sweep_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_full_gpuvisible_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_full_gpuvisible_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_full_nogpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_full_nogpu_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_gpu_gpuvisible_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_gpu_gpuvisible_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_trace_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_trace_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_exit_gate_trace_exit_entry_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_fill_grid_regen_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_fill_grid_single_gpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_fill_grid_written_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_handle_oom_regen_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_handle_oom_written_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_numerics_and_streams_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_query_error_cpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_query_error_single_gpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_release_failures_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/rev5_sync_existing_error_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/trace_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev5_after/trace_exit_entry_build_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/build_core_host_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/build_host_probes_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/core_cast_exit_bool_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/core_cast_exit_bool_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/core_cast_exit_index_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/core_cast_exit_index_control_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/core_host_compile_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/cpu_results.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/operand_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_arithmetic.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_casts_exit_bool.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_casts_exit_bool_--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_casts_exit_index.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_casts_exit_index_--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_cpu_native_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_cpu_native_throw_deleter.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_deferred_exit.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_diagnostic_oom_device.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_diagnostic_oom_query.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_diagnostic_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_fix2_harness_ck_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_fix3_harness_accounting.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_inside_callback.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_multidevice_restore.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_operand_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_prior_oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_query_once.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/rev6_sync_lock.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/run_cpu_checks_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/sync_late_release_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/sync_lock_gpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev6_after/sync_lock_nogpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/argument_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/argument_census_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/build_core_host_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/build_cpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/core_knob_exit_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/core_knob_exit_cpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/core_knob_exit_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/core_knob_exit_gpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/core_source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/cpu_results.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/gpu_regressions_fix56.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/gpu_regressions_multidevice.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/gpu_regressions_semantics.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/knob_exit_cpu_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/knob_exit_cpu_gpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/knob_exit_cpu_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/knob_exit_cpu_nogpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/query_diagnostic_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/query_diagnostic_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_cpu_native_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_cpu_native_throw_deleter.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_deferred_exit.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_diagnostic_oom_device.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_diagnostic_oom_query.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_diagnostic_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_fix2_harness_ck_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_fix3_harness_accounting.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_inside_callback.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_multidevice_restore.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_prior_oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_query_once.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_sync_late_release.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/rev7_sync_lock.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev7_after/run_cpu_checks_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/argument_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/argument_census_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/attribution_cpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/attribution_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_core_host_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_core_host_oom_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_cpu_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_diag_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_oom_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/build_shim_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_exit_log_oom_cpu--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_exit_log_oom_cpu--oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_knob_exit_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_knob_exit_cpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_oom_source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/core_source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/cpu_results.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/diagnostic_errors_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/diagnostic_events_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/diagnostic_events_gpu_legacy.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/exit_log_oom_cpu--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/exit_log_oom_cpu--oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/fix7_cpu_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/fix7_cpu_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/gpu_regressions_fix56.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/gpu_regressions_fix7.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/gpu_regressions_multidevice.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/gpu_regressions_semantics.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/knob_exit_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/knob_exit_cpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/lock_checks.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/lock_checks_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/operand_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/operand_census_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_cpu_native_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_cpu_native_throw_deleter.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_deferred_exit.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_diagnostic_oom_device.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_diagnostic_oom_query.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_diagnostic_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_fix2_harness_ck_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_fix3_harness_accounting.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_inside_callback.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_multidevice_restore.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_prior_oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_query_once.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_sync_late_release.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/p1t_rev8_sync_lock.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/query_diagnostic_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/run_cpu_checks_after.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/verify_core_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_after/verify_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/argument_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/argument_census_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/attribution_cpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/attribution_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_core_host_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_core_host_oom_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_cpu_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_diag_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_oom_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/build_shim_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_exit_log_oom_cpu--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_exit_log_oom_cpu--oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_knob_exit_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_knob_exit_cpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_oom_source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/core_source_slices.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/cpu_results.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/diagnostic_errors_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/diagnostic_events_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/diagnostic_events_gpu_legacy.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/exit_log_oom_cpu--control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/exit_log_oom_cpu--oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/fix7_cpu_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/fix7_cpu_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/gpu_regressions_fix56.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/gpu_regressions_fix7.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/gpu_regressions_multidevice.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/gpu_regressions_semantics.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/knob_exit_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/knob_exit_cpu_control.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/lock_checks.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/lock_checks_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/operand_census.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/operand_census_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_cpu_native_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_cpu_native_throw_deleter.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_deferred_exit.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_diagnostic_oom_device.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_diagnostic_oom_query.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_diagnostic_oom_sync.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_fix2_harness_ck_census.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_fix3_harness_accounting.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_inside_callback.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_multidevice_restore.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_prior_oom.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_query_once.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_sync_late_release.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/p1t_rev8_sync_lock.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/query_diagnostic_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/run_cpu_checks_before.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/verify_core_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rev8_before/verify_exit_log_cpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_addon_lifetime_run1.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_addon_lifetime_run2.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_addon_lifetime_run3.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_core_device_drain.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_core_edges.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_core_shutdown_final.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_core_shutdown_normal.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_host_checks.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round1_numerics_and_streams.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_core_cpu_build.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_cpu_native_build.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_host_checks_after_gpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_host_checks_after_gpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_host_checks_after_nogpu.json
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round2_host_checks_after_nogpu.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round3_core_exit_overrun_bounded.log
+   OK  ! artifacts/p1t_fix8/probe_runs/rounds123_after/round3_core_exit_overrun_during.log
+   OK  ! logs/p1t_fix8_core_build_final.log
+   OK  ! logs/p1t_fix8_core_build_initial.log
+   OK  ! logs/p1t_fix8_g3_combined_session.log
+   OK  ! logs/p1t_fix8_g3_torch_interop.log
+   OK  ! logs/p1t_fix8_g3_voice.log
+   OK  ! logs/p1t_fix8_tc_signal_build_final.log
+   HEAD vs 1cd8824 (lead order commit): ['orders/P1T_FIX8_ERROR_VISIBILITY_AT_EXIT.md']; only orders/: True
+2. added-code checks vs 6991939 (tensor_cuda/, tc_signal/; untracked new files included; 1187 added code lines):
+   new core __global__ (tensor_cuda/): 0
+   device atomics: 0
+   fast-math flags: 0
+   TF32: 0
+   cudaDeviceSynchronize (product): 0
+   host-callback launches: 0
+   os._exit / _exit / abort / std::terminate in product code: 0
+   no escaping throw in dlpack:void CapsuleRef::drop: True []
+   no escaping throw in dlpack:void add: True []
+   no escaping throw in dlpack:void sat_inc: True []
+   no escaping throw in dlpack:void sat_add: True []
+   no escaping throw in dlpack:void note_release_failure: True []
+   no escaping throw in dlpack:void note_unraisable_failure: True []
+   no escaping throw in dlpack:void destroy_event_on_device: True []
+   no escaping throw in dlpack:SyncResult sync_device_legacy: True []
+   no escaping throw in dlpack:void exit_log_unreported: True []
+   no escaping throw in dlpack:void note_unraisable_device_restore_failure: True []
+   no escaping throw in dlpack:FailureRecord first: True []
+   no escaping throw in dlpack:unsigned long long exit_hook_closes: True []
+   no escaping throw in dlpack:void merge: True []
+   no escaping throw in dlpack:void clear_reported_records: True []
+   no escaping throw in kernels:void note_core_unraisable: True []
+   no escaping throw in kernels:void dlpack_ack_unraisable: True []
+   no escaping throw in dlpack:void wait_without_gil: True []
+   no escaping throw in dlpack:void note_exit_marker_failure: True []
+   no escaping throw in dlpack:void destroy_marker: True []
+   no escaping throw in dlpack:bool wait_device_work_diagnosed: True []
+   no escaping throw in dlpack:void device_wait_line: True []
+   no escaping throw in dlpack:void device_wait_finished: True []
+   no escaping throw in dlpack:void stop: True []
+   no escaping throw in dlpack:void run: True []
+   no escaping throw in dlpack:ReportSummary summarize_unreported: True []
+   no escaping throw in dlpack:void write_summary_line: True []
+   no escaping throw in dlpack:void note_raised_at_exit: True []
+   no escaping throw in dlpack:void exit_report_written: True []
+   no escaping throw in dlpack:void exit_log_unwritten_report: True []
+   no escaping throw in dlpack:void exit_runner_window: True []
+   no escaping throw in kernels:void dlpack_unreported_unraisable_raw: True []
+   no escaping throw in cbind:void write_core_summary: True []
+   no escaping throw in cbind:void core_exit_last_reader: True []
+   no escaping throw in dlpack:void exit_device_waits_diagnosed: True []
+   no escaping throw in dlpack:void exit_device_waits_undiagnosed: True []
+   no escaping throw in conv:~NewHandleOwner: True []
+   no escaping throw in lstm:~NewHandleOwner: True []
+   no escaping throw in dlpack:~CallbackSection: True []
+   no escaping throw in dlpack:void leave_count: True []
+   no escaping throw in dlpack:Admission admit: True []
+   no escaping throw in dlpack:void leave: True []
+   no escaping throw in dlpack:void note_cublas_handle_destroy_failure: True []
+   no escaping throw in dlpack:void call_deleter_contained: True []
+   no escaping throw in dlpack:RetainUntilComplete::~RetainUntilComplete: True []
+   no escaping throw in dlpack:void drain_completed: True []
+   no escaping throw in guard:~DeviceGuard: True []
+   no escaping throw in guard:~QuietDeviceGuard: True []
+   no escaping throw in kernels:~CheckedDeviceGuard: True []
+   no escaping throw in kernels:bool drain_device_legacy_stream: True []
+   no escaping throw in kernels:Storage::~Storage: True []
+3. tc_signal/CMakeLists.txt unchanged vs 6991939: True; DT_NEEDED names _tensor_cuda: False
+4. reviewer probe files: per-file sha256 equal to the registered list: True (114 files; probe files present now: 114, same set: True); artifacts/p1t_rev*/ vs HEAD: unchanged
+G5 PASS

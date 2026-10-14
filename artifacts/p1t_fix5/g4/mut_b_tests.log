@@ -1,0 +1,64 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[one_pending-1] _
+
+fix4_shim = '/tmp/p1t_fix5_mut_b/pt/fix5_fix4_shim0/fix4_cudart_shim.so'
+mode = 'one_pending', pending = 1
+
+    @pytest.mark.parametrize('mode, pending', [('one_pending', 1), ('one_pending_then_drained', 1),
+                                               ('completed_pending', 3)])
+    def test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once(fix4_shim, mode, pending):
+        # `pending` = entries left for synchronize(): the failing entry (and the two behind it), or, when the same call's
+        # later drain already released the failing entry, that call's own new entry.
+        res = _v502(fix4_shim, mode)
+        if mode == 'completed_pending':
+            assert res['entries_after_staging'] == 3, res                            # staging precondition
+        assert res['call']['raised'] is None and res['call_slot'] == 0, res          # consumed in the drain, call clean
+>       assert res['stats_after_call']['event_query_failures'] == 1, res
+E       AssertionError: {'call': {'raised': None}, 'call_slot': 0, 'correct': True, 'deleted': 3, ...}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix5_findings.py:737: AssertionError
+_ test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[one_pending_then_drained-1] _
+
+fix4_shim = '/tmp/p1t_fix5_mut_b/pt/fix5_fix4_shim0/fix4_cudart_shim.so'
+mode = 'one_pending_then_drained', pending = 1
+
+    @pytest.mark.parametrize('mode, pending', [('one_pending', 1), ('one_pending_then_drained', 1),
+                                               ('completed_pending', 3)])
+    def test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once(fix4_shim, mode, pending):
+        # `pending` = entries left for synchronize(): the failing entry (and the two behind it), or, when the same call's
+        # later drain already released the failing entry, that call's own new entry.
+        res = _v502(fix4_shim, mode)
+        if mode == 'completed_pending':
+            assert res['entries_after_staging'] == 3, res                            # staging precondition
+        assert res['call']['raised'] is None and res['call_slot'] == 0, res          # consumed in the drain, call clean
+>       assert res['stats_after_call']['event_query_failures'] == 1, res
+E       AssertionError: {'call': {'raised': None}, 'call_slot': 0, 'correct': True, 'deleted': 4, ...}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix5_findings.py:737: AssertionError
+_ test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[completed_pending-3] _
+
+fix4_shim = '/tmp/p1t_fix5_mut_b/pt/fix5_fix4_shim0/fix4_cudart_shim.so'
+mode = 'completed_pending', pending = 3
+
+    @pytest.mark.parametrize('mode, pending', [('one_pending', 1), ('one_pending_then_drained', 1),
+                                               ('completed_pending', 3)])
+    def test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once(fix4_shim, mode, pending):
+        # `pending` = entries left for synchronize(): the failing entry (and the two behind it), or, when the same call's
+        # later drain already released the failing entry, that call's own new entry.
+        res = _v502(fix4_shim, mode)
+        if mode == 'completed_pending':
+            assert res['entries_after_staging'] == 3, res                            # staging precondition
+        assert res['call']['raised'] is None and res['call_slot'] == 0, res          # consumed in the drain, call clean
+>       assert res['stats_after_call']['event_query_failures'] == 1, res
+E       AssertionError: {'call': {'raised': None}, 'call_slot': 0, 'correct': True, 'deleted': 9, ...}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix5_findings.py:737: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[one_pending-1]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[one_pending_then_drained-1]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v502_one_shot_query_failure_is_recorded_and_reported_once[completed_pending-3]
+3 failed, 20 deselected in 5.31s

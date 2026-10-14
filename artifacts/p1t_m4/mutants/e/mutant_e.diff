@@ -1,0 +1,14 @@
+--- a/tc_signal/src/small_ops.cu
++++ b/tc_signal/src/small_ops.cu
+@@ -91,9 +91,9 @@
+     const int64_t r = i / T_out;
+     int64_t s = t - pad_begin;
+     if (s < 0)
+-      s = -s;
++      s = -s - 1;  // MUTANT (e): symmetric pad
+     else if (s >= T)
+-      s = 2 * (T - 1) - s;
++      s = 2 * T - 1 - s;  // MUTANT (e): symmetric pad
+     y[i] = x[r * T + s];
+   }
+ }

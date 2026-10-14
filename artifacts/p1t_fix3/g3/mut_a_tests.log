@@ -1,0 +1,42 @@
+.....FF..                                                                [100%]
+=================================== FAILURES ===================================
+_ test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[5.5] _
+
+deleter_s = 5.5
+
+    @pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+    def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+        r, res = _run_n5("overrun", repr(deleter_s))
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+        assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+        ah = res["after_hook"]
+        after = ah["stats"]
+>       assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru...hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}, 'knob_s': 5.0}
+E       assert (False is True)
+
+tensor_cuda/tests/test_dlpack.py:1244: AssertionError
+_ test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[12.0] _
+
+deleter_s = 12.0
+
+    @pytest.mark.parametrize("deleter_s", [0.1, 5.5, 12.0])
+    def test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit(deleter_s):
+        r, res = _run_n5("overrun", repr(deleter_s))
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        assert res["knob_s"] == 5.0, res                                            # the default knob, not lowered
+        assert res["before_hook"]["stats"]["in_flight"] == 1, res                   # admitted and unfinished at the hook
+        ah = res["after_hook"]
+        after = ah["stats"]
+>       assert ah["deleter_done"][0] is True and ah["deleter_calls"] == [1, 0], res  # completed, exactly once
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru...hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}, 'knob_s': 5.0}
+E       assert (False is True)
+
+tensor_cuda/tests/test_dlpack.py:1244: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[5.5]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix3_v301_admitted_release_finishes_before_finalization_ordinary_exit[12.0]
+2 failed, 7 passed, 113 deselected in 28.02s

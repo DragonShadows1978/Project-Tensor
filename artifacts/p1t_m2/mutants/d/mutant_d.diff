@@ -1,0 +1,64 @@
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -185,6 +185,38 @@
+   for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n;
+        i += static_cast<int64_t>(gridDim.x) * blockDim.x)
+     out[i] = x[i] / y[i];
++}
++
++
++// MUTANT (d): ConvTranspose1d as an atomicAdd scatter (the order's registered nondeterministic defect).
++__global__ void mutant_convt_init_kernel(float* __restrict__ y, const float* __restrict__ b, int64_t C_out,
++                                         int64_t T_out, int64_t total) {
++  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < total;
++       i += static_cast<int64_t>(gridDim.x) * blockDim.x)
++    y[i] = b != nullptr ? b[(i / T_out) % C_out] : 0.0f;
++}
++__global__ void mutant_convt_scatter_kernel(const float* __restrict__ x, const float* __restrict__ w,
++                                            float* __restrict__ y, int64_t N, int64_t C_in, int64_t T,
++                                            int64_t C_out, int64_t K, int64_t T_out, int64_t stride,
++                                            int64_t pad_begin, int64_t dilation, int64_t groups) {
++  const int64_t Cg = C_in / groups;
++  const int64_t Og = C_out / groups;
++  const int64_t total = N * C_in * T;
++  for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < total;
++       i += static_cast<int64_t>(gridDim.x) * blockDim.x) {
++    const int64_t q = i % T;
++    const int64_t r = i / T;
++    const int64_t c = r % C_in;
++    const int64_t n = r / C_in;
++    const int64_t g = c / Cg;
++    const float xv = x[i];
++    for (int64_t ol = 0; ol < Og; ++ol)
++      for (int64_t k = 0; k < K; ++k) {
++        const int64_t p = q * stride + k * dilation - pad_begin;
++        if (p < 0 || p >= T_out) continue;
++        atomicAdd(&y[(n * C_out + g * Og + ol) * T_out + p], w[(c * Og + ol) * K + k] * xv);
++      }
++  }
+ }
+ 
+ }  // namespace
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -278,11 +278,15 @@
+ void conv_transpose1d_forward(int device, const ConvTranspose1dGeom& g, const float* x, const float* w,
+                               const float* b, float* y) {
+   DeviceGuard guard(device);
+-  const int64_t total = g.N * g.C_out * g.T_out;
+-  conv_transpose1d_gather_kernel<<<grid_for(total, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
+-                                   kLegacyStream>>>(x, w, b, y, g.N, g.C_in, g.T, g.C_out, g.K, g.T_out, g.stride,
+-                                                    g.pad_begin, g.dilation, g.groups);
+-  check_launch("conv_transpose1d_gather_kernel");
++  const int64_t total = g.N * g.C_out * g.T_out;  // MUTANT (d): init + atomicAdd scatter instead of the gather
++  mutant_convt_init_kernel<<<grid_for(total, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
++                             kLegacyStream>>>(y, b, g.C_out, g.T_out, total);
++  check_launch("mutant_convt_init_kernel");
++  const int64_t total_in = g.N * g.C_in * g.T;
++  mutant_convt_scatter_kernel<<<grid_for(total_in, tuning::kConvTransposeBlock), tuning::kConvTransposeBlock, 0,
++                                kLegacyStream>>>(x, w, y, g.N, g.C_in, g.T, g.C_out, g.K, g.T_out, g.stride,
++                                                 g.pad_begin, g.dilation, g.groups);
++  check_launch("mutant_convt_scatter_kernel");
+ }
+ 
+ // ------------------------------------------------------------------------------------------------ introspection

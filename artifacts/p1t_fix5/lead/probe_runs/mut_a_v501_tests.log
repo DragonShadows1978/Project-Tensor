@@ -1,0 +1,337 @@
+.FFFFFFFFF....FF                                                         [100%]
+=================================== FAILURES ===================================
+_______ test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[0.1] ________
+
+sleep_s = 0.1
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit(sleep_s):
+>       r, res = _census('immediate', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:256: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'immediate', sleep_s = 0.1, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+>       assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+E       AssertionError: rc=0
+E         stdout=ARMED immediate
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         DELETER finishedRESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 1, "finalizing": false, "capsule_dtor_calls": 0}}
+E         REFUSED tc_signal: operand 'out': the producer marked this tensor re
+E         
+E         FINALIZING True
+E         
+E         stderr=
+E       assert None is not None
+
+tc_signal/tests/test_fix5_findings.py:230: AssertionError
+_______ test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[5.5] ________
+
+sleep_s = 5.5
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit(sleep_s):
+>       r, res = _census('immediate', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:256: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'immediate', sleep_s = 5.5, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+        assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        _no_abort(r)
+        done, fin = out.find('DELETER finished'), out.find('FINALIZING True')
+>       assert 0 <= done < fin, f'the callback did not finish before CPython finalized:\n{out}'
+E       AssertionError: the callback did not finish before CPython finalized:
+E         ARMED immediate
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E       assert 0 <= -1
+
+tc_signal/tests/test_fix5_findings.py:234: AssertionError
+_______ test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[12.0] _______
+
+sleep_s = 12.0
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit(sleep_s):
+>       r, res = _census('immediate', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:256: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'immediate', sleep_s = 12.0, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+        assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        _no_abort(r)
+        done, fin = out.find('DELETER finished'), out.find('FINALIZING True')
+>       assert 0 <= done < fin, f'the callback did not finish before CPython finalized:\n{out}'
+E       AssertionError: the callback did not finish before CPython finalized:
+E         ARMED immediate
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E       assert 0 <= -1
+
+tc_signal/tests/test_fix5_findings.py:234: AssertionError
+____________ test_fix5_v501_deferred_release_in_flight_at_exit[0.1] ____________
+
+sleep_s = 0.1
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_deferred_release_in_flight_at_exit(sleep_s):
+>       r, res = _census('deferred', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'deferred', sleep_s = 0.1, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+>       assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: rc=-6
+E         stdout=ARMED deferred
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E         stderr=FATAL: exception not rethrown
+E         
+E       assert -6 == 0
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ...done": 0, "finalizing": false, "capsule_dtor_calls": 0}}\nFINALIZING True\n', stderr='FATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix5_findings.py:231: AssertionError
+____________ test_fix5_v501_deferred_release_in_flight_at_exit[5.5] ____________
+
+sleep_s = 5.5
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_deferred_release_in_flight_at_exit(sleep_s):
+>       r, res = _census('deferred', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'deferred', sleep_s = 5.5, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+        assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        _no_abort(r)
+        done, fin = out.find('DELETER finished'), out.find('FINALIZING True')
+>       assert 0 <= done < fin, f'the callback did not finish before CPython finalized:\n{out}'
+E       AssertionError: the callback did not finish before CPython finalized:
+E         ARMED deferred
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E       assert 0 <= -1
+
+tc_signal/tests/test_fix5_findings.py:234: AssertionError
+___________ test_fix5_v501_deferred_release_in_flight_at_exit[12.0] ____________
+
+sleep_s = 12.0
+
+    @pytest.mark.parametrize('sleep_s', [0.1, 5.5, 12.0])
+    def test_fix5_v501_deferred_release_in_flight_at_exit(sleep_s):
+>       r, res = _census('deferred', sleep_s)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'deferred', sleep_s = 12.0, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+        assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        _no_abort(r)
+        done, fin = out.find('DELETER finished'), out.find('FINALIZING True')
+>       assert 0 <= done < fin, f'the callback did not finish before CPython finalized:\n{out}'
+E       AssertionError: the callback did not finish before CPython finalized:
+E         ARMED deferred
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 1, "high_water_managers": 2, "high_water_bytes": 32, "retained_entries": 1, "released_entries": 1, "released_managers": 2, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E       assert 0 <= -1
+
+tc_signal/tests/test_fix5_findings.py:234: AssertionError
+_____________ test_fix5_v501_immediate_refusal_with_no_visible_gpu _____________
+
+    def test_fix5_v501_immediate_refusal_with_no_visible_gpu():
+>       r, res = _census('immediate_nogpu', 0.6, env=_env(CUDA_VISIBLE_DEVICES=''))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'immediate_nogpu', sleep_s = 0.6
+env = {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLAUDECODE': '1', 'CLAUDE_CODE_BRIDGE_SESSION_ID': 'session_01QtMVXiWBbwvU3hp7w8VWwP', 'CLAUDE_CODE_CHILD_SESSION': '1', ...}
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+>       assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: rc=-6
+E         stdout=ARMED immediate_nogpu
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here; the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released
+E         FATAL: exception not rethrown
+E         
+E       assert -6 == 0
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ...tected)); operands without a completion proof were deliberately leaked, not released\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix5_findings.py:231: AssertionError
+_____________ test_fix5_v501_capsule_destructor_in_flight_at_exit ______________
+
+    def test_fix5_v501_capsule_destructor_in_flight_at_exit():
+>       r, res = _census('capsule_drop', 0.6)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'capsule_drop', sleep_s = 0.6, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+>       assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: rc=-6
+E         stdout=ARMED capsule_drop
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 1}}
+E         FINALIZING True
+E         
+E         stderr=terminate called without an active exception
+E         
+E       assert -6 == 0
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ...lizing": false, "capsule_dtor_calls": 1}}\nFINALIZING True\n', stderr='terminate called without an active exception\n').returncode
+
+tc_signal/tests/test_fix5_findings.py:231: AssertionError
+_ test_fix5_v501_producer_dlpack_callback_in_flight_at_exit_and_late_capsule_drop_is_kept _
+
+    def test_fix5_v501_producer_dlpack_callback_in_flight_at_exit_and_late_capsule_drop_is_kept():
+>       r, res = _census('callback', 0.6)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tc_signal/tests/test_fix5_findings.py:286: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'callback', sleep_s = 0.6, env = None
+
+    def _census(path, sleep_s, env=None):
+        r, res = _run(_EXIT_SCRIPT, path, repr(sleep_s), env=env, timeout=SUBPROC_TIMEOUT)
+        out = r.stdout
+        assert res is not None, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'
+>       assert r.returncode == 0, f'rc={r.returncode}\nstdout={out}\nstderr={r.stderr}'   # mutant (a): rc -6
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: rc=-11
+E         stdout=ARMED callback
+E         DELETER started
+E         CALLBACK IN PROGRESS
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 0, "callbacks_in_flight": 1, "admitted_releases": 0, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 0, "callbacks_in_flight": 1, "admitted_releases": 0, "admitted_callbacks": 1, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}
+E         FINALIZING True
+E         
+E         stderr=
+E       assert -11 == 0
+E        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ...irst_status": 0}, "calls": 1, "done": 0, "finalizing": false, "capsule_dtor_calls": 0}}\nFINALIZING True\n', stderr='').returncode
+
+tc_signal/tests/test_fix5_findings.py:231: AssertionError
+___ test_fix5_v501_throwing_cpp_deleter_in_flight_at_exit_is_contained_once ____
+
+thrower = '/tmp/pytest-of-vader/pytest-98/fix5_thrower0/fix5_thrower.so'
+
+    def test_fix5_v501_throwing_cpp_deleter_in_flight_at_exit_is_contained_once(thrower):
+        r, res = _run(_THROW_SCRIPT, thrower, 'exit')
+>       _ok(r, res)
+
+tc_signal/tests/test_fix5_findings.py:563: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ..., "cublas_handle_destroy_first_status": 0}, "calls": 1}}\nFINALIZING True\n', stderr='FATAL: exception not rethrown\n')
+res = {'after_hook': {'calls': 1, 'stats': {'admitted_callbacks': 0, 'admitted_releases': 1, 'bound_drains': 0, 'bytes': 0, ...}}, 'before_hook': {'stats': {'admitted_callbacks': 0, 'admitted_releases': 1, 'bound_drains': 0, 'bytes': 0, ...}}}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED
+E         DELETER started
+E         RESULT {"before_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": false, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 0, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}}, "after_hook": {"stats": {"entries": 0, "managers": 0, "bytes": 0, "high_water_entries": 0, "high_water_managers": 0, "high_water_bytes": 0, "retained_entries": 0, "released_entries": 0, "released_managers": 0, "bound_drains": 0, "fallback_syncs": 0, "leaked_managers": 0, "max_entries": 1024, "max_bytes": 268435456, "deleter_exceptions": 0, "push_alloc_failures": 0, "event_recycle_failures": 0, "bytes_saturated": false, "bytes_saturations": 0, "release_errors": 0, "unreported_release_errors": 0, "device_restore_failures": 0, "event_destroy_failures": 0, "unreported_unraisable_errors": 0, "release_admission_closed": true, "releases_in_flight": 1, "callbacks_in_flight": 0, "admitted_releases": 1, "admitted_callbacks": 0, "deleters_leaked_after_close": 0, "deleters_leaked_finalizing": 0, "capsules_kept_after_close": 0, "capsules_kept_finalizing": 0, "callbacks_refused_after_close": 0, "exit_hook_calls": 1, "exit_in_flight_at_close": 1, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "sync_waits_for_other_threads": 1, "sync_wait_us": 0, "sync_wait_diagnostics": 0, "lifecycle_lock_failures": 0, "event_query_failures": 0, "event_record_failures": 0, "cublas_handle_destroy_failures": 0, "cublas_handle_destroy_first_status": 0}, "calls": 1}}
+E         FINALIZING True
+E         
+E         stderr=FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, sys, threading, time, types\nRESULTS ..., "cublas_handle_destroy_first_status": 0}, "calls": 1}}\nFINALIZING True\n', stderr='FATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix5_findings.py:86: AssertionError
+___ test_fix5_v501_synchronize_waits_for_a_release_running_on_another_thread ___
+
+    def test_fix5_v501_synchronize_waits_for_a_release_running_on_another_thread():
+        # The reviewer's addon_exit_cpu.py trace calls exactly synchronize() as its exit hook.
+        r, res = _run(_SYNC_WAIT_SCRIPT)
+        _ok(r, res)
+>       assert res['in_flight_before'] == 1 and res['order_ok'] is True and res['sync_waits'] == 1, res
+E       AssertionError: {'closed': False, 'in_flight_before': 1, 'order_ok': False, 'sync_waits': 1}
+E       assert (1 == 1 and False is True)
+
+tc_signal/tests/test_fix5_findings.py:620: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[0.1]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[5.5]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_immediate_refusal_deleter_in_flight_at_exit[12.0]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_deferred_release_in_flight_at_exit[0.1]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_deferred_release_in_flight_at_exit[5.5]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_deferred_release_in_flight_at_exit[12.0]
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_immediate_refusal_with_no_visible_gpu
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_capsule_destructor_in_flight_at_exit
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_producer_dlpack_callback_in_flight_at_exit_and_late_capsule_drop_is_kept
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_throwing_cpp_deleter_in_flight_at_exit_is_contained_once
+FAILED tc_signal/tests/test_fix5_findings.py::test_fix5_v501_synchronize_waits_for_a_release_running_on_another_thread
+11 failed, 5 passed, 7 deselected in 45.90s

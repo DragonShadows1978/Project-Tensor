@@ -1,0 +1,102 @@
+--- /tmp/p1t_fix8_l2/before/dlpack_operand.cpp	2026-10-13 16:45:54.315206246 -0400
++++ /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8/tc_signal/src/dlpack_operand.cpp	2026-10-13 16:46:28.284383823 -0400
+@@ -1115,6 +1115,8 @@
+ std::atomic<long long> g_exit_device_wait_diag_ns{-1};  // < 0: outside the exit runner's window
+ std::atomic<unsigned long long> g_exit_device_wait_diagnostics{0};
+ std::atomic<unsigned long long> g_exit_device_wait_watchdogs{0};  // P1T-FIX8: waits a watchdog diagnosed
++std::atomic<unsigned long long> g_exit_watchdog_stop_lock_failures{0};  // P1T-FIX8 L2: stop()'s lock attempts that failed
++std::atomic<unsigned long long> g_exit_watchdog_detaches{0};  // P1T-FIX8 L2: joins that failed (detached after run())
+ 
+ void note_unraisable_failure(PendingState& st, const FailureRecord& r) noexcept;  // defined with the release records
+ 
+@@ -1226,6 +1228,23 @@
+ // it is only not repeated). Mutex / condition-variable failures (never observed) fall back to polling a flag. Prior
+ // art: watchdog threads for blocking calls (the kernel's hung-task detector; unverified here, lead to check
+ // "hung_task_timeout_secs"); ours: tying it to the exit wait's schedule.
++// P1T-FIX8, lead send-back L2: stopping it is safe whatever the mutex or the join does.
++//  * run() sets exited_ as its very last action; after it, the thread touches no member (nor the caller's schedule).
++//  * stop() sets done_, then until exited_ is set: attempts the lock (a failure is caught and counted), notifies,
++//    checks exited_, sleeps tuning::kExitDevicePollMs. A notify missed because the lock failed (the watchdog between
++//    its predicate check and its wait) is repeated one poll interval later, so stopping costs at most about one poll
++//    interval after the wakeup, never a silent wait until the watchdog's next diagnostic (FIX7 L1: no silent wait).
++//  * Only then does it join; if the join fails (pthread_join), it detaches, which is safe because run() has finished
++//    with mu_, cv_ and s_ (FIX8 had detached a thread that could still be inside run(): a use-after-free at exit once
++//    sync_device_legacy returned). No early return.
++//  * Stated limit: if writing a line blocks (stderr a full pipe nobody reads), stop() waits for that write, as the
++//    join did before; the waiting thread's own next line (device_wait_finished) would block on the same stderr.
++// Prior art: the "exit flag as the thread's last write" handshake before reclaiming shared state (as in the
++// release/acquire flag of a done-signal; unverified as a named pattern, lead to check "thread exit flag last action
++// before join detach use-after-free"); repeated notification against a lost wakeup (lost-wakeup problem, Lampson &
++// Redell 1980 "Experience with Processes and Monitors in Mesa", which notes that waiters must re-check and that
++// timeouts guard against missed notifies; unverified here, lead to check). Ours: the bounded stop loop of this
++// watchdog and its counters.
+ class DeviceWaitWatchdog {
+  public:
+   DeviceWaitWatchdog(int device, DeviceWaitSchedule& s) noexcept : device_(device), s_(s) {
+@@ -1247,17 +1266,23 @@
+ 
+   void stop() noexcept {
+     done_.store(true, std::memory_order_seq_cst);
+-    try {
+-      std::lock_guard<std::mutex> lk(mu_);  // a watchdog between its predicate check and its wait sees done_ next
+-    } catch (const std::exception&) {
+-    }
+-    cv_.notify_all();
+-    if (th_.joinable()) {
++    if (th_.joinable()) {  // false when the thread never started, or after an earlier stop()
++      while (!exited_.load(std::memory_order_acquire)) {
++        try {
++          std::lock_guard<std::mutex> lk(mu_);  // a watchdog between its predicate check and its wait sees done_ next
++        } catch (const std::exception&) {
++          g_exit_watchdog_stop_lock_failures.fetch_add(1, std::memory_order_relaxed);  // its notify may be missed:
++        }                                                                               // repeated below
++        cv_.notify_all();
++        if (exited_.load(std::memory_order_acquire)) break;
++        std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kExitDevicePollMs));
++      }
+       try {
+         th_.join();
+       } catch (const std::exception&) {
++        g_exit_watchdog_detaches.fetch_add(1, std::memory_order_relaxed);
+         try {
+-          th_.detach();  // never leave a joinable std::thread to its destructor (std::terminate)
++          th_.detach();  // safe: run() has finished (exited_); never leave a joinable std::thread (std::terminate)
+         } catch (const std::exception&) {
+         }
+       }
+@@ -1266,12 +1291,17 @@
+ 
+  private:
+   void run() noexcept {
++    diagnose();
++    exited_.store(true, std::memory_order_release);  // the very last action: no member is touched after this
++  }
++
++  void diagnose() noexcept {
+     const char* how = "; diagnosed by a watchdog thread, because the wait's marker event failed";
+     try {
+       std::unique_lock<std::mutex> lk(mu_);
+       while (!done_.load()) {
+         if (cv_.wait_until(lk, s_.next, [this] { return done_.load(); })) return;
+-        lk.unlock();  // a blocked stderr must not stop stop()
++        lk.unlock();  // stop()'s lock attempts never wait for a line being written
+         device_wait_line(device_, s_, std::chrono::steady_clock::now(), how);
+         lk.lock();
+       }
+@@ -1289,6 +1319,7 @@
+   std::mutex mu_;
+   std::condition_variable cv_;
+   std::atomic<bool> done_{false};
++  std::atomic<bool> exited_{false};  // P1T-FIX8 L2: set by run() as its last action
+   std::thread th_;
+ };
+ 
+@@ -2220,6 +2251,8 @@
+   d["exit_wait_poll_diagnostics"] = g_exit_wait_poll_diagnostics.load();  // P1T-FIX7 L1
+   d["exit_device_wait_diagnostics"] = g_exit_device_wait_diagnostics.load();  // P1T-FIX7 L1
+   d["exit_device_wait_watchdogs"] = g_exit_device_wait_watchdogs.load();  // P1T-FIX8 V8-01: marker failed -> watchdog
++  d["exit_device_wait_watchdog_lock_failures"] = g_exit_watchdog_stop_lock_failures.load();  // P1T-FIX8 L2
++  d["exit_device_wait_watchdog_detaches"] = g_exit_watchdog_detaches.load();  // P1T-FIX8 L2
+   d["exit_marker_failures"] = st.exit_marker_failures;                     // P1T-FIX8 V8-01: recorded, then raised
+   d["exit_log_fallbacks"] = st.exit_log_fallbacks;                         // P1T-FIX8 V8-02: allocation-free exit lines
+   d["exit_report_unwritten"] = st.exit_report_unwritten;                   // P1T-FIX8 V8-02

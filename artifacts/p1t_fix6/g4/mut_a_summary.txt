@@ -1,0 +1,9 @@
+mut_a tests identical: tc_signal/tests/test_fix6_findings.py
+mut_a tests identical: tc_signal/tests/test_fix5_findings.py
+mut_a tests identical: tc_signal/tests/test_fix2_findings.py
+mut_a tests identical: tensor_cuda/tests/test_dlpack.py
+mut_a tests exit=1 :: 6 failed, 84 deselected in 23.30s
+mut_a sync_lock_inversion nogpu exit=1 :: BLOCKED_BEFORE_CUDA=1 finite deleter waits for caller-held lock RuntimeError tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchroniz
+mut_a sync_lock_inversion gpu exit=1 :: BLOCKED_BEFORE_CUDA=1 finite deleter waits for caller-held lock elapsed=1.185 rescue=True release_finished=True 
+mut_a build trace (from the mutant's dlpack_operand.cpp) exit=0
+mut_a sync_late_release exit=1 :: SYNCHRONIZE begins ADMIT later release AFTER synchronize began FIRST completed LATER completed elapsed=0.700 waited_for_later=True 

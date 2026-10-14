@@ -1,0 +1,50 @@
+....................F................                                    [100%]
+=================================== FAILURES ===================================
+___________ test_import_release_drains_engine_stream_before_deleter ____________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_import_release_drains_engine_stream_before_deleter(torch):
+        # The producer's memory belongs to torch's caching allocator, on side stream S. TensorCUDA queues a write on it
+        # behind a sleep, then the TensorCUDA tensor dies. If the deleter ran before that write finished, torch would hand
+        # the block to the next same-size allocation on S at once, and the late TensorCUDA write would land on it.
+        # NO gc.collect() between the release and the reuse: with torch loaded it stalls the host ~60 ms (measured
+        # 57-79 ms), longer than the sleep, which closes the race window (G4 r1: mutant (d) survived because of it).
+        # `del u` frees the Tensor by refcount, so the Storage destructor runs right there. Warm-ups first, so lazy
+        # kernel loading cannot serialize the first trial.
+        S = torch.cuda.Stream()
+        tc.empty(1).fill_(0.0)
+        with torch.cuda.stream(S):
+            torch.empty(1, device="cuda").fill_(0.0)
+        torch.cuda._sleep(1)
+        torch.cuda.synchronize()
+        for k in range(RACE_TRIALS):
+            v = float(k + 1)
+            with torch.cuda.stream(S):
+                p = torch.zeros(RACE_NUMEL, device="cuda")
+            S.synchronize()
+            u = tc.from_dlpack(p)
+            ptr = p.data_ptr()
+            del p
+            torch.cuda._sleep(SLEEP_CYCLES)                  # legacy default stream
+            u.fill_(v)                                       # TensorCUDA write on the imported memory, behind the sleep
+            del u                                            # last reference: drain, then the deleter
+            with torch.cuda.stream(S):
+                q = torch.empty(RACE_NUMEL, device="cuda")
+                q.fill_(-7.0)
+            reused = q.data_ptr() == ptr
+            torch.cuda.synchronize()
+            assert reused, "precondition: torch did not reuse the released block on S, so this trial cannot detect"
+>           assert bool(torch.all(q == -7.0).item()), f"trial {k}: the deleter ran before TensorCUDA's queued write"
+E           AssertionError: trial 0: the deleter ran before TensorCUDA's queued write
+E           assert False
+E            +  where False = bool(False)
+E            +    where False = <built-in method item of Tensor object at 0x722e164af610>()
+E            +      where <built-in method item of Tensor object at 0x722e164af610> = tensor(False, device='cuda:0').item
+E            +        where tensor(False, device='cuda:0') = <built-in method all of type object at 0x722d43b3e180>(tensor([1., 1., 1.,  ..., 1., 1., 1.], device='cuda:0') == -7.0)
+E            +          where <built-in method all of type object at 0x722d43b3e180> = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>.all
+
+tensor_cuda/tests/test_dlpack.py:367: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_release_drains_engine_stream_before_deleter
+1 failed, 36 passed in 5.72s

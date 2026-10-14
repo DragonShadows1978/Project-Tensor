@@ -1,0 +1,68 @@
+..FF                                                                     [100%]
+=================================== FAILURES ===================================
+___ test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait[close] ___
+
+fix7_lock_shim = '/tmp/pytest-of-vader/pytest-159/fix7_lock_shim0/mutex_lock_shim.so'
+where = 'close'
+
+    @pytest.mark.parametrize("where", ["close", "relock_after_diagnostic"])
+    def test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait(fix7_lock_shim, where):
+        # "close": the lock that precedes `closing = true`; "relock_after_diagnostic": the close's lock succeeds, the timed
+        # wait writes its first line (the 0.6 s deleter outlasts 0.05 s), and its re-lock then meets the failures.
+        _torch_or_skip()
+        n = 15
+        purpose = ("to close DLPack release admission" if where == "close"
+                   else "again after a diagnostic (admission is already closed)")
+        arg = f"{n}:0.05" if where == "close" else f"{n}:0.05:1"
+        r, res = _run_fix7_core_exit("lock_fail", arg, LD_PRELOAD=fix7_lock_shim)   # + DELETER before FINALIZING
+        a = res["after"]
+        assert res["lock"] == {"failed": n, "left": 0}, res
+        assert a["shutdown_lock_retries"] == n, res
+        lines = [ln for ln in r.stderr.splitlines()
+                 if "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock " in ln]
+>       assert lines, r.stderr                                                        # diagnosed, not silent
+        ^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.2 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.3 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: the DLPack release(s) admitted before exit finished after 0.6 s; interpreter exit continues
+E         
+E       assert []
+
+tensor_cuda/tests/test_dlpack.py:2749: AssertionError
+_ test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait[relock_after_diagnostic] _
+
+fix7_lock_shim = '/tmp/pytest-of-vader/pytest-159/fix7_lock_shim0/mutex_lock_shim.so'
+where = 'relock_after_diagnostic'
+
+    @pytest.mark.parametrize("where", ["close", "relock_after_diagnostic"])
+    def test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait(fix7_lock_shim, where):
+        # "close": the lock that precedes `closing = true`; "relock_after_diagnostic": the close's lock succeeds, the timed
+        # wait writes its first line (the 0.6 s deleter outlasts 0.05 s), and its re-lock then meets the failures.
+        _torch_or_skip()
+        n = 15
+        purpose = ("to close DLPack release admission" if where == "close"
+                   else "again after a diagnostic (admission is already closed)")
+        arg = f"{n}:0.05" if where == "close" else f"{n}:0.05:1"
+        r, res = _run_fix7_core_exit("lock_fail", arg, LD_PRELOAD=fix7_lock_shim)   # + DELETER before FINALIZING
+        a = res["after"]
+        assert res["lock"] == {"failed": n, "left": 0}, res
+        assert a["shutdown_lock_retries"] == n, res
+        lines = [ln for ln in r.stderr.splitlines()
+                 if "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock " in ln]
+>       assert lines, r.stderr                                                        # diagnosed, not silent
+        ^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.1 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.2 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.4 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: the DLPack release(s) admitted before exit finished after 0.6 s; interpreter exit continues
+E         
+E       assert []
+
+tensor_cuda/tests/test_dlpack.py:2749: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix7_sweep_i_core_exit_close_retries_a_failed_lifecycle_lock_instead_of_skipping_the_close[1]
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix7_sweep_i_core_exit_close_retries_a_failed_lifecycle_lock_instead_of_skipping_the_close[3]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait[close]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait[relock_after_diagnostic]
+2 failed, 2 passed, 247 deselected in 12.72s

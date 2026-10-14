@@ -1,0 +1,583 @@
+.FF.....FF.FFFFFFFFF.FFFF..FFFF.F..F.F                                   [100%]
+=================================== FAILURES ===================================
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[huge_int] __
+
+knob = 'huge_int', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...derr='tc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob huge_int
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (OverflowError: int too large to convert to float)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...derr='tc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[neg_huge_int] _
+
+knob = 'neg_huge_int', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...derr='tc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob neg_huge_int
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (OverflowError: int too large to convert to float)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...derr='tc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_subclass] _
+
+knob = 'float_subclass', read = True
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...FINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['FSub.__float__']}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob float_subclass
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": ["FSub.__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (RuntimeError: never called)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...FINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[int_subclass] _
+
+knob = 'int_subclass', read = True
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...FINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['ISub.__float__']}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob int_subclass
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": ["ISub.__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (RuntimeError: never called)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...FINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+____ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[str] ____
+
+knob = 'str', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+        _hook_waited(res)
+        assert res['calls'] == [], res                                    # the knob's own methods were never called
+>       assert res['after']['exit_diag_default_used'] == (0 if read else 1), res
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 1, 'exit_in_flight_at_close': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix7_findings.py:273: AssertionError
+___ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[none] ____
+
+knob = 'none', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+        _hook_waited(res)
+        assert res['calls'] == [], res                                    # the knob's own methods were never called
+>       assert res['after']['exit_diag_default_used'] == (0 if read else 1), res
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 1, 'exit_in_flight_at_close': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix7_findings.py:273: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises] _
+
+knob = 'float_raises', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...t__"]}\nFINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: knob)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob float_raises
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": ["__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (RuntimeError: knob)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...t__"]}\nFINALIZING True\n', stderr='tc_signal: exit hook failed (RuntimeError: knob)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_keyboardinterrupt] _
+
+knob = 'float_raises_keyboardinterrupt', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+>       _hook_waited(res)
+
+tc_signal/tests/test_fix7_findings.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+
+    def _hook_waited(res):
+        a = res['after']
+        assert res['before']['in_flight'] == 1, res                                  # admitted and running at the hook
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res  # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:262: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_systemexit] _
+
+knob = 'float_raises_systemexit', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+>       _hook_waited(res)
+
+tc_signal/tests/test_fix7_findings.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+
+    def _hook_waited(res):
+        a = res['after']
+        assert res['before']['in_flight'] == 1, res                                  # admitted and running at the hook
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res  # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:262: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_base] _
+
+knob = 'float_raises_base', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+>       _hook_waited(res)
+
+tc_signal/tests/test_fix7_findings.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+
+    def _hook_waited(res):
+        a = res['after']
+        assert res['before']['in_flight'] == 1, res                                  # admitted and running at the hook
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res  # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:262: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_returns_nonfloat] _
+
+knob = 'float_returns_nonfloat', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+        _hook_waited(res)
+>       assert res['calls'] == [], res                                    # the knob's own methods were never called
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 1, 'exit_in_flight_at_close': 1, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert ['__float__'] == []
+E         
+E         Left contains one more item: '__float__'
+E         Use -v to get more diff
+
+tc_signal/tests/test_fix7_findings.py:272: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[index_only] _
+
+knob = 'index_only', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+        _hook_waited(res)
+>       assert res['calls'] == [], res                                    # the knob's own methods were never called
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 1, 'exit_in_flight_at_close': 1, ...}, 'before': {'in_flight': 1}, 'calls': ['__index__']}
+E       assert ['__index__'] == []
+E         
+E         Left contains one more item: '__index__'
+E         Use -v to get more diff
+
+tc_signal/tests/test_fix7_findings.py:272: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[numpy_float32] _
+
+knob = 'numpy_float32', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+        _ok(r, res)
+        _quiescent_exit(r)
+        _hook_waited(res)
+        assert res['calls'] == [], res                                    # the knob's own methods were never called
+>       assert res['after']['exit_diag_default_used'] == (0 if read else 1), res
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 1, 'exit_in_flight_at_close': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tc_signal/tests/test_fix7_findings.py:273: AssertionError
+__ test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[deleted] __
+
+knob = 'deleted', read = False
+
+    @pytest.mark.parametrize('knob,read', _KNOB_CLASSES, ids=[k for k, _ in _KNOB_CLASSES])
+    def test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob)
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:269: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types..."tc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)\nFATAL: exception not rethrown\n")
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob deleted
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types..."tc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)\nFATAL: exception not rethrown\n").returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+__ test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[huge_int] ___
+
+knob = 'huge_int'
+
+    @pytest.mark.parametrize('knob', ['huge_int', 'float_raises_keyboardinterrupt', 'deleted', 'default'])
+    def test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu(knob):
+        # No usable device: the hook's synchronize() raises (cudaErrorNoDevice, logged after the close), and the close and
+        # the wait still happen (the reviewer's knob_exit_cpu.py condition).
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob, env=_env(CUDA_VISIBLE_DEVICES=''))
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...ased\ntc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n')
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob huge_int
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here (the call that set it and its device are unknown: the slot records neither); the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released
+E         tc_signal: exit hook failed (OverflowError: int too large to convert to float)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...ased\ntc_signal: exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n').returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[float_raises_keyboardinterrupt] _
+
+knob = 'float_raises_keyboardinterrupt'
+
+    @pytest.mark.parametrize('knob', ['huge_int', 'float_raises_keyboardinterrupt', 'deleted', 'default'])
+    def test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu(knob):
+        # No usable device: the hook's synchronize() raises (cudaErrorNoDevice, logged after the close), and the close and
+        # the wait still happen (the reviewer's knob_exit_cpu.py condition).
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+        _quiescent_exit(r)
+>       _hook_waited(res)
+
+tc_signal/tests/test_fix7_findings.py:290: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+
+    def _hook_waited(res):
+        a = res['after']
+        assert res['before']['in_flight'] == 1, res                                  # admitted and running at the hook
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res  # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:262: AssertionError
+___ test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[deleted] ___
+
+knob = 'deleted'
+
+    @pytest.mark.parametrize('knob', ['huge_int', 'float_raises_keyboardinterrupt', 'deleted', 'default'])
+    def test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu(knob):
+        # No usable device: the hook's synchronize() raises (cudaErrorNoDevice, logged after the close), and the close and
+        # the wait still happen (the reviewer's knob_exit_cpu.py condition).
+        r, res = _run(_EXIT_SCRIPT, 'knob', knob, env=_env(CUDA_VISIBLE_DEVICES=''))
+>       _ok(r, res)
+
+tc_signal/tests/test_fix7_findings.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...ntc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)\nFATAL: exception not rethrown\n")
+res = {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+
+    def _ok(r, res):
+>       assert r.returncode == 0 and res is not None, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED knob deleted
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: synchronize() at exit failed (RuntimeError: tc_signal.synchronize: CUDA error, so the release is not reported as a success: a CUDA error was already pending in this thread when synchronize() was called (cudaErrorNoDevice: no CUDA-capable device is detected), from earlier work (for example a refused kernel launch), not from the release; taken from the error slot and reported here (the call that set it and its device are unknown: the slot records neither); the current-device query cudaGetDevice failed (cudaErrorNoDevice: no CUDA-capable device is detected)); operands without a completion proof were deliberately leaked, not released
+E         tc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...ntc_signal: exit hook failed (NameError: name '_RELEASE_EXIT_DIAG_S' is not defined)\nFATAL: exception not rethrown\n").returncode
+
+tc_signal/tests/test_fix7_findings.py:80: AssertionError
+_ test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[MemoryError] _
+
+kind = 'MemoryError'
+
+    @pytest.mark.parametrize('kind', ['RuntimeError', 'MemoryError', 'KeyboardInterrupt', 'SystemExit', 'Marker'])
+    def test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything(kind):
+        r, res = _run(_EXIT_SCRIPT, 'sync_raises', kind)
+        _ok(r, res)
+        _quiescent_exit(r)
+        a = res['after']
+        assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res   # the hook's finally closed
+        if kind in ('RuntimeError', 'MemoryError'):                                    # an Exception: logged after the close
+            assert f'tc_signal: synchronize() at exit failed ({kind}: injected)' in r.stderr, r.stderr
+            assert a['exit_runner_closes'] == 0, res
+            if kind == 'MemoryError':                                                  # the kept failures: one more try
+>               assert 'called again after the close' in r.stderr, r.stderr
+E               AssertionError: tc_signal: synchronize() at exit failed (MemoryError: injected); operands without a completion proof were deliberately leaked, not released
+E                 
+E               assert 'called again after the close' in 'tc_signal: synchronize() at exit failed (MemoryError: injected); operands without a completion proof were deliberately leaked, not released\n'
+E                +  where 'tc_signal: synchronize() at exit failed (MemoryError: injected); operands without a completion proof were deliberately leaked, not released\n' = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types... at exit failed (MemoryError: injected); operands without a completion proof were deliberately leaked, not released\n').stderr
+
+tc_signal/tests/test_fix7_findings.py:306: AssertionError
+_ test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[KeyboardInterrupt] _
+
+kind = 'KeyboardInterrupt'
+
+    @pytest.mark.parametrize('kind', ['RuntimeError', 'MemoryError', 'KeyboardInterrupt', 'SystemExit', 'Marker'])
+    def test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything(kind):
+        r, res = _run(_EXIT_SCRIPT, 'sync_raises', kind)
+        _ok(r, res)
+        _quiescent_exit(r)
+        a = res['after']
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res   # the hook's finally closed
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:301: AssertionError
+_ test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[SystemExit] _
+
+kind = 'SystemExit'
+
+    @pytest.mark.parametrize('kind', ['RuntimeError', 'MemoryError', 'KeyboardInterrupt', 'SystemExit', 'Marker'])
+    def test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything(kind):
+        r, res = _run(_EXIT_SCRIPT, 'sync_raises', kind)
+        _ok(r, res)
+        _quiescent_exit(r)
+        a = res['after']
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res   # the hook's finally closed
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:301: AssertionError
+___ test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[Marker] ___
+
+kind = 'Marker'
+
+    @pytest.mark.parametrize('kind', ['RuntimeError', 'MemoryError', 'KeyboardInterrupt', 'SystemExit', 'Marker'])
+    def test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything(kind):
+        r, res = _run(_EXIT_SCRIPT, 'sync_raises', kind)
+        _ok(r, res)
+        _quiescent_exit(r)
+        a = res['after']
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res   # the hook's finally closed
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:301: AssertionError
+_______ test_fix7_v701_hook_whose_module_lost_C_is_covered_by_the_runner _______
+
+    def test_fix7_v701_hook_whose_module_lost_C_is_covered_by_the_runner():
+        r, res = _run(_EXIT_SCRIPT, 'c_deleted', '-')
+>       assert r.returncode == 0, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+E       AssertionError: rc=-6
+E         stdout=ARMED c_deleted -
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"release_admission_closed": false, "releases_in_flight": 1, "exit_hook_calls": 0, "exit_in_flight_at_close": 0, "exit_wait_us": 0, "exit_wait_diagnostics": 0, "exit_wait_overruns": 0, "exit_diag_default_used": 0, "exit_runner_closes": 0, "exit_runner_in_flight_at_close": 0, "lifecycle_lock_failures": 0, "exit_wait_poll_diagnostics": 0, "exit_device_wait_diagnostics": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tc_signal: synchronize() at exit failed (NameError: name '_C' is not defined); operands without a completion proof were deliberately leaked, not released
+E         tc_signal: exit hook failed (NameError: name '_C' is not defined)
+E         FATAL: exception not rethrown
+E         
+E       assert -6 == 0
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport atexit, ctypes, json, resource, sys, threading, time, types...ked, not released\ntc_signal: exit hook failed (NameError: name '_C' is not defined)\nFATAL: exception not rethrown\n").returncode
+
+tc_signal/tests/test_fix7_findings.py:327: AssertionError
+_ test_fix7_v701_exit_hook_closes_when_stderr_is_gone_or_raises[raises_keyboardinterrupt] _
+
+how = 'raises_keyboardinterrupt'
+
+    @pytest.mark.parametrize('how', ['none', 'raises', 'raises_keyboardinterrupt'])
+    def test_fix7_v701_exit_hook_closes_when_stderr_is_gone_or_raises(how):
+        # No visible GPU, so the hook has a line to write (the failed synchronize()); every write comes after the close.
+        r, res = _run(_EXIT_SCRIPT, 'stderr', how, env=_env(CUDA_VISIBLE_DEVICES=''))
+        _ok(r, res)
+        _quiescent_exit(r)
+        a = res['after']
+>       assert a['exit_in_flight_at_close'] == 1 and a['exit_hook_calls'] == 1, res
+E       AssertionError: {'after': {'exit_device_wait_diagnostics': 0, 'exit_diag_default_used': 0, 'exit_hook_calls': 0, 'exit_in_flight_at_close': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert (0 == 1)
+
+tc_signal/tests/test_fix7_findings.py:340: AssertionError
+__ test_fix7_v701_exit_reports_a_failure_whose_message_could_not_be_allocated __
+
+    def test_fix7_v701_exit_reports_a_failure_whose_message_could_not_be_allocated():
+        r = subprocess.run([sys.executable, '-c', _EXIT_OOM_SCRIPT], capture_output=True, text=True,
+                           timeout=SUBPROC_TIMEOUT, env=_env())
+        assert r.returncode == 0 and 'ARMED' in r.stdout, f'rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}'
+        _no_abort(r)
+        assert 'tc_signal: synchronize() at exit failed (MemoryError' in r.stderr, r.stderr
+>       assert ('called again after the close to report what the MemoryError hid, raised RuntimeError: '
+                'tc_signal.synchronize:') in r.stderr, r.stderr
+E       AssertionError: tc_signal: synchronize() at exit failed (MemoryError: std::bad_alloc); operands without a completion proof were deliberately leaked, not released
+E         
+E       assert 'called again after the close to report what the MemoryError hid, raised RuntimeError: tc_signal.synchronize:' in 'tc_signal: synchronize() at exit failed (MemoryError: std::bad_alloc); operands without a completion proof were deliberately leaked, not released\n'
+E        +  where 'tc_signal: synchronize() at exit failed (MemoryError: std::bad_alloc); operands without a completion proof were deliberately leaked, not released\n' = CompletedProcess(args=['/usr/bin/python3', '-c', "\nimport torch\nimport tc_signal as ts\nfrom tc_signal import _tc_si...it failed (MemoryError: std::bad_alloc); operands without a completion proof were deliberately leaked, not released\n').stderr
+
+tc_signal/tests/test_fix7_findings.py:546: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[huge_int]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[neg_huge_int]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_subclass]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[int_subclass]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[str]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[none]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_keyboardinterrupt]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_systemexit]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_base]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[float_returns_nonfloat]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[index_only]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[numpy_float32]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_whatever_the_knob_holds[deleted]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[huge_int]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[float_raises_keyboardinterrupt]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_and_waits_without_a_visible_gpu[deleted]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[MemoryError]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[KeyboardInterrupt]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[SystemExit]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_when_synchronize_raises_anything[Marker]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_hook_whose_module_lost_C_is_covered_by_the_runner
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_hook_closes_when_stderr_is_gone_or_raises[raises_keyboardinterrupt]
+FAILED tc_signal/tests/test_fix7_findings.py::test_fix7_v701_exit_reports_a_failure_whose_message_could_not_be_allocated
+24 failed, 14 passed, 37 deselected in 160.67s (0:02:40)

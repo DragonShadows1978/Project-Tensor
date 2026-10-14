@@ -1,0 +1,11 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -887,7 +887,7 @@
+ 
+   void add(const FailureRecord& r) noexcept {
+     if (n < tuning::kSyncReportMax)
+-      rec[n++] = r;
++      rec[n++] = FailureRecord{FailedCall::kStreamSync, Purpose::kSyncStream, r.device, r.err};  // G4 MUTANT (c)
+     else
+       sat_inc(unnamed);
+   }

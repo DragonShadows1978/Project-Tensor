@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -961,7 +961,7 @@
+         r0 = now;
+         next = r0 + first;
+       }
+-      if (now >= next) {
++      if (false && now >= next) {  // G4 MUTANT (d): the lock-retry diagnostic removed
+         std::fprintf(stderr,
+                      "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock %s (%s): %llu failed "
+                      "attempt(s) over %.1f s; it retries every %d ms and waits (it never returns early)\n",

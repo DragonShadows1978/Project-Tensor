@@ -1,0 +1,375 @@
+......FFFFFFFF...F....F....F..FFFFFF.                                    [100%]
+=================================== FAILURES ===================================
+__________ test_import_pointer_identity_and_write_through[0d-float32] __________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = ()
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740896346112 == 127740892151808
+E        +  where 127740896346112 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19d904b0>.data_ptr
+E        +  and   127740892151808 = <built-in method data_ptr of Tensor object at 0x742f1c5daad0>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742f1c5daad0> = tensor(1., device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+__________ test_import_pointer_identity_and_write_through[0d-float16] __________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = ()
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740896346624 == 127740892152320
+E        +  where 127740896346624 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742f1c6d12b0>.data_ptr
+E        +  and   127740892152320 = <built-in method data_ptr of Tensor object at 0x742e19d9bbb0>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19d9bbb0> = tensor(1., device='cuda:0', dtype=torch.float16).data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+__________ test_import_pointer_identity_and_write_through[5-float32] ___________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = (5,)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740896347136 == 127740892152832
+E        +  where 127740896347136 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742f1e203830>.data_ptr
+E        +  and   127740892152832 = <built-in method data_ptr of Tensor object at 0x742e19db9860>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19db9860> = tensor([1., 1., 1., 1., 1.], device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+__________ test_import_pointer_identity_and_write_through[5-float16] ___________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = (5,)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740896347648 == 127740892153344
+E        +  where 127740896347648 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c335b0>.data_ptr
+E        +  and   127740892153344 = <built-in method data_ptr of Tensor object at 0x742e19dbac60>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19dbac60> = tensor([1., 1., 1., 1., 1.], device='cuda:0', dtype=torch.float16).data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+______ test_import_pointer_identity_and_write_through[1x512x1193-float32] ______
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = (1, 512, 1193)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740902637568 == 127740749545472
+E        +  where 127740902637568 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c211b0>.data_ptr
+E        +  and   127740749545472 = <built-in method data_ptr of Tensor object at 0x742e19dbb020>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19dbb020> = tensor([[[1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., ... ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., 1.]]], device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+______ test_import_pointer_identity_and_write_through[1x512x1193-float16] ______
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = (1, 512, 1193)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", CENSUS_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_import_pointer_identity_and_write_through(torch, dt, shape):
+        p = torch.full(shape, 1.0, dtype=_tdt(torch, dt), device="cuda")
+        torch.cuda.synchronize()
+        u = tc.from_dlpack(p)
+>       assert u.data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740896348160 == 127740751988736
+E        +  where 127740896348160 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c32db0>.data_ptr
+E        +  and   127740751988736 = <built-in method data_ptr of Tensor object at 0x742e19dbb070>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19dbb070> = tensor([[[1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., ...[1., 1., 1.,  ..., 1., 1., 1.],\n         [1., 1., 1.,  ..., 1., 1., 1.]]], device='cuda:0',\n       dtype=torch.float16).data_ptr
+
+tensor_cuda/tests/test_dlpack.py:177: AssertionError
+______________ test_capsule_protocol_names_and_single_consumption ______________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_capsule_protocol_names_and_single_consumption(torch):
+        t = tc.zeros(4)
+        legacy = t.__dlpack__()
+        old = t.__dlpack__(max_version=(0, 8))
+        versioned = t.__dlpack__(max_version=(1, 0))
+        assert "dltensor" in repr(legacy) and "dltensor_versioned" not in repr(legacy)
+        assert "dltensor" in repr(old) and "dltensor_versioned" not in repr(old)
+        assert "dltensor_versioned" in repr(versioned)
+        v = _peek_versioned(versioned)
+        assert (v.version.major, v.version.minor) == (1, 3) and v.flags == 0
+        assert v.dl_tensor.ndim == 1 and v.dl_tensor.shape[0] == 4 and v.dl_tensor.strides[0] == 1
+        assert (v.dl_tensor.dtype.code, v.dl_tensor.dtype.bits, v.dl_tensor.dtype.lanes) == (2, 32, 1)
+        u = tc.from_dlpack(versioned)                       # bare capsule
+>       assert u.data_ptr() == t.data_ptr()
+E       assert 127740897570304 == 127740897569792
+E        +  where 127740897570304 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e1a02d0b0>.data_ptr
+E        +  and   127740897569792 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c0b1b0>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:201: AssertionError
+_______________ test_from_dlpack_asks_producer_for_legacy_stream _______________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_from_dlpack_asks_producer_for_legacy_stream(torch):
+        calls = []
+        p = torch.ones(3, device="cuda")
+    
+        class Versioned:
+            def __dlpack_device__(self):
+                return p.__dlpack_device__()
+    
+            def __dlpack__(self, *, stream=None, max_version=None):
+                calls.append(("v", stream, max_version))
+                return p.__dlpack__(stream=stream, max_version=max_version)
+    
+        class Old:                                           # predates max_version: from_dlpack must retry without it
+            def __dlpack_device__(self):
+                return p.__dlpack_device__()
+    
+            def __dlpack__(self, *, stream=None):
+                calls.append(("o", stream))
+                return p.__dlpack__(stream=stream)
+    
+>       assert tc.from_dlpack(Versioned()).data_ptr() == p.data_ptr()
+E       AssertionError: assert 127740897570816 == 127740892153856
+E        +  where 127740897570816 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c314f0>.data_ptr
+E        +      where <tensor_cuda._tensor_cuda.Tensor object at 0x742de1c314f0> = <function from_dlpack at 0x742f1ca137e0>(<test_dlpack.test_from_dlpack_asks_producer_for_legacy_stream.<locals>.Versioned object at 0x742e1a44c830>)
+E        +        where <function from_dlpack at 0x742f1ca137e0> = tc.from_dlpack
+E        +        and   <test_dlpack.test_from_dlpack_asks_producer_for_legacy_stream.<locals>.Versioned object at 0x742e1a44c830> = <class 'test_dlpack.test_from_dlpack_asks_producer_for_legacy_stream.<locals>.Versioned'>()
+E        +  and   127740892153856 = <built-in method data_ptr of Tensor object at 0x742e19dbb160>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19dbb160> = tensor([1., 1., 1.], device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:232: AssertionError
+_______________ test_import_deleter_called_once_when_tensor_dies _______________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_import_deleter_called_once_when_tensor_dies(torch):
+        owner = torch.arange(12, dtype=torch.float32, device="cuda")
+        prod = _Producer(owner, (12,), (1,))
+        u = tc.from_dlpack(prod.capsule())
+        x = torch.from_dlpack(u)                             # re-export keeps the imported Storage alive too
+        del u
+        gc.collect()
+        assert prod.deleter_calls == 0
+        del x
+        gc.collect()
+>       assert prod.deleter_calls == 1 and prod.owner is None
+E       assert (0 == 1)
+E        +  where 0 = <test_dlpack._Producer object at 0x742e1a33fc20>.deleter_calls
+
+tensor_cuda/tests/test_dlpack.py:297: AssertionError
+_________________ test_accepts_size1_dim_with_arbitrary_stride _________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_accepts_size1_dim_with_arbitrary_stride(torch):
+        owner = torch.arange(6, dtype=torch.float32, device="cuda")
+        prod = _Producer(owner, (2, 1, 3), (3, 12345, 1))
+        u = tc.from_dlpack(prod.capsule())
+>       assert tuple(u.shape) == (2, 1, 3) and u.data_ptr() == owner.data_ptr()
+E       AssertionError: assert ((2, 1, 3) == (2, 1, 3)
+E         
+E         Use -v to get more diff and 127740770516992 == 127740892152320)
+E        +  where 127740770516992 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19df37b0>.data_ptr
+E        +  and   127740892152320 = <built-in method data_ptr of Tensor object at 0x742f1c993430>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742f1c993430> = tensor([0., 1., 2., 3., 4., 5.], device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:380: AssertionError
+_________________ test_nonzero_byte_offset_import_and_reexport _________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_nonzero_byte_offset_import_and_reexport(torch):
+        owner = torch.arange(16, dtype=torch.float32, device="cuda")
+        off = 4 * 4                                          # element 4
+        prod = _Producer(owner, (12,), (1,), byte_offset=off)
+        u = tc.from_dlpack(prod.capsule())
+>       assert u.data_ptr() == owner.data_ptr() + off
+E       AssertionError: assert 127740770517504 == (127740892152832 + 16)
+E        +  where 127740770517504 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742de1bd6c30>.data_ptr
+E        +  and   127740892152832 = <built-in method data_ptr of Tensor object at 0x742e19d9ba70>()
+E        +    where <built-in method data_ptr of Tensor object at 0x742e19d9ba70> = tensor([ 0.,  1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12., 13.,\n        14., 15.], device='cuda:0').data_ptr
+
+tensor_cuda/tests/test_dlpack.py:451: AssertionError
+___________ test_empty_shape_dtype_and_dlpack_roundtrip[0d-float32] ____________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = ()
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740770518528 == 127740770518016
+E        +  where 127740770518528 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1b070>.data_ptr
+E        +  and   127740770518016 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1bd30>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+___________ test_empty_shape_dtype_and_dlpack_roundtrip[0d-float16] ____________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = ()
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740770519552 == 127740770519040
+E        +  where 127740770519552 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e27b30>.data_ptr
+E        +  and   127740770519040 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e27f70>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+____________ test_empty_shape_dtype_and_dlpack_roundtrip[7-float32] ____________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = (7,)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740770520576 == 127740770520064
+E        +  where 127740770520576 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1fbb0>.data_ptr
+E        +  and   127740770520064 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1feb0>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+____________ test_empty_shape_dtype_and_dlpack_roundtrip[7-float16] ____________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = (7,)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740770521600 == 127740770521088
+E        +  where 127740770521600 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e26030>.data_ptr
+E        +  and   127740770521088 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e26d70>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+_______ test_empty_shape_dtype_and_dlpack_roundtrip[1x512x7160-float32] ________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float32', shape = (1, 512, 7160)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740818751488 == 127740804071424
+E        +  where 127740818751488 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1d070>.data_ptr
+E        +  and   127740804071424 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e1c370>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+_______ test_empty_shape_dtype_and_dlpack_roundtrip[1x512x7160-float16] ________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+dt = 'float16', shape = (1, 512, 7160)
+
+    @pytest.mark.parametrize("dt", DTYPES)
+    @pytest.mark.parametrize("shape", EMPTY_SHAPES, ids=lambda s: "x".join(map(str, s)) or "0d")
+    def test_empty_shape_dtype_and_dlpack_roundtrip(torch, dt, shape):
+        e = tc.empty(shape, dtype=dt)
+        assert tuple(e.shape) == shape and e.dtype == dt and not e.requires_grad and e.device.startswith("cuda")
+        x = torch.from_dlpack(e)
+        assert x.data_ptr() == e.data_ptr() and tuple(x.shape) == shape and x.dtype == _tdt(torch, dt)
+        back = tc.from_dlpack(x)
+>       assert back.data_ptr() == e.data_ptr()
+E       assert 127740841820160 == 127740833431552
+E        +  where 127740841820160 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e23a30>.data_ptr
+E        +  and   127740833431552 = data_ptr()
+E        +    where data_ptr = <tensor_cuda._tensor_cuda.Tensor object at 0x742e19e22030>.data_ptr
+
+tensor_cuda/tests/test_dlpack.py:497: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[0d-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[0d-float16]
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[5-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[5-float16]
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[1x512x1193-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_pointer_identity_and_write_through[1x512x1193-float16]
+FAILED tensor_cuda/tests/test_dlpack.py::test_capsule_protocol_names_and_single_consumption
+FAILED tensor_cuda/tests/test_dlpack.py::test_from_dlpack_asks_producer_for_legacy_stream
+FAILED tensor_cuda/tests/test_dlpack.py::test_import_deleter_called_once_when_tensor_dies
+FAILED tensor_cuda/tests/test_dlpack.py::test_accepts_size1_dim_with_arbitrary_stride
+FAILED tensor_cuda/tests/test_dlpack.py::test_nonzero_byte_offset_import_and_reexport
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[0d-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[0d-float16]
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[7-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[7-float16]
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[1x512x7160-float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_empty_shape_dtype_and_dlpack_roundtrip[1x512x7160-float16]
+17 failed, 20 passed in 5.29s

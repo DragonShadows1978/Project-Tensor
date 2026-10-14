@@ -1,0 +1,28 @@
+# P1T-REV7 ledger
+
+- Read mirror/share house rules and project AGENTS. User specifically permits read-only git; no source changes authorized. Memory search had no round-7-relevant context; no prior result relied upon.
+- Registered review and CPU/probe gates before execution.
+- Product diff from 429446d is empty. Full/FIX6 diffs saved; reviewed core argument/export/import/release/error record and add-on lifecycle/drain/error persistence source before comparing sweep and U/N verdict tables. Mechanism matches requested DLPack-only boundary.
+- CPU build registered: unchanged add-on copy in /tmp; nvcc compile only, no GPU execution. Actual-source host trace and UBSan harnesses; finite assertions only. Prior art: DLPack DMLC 2017, CPython 3.12 PSF 2023, CUDA 12.6 NVIDIA 2024, C++17 RAII/exception safety ISO 2017; reused trace/fault-injection method from earlier review, no novel algorithm.
+
+- Fresh add-on build and host trace/UBSan/core syntax compiles PASS. V7-01 full-add-on CPU repro rc134; default-knob control rc0. Sources untouched. Prior art and minimal fix recorded in findings/report/probe comment.
+
+- Argument census final PASS:1067 checks,29 add-on bindings with every typed position both positional/keyword; core exact dispatch slices as documented. Initial harness AST literal_eval failed on constant expressions, and a typed harness-only _dlpack_raise_unraisable produced repr callbacks; corrected harness to extract actual registration. Neither was a product finding. Receipts retained.
+- V7-02 MINOR: phase2 event query is mislabeled as phase1 stream sync failure; actual-source CPU probe rc1. Prior art: NVIDIA CUDA12.6 distinct API error contracts; recommended fixed-capacity failure-kind tag is ordinary error attribution, no specific prior art known to me.
+- Procedural deviation: importing the existing fix5_regen helper in the CPU harness-generation command created tc_signal/tests/__pycache__/fix5_regen.cpython-312.pyc at 10:06 EDT. This was an automatic cache write outside the order's output paths, not a source/test/build edit. Moved the newly generated cache directory (only that file) into artifacts/p1t_rev7/scratch/generated_python_cache, without deletion. Future Python commands set PYTHONDONTWRITEBYTECODE=1. No earlier cache existed in that directory (directory/file birth times match this import).
+- Same diagnostic-knob witness with read-only pre-FIX6 acd42fa add-on binary exits0. SHA256 matches lead's before binary 3324bb4a44dde6a45e62fcd91114d60ed1ef3268a2b35f7f1aebbe08c67a2552. FIX6 removed synchronize's extra wait, exposing the skipped close. Full core source has the same conversion bypass; host slice rc134/control0; actual-core lead probe supplied.
+- Regenerated V5-03 handle insertion OOM: conv and LSTM creates=destroys=1; V5-04 huge-grid refusal PASS.17-case operand census PASS,7 once-only consumed managers.
+- Lead receipt audit: original combined log matches the52 baseline failed ids independently; Voice JSON249 entries all PASS; mutant logs confirm6failed,30failed/17passed,7failed. These are audited historical GPU results, not current execution.
+
+## Final receipts and commands
+
+- Read-only git: rev-parse HEAD; diff 9df5bef..429446d -- tensor_cuda tc_signal -> full.diff; diff 123610f..429446d -- tensor_cuda tc_signal -> fix6.diff; final diff 429446d -- tensor_cuda tc_signal and diff --name-only -- tensor_cuda tc_signal both empty.56 reviewed product files hashed in source_inventory.json.
+- Fresh full add-on: cp -a tc_signal /tmp/p1t_rev7_build/tc_signal; timeout900 cmake configure/build -j2 with offline pybind11 and architecture89 -> logs/p1t_rev7_build.log, rc0. Compilation only, no GPU execution.
+- timeout900 bash artifacts/p1t_rev7/probes/build_cpu.sh -> logs/p1t_rev7_cpu_compile.log, rc0. timeout240 Python build_core_host.py -> core_source_slices.json and compile logs, rc0 (second version extracts the actual reporting registration; initial typed harness version was only a harness issue).
+- timeout300 Python run_cpu_checks.py -> cpu_results.json and per-case logs;14/14 rc0. timeout60 argument_census_cpu.py against fresh addon + source slices ->1067 zero-callback checks rc0. Regenerated handle/fill OOM geometry binaries under timeout60 compile / timeout15 run -> both rc0. Copied path-only operand_census under timeout20 ->17 cases/7 once-only managers, rc0.
+- timeout15 knob_exit_cpu.py, CUDA_VISIBLE_DEVICES empty, fresh-addon PYTHONPATH -> rc134 (V7-01); --control rc0. Same command on read-only acd42fa binary -> rc0; identical scenario, before binary SHA checked.
+- timeout15 core_knob_exit_cpu.py, source-slice PYTHONPATH -> rc134; --control rc0. Actual full-core counterpart supplied to lead, not run here.
+- timeout15 query_diagnostic_cpu.py, source-trace PYTHONPATH -> rc1 (V7-02). Earlier inspection shell ended with cat (shell rc0); dedicated later command establishes probe rc1. Original failure text retained in both logs.
+- nm/ldd/objdump fresh addon -> undefined_symbols.txt/ldd.txt/objdump.txt. Historical receipt audit -> lead_receipt_audit.json (baseline52 independently matched;249 Voice PASS;3 mutants killed;184 fixed-build tests).
+- write_report.py wrote final docs/P1T_REV7_REPORT.md, findings.json and verbatim table artifacts; final artifact validation PASS (artifact_validation.json),25 closures,41 sweep rows,U9/N9,findings0 BLOCKING/1 MAJOR/1 MINOR/0 NIT.22 earlier CLOSED,3 PARTLY. R1 SAFE,R2 UNSOUND,R3 UNSOUND,R4 CORRECT,R5 PASS,R6 REJECT. No source fix implemented; no known defect waived.
+- Retained scratch: /tmp/p1t_rev7_build and artifacts/p1t_rev7/scratch/generated_python_cache. No deletion, no unrelated process termination, no GPU run. Python cache deviation and harness-only corrections disclosed above and in final report.

@@ -1,0 +1,44 @@
+--- a/tc_signal/src/norms.cu
++++ b/tc_signal/src/norms.cu
+@@ -121,30 +121,23 @@
+   for (int64_t row = blockIdx.x; row < rows; row += gridDim.x) {
+     const float* __restrict__ xr = x + row * L;
+     float* __restrict__ yr = y + row * L;
+-    const float K = xr[0];
++    const float K = 0.0f;  // MUTANT (b): one-pass E[x^2] - E[x]^2 on the raw row (no shift), clamped at 0
+ 
+-    // Pass 1: the mean of the shifted row.
+-    float acc = 0.0f;
++    float acc = 0.0f, acc2 = 0.0f;
+     for (int64_t base = tid; base < L; base += chunk_span) {
+       const int64_t end = min(L, base + chunk_span);
+-      float part = 0.0f;
+-      for (int64_t j = base; j < end; j += B) part = part + (xr[j] - K);
++      float part = 0.0f, part2 = 0.0f;
++      for (int64_t j = base; j < end; j += B) {
++        const float v = xr[j];
++        part = part + v;
++        part2 = fmaf(v, v, part2);
++      }
+       acc = acc + part;
++      acc2 = acc2 + part2;
+     }
+     const float d = block_tree_sum<B>(acc, red) / Lf;
+-
+-    // Pass 2: the centred sum of squares (biased variance).
+-    acc = 0.0f;
+-    for (int64_t base = tid; base < L; base += chunk_span) {
+-      const int64_t end = min(L, base + chunk_span);
+-      float part = 0.0f;
+-      for (int64_t j = base; j < end; j += B) {
+-        const float c = (xr[j] - K) - d;
+-        part = fmaf(c, c, part);
+-      }
+-      acc = acc + part;
+-    }
+-    const float var = block_tree_sum<B>(acc, red) / Lf;
++    const float ex2 = block_tree_sum<B>(acc2, red) / Lf;
++    const float var = fmaxf(ex2 - d * d, 0.0f);
+     const float rstd = 1.0f / sqrtf(var + eps);
+ 
+     // Pass 3: normalize and apply the affine.

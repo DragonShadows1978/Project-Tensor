@@ -1,0 +1,64 @@
+# P1T-M2 G4 linkage receipt, Mon Oct 12 08:00:18 PM EDT 2026
+## sha256
+3db14dc4af85e5376b850d21ec568f842189c1a4d76f47f87fcf80c6d23e4a25  tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so
+## ldd tc_signal
+	linux-vdso.so.1 (0x0000760bfb1fd000)
+	libcudart.so.12 => /usr/local/cuda-12.6/lib64/libcudart.so.12 (0x0000760bfae00000)
+	libcublas.so.12 => /usr/local/cuda-12.6/lib64/libcublas.so.12 (0x0000760bf4400000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000760bf4000000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000760bfb165000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000760bf3c00000)
+	/lib64/ld-linux-x86-64.so.2 (0x0000760bfb1ff000)
+	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x0000760bfb15e000)
+	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x0000760bfb159000)
+	librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x0000760bfb154000)
+	libcublasLt.so.12 => /usr/local/cuda-12.6/lib64/libcublasLt.so.12 (0x0000760bd2200000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000760bf4317000)
+## ldd core (production, read-only)
+	linux-vdso.so.1 (0x000079aa079af000)
+	libcudart.so.12 => /usr/local/cuda-12.6/lib64/libcudart.so.12 (0x000079aa06c00000)
+	libcublas.so.12 => /usr/local/cuda-12.6/lib64/libcublas.so.12 (0x000079aa00200000)
+	libcublasLt.so.12 => /usr/local/cuda-12.6/lib64/libcublasLt.so.12 (0x000079a9de800000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x000079a9de400000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x000079aa06f17000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x000079aa0795f000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000079a9de000000)
+	/lib64/ld-linux-x86-64.so.2 (0x000079aa079b1000)
+	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x000079aa0795a000)
+	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x000079aa07955000)
+	librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x000079aa07950000)
+## readelf -d tc_signal (NEEDED/RUNPATH)
+ 0x0000000000000001 (NEEDED)             Shared library: [libcudart.so.12]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcublas.so.12]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/usr/local/cuda-12.6/lib64]
+## cudart symbols in tc_signal (U = imported from the shared libcudart.so.12)
+                 U cudaGetLastError@libcudart.so.12
+                 U cudaLaunchKernel@libcudart.so.12
+                 U __cudaRegisterFatBinary@libcudart.so.12
+                 U __cudaRegisterFatBinaryEnd@libcudart.so.12
+## static cudart / core symbols in tc_signal (expect none)
+0
+## same libcudart path check
+tc_signal: /usr/local/cuda-12.6/lib64/libcudart.so.12
+core:      /usr/local/cuda-12.6/lib64/libcudart.so.12
+SAME PATH: yes
+0
+## (amended) plain nm on the stripped module prints: nm: tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so: no symbols -> the count above is vacuous; real checks follow
+## link line libraries (tc_signal/build/CMakeFiles/_tc_signal.dir/link.txt)
+-Wl,-rpath,/usr/local/cuda-12.6/lib64
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_m2/tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so
+-L/usr/local/cuda-12/targets/x86_64-linux/lib/stubs
+-L/usr/local/cuda-12/targets/x86_64-linux/lib
+/usr/local/cuda-12.6/targets/x86_64-linux/lib/libcudart.so
+/usr/local/cuda-12.6/targets/x86_64-linux/lib/libcublas.so
+/usr/local/cuda-12.6/targets/x86_64-linux/lib/libcublasLt.so
+/usr/local/cuda-12.6/targets/x86_64-linux/lib/libculibos.a
+-lcudadevrt
+-lcudart
+## cudart_static in link line: 0
+## dynamic cuda* symbols DEFINED in tc_signal (a static cudart would define them; expect 0): 0
+## dynamic cuda* symbols IMPORTED from libcudart.so.12: 13
+## readelf strings mentioning tensor_cuda (expect 0): 0

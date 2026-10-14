@@ -1,0 +1,441 @@
+.FF.....FF.FFFFFFFFF.F.F..F..                                            [100%]
+=================================== FAILURES ===================================
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[huge_int] _
+
+knob = 'huge_int', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'huge_int', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...sor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n')
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ... "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+@py_assert1 = ["-6\n{-6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\\nimport atexit, json, resource, sys, threading, time, ...ook failed (OverflowError: int too large to convert to float)\\nFATAL: exception not rethrown\\n').returncode\n} == 0"]
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob huge_int
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...sor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[neg_huge_int] _
+
+knob = 'neg_huge_int', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'neg_huge_int', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...sor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n')
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ... "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+@py_assert1 = ["-6\n{-6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\\nimport atexit, json, resource, sys, threading, time, ...ook failed (OverflowError: int too large to convert to float)\\nFATAL: exception not rethrown\\n').returncode\n} == 0"]
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob neg_huge_int
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...sor_cuda: DLPack exit hook failed (OverflowError: int too large to convert to float)\nFATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_subclass] _
+
+knob = 'float_subclass', read = True
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'float_subclass', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...G True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n')
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ...default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["FSub.__float__"]}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['FSub.__float__']}
+@py_assert1 = ["-6\n{-6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\\nimport atexit, json, resource, sys, threading, time, ...or_cuda: DLPack exit hook failed (RuntimeError: never called)\\nFATAL: exception not rethrown\\n').returncode\n} == 0"]
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob float_subclass
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["FSub.__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (RuntimeError: never called)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...G True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[int_subclass] _
+
+knob = 'int_subclass', read = True
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'int_subclass', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...G True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n')
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ...default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["ISub.__float__"]}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['ISub.__float__']}
+@py_assert1 = ["-6\n{-6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\\nimport atexit, json, resource, sys, threading, time, ...or_cuda: DLPack exit hook failed (RuntimeError: never called)\\nFATAL: exception not rethrown\\n').returncode\n} == 0"]
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob int_subclass
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["ISub.__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (RuntimeError: never called)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...G True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: never called)\nFATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[str] __
+
+knob = 'str', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        assert a["shutdown_runner_closes"] == 0, res
+        assert res["calls"] == [], res                                                # the knob's methods never ran
+>       assert a["shutdown_diag_default_used"] == (0 if read else 1), res
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tensor_cuda/tests/test_dlpack.py:2607: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[none] _
+
+knob = 'none', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        assert a["shutdown_runner_closes"] == 0, res
+        assert res["calls"] == [], res                                                # the knob's methods never ran
+>       assert a["shutdown_diag_default_used"] == (0 if read else 1), res
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tensor_cuda/tests/test_dlpack.py:2607: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises] _
+
+knob = 'float_raises', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'float_raises', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...INALIZING True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: knob)\nFATAL: exception not rethrown\n')
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ...diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["__float__"]}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+@py_assert1 = ["-6\n{-6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\\nimport atexit, json, resource, sys, threading, time, ...rr='tensor_cuda: DLPack exit hook failed (RuntimeError: knob)\\nFATAL: exception not rethrown\\n').returncode\n} == 0"]
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob float_raises
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": ["__float__"]}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (RuntimeError: knob)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...INALIZING True\n', stderr='tensor_cuda: DLPack exit hook failed (RuntimeError: knob)\nFATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_keyboardinterrupt] _
+
+knob = 'float_raises_keyboardinterrupt', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+>       assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tensor_cuda/tests/test_dlpack.py:2604: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_systemexit] _
+
+knob = 'float_raises_systemexit', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+>       assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tensor_cuda/tests/test_dlpack.py:2604: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_base] _
+
+knob = 'float_raises_base', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+>       assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert (0 == 1)
+
+tensor_cuda/tests/test_dlpack.py:2604: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_returns_nonfloat] _
+
+knob = 'float_returns_nonfloat', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        assert a["shutdown_runner_closes"] == 0, res
+>       assert res["calls"] == [], res                                                # the knob's methods never ran
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': ['__float__']}
+E       assert ['__float__'] == []
+E         
+E         Left contains one more item: '__float__'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:2606: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[index_only] _
+
+knob = 'index_only', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        assert a["shutdown_runner_closes"] == 0, res
+>       assert res["calls"] == [], res                                                # the knob's methods never ran
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': ['__index__']}
+E       assert ['__index__'] == []
+E         
+E         Left contains one more item: '__index__'
+E         Use -v to get more diff
+
+tensor_cuda/tests/test_dlpack.py:2606: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[numpy_float32] _
+
+knob = 'numpy_float32', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("knob", knob)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res   # the HOOK closed and waited
+        assert a["shutdown_runner_closes"] == 0, res
+        assert res["calls"] == [], res                                                # the knob's methods never ran
+>       assert a["shutdown_diag_default_used"] == (0 if read else 1), res
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tensor_cuda/tests/test_dlpack.py:2607: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[deleted] _
+
+knob = 'deleted', read = False
+
+    @pytest.mark.parametrize("knob,read", _FIX7_KNOB_CLASSES, ids=[k for k, _ in _FIX7_KNOB_CLASSES])
+    def test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds(knob, read):
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("knob", knob)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'knob', arg = 'deleted', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...: DLPack exit hook failed (NameError: name '_DLPACK_SHUTDOWN_WAIT_S' is not defined)\nFATAL: exception not rethrown\n")
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ... "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+@py_assert1 = ['-6\n{-6 = CompletedProcess(args=[\'/usr/bin/python3\', \'-c\', \'\\nimport atexit, json, resource, sys, threading, t... (NameError: name \'_DLPACK_SHUTDOWN_WAIT_S\' is not defined)\\nFATAL: exception not rethrown\\n").returncode\n} == 0']
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED knob deleted
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (NameError: name '_DLPACK_SHUTDOWN_WAIT_S' is not defined)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa...: DLPack exit hook failed (NameError: name '_DLPACK_SHUTDOWN_WAIT_S' is not defined)\nFATAL: exception not rethrown\n").returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+____ test_fix7_v701_core_hook_whose_module_lost_C_is_covered_by_the_runner _____
+
+    def test_fix7_v701_core_hook_whose_module_lost_C_is_covered_by_the_runner():
+        _torch_or_skip()
+>       r, res = _run_fix7_core_exit("c_deleted", "-")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_dlpack.py:2625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mode = 'c_deleted', arg = '-', env = {}
+r = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa..., stderr="tensor_cuda: DLPack exit hook failed (NameError: name '_C' is not defined)\nFATAL: exception not rethrown\n")
+lines = ['RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, ... "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}']
+res = {'after': {'closing': False, 'in_flight': 1, 'released': 0, 'shutdown_calls': 0, ...}, 'before': {'in_flight': 1}, 'calls': []}
+@py_assert1 = ['-6\n{-6 = CompletedProcess(args=[\'/usr/bin/python3\', \'-c\', \'\\nimport atexit, json, resource, sys, threading, t...Pack exit hook failed (NameError: name \'_C\' is not defined)\\nFATAL: exception not rethrown\\n").returncode\n} == 0']
+@py_assert3 = -6, @py_assert6 = 0
+
+    def _run_fix7_core_exit(mode, arg, **env):
+        r = subprocess.run([sys.executable, "-c", _FIX7_CORE_EXIT_SCRIPT, mode, arg], capture_output=True, text=True,
+                           timeout=_SUBPROC_TIMEOUT, env=_subproc_env(**env))
+        lines = [ln[ln.index("RESULT {"):] for ln in r.stdout.splitlines() if "RESULT {" in ln]
+        res = json.loads(lines[-1][len("RESULT "):]) if lines else None
+>       assert r.returncode == 0 and res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED c_deleted -
+E         DELETER started
+E         RESULT {"before": {"in_flight": 1}, "after": {"in_flight": 1, "closing": false, "released": 0, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_diag_default_used": 0, "shutdown_runner_closes": 0, "shutdown_runner_in_flight_at_close": 0}, "calls": []}
+E         FINALIZING True
+E         
+E         stderr=tensor_cuda: DLPack exit hook failed (NameError: name '_C' is not defined)
+E         FATAL: exception not rethrown
+E         
+E       assert (-6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, json, resource, sys, threading, time, types, _threa..., stderr="tensor_cuda: DLPack exit hook failed (NameError: name '_C' is not defined)\nFATAL: exception not rethrown\n").returncode
+
+tensor_cuda/tests/test_dlpack.py:2589: AssertionError
+_ test_fix7_v701_core_exit_hook_closes_when_stderr_is_gone_or_raises[raises_keyboardinterrupt] _
+
+how = 'raises_keyboardinterrupt'
+
+    @pytest.mark.parametrize("how", ["none", "raises", "raises_keyboardinterrupt"])
+    def test_fix7_v701_core_exit_hook_closes_when_stderr_is_gone_or_raises(how):
+        _torch_or_skip()
+        r, res = _run_fix7_core_exit("stderr", how)
+        a = res["after"]
+        assert a["shutdown_calls"] == 1 and a["shutdown_in_flight_at_close"] == 1, res
+>       assert a["shutdown_runner_closes"] == (1 if how == "raises_keyboardinterrupt" else 0), res
+E       AssertionError: {'after': {'closing': True, 'in_flight': 0, 'released': 1, 'shutdown_calls': 1, ...}, 'before': {'in_flight': 1}, 'calls': []}
+E       assert 0 == 1
+
+tensor_cuda/tests/test_dlpack.py:2636: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[huge_int]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[neg_huge_int]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_subclass]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[int_subclass]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[str]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[none]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_keyboardinterrupt]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_systemexit]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_raises_base]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[float_returns_nonfloat]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[index_only]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[numpy_float32]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_and_waits_whatever_the_knob_holds[deleted]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_hook_whose_module_lost_C_is_covered_by_the_runner
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_v701_core_exit_hook_closes_when_stderr_is_gone_or_raises[raises_keyboardinterrupt]
+16 failed, 13 passed, 217 deselected in 88.69s (0:01:28)

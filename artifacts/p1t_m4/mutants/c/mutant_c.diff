@@ -1,0 +1,11 @@
+--- a/tc_signal/src/m4_bindings.cpp
++++ b/tc_signal/src/m4_bindings.cpp
+@@ -339,7 +339,7 @@
+   m.def(
+       "layer_norm_run",
+       [](py::object xc, py::object sc, py::object bc, py::object out, int64_t axis, double eps) {
+-        norm_run(NormKind::kLayer, xc, sc, bc, out, axis, eps);
++        norm_run(NormKind::kLayer, xc, sc, bc, out, axis, 1e-5);  // MUTANT (c): eps forced to 1e-5
+       },
+       py::arg("x_capsule"), py::arg("scale_capsule"), py::arg("bias_capsule"), py::arg("out"), py::arg("axis"),
+       py::arg("eps"), "Consume every operand, validate, launch on the legacy stream, release.");

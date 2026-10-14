@@ -8,9 +8,11 @@ plumbing, no_grad). See ROADMAP.md for the layers still being ported.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 from collections.abc import Mapping
 import operator
+import sys
 
 import numpy as np
 
@@ -68,6 +70,242 @@ rand = _factory(lambda s: np.random.rand(*s))
 
 def from_numpy(arr, *, device="cuda", requires_grad=False):
     return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
+
+
+# P1T-M1 (Project-Voice T1): DLPack import. Prior art: the Python array API
+# standard's from_dlpack (Consortium for Python Data API Standards, 2021-2023)
+# and the PyTorch/CuPy importers' owner keepalive (the imported tensor keeps the
+# producer's DLPack manager alive and calls its deleter when it dies); the
+# versioned-then-legacy retry mirrors torch.utils.dlpack.from_dlpack. Ours: the
+# TensorCUDA wiring (bindings.cpp, kernels.cu Storage).
+_DLPACK_MAX_VERSION = (1, 3)   # the vendored dlpack.h (include/dlpack/dlpack.h)
+_DLPACK_LEGACY_STREAM = 1      # DLPack int for the CUDA legacy default stream
+_KDL_CUDA = 2
+
+
+def from_dlpack(obj):
+    """Zero-copy import of any DLPack CUDA producer (or a bare DLPack capsule).
+
+    For an object with ``__dlpack__`` this calls
+    ``obj.__dlpack__(stream=1, max_version=(1, 3))`` (retrying without
+    ``max_version`` for a producer that predates it). ``stream=1`` names the
+    consumer stream, TensorCUDA's legacy default stream, so the producer orders
+    that stream after its own pending work before handing the capsule over.
+    A bare capsule carries no stream information: the caller must already have
+    ordered the producer's work.
+
+    The result aliases the producer's memory (``data_ptr()`` is the producer's
+    element 0) and keeps the producer's DLPack manager alive. When the last
+    TensorCUDA reference to that memory dies, TensorCUDA first drains its own
+    stream on the memory's device (switching to that device if another one is
+    current, then restoring the caller's device), so no queued TensorCUDA
+    kernel can still touch the memory, and then calls the producer's deleter
+    with the GIL held. If that drain fails (a broken CUDA context), or the
+    last reference dies while the interpreter is finalizing, the deleter is
+    deliberately NOT called: the manager is leaked rather than risk a
+    use-after-free or a GIL acquisition during shutdown (P1T-FIX1 F04/F05).
+    Interpreter exit (P1T-FIX2 N5, P1T-FIX3 V3-01): an atexit hook stops
+    admitting such releases and waits, GIL released and with NO time bound,
+    until every release already admitted has finished (a release normally
+    takes microseconds); ``_DLPACK_SHUTDOWN_WAIT_S`` is only the delay before
+    the first stderr diagnostic, and another follows each time the time waited
+    doubles (P1T-FIX7: whatever that knob holds, an unusable value or none at
+    all, the close and the wait still happen; see ``_dlpack_shutdown_hook``). So a producer deleter that never returns makes interpreter exit
+    wait for it (Ctrl-C does not interrupt that wait; SIGTERM / SIGKILL end the
+    process). Every release that starts after the hook leaks (counted) without
+    touching the GIL. A producer deleter that raises a C++ exception is
+    contained and counted (P1T-FIX2 N4).
+    The memory is never returned to TensorCUDA's pool and never
+    ``cudaFree``-d by TensorCUDA.
+
+    Refused with ``RuntimeError`` (P1T-FIX4 V4-03), before the capsule is
+    consumed: the current-device query ``cudaGetDevice`` fails (for example no
+    usable CUDA device); the producer keeps ownership.
+    Refused with ``BufferError``, never converted: non-CUDA devices (CPU
+    included), another CUDA device than TensorCUDA's, non-contiguous strides
+    (a size-1 dimension may carry any stride), read-only tensors, and dtypes
+    with no exact TensorCUDA match (supported: float32, float16, bfloat16,
+    int64, uint8, bool). Refused with ``ValueError``: an element count, byte
+    size, ``byte_offset`` + size or address range that overflows 64-bit
+    arithmetic (P1T-FIX1 F03), counting every nonzero extent also when another
+    extent is 0 (P1T-FIX2 N2: ``[0, 2**62, 4]`` is refused, not an empty
+    tensor); ``TypeError``: anything that is neither a DLPack
+    producer nor a capsule (``None`` included). The result has
+    ``requires_grad=False``. If anything outside TensorCUDA later writes into
+    it in place, call ``mark_modified()`` (see ``Tensor.__dlpack__``).
+    """
+    if not hasattr(obj, "__dlpack__"):
+        return _C._from_dlpack_capsule(obj)   # bare capsule (TypeError otherwise)
+    dev = getattr(obj, "__dlpack_device__", None)
+    if dev is not None:
+        dev_type, dev_id = dev()
+        if int(dev_type) != _KDL_CUDA:
+            raise BufferError(
+                f"from_dlpack: only CUDA device memory (kDLCUDA = 2) can be "
+                f"imported; the producer reports device ({int(dev_type)}, "
+                f"{int(dev_id)})" + (" (CPU)" if int(dev_type) == 1 else ""))
+    try:
+        cap = obj.__dlpack__(stream=_DLPACK_LEGACY_STREAM,
+                             max_version=_DLPACK_MAX_VERSION)
+    except TypeError:
+        cap = obj.__dlpack__(stream=_DLPACK_LEGACY_STREAM)
+    return _C._from_dlpack_capsule(cap)
+
+
+def empty(*shape, dtype="float32", device="cuda"):
+    """Uninitialized tensor allocated on the device by the engine's allocator.
+
+    Amendment 1 (P1T-M1): binds ``NDArray::empty`` with no host round-trip and
+    no fill, so the CONTENTS ARE UNINITIALIZED (whatever the allocator hands
+    back). Shape conventions match ``zeros``: ``empty(2, 3)``,
+    ``empty((2, 3))`` or ``empty([2, 3])``; ``empty()`` is 0-d. Returns a
+    Tensor with ``requires_grad=False``. Unlike ``zeros``, an unknown dtype
+    string raises instead of falling back to float32. More than 8 dimensions
+    (TensorCUDA's maximum rank), a negative extent, or an element count or
+    byte size that overflows 64-bit arithmetic raises ``ValueError`` before
+    anything is allocated (P1T-FIX1 F03). Every nonzero extent counts, also
+    when another extent is 0 (P1T-FIX2 N2): the product of the extents with
+    zeros counted as 1, times the element size, must fit in int64, so
+    ``empty(0, 2**62, 4)`` raises while ``empty(0, 2**60)`` is an empty tensor
+    (NumPy's rule).
+
+    Device (P1T-FIX4): a CUDA tensor is allocated on the CURRENT CUDA device and
+    labeled with it (``cudaGetDevice``, checked: ``RuntimeError`` if it fails);
+    ``device="cuda:N"`` must name the current device (``ValueError``
+    otherwise: TensorCUDA does not switch devices to allocate).
+    """
+    if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+        shape = tuple(shape[0])
+    return _C.empty([operator.index(s) for s in shape], dtype, device)
+
+
+# P1T-FIX2 (N5): interpreter-exit coordination for DLPack import releases that
+# need the GIL (bindings.cpp, ImportReleaseLifecycle). CPython runs atexit
+# callbacks before it marks the runtime finalizing (v3.12.3 pylifecycle.c,
+# Py_FinalizeEx: _PyAtExit_Call at line 1815, _PyRuntimeState_SetFinalizing at
+# 1833), so this hook closes admission while taking the GIL is still safe and
+# waits for the releases already admitted.
+# P1T-FIX3 (round-3 review V3-01): that wait has NO bound any more; FIX2's
+# bounded return let finalization start while an admitted deleter was still
+# running, and the process aborted when the deleter re-took the GIL. Knob: the
+# time waited, in seconds, before the first stderr diagnostic (a release
+# normally finishes in microseconds, so this only fires for a producer deleter
+# that blocks); later diagnostics are written each time the time waited has
+# doubled. Prior art: CPython's own threading._shutdown (joins non-daemon
+# threads before finalizing, with no bound), the same "stop admitting, then wait
+# for what already started" order; RCU-style grace periods (an unbounded wait
+# for pre-existing readers) and the kernel's repeated stall warnings. Ours:
+# applying them to the DLPack release at the atexit boundary.
+# P1T-FIX7 (round-7 review V7-01): diagnostics only, and never able to stop the exit close-and-wait. The hook passes
+# the knob as is to the native entry, which reads a float or an int (subclasses included) without calling any of its
+# Python methods; anything else (None, a str, an object with __float__, an int beyond the double range) or a deleted
+# knob uses the native default and the close and the wait still happen (stderr says the default was used). Initial
+# value: that native default (bindings.cpp kDlpackShutdownDiagDefaultS), so the two cannot drift apart.
+_DLPACK_SHUTDOWN_WAIT_S = _C._DLPACK_SHUTDOWN_DIAG_DEFAULT_S
+
+
+def _dlpack_shutdown_hook():
+    """atexit hook (P1T-FIX2 N5, P1T-FIX3 V3-01): close admission of GIL-taking
+    DLPack import releases, then wait until every release admitted before that
+    has finished. Interpreter finalization never starts while one is running.
+
+    The wait has no bound. After ``_DLPACK_SHUTDOWN_WAIT_S`` seconds a line goes
+    to stderr (how many are still running, seconds waited), and another each
+    time the time waited doubles; the wait goes on. Consequence: a producer
+    deleter that never returns makes interpreter exit wait forever. That is the
+    producer's DLPack contract violation (a deleter must return), and waiting is
+    the honest outcome: returning early would let CPython finalize under a
+    running callback and abort the process (round-3 review V3-01, rc -6). Ctrl-C
+    does not interrupt the wait; SIGTERM / SIGKILL still end the process.
+    Releases that start after admission closed are deliberately leaked (no GIL
+    is taken), as before.
+
+    P1T-FIX7 (round-7 review V7-01, sweep (i)): diagnostic configuration never
+    gates exit quiescence. The close is the hook's first call: the knob is read
+    by a plain name load (a deleted knob is caught as NameError and passes None)
+    and handed to the native entry as is, never converted here, so no float(),
+    __float__ or OverflowError can run before the close (FIX2-FIX6 called
+    float(knob): 1 << 4096 raised OverflowError, the close was skipped, and a
+    finite deleter still running on another thread aborted the process at
+    finalization). Everything else (the diagnostic lines, the recorded P1-T
+    failures) is logged after the close, each line guarded. An exception that
+    escapes the hook before its close (a Ctrl-C delivered at its first
+    bytecode, where CPython 3.12 checks for pending signals) is handled by the
+    native runner atexit actually calls, ``_C._dlpack_exit_hook_runner``: it
+    closes and waits itself, logs the recorded failures nobody reported, and
+    re-raises. Never raises, except a BaseException that arrived during it.
+    P1T-FIX8 (round-8 review V8-02): a recorded P1-T CUDA failure is reported
+    at exit even when its report cannot allocate. The native runner is the
+    last reader: after this hook (returned or raised) and after the close and
+    the wait, it writes, with C stdio, the records nobody raised and an R7
+    report this hook raised but could not write, falling back to an
+    allocation-free summary (count, first site, device, error name). This hook
+    acknowledges with _C._dlpack_exit_report_written() that its lines are out.
+    P1T-FIX7 (lead send-back L1): if locking the release lifecycle mutex
+    fails (never observed), the close retries it, and that retry wait is
+    diagnosed like the release wait (a stderr line after the knob's delay,
+    then each time the retrying time doubles; _dlpack_release_stats()
+    shutdown_lock_retries / shutdown_lock_diagnostics). No exit wait is
+    silent.
+    Prior art: CPython's atexit (a callback's exception is printed, the rest
+    still run) and Python's try / finally; see bindings.cpp.
+    """
+    C = _C
+    try:
+        knob = _DLPACK_SHUTDOWN_WAIT_S
+        missing = False
+    except NameError:
+        knob, missing = None, True
+    result = hook_error = None
+    try:
+        result = C._dlpack_begin_shutdown(knob)    # V7-01: closes and waits for ANY knob object
+    except Exception as e:  # noqa: BLE001  (raised only after the close and the wait: building the result failed)
+        hook_error = e
+    lines = []
+    if hook_error is not None:
+        lines.append(f"tensor_cuda: DLPack exit hook: admission was closed and the wait finished, then building its "
+                     f"result failed ({type(hook_error).__name__}: {hook_error})")
+    if result is not None:
+        if result["first_diag_default_used"] and (missing or knob is not None):
+            kind = type(knob)
+            what = ("was deleted" if missing else "holds an int beyond the range of a C double"
+                    if issubclass(kind, int) else f"holds a {kind.__name__} (not a float or an int)")
+            lines.append(f"tensor_cuda: _DLPACK_SHUTDOWN_WAIT_S {what}; the exit wait used the default "
+                         f"first-diagnostic delay of {result['first_diag_s']:g} s (the close and the wait are never "
+                         f"affected)")
+        if result["timed_out"]:
+            lines.append(f"tensor_cuda: the DLPack release(s) admitted before exit finished after "
+                         f"{result['waited_us'] / 1e6:.1f} s; interpreter exit continues")
+    # P1T-FIX6 (FIX5 residual R7): a CUDA failure recorded on a P1-T path that could not raise, and not raised by a
+    # synchronize() since, is logged here (an exception from an atexit callback has no handler). P1T-FIX7: attempted
+    # whatever the close returned or raised (FIX6 skipped it when the close step raised).
+    try:
+        C._dlpack_raise_unraisable()
+    except RuntimeError as e:
+        lines.append(f"{e} (logged by tensor_cuda's interpreter-exit hook)")
+    except Exception as e:  # noqa: BLE001  (MemoryError: the record stays; the native runner writes it, P1T-FIX8)
+        lines.append(f"tensor_cuda: at exit, the recorded P1-T CUDA failures could not be reported "
+                     f"({type(e).__name__}: {e})")
+    written = True
+    for line in lines:
+        try:
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001  (stderr may already be closed at exit)
+            written = False
+    if written:
+        # P1T-FIX8 (V8-02): every line is out, including the R7 report raised here; the native runner, the last
+        # reader at exit, then does not write that report's allocation-free summary again.
+        try:
+            C._dlpack_exit_report_written()
+        except Exception:  # noqa: BLE001  (a _C without it: the runner writes the summary, a harmless repeat)
+            pass
+
+
+# P1T-FIX7 (V7-01): registered through the native runner: atexit calls _C._dlpack_exit_hook_runner(hook), which calls
+# the hook and, only if the hook raised before closing (a Ctrl-C delivered at its first bytecode), closes and waits
+# itself. To remove it: atexit.unregister(tensor_cuda._C._dlpack_exit_hook_runner).
+atexit.register(_C._dlpack_exit_hook_runner, _dlpack_shutdown_hook)
 
 
 def matmul(a, b, alpha=1.0, trans_b=False):
@@ -1196,7 +1434,18 @@ def checkpoint(fn, *inputs):
 
 
 def synchronize():
+    """Wait for all queued device work (the engine's device synchronize), then report deferred P1-T errors.
+
+    P1T-FIX6 (FIX5 residual R7): a CUDA failure on a P1-T core path that cannot raise where it happens (an imported
+    tensor's device drain before its DLPack release, which then deliberately leaks the producer's memory; restoring the
+    caller's device after that drain; fill_'s device guard unwinding after another error) was only counted in
+    ``_C._dlpack_release_stats()``, so no API ever reported it. ``synchronize()`` now raises RuntimeError naming the
+    first such failure and how many there were, once: the record is consumed only after the RuntimeError exists (a
+    MemoryError while reporting leaves it for the next call). Same rule as ``tc_signal.synchronize()`` (P1T-FIX2 N1:
+    a CUDA failure is never reported as success). Prior art: tc_signal's raise-once records; PyTorch's
+    C10_CUDA_CHECK_WARN (an error found in a destructor is reported, not dropped)."""
     _C.synchronize()
+    _C._dlpack_raise_unraisable()
 
 
 def empty_cache():
@@ -1237,7 +1486,7 @@ from . import quantization  # noqa: E402
 apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
-    "Tensor", "tensor", "from_numpy", "zeros", "ones", "randn", "rand",
+    "Tensor", "tensor", "from_numpy", "from_dlpack", "empty", "zeros", "ones", "randn", "rand",
     "matmul", "dda_raycast", "raster_winner_scatter_min",
     "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",
     "bake_back_project", "bake_cosine_blend", "build_inpaint_island_csr",

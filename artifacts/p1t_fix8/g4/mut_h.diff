@@ -1,0 +1,36 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -1264,25 +1264,19 @@
+   DeviceWaitWatchdog(const DeviceWaitWatchdog&) = delete;
+   DeviceWaitWatchdog& operator=(const DeviceWaitWatchdog&) = delete;
+ 
+-  void stop() noexcept {
++  void stop() noexcept {  // G4 MUTANT (h): FIX8's stop() before lead send-back L2
+     done_.store(true, std::memory_order_seq_cst);
+-    if (th_.joinable()) {  // false when the thread never started, or after an earlier stop()
+-      while (!exited_.load(std::memory_order_acquire)) {
+-        try {
+-          std::lock_guard<std::mutex> lk(mu_);  // a watchdog between its predicate check and its wait sees done_ next
+-        } catch (const std::exception&) {
+-          g_exit_watchdog_stop_lock_failures.fetch_add(1, std::memory_order_relaxed);  // its notify may be missed:
+-        }                                                                               // repeated below
+-        cv_.notify_all();
+-        if (exited_.load(std::memory_order_acquire)) break;
+-        std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kExitDevicePollMs));
+-      }
++    try {
++      std::lock_guard<std::mutex> lk(mu_);  // a watchdog between its predicate check and its wait sees done_ next
++    } catch (const std::exception&) {
++    }
++    cv_.notify_all();
++    if (th_.joinable()) {
+       try {
+         th_.join();
+       } catch (const std::exception&) {
+-        g_exit_watchdog_detaches.fetch_add(1, std::memory_order_relaxed);
+         try {
+-          th_.detach();  // safe: run() has finished (exited_); never leave a joinable std::thread (std::terminate)
++          th_.detach();  // never leave a joinable std::thread to its destructor (std::terminate)
+         } catch (const std::exception&) {
+         }
+       }

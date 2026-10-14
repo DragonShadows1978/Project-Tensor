@@ -1,0 +1,11 @@
+--- worktree/tensor_cuda/src/bindings.cpp
++++ mut_e/tensor_cuda/src/bindings.cpp
+@@ -664,7 +664,7 @@
+     std::unique_lock<std::mutex> lk(lc.mu);
+     lc.closing = true;
+     at_close = lc.in_flight;
+-    if (at_close > 0) timed_out = !lc.cv.wait_for(lk, bound, [&lc] { return lc.in_flight == 0; });
++    (void)bound;  // MUTANT (e): N5, the in-flight wait removed (admission still closes)
+     remaining = lc.in_flight;
+   }  // lk is released before nogil re-takes the GIL
+   const long long waited_us =

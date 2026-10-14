@@ -1,0 +1,48 @@
+Source: https://raw.githubusercontent.com/python/cpython/v3.12.3/Python/bytecodes.c (fetched 2026-10-13 through the AtlasForge web proxy). Excerpts:
+ inst(RESUME, (--)) {
+ assert(tstate->cframe == &cframe);
+ assert(frame == cframe.current_frame);
+ /* Possibly combine this with eval breaker */
+ if (frame->f_code->_co_instrumentation_version != tstate->interp->monitoring_version) {
+ int err = _Py_Instrument(frame->f_code, tstate->interp);
+ ERROR_IF(err, error);
+ next_instr--;
+ }
+ else if (_Py_atomic_load_relaxed_int32(&tstate->interp->ceval.eval_breaker) && oparg < 2) {
+ goto handle_eval_breaker;
+ }
+ }
+...
+ inst(JUMP_BACKWARD, (--)) {
+ assert(oparg < INSTR_OFFSET());
+ JUMPBY(-oparg);
+ CHECK_EVAL_BREAKER();
+ }
+... CHECK_EVAL_BREAKER() occurrences (line numbers in the fetched text):
+2160: CHECK_EVAL_BREAKER();
+2741: CHECK_EVAL_BREAKER();
+2848: CHECK_EVAL_BREAKER();
+2862: CHECK_EVAL_BREAKER();
+2887: CHECK_EVAL_BREAKER();
+2918: CHECK_EVAL_BREAKER();
+2953: CHECK_EVAL_BREAKER();
+2988: CHECK_EVAL_BREAKER();
+3099: CHECK_EVAL_BREAKER();
+3131: CHECK_EVAL_BREAKER();
+3163: CHECK_EVAL_BREAKER();
+3194: CHECK_EVAL_BREAKER();
+3266: CHECK_EVAL_BREAKER();
+... the instruction containing each:
+2160:  inst(JUMP_BACKWARD, (--)) {
+2741:  inst(CALL, (unused/1, unused/2, method, callable, args[oparg] -- res)) {
+2848:  inst(CALL_NO_KW_STR_1, (unused/1, unused/2, null, callable, args[oparg] -- res)) {
+2862:  inst(CALL_NO_KW_TUPLE_1, (unused/1, unused/2, null, callable, args[oparg] -- res)) {
+2887:  inst(CALL_BUILTIN_CLASS, (unused/1, unused/2, method, callable, args[oparg] -- res)) {
+2918:  inst(CALL_NO_KW_BUILTIN_O, (unused/1, unused/2, method, callable, args[oparg] -- res)) {
+2953:  inst(CALL_NO_KW_BUILTIN_FAST, (unused/1, unused/2, method, callable, args[oparg] -- res)) {
+2988:  inst(CALL_BUILTIN_FAST_WITH_KEYWORDS, (unused/1, unused/2, method, callable, args[oparg] -- res)) {
+3099:  inst(CALL_NO_KW_METHOD_DESCRIPTOR_O, (unused/1, unused/2, method, unused, args[oparg] -- res)) {
+3131:  inst(CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS, (unused/1, unused/2, method, unused, args[oparg] -- res)) {
+3163:  inst(CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS, (unused/1, unused/2, method, unused, args[oparg] -- res)) {
+3194:  inst(CALL_NO_KW_METHOD_DESCRIPTOR_FAST, (unused/1, unused/2, method, unused, args[oparg] -- res)) {
+3266:  inst(CALL_FUNCTION_EX, (unused, func, callargs, kwargs if (oparg & 1) -- result)) {

@@ -1,0 +1,35 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix5/artifacts/p1t_rev4/probes/core_interop_cpu.cpp	2026-10-13 04:56:50.608639704 -0400
++++ /tmp/p1t_fix5_probes/after/rev4/core_interop_import_regen.cpp	2026-10-13 06:16:43.908401390 -0400
+@@ -880,8 +880,30 @@
+         "from_dlpack: only CUDA device memory (kDLCUDA = 2) can be imported; "
+         "got device type " + std::to_string(static_cast<int>(dl->device.device_type)) +
+         (dl->device.device_type == kDLCPU ? " (CPU)" : ""));
+-  int cur = 0;
+-  cudaGetDevice(&cur);
++  // P1T-FIX4, round-4 review finding V4-03 (MINOR). 62c8d9f ignored this query's
++  // result: on failure (no usable device, or an initialization error) `cur`
++  // stayed 0, a device-0 capsule was accepted, a Storage was built on an
++  // unvalidated device and the capsule was renamed "used_*". Now the result is
++  // checked here, before the Storage exists and before the rename: a failure
++  // raises RuntimeError naming cudaGetDevice and the CUDA error, the capsule
++  // stays unconsumed (its own destructor returns the memory to the producer),
++  // and the failed call's slot entry is consumed (this raise reports it). This
++  // is the only CUDA call of the import (the sweep: no other query). A sticky
++  // context error does not make cudaGetDevice fail (measured, receipt
++  // artifacts/p1t_fix4/cuda_semantics.txt); such an import proceeds, and the
++  // Storage's release later finds the drain failing and leaks instead of
++  // releasing (P1T-FIX1 F05).
++  // Prior art: the CUDA 12.6 contract that cudaGetDevice returns an error code
++  // (cudaErrorNoDevice, cudaErrorInsufficientDriver, ...) and the DLPack rule that
++  // a refused capsule keeps its ownership. Nothing new.
++  int cur = -1;
++  const cudaError_t qe = cudaGetDevice(&cur);
++  if (qe != cudaSuccess) {
++    cudaGetLastError();
++    throw std::runtime_error(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
++                             cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
++                             "); refused before taking ownership (the capsule is not consumed)");
++  }
+   if (dl->device.device_id != cur)
+     throw py::buffer_error(
+         "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +

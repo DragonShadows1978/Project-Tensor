@@ -1,0 +1,12 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp (mutant a)
+@@ -437,7 +437,8 @@
+     throw std::runtime_error("__dlpack__: stream fence: cudaGetDevice failed (" + name(e) +
+                              "); nothing was switched or recorded");
+   }
+-  const bool switched = (prev != device);
++  const bool switched = false;  // MUTANT (a): V4-01 guard removed (fence on the CURRENT device, as 62c8d9f)
++  (void)device;
+   if (switched) {
+     e = cudaSetDevice(device);
+     if (e != cudaSuccess) {

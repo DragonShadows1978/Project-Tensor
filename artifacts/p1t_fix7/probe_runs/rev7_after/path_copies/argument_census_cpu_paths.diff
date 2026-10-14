@@ -1,0 +1,18 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_rev7/probes/argument_census_cpu.py
++++ /tmp/p1t_fix7_rev7/after/argument_census_cpu_paths.py
+@@ -8,7 +8,7 @@
+ import numpy as np
+ import _p1t_rev7_core as n
+ from tc_signal import _tc_signal as c
+-root=Path(__file__).resolve().parents[3];rows=[];hits=[]
++root=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7');rows=[];hits=[]
+ class R:
+     def hit(self,s):hits.append(s)
+     def __index__(self):self.hit('index');return 1
+@@ -85,5 +85,5 @@
+ for fn in [t.__dlpack__,t.__dlpack_device__,n.empty,n._dlpack_begin_shutdown,n._dlpack_raise_unraisable]:
+     check('core:arity:'+fn.__name__,fn,[R()]*20,{})
+ for shape in [T((I(1),I(2))),L([I(1),I(2)])]:check('core:shape-subclass',n.empty,[shape,S('float32'),S('cpu')],{})
+-(root/'artifacts/p1t_rev7/argument_census.json').write_text(json.dumps({'cases':rows,'count':len(rows),'python_calls':0},indent=2)+'\n')
++(Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_fix7/probe_runs/rev7_after')/'argument_census.json').write_text(json.dumps({'cases':rows,'count':len(rows),'python_calls':0},indent=2)+'\n')
+ print('PASS',len(rows),'argument checks; 29 addon bindings, all typed positions both call styles; zero conversion calls')

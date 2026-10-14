@@ -1,0 +1,11 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_rev7/probes/gpu_regressions.py
++++ /tmp/p1t_fix7_rev7/after/gpu_regressions_paths.py
+@@ -8,7 +8,7 @@
+ import torch
+ lane=sys.argv[1] if len(sys.argv)>1 else 'fix56'
+ if not torch.cuda.is_available() or (lane=='multidevice' and torch.cuda.device_count()<2):raise SystemExit(3)
+-root=Path(__file__).resolve().parents[3];out=root/'artifacts/p1t_rev7';args=[]
++root=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7');out=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix7/artifacts/p1t_fix7/probe_runs/rev7_after');args=[]
+ if lane=='fix56':args=['tensor_cuda/tests/test_dlpack.py','tc_signal/tests/test_fix5_findings.py','tc_signal/tests/test_fix6_findings.py','-k','fix5 or fix6 or v50']
+ elif lane=='semantics':args=['tc_signal/tests/test_conv.py','tc_signal/tests/test_lstm.py','tc_signal/tests/test_norms.py','tc_signal/tests/test_small_ops.py','tc_signal/tests/test_contract.py']
+ elif lane=='multidevice':args=['tensor_cuda/tests/test_dlpack.py','tc_signal/tests/test_fix4_findings.py','-k','device']

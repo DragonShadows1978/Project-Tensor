@@ -1,0 +1,33 @@
+..................F..................                                    [100%]
+=================================== FAILURES ===================================
+________________ test_export_stream_ordering_torch_side_stream _________________
+
+torch = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>
+
+    def test_export_stream_ordering_torch_side_stream(torch):
+        S = torch.cuda.Stream()
+        for k in range(RACE_TRIALS):
+            v = float(k + 1)
+            t = tc.empty(RACE_NUMEL)
+            t.fill_(0.0)
+            torch.cuda.synchronize()
+            torch.cuda._sleep(SLEEP_CYCLES)                  # legacy default stream (TensorCUDA's)
+            t.fill_(v)                                       # queued behind the sleep
+            h = torch.empty(RACE_NUMEL, dtype=torch.float32, pin_memory=True)
+            with torch.cuda.stream(S):
+                x = torch.from_dlpack(t)                     # torch passes stream=<S>: the fence must order S
+                h.copy_(x, non_blocking=True)
+            S.synchronize()
+>           assert bool(torch.all(h == v).item()), f"trial {k}: consumer stream read before TensorCUDA's write"
+E           AssertionError: trial 0: consumer stream read before TensorCUDA's write
+E           assert False
+E            +  where False = bool(False)
+E            +    where False = <built-in method item of Tensor object at 0x7c30500d3610>()
+E            +      where <built-in method item of Tensor object at 0x7c30500d3610> = tensor(False).item
+E            +        where tensor(False) = <built-in method all of type object at 0x7c2f7d73e180>(tensor([0., 0., 0.,  ..., 0., 0., 0.]) == 1.0)
+E            +          where <built-in method all of type object at 0x7c2f7d73e180> = <module 'torch' from '/home/vader/.local/lib/python3.12/site-packages/torch/__init__.py'>.all
+
+tensor_cuda/tests/test_dlpack.py:315: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_export_stream_ordering_torch_side_stream
+1 failed, 36 passed in 6.10s

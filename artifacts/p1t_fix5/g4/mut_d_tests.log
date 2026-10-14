@@ -1,0 +1,40 @@
+.FF..                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch[one_more] _
+
+fix5_fill_shim = '/tmp/p1t_fix5_mut_d/pt/fix5_fill_shim0/fix5_fill_shim.so'
+case = 'one_more'
+
+    @pytest.mark.parametrize("case", ["one_more", "huge"])
+    def test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch(fix5_fill_shim, case):
+        # 1475fae (and mutant (d)): "huge" launched grid 1 (2^32 + 1 narrowed), wrote 256 elements and bumped the revision.
+        res = _run_fix5_fill(fix5_fill_shim, case)
+>       assert res["raised"] == "ValueError", res
+E       AssertionError: {'block': 256, 'calls': 1, 'case': 'one_more', 'deleter_calls': 1, ...}
+E       assert 'RuntimeError' == 'ValueError'
+E         
+E         - ValueError
+E         + RuntimeError
+
+tensor_cuda/tests/test_dlpack.py:1925: AssertionError
+_ test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch[huge] _
+
+fix5_fill_shim = '/tmp/p1t_fix5_mut_d/pt/fix5_fill_shim0/fix5_fill_shim.so'
+case = 'huge'
+
+    @pytest.mark.parametrize("case", ["one_more", "huge"])
+    def test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch(fix5_fill_shim, case):
+        # 1475fae (and mutant (d)): "huge" launched grid 1 (2^32 + 1 narrowed), wrote 256 elements and bumped the revision.
+        res = _run_fix5_fill(fix5_fill_shim, case)
+>       assert res["raised"] == "ValueError", res
+E       AssertionError: {'block': 256, 'calls': 1, 'case': 'huge', 'deleter_calls': 1, ...}
+E       assert 'RuntimeError' == 'ValueError'
+E         
+E         - ValueError
+E         + RuntimeError
+
+tensor_cuda/tests/test_dlpack.py:1925: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch[one_more]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix5_v504_fill_beyond_the_grid_limit_is_refused_before_any_launch[huge]
+2 failed, 3 passed, 152 deselected in 4.11s

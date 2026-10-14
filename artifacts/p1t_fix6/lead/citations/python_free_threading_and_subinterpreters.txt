@@ -1,0 +1,17 @@
+Source: https://docs.python.org/3.12/c-api/init.html (PyInterpreterConfig.check_multi_interp_extensions), fetched 2026-10-13 via the AtlasForge web proxy
+int check_multi_interp_extensionsÂ¶
+ - If this is 0 then all extension modules may be imported,
+including legacy (single-phase init) modules,
+in any thread where the sub-interpreter is currently active.
+Otherwise only multi-phase init extension modules
+(see PEP 489) may be imported.
+(Also seePy_mod_multiple_interpreters .)This must be 1 (non-zero) ifuse_main_obmalloc is0 .
+ 
+ - 
+
+Source: https://docs.python.org/3.13/howto/free-threading-extensions.html, fetched 2026-10-13 via the AtlasForge web proxy
+Module Initialization: Extension modules need to explicitly indicate that they support running with the GIL disabled; otherwise importing the extension will raise a warning and enable the GIL at runtime.
+Building Extensions for the Free-Threaded Build: C API extensions need to be built specifically for the free-threaded build. The wheels, shared libraries, and binaries are indicated by a t suffix.
+
+Source: https://docs.python.org/3.12/c-api/init.html (Non-Python created threads), fetched 2026-10-13 via the AtlasForge web proxy
+Note that the PyGILState_* functions assume there is only one global interpreter (created automatically by Py_Initialize()). Python supports the creation of additional interpreters (using Py_NewInterpreter()), but mixing multiple interpreters and the PyGILState_* API is unsupported.

@@ -1,0 +1,1163 @@
+........................................................FFFF..........F. [ 45%]
+..FFFFF..FF..FFFFFFFFFF..........FF....F................................ [ 91%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+__________________ test_byte_offset_honoured[versioned-field] __________________
+
+mode = 'field', versioned = True
+
+    @pytest.mark.parametrize('mode', ['field', 'data'])
+    @pytest.mark.parametrize('versioned', [True, False], ids=['versioned', 'legacy'])
+    def test_byte_offset_honoured(mode, versioned):
+        base = _t(1000)
+        off = 37
+        x = P.Producer(base, (1, 8, 20), offset_elems=off, byte_offset_mode=mode, versioned=versioned)
+        wb = _t(6, 8, 3)
+        y = ts.conv1d(x, wb, None, padding=(1, 1))
+        torch.cuda.synchronize()
+        ref = _ref_conv1d(base[off:off + 160].view(1, 8, 20), wb, None, padding=(1, 1))
+>       assert normwise(y, ref) <= C.GATE_N
+E       AssertionError: assert 0.00041980869017841906 <= 1e-05
+E        +  where 0.00041980869017841906 = normwise(tensor([[[10.4660,  5.3250,  0.3784,  1.1620, -7.6517, -2.0494,  3.3049,\n           7.4405,  2.3344,  2.1882,  0.4361,..., -0.3428, -1.6418, -0.5956,\n          -2.7014,  3.0243,  6.3651,  5.2086,  5.8418, -3.9576]]],\n       device='cuda:0'), tensor([[[10.4673,  5.3238,  0.3766,  1.1616, -7.6524, -2.0489,  3.3016,\n           7.4422,  2.3340,  2.1852,  0.4376,....3427, -1.6417, -0.5954,\n          -2.7008,  3.0254,  6.3645,  5.2074,  5.8414, -3.9574]]],\n       dtype=torch.float64))
+E        +  and   1e-05 = C.GATE_N
+
+tc_signal/tests/test_contract.py:287: AssertionError
+__________________ test_byte_offset_honoured[versioned-data] ___________________
+
+mode = 'data', versioned = True
+
+    @pytest.mark.parametrize('mode', ['field', 'data'])
+    @pytest.mark.parametrize('versioned', [True, False], ids=['versioned', 'legacy'])
+    def test_byte_offset_honoured(mode, versioned):
+        base = _t(1000)
+        off = 37
+        x = P.Producer(base, (1, 8, 20), offset_elems=off, byte_offset_mode=mode, versioned=versioned)
+        wb = _t(6, 8, 3)
+        y = ts.conv1d(x, wb, None, padding=(1, 1))
+        torch.cuda.synchronize()
+        ref = _ref_conv1d(base[off:off + 160].view(1, 8, 20), wb, None, padding=(1, 1))
+>       assert normwise(y, ref) <= C.GATE_N
+E       AssertionError: assert 0.00039983066721567507 <= 1e-05
+E        +  where 0.00039983066721567507 = normwise(tensor([[[ 8.2697e-01,  8.0554e+00,  6.3752e-01,  5.0469e+00,  4.3307e+00,\n          -1.0644e+00,  4.3481e+00,  2.3029...-01, -1.1882e+00,\n           2.1270e+00, -5.6967e+00, -5.7166e-01, -2.9636e+00,  1.1535e+01]]],\n       device='cuda:0'), tensor([[[ 8.2651e-01,  8.0549e+00,  6.3417e-01,  5.0453e+00,  4.3303e+00,\n          -1.0635e+00,  4.3462e+00,  2.3029... -1.1869e+00,\n           2.1264e+00, -5.6958e+00, -5.7030e-01, -2.9634e+00,  1.1535e+01]]],\n       dtype=torch.float64))
+E        +  and   1e-05 = C.GATE_N
+
+tc_signal/tests/test_contract.py:287: AssertionError
+___________________ test_byte_offset_honoured[legacy-field] ____________________
+
+mode = 'field', versioned = False
+
+    @pytest.mark.parametrize('mode', ['field', 'data'])
+    @pytest.mark.parametrize('versioned', [True, False], ids=['versioned', 'legacy'])
+    def test_byte_offset_honoured(mode, versioned):
+        base = _t(1000)
+        off = 37
+        x = P.Producer(base, (1, 8, 20), offset_elems=off, byte_offset_mode=mode, versioned=versioned)
+        wb = _t(6, 8, 3)
+        y = ts.conv1d(x, wb, None, padding=(1, 1))
+        torch.cuda.synchronize()
+        ref = _ref_conv1d(base[off:off + 160].view(1, 8, 20), wb, None, padding=(1, 1))
+>       assert normwise(y, ref) <= C.GATE_N
+E       AssertionError: assert 0.00025245437205154023 <= 1e-05
+E        +  where 0.00025245437205154023 = normwise(tensor([[[  2.2752, -11.9306,   4.4340,   4.2785,  -4.6129,  -1.8577,   1.5426,\n           -5.2994,   2.8171,  -5.7494...9,  -4.7994,   0.3217,\n            4.0156,  -1.6944,   4.0691,  -6.6513,  -8.1655, -15.2110]]],\n       device='cuda:0'), tensor([[[  2.2752, -11.9344,   4.4348,   4.2795,  -4.6119,  -1.8577,   1.5424,\n           -5.3004,   2.8159,  -5.7502...-4.7969,   0.3216,\n            4.0138,  -1.6948,   4.0690,  -6.6518,  -8.1642, -15.2100]]],\n       dtype=torch.float64))
+E        +  and   1e-05 = C.GATE_N
+
+tc_signal/tests/test_contract.py:287: AssertionError
+____________________ test_byte_offset_honoured[legacy-data] ____________________
+
+mode = 'data', versioned = False
+
+    @pytest.mark.parametrize('mode', ['field', 'data'])
+    @pytest.mark.parametrize('versioned', [True, False], ids=['versioned', 'legacy'])
+    def test_byte_offset_honoured(mode, versioned):
+        base = _t(1000)
+        off = 37
+        x = P.Producer(base, (1, 8, 20), offset_elems=off, byte_offset_mode=mode, versioned=versioned)
+        wb = _t(6, 8, 3)
+        y = ts.conv1d(x, wb, None, padding=(1, 1))
+        torch.cuda.synchronize()
+        ref = _ref_conv1d(base[off:off + 160].view(1, 8, 20), wb, None, padding=(1, 1))
+>       assert normwise(y, ref) <= C.GATE_N
+E       AssertionError: assert 0.0004063757880746148 <= 1e-05
+E        +  where 0.0004063757880746148 = normwise(tensor([[[  3.8439,  -1.9312,   0.5448,   4.0641,   2.2408,  -3.2588,   1.2453,\n            2.4603,   0.5957,   2.5286...3,  -5.3016,   3.9651,\n            1.8161,  -3.8204,  -6.2824,   2.7275,  -1.4504,  -2.8290]]],\n       device='cuda:0'), tensor([[[  3.8433,  -1.9320,   0.5445,   4.0634,   2.2405,  -3.2575,   1.2436,\n            2.4608,   0.5971,   2.5277...-5.3008,   3.9659,\n            1.8174,  -3.8215,  -6.2828,   2.7283,  -1.4501,  -2.8311]]],\n       dtype=torch.float64))
+E        +  and   1e-05 = C.GATE_N
+
+tc_signal/tests/test_contract.py:287: AssertionError
+__________________________ test_cublas_handle_config ___________________________
+
+    def test_cublas_handle_config():
+        cfg = _C.cublas_config(torch.cuda.current_device())
+>       assert cfg['default_math'] and cfg['atomics_not_allowed'] and cfg['legacy_stream'], cfg
+E       AssertionError: {'atomics_mode': 0, 'atomics_not_allowed': True, 'default_math': False, 'legacy_stream': True, ...}
+E       assert (False)
+
+tc_signal/tests/test_contract.py:434: AssertionError
+________________ test_conv1d_census[kokoro-k3_s1_p11_512to512] _________________
+
+cell = ('kokoro', 'k3_s1_p11_512to512', 1, 512, 512, 96, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_512to512', ...}]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_512to512', ...}]
+op = 'conv1d', kind = 'kokoro', name = 'k3_s1_p11_512to512'
+attrs = {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-7.0042e-01,  2.6029e-01,  3.8016e-01,  ...,  1.6956e+00,
+           2.9541e-01,  8.3826e-01],
+         [ 1....     [ 3.8233e-01, -1.7582e+00, -4.1517e-01,  ..., -3.6208e+00,
+          -1.4449e-03, -2.2468e+00]]], device='cuda:0')
+y2 = tensor([[[-7.0042e-01,  2.6029e-01,  3.8016e-01,  ...,  1.6956e+00,
+           2.9541e-01,  8.3826e-01],
+         [ 1....     [ 3.8233e-01, -1.7582e+00, -4.1517e-01,  ..., -3.6208e+00,
+          -1.4449e-03, -2.2468e+00]]], device='cuda:0')
+o = tensor([[[-7.0020e-01,  2.6031e-01,  3.7989e-01,  ...,  1.6952e+00,
+           2.9544e-01,  8.3838e-01],
+         [ 1.... [ 3.8250e-01, -1.7584e+00, -4.1579e-01,  ..., -3.6210e+00,
+          -1.9273e-03, -2.2466e+00]]], dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.165e-04 > gate 1e-05
+E       assert 0.00021653247845280954 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+_______________ test_conv1d_census[kokoro-k3_s1_p11_1090to1024] ________________
+
+cell = ('kokoro', 'k3_s1_p11_1090to1024', 1, 1090, 1024, 48, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ... 'all_finite': True, 'attrs': {'C_in': 1090, 'C_out': 1024, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_1090to1024', ...}]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ... 'all_finite': True, 'attrs': {'C_in': 1090, 'C_out': 1024, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_1090to1024', ...}]
+op = 'conv1d', kind = 'kokoro', name = 'k3_s1_p11_1090to1024'
+attrs = {'C_in': 1090, 'C_out': 1024, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-0.4911, -3.2907, -1.9162,  ..., -0.6976, -3.0164, -0.5963],
+         [ 1.8365,  0.0290,  2.2258,  ...,  1.7...54, -1.7118, -1.5218],
+         [-1.7302,  1.4573,  0.0649,  ..., -0.8444,  0.4856, -1.5864]]],
+       device='cuda:0')
+y2 = tensor([[[-0.4911, -3.2907, -1.9162,  ..., -0.6976, -3.0164, -0.5963],
+         [ 1.8365,  0.0290,  2.2258,  ...,  1.7...54, -1.7118, -1.5218],
+         [-1.7302,  1.4573,  0.0649,  ..., -0.8444,  0.4856, -1.5864]]],
+       device='cuda:0')
+o = tensor([[[-0.4913, -3.2909, -1.9167,  ..., -0.6974, -3.0166, -0.5960],
+         [ 1.8365,  0.0289,  2.2259,  ...,  1.7...-1.7116, -1.5216],
+         [-1.7302,  1.4573,  0.0650,  ..., -0.8443,  0.4852, -1.5865]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.295e-04 > gate 1e-05
+E       assert 0.0002294882558282576 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k3_s1_p11_514to1024] ________________
+
+cell = ('kokoro', 'k3_s1_p11_514to1024', 1, 514, 1024, 40, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...4, 'all_finite': True, 'attrs': {'C_in': 514, 'C_out': 1024, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_514to1024', ...}]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...4, 'all_finite': True, 'attrs': {'C_in': 514, 'C_out': 1024, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_514to1024', ...}]
+op = 'conv1d', kind = 'kokoro', name = 'k3_s1_p11_514to1024'
+attrs = {'C_in': 514, 'C_out': 1024, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-0.1273, -1.2362, -0.9962,  ..., -0.6141,  1.4011, -0.2761],
+         [-1.4803, -0.1020,  0.3849,  ..., -1.2...82, -2.4961, -1.6394],
+         [ 0.3245,  0.8218, -0.6507,  ..., -0.4766, -0.0219, -2.4531]]],
+       device='cuda:0')
+y2 = tensor([[[-0.1273, -1.2362, -0.9962,  ..., -0.6141,  1.4011, -0.2761],
+         [-1.4803, -0.1020,  0.3849,  ..., -1.2...82, -2.4961, -1.6394],
+         [ 0.3245,  0.8218, -0.6507,  ..., -0.4766, -0.0219, -2.4531]]],
+       device='cuda:0')
+o = tensor([[[-0.1270, -1.2362, -0.9961,  ..., -0.6141,  1.4009, -0.2764],
+         [-1.4805, -0.1018,  0.3845,  ..., -1.2...-2.4965, -1.6394],
+         [ 0.3247,  0.8215, -0.6507,  ..., -0.4764, -0.0220, -2.4531]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.245e-04 > gate 1e-05
+E       assert 0.0002245124616200664 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k3_s1_p11_1090to512] ________________
+
+cell = ('kokoro', 'k3_s1_p11_1090to512', 1, 1090, 512, 48, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...7, 'all_finite': True, 'attrs': {'C_in': 1090, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_1090to512', ...}]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...7, 'all_finite': True, 'attrs': {'C_in': 1090, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': 'k3_s1_p11_1090to512', ...}]
+op = 'conv1d', kind = 'kokoro', name = 'k3_s1_p11_1090to512'
+attrs = {'C_in': 1090, 'C_out': 512, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-0.6207,  0.6785, -0.2568,  ..., -2.8278,  0.1758, -1.3371],
+         [ 3.5618,  2.1064,  1.8099,  ...,  2.9...70, -1.4791,  0.4810],
+         [-0.8376, -0.3704, -0.0442,  ..., -0.0372, -2.0508, -0.5211]]],
+       device='cuda:0')
+y2 = tensor([[[-0.6207,  0.6785, -0.2568,  ..., -2.8278,  0.1758, -1.3371],
+         [ 3.5618,  2.1064,  1.8099,  ...,  2.9...70, -1.4791,  0.4810],
+         [-0.8376, -0.3704, -0.0442,  ..., -0.0372, -2.0508, -0.5211]]],
+       device='cuda:0')
+o = tensor([[[-0.6207,  0.6786, -0.2568,  ..., -2.8272,  0.1755, -1.3371],
+         [ 3.5621,  2.1065,  1.8096,  ...,  2.9...-1.4790,  0.4814],
+         [-0.8373, -0.3702, -0.0445,  ..., -0.0371, -2.0506, -0.5210]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.035e-04 > gate 1e-05
+E       assert 0.00020346083565117 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k1_s1_p00_512to256] _________________
+
+cell = ('kokoro', 'k1_s1_p00_512to256', 1, 512, 256, 96, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...278, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 256, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_512to256', ...}]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...278, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 256, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_512to256', ...}]
+op = 'conv1d', kind = 'kokoro', name = 'k1_s1_p00_512to256'
+attrs = {'C_in': 512, 'C_out': 256, 'K': 1, 'N': 1, ...}
+y1 = tensor([[[ 2.0938, -1.2109,  1.7194,  ...,  0.4540,  0.2402,  0.0130],
+         [ 1.1457, -1.0837, -0.2286,  ...,  0.3...78,  1.3940,  1.8333],
+         [-0.4955,  0.5708,  1.1155,  ...,  2.0093,  0.6617, -1.1607]]],
+       device='cuda:0')
+y2 = tensor([[[ 2.0938, -1.2109,  1.7194,  ...,  0.4540,  0.2402,  0.0130],
+         [ 1.1457, -1.0837, -0.2286,  ...,  0.3...78,  1.3940,  1.8333],
+         [-0.4955,  0.5708,  1.1155,  ...,  2.0093,  0.6617, -1.1607]]],
+       device='cuda:0')
+o = tensor([[[ 2.0942, -1.2100,  1.7197,  ...,  0.4540,  0.2403,  0.0134],
+         [ 1.1454, -1.0838, -0.2288,  ...,  0.3... 1.3934,  1.8330],
+         [-0.4957,  0.5702,  1.1148,  ...,  2.0093,  0.6617, -1.1608]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.034e-04 > gate 1e-05
+E       assert 0.00020335395648336278 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+_______________ test_conv1d_census[kokoro-k1_s1_p00_1090to1024] ________________
+
+cell = ('kokoro', 'k1_s1_p00_1090to1024', 1, 1090, 1024, 40, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k1_s1_p00_1090to1024'
+attrs = {'C_in': 1090, 'C_out': 1024, 'K': 1, 'N': 1, ...}
+y1 = tensor([[[ 1.2801,  1.3352,  0.8428,  ...,  0.6014,  1.3119,  0.2699],
+         [-1.3586,  0.5138,  0.2335,  ...,  0.6...71, -0.1274,  1.5870],
+         [-0.3139,  0.6002,  1.1829,  ..., -0.3941,  0.4526, -0.8239]]],
+       device='cuda:0')
+y2 = tensor([[[ 1.2801,  1.3352,  0.8428,  ...,  0.6014,  1.3119,  0.2699],
+         [-1.3586,  0.5138,  0.2335,  ...,  0.6...71, -0.1274,  1.5870],
+         [-0.3139,  0.6002,  1.1829,  ..., -0.3941,  0.4526, -0.8239]]],
+       device='cuda:0')
+o = tensor([[[ 1.2795,  1.3348,  0.8427,  ...,  0.6017,  1.3114,  0.2699],
+         [-1.3589,  0.5134,  0.2339,  ...,  0.6...-0.1271,  1.5870],
+         [-0.3136,  0.6007,  1.1828,  ..., -0.3943,  0.4531, -0.8235]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 3.208e-04 > gate 1e-05
+E       assert 0.000320777884408124 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k5_s1_p22_512to512] _________________
+
+cell = ('kokoro', 'k5_s1_p22_512to512', 1, 512, 512, 64, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k5_s1_p22_512to512'
+attrs = {'C_in': 512, 'C_out': 512, 'K': 5, 'N': 1, ...}
+y1 = tensor([[[-1.9358, -1.9015, -1.1995,  ..., -1.2440, -2.9501, -1.5829],
+         [-0.8378,  0.2630,  0.8879,  ..., -0.7...06, -0.1804, -0.7065],
+         [ 0.3789,  1.9414, -0.2818,  ...,  0.8294,  1.0841,  1.3340]]],
+       device='cuda:0')
+y2 = tensor([[[-1.9358, -1.9015, -1.1995,  ..., -1.2440, -2.9501, -1.5829],
+         [-0.8378,  0.2630,  0.8879,  ..., -0.7...06, -0.1804, -0.7065],
+         [ 0.3789,  1.9414, -0.2818,  ...,  0.8294,  1.0841,  1.3340]]],
+       device='cuda:0')
+o = tensor([[[-1.9355, -1.9012, -1.1998,  ..., -1.2440, -2.9501, -1.5830],
+         [-0.8380,  0.2630,  0.8877,  ..., -0.7...-0.1802, -0.7063],
+         [ 0.3790,  1.9417, -0.2814,  ...,  0.8291,  1.0844,  1.3345]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.912e-04 > gate 1e-05
+E       assert 0.00019117777394188516 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k12_s6_p33_22to256] _________________
+
+cell = ('kokoro', 'k12_s6_p33_22to256', 1, 22, 256, 600, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k12_s6_p33_22to256'
+attrs = {'C_in': 22, 'C_out': 256, 'K': 12, 'N': 1, ...}
+y1 = tensor([[[-1.0476e+00, -7.3155e-01,  3.8514e-01,  ..., -1.9382e-01,
+          -1.5624e+00,  5.7310e-01],
+         [-9....     [-1.3738e+00, -1.3995e+00, -1.6116e+00,  ..., -8.8768e-01,
+          -3.5115e+00, -1.9387e+00]]], device='cuda:0')
+y2 = tensor([[[-1.0476e+00, -7.3155e-01,  3.8514e-01,  ..., -1.9382e-01,
+          -1.5624e+00,  5.7310e-01],
+         [-9....     [-1.3738e+00, -1.3995e+00, -1.6116e+00,  ..., -8.8768e-01,
+          -3.5115e+00, -1.9387e+00]]], device='cuda:0')
+o = tensor([[[-1.0474e+00, -7.3148e-01,  3.8456e-01,  ..., -1.9397e-01,
+          -1.5629e+00,  5.7346e-01],
+         [-9.... [-1.3739e+00, -1.3988e+00, -1.6117e+00,  ..., -8.8767e-01,
+          -3.5117e+00, -1.9386e+00]]], dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.567e-04 > gate 1e-05
+E       assert 0.00025671723850551883 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+________________ test_conv1d_census[kokoro-k7_s1_p33_256to256] _________________
+
+cell = ('kokoro', 'k7_s1_p33_256to256', 1, 256, 256, 128, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k7_s1_p33_256to256'
+attrs = {'C_in': 256, 'C_out': 256, 'K': 7, 'N': 1, ...}
+y1 = tensor([[[-0.8998, -0.2335, -0.3296,  ...,  0.8648,  0.3593, -0.5036],
+         [ 0.7121,  0.6559,  1.5028,  ...,  1.2...79,  0.8497, -1.1323],
+         [-0.1821, -1.1108,  0.2802,  ...,  0.1183,  1.7921, -0.5449]]],
+       device='cuda:0')
+y2 = tensor([[[-0.8998, -0.2335, -0.3296,  ...,  0.8648,  0.3593, -0.5036],
+         [ 0.7121,  0.6559,  1.5028,  ...,  1.2...79,  0.8497, -1.1323],
+         [-0.1821, -1.1108,  0.2802,  ...,  0.1183,  1.7921, -0.5449]]],
+       device='cuda:0')
+o = tensor([[[-0.8999, -0.2331, -0.3298,  ...,  0.8646,  0.3592, -0.5037],
+         [ 0.7120,  0.6557,  1.5026,  ...,  1.2... 0.8495, -1.1320],
+         [-0.1824, -1.1107,  0.2805,  ...,  0.1182,  1.7920, -0.5448]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.067e-04 > gate 1e-05
+E       assert 0.0002067012217771739 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+_________________ test_conv1d_census[kokoro-k7_s1_p33_128to22] _________________
+
+cell = ('kokoro', 'k7_s1_p33_128to22', 1, 128, 22, 128, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k7_s1_p33_128to22'
+attrs = {'C_in': 128, 'C_out': 22, 'K': 7, 'N': 1, ...}
+y1 = tensor([[[ 0.5777,  1.0931,  0.4794,  ..., -0.3640,  2.7293, -0.3200],
+         [ 0.0383, -0.9836, -0.6795,  ..., -1.8...24, -0.7814,  0.1860],
+         [ 0.7950,  1.4474,  2.4678,  ...,  1.3252,  0.4846,  0.0132]]],
+       device='cuda:0')
+y2 = tensor([[[ 0.5777,  1.0931,  0.4794,  ..., -0.3640,  2.7293, -0.3200],
+         [ 0.0383, -0.9836, -0.6795,  ..., -1.8...24, -0.7814,  0.1860],
+         [ 0.7950,  1.4474,  2.4678,  ...,  1.3252,  0.4846,  0.0132]]],
+       device='cuda:0')
+o = tensor([[[ 0.5780,  1.0934,  0.4788,  ..., -0.3639,  2.7297, -0.3202],
+         [ 0.0382, -0.9838, -0.6796,  ..., -1.8...-0.7814,  0.1854],
+         [ 0.7950,  1.4471,  2.4679,  ...,  1.3249,  0.4845,  0.0134]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 3.104e-04 > gate 1e-05
+E       assert 0.00031039136448521813 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+___________________ test_conv1d_census[kokoro-k7_d3_p99_128] ___________________
+
+cell = ('kokoro', 'k7_d3_p99_128', 1, 128, 128, 128, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k7_d3_p99_128'
+attrs = {'C_in': 128, 'C_out': 128, 'K': 7, 'N': 1, ...}
+y1 = tensor([[[-1.8131, -1.4487, -1.5851,  ..., -1.3638, -0.7079, -0.6423],
+         [ 0.5576,  0.9635,  1.2882,  ...,  1.1...94,  0.6512,  1.0078],
+         [-2.4648, -0.6107, -0.4825,  ..., -1.1067, -1.0822, -2.3212]]],
+       device='cuda:0')
+y2 = tensor([[[-1.8131, -1.4487, -1.5851,  ..., -1.3638, -0.7079, -0.6423],
+         [ 0.5576,  0.9635,  1.2882,  ...,  1.1...94,  0.6512,  1.0078],
+         [-2.4648, -0.6107, -0.4825,  ..., -1.1067, -1.0822, -2.3212]]],
+       device='cuda:0')
+o = tensor([[[-1.8132, -1.4484, -1.5850,  ..., -1.3637, -0.7084, -0.6424],
+         [ 0.5575,  0.9632,  1.2884,  ...,  1.1... 0.6507,  1.0076],
+         [-2.4650, -0.6105, -0.4825,  ..., -1.1070, -1.0822, -2.3212]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.317e-04 > gate 1e-05
+E       assert 0.00023171046129186025 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+__________________ test_conv1d_census[kokoro-k7_d5_p1515_256] __________________
+
+cell = ('kokoro', 'k7_d5_p1515_256', 1, 256, 256, 96, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k7_d5_p1515_256'
+attrs = {'C_in': 256, 'C_out': 256, 'K': 7, 'N': 1, ...}
+y1 = tensor([[[ 0.8477,  0.1181, -1.3410,  ...,  0.8256,  0.3019, -0.9677],
+         [ 0.4776,  1.5957,  1.6683,  ...,  2.1...11,  1.5761, -0.9086],
+         [-0.2564,  1.5759,  0.9476,  ...,  1.3478,  0.8819,  1.2494]]],
+       device='cuda:0')
+y2 = tensor([[[ 0.8477,  0.1181, -1.3410,  ...,  0.8256,  0.3019, -0.9677],
+         [ 0.4776,  1.5957,  1.6683,  ...,  2.1...11,  1.5761, -0.9086],
+         [-0.2564,  1.5759,  0.9476,  ...,  1.3478,  0.8819,  1.2494]]],
+       device='cuda:0')
+o = tensor([[[ 0.8478,  0.1180, -1.3410,  ...,  0.8262,  0.3017, -0.9675],
+         [ 0.4770,  1.5955,  1.6683,  ...,  2.1... 1.5763, -0.9083],
+         [-0.2561,  1.5761,  0.9478,  ...,  1.3474,  0.8821,  1.2494]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.363e-04 > gate 1e-05
+E       assert 0.00023627048027724905 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+___________________ test_conv1d_census[kokoro-k3_d3_p33_256] ___________________
+
+cell = ('kokoro', 'k3_d3_p33_256', 1, 256, 256, 96, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k3_d3_p33_256'
+attrs = {'C_in': 256, 'C_out': 256, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[ 0.1268, -0.2088, -0.3047,  ...,  0.1174, -0.9035,  0.0861],
+         [-1.1529, -0.4694, -2.2207,  ..., -0.1...32,  0.2802,  0.6444],
+         [-1.1620, -1.7508, -1.6492,  ..., -1.8184, -2.2717, -1.4490]]],
+       device='cuda:0')
+y2 = tensor([[[ 0.1268, -0.2088, -0.3047,  ...,  0.1174, -0.9035,  0.0861],
+         [-1.1529, -0.4694, -2.2207,  ..., -0.1...32,  0.2802,  0.6444],
+         [-1.1620, -1.7508, -1.6492,  ..., -1.8184, -2.2717, -1.4490]]],
+       device='cuda:0')
+o = tensor([[[ 0.1272, -0.2085, -0.3045,  ...,  0.1174, -0.9033,  0.0863],
+         [-1.1532, -0.4694, -2.2207,  ..., -0.1... 0.2799,  0.6442],
+         [-1.1620, -1.7510, -1.6496,  ..., -1.8186, -2.2717, -1.4492]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.213e-04 > gate 1e-05
+E       assert 0.00022131607814561183 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+___________________ test_conv1d_census[kokoro-k3_d5_p55_128] ___________________
+
+cell = ('kokoro', 'k3_d5_p55_128', 1, 128, 128, 128, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k3_d5_p55_128'
+attrs = {'C_in': 128, 'C_out': 128, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-1.0800,  1.2199,  1.0903,  ...,  1.2132,  0.5718, -0.2375],
+         [-1.1503,  0.9771, -0.4548,  ..., -1.0...32, -0.3743, -0.3154],
+         [-3.1134, -1.7169, -1.8149,  ..., -0.6398,  1.0042, -1.2699]]],
+       device='cuda:0')
+y2 = tensor([[[-1.0800,  1.2199,  1.0903,  ...,  1.2132,  0.5718, -0.2375],
+         [-1.1503,  0.9771, -0.4548,  ..., -1.0...32, -0.3743, -0.3154],
+         [-3.1134, -1.7169, -1.8149,  ..., -0.6398,  1.0042, -1.2699]]],
+       device='cuda:0')
+o = tensor([[[-1.0800,  1.2204,  1.0903,  ...,  1.2129,  0.5719, -0.2378],
+         [-1.1503,  0.9772, -0.4552,  ..., -1.0...-0.3743, -0.3150],
+         [-3.1133, -1.7170, -1.8151,  ..., -0.6395,  1.0041, -1.2695]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.721e-04 > gate 1e-05
+E       assert 0.0002721006882242511 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+__________________ test_conv1d_census[kokoro-k11_d1_p55_256] ___________________
+
+cell = ('kokoro', 'k11_d1_p55_256', 1, 256, 256, 96, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k11_d1_p55_256'
+attrs = {'C_in': 256, 'C_out': 256, 'K': 11, 'N': 1, ...}
+y1 = tensor([[[ 2.2978,  1.0632,  2.4361,  ...,  1.8037,  2.7998,  2.0114],
+         [-0.4900, -0.9655,  0.3943,  ..., -1.0...35,  2.8761,  1.9511],
+         [-0.6016, -1.3155, -1.7343,  ..., -1.5059, -0.9842, -0.2211]]],
+       device='cuda:0')
+y2 = tensor([[[ 2.2978,  1.0632,  2.4361,  ...,  1.8037,  2.7998,  2.0114],
+         [-0.4900, -0.9655,  0.3943,  ..., -1.0...35,  2.8761,  1.9511],
+         [-0.6016, -1.3155, -1.7343,  ..., -1.5059, -0.9842, -0.2211]]],
+       device='cuda:0')
+o = tensor([[[ 2.2979,  1.0631,  2.4359,  ...,  1.8038,  2.7999,  2.0117],
+         [-0.4899, -0.9653,  0.3943,  ..., -1.0... 2.8757,  1.9507],
+         [-0.6016, -1.3153, -1.7347,  ..., -1.5063, -0.9842, -0.2208]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.330e-04 > gate 1e-05
+E       assert 0.00023304542473190037 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+_________________ test_conv1d_census[kokoro-k11_d3_p1515_128] __________________
+
+cell = ('kokoro', 'k11_d3_p1515_128', 1, 128, 128, 160, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k11_d3_p1515_128'
+attrs = {'C_in': 128, 'C_out': 128, 'K': 11, 'N': 1, ...}
+y1 = tensor([[[-1.4598, -0.2558, -0.6193,  ..., -0.8273, -1.5468, -0.7156],
+         [ 0.5318,  0.9510,  0.4288,  ...,  1.1...60, -0.5041, -1.3833],
+         [ 0.5371, -0.0740, -0.2044,  ..., -0.5509, -0.0815, -0.1069]]],
+       device='cuda:0')
+y2 = tensor([[[-1.4598, -0.2558, -0.6193,  ..., -0.8273, -1.5468, -0.7156],
+         [ 0.5318,  0.9510,  0.4288,  ...,  1.1...60, -0.5041, -1.3833],
+         [ 0.5371, -0.0740, -0.2044,  ..., -0.5509, -0.0815, -0.1069]]],
+       device='cuda:0')
+o = tensor([[[-1.4598, -0.2555, -0.6192,  ..., -0.8272, -1.5467, -0.7156],
+         [ 0.5322,  0.9508,  0.4288,  ...,  1.1...-0.5043, -1.3832],
+         [ 0.5371, -0.0741, -0.2044,  ..., -0.5509, -0.0816, -0.1067]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.082e-04 > gate 1e-05
+E       assert 0.00020823873034334244 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+_________________ test_conv1d_census[kokoro-k11_d5_p2525_128] __________________
+
+cell = ('kokoro', 'k11_d5_p2525_128', 1, 128, 128, 160, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'kokoro', name = 'k11_d5_p2525_128'
+attrs = {'C_in': 128, 'C_out': 128, 'K': 11, 'N': 1, ...}
+y1 = tensor([[[-0.6308, -1.5370, -0.3922,  ..., -0.7887, -1.6369, -0.4659],
+         [-0.6322,  0.0829, -0.6305,  ...,  0.7...00, -1.3649, -0.9340],
+         [-0.7818,  0.7213, -2.4004,  ..., -1.8127, -1.2368, -1.2676]]],
+       device='cuda:0')
+y2 = tensor([[[-0.6308, -1.5370, -0.3922,  ..., -0.7887, -1.6369, -0.4659],
+         [-0.6322,  0.0829, -0.6305,  ...,  0.7...00, -1.3649, -0.9340],
+         [-0.7818,  0.7213, -2.4004,  ..., -1.8127, -1.2368, -1.2676]]],
+       device='cuda:0')
+o = tensor([[[-0.6304, -1.5366, -0.3923,  ..., -0.7890, -1.6368, -0.4656],
+         [-0.6324,  0.0828, -0.6305,  ...,  0.7...-1.3648, -0.9339],
+         [-0.7820,  0.7209, -2.4004,  ..., -1.8127, -1.2373, -1.2678]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 2.214e-04 > gate 1e-05
+E       assert 0.00022144670950596495 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+____________________ test_conv1d_census[edge-dil_span_ge_T] ____________________
+
+cell = ('edge', 'dil_span_ge_T', 1, 8, 8, 4, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'edge', name = 'dil_span_ge_T'
+attrs = {'C_in': 8, 'C_out': 8, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[-0.6837, -0.1283, -0.6689, -0.2392],
+         [ 1.9521,  0.4624,  2.4568,  2.4945],
+         [ 0.2757,  0.80...7014],
+         [-1.7331, -1.5606, -0.1759, -0.6763],
+         [ 0.3708,  1.2924, -0.1725,  0.1211]]], device='cuda:0')
+y2 = tensor([[[-0.6837, -0.1283, -0.6689, -0.2392],
+         [ 1.9521,  0.4624,  2.4568,  2.4945],
+         [ 0.2757,  0.80...7014],
+         [-1.7331, -1.5606, -0.1759, -0.6763],
+         [ 0.3708,  1.2924, -0.1725,  0.1211]]], device='cuda:0')
+o = tensor([[[-0.6834, -0.1287, -0.6688, -0.2395],
+         [ 1.9520,  0.4622,  2.4569,  2.4949],
+         [ 0.2758,  0.80...],
+         [-1.7332, -1.5602, -0.1758, -0.6761],
+         [ 0.3706,  1.2925, -0.1726,  0.1211]]], dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.789e-04 > gate 1e-05
+E       assert 0.00017886448490154937 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+______________________ test_conv1d_census[edge-N2_Cout33] ______________________
+
+cell = ('edge', 'N2_Cout33', 2, 8, 33, 40, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'edge', name = 'N2_Cout33'
+attrs = {'C_in': 8, 'C_out': 33, 'K': 3, 'N': 2, ...}
+y1 = tensor([[[-1.9566, -1.2969,  0.1873,  ...,  0.3616,  0.7829,  0.5074],
+         [-2.0304, -3.2787, -1.5984,  ..., -2.1...64,  1.2971,  0.4811],
+         [ 1.6005,  0.1573,  1.3852,  ...,  2.2069,  1.6189,  1.0407]]],
+       device='cuda:0')
+y2 = tensor([[[-1.9566, -1.2969,  0.1873,  ...,  0.3616,  0.7829,  0.5074],
+         [-2.0304, -3.2787, -1.5984,  ..., -2.1...64,  1.2971,  0.4811],
+         [ 1.6005,  0.1573,  1.3852,  ...,  2.2069,  1.6189,  1.0407]]],
+       device='cuda:0')
+o = tensor([[[-1.9567, -1.2974,  0.1873,  ...,  0.3613,  0.7823,  0.5074],
+         [-2.0304, -3.2791, -1.5985,  ..., -2.1... 1.2969,  0.4812],
+         [ 1.6003,  0.1569,  1.3856,  ...,  2.2067,  1.6191,  1.0412]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 1.972e-04 > gate 1e-05
+E       assert 0.00019722017324194934 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+___________________ test_conv1d_census[edge-Cout11_no_bias] ____________________
+
+cell = ('edge', 'Cout11_no_bias', 1, 8, 11, 40, ...)
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', CONV1D_CELLS, ids=[f'{c[0]}-{c[1]}' for c in CONV1D_CELLS])
+    def test_conv1d_census(cell, receipt):
+        kind, name, N, Cin, Cout, T, K, s, pads, d, G, bias = cell
+        x, w, b = _conv1d_data('conv1d/' + name, N, Cin, Cout, T, K, G, bias)
+        kw = dict(stride=s, padding=pads, dilation=d, groups=G)
+        y1 = ts.conv1d(x, w, b, **kw)
+        y2 = ts.conv1d(x, w, b, **kw)
+        o = conv1d_f64(x, w, b, stride=s, pads=pads, dilation=d, groups=G)
+        attrs = dict(N=N, C_in=Cin, C_out=Cout, T=T, K=K, stride=s, pads=list(pads), dilation=d, groups=G, bias=bias)
+>       _check(receipt, 'conv1d', kind, name, attrs, y1, y2, o)
+
+tc_signal/tests/test_conv.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 0.00021653247845280954, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'conv1d', kind = 'edge', name = 'Cout11_no_bias'
+attrs = {'C_in': 8, 'C_out': 11, 'K': 3, 'N': 1, ...}
+y1 = tensor([[[ 9.2860e-02, -1.3562e+00, -3.9162e-01,  1.1008e+00, -1.0649e+00,
+          -6.9920e-01,  1.3756e+00, -1.3324...-01, -7.4450e-01,
+           9.1064e-01, -8.8368e-01, -1.0585e+00, -2.4968e-01, -9.8543e-01]]],
+       device='cuda:0')
+y2 = tensor([[[ 9.2860e-02, -1.3562e+00, -3.9162e-01,  1.1008e+00, -1.0649e+00,
+          -6.9920e-01,  1.3756e+00, -1.3324...-01, -7.4450e-01,
+           9.1064e-01, -8.8368e-01, -1.0585e+00, -2.4968e-01, -9.8543e-01]]],
+       device='cuda:0')
+o = tensor([[[ 9.2857e-02, -1.3560e+00, -3.9093e-01,  1.1007e+00, -1.0646e+00,
+          -6.9945e-01,  1.3756e+00, -1.3320... -7.4426e-01,
+           9.1060e-01, -8.8372e-01, -1.0586e+00, -2.4968e-01, -9.8556e-01]]],
+       dtype=torch.float64)
+
+    def _check(receipt, op, kind, name, attrs, y1, y2, o):
+        torch.cuda.synchronize()
+        shape_ok = tuple(y1.shape) == tuple(o.shape)
+        finite = bool(torch.isfinite(y1).all().item())
+        n = normwise(y1, o) if shape_ok else float('inf')
+        det = bits_equal(y1, y2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(y1.shape), 'N': n,
+                        'gate': C.GATE_N, 'deterministic': det, 'mismatches': 0 if det else bit_mismatches(y1, y2),
+                        'all_finite': finite, 'pass': bool(shape_ok and finite and n <= C.GATE_N and det)})
+        assert shape_ok, f'shape {tuple(y1.shape)} != oracle {tuple(o.shape)}'
+        assert finite, 'non-finite output (an element was never written: the allocator pre-fills NaN)'
+>       assert n <= C.GATE_N, f'N {n:.3e} > gate {C.GATE_N:.0e}'
+E       AssertionError: N 3.019e-04 > gate 1e-05
+E       assert 0.0003018612642686696 <= 1e-05
+E        +  where 1e-05 = C.GATE_N
+
+tc_signal/tests/test_conv.py:64: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-field]
+FAILED tc_signal/tests/test_contract.py::test_byte_offset_honoured[versioned-data]
+FAILED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-field]
+FAILED tc_signal/tests/test_contract.py::test_byte_offset_honoured[legacy-data]
+FAILED tc_signal/tests/test_contract.py::test_cublas_handle_config - Assertio...
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_512to512]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to1024]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_514to1024]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_s1_p11_1090to512]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_512to256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k1_s1_p00_1090to1024]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k5_s1_p22_512to512]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k12_s6_p33_22to256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_256to256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_s1_p33_128to22]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d3_p99_128]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k7_d5_p1515_256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d3_p33_256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k3_d5_p55_128]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d1_p55_256]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d3_p1515_128]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[kokoro-k11_d5_p2525_128]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[edge-dil_span_ge_T]
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[edge-N2_Cout33] - Ass...
+FAILED tc_signal/tests/test_conv.py::test_conv1d_census[edge-Cout11_no_bias]
+25 failed, 132 passed in 5.91s

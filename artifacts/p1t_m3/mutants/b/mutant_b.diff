@@ -1,0 +1,11 @@
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -175,7 +175,7 @@
+     const int64_t r = idx / H;
+     const int64_t n = r % N;
+     const int64_t d = r / N;
+-    const int64_t tt = (d >= first_reverse) ? (T - 1 - s) : s;   // the reverse slot walks time backwards
++    const int64_t tt = s;  // MUTANT (b): reverse slot not reversed   // the reverse slot walks time backwards
+     const float* gxp = gx + ((d * T + tt) * N + n) * H4;
+     const float* ghp = gh + (d * N + n) * H4;
+     float zi = gxp[kGateI * H + j] + ghp[kGateI * H + j];

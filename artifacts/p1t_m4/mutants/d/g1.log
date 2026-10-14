@@ -1,0 +1,312 @@
+Mon Oct 12 09:14:11 PM EDT 2026
+..........................................F............................. [ 19%]
+........................................................................ [ 38%]
+........................................................................ [ 57%]
+........................................................................ [ 76%]
+.......................................FFFFF.FFF........................ [ 96%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+__________________ test_default_allocator_names_set_allocator __________________
+
+    def test_default_allocator_names_set_allocator():
+        ts.set_allocator(None)              # the default: tensor_cuda.empty (absent before M1)
+>       with pytest.raises(RuntimeError, match='set_allocator'):
+E       Failed: DID NOT RAISE <class 'RuntimeError'>
+
+tc_signal/tests/test_contract.py:166: Failed
+___________________ test_rint_census[kokoro-durations_short] ___________________
+
+cell = ('durations_short', 'kokoro', (1, 30), 'durations')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.RINT_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.RINT_CELLS])
+    def test_rint_census(cell, receipt):
+        name, kind, shape, data = cell
+        x = O.rint_data('rint/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.rint(X)), _host(ts.rint(X))
+>       _record(receipt, 'rint', kind, name, {'shape': list(x.shape), 'data': data}, a1, a2, O.rint_oracle(x), strict=False)
+
+tc_signal/tests/test_small_ops.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'rint', kind = 'kokoro', name = 'durations_short'
+attrs = {'data': 'durations', 'shape': [1, 30]}
+a1 = array([[ 3.,  8.,  4.,  5., 11.,  2.,  9.,  3.,  0.,  4.,  3.,  3.,  4.,
+         4.,  5.,  5.,  4.,  2.,  3.,  2.,  6.,  4.,  4.,  3., 10.,  7.,
+         6.,  1.,  7.,  5.]], dtype=float32)
+a2 = array([[ 3.,  8.,  4.,  5., 11.,  2.,  9.,  3.,  0.,  4.,  3.,  3.,  4.,
+         4.,  5.,  5.,  4.,  2.,  3.,  2.,  6.,  4.,  4.,  3., 10.,  7.,
+         6.,  1.,  7.,  5.]], dtype=float32)
+o = array([[ 3.,  8.,  4.,  5., 11.,  2.,  9.,  2.,  0.,  4.,  2.,  3.,  4.,
+         4.,  5.,  4.,  4.,  2.,  3.,  2.,  6.,  4.,  4.,  2., 10.,  7.,
+         6.,  1.,  7.,  5.]], dtype=float32)
+strict = False
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 4 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________________ test_rint_census[kokoro-durations_long] ____________________
+
+cell = ('durations_long', 'kokoro', (1, 505), 'durations')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.RINT_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.RINT_CELLS])
+    def test_rint_census(cell, receipt):
+        name, kind, shape, data = cell
+        x = O.rint_data('rint/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.rint(X)), _host(ts.rint(X))
+>       _record(receipt, 'rint', kind, name, {'shape': list(x.shape), 'data': data}, a1, a2, O.rint_oracle(x), strict=False)
+
+tc_signal/tests/test_small_ops.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'rint', kind = 'kokoro', name = 'durations_long'
+attrs = {'data': 'durations', 'shape': [1, 505]}
+a1 = array([[ 6.,  6.,  2.,  5., 10.,  8.,  6.,  2., 10.,  9.,  6.,  2.,  4.,
+         2.,  4.,  6.,  8.,  5.,  6.,  4.,  5...2., 14.,  4.,  8.,  6., 13.,  7.,
+         7.,  1.,  9.,  0.,  2., 10., 11.,  4., 13.,  6.,  3.]],
+      dtype=float32)
+a2 = array([[ 6.,  6.,  2.,  5., 10.,  8.,  6.,  2., 10.,  9.,  6.,  2.,  4.,
+         2.,  4.,  6.,  8.,  5.,  6.,  4.,  5...2., 14.,  4.,  8.,  6., 13.,  7.,
+         7.,  1.,  9.,  0.,  2., 10., 11.,  4., 13.,  6.,  3.]],
+      dtype=float32)
+o = array([[ 6.,  6.,  2.,  5., 10.,  8.,  6.,  2., 10.,  8.,  6.,  2.,  4.,
+         2.,  4.,  6.,  8.,  5.,  6.,  4.,  5...2., 14.,  4.,  8.,  6., 12.,  7.,
+         6.,  1.,  9.,  0.,  2., 10., 11.,  4., 13.,  6.,  3.]],
+      dtype=float32)
+strict = False
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 63 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+____________________ test_rint_census[edge-order_vector_N2] ____________________
+
+cell = ('order_vector_N2', 'edge', (2, -1), 'order_vector')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.RINT_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.RINT_CELLS])
+    def test_rint_census(cell, receipt):
+        name, kind, shape, data = cell
+        x = O.rint_data('rint/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.rint(X)), _host(ts.rint(X))
+>       _record(receipt, 'rint', kind, name, {'shape': list(x.shape), 'data': data}, a1, a2, O.rint_oracle(x), strict=False)
+
+tc_signal/tests/test_small_ops.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'rint', kind = 'edge', name = 'order_vector_N2'
+attrs = {'data': 'order_vector', 'shape': [2, 38]}
+a1 = array([[ 1.0000000e+00, -1.0000000e+00,  2.0000000e+00, -2.0000000e+00,
+         3.0000000e+00, -3.0000000e+00, -0.000...0.0000000e+00, -1.0000000e+00, -2.0000000e+00, -3.4028235e+38,
+         3.4028235e+38, -0.0000000e+00]], dtype=float32)
+a2 = array([[ 1.0000000e+00, -1.0000000e+00,  2.0000000e+00, -2.0000000e+00,
+         3.0000000e+00, -3.0000000e+00, -0.000...0.0000000e+00, -1.0000000e+00, -2.0000000e+00, -3.4028235e+38,
+         3.4028235e+38, -0.0000000e+00]], dtype=float32)
+o = array([[ 0.0000000e+00, -0.0000000e+00,  2.0000000e+00, -2.0000000e+00,
+         2.0000000e+00, -2.0000000e+00, -0.000...0.0000000e+00, -1.0000000e+00, -2.0000000e+00, -3.4028235e+38,
+         3.4028235e+38, -0.0000000e+00]], dtype=float32)
+strict = False
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 16 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________________ test_rint_census[edge-halves_-64_64_N2] ____________________
+
+cell = ('halves_-64_64_N2', 'edge', (2, -1), 'halves')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.RINT_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.RINT_CELLS])
+    def test_rint_census(cell, receipt):
+        name, kind, shape, data = cell
+        x = O.rint_data('rint/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.rint(X)), _host(ts.rint(X))
+>       _record(receipt, 'rint', kind, name, {'shape': list(x.shape), 'data': data}, a1, a2, O.rint_oracle(x), strict=False)
+
+tc_signal/tests/test_small_ops.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'rint', kind = 'edge', name = 'halves_-64_64_N2'
+attrs = {'data': 'halves', 'shape': [2, 128]}
+a1 = array([[-64., -63., -62., -61., -60., -59., -58., -57., -56., -55., -54.,
+        -53., -52., -51., -50., -49., -48., ...49.,  50.,  51.,  52.,  53.,  54.,  55.,  56.,  57.,
+         58.,  59.,  60.,  61.,  62.,  63.,  64.]], dtype=float32)
+a2 = array([[-64., -63., -62., -61., -60., -59., -58., -57., -56., -55., -54.,
+        -53., -52., -51., -50., -49., -48., ...49.,  50.,  51.,  52.,  53.,  54.,  55.,  56.,  57.,
+         58.,  59.,  60.,  61.,  62.,  63.,  64.]], dtype=float32)
+o = array([[-64., -62., -62., -60., -60., -58., -58., -56., -56., -54., -54.,
+        -52., -52., -50., -50., -48., -48., ...49.,  50.,  51.,  52.,  53.,  54.,  55.,  56.,  57.,
+         58.,  59.,  60.,  61.,  62.,  63.,  64.]], dtype=float32)
+strict = False
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 64 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+___________________ test_rint_census[edge-wide_exponents_N2] ___________________
+
+cell = ('wide_exponents_N2', 'edge', (2, 3, 1000), 'wide')
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    @pytest.mark.parametrize('cell', C.RINT_CELLS, ids=[f'{c[1]}-{c[0]}' for c in C.RINT_CELLS])
+    def test_rint_census(cell, receipt):
+        name, kind, shape, data = cell
+        x = O.rint_data('rint/' + name, shape, data)
+        X = _dev(x)
+        a1, a2 = _host(ts.rint(X)), _host(ts.rint(X))
+>       _record(receipt, 'rint', kind, name, {'shape': list(x.shape), 'data': data}, a1, a2, O.rint_oracle(x), strict=False)
+
+tc_signal/tests/test_small_ops.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+op = 'rint', kind = 'edge', name = 'wide_exponents_N2'
+attrs = {'data': 'wide', 'shape': [2, 3, 1000]}
+a1 = array([[[ 0.0000000e+00, -3.0000000e+00,  0.0000000e+00, ...,
+         -0.0000000e+00,  0.0000000e+00,  4.7000000e+02]....0000000e+00, ...,
+          8.8716992e+08, -0.0000000e+00,  0.0000000e+00]]],
+      shape=(2, 3, 1000), dtype=float32)
+a2 = array([[[ 0.0000000e+00, -3.0000000e+00,  0.0000000e+00, ...,
+         -0.0000000e+00,  0.0000000e+00,  4.7000000e+02]....0000000e+00, ...,
+          8.8716992e+08, -0.0000000e+00,  0.0000000e+00]]],
+      shape=(2, 3, 1000), dtype=float32)
+o = array([[[ 0.0000000e+00, -3.0000000e+00,  0.0000000e+00, ...,
+         -0.0000000e+00,  0.0000000e+00,  4.7000000e+02]....0000000e+00, ...,
+          8.8716992e+08, -0.0000000e+00,  0.0000000e+00]]],
+      shape=(2, 3, 1000), dtype=float32)
+strict = False
+
+    def _record(receipt, op, kind, name, attrs, a1, a2, o, strict):
+        shape_ok = a1.shape == o.shape
+        eq = (O.bits_equal_strict(a1, o) if strict else O.bits_equal_nan_aware(a1, o)) if shape_ok else False
+        mism = (int(np.sum(a1.view(np.uint32) != o.view(np.uint32))) if strict else O.bit_mismatches_nan_aware(a1, o)) \
+            if shape_ok else None
+        det = O.bits_equal_strict(a1, a2)
+        receipt.append({'op': op, 'kind': kind, 'cell': name, 'attrs': attrs, 'shape': list(a1.shape),
+                        'bit_mismatches': mism, 'payload_exact_rule': strict, 'deterministic': det,
+                        'pass': bool(shape_ok and eq and det)})
+        assert shape_ok, f'shape {a1.shape} != oracle {o.shape}'
+>       assert eq, f'{mism} elements differ bitwise from the oracle'
+E       AssertionError: 62 elements differ bitwise from the oracle
+E       assert False
+
+tc_signal/tests/test_small_ops.py:55: AssertionError
+________________________ test_rint_order_vector_values _________________________
+
+    def test_rint_order_vector_values():
+        """The order's named rint cases, value by value (signs of zero included)."""
+        v = np.array([0.5, -0.5, 1.5, -1.5, 2.5, -2.5, -0.4, np.inf, -np.inf, C.TWO23 - 0.5, C.SUBNORMAL_MIN,
+                      -C.SUBNORMAL_MIN], np.float32)
+        want = np.array([0.0, -0.0, 2.0, -2.0, 2.0, -2.0, -0.0, np.inf, -np.inf, C.TWO23, 0.0, -0.0], np.float32)
+        got = _host(ts.rint(_dev(v)))
+>       assert O.bits_equal_strict(got, want), (got, want)
+E       AssertionError: (array([ 1.000000e+00, -1.000000e+00,  2.000000e+00, -2.000000e+00,
+E                 3.000000e+00, -3.000000e+00, -0.000000e+00...-0.000000e+00,           inf,
+E                         -inf,  8.388608e+06,  0.000000e+00, -0.000000e+00],
+E               dtype=float32))
+E       assert False
+E        +  where False = <function bits_equal_strict at 0x7e1518fb4f40>(array([ 1.000000e+00, -1.000000e+00,  2.000000e+00, -2.000000e+00,\n        3.000000e+00, -3.000000e+00, -0.000000e+00,           inf,\n                -inf,  8.388608e+06,  0.000000e+00, -0.000000e+00],\n      dtype=float32), array([ 0.000000e+00, -0.000000e+00,  2.000000e+00, -2.000000e+00,\n        2.000000e+00, -2.000000e+00, -0.000000e+00,           inf,\n                -inf,  8.388608e+06,  0.000000e+00, -0.000000e+00],\n      dtype=float32))
+E        +    where <function bits_equal_strict at 0x7e1518fb4f40> = O.bits_equal_strict
+
+tc_signal/tests/test_small_ops.py:104: AssertionError
+_________________________ test_rint_bit_pattern_sweep __________________________
+
+receipt = [{'N': 2.2587913670161425e-07, 'all_finite': True, 'attrs': {'C_in': 512, 'C_out': 512, 'K': 3, 'N': 1, ...}, 'cell': ...08, 'all_finite': True, 'attrs': {'C_in': 256, 'C_out': 1, 'K': 1, 'N': 1, ...}, 'cell': 'k1_s1_p00_256to1', ...}, ...]
+
+    def test_rint_bit_pattern_sweep(receipt):
+        """Every RINT_SWEEP_STRIDE-th fp32 bit pattern (all exponents, both signs, NaNs, subnormals) vs numpy rint."""
+        w = np.arange(0, 1 << 32, C.RINT_SWEEP_STRIDE, dtype=np.uint64).astype(np.uint32)
+        x = w.view(np.float32)
+        got = _host(ts.rint(_dev(x)))
+        with np.errstate(invalid='ignore'):        # signalling NaNs among the patterns
+            want = np.rint(x)                      # float32 rint, IEEE roundTiesToEven
+        assert O.bits_equal_nan_aware(want, O.rint_oracle(x))   # float32 and float64 rint agree (oracle self-check)
+        mism = O.bit_mismatches_nan_aware(got, want)
+        receipt.append({'op': 'rint', 'kind': 'sweep', 'cell': f'bit_patterns_stride_{C.RINT_SWEEP_STRIDE}',
+                        'attrs': {'n': int(x.size)}, 'bit_mismatches': mism, 'pass': mism == 0})
+>       assert mism == 0, f'{mism} of {x.size} patterns differ from numpy rint'
+E       AssertionError: 32642 of 16711936 patterns differ from numpy rint
+E       assert 32642 == 0
+
+tc_signal/tests/test_small_ops.py:120: AssertionError
+_________________________________ test_rint_0d _________________________________
+
+    def test_rint_0d():
+        x = torch.tensor(2.5, device='cuda')
+        y = ts.rint(x)
+>       assert tuple(y.shape) == () and float(y.item()) == 2.0
+E       AssertionError: assert (() == ()
+E         
+E         Use -v to get more diff and 3.0 == 2.0)
+E        +  where 3.0 = float(3.0)
+E        +    where 3.0 = <built-in method item of Tensor object at 0x7e1518301950>()
+E        +      where <built-in method item of Tensor object at 0x7e1518301950> = tensor(3., device='cuda:0').item
+
+tc_signal/tests/test_small_ops.py:126: AssertionError
+=========================== short test summary info ============================
+FAILED tc_signal/tests/test_contract.py::test_default_allocator_names_set_allocator
+FAILED tc_signal/tests/test_small_ops.py::test_rint_census[kokoro-durations_short]
+FAILED tc_signal/tests/test_small_ops.py::test_rint_census[kokoro-durations_long]
+FAILED tc_signal/tests/test_small_ops.py::test_rint_census[edge-order_vector_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_rint_census[edge-halves_-64_64_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_rint_census[edge-wide_exponents_N2]
+FAILED tc_signal/tests/test_small_ops.py::test_rint_order_vector_values - Ass...
+FAILED tc_signal/tests/test_small_ops.py::test_rint_bit_pattern_sweep - Asser...
+FAILED tc_signal/tests/test_small_ops.py::test_rint_0d - AssertionError: asse...
+9 failed, 366 passed in 8.01s
+pytest exit=1
+Mon Oct 12 09:14:21 PM EDT 2026

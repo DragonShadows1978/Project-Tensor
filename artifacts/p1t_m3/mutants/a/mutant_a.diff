@@ -1,0 +1,17 @@
+--- a/tc_signal/src/lstm.cu
++++ b/tc_signal/src/lstm.cu
+@@ -64,10 +64,10 @@
+ constexpr cudaStream_t kLegacyStream = 0;
+ 
+ // ONNX LSTM gate block indices along the 4H axis (Operators.md, LSTM: "iofc").
+-constexpr int64_t kGateI = 0;
+-constexpr int64_t kGateO = 1;
+-constexpr int64_t kGateF = 2;
+-constexpr int64_t kGateC = 3;
++constexpr int64_t kGateI = 0;  // MUTANT (a): torch.nn.LSTM gate order i, f, g, o
++constexpr int64_t kGateO = 3;
++constexpr int64_t kGateF = 1;
++constexpr int64_t kGateC = 2;
+ 
+ void check_cuda(cudaError_t e, const char* what) {
+   if (e != cudaSuccess) {

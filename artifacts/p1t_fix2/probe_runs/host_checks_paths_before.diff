@@ -1,0 +1,23 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix2/artifacts/p1t_rev2/probes/host_checks.py
++++ /tmp/p1t_fix2_probes/before/host_checks_paths.py
+@@ -7,16 +7,16 @@
+ import json, os, resource, subprocess, sys
+ from pathlib import Path
+ resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+-ROOT=Path(__file__).resolve().parents[3]
+-OUT=ROOT/'artifacts/p1t_rev2'
++ROOT=Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1')
++OUT=Path('/tmp/p1t_fix2_probes/before')
+ if len(sys.argv)==1:
+     cases=['none_up','none_pad','none_rint','reflect_overflow','upsample_overflow','null_shape','negative_rank','byte_overflow','address_overflow','scalar','zero_size','conv_int32','lstm_int32','same_capsule','empty_sync']
+     results=[]
+-    env=os.environ.copy();env['PYTHONDONTWRITEBYTECODE']='1';env['PYTHONPATH']='/tmp/p1t_rev2_build_review/tc_signal'
++    env=os.environ.copy();env['PYTHONDONTWRITEBYTECODE']='1';env['PYTHONPATH']='/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix1/tc_signal'
+     for c in cases:
+         p=subprocess.run([sys.executable,__file__,c],env=env,text=True,capture_output=True,timeout=20)
+         results.append(dict(case=c,returncode=p.returncode,stdout=p.stdout,stderr=p.stderr))
+-    for exe,cases2 in [('/tmp/p1t_rev2_core_cpu',['normal','prefix','suffix']),('/tmp/p1t_rev2_cpu_native',['oom_sync','throw_deleter'])]:
++    for exe,cases2 in [('/tmp/p1t_fix2_probes/before/core_cpu',['normal','prefix','suffix']),('/tmp/p1t_fix2_probes/before/cpu_native',['oom_sync','throw_deleter'])]:
+         for c in cases2:
+             p=subprocess.run([exe,c],env=env,text=True,capture_output=True,timeout=20)
+             results.append(dict(case=c,returncode=p.returncode,stdout=p.stdout,stderr=p.stderr))

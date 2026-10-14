@@ -1,0 +1,31 @@
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+______ test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait _______
+
+fix7_lock_shim = '/tmp/pytest-of-vader/pytest-145/fix7_lock_shim0/mutex_lock_shim.so'
+
+    def test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait(fix7_lock_shim):
+        _torch_or_skip()
+        n = 15
+        r, res = _run_fix7_core_exit("lock_fail", f"{n}:0.05", LD_PRELOAD=fix7_lock_shim)   # + DELETER before FINALIZING
+        a = res["after"]
+        assert res["lock"] == {"failed": n, "left": 0}, res
+        assert a["shutdown_lock_retries"] == n, res
+        lines = [ln for ln in r.stderr.splitlines()
+                 if "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock to close DLPack release "
+                    "admission (Invalid argument)" in ln]
+>       assert lines, r.stderr                                                        # diagnosed, not silent
+        ^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.2 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: 1 DLPack release(s) admitted before exit still running after 0.3 s; interpreter exit waits for them (no new release is admitted)
+E         tensor_cuda: the DLPack release(s) admitted before exit finished after 0.6 s; interpreter exit continues
+E         
+E       assert []
+
+tensor_cuda/tests/test_dlpack.py:2734: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix7_sweep_i_core_exit_close_retries_a_failed_lifecycle_lock_instead_of_skipping_the_close[1]
+PASSED tensor_cuda/tests/test_dlpack.py::test_fix7_sweep_i_core_exit_close_retries_a_failed_lifecycle_lock_instead_of_skipping_the_close[3]
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix7_l1_core_lock_retry_wait_is_diagnosed_like_the_exit_wait
+1 failed, 2 passed, 247 deselected in 10.77s

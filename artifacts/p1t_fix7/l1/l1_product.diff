@@ -1,0 +1,461 @@
+# L1 product diff: pre-L1 FIX7 sources (artifacts/p1t_fix7/preL1_sources/: tc_signal and tensor_cuda/src copied from /tmp/p1t_fix7_mut_b, whose only mutation is tensor_cuda/tensor_cuda/__init__.py; tensor_cuda/tensor_cuda/__init__.py from /tmp/p1t_fix7_mut_a, whose only mutation is tc_signal/tc_signal/__init__.py) -> this worktree. README.md not included (no pre-L1 copy outside git).
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -187,6 +187,7 @@
+ std::atomic<unsigned long long> g_exit_wait_us{0};
+ std::atomic<unsigned long long> g_exit_wait_diagnostics{0};
+ std::atomic<unsigned long long> g_exit_wait_overruns{0};
++std::atomic<unsigned long long> g_exit_wait_poll_diagnostics{0};  // P1T-FIX7 L1: lines of the polling fallback
+ // P1T-FIX6 (V6-01): FIX5's g_sync_waits / g_sync_wait_us / g_sync_wait_diagnostics counted synchronize()'s wait for
+ // other threads; that wait is removed, and so are they (and their pending_stats keys).
+ 
+@@ -265,14 +266,22 @@
+ }
+ 
+ // The part of the exit wait that runs with the GIL released: the mutex and condition variable only, no Python object.
++// P1T-FIX7, lead send-back L1 (sweep (i) addendum): FIX5's fallback for a failed lifecycle mutex / condition variable
++// (poll every kLifecyclePollMs until quiet) was a SILENT exit wait. It now keeps the same diagnostic schedule as the
++// condition-variable wait (FIX3 V3-01 / FIX5 V5-01: the first line after first_diag_s from the start of the wait, then
++// each time the time waited has doubled; C stdio, no allocation, GIL released), says that it is polling and why, and
++// counts each line (w.diagnostics -> pending_stats() exit_wait_diagnostics for the hook's close, and
++// exit_wait_poll_diagnostics for every polling line). It still never returns early. Prior art: FIX3 / FIX5's own
++// schedule (taken as is); ours: applying it to the fallback.
+ void wait_without_gil(Lifecycle& lc, double first_diag_s, std::chrono::steady_clock::time_point t0,
+                       WaitOutcome& w) noexcept {
+   using clock = std::chrono::steady_clock;
+   const auto first = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(first_diag_s));
++  const auto tick = clock::duration(1);  // next line at least one clock tick later: no busy loop at a zero delay
+   auto quiet = [&lc, &w] { return others_running(lc, w.own) <= 0; };
++  auto next = t0 + first;
+   try {
+     std::unique_lock<std::mutex> lk(lc.mu);
+-    auto next = t0 + first;
+     while (!lc.cv.wait_until(lk, next, quiet)) {
+       // Still running at the diagnostic time: report, then keep waiting (never return early: V3-01, V5-01).
+       w.overran = true;
+@@ -286,15 +295,33 @@
+                    running, std::chrono::duration<double>(now - t0).count());
+       std::fflush(stderr);
+       ++w.diagnostics;
+-      const auto waited = now - t0;  // next line when the time waited has doubled (at least one tick: no busy loop)
+-      const auto tick = clock::duration(1);
++      const auto waited = now - t0;  // next line when the time waited has doubled
+       next = now + (waited > tick ? waited : tick);
+       lk.lock();
+     }
++    return;
+   } catch (const std::system_error&) {
+     // A mutex / condition-variable failure (never observed): keep waiting by polling, never return early.
+     g_lifecycle_lock_failures.fetch_add(1, std::memory_order_relaxed);
+-    while (!quiet()) std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kLifecyclePollMs));
++  }
++  while (!quiet()) {
++    const auto now = clock::now();
++    if (now >= next) {  // the same schedule as above, continued from where it was: never a silent wait
++      w.overran = true;
++      std::fprintf(stderr,
++                   "tc_signal: %lld DLPack producer callback(s) (deleter, capsule destructor or __dlpack__) admitted "
++                   "on other threads before interpreter exit still running after %.1f s; interpreter exit waits for "
++                   "them (no new one is admitted; polling every %d ms because the lifecycle mutex or condition "
++                   "variable failed)\n",
++                   others_running(lc, w.own), std::chrono::duration<double>(now - t0).count(),
++                   tuning::kLifecyclePollMs);
++      std::fflush(stderr);
++      ++w.diagnostics;
++      g_exit_wait_poll_diagnostics.fetch_add(1, std::memory_order_relaxed);
++      const auto waited = now - t0;
++      next = now + (waited > tick ? waited : tick);
++    }
++    std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kLifecyclePollMs));
+   }
+ }
+ 
+@@ -999,10 +1026,80 @@
+   FailedCall call = FailedCall::kStreamSync;
+ };
+ 
++// P1T-FIX7, lead send-back L1 (sweep (i) addendum, "every exit wait that can block is diagnosed"): the device waits of
++// interpreter exit. The exit hook's step 1 (synchronize()) and the exit runner's own synchronize() wait in
++// cudaStreamSynchronize for the work queued on each device's legacy stream; a kernel that never finishes made exit
++// wait SILENTLY. While the exit runner runs (raw_exit_hook_runner opens this window around the hook and its own steps;
++// nothing else does), each such sync is preceded by a diagnosed wait: an event recorded on the legacy stream is polled
++// every tuning::kExitDevicePollMs; after the first-diagnostic delay (the hook's knob, read at C level by the runner)
++// a line goes to stderr naming the device and the seconds waited, then another each time the time waited has
++// doubled (FIX3 V3-01's schedule), each counted (pending_stats() exit_device_wait_diagnostics), and a last line says
++// when the work finished. The cudaStreamSynchronize that follows returns at once and keeps its own error and its
++// attribution (V7-02: a failure is still named as cudaStreamSynchronize). Only CUDA calls this file already makes
++// are used (cudaEventCreateWithFlags / Record / Query / Destroy, cudaPeekAtLastError / cudaGetLastError), so the
++// reviewers' host traces that compile this file link unchanged; an error of the diagnostic event is cleared and the
++// sync still runs (it then reports any sticky error itself). No allocation; never throws. Outside the window (every
++// ordinary synchronize(), bound drain or fallback) nothing changes: one relaxed atomic load. Prior art: FIX3 V3-01's
++// diagnostic schedule; event polling as a host-side progress check (cudaEventQuery's documented NotReady contract,
++// CUDA 12.6 Runtime API; unverified here, lead to check "cudaEventQuery cudaErrorNotReady"); ours: confining it to the
++// exit runner's window.
++std::atomic<long long> g_exit_device_wait_diag_ns{-1};  // < 0: outside the exit runner's window
++std::atomic<unsigned long long> g_exit_device_wait_diagnostics{0};
++
++void wait_device_work_diagnosed(int device, long long first_ns) noexcept {
++  using clock = std::chrono::steady_clock;
++  cudaEvent_t ev = nullptr;
++  if (cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) != cudaSuccess) {
++    cudaGetLastError();
++    return;  // the stream sync below still runs and reports any sticky error itself
++  }
++  if (cudaEventRecord(ev, cudaStreamLegacy) != cudaSuccess) {
++    cudaGetLastError();
++    if (cudaEventDestroy(ev) != cudaSuccess) cudaGetLastError();
++    return;
++  }
++  const auto t0 = clock::now();
++  const auto tick = clock::duration(1);
++  auto next = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::nanoseconds(first_ns));
++  unsigned long long written = 0;
++  for (;;) {
++    const cudaError_t q = cudaEventQuery(ev);
++    if (q != cudaErrorNotReady) {
++      if (q != cudaSuccess) cudaGetLastError();  // the sync below reports the device's state itself
++      break;
++    }
++    if (cudaPeekAtLastError() == cudaErrorNotReady) cudaGetLastError();
++    const auto now = clock::now();
++    if (now >= next) {
++      std::fprintf(stderr,
++                   "tc_signal: interpreter exit is waiting for the work queued on the legacy stream of CUDA device %d "
++                   "(synchronize() at exit, before the pending operands are released): still running after %.1f s; "
++                   "exit waits for it (a kernel that never finishes keeps exit waiting)\n",
++                   device, std::chrono::duration<double>(now - t0).count());
++      std::fflush(stderr);
++      ++written;
++      g_exit_device_wait_diagnostics.fetch_add(1, std::memory_order_relaxed);
++      const auto waited = now - t0;  // next line when the time waited has doubled
++      next = now + (waited > tick ? waited : tick);
++    }
++    std::this_thread::sleep_for(std::chrono::milliseconds(tuning::kExitDevicePollMs));
++  }
++  if (written > 0) {
++    std::fprintf(stderr,
++                 "tc_signal: the work queued on the legacy stream of CUDA device %d finished after %.1f s; "
++                 "interpreter exit continues\n",
++                 device, std::chrono::duration<double>(clock::now() - t0).count());
++    std::fflush(stderr);
++  }
++  if (cudaEventDestroy(ev) != cudaSuccess) cudaGetLastError();
++}
++
+ // Synchronizes the legacy stream of `device` (switching to it and back). Never throws, never allocates.
+ SyncResult sync_device_legacy(int device) noexcept {
+   QuietDeviceGuard g(device);
+   if (!g.ok()) return {g.error(), guard_call(g)};
++  const long long diag_ns = g_exit_device_wait_diag_ns.load(std::memory_order_relaxed);
++  if (diag_ns >= 0) wait_device_work_diagnosed(device, diag_ns);  // P1T-FIX7 L1: inside the exit runner only
+   const cudaError_t r =
+       test_hooks::take(test_hooks::kCudaSync) ? kTestInjectedCudaError : cudaStreamSynchronize(cudaStreamLegacy);
+   if (r != cudaSuccess) cudaGetLastError();
+@@ -1361,6 +1458,16 @@
+ 
+ unsigned long long exit_hook_closes() noexcept { return g_exit_hook_calls.load(std::memory_order_relaxed); }
+ 
++// P1T-FIX7 L1: the exit runner's device-wait window (see wait_device_work_diagnosed). The delay is clamped as the exit
++// wait's is (NaN / negative -> 0: diagnose at once; capped at kLifecycleMaxDiagDelayS).
++void exit_device_waits_diagnosed(double first_diag_s) noexcept {
++  if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;
++  if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
++  g_exit_device_wait_diag_ns.store(static_cast<long long>(first_diag_s * 1e9), std::memory_order_relaxed);
++}
++
++void exit_device_waits_undiagnosed() noexcept { g_exit_device_wait_diag_ns.store(-1, std::memory_order_relaxed); }
++
+ long long exit_runner_close_and_wait(long long* waited_us) {
+   const ExitClose c = exit_close_and_wait(tuning::kExitDiagDefaultS);
+   const long long running = c.w.running_at_start > 0 ? c.w.running_at_start : 0;
+@@ -1762,6 +1869,8 @@
+   // after a message allocation failed).
+   d["unreported_drain_failures"] = st.drain_unreported_calls;
+   d["lifecycle_lock_failures"] = g_lifecycle_lock_failures.load();
++  d["exit_wait_poll_diagnostics"] = g_exit_wait_poll_diagnostics.load();  // P1T-FIX7 L1
++  d["exit_device_wait_diagnostics"] = g_exit_device_wait_diagnostics.load();  // P1T-FIX7 L1
+   d["event_query_failures"] = st.event_query_failures;    // V5-02
+   d["event_record_failures"] = st.event_record_failures;  // sweep (d)
+   d["cublas_handle_destroy_failures"] = g_cublas_destroy_failures.load();             // V5-03
+--- a/tc_signal/src/dlpack_operand.h
++++ b/tc_signal/src/dlpack_operand.h
+@@ -255,6 +255,10 @@
+ long long exit_runner_close_and_wait(long long* waited_us);
+ // P1T-FIX7: how many exit-hook closes happened so far (the runner compares it around its call of the hook).
+ unsigned long long exit_hook_closes() noexcept;
++// P1T-FIX7 L1 (lead send-back): the exit runner opens a window in which every device sync of synchronize() is preceded
++// by a diagnosed wait (stderr after first_diag_s, then each time the time waited doubles); it closes it on return.
++void exit_device_waits_diagnosed(double first_diag_s) noexcept;
++void exit_device_waits_undiagnosed() noexcept;
+ // P1T-FIX7 (V7-01): the runner's stderr line (C stdio, no Python) naming every recorded CUDA failure nobody raised yet,
+ // after the hook was interrupted; the records are cleared once written. Never throws.
+ void exit_log_unreported() noexcept;
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -390,7 +390,32 @@
+ // When the hook raised BEFORE its own close (no hook close was counted during the call: an exception at its first
+ // bytecode, or before its finally reached the close), its synchronize() may not have run either: the runner then runs
+ // it first (releasing what is pending, as the hook would have; a failure is written to stderr), before closing.
++// P1T-FIX7, lead send-back L1 (sweep (i) addendum): the runner also opens the window in which the device syncs of exit
++// (the hook's step 1, its post-close retry, the runner's own synchronize()) are diagnosed instead of silent
++// (dlpack_operand.cpp wait_device_work_diagnosed). Its delay is the hook's knob as the hook will pass it, read at C
++// level from the hook's module globals (PyDict_GetItemString: a dict lookup of a str key, errors suppressed; the value
++// read by raw_exit_diag_value, no Python method of it runs); absent or unreadable -> tuning::kExitDiagDefaultS. The
++// window closes when the runner returns (RAII), so no ordinary synchronize() is affected.
++double exit_diag_of_hook(PyObject* hook) {
++  double v = tuning::kExitDiagDefaultS;
++  if (!PyFunction_Check(hook)) return v;
++  PyObject* globals = PyFunction_GET_GLOBALS(hook);
++  if (globals == nullptr || !PyDict_Check(globals)) return v;
++  PyObject* knob = PyDict_GetItemString(globals, "_RELEASE_EXIT_DIAG_S");  // borrowed, or nullptr (deleted)
++  if (knob == nullptr) return v;
++  raw_exit_diag_value(knob, tuning::kExitDiagDefaultS, &v);
++  return v;
++}
++
++struct ExitDeviceWaitWindow {
++  explicit ExitDeviceWaitWindow(double first_diag_s) noexcept { exit_device_waits_diagnosed(first_diag_s); }
++  ~ExitDeviceWaitWindow() { exit_device_waits_undiagnosed(); }
++  ExitDeviceWaitWindow(const ExitDeviceWaitWindow&) = delete;
++  ExitDeviceWaitWindow& operator=(const ExitDeviceWaitWindow&) = delete;
++};
++
+ PyObject* raw_exit_hook_runner(PyObject*, PyObject* hook) {
++  const ExitDeviceWaitWindow window(exit_diag_of_hook(hook));  // P1T-FIX7 L1: device waits of exit are diagnosed
+   const unsigned long long closes_before = exit_hook_closes();
+   PyObject* r = PyObject_CallNoArgs(hook);
+   if (r != nullptr) return r;
+@@ -452,8 +477,11 @@
+     "_release_pending_at_exit). Calls hook(); if the hook raises (for example a KeyboardInterrupt delivered at its "
+     "first bytecode, before any of its statements ran), runs synchronize() if the hook had not closed yet, closes "
+     "release admission and waits itself (default diagnostic delay), writes any recorded CUDA failure nobody "
+-    "reported to stderr, then re-raises the hook's exception. Does nothing more when the hook returns. Remove it "
+-    "with atexit.unregister(_exit_hook_runner).";
++    "reported to stderr, then re-raises the hook's exception. Does nothing more when the hook returns. P1T-FIX7 "
++    "(lead send-back L1): while it runs, every device sync of exit (synchronize() in the hook or in the runner) is "
++    "diagnosed: a stderr line after the hook's _RELEASE_EXIT_DIAG_S (read at C level; default if unreadable), then "
++    "each time the time waited doubles (pending_stats() exit_device_wait_diagnostics). Remove it with "
++    "atexit.unregister(_exit_hook_runner).";
+ PyMethodDef kExitRunnerDef = {"_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_exit_hook_runner), METH_O,
+                               kExitRunnerDoc};
+ }  // namespace tcs
+--- a/tc_signal/src/py_args.h
++++ b/tc_signal/src/py_args.h
+@@ -216,6 +216,26 @@
+ // (Python/getargs.c: shape errors are TypeError before the body runs); "diagnostic configuration never gates the
+ // safety path" is ours (no prior art known to me for the exact rule; closest: CPython's atexit, which runs every
+ // callback whatever an earlier one raised).
++// The VALUE rule alone (P1T-FIX7): a float or an int (subclasses included) read at C level, never calling a Python
++// method; anything else, or an int beyond the double range, gives `fallback`. Returns true when the fallback was used.
++// Never leaves an error set. Also used by the exit runner to read the knob from the hook's globals (lead send-back L1).
++inline bool raw_exit_diag_value(PyObject* v, double fallback, double* out) {
++  if (PyFloat_Check(v)) {  // float and subclasses: the C value, no __float__
++    *out = PyFloat_AS_DOUBLE(v);
++    return false;
++  }
++  if (PyLong_Check(v)) {  // int and subclasses (bool included): the C value, no __index__ / __float__
++    const double d = PyLong_AsDouble(v);
++    if (!(d == -1.0 && PyErr_Occurred())) {
++      *out = d;
++      return false;
++    }
++    PyErr_Clear();  // beyond the double range: unreadable, the default applies
++  }
++  *out = fallback;
++  return true;
++}
++
+ inline bool raw_exit_diag_arg(const char* fn, const char* name, PyObject* args, PyObject* kwargs, double fallback,
+                               double* out, bool* default_used) {
+   PyObject* v = nullptr;
+@@ -249,21 +269,7 @@
+     PyErr_Format(PyExc_TypeError, "%s(): missing required argument '%s'", fn, name);
+     return false;
+   }
+-  *default_used = false;
+-  if (PyFloat_Check(v)) {  // float and subclasses: the C value, no __float__
+-    *out = PyFloat_AS_DOUBLE(v);
+-    return true;
+-  }
+-  if (PyLong_Check(v)) {  // int and subclasses (bool included): the C value, no __index__ / __float__
+-    const double d = PyLong_AsDouble(v);
+-    if (!(d == -1.0 && PyErr_Occurred())) {
+-      *out = d;
+-      return true;
+-    }
+-    PyErr_Clear();  // beyond the double range: unreadable, the default applies
+-  }
+-  *out = fallback;
+-  *default_used = true;
++  *default_used = raw_exit_diag_value(v, fallback, out);
+   return true;
+ }
+ 
+--- a/tc_signal/src/tuning.h
++++ b/tc_signal/src/tuning.h
+@@ -53,6 +53,10 @@
+ // calling a Python method (another type, an int beyond the double range, the knob deleted). Diagnostics only: it never
+ // bounds or gates the wait, and it changes no numerics.
+ constexpr double kExitDiagDefaultS = 5.0;
++// P1T-FIX7, lead send-back L1: the polling interval of the diagnosed device wait at interpreter exit (inside the exit
++// runner only; dlpack_operand.cpp wait_device_work_diagnosed). It adds at most one interval of latency to each device
++// sync at exit; it never bounds the wait and changes no numerics.
++constexpr int kExitDevicePollMs = 1;
+ 
+ }  // namespace tuning
+ }  // namespace tcs
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -816,6 +816,9 @@
+ std::atomic<unsigned long long> g_shutdown_runner_closes{0};
+ std::atomic<unsigned long long> g_shutdown_runner_in_flight_at_close{0};
+ std::atomic<unsigned long long> g_shutdown_lock_retries{0};
++// P1T-FIX7, lead send-back L1: stderr lines written while the close retried a failed lifecycle-mutex lock (also
++// counted in g_shutdown_diagnostics when the hook's own close wrote them).
++std::atomic<unsigned long long> g_shutdown_lock_diagnostics{0};
+ 
+ // P1T-FIX7 (V7-01) exit tunables of the import-release lifecycle (P1-T core; none bounds the wait, none changes
+ // numerics): the default first-diagnostic delay (the initial value of the Python knob
+@@ -918,18 +921,60 @@
+ // it at C level and falls back to kDlpackShutdownDiagDefaultS: `diag_default_used`), and by the atexit runner after the
+ // hook raised before closing (`runner`: counted apart). Sweep (i) also found one path INSIDE this function that could
+ // skip the close: locking the lifecycle mutex can throw std::system_error (C++17 [thread.mutex.requirements.mutex]),
+-// and FIX3-FIX6 re-took the GIL and rethrew before `closing` was set. Never observed with glibc's default mutex, but it
+-// is a path: the lock is now retried (GIL released, kDlpackShutdownLockRetryMs apart, counted) until it succeeds, so
+-// the close is never skipped and the function never returns before the wait has finished (a permanently broken mutex
+-// makes exit wait, as a deleter that never returns does, instead of letting finalization overtake a release).
++// and FIX3-FIX6 re-took the GIL and rethrew before `closing` was set (with one injected lock failure 429446d aborts at
++// exit, rc -6: artifacts/p1t_fix7/lock_failure_receipt_before_B.txt). The lock is now retried (GIL released,
++// kDlpackShutdownLockRetryMs apart, counted) until it succeeds, so the close is never skipped and the function never
++// returns before the wait has finished (a permanently broken mutex makes exit wait, as a deleter that never returns
++// does, instead of letting finalization overtake a release).
++// P1T-FIX7, lead send-back L1: that retry loop is an exit wait too, so it is diagnosed exactly like the timed wait
++// below (FIX3 V3-01: never silent). Once the retries of one lock attempt have lasted the first-diagnostic delay (the
++// caller's clamped first_diag_s), a line goes to stderr (C stdio, GIL released, no allocation: what() is the
++// exception's own string) naming what is waited for, how many attempts failed and for how long; then another each
++// time the time spent retrying has doubled. Each line is counted (g_shutdown_lock_diagnostics, and in the caller's
++// `diagnostics`). When the lock is finally taken after a diagnostic, one more line says so. Prior art: FIX3's V3-01
++// diagnostic schedule (first delay, then doubling), itself after the kernel's repeated stall warnings (RCU CPU stall
++// warnings, hung-task detector; unverified here, lead to check "RCU CPU stall warning repeated"); ours: applying it to
++// a lock-retry loop.
+ namespace {
+-void lock_retrying(std::unique_lock<std::mutex>& lk) {
++void lock_retrying(std::unique_lock<std::mutex>& lk, std::chrono::steady_clock::duration first, const char* purpose,
++                   unsigned long long& diagnostics) {
++  using clock = std::chrono::steady_clock;
++  unsigned long long failed = 0;
++  unsigned long long written = 0;
++  clock::time_point r0{};
++  clock::time_point next{};
+   for (;;) {
+     try {
+       lk.lock();
++      if (written > 0) {
++        std::fprintf(stderr,
++                     "tensor_cuda: interpreter exit took the DLPack release lifecycle lock %s after %llu failed "
++                     "attempt(s) over %.1f s; exit continues\n",
++                     purpose, failed, std::chrono::duration<double>(clock::now() - r0).count());
++        std::fflush(stderr);
++      }
+       return;
+-    } catch (const std::system_error&) {
++    } catch (const std::system_error& e) {
+       g_shutdown_lock_retries.fetch_add(1);
++      const auto now = clock::now();
++      if (failed++ == 0) {
++        r0 = now;
++        next = r0 + first;
++      }
++      if (now >= next) {
++        std::fprintf(stderr,
++                     "tensor_cuda: interpreter exit cannot take the DLPack release lifecycle lock %s (%s): %llu failed "
++                     "attempt(s) over %.1f s; it retries every %d ms and waits (it never returns early)\n",
++                     purpose, e.what(), failed, std::chrono::duration<double>(now - r0).count(),
++                     kDlpackShutdownLockRetryMs);
++        std::fflush(stderr);
++        ++written;
++        ++diagnostics;
++        g_shutdown_lock_diagnostics.fetch_add(1);
++        const auto waited = now - r0;            // next line when the time spent retrying has doubled
++        const auto tick = clock::duration(1);    // (at least one clock tick later: no line per attempt at a zero delay)
++        next = now + (waited > tick ? waited : tick);
++      }
+       std::this_thread::sleep_for(std::chrono::milliseconds(kDlpackShutdownLockRetryMs));
+     }
+   }
+@@ -963,7 +1008,7 @@
+   PyThreadState* gil_state = PyEval_SaveThread();           // admitted releases need the GIL to finish
+   try {
+     std::unique_lock<std::mutex> lk(lc.mu, std::defer_lock);
+-    lock_retrying(lk);                                      // P1T-FIX7: a lock failure never skips the close
++    lock_retrying(lk, first, "to close DLPack release admission", diagnostics);  // P1T-FIX7: never skips the close
+     lc.closing = true;                                      // admission closed for good: nothing new can start
+     at_close = lc.in_flight;
+     auto next = t0 + first;
+@@ -985,7 +1030,7 @@
+       const auto waited = now - t0;
+       const auto tick = std::chrono::steady_clock::duration(1);
+       next = now + (waited > tick ? waited : tick);
+-      lock_retrying(lk);
++      lock_retrying(lk, first, "again after a diagnostic (admission is already closed)", diagnostics);
+     }
+     remaining = lc.in_flight - own;
+   } catch (...) {
+@@ -1529,7 +1574,10 @@
+     "first_diag_s is diagnostics only and never prevents the close: a float or an int (subclasses included) is read "
+     "without calling its methods; any other value, or an int beyond the double range, uses the default "
+     "(_DLPACK_SHUTDOWN_DIAG_DEFAULT_S) and the call still closes and waits (first_diag_default_used=True). Only a "
+-    "malformed call (wrong arity or keyword) raises TypeError, doing nothing.";
++    "malformed call (wrong arity or keyword) raises TypeError, doing nothing. P1T-FIX7 (lead send-back L1): if "
++    "locking the release lifecycle mutex fails (never observed), the close retries it and that retry wait is "
++    "diagnosed like the release wait (first line after first_diag_s, then each time the retrying time doubles; "
++    "_dlpack_release_stats() shutdown_lock_retries / shutdown_lock_diagnostics); diagnostics counts those lines too.";
+ PyMethodDef kBeginShutdownDef = {"_dlpack_begin_shutdown",
+                                  reinterpret_cast<PyCFunction>(reinterpret_cast<void (*)(void)>(&raw_dlpack_begin_shutdown)),
+                                  METH_VARARGS | METH_KEYWORDS, kBeginShutdownDoc};
+@@ -2516,6 +2564,7 @@
+     d["shutdown_runner_closes"] = g_shutdown_runner_closes.load();
+     d["shutdown_runner_in_flight_at_close"] = g_shutdown_runner_in_flight_at_close.load();
+     d["shutdown_lock_retries"] = g_shutdown_lock_retries.load();
++    d["shutdown_lock_diagnostics"] = g_shutdown_lock_diagnostics.load();  // P1T-FIX7 L1
+     d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
+     // P1T-FIX5 (sweep d): every unraisable CUDA error of the P1-T core paths, recorded before its slot entry was
+     // consumed (count), and the first one: site, device, CUDA error name ("" / -1 / "cudaSuccess" when none).
+@@ -2538,7 +2587,8 @@
+      "first one (first_unraisable_what / _device / _error), every CUDA error of those paths recorded before its "
+      "error-slot entry was consumed; P1T-FIX7: shutdown_diag_default_used (hook closes whose knob could not be read), "
+      "shutdown_runner_closes / shutdown_runner_in_flight_at_close (the exit runner's own closes after the hook raised "
+-     "before closing), shutdown_lock_retries.");
++     "before closing), shutdown_lock_retries (failed lifecycle-mutex locks the exit close retried) and "
++     "shutdown_lock_diagnostics (the stderr lines that retry loop wrote: it is diagnosed like the exit wait).");
+   // P1T-FIX2 (N5): construct the release lifecycle state now, so no release path is the first to allocate it.
+   (void)release_lifecycle();
+   m.def("_dlpack_raise_unraisable",
+--- a/tc_signal/tc_signal/__init__.py
++++ b/tc_signal/tc_signal/__init__.py
+@@ -202,6 +202,10 @@
+     jump out of an except handler is one), so a KeyboardInterrupt can arrive before any statement of this hook runs.
+     After a MemoryError from step 1 (V6-03: its CUDA failures are kept), synchronize() is called once more after the
+     close, so the kept failures are logged too (after the close it releases nothing; late releases are leaked).
++    P1T-FIX7 (lead send-back L1): every wait of exit is diagnosed on stderr, never silent: the wait of step 2 (also
++    its polling fallback when the lifecycle mutex fails), and the device syncs of step 1 (while the native runner runs,
++    each is preceded by a polled wait that writes a line after _RELEASE_EXIT_DIAG_S, then each time the time waited
++    doubles); pending_stats() exit_wait_poll_diagnostics / exit_device_wait_diagnostics count them.
+     Never raises, except a BaseException that arrived during it (after the close). Prior art: CPython's atexit, which
+     itself prints (not raises) a callback's exception and runs the rest (taken: log-don't-raise); Python's try / finally
+     guarantee, also for KeyboardInterrupt (language reference, "The try statement"); core's
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -234,6 +234,12 @@
+     native runner atexit actually calls, ``_C._dlpack_exit_hook_runner``: it
+     closes and waits itself, logs the recorded failures nobody reported, and
+     re-raises. Never raises, except a BaseException that arrived during it.
++    P1T-FIX7 (lead send-back L1): if locking the release lifecycle mutex
++    fails (never observed), the close retries it, and that retry wait is
++    diagnosed like the release wait (a stderr line after the knob's delay,
++    then each time the retrying time doubles; _dlpack_release_stats()
++    shutdown_lock_retries / shutdown_lock_diagnostics). No exit wait is
++    silent.
+     Prior art: CPython's atexit (a callback's exception is printed, the rest
+     still run) and Python's try / finally; see bindings.cpp.
+     """

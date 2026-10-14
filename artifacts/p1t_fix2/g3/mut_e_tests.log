@@ -1,0 +1,46 @@
+........................................................FF.F             [100%]
+=================================== FAILURES ===================================
+_____ test_fix2_n5_in_flight_foreign_release_completes_before_finalization _____
+
+    def test_fix2_n5_in_flight_foreign_release_completes_before_finalization():
+        r, res = _run_n5("during")
+        assert res is not None, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        before, after = res["before_hook"]["stats"], res["after_hook"]["stats"]
+        assert before.get("in_flight") == 1, res                      # admitted and unfinished when the hook ran
+>       assert res["after_hook"]["deleter_done"][0] is True and res["after_hook"]["deleter_calls"][0] == 1, res
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru......}}, 'before_hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}}
+E       assert (False is True)
+
+tensor_cuda/tests/test_dlpack.py:1164: AssertionError
+_______ test_fix2_n5_release_starting_during_the_wait_leaks_without_gil ________
+
+    def test_fix2_n5_release_starting_during_the_wait_leaks_without_gil():
+        r, res = _run_n5("nested")
+>       assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+E       AssertionError: rc=-6
+E         stdout=ARMED
+E         RESULT {"before_hook": {"stats": {"released": 0, "leaked_interpreter_shutdown": 0, "leaked_drain_failure": 0, "deleter_exceptions": 0, "leaked_closing": 0, "lock_failures": 0, "in_flight": 1, "closing": false, "shutdown_calls": 0, "shutdown_in_flight_at_close": 0, "shutdown_timeouts": 0, "shutdown_still_in_flight": 0, "shutdown_wait_us": 0}}, "after_hook": {"stats": {"released": 0, "leaked_interpreter_shutdown": 0, "leaked_drain_failure": 0, "deleter_exceptions": 0, "leaked_closing": 0, "lock_failures": 0, "in_flight": 1, "closing": true, "shutdown_calls": 1, "shutdown_in_flight_at_close": 1, "shutdown_timeouts": 0, "shutdown_still_in_flight": 1, "shutdown_wait_us": 0}, "deleter_calls": [1, 0], "deleter_done": [false, false], "finalizing": false}}
+E         
+E         stderr=FATAL: exception not rethrown
+E         
+E       assert ({'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru......}}, 'before_hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}} is not None and -6 == 0)
+E        +  where -6 = CompletedProcess(args=['/usr/bin/python3', '-c', '\nimport atexit, ctypes, gc, json, os, sys, time\nRESULTS = {}\nPROD...ter_calls": [1, 0], "deleter_done": [false, false], "finalizing": false}}\n', stderr='FATAL: exception not rethrown\n').returncode
+
+tensor_cuda/tests/test_dlpack.py:1174: AssertionError
+________________ test_fix2_n5_the_wait_is_bounded_and_reported _________________
+
+    def test_fix2_n5_the_wait_is_bounded_and_reported():
+        t0 = __import__("time").monotonic()
+        r, res = _run_n5("bounded")
+        assert res is not None and r.returncode == 0, f"rc={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+        after = res["after_hook"]["stats"]
+>       assert after["shutdown_timeouts"] == 1 and after["shutdown_still_in_flight"] == 1, res
+E       AssertionError: {'after_hook': {'deleter_calls': [1, 0], 'deleter_done': [False, False], 'finalizing': False, 'stats': {'closing': Tru......}}, 'before_hook': {'stats': {'closing': False, 'deleter_exceptions': 0, 'in_flight': 1, 'leaked_closing': 0, ...}}}
+E       assert (0 == 1)
+
+tensor_cuda/tests/test_dlpack.py:1197: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix2_n5_in_flight_foreign_release_completes_before_finalization
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix2_n5_release_starting_during_the_wait_leaks_without_gil
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix2_n5_the_wait_is_bounded_and_reported
+3 failed, 57 passed, 57 deselected in 13.35s

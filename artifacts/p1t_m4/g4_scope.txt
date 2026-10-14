@@ -1,0 +1,126 @@
+# P1T-M4 G4 scope receipt (Mon Oct 12 09:19:23 PM EDT 2026)
+## 1. diff -u of the three hook files against the bbc4880 copies (/tmp/p1t_m4_base/tc_signal_bbc4880, byte-identical to WorkTree/tensor_fork_voice_wt_int)
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -305,6 +305,8 @@
+ }  // namespace
+ }  // namespace tcs
+ 
++namespace tcs { void register_m4(py::module_& m); }  // P1T-M4 norms and small ops (src/m4_bindings.cpp)
++
+ PYBIND11_MODULE(_tc_signal, m) {
+   m.doc() = "tc_signal C++ core: DLPack-consuming fp32 1-D convolutions on the legacy default stream (P1T-M2)";
+   using namespace tcs;
+@@ -348,4 +350,5 @@
+     d["dlpack_consumer_stream"] = tuning::kDlpackLegacyStream;
+     return d;
+   });
++  register_m4(m);
+ }
+--- a/tc_signal/CMakeLists.txt
++++ b/tc_signal/CMakeLists.txt
+@@ -50,6 +50,9 @@
+   src/conv.cu
+   src/dlpack_operand.cpp
+   src/bindings.cpp
++  src/norms.cu
++  src/small_ops.cu
++  src/m4_bindings.cpp
+ )
+ 
+ target_include_directories(_tc_signal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+--- a/tc_signal/tc_signal/__init__.py
++++ b/tc_signal/tc_signal/__init__.py
+@@ -111,3 +111,8 @@
+         out = _allocator(tuple(out_shape))
+     _C.conv_transpose1d_run(xc, wc, bc, out, s, pb, pe, op, d, g)
+     return out
++
++
++from ._norms import group_norm, instance_norm1d, layer_norm  # noqa: E402  (P1T-M4, T5)
++from ._small import reflection_pad1d, rint, upsample_nearest1d  # noqa: E402  (P1T-M4, T6)
++__all__ += ['instance_norm1d', 'layer_norm', 'group_norm', 'upsample_nearest1d', 'reflection_pad1d', 'rint']
+
+## 2. M2's other existing tc_signal files unchanged (sha256 vs the 20:27 snapshot; the .so is rebuilt by design)
+tc_signal/CMakeLists.txt: FAILED
+tc_signal/src/bindings.cpp: FAILED
+tc_signal/tc_signal/__init__.py: FAILED
+tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so: FAILED
+sha256sum: WARNING: 4 computed checksums did NOT match
+(only lines that are NOT OK are listed above)
+
+## 3. nothing under tensor_cuda/ changed (sha256 of all 132 files vs the 20:27 snapshot)
+OK lines: 132 / 132; not OK: 0
+files under tensor_cuda/ newer than the snapshot: 0
+
+## 4. the order's grep (run from the worktree root)
+$ grep -n "use_fast_math\|atomicAdd\|__half\|roundf" tc_signal/src/norms.cu tc_signal/src/small_ops.cu
+grep exit=1 (1 = no match)
+same grep over every M4 source file:
+grep exit=1
+math functions used in the M4 kernels:
+      2 tc_signal/src/norms.cu:13:sqrtf
+      1 tc_signal/src/small_ops.cu:3:rintf
+      1 tc_signal/src/small_ops.cu:105:rintf
+      1 tc_signal/src/small_ops.cu:101:rintf
+      1 tc_signal/src/norms.cu:99:__forceinline__
+      1 tc_signal/src/norms.cu:27:rsqrtf
+      1 tc_signal/src/norms.cu:26:sqrtf
+      1 tc_signal/src/norms.cu:162:fmaf
+      1 tc_signal/src/norms.cu:14:fmaf
+      1 tc_signal/src/norms.cu:148:sqrtf
+      1 tc_signal/src/norms.cu:143:fmaf
+
+## 5. non-git diff stat (NO git, per the order): every file under the worktree newer than the 20:27 snapshot
+allowed new ./artifacts/p1t_m4/g1_census_receipt.json (binary/json, 57199 bytes)
+allowed new ./artifacts/p1t_m4/g4_scope.txt 75 lines
+allowed new ./artifacts/p1t_m4/mutants/make_mutants.py 108 lines
+allowed new ./artifacts/p1t_m4/mutants/mutant_summary.json (binary/json, 48701 bytes)
+allowed new ./artifacts/p1t_m4/mutants/mutant_summary.txt 242 lines
+allowed new ./artifacts/p1t_m4/mutants/summarize.py 51 lines
+allowed new ./artifacts/p1t_m4/p1t_T1T2T3T5T6.json (binary/json, 224263 bytes)
+allowed new ./artifacts/p1t_m4/p1t_T1T2T3T5T6_summary.txt 11 lines
+allowed new ./artifacts/p1t_m4/p1t_T5T6.json (binary/json, 44224 bytes)
+allowed new ./artifacts/p1t_m4/p1t_T5T6_summary.txt 8 lines
+allowed new ./artifacts/p1t_m4/sim_large_offset.py 23 lines
+allowed new ./artifacts/p1t_m4/sim_large_offset.txt 4 lines
+allowed new ./artifacts/p1t_m4/summarize_g2.py 15 lines
+allowed new ./artifacts/p1t_m4/tc_signal_tree_before.sha256 19 lines
+allowed new ./artifacts/p1t_m4/tensorcuda_adapter.py 149 lines
+allowed new ./docs/P1T_M4_LEDGER.md 216 lines
+allowed new ./logs/p1t_m4_build.log 46 lines
+allowed new ./logs/p1t_m4_g1_baseline_bbc4880.log 25 lines
+allowed new ./logs/p1t_m4_g1_new_tests_timing.log 22 lines
+allowed new ./logs/p1t_m4_g1_own_tests.log 398 lines
+allowed new ./logs/p1t_m4_g2_regression.log 64 lines
+allowed new ./logs/p1t_m4_g2_T5T6.log 46 lines
+allowed modified ./tc_signal/CMakeLists.txt 78 lines
+allowed modified ./tc_signal/src/bindings.cpp 354 lines
+allowed new ./tc_signal/src/m4_bindings.cpp 380 lines
+allowed new ./tc_signal/src/m4_ops.h 60 lines
+allowed new ./tc_signal/src/norms.cu 179 lines
+allowed new ./tc_signal/src/small_ops.cu 138 lines
+allowed modified ./tc_signal/tc_signal/__init__.py 118 lines
+allowed new ./tc_signal/tc_signal/_norms.py 81 lines
+allowed new ./tc_signal/tc_signal/_small.py 71 lines
+allowed modified ./tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so (binary/json, 438552 bytes)
+allowed new ./tc_signal/tests/m4_census.py 187 lines
+allowed new ./tc_signal/tests/m4_oracle.py 198 lines
+allowed new ./tc_signal/tests/test_norms.py 328 lines
+allowed new ./tc_signal/tests/test_small_ops.py 293 lines
+(mutant receipt copies under artifacts/p1t_m4/mutants/<id>/ omitted from the list: 70 files)
+files outside the allowed paths: 0
+
+## 6. Project-Voice untouched: files under its runner and fixtures dirs newer than the snapshot
+0
+
+## Notes (seat)
+- §2: the 4 non-matching files are exactly the 3 hook files (their full diffs are in §1) and the rebuilt module
+  (_tc_signal*.so, rebuilt by design: new sha256 85a80ed1d82d798542eeccc3182fd9a48e3d5e62458e1d307f7cbb5f2bcd38fa,
+  was 3db14dc4…). The other 15 files of M2's tc_signal tree (conv.cu, conv_ops.h, dlpack_operand.{h,cpp}, tuning.h,
+  build.sh, .gitignore, README.md, include/dlpack/dlpack.h, tests/{conftest,tcs_census,tcs_oracle,tcs_producer,
+  test_contract,test_conv}.py) match byte for byte.
+- §4: the math-function list includes comment lines. In code, norms.cu:148 is `1.0f / sqrtf(var + eps)` (math-library
+  sqrtf, IEEE-rounded under the default -prec-sqrt=true, then IEEE division); rsqrtf appears only in the comment at
+  norms.cu:27 that explains why it is not used. small_ops.cu:105 is the only rintf call.
+- §5 is the non-git stand-in for `git diff bbc4880 --stat` (the order says NO git); the lead should run the git form.

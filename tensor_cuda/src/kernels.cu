@@ -6,6 +6,7 @@
 #include "tc/core.h"
 
 #include <cuda_runtime.h>
+#include <atomic>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <mma.h>  // EXP-APA-3: WMMA HMMA for the Q-tiled attention skeleton
@@ -66,17 +67,32 @@ Device Device::from_string(const std::string& s) {
   return d;
 }
 
+// P1T-FIX2, review finding N2: both helpers used plain signed products, which overflowed (undefined behaviour) for
+// zero-extent shapes such as [2^62, 4, 0] (numel_of: the prefix product 2^64 is formed before the 0 is reached) and
+// [0, 2^62, 4] (contiguous_strides: the stride of axis 0 is 2^64) even though the element count is 0 (round-2 probe
+// core_cpu prefix/suffix, UBSan). The DLPack/empty entry points now refuse such shapes first (bindings.cpp
+// checked_numel/checked_nbytes, the zero-extent rule); these helpers are the second line:
+//  * numel_of returns 0 for any shape with a zero extent WITHOUT multiplying (that is the exact count), and otherwise
+//    multiplies with overflow checks;
+//  * contiguous_strides multiplies with overflow checks and no longer forms the unused product past axis 0.
+// An overflow throws std::overflow_error (Python OverflowError) instead of wrapping. Values are unchanged whenever no
+// overflow occurs. Prior art: GCC/Clang __builtin_mul_overflow (GCC 5, 2015), C23 ckd_mul, CERT INT32-C. Ours: where.
 int64_t numel_of(const Shape& shape) {
+  for (int64_t s : shape)
+    if (s == 0) return 0;
   int64_t n = 1;
-  for (int64_t s : shape) n *= s;
-  return shape.empty() ? 1 : n;
+  for (int64_t s : shape)
+    if (__builtin_mul_overflow(n, s, &n))
+      throw std::overflow_error("numel_of: the element count of a shape overflows int64");
+  return n;  // 1 for a 0-d shape
 }
 Shape contiguous_strides(const Shape& shape) {
   Shape st(shape.size());
   int64_t acc = 1;
   for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
     st[i] = acc;
-    acc *= shape[i];
+    if (i > 0 && __builtin_mul_overflow(acc, shape[i], &acc))
+      throw std::overflow_error("contiguous_strides: a stride of a shape overflows int64");
   }
   return st;
 }
@@ -178,7 +194,330 @@ Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(devic
     ptr = std::malloc(nbytes);
   }
 }
+// P1T-M1 (DLPack import): wrap a producer's memory. No allocation, no pool.
+Storage::Storage(void* external_ptr, size_t nbytes_, Device device_,
+                 ExternalRelease release, void* release_ctx)
+    : ptr(external_ptr), nbytes(nbytes_), device(device_),
+      external_release(release), external_ctx(release_ctx) {}
+
+// P1T-FIX1, F05: device-correct drain for an external (imported) Storage.
+//  1. If `dev` is not the current device, switch to it (the caller may have
+//     switched devices since the import; draining the CURRENT device's legacy
+//     stream would leave this allocation's last use pending).
+//  2. Synchronize that device's legacy stream (stream 0 in this TU).
+//  3. Report failure (any step) so the caller does NOT release, and clear the
+//     runtime's last-error slot so an unrelated later launch check does not
+//     report this destructor's error.
+//  4. Restore the caller's device.
+// No device-wide sync (cudaDeviceSynchronize): one stream sync, as before.
+// Prior art: the CUDA runtime current-device model (cudaGetDevice/cudaSetDevice;
+// the legacy default stream is per device) and the scoped device guard of
+// PyTorch (c10::cuda::CUDAGuard) / CuPy (cupy.cuda.Device as a context manager).
+// Taken: switch-then-restore. Ours: its placement before the DLPack deleter and
+// the leak-on-failure rule.
+namespace {
+std::atomic<unsigned long long> g_external_drain_leaks{0};
+// P1T-FIX4 (sweep, unchecked CUDA returns): a restore of the caller's device that failed on a path that cannot raise
+// (the external Storage destructor below, or a CheckedDeviceGuard unwinding after another error). Counted, and the
+// failed call's entry is consumed from the thread's last-error slot, so a later unrelated launch check does not report
+// it. Read through tensor_cuda._C._dlpack_release_stats()["device_restore_failures"].
+std::atomic<unsigned long long> g_dlpack_device_restore_failures{0};
+
+// P1T-FIX5 (sweep (d), consumed-but-unrecorded errors; round 5 found V5-02 in this class in the add-on). The P1-T core
+// sites that consume a failed call's slot entry WITHOUT raising (they run in the external Storage destructor or while
+// fill_ unwinds: nothing may raise there) were counted (leaked_drain_failure, device_restore_failures) but the error
+// itself was lost. Each now RECORDS it first: counted in unraisable_errors, and the first one (site, device, CUDA error)
+// kept; tensor_cuda._C._dlpack_release_stats() reports them. Core's synchronize() (cuda_sync: cudaDeviceSynchronize +
+// cuda_check_last) is pre-existing engine code outside the P1-T surface and is not changed to raise them.
+// Thread-safe (a Storage may die on any thread): the count is atomic, the first record is taken under a mutex whose
+// failure is caught (never thrown from these noexcept paths). Prior art: PyTorch's C10_CUDA_CHECK_WARN (consume and
+// report in a destructor, never throw) and errno-style "first error" recording; no specific prior art known to me for
+// keeping the first unraisable error next to a counter.
+struct CoreUnraisableRecord {
+  std::mutex mu;
+  const char* what = nullptr;
+  int device = -1;
+  int error = 0;
+  // P1T-FIX6 (FIX5 residual R7: recorded, but raised by nothing): the first failure not raised yet. Raised once by
+  // tensor_cuda.synchronize() (bindings.cpp dlpack_raise_unraisable), logged by the exit hook, then consumed.
+  const char* unreported_what = nullptr;
+  int unreported_device = -1;
+  int unreported_error = 0;
+};
+std::atomic<unsigned long long> g_core_unraisable_errors{0};
+std::atomic<unsigned long long> g_core_unraisable_unreported{0};  // P1T-FIX6 (R7): recorded, not raised yet
+
+CoreUnraisableRecord& core_unraisable_record() {
+  static CoreUnraisableRecord* r = new CoreUnraisableRecord();  // never destroyed (a Storage may die at exit)
+  return *r;
+}
+
+void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept {
+  g_core_unraisable_errors.fetch_add(1);
+  bool counted = false;  // P1T-FIX6 (R7): the not-yet-raised count changes with its name, under the mutex
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    if (r.what == nullptr) {
+      r.what = what;
+      r.device = device;
+      r.error = static_cast<int>(e);
+    }
+    if (g_core_unraisable_unreported.load() == 0) {
+      r.unreported_what = what;
+      r.unreported_device = device;
+      r.unreported_error = static_cast<int>(e);
+    }
+    g_core_unraisable_unreported.fetch_add(1);
+    counted = true;
+  } catch (const std::exception&) {
+    if (!counted) g_core_unraisable_unreported.fetch_add(1);  // counted, unnamed
+    // bad_alloc on the first use or a mutex failure: the counter above still records it.
+  }
+}
+
+// P1T-FIX4: the restore result is now checked (62c8d9f ignored it). The drain itself decides release vs leak; a failed
+// restore does not make the drained memory unsafe, so it is counted (above) rather than turned into a leak. Every
+// failed call of ours is consumed from the last-error slot (the error is accounted for by the leak or the counter).
+// P1T-FIX5 (sweep d): each failure is recorded (note_core_unraisable) before its slot entry is consumed.
+// Prior art: PyTorch c10 CUDAGuardImpl::uncheckedSetDevice -> C10_CUDA_CHECK_WARN (consume with cudaGetLastError, warn,
+// never throw from the guard's destructor), read in the installed torch 2.11 headers. Taken: check, consume, do not
+// throw. Ours: counting instead of a warning line.
+// P1T-FIX7 (sweep (j), error attribution): the record names the ONE call that failed. FIX5/FIX6 recorded every drain
+// failure as "(cudaGetDevice / cudaSetDevice / cudaStreamSynchronize)", so the message never said which call had failed
+// and named two that had not. The device in the record is the imported Storage's device in all three cases.
+bool drain_device_legacy_stream(int dev) {
+  int prev = -1;
+  const char* failed_step =
+      "draining an imported Storage's device before its DLPack release: the current-device query cudaGetDevice "
+      "failed, so nothing was drained; the release was deliberately leaked";
+  cudaError_t e = cudaGetDevice(&prev);
+  bool switched = false;
+  if (e == cudaSuccess && prev != dev) {
+    failed_step =
+        "draining an imported Storage's device before its DLPack release: switching to that device (cudaSetDevice) "
+        "failed, so nothing was drained; the release was deliberately leaked";
+    e = cudaSetDevice(dev);
+    switched = (e == cudaSuccess);
+  }
+  if (e == cudaSuccess) {
+    failed_step =
+        "draining an imported Storage's device before its DLPack release: cudaStreamSynchronize of that device's "
+        "legacy stream failed; the release was deliberately leaked";
+    e = cudaStreamSynchronize(0);
+  }
+  if (e != cudaSuccess) {
+    note_core_unraisable(failed_step, dev, e);  // recorded before the slot entry is consumed
+    cudaGetLastError();
+  }
+  const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
+  if (re != cudaSuccess) {
+    note_core_unraisable("restoring the caller's CUDA device after an imported Storage's drain (cudaSetDevice)", prev,
+                         re);
+    cudaGetLastError();
+    g_dlpack_device_restore_failures.fetch_add(1);
+  }
+  return e == cudaSuccess;
+}
+
+// P1T-FIX4 (sweep): every failed CUDA call of the P1-T core surface is reported by exactly one raise, and that raise
+// consumes the call's entry from the calling thread's last-error slot (CUDA 12.6 Programming Guide 3.2.12: the runtime
+// keeps one error variable per host thread, "overwritten by the error code every time an error occurs"; cudaGetLastError
+// "returns this variable and resets it"), so no later, unrelated launch check reports it a second time.
+// P1T-FIX8 (sweep (k), consumed CUDA errors): the report (message and std::runtime_error) is built BEFORE the slot entry
+// is consumed, so a std::bad_alloc while building it (MemoryError) leaves the entry in the slot for the next check to
+// report, instead of consuming a failure nobody reports. Prior art: FIX5 V5-02's record-before-consume rule; CUDA 12.6
+// cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset").
+[[noreturn]] void throw_after_consuming(const std::string& msg) {
+  std::runtime_error report(msg);
+  cudaGetLastError();  // consumed only now that the report exists
+  throw report;
+}
+[[noreturn]] void raise_cuda_failure(const std::string& what, cudaError_t e) {
+  throw_after_consuming(what + " (" + cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + ")");
+}
+
+// P1T-FIX4 (sweep, implicit current device): a checked scoped device switch for fill_. The constructor raises
+// RuntimeError if the current device cannot be read or the switch fails (nothing switched then); restore() is the
+// success-path restore and raises if it fails; the destructor restores only when an exception is already unwinding
+// (restore() not reached) and counts a failure instead of throwing (no throw from a destructor).
+// Prior art: c10::cuda::CUDAGuard / OptionalCUDAGuard (PyTorch; switch, then restore in the destructor with
+// C10_CUDA_CHECK_WARN) and cupy.cuda.Device as a context manager (CuPy; __exit__ restores and may raise). Taken: the
+// scoped switch-and-restore. Ours: the explicit raising restore() on the success path plus the counting destructor.
+class CheckedDeviceGuard {
+ public:
+  CheckedDeviceGuard(int device, const char* who) : who_(who) {
+    cudaError_t e = cudaGetDevice(&prev_);
+    if (e != cudaSuccess) raise_cuda_failure(std::string(who_) + ": cudaGetDevice failed", e);
+    if (prev_ != device) {
+      e = cudaSetDevice(device);
+      if (e != cudaSuccess)
+        raise_cuda_failure(std::string(who_) + ": cannot make the tensor's CUDA device " + std::to_string(device) +
+                               " current (cudaSetDevice failed)",
+                           e);
+      switched_ = true;
+    }
+  }
+  void restore() {
+    if (!switched_) return;
+    switched_ = false;
+    const cudaError_t e = cudaSetDevice(prev_);
+    if (e != cudaSuccess)
+      raise_cuda_failure(std::string(who_) + ": restoring the caller's CUDA device " + std::to_string(prev_) +
+                             " failed (cudaSetDevice); the work was queued, and the calling thread's current device "
+                             "is still the tensor's",
+                         e);
+  }
+  ~CheckedDeviceGuard() {
+    if (!switched_) return;
+    const cudaError_t e = cudaSetDevice(prev_);
+    if (e != cudaSuccess) {
+      // P1T-FIX5 (sweep d): recorded before its slot entry is consumed (counted only, before).
+      note_core_unraisable("restoring the caller's CUDA device while fill_ unwound after another error (cudaSetDevice)",
+                           prev_, e);
+      cudaGetLastError();
+      g_dlpack_device_restore_failures.fetch_add(1);
+    }
+  }
+  CheckedDeviceGuard(const CheckedDeviceGuard&) = delete;
+  CheckedDeviceGuard& operator=(const CheckedDeviceGuard&) = delete;
+
+ private:
+  const char* who_;
+  int prev_ = -1;
+  bool switched_ = false;
+};
+}  // namespace
+
+unsigned long long storage_external_drain_leaks() { return g_external_drain_leaks.load(); }
+
+// P1T-FIX4: declared locally in bindings.cpp (core.h is outside this order's scope).
+unsigned long long dlpack_device_restore_failures() { return g_dlpack_device_restore_failures.load(); }
+
+// P1T-FIX5 (sweep d): the recorded unraisable CUDA errors of the P1-T core paths (declared locally in bindings.cpp).
+unsigned long long dlpack_unraisable_errors() { return g_core_unraisable_errors.load(); }
+void dlpack_first_unraisable(std::string* what, int* device, int* error) {
+  CoreUnraisableRecord& r = core_unraisable_record();
+  std::lock_guard<std::mutex> lk(r.mu);
+  *what = r.what ? r.what : "";
+  *device = r.device;
+  *error = r.error;
+}
+
+// P1T-FIX6 (FIX5 residual R7): the recorded failures not raised yet (count; the first of them, "" when it was recorded
+// while an earlier report was being raised and is therefore not named), and their consumption by the raise. The count
+// is atomic (a Storage may die on any thread); the named first one is kept under the record's mutex. Prior art: the
+// add-on's N1 / V6-03 raise-once records (tc_signal dlpack_operand.cpp); no specific external prior art known to me.
+void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error) {
+  CoreUnraisableRecord& r = core_unraisable_record();
+  std::lock_guard<std::mutex> lk(r.mu);
+  *count = g_core_unraisable_unreported.load();
+  *what = r.unreported_what ? r.unreported_what : "";
+  *device = r.unreported_device;
+  *error = r.unreported_error;
+}
+
+// P1T-FIX8 (sweep (k)): the external form of throw_after_consuming for bindings.cpp's P1-T raises (declared there).
+[[noreturn]] void throw_cuda_report_after_consuming(const std::string& msg) { throw_after_consuming(msg); }
+
+// P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l): the same snapshot WITHOUT allocating, for the exit
+// runner's last-chance report (the site text is a static string; FIX6's snapshot copied it into a std::string, which
+// is what threw bad_alloc and left the exit log empty). A mutex failure (never observed) still yields the count, unnamed.
+void dlpack_unreported_unraisable_raw(unsigned long long* count, const char** what, int* device, int* error) noexcept {
+  *what = nullptr;
+  *device = -1;
+  *error = 0;
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    *count = g_core_unraisable_unreported.load();
+    *what = r.unreported_what;
+    *device = r.unreported_device;
+    *error = r.unreported_error;
+  } catch (const std::exception&) {
+    *count = g_core_unraisable_unreported.load();
+  }
+}
+
+void dlpack_ack_unraisable(unsigned long long count) noexcept {
+  auto consume = [count] {
+    unsigned long long cur = g_core_unraisable_unreported.load();
+    while (!g_core_unraisable_unreported.compare_exchange_weak(cur, cur > count ? cur - count : 0ULL)) {
+    }
+  };
+  try {
+    CoreUnraisableRecord& r = core_unraisable_record();
+    std::lock_guard<std::mutex> lk(r.mu);
+    consume();
+    // The named one was just raised; a failure recorded since the snapshot stays counted, unnamed.
+    r.unreported_what = nullptr;
+    r.unreported_device = -1;
+    r.unreported_error = 0;
+  } catch (const std::exception&) {
+    consume();  // a mutex failure (never observed): consume the count; a stale name is only a label
+  }
+}
+
+// P1T-FIX4 (sweep, implicit current device): TensorCUDA labels its OWN allocations cuda:0 (Device::from_string, which
+// predates P1-T, maps every "cuda..." string to index 0) while the Storage constructor allocates on whatever device is
+// current; an imported Storage is labeled with the producer's device. So the label is proven here against the
+// allocation itself before a P1-T path acts on it (the DLPack export publishes it and fences its stream; fill_ launches
+// on it): cudaPointerGetAttributes of element 0 must report a CUDA allocation on a.device.index. Returns "" when it
+// does; otherwise a message naming both devices (the caller raises its own error type). A failed query raises
+// RuntimeError (its slot entry consumed). Empty arrays have no memory to act on and pass. The query does not
+// synchronize, and it succeeds in a context with a sticky error (receipt artifacts/p1t_fix4/cuda_semantics.txt).
+// Prior art: the CUDA runtime's unified-addressing pointer query (cudaPointerGetAttributes, CUDA 4.0+); PyTorch 2.11
+// Tensor.__dlpack__ refuses a CURRENT-device mismatch instead (BufferError "Can't export tensors on a different CUDA
+// device index", read in the installed torch/_tensor.py). Taken: refuse rather than publish a wrong device. Ours:
+// checking the label against the allocation (not the current device), at export and fill_.
+std::string cuda_storage_device_mismatch(const NDArray& a, const char* who) {
+  if (!a.defined() || !a.device.is_cuda() || a.numel() == 0 || a.storage->ptr == nullptr) return std::string();
+  cudaPointerAttributes attr{};
+  const cudaError_t e = cudaPointerGetAttributes(&attr, a.data_ptr());
+  // P1T-FIX7 (sweep (j)): the failed query is about this pointer; which device holds it is what it could not tell.
+  if (e != cudaSuccess)
+    raise_cuda_failure(std::string(who) + ": cudaPointerGetAttributes failed for element 0 (the tensor is labeled cuda:" +
+                           std::to_string(a.device.index) + "; the device of its allocation is unknown)",
+                       e);
+  if (attr.type == cudaMemoryTypeUnregistered)
+    return std::string(who) + ": this tensor is labeled cuda:" + std::to_string(a.device.index) +
+           " but its memory is not a CUDA allocation the driver knows; refused";
+  if (attr.device != a.device.index)
+    return std::string(who) + ": this tensor is labeled cuda:" + std::to_string(a.device.index) +
+           " but its memory is on CUDA device " + std::to_string(attr.device) +
+           " (TensorCUDA labels its own allocations cuda:0 and allocates on the current device, so it was created "
+           "while that device was current); refused rather than act on the wrong device";
+  return std::string();
+}
+
 Storage::~Storage() {
+  if (external_release) {
+    // Imported (DLPack) memory belongs to its producer: never cudaFree it and
+    // never hand it to the pool. ORDER MATTERS:
+    //  1. Drain the engine stream. Every engine kernel, cuBLAS call and
+    //     cudaMemcpy runs on stream 0 (the legacy default stream; this TU is
+    //     built without --default-stream per-thread), so once it is idle no
+    //     queued engine work can still read or write this memory. The engine
+    //     keeps no per-Storage "last use" event, so "everything queued so far"
+    //     is the only sound fence; an event recorded here and waited on would
+    //     cover exactly the same work at three API calls instead of one. A
+    //     deferred release (host callback) is not allowed to run the
+    //     producer's deleter, which may call CUDA (torch's caching allocator).
+    //  2. Then hand the memory back (the DLPack deleter, GIL held, in
+    //     bindings.cpp). A producer may reuse it at once on its own stream.
+    // Prior art: the DLPack deleter contract (dmlc/dlpack, 2017+) and the
+    // array API's stream rules (2021+); the drain-then-delete order is the
+    // standard CUDA "free only after last use" rule. Ours: its placement in
+    // the Storage destructor.
+    // P1T-FIX1 F05: drain THIS Storage's device (drain_device_legacy_stream
+    // above); if the drain fails, deliberately leak instead of releasing.
+    if (device.is_cuda() && !drain_device_legacy_stream(device.index)) {
+      g_external_drain_leaks.fetch_add(1);
+      return;
+    }
+    external_release(external_ctx);
+    return;
+  }
   if (!ptr) return;
   if (device.is_cuda()) {
     if (pooled) cudaFreeAsync(ptr, 0);
@@ -247,6 +586,95 @@ NDArray NDArray::full(const Shape& shape, double value, DType dtype, Device devi
   });
   cuda_check_last("full");
   return a;
+}
+// P1T-M1: in-place fill through the EXISTING fill_kernel (no new kernel),
+// queued on the engine stream like NDArray::full; an in-place engine write,
+// so it bumps the Storage revision after enqueueing (core.h contract).
+// Prior art: torch.Tensor.fill_ / numpy ndarray.fill (API shape only).
+//
+// P1T-FIX4 (sweep; review rounds found F05/V4-01 in this class): 62c8d9f launched on the CURRENT device, whatever the
+// array's device. Now, for a non-empty array:
+//  1. the array's device label is proven against its allocation (cuda_storage_device_mismatch; RuntimeError on a
+//     mismatch, nothing launched);
+//  2. a checked guard makes that device current (CheckedDeviceGuard: switch, launch, raising restore; the revision is
+//     bumped once the launch is queued and checked, before the restore, so a failed restore cannot hide the write);
+//  3. right before the launch, an error already pending in the calling thread's last-error slot is taken and raised as
+//     such (nothing launched), so the post-launch check below can only report this launch's own error. CUDA 12.6
+//     Programming Guide 3.2.12: "To ensure that any error returned by cudaPeekAtLastError() or cudaGetLastError() does
+//     not originate from calls prior to the kernel launch, one has to make sure that the runtime error variable is set
+//     to cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel
+//     launch." (receipt artifacts/p1t_fix4/cuda_doc_quotes.txt). Taken: that rule. Ours: raising the pending error,
+//     named as pre-existing, instead of discarding it.
+//
+// P1T-FIX5, round-5 review finding V5-04 (MINOR): fill_ launched the existing, NON-grid-stride fill_kernel (one thread
+// per element, `if (i < n)`) with the baseline helper nblk(n), which narrows ceil(n / 256) to int. For an accepted
+// extent of 2^40 + 1 fp32 elements (4 TiB + 4 bytes of metadata; shape and byte bounds fit int64) the block count
+// 2^32 + 1 became 1: one block wrote 256 elements, the launch succeeded and the revision was bumped (review probes
+// fill_grid_cpu.cpp, fill_grid_single_gpu.py). Now, before anything else (before the label proof, the device guard, any
+// launch and the revision bump), fill_grid_blocks computes the block count in int64 and REFUSES (ValueError) an extent
+// whose block count exceeds the grid's x-dimension limit; an accepted extent's launch covers every element
+// (blocks * 256 >= n). Refusal, not a grid-stride fill: a grid-stride kernel would be a new core __global__, which the
+// P1-T plan forbids. The shared nblk helper and the other engine kernels are unchanged (baseline, outside P1-T).
+// The limit: CUDA C++ Programming Guide 12.6, "Compute Capabilities", Table "Technical Specifications per Compute
+// Capability": "Maximum x-dimension of a grid of thread blocks" = 2^31-1 for every compute capability CUDA 12.6 supports
+// (it is also cudaDeviceProp::maxGridSize[0] / cudaDevAttrMaxGridDimX; tests/test_dlpack.py test_fix5_v504_* reads it
+// on this host: 2147483647). A hardware limit, not a tunable.
+// Prior art: ISO C++17 integral conversions ([conv.integral]: an out-of-range signed conversion is implementation-
+// defined, here a wrap) and the checked-narrowing rule of the C++ Core Guidelines (ES.46, gsl::narrow); CUDA's dim3 grid
+// semantics. Taken: compute wide, check, then narrow. Ours: refusing at fill_'s boundary instead of capping the grid.
+namespace {
+constexpr int64_t kFillMaxGridX = 2147483647;  // 2^31-1: CUDA 12.6 grid x-dimension limit (see above)
+
+int64_t fill_grid_blocks(int64_t n) {
+  const int64_t blocks = n / kT + (n % kT != 0 ? 1 : 0);  // ceil(n / kT) for n >= 1, without forming n + kT - 1
+  if (blocks > kFillMaxGridX)
+    throw std::invalid_argument(
+        "fill_: " + std::to_string(n) + " elements need " + std::to_string(blocks) + " blocks of " +
+        std::to_string(kT) + " threads, more than the CUDA grid x-dimension limit of " +
+        std::to_string(kFillMaxGridX) + " (2^31-1) blocks; fill_ launches one thread per element (the existing "
+        "fill_kernel), so it covers at most " + std::to_string(kFillMaxGridX * kT) +
+        " elements. Refused before any launch: nothing was written and the revision is unchanged");
+  return blocks;
+}
+}  // namespace
+
+void fill_(NDArray& a, double value) {
+  if (!a.defined()) throw std::runtime_error("fill_: undefined array");
+  if (!a.device.is_cuda()) throw std::runtime_error("fill_: CUDA arrays only");
+  if (a.dtype != DType::Float32 && a.dtype != DType::Float16 && a.dtype != DType::BFloat16)
+    throw std::runtime_error("op supports float32/float16/bfloat16 only");
+  int64_t n = a.numel();
+  if (n == 0) return;
+  const int64_t blocks = fill_grid_blocks(n);  // P1T-FIX5 V5-04: int64 block count; refused here if over the limit
+  const std::string mismatch = cuda_storage_device_mismatch(a, "fill_");
+  if (!mismatch.empty()) throw std::runtime_error(mismatch);
+  CheckedDeviceGuard guard(a.device.index, "fill_");
+  const cudaError_t pending = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
+  if (pending != cudaSuccess)
+    throw_after_consuming(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
+                             cudaGetErrorName(pending) + ": " + cudaGetErrorString(pending) +
+                             "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
+                             "(P1T-FIX7: the call that set it and its device are unknown; the slot records neither)");
+  DISPATCH_FLOAT(a.dtype, T, {
+    // P1T-FIX5 V5-04: blocks <= 2^31-1 (checked above), so this conversion is exact and blocks * kT >= n.
+    fill_kernel<T><<<static_cast<unsigned int>(blocks), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+  });
+  // P1T-FIX7 (sweep (j), error attribution): the launch check names the kernel and the device, and does not claim the
+  // launch failed: cudaGetLastError right after a launch reports the launch's own error OR an asynchronous error of
+  // earlier work on that device (CUDA 12.6 Runtime API: it "may also return error codes from previous, asynchronous
+  // launches"). FIX6 called the baseline cuda_check_last("fill_"), which named neither. The message still starts
+  // "CUDA error at fill_" (that helper's text). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK note ("CUDA kernel
+  // errors might be asynchronously reported at some other API call").
+  {
+    const cudaError_t le = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
+    if (le != cudaSuccess)
+      throw_after_consuming(std::string("CUDA error at fill_: ") + cudaGetErrorName(le) + ": " +
+                               cudaGetErrorString(le) + " (cudaGetLastError right after launching fill_kernel on CUDA "
+                               "device " + std::to_string(a.device.index) +
+                               ": the launch's own error, or an asynchronous error of earlier work on that device)");
+  }
+  a.mark_modified();  // the write is queued: bump the revision BEFORE a restore failure can raise
+  guard.restore();
 }
 NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Device device) {
   NDArray a(shape, dtype, device);

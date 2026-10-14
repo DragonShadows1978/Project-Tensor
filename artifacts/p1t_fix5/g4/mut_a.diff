@@ -1,0 +1,11 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -294,7 +294,7 @@
+   w.own[kRelease] = t_depth[kRelease];
+   w.own[kCallback] = t_depth[kCallback];
+   w.running_at_start = others_running(lc, callbacks_too, w.own);
+-  if (w.running_at_start <= 0) return w;  // nothing to wait for: the GIL is not touched
++  if (true) return w;  // MUTANT (a): the V5-01 admission wait removed
+   if (!(first_diag_s >= 0.0)) first_diag_s = 0.0;   // NaN or negative: diagnose at once (the wait is the same)
+   if (first_diag_s > tuning::kLifecycleMaxDiagDelayS) first_diag_s = tuning::kLifecycleMaxDiagDelayS;
+   const auto t0 = std::chrono::steady_clock::now();
