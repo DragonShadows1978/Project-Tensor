@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -1707,7 +1707,7 @@
+     } catch (const std::exception&) {
+       // bad_alloc building the message: the allocation-free summary below (V8-02).
+     }
+-    if (!written)
++    if (false && !written)  // G4 MUTANT (g): the allocation-free fallback removed
+       write_core_summary("tensor_cuda: at interpreter exit,", "the full report could not be built: it failed to allocate",
+                          n, what, dev, err);
+     dlpack_ack_unraisable(n);

@@ -1,0 +1,11 @@
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -1167,7 +1167,7 @@
+ void note_exit_marker_failure(FailedCall call, int device, cudaError_t err) noexcept {
+   PendingState& st = pending();
+   sat_inc(st.exit_marker_failures);
+-  note_unraisable_failure(st, {call, Purpose::kExitWaitMarker, device, err});
++  (void)call; (void)device; (void)err;  // G4 MUTANT (e): the record removed
+ }
+ 
+ void destroy_marker(int device, cudaEvent_t ev) noexcept {

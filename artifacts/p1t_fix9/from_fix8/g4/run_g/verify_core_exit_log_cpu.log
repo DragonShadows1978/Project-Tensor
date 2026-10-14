@@ -1,0 +1,21 @@
+[
+  {
+    "arm": "--control",
+    "rc": 0,
+    "stdout": "recorded= 1\n",
+    "stderr": "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: host probe error [CUDA device 0: cudaErrorInvalidValue: invalid argument] (logged by the exit runner: the exit hook did not finish)\n",
+    "reported": true
+  },
+  {
+    "arm": "--oom",
+    "rc": 0,
+    "stdout": "recorded= 1\n",
+    "stderr": "",
+    "reported": false
+  }
+]
+Traceback (most recent call last):
+  File "/tmp/p1t_fix8_mut_g/artifacts/p1t_rev8/probes/verify_core_exit_log_cpu.py", line 11, in <module>
+    assert all(r['rc']==0 and r['reported'] for r in rows),'core native exit logger loses its report under OOM'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: core native exit logger loses its report under OOM
