@@ -4,7 +4,11 @@
 TensorCUDA, and it keeps them out of TensorCUDA's core. David, 2026-10-12: "I don't want to build it directly INTO the
 core of TensorCUDA - It needs to be separate". Plan: `Fork/tensor_fork_voice/docs/P1T_TENSOR_ALT_PLAN.md` §4.
 
-Status (P1T-M2): `conv1d` (T2) and `conv_transpose1d` (T3). T4-T6 come in later milestones.
+Status (merged to Project-Tensor main 2026-10-13, ff8f25d): all six op families are in. They are `conv1d` (T2),
+`conv_transpose1d` (T3), the ONNX `lstm` (T4), `instance_norm1d` / `layer_norm` / `group_norm` (T5), and
+`upsample_nearest1d` / `reflection_pad1d` / `rint` (T6). Voice's acceptance suite passes 249/249 on the installed
+build. Two MINOR open issues (V9-01, V9-02) are in core's error diagnostics, not here; see
+`docs/P1T_PROMOTION_RECORD.md`.
 
 - **No core dependency.** It does not link `_tensor_cuda`, include `tensor_cuda/include`, or compile any core source.
 - **Same CUDA runtime as core.** It links the shared CUDA 12.6 runtime (`libcudart.so.12`) and `libcublas.so.12`, with
@@ -51,9 +55,19 @@ tc_signal.conv1d(x, w, b=None, *, stride=1, padding=0, dilation=1, groups=1, out
 tc_signal.conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dilation=1, groups=1, out=None)
 tc_signal.set_allocator(fn)   # fn(shape: tuple) -> fp32 CUDA DLPack tensor; returns the previous allocator
 tc_signal.synchronize()       # P1T-FIX1: wait for the legacy stream, release every operand tc_signal still holds
+
+tc_signal.lstm(x, W, R, B=None, *, hidden_size, direction='forward', initial_h=None, initial_c=None,
+               sequence_lens=None, layout=0, out=None)     # ONNX LSTM (gates i, o, f, c), layout 0
+tc_signal.instance_norm1d(x, scale=None, bias=None, *, eps=1e-5, out=None)
+tc_signal.layer_norm(x, scale=None, bias=None, *, axis=-1, eps=1e-5, out=None)
+tc_signal.group_norm(x, num_groups, scale=None, bias=None, *, eps=1e-5, out=None)
+tc_signal.upsample_nearest1d(x, scale, *, out=None)
+tc_signal.reflection_pad1d(x, pads, *, out=None)
+tc_signal.rint(x, *, out=None)                              # round half to even
 ```
 
-The semantics are ONNX `Conv` and `ConvTranspose`, 1-D.
+The convolution semantics are ONNX `Conv` and `ConvTranspose`, 1-D. The other ops follow their ONNX operators; their
+docstrings give the details.
 
 **Shapes**
 - `x` is `[N, C_in, T]`.
@@ -70,8 +84,8 @@ The semantics are ONNX `Conv` and `ConvTranspose`, 1-D.
 
 **Allocation**
 - With `out=None`, the output comes from the module allocator. The function always returns `out`.
-- The default allocator is `tensor_cuda.empty(*shape, dtype="float32")`, which P1T-M1 adds. Until then it raises a
-  `RuntimeError` that names `set_allocator`.
+- The default allocator is `tensor_cuda.empty(*shape, dtype="float32")` (core, P1T-M1). With an older core that has no
+  `empty`, it raises a `RuntimeError` that names `set_allocator`.
 - `set_allocator(None)` restores the default.
 - The im2col scratch for `conv1d` also comes from the allocator. Its shape is `(C_in*K*T_out,)`, sized by the C++
   helper `conv1d_plan`. The scratch is skipped for the direct path (K 1, stride 1, no pads).

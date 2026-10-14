@@ -32,6 +32,32 @@ The build is Release by default and writes `_tensor_cuda.*.so` into
 `tensor_cuda/tensor_cuda/`. The repository-root `pyproject.toml` packages the
 historical CuPy implementation; it is not the native-engine install path.
 
+## DLPack interop and the `tc_signal` add-on (2026-10)
+
+TensorCUDA tensors exchange data with other CUDA libraries through DLPack:
+- `Tensor.__dlpack__` / `__dlpack_device__` and `tensor_cuda.from_dlpack` (zero-copy, stream-ordered, with an
+  explicit release lifecycle and an interpreter-exit quiescence hook);
+- `data_ptr`, `fill_`, `mark_modified` / `revision`;
+- a device-side `tensor_cuda.empty`.
+
+Signal ops live in a separate package, [`tc_signal/`](tc_signal/README.md), outside the engine core. It does not link
+`_tensor_cuda` and talks to it only through DLPack. It holds 1-D `conv1d` / `conv_transpose1d`, an ONNX-semantics
+`lstm`, `instance_norm1d` / `layer_norm` / `group_norm`, `upsample_nearest1d`, `reflection_pad1d` and
+round-half-to-even `rint`.
+
+```bash
+cd tc_signal && ./build.sh 89    # set PYBIND11_SOURCE_DIR to build offline
+PYTHONPATH=tensor_cuda:tc_signal python3 -c "import tensor_cuda, tc_signal; print(tc_signal.__all__)"
+```
+
+These ops let a Kokoro-82M text-to-speech port (Project-Voice, a personal project that is not publicly available) run
+on TensorCUDA:
+- its 249-case acceptance suite passes on the installed build;
+- its 98-case numeric census is bitwise identical to the run that passed its gates.
+
+The interop went through nine cross-model review rounds and was merged on the owner's decision with two MINOR,
+diagnostics-only findings open. See [the promotion record](docs/P1T_PROMOTION_RECORD.md) and "Honest limits" below.
+
 ## What runs today
 
 These are native-engine validation points, not an exhaustive model list. The
@@ -145,6 +171,13 @@ NoPE/hybrid text, and bidirectional visual attention.
   receipts use RTX 3070 8GB and RTX 4070 SUPER 12GB-class consumer cards.
 - The Hunyuan3D-2.0 APA E2E receipt does not transfer to Hunyuan3D-2.1; the
   latter remains unconfirmed for APA until separately gated.
+- DLPack interop and `tc_signal` were merged with two MINOR findings open, both in core error diagnostics on rare
+  compound-failure paths:
+  - V9-01: a cleanup failure plus report-allocation failure in the export fence loses the first CUDA error;
+  - V9-02: a race between two snapshots at interpreter exit can print a failure unnamed.
+
+  Neither affects results, memory safety or ordinary use. Multi-GPU DLPack paths are code-reviewed but were tested on
+  a single GPU only.
 
 ## Documentation
 
@@ -157,6 +190,11 @@ NoPE/hybrid text, and bidirectional visual attention.
 - [Full APA paper draft](docs/APA_PAPER_DRAFT.md) — historical research report;
   the Gemma verdict is superseded by the adjudication above
 - [Failure and implementation ledgers](docs/KERNEL_OPT_IMPLEMENTATION_LEDGER.md)
+- [`tc_signal` add-on: API, operand contract, streams and lifetimes](tc_signal/README.md)
+- [P1-T promotion record: DLPack interop and `tc_signal` review history and known issues](docs/P1T_PROMOTION_RECORD.md)
+- [Engine build log: which `_tensor_cuda` binary is installed](docs/ENGINE_BUILD_LOG.md)
+- [APA mask-fix chain (−inf/+inf reduction identities, fully blocked rows return 0)](docs/APA_MF2_REPORT.md), and
+  regression tests [REGT1](docs/APA_REGT1_REPORT.md) / [REGT2](docs/APA_REGT2_REPORT.md)
 
 ## License
 
