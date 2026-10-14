@@ -1,0 +1,35 @@
+FF..                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_fix8_v802_core_runner_writes_an_allocation_free_summary_when_its_message_cannot_allocate _
+
+f05_shim = '/tmp/pytest-of-vader/pytest-176/f05_shim0/cudart_device_shim.so'
+
+    def test_fix8_v802_core_runner_writes_an_allocation_free_summary_when_its_message_cannot_allocate(f05_shim):
+        r, a = _run_fix8_r7(f05_shim, "fail_oom")
+        line = next((ln for ln in r.stderr.splitlines() if "allocation-free summary" in ln), "")
+>       assert "tensor_cuda: at interpreter exit, 1 CUDA failure(s) on DLPack release / fill_ paths" in line, r.stderr
+E       AssertionError: Exception ignored in atexit callback: <built-in function _dlpack_exit_hook_runner>
+E         Traceback (most recent call last):
+E           File "/tmp/p1t_fix8_mut_g/tensor_cuda/tensor_cuda/__init__.py", line 207, in _dlpack_shutdown_hook
+E             def _dlpack_shutdown_hook():
+E             
+E         KeyboardInterrupt: 
+E         
+E       assert 'tensor_cuda: at interpreter exit, 1 CUDA failure(s) on DLPack release / fill_ paths' in ''
+
+tensor_cuda/tests/test_dlpack.py:3020: AssertionError
+__ test_fix8_v802_core_runner_with_stderr_closed_does_not_crash_and_consumes ___
+
+f05_shim = '/tmp/pytest-of-vader/pytest-176/f05_shim0/cudart_device_shim.so'
+
+    def test_fix8_v802_core_runner_with_stderr_closed_does_not_crash_and_consumes(f05_shim):
+        r, a = _run_fix8_r7(f05_shim, "fail_oom_stderr_closed")
+>       assert a["unraisable_unreported"] == 0 and a["shutdown_log_fallbacks"] == 1 and a["shutdown_runner_closes"] == 1, a
+E       AssertionError: {'exit_report_unwritten': False, 'shutdown_calls': 0, 'shutdown_log_fallbacks': 0, 'shutdown_runner_closes': 1, ...}
+E       assert (0 == 0 and 0 == 1)
+
+tensor_cuda/tests/test_dlpack.py:3031: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix8_v802_core_runner_writes_an_allocation_free_summary_when_its_message_cannot_allocate
+FAILED tensor_cuda/tests/test_dlpack.py::test_fix8_v802_core_runner_with_stderr_closed_does_not_crash_and_consumes
+2 failed, 2 passed, 253 deselected in 3.29s

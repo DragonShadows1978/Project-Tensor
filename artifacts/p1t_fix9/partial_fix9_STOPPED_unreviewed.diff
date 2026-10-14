@@ -1,0 +1,1829 @@
+diff --git a/tc_signal/src/bindings.cpp b/tc_signal/src/bindings.cpp
+index 3f51fa2..3559fd7 100644
+--- a/tc_signal/src/bindings.cpp
++++ b/tc_signal/src/bindings.cpp
+@@ -709,6 +709,7 @@ PYBIND11_MODULE(_tc_signal, m) {
+             {"cuda:current_device", test_hooks::kCudaCurrentDevice},
+             {"cuda:event_query", test_hooks::kCudaEventQuery},
+             {"alloc:exit_log", test_hooks::kAllocExitLog},                // P1T-FIX8 (V8-02)
++            {"record:during_report", test_hooks::kRecordDuringReport},     // P1T-FIX9 (sweep (n))
+             {"cuda:exit_marker_create", test_hooks::kCudaMarkerCreate},   // P1T-FIX8 (V8-01), exit window only
+             {"cuda:exit_marker_record", test_hooks::kCudaMarkerRecord},
+             {"cuda:exit_marker_query", test_hooks::kCudaMarkerQuery},
+diff --git a/tc_signal/src/conv.cu b/tc_signal/src/conv.cu
+index c24dd0a..feea262 100644
+--- a/tc_signal/src/conv.cu
++++ b/tc_signal/src/conv.cu
+@@ -51,11 +51,12 @@ constexpr cudaStream_t kLegacyStream = 0;
+ 
+ void check_cuda(cudaError_t e, const char* what) {
+   if (e != cudaSuccess) {
++    // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry. P1T-FIX9 (sweep
++    // (m)): recorded first (RaiseRecord), then consumed, then reported; `what` is the call's name (a literal).
++    RaiseRecord rec(kRaiseSiteBuildInfo, "tc_signal: ", what, what, -1, e);
+     std::ostringstream os;
+     os << "tc_signal: " << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+-    // P1T-FIX4 (cuda_guard.h rule 1): this raise reports the failed call, so it consumes its entry; P1T-FIX8 (sweep
+-    // (k)): only once the report exists (cuda_guard.h throw_after_consuming).
+-    throw_after_consuming(os);
++    rec.raise(os);
+   }
+ }
+ 
+diff --git a/tc_signal/src/cuda_guard.h b/tc_signal/src/cuda_guard.h
+index adfe0d1..89ea19d 100644
+--- a/tc_signal/src/cuda_guard.h
++++ b/tc_signal/src/cuda_guard.h
+@@ -46,27 +46,62 @@ void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcep
+ // allocates.
+ void note_cublas_handle_destroy_failure(int status) noexcept;
+ 
+-// P1T-FIX8 (sweep (k), consumed CUDA errors): the report exists BEFORE the slot entry it reports is consumed. Every
+-// raise below builds its message and its std::runtime_error first; a std::bad_alloc while building them propagates
+-// (MemoryError) with the entry still in the calling thread's slot, so the next synchronize() (or launch check) still
+-// raises it, as a pre-existing error, instead of the failure being consumed and lost. Only then is the entry consumed
+-// (rule 1) and the exception thrown (copying a std::runtime_error is noexcept). A launch check reads the slot with
+-// cudaPeekAtLastError for the same reason. Prior art: FIX5 V5-02's record-before-consume rule; the CUDA 12.6 error-slot
+-// contract of cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset"). Ours: applying it
+-// to the raising paths.
+-[[noreturn]] inline void throw_after_consuming(std::ostringstream& os) {
+-  if (!os) throw std::bad_alloc();  // ostream swallows a bad_alloc into badbit: report the allocation failure itself
+-  std::runtime_error report(os.str());
+-  cudaGetLastError();  // consumed only now that the report exists
+-  throw report;
+-}
++// P1T-FIX8 (sweep (k), consumed CUDA errors) built every raise's report BEFORE consuming the slot entry it reports, so a
++// std::bad_alloc while building it (MemoryError) left the failure in the calling thread's error slot.
++// P1T-FIX9 (sweep (m), "a failure held only in a local or the error slot"): the slot is not a place to keep a failure.
++// It holds only the error code, so a later reader (the next synchronize()'s pre-existing-error check, or any other
++// library on this thread) names neither the call nor the device; and the next failing CUDA call on the thread
++// overwrites it. So every raise below now RECORDS its failure first (RaiseRecord: the call, what it was for, the
++// device, the error; an allocation-free tagged record in the add-on's record store, dlpack_operand.cpp), consumes the
++// slot only then, and builds its report afterwards. The record is acknowledged once the std::runtime_error exists; if
++// building it throws (bad_alloc -> MemoryError), the RaiseRecord's destructor keeps the record for the next
++// synchronize(), which raises it once, under its own name. Every text is a string literal of the caller (static).
++// Prior art: FIX5 V5-02's record-before-consume rule; CUDA 12.6 Programming Guide 3.2.12 (one error variable per host
++// thread, overwritten by the next failing call); SQLite's OOM-testing discipline (an error must survive the failure of
++// its own reporting); RAII (Stroustrup) for the commit-on-unwind. Ours: the in-flight record of a raise.
++enum RaiseSite : int {  // dlpack_operand.cpp RaiseKind (the same values; checked there)
++  kRaiseSiteCall = 1,
++  kRaiseSiteLaunchCheck = 2,
++  kRaiseSiteCublasCheck = 3,
++  kRaiseSiteGuardGet = 4,
++  kRaiseSiteGuardSet = 5,
++  kRaiseSiteGuardRestore = 6,
++  kRaiseSiteBuildInfo = 7,
++  kRaiseSitePendingAtCall = 8,
++};
++// Defined in dlpack_operand.cpp. Never allocate, never throw. GIL held (every tc_signal path runs under the GIL).
++unsigned raise_record_persist(int site, const char* prefix, const char* what, const char* api, int device,
++                              cudaError_t err) noexcept;
++void raise_record_reported(unsigned token) noexcept;    // the RuntimeError exists: the record is acknowledged
++void raise_record_unreported(unsigned token) noexcept;  // it could not be built: kept for the next synchronize()
+ 
+-// Rule 1: raise for a failed CUDA call of ours, consuming its slot entry once the report exists.
+-[[noreturn]] inline void raise_cuda_failure(const std::string& what, cudaError_t e) {
+-  std::ostringstream os;
+-  os << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
+-  throw_after_consuming(os);
+-}
++class RaiseRecord {
++ public:
++  // Records the failure, then (consume_slot) takes its entry from the error slot: in that order.
++  RaiseRecord(int site, const char* prefix, const char* what, const char* api, int device, cudaError_t err,
++              bool consume_slot = true) noexcept
++      : token_(raise_record_persist(site, prefix, what, api, device, err)) {
++    if (consume_slot) cudaGetLastError();  // consumed only now that the failure is recorded
++  }
++  // Adopts a record already persisted (dlpack_operand.cpp acquire_event: its tagged record).
++  explicit RaiseRecord(unsigned token) noexcept : token_(token) {}
++  // Throws the report built in `os`; the record is acknowledged only once the std::runtime_error exists.
++  [[noreturn]] void raise(std::ostringstream& os) {
++    if (!os) throw std::bad_alloc();  // ostream swallows a bad_alloc into badbit: report the allocation failure itself
++    std::runtime_error report(os.str());
++    raise_record_reported(token_);
++    token_ = 0;
++    throw report;  // copying a std::runtime_error is noexcept
++  }
++  ~RaiseRecord() {
++    if (token_ != 0) raise_record_unreported(token_);  // unwinding before the report existed: the record stays
++  }
++  RaiseRecord(const RaiseRecord&) = delete;
++  RaiseRecord& operator=(const RaiseRecord&) = delete;
++
++ private:
++  unsigned token_;
++};
+ 
+ // P1T-FIX7, sweep (j) "error attribution": the messages of the launch paths name the call that actually returned the
+ // error, and the device. Three cases, each with its own wording:
+@@ -88,33 +123,36 @@ void note_cublas_handle_destroy_failure(int status) noexcept;
+ // device.
+ [[noreturn]] inline void raise_call_failure_on(const char* prefix, const char* what, const char* api, int device,
+                                                cudaError_t e) {
++  RaiseRecord rec(kRaiseSiteCall, prefix, what, api, device, e);  // P1T-FIX9: recorded, then consumed, then reported
+   std::ostringstream os;
+   os << prefix << what << " failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e) << " (" << api
+      << " on CUDA device " << device << " returned it)";
+-  throw_after_consuming(os);
++  rec.raise(os);
+ }
+ inline void check_call_on(const char* prefix, const char* what, const char* api, int device, cudaError_t e) {
+   if (e != cudaSuccess) raise_call_failure_on(prefix, what, api, device, e);
+ }
+ inline void check_launch_on(const char* prefix, const char* kernel, int device) {
+-  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
++  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX9: read, recorded, and only then consumed
+   if (e == cudaSuccess) return;
++  RaiseRecord rec(kRaiseSiteLaunchCheck, prefix, kernel, nullptr, device, e);
+   std::ostringstream os;
+   os << prefix << "CUDA error at the launch check of " << kernel << " on CUDA device " << device << ": "
+      << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+      << " (cudaGetLastError right after the launch: the launch's own error, or an asynchronous error of earlier work "
+         "on that device, which CUDA reports at a later call)";
+-  throw_after_consuming(os);
++  rec.raise(os);
+ }
+ inline void check_after_cublas_on(const char* prefix, const char* fn, int device) {
+-  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX8: read, not consumed until the report exists
++  const cudaError_t e = cudaPeekAtLastError();  // P1T-FIX9: read, recorded, and only then consumed
+   if (e == cudaSuccess) return;
++  RaiseRecord rec(kRaiseSiteCublasCheck, prefix, fn, nullptr, device, e);
+   std::ostringstream os;
+   os << prefix << "CUDA error found by the check after " << fn << " on CUDA device " << device
+      << ", which returned CUBLAS_STATUS_SUCCESS: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e)
+      << " (cudaGetLastError; cuBLAS does not set the CUDA runtime's error state, so this is an asynchronous error of "
+         "earlier work on that device)";
+-  throw_after_consuming(os);
++  rec.raise(os);
+ }
+ [[noreturn]] inline void raise_cublas_failure_on(const char* prefix, const char* fn, int device, int status) {
+   std::ostringstream os;
+@@ -129,12 +167,25 @@ inline void check_after_cublas_on(const char* prefix, const char* fn, int device
+ // destructor.
+ class DeviceGuard {
+  public:
++  // P1T-FIX9 (sweep (m)): each failure is recorded (RaiseRecord), then consumed, before its message is built. The
++  // messages are FIX4's.
+   explicit DeviceGuard(int device) : device_(device) {
+     cudaError_t e = cudaGetDevice(&prev_);
+-    if (e != cudaSuccess) raise_cuda_failure("tc_signal: cudaGetDevice", e);
++    if (e != cudaSuccess) {
++      RaiseRecord rec(kRaiseSiteGuardGet, "tc_signal: ", nullptr, nullptr, device, e);
++      std::ostringstream os;
++      os << "tc_signal: cudaGetDevice failed: " << cudaGetErrorName(e) << ": " << cudaGetErrorString(e);
++      rec.raise(os);
++    }
+     if (prev_ != device) {
+       e = cudaSetDevice(device);
+-      if (e != cudaSuccess) raise_cuda_failure("tc_signal: cudaSetDevice(" + std::to_string(device) + ")", e);
++      if (e != cudaSuccess) {
++        RaiseRecord rec(kRaiseSiteGuardSet, "tc_signal: ", nullptr, nullptr, device, e);
++        std::ostringstream os;
++        os << "tc_signal: cudaSetDevice(" << device << ") failed: " << cudaGetErrorName(e) << ": "
++           << cudaGetErrorString(e);
++        rec.raise(os);
++      }
+       switched_ = true;
+     }
+   }
+@@ -142,12 +193,15 @@ class DeviceGuard {
+     if (!switched_) return;
+     switched_ = false;
+     const cudaError_t e = cudaSetDevice(prev_);
+-    if (e != cudaSuccess)
+-      raise_cuda_failure("tc_signal: restoring the caller's CUDA device " + std::to_string(prev_) +
+-                             " after queueing work on device " + std::to_string(device_) +
+-                             " (cudaSetDevice; the calling thread's current device is still " +
+-                             std::to_string(device_) + ", and the call's operands stay retained until that work is done)",
+-                         e);
++    if (e != cudaSuccess) {
++      RaiseRecord rec(kRaiseSiteGuardRestore, "tc_signal: ", nullptr, nullptr, prev_, e);
++      std::ostringstream os;
++      os << "tc_signal: restoring the caller's CUDA device " << prev_ << " after queueing work on device " << device_
++         << " (cudaSetDevice; the calling thread's current device is still " << device_
++         << ", and the call's operands stay retained until that work is done) failed: " << cudaGetErrorName(e) << ": "
++         << cudaGetErrorString(e);
++      rec.raise(os);
++    }
+   }
+   ~DeviceGuard() {
+     if (!switched_) return;
+diff --git a/tc_signal/src/dlpack_operand.cpp b/tc_signal/src/dlpack_operand.cpp
+index 10a19f7..9aaf6bc 100644
+--- a/tc_signal/src/dlpack_operand.cpp
++++ b/tc_signal/src/dlpack_operand.cpp
+@@ -785,6 +785,8 @@ enum class FailedCall : unsigned char {
+   kEventRecord,   // cudaEventRecord(event, cudaStreamLegacy)
+   kEventDestroy,  // cudaEventDestroy
+   kEventCreate,   // cudaEventCreateWithFlags (P1T-FIX8: the exit device wait's marker event)
++  kLastError,     // P1T-FIX9: cudaGetLastError / cudaPeekAtLastError (a launch check, a pending-error check)
++  kNamedApi,      // P1T-FIX9: the call named by the record's `api` (a static string: cudaMemcpyAsync, ...)
+ };
+ enum class Purpose : unsigned char {
+   kCurrentDevice,    // synchronize()'s current-device query (it reads which device is current: no device)
+@@ -798,12 +800,36 @@ enum class Purpose : unsigned char {
+   kUnnamed,          // never built from a real failure: failed() with no named record (capacity exhausted)
+   kExitWaitMarker,   // P1T-FIX8 (V8-01): the marker event of the diagnosed device wait at interpreter exit (L1, a3)
+   kCreateEvent,      // P1T-FIX8 (sweep (k)): creating a call's completion event, when its RuntimeError could not be built
++  kRaisePath,        // P1T-FIX9 (sweep (m)): a raising path whose RuntimeError could not be built (see RaiseKind)
++};
++// P1T-FIX9 (sweep (m), "a failure held only in a local or the error slot"): which raising path a kRaisePath record
++// comes from. FIX8 built a raise's report first and left the failure in the thread's error slot when that failed
++// (bad_alloc -> MemoryError); the slot holds only the error code (a later reader names neither the call nor the
++// device), and the next failing CUDA call on the thread overwrites it. Each raising path now records its failure
++// FIRST (cuda_guard.h RaiseRecord; the static texts below are the caller's string literals), consumes the slot, then
++// builds its report: the record is acknowledged once the RuntimeError exists, or kept for the next synchronize() if
++// it cannot be built.
++enum class RaiseKind : unsigned char {
++  kNone,
++  kCall,           // check_call_on: <prefix><what>: <api> on CUDA device D returned the error
++  kLaunchCheck,    // check_launch_on: the launch check of the kernel <what> on CUDA device D
++  kCublasCheck,    // check_after_cublas_on: the check after <what> (which returned CUBLAS_STATUS_SUCCESS) on device D
++  kGuardGet,       // DeviceGuard: the current-device query before switching to CUDA device D
++  kGuardSet,       // DeviceGuard: switching to CUDA device D (cudaSetDevice)
++  kGuardRestore,   // DeviceGuard::restore: restoring the caller's CUDA device D after queueing work (cudaSetDevice)
++  kBuildInfo,      // build_info: <what> (cudaRuntimeGetVersion, cudaGetDevice)
++  kPendingAtCall,  // RetainUntilComplete: a CUDA error already pending before a call's first launch on device D
+ };
+ struct FailureRecord {
+   FailedCall call = FailedCall::kStreamSync;
+   Purpose purpose = Purpose::kUnnamed;
+   int device = -1;  // the device the failed call concerned; -1 only for kCurrentDevice / kUnnamed
+   cudaError_t err = cudaSuccess;
++  // P1T-FIX9: a kRaisePath record's path and static texts (string literals of the caller; never freed).
++  RaiseKind kind = RaiseKind::kNone;
++  const char* prefix = nullptr;  // "tc_signal: ", ...
++  const char* what = nullptr;    // the operation, kernel or cuBLAS function
++  const char* api = nullptr;     // kCall: the CUDA call that returned the error
+ };
+ 
+ const char* call_name(FailedCall c) noexcept {
+@@ -815,10 +841,17 @@ const char* call_name(FailedCall c) noexcept {
+     case FailedCall::kEventRecord: return "cudaEventRecord";
+     case FailedCall::kEventDestroy: return "cudaEventDestroy";
+     case FailedCall::kEventCreate: return "cudaEventCreateWithFlags";
++    case FailedCall::kLastError: return "cudaGetLastError";
++    case FailedCall::kNamedApi: return "a CUDA call";
+   }
+   return "a CUDA call";
+ }
+ 
++// P1T-FIX9: the failed call of a record (a kNamedApi record names it in `api`). Static strings only.
++const char* record_call_name(const FailureRecord& r) noexcept {
++  return r.call == FailedCall::kNamedApi && r.api != nullptr ? r.api : call_name(r.call);
++}
++
+ // P1T-FIX8 (V8-02, sweep (l)): what a record was FOR, as a static string, for the allocation-free fallback line of the
+ // exit loggers (no std::string, no ostream: only static texts, cudaGetErrorName's static name and C stdio).
+ const char* purpose_name(Purpose p) noexcept {
+@@ -834,6 +867,7 @@ const char* purpose_name(Purpose p) noexcept {
+     case Purpose::kUnnamed: return "an unnamed CUDA failure";
+     case Purpose::kExitWaitMarker: return "the marker event of interpreter exit's diagnosed device wait";
+     case Purpose::kCreateEvent: return "creating a call's completion event";
++    case Purpose::kRaisePath: return "a call refused with MemoryError (its RuntimeError could not be built)";
+   }
+   return "a CUDA call";
+ }
+@@ -921,6 +955,54 @@ void describe(std::ostream& os, const FailureRecord& r) {
+       error();
+       os << "; the call was refused with MemoryError, its message could not be allocated)";
+       return;
++    case Purpose::kRaisePath: {
++      // P1T-FIX9 (sweep (m)): the call was refused with MemoryError (its RuntimeError could not be built); the CUDA
++      // failure behind it is raised here, by the next synchronize(), under its own name.
++      const char* prefix = r.prefix ? r.prefix : "tc_signal: ";
++      const char* what = r.what ? r.what : "a call";
++      switch (r.kind) {
++        case RaiseKind::kCall:
++          os << prefix << what << " failed on CUDA device " << r.device << " (" << record_call_name(r) << ": ";
++          break;
++        case RaiseKind::kLaunchCheck:
++          os << prefix << "the launch check of " << what << " on CUDA device " << r.device
++             << " found an error (the launch's own error, or an asynchronous error of earlier work on that device; "
++                "cudaGetLastError: ";
++          break;
++        case RaiseKind::kCublasCheck:
++          os << prefix << "the check after " << what << " on CUDA device " << r.device
++             << " (which returned CUBLAS_STATUS_SUCCESS) found an asynchronous error of earlier work on that device ("
++                "cudaGetLastError: ";
++          break;
++        case RaiseKind::kGuardGet:
++          os << prefix << "the current-device query before switching to CUDA device " << r.device
++             << " failed (cudaGetDevice: ";
++          break;
++        case RaiseKind::kGuardSet:
++          os << prefix << "switching to CUDA device " << r.device << " failed (cudaSetDevice: ";
++          break;
++        case RaiseKind::kGuardRestore:
++          os << prefix << "restoring the caller's CUDA device " << r.device
++             << " after queueing work failed (cudaSetDevice; the calling thread's current device stayed on the work's "
++                "device: ";
++          break;
++        case RaiseKind::kBuildInfo:
++          os << prefix << "build_info: " << what << " failed (" << record_call_name(r) << ": ";
++          break;
++        case RaiseKind::kPendingAtCall:
++          os << prefix << "a CUDA error was already pending in this thread before a call's first launch on CUDA device "
++             << r.device << ", from earlier work outside that call (its call and device are unknown: the error slot "
++                            "records neither; ";
++          break;
++        case RaiseKind::kNone:
++          os << prefix << what << " on CUDA device " << r.device << " (";
++          break;
++      }
++      error();
++      os << "); the call was refused with MemoryError (its message could not be allocated), so the failure is "
++            "reported here";
++      return;
++    }
+     case Purpose::kExitWaitMarker:
+       // P1T-FIX8 (V8-01): a failed call of the marker event of the diagnosed device wait at interpreter exit. The wait
+       // itself still happened: a failed create / record / query hands it to a watchdog-diagnosed stream sync.
+@@ -1075,6 +1157,32 @@ struct PendingState {
+   FailureRecord exit_report_first;
+   cudaError_t exit_report_prior = cudaSuccess;
+   unsigned long long exit_log_fallbacks = 0;  // exit log lines written by the allocation-free fallback
++  // P1T-FIX9 (sweep (m)): raising paths' failures persisted BEFORE their report is built (cuda_guard.h RaiseRecord).
++  // A raise never nests inside another (its window is message building), so kRaiseInFlight slots are more than
++  // enough; acknowledged (cleared) once the RuntimeError exists, or committed to the unraisable records otherwise.
++  static constexpr int kRaiseInFlight = 4;
++  FailureRecord raise_in_flight[kRaiseInFlight];
++  unsigned raise_in_flight_token[kRaiseInFlight] = {};  // 0: free
++  unsigned raise_next_token = 0;
++  unsigned long long raise_records_reported = 0;   // acknowledged: their RuntimeError existed
++  unsigned long long raise_records_committed = 0;  // kept for the next synchronize(): the report could not be built
++  unsigned long long raise_records_direct = 0;     // no free in-flight slot (never expected): recorded directly
++  // P1T-FIX9 (sweep (n), "report and acknowledgement from one snapshot"): while a report is being built from the
++  // records (synchronize(), the exit logger), a record written by anything that runs in between goes HERE, not into
++  // the records being reported, and is moved into them once the report's records are cleared (or appended after them
++  // if the report could not be built). So what is cleared is exactly what was reported, and a record that arrives in
++  // between is kept, with its name, for the next report. Nothing is expected to run in between (the GIL is held and no
++  // Python code runs); this makes it exact whatever runs (test hook kRecordDuringReport writes one there).
++  bool reporting = false;
++  struct Arrived {
++    unsigned long long unreported_count = 0;
++    unsigned long long unreported_leaked = 0;
++    FailureRecord unreported_first;
++    bool unreported_in_bound_drain = false;
++    unsigned long long unraisable_unreported = 0;
++    FailureRecord unraisable_first;
++  } arrived;
++  unsigned long long report_window_arrivals = 0;  // records that arrived inside a report window (stats)
+   std::unordered_map<int, DeviceEvents> event_pool;   // per device
+ };
+ 
+@@ -1389,6 +1497,17 @@ struct DeviceSyncSet {
+ void note_release_failure(PendingState& st, const FailureRecord& first, bool in_bound_drain,
+                           unsigned long long leaked) noexcept {
+   sat_inc(st.release_errors);
++  if (st.reporting) {  // P1T-FIX9 (sweep (n)): a report is being built: kept for the next one
++    PendingState::Arrived& a = st.arrived;
++    if (a.unreported_count == 0) {
++      a.unreported_first = first;
++      a.unreported_in_bound_drain = in_bound_drain;
++    }
++    sat_inc(a.unreported_count);
++    sat_add(a.unreported_leaked, leaked);
++    sat_inc(st.report_window_arrivals);
++    return;
++  }
+   if (st.unreported_count == 0) {
+     st.unreported_first = first;
+     st.unreported_in_bound_drain = in_bound_drain;
+@@ -1400,10 +1519,34 @@ void note_release_failure(PendingState& st, const FailureRecord& first, bool in_
+ // P1T-FIX4 (sweep): a failure that cannot raise where it happens and leaks no operand (see PendingState). Never
+ // allocates. P1T-FIX7: a tagged record (FIX6 stored a site string naming the guarded call).
+ void note_unraisable_failure(PendingState& st, const FailureRecord& r) noexcept {
++  if (st.reporting) {  // P1T-FIX9 (sweep (n)): a report is being built: kept for the next one
++    if (st.arrived.unraisable_unreported == 0) st.arrived.unraisable_first = r;
++    sat_inc(st.arrived.unraisable_unreported);
++    sat_inc(st.report_window_arrivals);
++    return;
++  }
+   if (st.unraisable_unreported == 0) st.unraisable_first = r;
+   sat_inc(st.unraisable_unreported);
+ }
+ 
++// P1T-FIX9 (sweep (m)): the in-flight record of a raise (cuda_guard.h RaiseRecord; see PendingState::raise_in_flight).
++// Persisted before the raise builds its report; acknowledged (cleared) once its RuntimeError exists, or committed to
++// the unraisable records, which the next synchronize() raises once, if the report could not be built. Never allocates,
++// never throws. Returns the slot's token (0: no free slot, never expected: then recorded directly, so a later
++// synchronize() repeats it rather than lose it).
++unsigned persist_raise_record(PendingState& st, const FailureRecord& r) noexcept {
++  for (int i = 0; i < PendingState::kRaiseInFlight; ++i) {
++    if (st.raise_in_flight_token[i] != 0) continue;
++    if (++st.raise_next_token == 0) ++st.raise_next_token;  // 0 means "no slot"
++    st.raise_in_flight_token[i] = st.raise_next_token;
++    st.raise_in_flight[i] = r;
++    return st.raise_next_token;
++  }
++  sat_inc(st.raise_records_direct);
++  note_unraisable_failure(st, r);
++  return 0;
++}
++
+ // P1T-FIX4 (sweep): an event is destroyed on its own device (62c8d9f destroyed it on whatever device was current and
+ // ignored the result). Prior art: PyTorch's CUDAEvent destructor, "event destruction done on creating device to avoid
+ // creating a CUDA context on other devices" (c10/cuda/CUDAEvent.h, torch 2.11 headers: CUDAGuard, then
+@@ -1596,10 +1739,12 @@ cudaEvent_t acquire_event(int device) {
+   cudaEvent_t ev = nullptr;
+   cudaError_t r = g.ok() ? cudaEventCreateWithFlags(&ev, cudaEventDisableTiming) : g.error();
+   if (r != cudaSuccess) {
+-    // P1T-FIX8 (sweep (k)): the report is built BEFORE the slot entry is consumed; if it cannot be built (bad_alloc ->
+-    // MemoryError), the failure is recorded (tagged) for the next synchronize() first, so it is never lost (the
+-    // guard's own failure was consumed by the guard already, so the slot cannot carry it).
+-    try {
++    // P1T-FIX8 (sweep (k)) recorded the failure only if its report could not be built. P1T-FIX9 (sweep (m)): it is
++    // recorded FIRST (RaiseRecord, tagged like FIX8's record), then consumed (only cudaEventCreateWithFlags's own
++    // entry: the guard consumed its failure already), then reported; acknowledged once the RuntimeError exists.
++    RaiseRecord rec(persist_raise_record(
++        pending(), {g.ok() ? FailedCall::kEventCreate : guard_call(g), Purpose::kCreateEvent, device, r}));
++    if (g.ok()) cudaGetLastError();  // consumed only now that the failure is recorded
+     // P1T-FIX7 (sweep (j)): name the call that failed: the guard's cudaGetDevice / cudaSetDevice (then no event was
+     // created at all), or cudaEventCreateWithFlags itself (FIX6 named neither).
+     std::ostringstream os;
+@@ -1611,16 +1756,7 @@ cudaEvent_t acquire_event(int device) {
+                          : "the current-device query before switching failed, cudaGetDevice returned it; no event "
+                            "was created"))
+        << ")";
+-    if (!os) throw std::bad_alloc();
+-    std::runtime_error report(os.str());
+-    cudaGetLastError();  // consumed only now that the report exists
+-    throw report;
+-    } catch (const std::bad_alloc&) {
+-      note_unraisable_failure(pending(), {g.ok() ? FailedCall::kEventCreate : guard_call(g), Purpose::kCreateEvent,
+-                                          device, r});
+-      cudaGetLastError();  // recorded above: consumed so it is not reported twice
+-      throw;
+-    }
++    rec.raise(os);
+   }
+   ++de.created;
+   return ev;
+@@ -1740,6 +1876,58 @@ void note_unraisable_device_restore_failure(int device, cudaError_t err) noexcep
+   note_unraisable_failure(st, {FailedCall::kSetDevice, Purpose::kRestoreDevice, device, err});
+ }
+ 
++// P1T-FIX9 (sweep (m)): cuda_guard.h's raising paths (RaiseRecord). The RaiseSite values are RaiseKind's.
++static_assert(static_cast<int>(RaiseKind::kCall) == kRaiseSiteCall &&
++                  static_cast<int>(RaiseKind::kLaunchCheck) == kRaiseSiteLaunchCheck &&
++                  static_cast<int>(RaiseKind::kCublasCheck) == kRaiseSiteCublasCheck &&
++                  static_cast<int>(RaiseKind::kGuardGet) == kRaiseSiteGuardGet &&
++                  static_cast<int>(RaiseKind::kGuardSet) == kRaiseSiteGuardSet &&
++                  static_cast<int>(RaiseKind::kGuardRestore) == kRaiseSiteGuardRestore &&
++                  static_cast<int>(RaiseKind::kBuildInfo) == kRaiseSiteBuildInfo &&
++                  static_cast<int>(RaiseKind::kPendingAtCall) == kRaiseSitePendingAtCall,
++              "cuda_guard.h RaiseSite must match RaiseKind");
++unsigned raise_record_persist(int site, const char* prefix, const char* what, const char* api, int device,
++                              cudaError_t err) noexcept {
++  FailureRecord r;
++  r.purpose = Purpose::kRaisePath;
++  r.device = device;
++  r.err = err;
++  r.kind = static_cast<RaiseKind>(site);
++  r.prefix = prefix;
++  r.what = what;
++  r.api = api;
++  switch (r.kind) {
++    case RaiseKind::kGuardGet: r.call = FailedCall::kGetDevice; break;
++    case RaiseKind::kGuardSet:
++    case RaiseKind::kGuardRestore: r.call = FailedCall::kSetDevice; break;
++    case RaiseKind::kCall:
++    case RaiseKind::kBuildInfo: r.call = FailedCall::kNamedApi; break;
++    default: r.call = FailedCall::kLastError; break;
++  }
++  return persist_raise_record(pending(), r);
++}
++void raise_record_reported(unsigned token) noexcept {
++  if (token == 0) return;
++  PendingState& st = pending();
++  for (int i = 0; i < PendingState::kRaiseInFlight; ++i)
++    if (st.raise_in_flight_token[i] == token) {
++      st.raise_in_flight_token[i] = 0;
++      sat_inc(st.raise_records_reported);
++      return;
++    }
++}
++void raise_record_unreported(unsigned token) noexcept {
++  if (token == 0) return;
++  PendingState& st = pending();
++  for (int i = 0; i < PendingState::kRaiseInFlight; ++i)
++    if (st.raise_in_flight_token[i] == token) {
++      note_unraisable_failure(st, st.raise_in_flight[i]);
++      st.raise_in_flight_token[i] = 0;
++      sat_inc(st.raise_records_committed);
++      return;
++    }
++}
++
+ int64_t aggregate_operand_bytes(const std::vector<Operand*>& ops) {
+   // V3-02 (see dlpack_operand.h): checked sum of the present operands' fp32 bytes; ValueError on overflow (ck_add).
+   // Prior art: the checked builtins (GCC 5 __builtin_add_overflow, 2015; C23 ckd_add), as in checked_math.h. Ours:
+@@ -1777,10 +1965,14 @@ RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Opera
+   // cudaSuccess just before the kernel launch, for example, by calling cudaGetLastError() just before the kernel
+   // launch" (artifacts/p1t_fix4/cuda_doc_quotes.txt). Taken: that rule. Ours: raising the pending error as pre-existing
+   // instead of discarding it, at the one constructor every launch path shares.
+-  // P1T-FIX8 (sweep (k)): read with cudaPeekAtLastError and consumed only once the report exists, so a bad_alloc while
+-  // building it leaves the error in the slot (the next synchronize() raises it as pre-existing) instead of losing it.
++  // P1T-FIX8 (sweep (k)) read it with cudaPeekAtLastError and consumed it only once the report existed.
++  // P1T-FIX9 (sweep (m)): it is RECORDED first (RaiseRecord), and only then consumed, BEFORE the event is recycled: a
++  // recycle that fails destroys the event (a CUDA call: a failing destroy overwrote the slot and the pending error was
++  // gone, round-9 compound_cleanup_cpu.py, a test-only path in production since the recycle slot is reserved) and the
++  // message allocates. The record is acknowledged once the RuntimeError exists, else kept for the next synchronize().
+   const cudaError_t pending_err = cudaPeekAtLastError();
+   if (pending_err != cudaSuccess) {
++    RaiseRecord rec(kRaiseSitePendingAtCall, "tc_signal: ", nullptr, nullptr, device_, pending_err);
+     recycle_event(pending(), device_, event_);  // never allocates (its recycle slot was reserved by acquire_event)
+     event_ = nullptr;
+     std::ostringstream os;
+@@ -1789,7 +1981,7 @@ RetainUntilComplete::RetainUntilComplete(int device, std::initializer_list<Opera
+        << cudaGetErrorName(pending_err) << ": " << cudaGetErrorString(pending_err)
+        << "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
+           "(the call that set it and its device are unknown: the slot records neither)";
+-    throw_after_consuming(os);
++    rec.raise(os);
+   }
+ }
+ 
+@@ -1950,6 +2142,47 @@ void clear_reported_records(PendingState& st) noexcept {
+   st.drain_unreported_calls = 0;
+ }
+ 
++// P1T-FIX9 (sweep (n)): the report window (see PendingState::reporting). Opened once a report's records are final
++// (synchronize() persisted its own drain and prior-error records), closed when the report is over: whatever arrived in
++// between is then moved into the records, after them if the report could not be built (they are older) or as the only
++// records once the reported ones were cleared. A nested window (never expected) only closes at the outer one. Never
++// allocates, never throws. Prior art: double buffering (a writer never touches the buffer being read); a consistent
++// snapshot under one lock (the GIL here). Ours: the window around the add-on's raise-and-clear.
++class ReportWindow {
++ public:
++  explicit ReportWindow(PendingState& st) noexcept : st_(st), outer_(!st.reporting) { st_.reporting = true; }
++  ~ReportWindow() {
++    if (!outer_) return;
++    st_.reporting = false;
++    PendingState::Arrived& a = st_.arrived;
++    if (a.unreported_count > 0) {
++      if (st_.unreported_count == 0) {
++        st_.unreported_first = a.unreported_first;
++        st_.unreported_in_bound_drain = a.unreported_in_bound_drain;
++      }
++      sat_add(st_.unreported_count, a.unreported_count);
++      sat_add(st_.unreported_leaked, a.unreported_leaked);
++    }
++    if (a.unraisable_unreported > 0) {
++      if (st_.unraisable_unreported == 0) st_.unraisable_first = a.unraisable_first;
++      sat_add(st_.unraisable_unreported, a.unraisable_unreported);
++    }
++    a = PendingState::Arrived{};
++  }
++  ReportWindow(const ReportWindow&) = delete;
++  ReportWindow& operator=(const ReportWindow&) = delete;
++
++ private:
++  PendingState& st_;
++  bool outer_;
++};
++
++// TEST HOOK (P1T-FIX9 sweep (n) tests): a record written inside a report window, as anything running there would.
++void test_record_during_report(PendingState& st) noexcept {
++  if (test_hooks::take(test_hooks::kRecordDuringReport))
++    note_unraisable_failure(st, {FailedCall::kEventDestroy, Purpose::kDestroyEvent, 0, cudaErrorInvalidValue});
++}
++
+ bool has_unreported_records(const PendingState& st) noexcept {
+   return st.drain_unreported_calls != 0 || st.unreported_count != 0 || st.unraisable_unreported != 0 ||
+          st.prior_unreported != 0;
+@@ -2061,6 +2294,13 @@ void write_summary_line(const char* head, const char* why, const ReportSummary&
+                  "thread when synchronize() was called, whose call and device are unknown (the error slot records "
+                  "neither): %s\n",
+                  head, r.count, why, cudaGetErrorName(r.prior));
++  } else if (r.first.purpose == Purpose::kRaisePath) {
++    // P1T-FIX9 (sweep (m)): a raising path's record: its static texts (the caller's literals) name what failed.
++    std::fprintf(stderr, "%s %llu CUDA failure(s) (%s; allocation-free summary), the first: %s%s%s%s failed, %s, on "
++                 "CUDA device %d: %s\n",
++                 head, r.count, why, r.first.prefix ? r.first.prefix : "", r.first.what ? r.first.what : "",
++                 r.first.what ? ": " : "", record_call_name(r.first), purpose_name(r.first.purpose), r.first.device,
++                 cudaGetErrorName(r.first.err));
+   } else if (r.first.device >= 0) {
+     std::fprintf(stderr, "%s %llu CUDA failure(s) (%s; allocation-free summary), the first: %s failed, %s, on CUDA "
+                  "device %d: %s\n",
+@@ -2101,25 +2341,32 @@ void note_raised_at_exit(PendingState& st) noexcept {
+ // (the count and the first record: call, purpose, device, cudaGetErrorName) is written instead, and the records are
+ // then consumed (acknowledged: written once, whatever stderr does with it; a closed stderr makes fprintf fail quietly,
+ // never crash). The runner calls this after the hook in every case (it is the last reader at exit).
++// P1T-FIX9 (sweep (n)): written and cleared inside one report window, so what is cleared is what was written; a record
++// that arrives in between stays, and a second pass writes it (the last reader leaves nothing it could still see).
+ void exit_log_unreported() noexcept {
+   PendingState& st = pending();
+-  if (!has_unreported_records(st)) return;
+-  try {
+-    if (test_hooks::take(test_hooks::kAllocExitLog)) throw std::bad_alloc();  // TEST HOOK (P1T-FIX8 V8-02 tests)
+-    const std::string msg = report_message(
+-        st, "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet:");
+-    std::fprintf(stderr, "%s\n", msg.c_str());
+-    std::fflush(stderr);
++  for (int pass = 0; pass < 2 && has_unreported_records(st); ++pass) {
++    const ReportWindow window(st);
++    bool written = false;
++    try {
++      if (test_hooks::take(test_hooks::kAllocExitLog)) throw std::bad_alloc();  // TEST HOOK (P1T-FIX8 V8-02 tests)
++      const std::string msg = report_message(
++          st, "tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported yet:");
++      test_record_during_report(st);
++      std::fprintf(stderr, "%s\n", msg.c_str());
++      std::fflush(stderr);
++      written = true;
++    } catch (const std::exception&) {
++      // bad_alloc building the report: the allocation-free fallback below (V8-02).
++    }
++    if (!written) {
++      write_summary_line("tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody "
++                         "reported yet:",
++                         "the full report could not be built: it failed to allocate", summarize_unreported(st));
++      sat_inc(st.exit_log_fallbacks);
++    }
+     clear_reported_records(st);
+-    return;
+-  } catch (const std::exception&) {
+-    // bad_alloc building the report: the allocation-free fallback below (V8-02).
+   }
+-  write_summary_line("tc_signal: at interpreter exit (the exit hook did not finish), CUDA failures nobody reported "
+-                     "yet:",
+-                     "the full report could not be built: it failed to allocate", summarize_unreported(st));
+-  sat_inc(st.exit_log_fallbacks);
+-  clear_reported_records(st);
+ }
+ 
+ // P1T-FIX8 (V8-02, sweep (l)): the exit runner's window flag (see note_raised_at_exit), the hook's acknowledgement that
+@@ -2163,11 +2410,16 @@ void synchronize_and_release_all() {
+     sat_inc(st.drain_unreported_calls);
+   }
+   if (!has_unreported_records(st)) return;
++  // P1T-FIX9 (sweep (n)): from here until the records are cleared (or this raise gives up), one report window: the
++  // message, what note_raised_at_exit keeps and what clear_reported_records clears are the same records; a record
++  // written in between (by anything that runs here: nothing is expected to) is kept for the next report.
++  const ReportWindow window(st);
+   // N1: any CUDA failure is an error of synchronize(), never a success. N3: building the message may allocate; a
+   // bad_alloc here propagates as MemoryError (an error, not a success, and not a terminate), and every record stays.
+   if (test_hooks::take(test_hooks::kAllocErrorMessage)) throw std::bad_alloc();
+   const std::string msg =
+       report_message(st, "tc_signal.synchronize: CUDA error, so the release is not reported as a success:");
++  test_record_during_report(st);
+   // V6-03: raise first, clear second. The Python RuntimeError is created here (GIL held: every caller is a binding or
+   // the exit hook); if its str cannot be allocated CPython sets MemoryError instead, and the records stay.
+   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+@@ -2252,6 +2504,15 @@ py::dict pending_stats(bool reset_high_water) {
+   d["exit_device_wait_diagnostics"] = g_exit_device_wait_diagnostics.load();  // P1T-FIX7 L1
+   d["exit_device_wait_watchdogs"] = g_exit_device_wait_watchdogs.load();  // P1T-FIX8 V8-01: marker failed -> watchdog
+   d["exit_device_wait_watchdog_lock_failures"] = g_exit_watchdog_stop_lock_failures.load();  // P1T-FIX8 L2
++  {  // P1T-FIX9 (sweeps (m) / (n)): raising paths' records and the report window
++    long long in_flight = 0;
++    for (int i = 0; i < PendingState::kRaiseInFlight; ++i) in_flight += st.raise_in_flight_token[i] != 0 ? 1 : 0;
++    d["raise_records_in_flight"] = in_flight;  // 0 whenever Python can look (a raise never returns with one)
++    d["raise_records_reported"] = st.raise_records_reported;
++    d["raise_records_committed"] = st.raise_records_committed;
++    d["raise_records_direct"] = st.raise_records_direct;
++    d["report_window_arrivals"] = st.report_window_arrivals;
++  }
+   d["exit_device_wait_watchdog_detaches"] = g_exit_watchdog_detaches.load();  // P1T-FIX8 L2
+   d["exit_marker_failures"] = st.exit_marker_failures;                     // P1T-FIX8 V8-01: recorded, then raised
+   d["exit_log_fallbacks"] = st.exit_log_fallbacks;                         // P1T-FIX8 V8-02: allocation-free exit lines
+diff --git a/tc_signal/src/dlpack_operand.h b/tc_signal/src/dlpack_operand.h
+index fba4f89..f084c3b 100644
+--- a/tc_signal/src/dlpack_operand.h
++++ b/tc_signal/src/dlpack_operand.h
+@@ -304,6 +304,9 @@ enum : unsigned {
+   kCudaMarkerRecord = 1u << 11,      // wait_device_work_diagnosed: cudaEventRecord
+   kCudaMarkerQuery = 1u << 12,       // wait_device_work_diagnosed: cudaEventQuery
+   kCudaMarkerDestroy = 1u << 13,     // destroy_marker: cudaEventDestroy (the event is still destroyed)
++  // P1T-FIX9 (sweep (n) regression tests): a record written inside a report window (synchronize() or the exit logger,
++  // between building the report and clearing its records), as anything running there would.
++  kRecordDuringReport = 1u << 14,
+ };
+ void arm(unsigned bits) noexcept;
+ void clear() noexcept;
+diff --git a/tc_signal/tests/test_fix8_findings.py b/tc_signal/tests/test_fix8_findings.py
+index e0205e9..421c904 100644
+--- a/tc_signal/tests/test_fix8_findings.py
++++ b/tc_signal/tests/test_fix8_findings.py
+@@ -94,14 +94,14 @@ _TRACE_SRC = r'''
+ namespace py = pybind11;
+ static thread_local cudaError_t slot = cudaSuccess;
+ static int create_fail = 0, record_fail = 0, query_fail = 0, destroy_fail = 0, sync_fail = 0;
+-static int query_notready = 0, sync_delay_ms = 0, current_device = 0;
++static int query_notready = 0, sync_delay_ms = 0, current_device = 0, set_fail = 0;
+ static bool oom_after_create_fail = false;
+ static bool fail_allocations = false;
+ void* operator new(std::size_t n) { if (fail_allocations) throw std::bad_alloc(); void* p = std::malloc(n ? n : 1); if (!p) throw std::bad_alloc(); return p; }
+ void operator delete(void* p) noexcept { std::free(p); }
+ void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+ extern "C" cudaError_t cudaGetDevice(int* d) { *d = current_device; return cudaSuccess; }
+-extern "C" cudaError_t cudaSetDevice(int d) { current_device = d; return cudaSuccess; }
++extern "C" cudaError_t cudaSetDevice(int d) { if (set_fail) { --set_fail; slot = cudaErrorInvalidDevice; return slot; } current_device = d; return cudaSuccess; }
+ extern "C" cudaError_t cudaStreamSynchronize(cudaStream_t) {
+   if (sync_delay_ms) std::this_thread::sleep_for(std::chrono::milliseconds(sync_delay_ms));
+   if (sync_fail) { --sync_fail; slot = cudaErrorInvalidValue; return slot; }
+@@ -174,8 +174,8 @@ PYBIND11_MODULE(_p1t_fix8_trace, m) {
+     if (which == "launch") return guarded(oom, [] { tcs::check_launch_on("p: ", "k", 0); });
+     if (which == "cublas") return guarded(oom, [] { tcs::check_after_cublas_on("p: ", "f", 0); });
+     if (which == "call") return guarded(oom, [] { tcs::raise_call_failure_on("p: ", "w", "cudaMemsetAsync", 0, cudaErrorInvalidValue); });
+-    static const std::string what("p: a call");
+-    return guarded(oom, [] { tcs::raise_cuda_failure(what, cudaErrorInvalidValue); });
++    // P1T-FIX9: the device guard's switch (FIX8 called its helper raise_cuda_failure directly; it is gone).
++    return guarded(oom, [] { slot = cudaSuccess; set_fail = 1; tcs::DeviceGuard g(1); });
+   });
+ }
+ '''
+@@ -297,17 +297,37 @@ print('RESULT ' + json.dumps({'outcome': list(outcome), 'calls': calls}), flush=
+     assert res['calls'][1] is None, res                 # exactly once
+ 
+ 
++# P1T-FIX9 (sweep (m)): FIX8 left the failure in the thread's error slot when the report could not be built
++# (['bad_alloc', 1]); the slot holds only the error code and the next failing CUDA call overwrites it. FIX9 records it
++# first (a tagged record) and consumes the slot: under OOM the slot is clean and the record is kept (committed), and the
++# next synchronize() raises it once, under its own name (test_fix9_findings.py checks the names); with the report built
++# the record is acknowledged and nothing is left.
+ @pytest.mark.parametrize('which', ['launch', 'cublas', 'call', 'cuda'])
+ def test_fix8_sweep_k_raise_helpers_consume_only_after_their_report_exists(trace_dir, which):
+     r, res = _run(r'''
+ import json, sys
+ import _p1t_fix8_trace as n
+-print('RESULT ' + json.dumps({'oom': list(n.guard_helper(sys.argv[1], True)),
+-                              'control': list(n.guard_helper(sys.argv[1], False))}), flush=True)
++oom = list(n.guard_helper(sys.argv[1], True))
++st = n.stats()
++calls = []
++for _ in range(2):
++    try:
++        n.synchronize(); calls.append(None)
++    except RuntimeError as e:
++        calls.append(str(e))
++control = list(n.guard_helper(sys.argv[1], False))
++st2 = n.stats()
++print('RESULT ' + json.dumps({'oom': oom, 'committed': st['raise_records_committed'], 'calls': calls,
++                              'control': control, 'reported': st2['raise_records_reported'],
++                              'in_flight': st2['raise_records_in_flight'],
++                              'left': st2['unreported_unraisable_errors']}), flush=True)
+ ''', which, env=_env(PYTHONPATH=trace_dir, CUDA_VISIBLE_DEVICES=''))
+     _ok(r, res)
+-    assert res['oom'] == ['bad_alloc', 1], res          # the report could not be built: the entry stays in the slot
+-    assert res['control'] == ['runtime_error', 0], res  # the report exists: the entry is consumed (rule 1)
++    assert res['oom'] == ['bad_alloc', 0] and res['committed'] == 1, res  # recorded first, then consumed: kept
++    assert res['calls'][0] and 'the call was refused with MemoryError' in res['calls'][0], res  # raised once, named
++    assert res['calls'][1] is None, res
++    assert res['control'] == ['runtime_error', 0] and res['reported'] == 1, res  # the report exists: acknowledged
++    assert res['in_flight'] == 0 and res['left'] == 0, res
+ 
+ 
+ # ======================================================================================= real module, GPU (V8-01)
+diff --git a/tensor_cuda/src/bindings.cpp b/tensor_cuda/src/bindings.cpp
+index 4c1e490..f9e0f1d 100644
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -39,14 +39,43 @@ unsigned long long dlpack_device_restore_failures();
+ // drain and its restore, fill_'s guard unwinding), recorded before their slot entry is consumed: count, and the first.
+ unsigned long long dlpack_unraisable_errors();
+ void dlpack_first_unraisable(std::string* what, int* device, int* error);
+-// P1T-FIX6 (FIX5 residual R7, a recorded error that nothing ever raised; defined in kernels.cu): the part of that
+-// record not raised yet (count, and the first of them), and its consumption once a RuntimeError naming it exists.
+-void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error);
+-void dlpack_ack_unraisable(unsigned long long count) noexcept;
+-// P1T-FIX8 (sweep (k), defined in kernels.cu): throw a RuntimeError whose report exists before the slot is consumed.
+-[[noreturn]] void throw_cuda_report_after_consuming(const std::string& msg);
+-// P1T-FIX8 (V8-02, defined in kernels.cu): the same snapshot without allocating (the site text is a static string).
++// P1T-FIX9, round-9 review findings V9-01 / V9-02, sweeps (m) / (n) (defined in kernels.cu, where the store and its
++// rationale are): ONE record store for the P1-T core's recorded CUDA failures and ONE snapshot-and-acknowledge API.
++// CoreFailureSnapshot is the IDENTICAL type kernels.cu defines (a POD both files' functions pass; keep the two copies
++// token-for-token equal: the static_assert below checks the layout the two must share).
++constexpr int kCoreNamedRecords = 16;
++struct CoreFailureSnapshot {
++  bool locked = false;              // taken under the mutex (false: a lock failure, the count only)
++  unsigned long long hi = 0;        // the latest sequence number covered (0: no sequenced record covered)
++  unsigned long long count = 0;     // every record covered: sequenced (named or not) + lockless
++  unsigned long long lockless = 0;  // covered records whose writer could not take the lock (never named)
++  unsigned long long oldest_unnamed = 0;  // covered sequenced records no longer held by name (more than the ring)
++  int named = 0;                    // covered records held by name, oldest first
++  unsigned long long seq[kCoreNamedRecords] = {};
++  const char* who[kCoreNamedRecords] = {};   // static: the P1-T path, or nullptr
++  const char* what[kCoreNamedRecords] = {};  // static: the failed call and what it was for
++  int device[kCoreNamedRecords] = {};
++  int error[kCoreNamedRecords] = {};
++};
++static_assert(sizeof(CoreFailureSnapshot) == 8 * 5 + 8 + 16 * (8 + 8 + 8 + 4 + 4), "the kernels.cu layout");
++// The one snapshot (taken once under the store mutex; never allocates), the FIX8 four-value form of it, the exact
++// acknowledgement of what a snapshot covers (only once its report exists), the text of a snapshot's records, how many
++// acknowledgements had to be deferred (a lock failure), and the raise every P1-T core CUDA failure goes through.
++void dlpack_unreported_unraisable_raw(CoreFailureSnapshot* out) noexcept;
+ void dlpack_unreported_unraisable_raw(unsigned long long* count, const char** what, int* device, int* error) noexcept;
++void dlpack_ack_unraisable(const CoreFailureSnapshot& s) noexcept;
++std::string dlpack_describe_records(const CoreFailureSnapshot& s, const unsigned long long* skip, int n_skip,
++                                    unsigned long long skip_lockless);
++unsigned long long dlpack_ack_deferred();
++[[noreturn]] void throw_core_report(std::string head, const unsigned long long* own, int n_own);
++// Records one failed call (static path and call texts, device, error) and only then consumes its slot entry; returns
++// its sequence number (0: recorded without a name, the record lock failed). Never allocates, never throws.
++unsigned long long dlpack_record_and_consume(const char* who, const char* what, int device, cudaError_t e) noexcept;
++// TEST HOOKS (P1T-FIX9 V9-02 tests only): arm `n` records, made by another native thread when a report reaches
++// boundary `at` (1-3: the R7 raise after its snapshot / message / capture; 4-5: the exit reader after its snapshot /
++// write; 6: a P1-T core raise after its snapshot), and the call each boundary makes.
++void dlpack_test_arm_records(int at, int n) noexcept;
++void dlpack_test_records_at(int boundary) noexcept;
+ // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
+ void bp_kernel_4_set_variant(const std::string&);
+ std::string bp_kernel_4_get_variant();
+@@ -429,6 +458,11 @@ void capsule_destructor_versioned(PyObject* cap) {
+ // consumer wait included, inside the guard, and restore-before-raise.
+ // P1T-FIX6 (V6-02): `stream` arrives already read by DlpackArgs (None -> has_stream false; an int's value): this
+ // function calls no Python at all.
++// "<cudaGetErrorName>: <cudaGetErrorString>" (allocates: only once the failure it names is recorded).
++std::string cuda_error_name_text(cudaError_t err) {
++  return std::string(cudaGetErrorName(err)) + ": " + cudaGetErrorString(err);
++}
++
+ void dlpack_fence_consumer(bool has_stream, long long s, int device) {
+   if (!has_stream) return;
+   if (s == -1 || s == 1) return;
+@@ -441,52 +475,79 @@ void dlpack_fence_consumer(bool has_stream, long long s, int device) {
+   cudaStream_t consumer =
+       (s == 2) ? cudaStreamPerThread
+                : reinterpret_cast<cudaStream_t>(static_cast<uintptr_t>(s));
+-  const std::string dev = std::to_string(device);
+-  auto name = [](cudaError_t err) {
+-    return std::string(cudaGetErrorName(err)) + ": " + cudaGetErrorString(err);
++  // P1T-FIX9, round-9 review finding V9-01 (MINOR), sweep (m): FIX8 kept the first failure of the fence only in a local
++  // (`e`) while the cleanup calls ran: a failing cudaEventDestroy overwrote the thread's error slot, and when building
++  // the combined message then threw bad_alloc the first failure was gone (reviewer probe core_fence_cpu.py: compound
++  // cleanup failure + report OOM). Now EVERY failed fence or cleanup call is recorded (the core record store,
++  // kernels.cu: its call, the tensor's device or the caller's, its error; allocation-free) and its slot entry consumed
++  // BEFORE the next CUDA call or allocation runs. The combined report is built afterwards from those records plus any
++  // other unreported one (throw_core_report), and they are acknowledged only once the std::runtime_error exists; if it
++  // cannot be built (MemoryError) they stay, and the next tensor_cuda.synchronize() or the exit reader reports each,
++  // by name, once. The order of the calls and every message are unchanged. Prior art: CUDA 12.6 Programming Guide
++  // 3.2.12 (one error variable per host thread, overwritten by the next failing call); FIX5 V5-02's record-before-
++  // consume rule; SQLite's OOM testing. Ours: recording each fence step at the call, before its cleanup.
++  constexpr int kMaxFenceFailures = 5;  // at most: one failed step, the destroy, the restore (or get / set alone)
++  unsigned long long own[kMaxFenceFailures] = {};
++  int n_own = 0;
++  auto record = [&own, &n_own](const char* what, int dv, cudaError_t err) noexcept {
++    own[n_own++] = dlpack_record_and_consume("__dlpack__ stream fence", what, dv, err);
+   };
+-  // P1T-FIX8 (sweep (k)): every raise below builds its report before consuming the slot entry (throw_after_consuming,
+-  // kernels.cu): a bad_alloc while building it leaves the failure in the slot for the next check.
+   int prev = -1;
+   cudaError_t e = cudaGetDevice(&prev);
+-  if (e != cudaSuccess)
+-    throw_cuda_report_after_consuming("__dlpack__: stream fence: cudaGetDevice failed (" + name(e) +
+-                          "); nothing was switched or recorded");
++  if (e != cudaSuccess) {
++    record("the current-device query cudaGetDevice failed; nothing was switched or recorded", device, e);
++    throw_core_report("__dlpack__: stream fence: cudaGetDevice failed (" + cuda_error_name_text(e) +
++                          "); nothing was switched or recorded",
++                      own, n_own);
++  }
+   const bool switched = (prev != device);
+   if (switched) {
+     e = cudaSetDevice(device);
+-    if (e != cudaSuccess)
+-      throw_cuda_report_after_consuming("__dlpack__: stream fence: cannot make the tensor's CUDA device " + dev +
+-                            " current (cudaSetDevice: " + name(e) + "); the caller's device " +
+-                            std::to_string(prev) + " is unchanged and nothing was recorded");
++    if (e != cudaSuccess) {
++      record("making the tensor's CUDA device current (cudaSetDevice) failed; the caller's device is unchanged and "
++             "nothing was recorded", device, e);
++      throw_core_report("__dlpack__: stream fence: cannot make the tensor's CUDA device " + std::to_string(device) +
++                            " current (cudaSetDevice: " + cuda_error_name_text(e) + "); the caller's device " +
++                            std::to_string(prev) + " is unchanged and nothing was recorded",
++                        own, n_own);
++    }
+   }
+   // `device` is current from here until the restore below.
+   cudaEvent_t ev = nullptr;
+   const char* step = "cudaEventCreateWithFlags";
+   e = cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
++  if (e != cudaSuccess) record("creating the fence's event (cudaEventCreateWithFlags) failed", device, e);
+   if (e == cudaSuccess) {
+     step = "cudaEventRecord on the legacy stream";
+     e = cudaEventRecord(ev, cudaStreamLegacy);  // engine stream of `device`
++    if (e != cudaSuccess) record("recording the fence's event on the legacy stream (cudaEventRecord) failed", device, e);
+   }
+   if (e == cudaSuccess) {
+     step = "cudaStreamWaitEvent on the consumer's stream";
+     e = cudaStreamWaitEvent(consumer, ev, 0);
++    if (e != cudaSuccess)
++      record("making the consumer's stream wait on the fence's event (cudaStreamWaitEvent) failed", device, e);
+   }
+   // Safe right after the wait is enqueued: the dependency is captured at the
+   // cudaStreamWaitEvent call and the runtime frees the event once it fires.
+   const cudaError_t de = ev ? cudaEventDestroy(ev) : cudaSuccess;  // on its own device
++  if (de != cudaSuccess) record("destroying the fence's event (cudaEventDestroy) failed", device, de);
+   const cudaError_t re = switched ? cudaSetDevice(prev) : cudaSuccess;
+-  if (e == cudaSuccess && de == cudaSuccess && re == cudaSuccess) return;
+-  // the failed calls are reported by the raise below; their slot entry is consumed once that report exists
++  if (re != cudaSuccess)
++    record("restoring the caller's CUDA device after the fence (cudaSetDevice) failed; the calling thread's current "
++           "device is still the tensor's", prev, re);
++  if (n_own == 0) return;
++  // Every failed call is recorded and its slot entry consumed; only now is anything allocated.
++  const std::string dev = std::to_string(device);
+   std::string msg = "__dlpack__: stream fence on the tensor's CUDA device " + dev + " failed:";
+-  if (e != cudaSuccess) msg += std::string(" ") + step + " (" + name(e) + ");";
+-  if (de != cudaSuccess) msg += " cudaEventDestroy (" + name(de) + ");";
++  if (e != cudaSuccess) msg += std::string(" ") + step + " (" + cuda_error_name_text(e) + ");";
++  if (de != cudaSuccess) msg += " cudaEventDestroy (" + cuda_error_name_text(de) + ");";
+   if (re != cudaSuccess)
+-    msg += " restoring the caller's CUDA device " + std::to_string(prev) + " also failed (cudaSetDevice: " + name(re) +
+-           "), so the calling thread's current device is still " + dev;
++    msg += " restoring the caller's CUDA device " + std::to_string(prev) + " also failed (cudaSetDevice: " +
++           cuda_error_name_text(re) + "), so the calling thread's current device is still " + dev;
+   else if (switched)
+     msg += " the caller's CUDA device " + std::to_string(prev) + " was restored";
+-  throw_cuda_report_after_consuming(msg);
++  throw_core_report(std::move(msg), own, n_own);
+ }
+ 
+ // P1T-FIX6, round-6 review finding V6-02 (MAJOR; FIX5's residual R3). tensor_dlpack converted its arguments with
+@@ -1141,10 +1202,13 @@ Tensor tensor_from_dlpack_capsule(py::object obj) {
+   // a refused capsule keeps its ownership. Nothing new.
+   int cur = -1;
+   const cudaError_t qe = cudaGetDevice(&cur);
+-  if (qe != cudaSuccess)  // P1T-FIX8 (sweep (k)): the report exists before the slot entry is consumed
+-    throw_cuda_report_after_consuming(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
+-                          cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) +
+-                          "); refused before taking ownership (the capsule is not consumed)");
++  if (qe != cudaSuccess) {  // P1T-FIX9 (sweep (m)): recorded, then consumed, before the message is built
++    const unsigned long long seq = dlpack_record_and_consume(
++        "from_dlpack", "the current-device query cudaGetDevice failed; refused before taking ownership", -1, qe);
++    throw_core_report(std::string("from_dlpack: the current-device query cudaGetDevice failed (") +
++                          cuda_error_name_text(qe) + "); refused before taking ownership (the capsule is not consumed)",
++                      &seq, 1);
++  }
+   if (dl->device.device_id != cur)
+     throw py::buffer_error(
+         "from_dlpack: tensor is on CUDA device " + std::to_string(dl->device.device_id) +
+@@ -1260,9 +1324,13 @@ Tensor tensor_empty(std::vector<int64_t> shape, const std::string& dtype,
+   if (dev.is_cuda()) {
+     int cur = -1;
+     const cudaError_t qe = cudaGetDevice(&cur);
+-    if (qe != cudaSuccess)  // P1T-FIX8 (sweep (k)): the report exists before the slot entry is consumed
+-      throw_cuda_report_after_consuming(std::string("empty: the current-device query cudaGetDevice failed (") +
+-                            cudaGetErrorName(qe) + ": " + cudaGetErrorString(qe) + "); nothing was allocated");
++    if (qe != cudaSuccess) {  // P1T-FIX9 (sweep (m)): recorded, then consumed, before the message is built
++      const unsigned long long seq = dlpack_record_and_consume(
++          "empty", "the current-device query cudaGetDevice failed; nothing was allocated", -1, qe);
++      throw_core_report(std::string("empty: the current-device query cudaGetDevice failed (") +
++                            cuda_error_name_text(qe) + "); nothing was allocated",
++                        &seq, 1);
++    }
+     const std::string prefix = "cuda:";
+     if (device.compare(0, prefix.size(), prefix) == 0) {
+       const std::string idx = device.substr(prefix.size());
+@@ -1591,66 +1659,87 @@ PyMethodDef kBeginShutdownDef = {"_dlpack_begin_shutdown",
+ // "tensor_cuda: at exit: tensor_cuda.synchronize: ...", naming a call that did not happen at exit); it names the
+ // reporting paths instead, and each record's site string names the CUDA call that failed (kernels.cu), followed by
+ // the device it concerned.
+-std::string unraisable_message(unsigned long long n, const std::string& what, int dev, int err) {
+-  std::string msg = "tensor_cuda: " + std::to_string(n) +
+-                    " CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T "
+-                    "core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: ";
+-  if (what.empty())
+-    msg += "(not named: recorded while an earlier report was being raised)";
+-  else
+-    msg += what + " [CUDA device " + std::to_string(dev) + ": " + cudaGetErrorName(static_cast<cudaError_t>(err)) +
+-           ": " + cudaGetErrorString(static_cast<cudaError_t>(err)) + "]";
+-  return msg;
++// P1T-FIX9 (V9-02, sweep (n)): built from ONE snapshot (dlpack_unreported_unraisable_raw), which is also what gets
++// acknowledged and, at exit, retained. Every covered record held by name is listed, oldest first, with its path, the
++// failed call, its device and its error; those the store could not keep by name are counted, with the reason.
++std::string unraisable_message(const CoreFailureSnapshot& s) {
++  return "tensor_cuda: " + std::to_string(s.count) +
++         " CUDA failure(s) recorded on P1-T core paths (DLPack release, fill_, the export fence and the imports) and "
++         "not reported where they happened (P1-T core; reported once, by tensor_cuda.synchronize(), by the next P1-T "
++         "core error, or at interpreter exit): " +
++         dlpack_describe_records(s, nullptr, 0, 0);
+ }
+ 
+ // P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l) "the last reader at exit": the core exit runner is the last
+ // reader of the R7 record in every case. What _dlpack_raise_unraisable RAISES inside the runner (the hook's R7 logging)
+ // is acknowledged only when the hook says it wrote the line (_dlpack_exit_report_written); until then a plain-data copy
+-// (count, the static site text, device, error) is kept here, and the runner writes it with C stdio if the hook could
+-// not (MemoryError building the line, stderr None or raising, the hook interrupted). GIL held for every access (the
+-// runner, the hook and the raise all hold it). Prior art: allocation-free last-chance reporting (async-signal-safe
+-// logging with POSIX write(2); SQLite's OOM-testing discipline); ours: the acknowledged exit report.
++// is kept here, and the runner writes it with C stdio if the hook could not (MemoryError building the line, stderr
++// None or raising, the hook interrupted). GIL held for every access (the runner, the hook and the raise all hold it).
++// P1T-FIX9, round-9 review finding V9-02 (MINOR): the copy kept here is now a summary of the SAME snapshot the raised
++// RuntimeError was built from and that was acknowledged (FIX8 kept an earlier raw snapshot: a record arriving between
++// its raw and rich reads was raised, acknowledged, and then written by the runner as "not named" with a false reason).
++// Prior art: allocation-free last-chance reporting (async-signal-safe logging with POSIX write(2); SQLite's OOM-testing
++// discipline); a consistent snapshot under one lock (C++17 [thread.mutex]); ours: the acknowledged exit report.
++struct CoreReportSummary {  // allocation-free: counts, static texts, ints
++  unsigned long long count = 0;
++  bool first_named = false;  // the oldest covered record is held by name
++  const char* first_who = nullptr;
++  const char* first_what = nullptr;
++  int first_device = -1;
++  int first_error = 0;
++  unsigned long long oldest_unnamed = 0;
++  unsigned long long lockless = 0;
++  bool locked = true;
++};
++CoreReportSummary summarize_snapshot(const CoreFailureSnapshot& s) noexcept {
++  CoreReportSummary r;
++  r.count = s.count;
++  r.oldest_unnamed = s.oldest_unnamed;
++  r.lockless = s.lockless;
++  r.locked = s.locked;
++  if (s.named > 0) {  // the oldest record still held by name (the first one when oldest_unnamed == 0)
++    r.first_named = s.oldest_unnamed == 0;
++    r.first_who = s.who[0];
++    r.first_what = s.what[0];
++    r.first_device = s.device[0];
++    r.first_error = s.error[0];
++  }
++  return r;
++}
+ struct CoreExitReport {
+   bool in_runner = false;  // the exit runner is running (its window)
+   bool unwritten = false;
+-  unsigned long long count = 0;
+-  const char* what = nullptr;  // a static site string, or nullptr (not named)
+-  int device = -1;
+-  int error = 0;
++  CoreReportSummary summary;  // the first unwritten report's summary; `count` accumulates over unwritten reports
+ };
+ CoreExitReport g_core_exit_report;
+-std::atomic<unsigned long long> g_shutdown_log_fallbacks{0};   // exit log lines written by the allocation-free path
+-std::atomic<bool> g_test_fail_exit_report{false};              // TEST HOOK (P1T-FIX8 V8-02 tests): one-shot
+-
++std::atomic<unsigned long long> g_shutdown_log_fallbacks{0};  // exit log lines written by the allocation-free path
++std::atomic<bool> g_test_fail_exit_report{false};             // TEST HOOK (P1T-FIX8 V8-02 tests): one-shot
+ void dlpack_raise_unraisable() {
+-  unsigned long long n = 0;
+-  std::string what;
+-  int dev = -1, err = 0;
+-  const char* raw_what = nullptr;  // P1T-FIX8: the static site text, for the exit report
+-  unsigned long long raw_n = 0;
+-  int raw_dev = -1, raw_err = 0;
+-  dlpack_unreported_unraisable_raw(&raw_n, &raw_what, &raw_dev, &raw_err);
+-  dlpack_unreported_unraisable(&n, &what, &dev, &err);
+-  if (n == 0) return;
+-  const std::string msg = unraisable_message(n, what, dev, err);
++  CoreFailureSnapshot snap;  // P1T-FIX9 (V9-02): THE snapshot: the message, the acknowledgement and the exit report
++  dlpack_unreported_unraisable_raw(&snap);
++  dlpack_test_records_at(1);  // TEST HOOK (P1T-FIX9 V9-02 tests): records made at each boundary of this report
++  if (snap.count == 0) return;
++  const std::string msg = unraisable_message(snap);
++  dlpack_test_records_at(2);
+   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+   if (!PyErr_ExceptionMatches(PyExc_RuntimeError)) {
+     PyErr_Clear();
+-    throw std::bad_alloc();  // -> MemoryError; the record stays for the next call
++    throw std::bad_alloc();  // -> MemoryError; the records stay for the next call
+   }
+   try {
+     py::error_already_set raised;  // captures the RuntimeError (a bad_alloc here consumes nothing)
+     if (g_core_exit_report.in_runner) {  // P1T-FIX8 (V8-02): kept until the hook says it wrote it
++      const CoreReportSummary r = summarize_snapshot(snap);
+       if (!g_core_exit_report.unwritten) {
+-        g_core_exit_report.what = raw_what;
+-        g_core_exit_report.device = raw_dev;
+-        g_core_exit_report.error = raw_err;
++        g_core_exit_report.summary = r;
++      } else {
++        const unsigned long long c = g_core_exit_report.summary.count;
++        g_core_exit_report.summary.count = (r.count > ~0ULL - c) ? ~0ULL : c + r.count;
+       }
+-      const unsigned long long c = g_core_exit_report.count;
+-      g_core_exit_report.count = (n > ~0ULL - c) ? ~0ULL : c + n;
+       g_core_exit_report.unwritten = true;
+     }
+-    dlpack_ack_unraisable(n);      // noexcept: consumed exactly once, now that the diagnostic exists
++    dlpack_test_records_at(3);
++    dlpack_ack_unraisable(snap);  // noexcept: exactly the records the RuntimeError names, now that it exists
+     throw raised;
+   } catch (const std::bad_alloc&) {
+     PyErr_Clear();
+@@ -1671,16 +1760,32 @@ void dlpack_raise_unraisable() {
+ // P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l): the allocation-free line for a record count and its first
+ // record (static site text, device, cudaGetErrorName's static name: CUDA 12.6 Runtime API; unverified here, lead to
+ // check "cudaGetErrorName returns static string"). C stdio only; a closed stderr makes it fail quietly, never crash.
+-void write_core_summary(const char* head, const char* why, unsigned long long n, const char* what, int dev,
+-                        int err) noexcept {
+-  if (what != nullptr)
+-    std::fprintf(stderr, "%s %llu CUDA failure(s) on DLPack release / fill_ paths (P1-T core; %s; allocation-free "
+-                 "summary), the first: %s [CUDA device %d: %s]\n",
+-                 head, n, why, what, dev, cudaGetErrorName(static_cast<cudaError_t>(err)));
+-  else
+-    std::fprintf(stderr, "%s %llu CUDA failure(s) on DLPack release / fill_ paths (P1-T core; %s; allocation-free "
+-                 "summary), the first not named (recorded while an earlier report was being raised)\n",
+-                 head, n, why);
++// P1T-FIX9 (V9-02): the summary is of ONE snapshot, and says why a record is not named when it is not: the store keeps
++// the latest kCoreNamedRecords by name, and a record made while the record lock could not be taken has no name (FIX8
++// wrote "recorded while an earlier report was being raised", which was false in round 9's case). C stdio only; static
++// texts, ints and cudaGetErrorName's static name.
++void write_core_summary(const char* head, const char* why, const CoreReportSummary& r) noexcept {
++  std::fprintf(stderr, "%s %llu CUDA failure(s) on P1-T core paths (P1-T core; %s; allocation-free summary)", head,
++               r.count, why);
++  if (r.first_named) {
++    std::fprintf(stderr, ", the first: %s%s%s [CUDA device %d: %s]", r.first_who ? r.first_who : "",
++                 r.first_who ? ": " : "", r.first_what ? r.first_what : "a CUDA call", r.first_device,
++                 cudaGetErrorName(static_cast<cudaError_t>(r.first_error)));
++  } else if (!r.locked) {
++    std::fprintf(stderr, ", none named (the record lock could not be taken to read them)");
++  } else {
++    if (r.oldest_unnamed > 0)
++      std::fprintf(stderr, ", the first %llu not named (more than %d failures were recorded before they were reported; "
++                   "only the latest %d are kept by name)", r.oldest_unnamed, kCoreNamedRecords, kCoreNamedRecords);
++    if (r.first_what != nullptr)
++      std::fprintf(stderr, "; the earliest still named: %s%s%s [CUDA device %d: %s]", r.first_who ? r.first_who : "",
++                   r.first_who ? ": " : "", r.first_what, r.first_device,
++                   cudaGetErrorName(static_cast<cudaError_t>(r.first_error)));
++    if (r.lockless > 0)
++      std::fprintf(stderr, "; %llu recorded without a name (the record lock could not be taken when they were "
++                   "recorded)", r.lockless);
++  }
++  std::fprintf(stderr, "\n");
+   std::fflush(stderr);
+   g_shutdown_log_fallbacks.fetch_add(1);
+ }
+@@ -1689,18 +1794,21 @@ void write_core_summary(const char* head, const char* why, unsigned long long n,
+ // records nobody raised: the full message (unraisable_message), or, when it cannot allocate (FIX7 caught bad_alloc and
+ // wrote nothing), the allocation-free summary; consumed either way (written once: there is no later reader). (2) A
+ // report the hook's _dlpack_raise_unraisable raised here but the hook did not acknowledge writing: its summary.
++// P1T-FIX9 (V9-02, sweep (n)): (1) is ONE snapshot: the message or the summary is built from it, and exactly what it
++// covers is acknowledged; a record that arrives meanwhile (another native thread) stays and is read again, by a second
++// pass, so the last reader leaves nothing behind that existed when it finished.
+ void core_exit_last_reader(bool hook_raised) noexcept {
+   const char* head_tail = hook_raised ? "(logged by the exit runner: the exit hook did not finish)"
+                                       : "(logged by the exit runner: the exit hook did not report it)";
+-  unsigned long long n = 0;
+-  const char* what = nullptr;
+-  int dev = -1, err = 0;
+-  dlpack_unreported_unraisable_raw(&n, &what, &dev, &err);  // no allocation
+-  if (n > 0) {
++  for (int pass = 0; pass < 2; ++pass) {  // a second pass for records made by other threads during the first
++    CoreFailureSnapshot snap;
++    dlpack_unreported_unraisable_raw(&snap);  // no allocation
++    dlpack_test_records_at(4);
++    if (snap.count == 0) break;
+     bool written = false;
+     try {
+       if (g_test_fail_exit_report.exchange(false)) throw std::bad_alloc();  // TEST HOOK (P1T-FIX8 V8-02 tests)
+-      const std::string msg = unraisable_message(n, what != nullptr ? std::string(what) : std::string(), dev, err);
++      const std::string msg = unraisable_message(snap);
+       std::fprintf(stderr, "%s %s\n", msg.c_str(), head_tail);
+       std::fflush(stderr);
+       written = true;
+@@ -1709,16 +1817,16 @@ void core_exit_last_reader(bool hook_raised) noexcept {
+     }
+     if (!written)
+       write_core_summary("tensor_cuda: at interpreter exit,", "the full report could not be built: it failed to allocate",
+-                         n, what, dev, err);
+-    dlpack_ack_unraisable(n);
++                         summarize_snapshot(snap));
++    dlpack_test_records_at(5);
++    dlpack_ack_unraisable(snap);  // exactly what was written
+   }
+   if (g_core_exit_report.unwritten) {
+     write_core_summary("tensor_cuda: at interpreter exit, a report of", "raised at exit but not written by the exit "
+                        "hook; written here by the exit runner, its last reader",
+-                       g_core_exit_report.count, g_core_exit_report.what, g_core_exit_report.device,
+-                       g_core_exit_report.error);
++                       g_core_exit_report.summary);
+     g_core_exit_report.unwritten = false;
+-    g_core_exit_report.count = 0;
++    g_core_exit_report.summary = CoreReportSummary{};
+   }
+ }
+ 
+@@ -1762,7 +1870,7 @@ PyObject* raw_dlpack_exit_hook_runner(PyObject*, PyObject* hook) {
+ // METH_NOARGS. Never raises.
+ PyObject* raw_dlpack_exit_report_written(PyObject*, PyObject*) {
+   g_core_exit_report.unwritten = false;
+-  g_core_exit_report.count = 0;
++  g_core_exit_report.summary = CoreReportSummary{};
+   Py_RETURN_NONE;
+ }
+ 
+@@ -1773,6 +1881,23 @@ PyObject* raw_dlpack_test_fail_exit_report(PyObject*, PyObject*) {
+   Py_RETURN_NONE;
+ }
+ 
++// P1T-FIX9 (V9-02 regression tests only; not an API): arm records made by another native thread when a report reaches
++// a boundary (see dlpack_test_records_at). Raw METH_O; the argument is an int read at C level (no Python method runs):
++// boundary * 16 + count. Anything else raises TypeError.
++PyObject* raw_dlpack_test_record_between(PyObject*, PyObject* arg) {
++  if (!PyLong_Check(arg)) {
++    PyErr_SetString(PyExc_TypeError, "_dlpack_test_record_between: an int (boundary * 16 + count)");
++    return nullptr;
++  }
++  const long code = PyLong_AsLong(arg);
++  if (code < 0 || PyErr_Occurred()) {
++    if (!PyErr_Occurred()) PyErr_SetString(PyExc_ValueError, "_dlpack_test_record_between: a non-negative int");
++    return nullptr;
++  }
++  dlpack_test_arm_records(static_cast<int>(code / 16), static_cast<int>(code % 16));
++  Py_RETURN_NONE;
++}
++
+ const char kExitRunnerDoc[] =
+     "_dlpack_exit_hook_runner(hook)\n\n"
+     "P1T-FIX7 (V7-01): what tensor_cuda registers with atexit, as atexit.register(_dlpack_exit_hook_runner, "
+@@ -1790,6 +1915,10 @@ PyMethodDef kExitReportWrittenDef = {"_dlpack_exit_report_written", &raw_dlpack_
+ PyMethodDef kTestFailExitReportDef = {"_dlpack_test_fail_exit_report", &raw_dlpack_test_fail_exit_report, METH_NOARGS,
+                                       "_dlpack_test_fail_exit_report()\n\nTEST HOOK (P1T-FIX8 V8-02 tests only): "
+                                       "the exit runner's next full report fails as if it could not allocate."};
++PyMethodDef kTestRecordBetweenDef = {"_dlpack_test_record_between", &raw_dlpack_test_record_between, METH_O,
++                                     "_dlpack_test_record_between(code)\n\nTEST HOOK (P1T-FIX9 V9-02 tests only): "
++                                     "records made by another native thread when a report reaches a boundary "
++                                     "(code = boundary * 16 + count)."};
+ PyMethodDef kExitRunnerDef = {"_dlpack_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_dlpack_exit_hook_runner),
+                               METH_O, kExitRunnerDoc};
+ 
+@@ -2675,11 +2804,12 @@ PYBIND11_MODULE(_tensor_cuda, m) {
+     d["shutdown_lock_diagnostics"] = g_shutdown_lock_diagnostics.load();  // P1T-FIX7 L1
+     d["shutdown_log_fallbacks"] = g_shutdown_log_fallbacks.load();  // P1T-FIX8 V8-02: allocation-free exit lines
+     {  // P1T-FIX8 (V8-02): the recorded failures not raised yet (the last reader at exit consumes them)
+-      unsigned long long un = 0;
+-      const char* uw = nullptr;
+-      int ud = -1, ue = 0;
+-      dlpack_unreported_unraisable_raw(&un, &uw, &ud, &ue);
+-      d["unraisable_unreported"] = un;
++      CoreFailureSnapshot s;  // P1T-FIX9: the one snapshot (read only: nothing is acknowledged here)
++      dlpack_unreported_unraisable_raw(&s);
++      d["unraisable_unreported"] = s.count;
++      d["unraisable_unreported_named"] = s.named;            // P1T-FIX9: held by name (the latest kCoreNamedRecords)
++      d["unraisable_unreported_lockless"] = s.lockless;      // P1T-FIX9: recorded while the record lock failed
++      d["unraisable_ack_deferred"] = dlpack_ack_deferred();  // P1T-FIX9: acknowledgements whose lock failed
+       d["exit_report_unwritten"] = g_core_exit_report.unwritten;
+     }
+     d["device_restore_failures"] = dlpack_device_restore_failures();  // P1T-FIX4 (sweep): counted, never thrown
+@@ -2729,6 +2859,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
+                py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kExitReportWrittenDef, nullptr, nullptr)));
+   m.add_object("_dlpack_test_fail_exit_report",  // P1T-FIX8 (V8-02 tests)
+                py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kTestFailExitReportDef, nullptr, nullptr)));
++  m.add_object("_dlpack_test_record_between",  // P1T-FIX9 (V9-02 tests)
++               py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kTestRecordBetweenDef, nullptr, nullptr)));
+   m.add_object("_dlpack_exit_hook_runner", py::reinterpret_steal<py::object>(PyCFunction_NewEx(&kExitRunnerDef,
+                                                                                                 nullptr, nullptr)));
+   m.attr("_DLPACK_SHUTDOWN_DIAG_DEFAULT_S") = kDlpackShutdownDiagDefaultS;
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 2aefbb8..b86fc97 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -19,6 +19,9 @@
+ #include <stdexcept>
+ #include <utility>
+ #include <mutex>
++#include <string>
++#include <thread>       // P1T-FIX9: the V9-02 test hook's writer thread
++#include <type_traits>  // P1T-FIX9: the record store is trivially destructible
+ #include <unordered_map>
+ #include <vector>
+ 
+@@ -223,59 +226,117 @@ std::atomic<unsigned long long> g_external_drain_leaks{0};
+ // it. Read through tensor_cuda._C._dlpack_release_stats()["device_restore_failures"].
+ std::atomic<unsigned long long> g_dlpack_device_restore_failures{0};
+ 
+-// P1T-FIX5 (sweep (d), consumed-but-unrecorded errors; round 5 found V5-02 in this class in the add-on). The P1-T core
+-// sites that consume a failed call's slot entry WITHOUT raising (they run in the external Storage destructor or while
+-// fill_ unwinds: nothing may raise there) were counted (leaked_drain_failure, device_restore_failures) but the error
+-// itself was lost. Each now RECORDS it first: counted in unraisable_errors, and the first one (site, device, CUDA error)
+-// kept; tensor_cuda._C._dlpack_release_stats() reports them. Core's synchronize() (cuda_sync: cudaDeviceSynchronize +
+-// cuda_check_last) is pre-existing engine code outside the P1-T surface and is not changed to raise them.
+-// Thread-safe (a Storage may die on any thread): the count is atomic, the first record is taken under a mutex whose
+-// failure is caught (never thrown from these noexcept paths). Prior art: PyTorch's C10_CUDA_CHECK_WARN (consume and
+-// report in a destructor, never throw) and errno-style "first error" recording; no specific prior art known to me for
+-// keeping the first unraisable error next to a counter.
+-struct CoreUnraisableRecord {
+-  std::mutex mu;
++// P1T-FIX5 (sweep (d)) recorded the CUDA failures of the P1-T core paths that cannot raise where they happen (the
++// external Storage destructor, fill_'s guard unwinding); P1T-FIX6 (R7) raised them once, by tensor_cuda.synchronize()
++// or at interpreter exit. Their store was a counter plus ONE named record, read twice by a report (a raw and a rich
++// snapshot) and acknowledged by count.
++// P1T-FIX9, round-9 review findings V9-01 / V9-02 and sweeps (m) "a failure held only in a local" / (n) "report and
++// acknowledgement from one snapshot": ONE allocation-free record store for every recorded CUDA failure of the P1-T core
++// paths, and ONE snapshot-and-acknowledge API that every reporter uses (tensor_cuda.synchronize()'s R7 raise, the exit
++// hook's R7 logging, the exit runner's last reading, and every P1-T core raise on a failed CUDA call).
++//  * Every record gets a sequence number under the store mutex (1, 2, ...). The latest kCoreNamedRecords are held by
++//    name in a ring (record s at ring[s % kCoreNamedRecords] while ring[...].seq == s); older unreported ones keep their
++//    count and are reported as not named, with that reason.
++//  * A snapshot is taken ONCE under the mutex (dlpack_unreported_unraisable_raw): the count, the sequence bound `hi`
++//    (the latest record it covers), and the covered records still held by name, oldest first. A report is built only
++//    from it, anything retained (the exit report) is that snapshot's summary, and its acknowledgement
++//    (dlpack_ack_unraisable) advances the acknowledged bound to exactly `hi`. A record that arrives between the snapshot
++//    and the acknowledgement has a larger sequence number: it stays, with its name, for the next report (V9-02: FIX8
++//    read a raw and a rich snapshot separately, and its acknowledgement by count dropped the name of a record that
++//    arrived in between).
++//  * Nothing here allocates or throws, and nothing waits on anything but the mutex (whose holders only copy a few
++//    words). A lock failure (never observed) never loses a count: a writer then counts its record in
++//    g_core_lockless (reported as recorded without a name, for that reason), a reader falls back to the atomic mirrors
++//    (a count without names), and an acknowledgement records its bound in g_core_ack_upto (acknowledgements only ever
++//    advance), which the next lock holder applies.
++// The store is a constant-initialized, trivially destructible object (no allocation on first use, no destructor at
++// exit: a Storage may die on any thread, at any time).
++// Prior art: sequence numbers / generation counters for consistent reads of shared state (the Linux kernel's
++// seqcount_t and seqlocks; taken: a number that tells a reader which writes its read covers), a consistent snapshot
++// under one lock (C++17 [thread.mutex], POSIX threads), the acknowledged-range bookkeeping of a log consumer (the
++// committed offset of a message queue consumer, e.g. Kafka's consumer offsets; taken: acknowledge "everything up to
++// N", never "N items"; unverified here, lead to check "Kafka consumer committed offset semantics"); FIX5 V5-02's
++// record-before-consume rule; SQLite's OOM-testing discipline. Ours: the bounded named ring with a reasoned "not named"
++// count, the deferred acknowledgement on lock failure, and one API for every core reporter.
++}  // namespace
++
++constexpr int kCoreNamedRecords = 16;  // records held by name (tests: test_dlpack.py test_fix9_*)
++
++// What a report covers (bindings.cpp declares the identical type: a POD, shared across the two files' functions).
++struct CoreFailureSnapshot {
++  bool locked = false;              // taken under the mutex (false: a lock failure, the count only)
++  unsigned long long hi = 0;        // the latest sequence number covered (0: no sequenced record covered)
++  unsigned long long count = 0;     // every record covered: sequenced (named or not) + lockless
++  unsigned long long lockless = 0;  // covered records whose writer could not take the lock (never named)
++  unsigned long long oldest_unnamed = 0;  // covered sequenced records no longer held by name (more than the ring)
++  int named = 0;                    // covered records held by name, oldest first
++  unsigned long long seq[kCoreNamedRecords] = {};
++  const char* who[kCoreNamedRecords] = {};   // static: the P1-T path, or nullptr
++  const char* what[kCoreNamedRecords] = {};  // static: the failed call and what it was for
++  int device[kCoreNamedRecords] = {};
++  int error[kCoreNamedRecords] = {};
++};
++
++[[noreturn]] void throw_core_report(std::string head, const unsigned long long* own, int n_own);  // defined below
++
++static_assert(sizeof(CoreFailureSnapshot) == 8 * 5 + 8 + 16 * (8 + 8 + 8 + 4 + 4), "bindings.cpp's copy");
++
++namespace {
++struct CoreRecord {
++  unsigned long long seq = 0;  // 0: empty
++  const char* who = nullptr;
+   const char* what = nullptr;
+   int device = -1;
+   int error = 0;
+-  // P1T-FIX6 (FIX5 residual R7: recorded, but raised by nothing): the first failure not raised yet. Raised once by
+-  // tensor_cuda.synchronize() (bindings.cpp dlpack_raise_unraisable), logged by the exit hook, then consumed.
+-  const char* unreported_what = nullptr;
+-  int unreported_device = -1;
+-  int unreported_error = 0;
+ };
+-std::atomic<unsigned long long> g_core_unraisable_errors{0};
+-std::atomic<unsigned long long> g_core_unraisable_unreported{0};  // P1T-FIX6 (R7): recorded, not raised yet
+-
+-CoreUnraisableRecord& core_unraisable_record() {
+-  static CoreUnraisableRecord* r = new CoreUnraisableRecord();  // never destroyed (a Storage may die at exit)
+-  return *r;
+-}
+-
+-void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept {
++struct CoreRecordStore {
++  std::mutex mu;
++  unsigned long long recorded = 0;  // the latest sequence number given (records are numbered 1, 2, ...)
++  unsigned long long acked = 0;     // every record with a sequence number <= acked has been reported
++  CoreRecord ring[kCoreNamedRecords];
++  CoreRecord first_ever;            // _dlpack_release_stats() first_unraisable_* (never cleared)
++};
++static_assert(std::is_trivially_destructible<CoreRecordStore>::value, "no destructor may run at exit");
++CoreRecordStore g_core_records;                               // constant-initialized
++std::atomic<unsigned long long> g_core_unraisable_errors{0};  // every record ever (stats)
++std::atomic<unsigned long long> g_core_lockless{0};           // unreported records counted without the lock
++std::atomic<unsigned long long> g_core_recorded_seen{0};      // mirror of `recorded`, for a reader whose lock failed
++std::atomic<unsigned long long> g_core_acked_seen{0};         // mirror of `acked`
++std::atomic<unsigned long long> g_core_ack_upto{0};           // an acknowledgement whose lock failed (applied later)
++std::atomic<unsigned long long> g_core_ack_deferred{0};       // how many acknowledgements were deferred (stats)
++
++// Under the mutex: apply an acknowledgement whose own lock failed (acknowledgements only ever advance).
++void apply_deferred_ack(CoreRecordStore& s) noexcept {
++  const unsigned long long up = g_core_ack_upto.load();
++  if (up > s.acked) s.acked = up < s.recorded ? up : s.recorded;
++  g_core_acked_seen.store(s.acked);
++}
++
++// Records one failure; returns its sequence number, or 0 when the lock could not be taken (counted, not named).
++unsigned long long core_record(const char* who, const char* what, int device, cudaError_t e) noexcept {
+   g_core_unraisable_errors.fetch_add(1);
+-  bool counted = false;  // P1T-FIX6 (R7): the not-yet-raised count changes with its name, under the mutex
+   try {
+-    CoreUnraisableRecord& r = core_unraisable_record();
+-    std::lock_guard<std::mutex> lk(r.mu);
+-    if (r.what == nullptr) {
+-      r.what = what;
+-      r.device = device;
+-      r.error = static_cast<int>(e);
+-    }
+-    if (g_core_unraisable_unreported.load() == 0) {
+-      r.unreported_what = what;
+-      r.unreported_device = device;
+-      r.unreported_error = static_cast<int>(e);
+-    }
+-    g_core_unraisable_unreported.fetch_add(1);
+-    counted = true;
++    std::lock_guard<std::mutex> lk(g_core_records.mu);
++    CoreRecordStore& s = g_core_records;
++    apply_deferred_ack(s);
++    const unsigned long long seq = ++s.recorded;
++    CoreRecord& r = s.ring[seq % kCoreNamedRecords];
++    r.seq = seq;
++    r.who = who;
++    r.what = what;
++    r.device = device;
++    r.error = static_cast<int>(e);
++    if (s.first_ever.seq == 0) s.first_ever = r;
++    g_core_recorded_seen.store(s.recorded);
++    return seq;
+   } catch (const std::exception&) {
+-    if (!counted) g_core_unraisable_unreported.fetch_add(1);  // counted, unnamed
+-    // bad_alloc on the first use or a mutex failure: the counter above still records it.
++    g_core_lockless.fetch_add(1);  // a mutex failure (never observed): counted, reported as not named for that reason
++    return 0;
+   }
+ }
+ 
++// The FIX5 entry point (the destructor and guard paths, and the reviewers' host probes): one record, no path prefix.
++void note_core_unraisable(const char* what, int device, cudaError_t e) noexcept { core_record(nullptr, what, device, e); }
+ // P1T-FIX4: the restore result is now checked (62c8d9f ignored it). The drain itself decides release vs leak; a failed
+ // restore does not make the drained memory unsafe, so it is counted (above) rather than turned into a leak. Every
+ // failed call of ours is consumed from the last-error slot (the error is accounted for by the leak or the counter).
+@@ -324,17 +385,21 @@ bool drain_device_legacy_stream(int dev) {
+ // consumes the call's entry from the calling thread's last-error slot (CUDA 12.6 Programming Guide 3.2.12: the runtime
+ // keeps one error variable per host thread, "overwritten by the error code every time an error occurs"; cudaGetLastError
+ // "returns this variable and resets it"), so no later, unrelated launch check reports it a second time.
+-// P1T-FIX8 (sweep (k), consumed CUDA errors): the report (message and std::runtime_error) is built BEFORE the slot entry
+-// is consumed, so a std::bad_alloc while building it (MemoryError) leaves the entry in the slot for the next check to
+-// report, instead of consuming a failure nobody reports. Prior art: FIX5 V5-02's record-before-consume rule; CUDA 12.6
+-// cudaGetLastError ("returns ... and resets") / cudaPeekAtLastError ("does not reset").
+-[[noreturn]] void throw_after_consuming(const std::string& msg) {
+-  std::runtime_error report(msg);
+-  cudaGetLastError();  // consumed only now that the report exists
+-  throw report;
++// P1T-FIX8 (sweep (k)) built the report before consuming the slot, so a bad_alloc left the failure in the slot.
++// P1T-FIX9 (sweep (m)): the slot is not a place to keep a failure: it holds only the error code (a later reader names
++// neither the call nor the device), and the next failing CUDA call on this thread overwrites it (V9-01). So every raise
++// now RECORDS the failed call first (core_record: static path and call text, device, error; allocation-free), consumes
++// the slot only then, and reports through throw_core_report, which acknowledges the record only once the
++// std::runtime_error exists; a bad_alloc leaves the record for the next tensor_cuda.synchronize() or the exit reader.
++std::string cuda_error_text(cudaError_t e) {
++  return std::string(cudaGetErrorName(e)) + ": " + cudaGetErrorString(e);
+ }
+-[[noreturn]] void raise_cuda_failure(const std::string& what, cudaError_t e) {
+-  throw_after_consuming(what + " (" + cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + ")");
++
++// Records one failed call and consumes its slot entry (in that order). Returns the record's sequence number.
++unsigned long long record_and_consume(const char* who, const char* what, int device, cudaError_t e) noexcept {
++  const unsigned long long seq = core_record(who, what, device, e);
++  cudaGetLastError();  // consumed only now that the failure is recorded
++  return seq;
+ }
+ 
+ // P1T-FIX4 (sweep, implicit current device): a checked scoped device switch for fill_. The constructor raises
+@@ -346,15 +411,23 @@ bool drain_device_legacy_stream(int dev) {
+ // scoped switch-and-restore. Ours: the explicit raising restore() on the success path plus the counting destructor.
+ class CheckedDeviceGuard {
+  public:
++  // P1T-FIX9 (sweep (m)): each failure is recorded, then its slot entry consumed, before the message is built.
+   CheckedDeviceGuard(int device, const char* who) : who_(who) {
+     cudaError_t e = cudaGetDevice(&prev_);
+-    if (e != cudaSuccess) raise_cuda_failure(std::string(who_) + ": cudaGetDevice failed", e);
++    if (e != cudaSuccess) {
++      const unsigned long long seq = record_and_consume(
++          who_, "the current-device query cudaGetDevice before switching to the tensor's CUDA device failed", device, e);
++      throw_core_report(std::string(who_) + ": cudaGetDevice failed (" + cuda_error_text(e) + ")", &seq, 1);
++    }
+     if (prev_ != device) {
+       e = cudaSetDevice(device);
+-      if (e != cudaSuccess)
+-        raise_cuda_failure(std::string(who_) + ": cannot make the tensor's CUDA device " + std::to_string(device) +
+-                               " current (cudaSetDevice failed)",
+-                           e);
++      if (e != cudaSuccess) {
++        const unsigned long long seq =
++            record_and_consume(who_, "making the tensor's CUDA device current (cudaSetDevice) failed", device, e);
++        throw_core_report(std::string(who_) + ": cannot make the tensor's CUDA device " + std::to_string(device) +
++                              " current (cudaSetDevice failed) (" + cuda_error_text(e) + ")",
++                          &seq, 1);
++      }
+       switched_ = true;
+     }
+   }
+@@ -362,11 +435,15 @@ class CheckedDeviceGuard {
+     if (!switched_) return;
+     switched_ = false;
+     const cudaError_t e = cudaSetDevice(prev_);
+-    if (e != cudaSuccess)
+-      raise_cuda_failure(std::string(who_) + ": restoring the caller's CUDA device " + std::to_string(prev_) +
+-                             " failed (cudaSetDevice); the work was queued, and the calling thread's current device "
+-                             "is still the tensor's",
+-                         e);
++    if (e != cudaSuccess) {
++      const unsigned long long seq = record_and_consume(
++          who_, "restoring the caller's CUDA device (cudaSetDevice) after queueing the work failed; the calling "
++                "thread's current device is still the tensor's", prev_, e);
++      throw_core_report(std::string(who_) + ": restoring the caller's CUDA device " + std::to_string(prev_) +
++                            " failed (cudaSetDevice); the work was queued, and the calling thread's current device "
++                            "is still the tensor's (" + cuda_error_text(e) + ")",
++                        &seq, 1);
++    }
+   }
+   ~CheckedDeviceGuard() {
+     if (!switched_) return;
+@@ -397,67 +474,187 @@ unsigned long long dlpack_device_restore_failures() { return g_dlpack_device_res
+ // P1T-FIX5 (sweep d): the recorded unraisable CUDA errors of the P1-T core paths (declared locally in bindings.cpp).
+ unsigned long long dlpack_unraisable_errors() { return g_core_unraisable_errors.load(); }
+ void dlpack_first_unraisable(std::string* what, int* device, int* error) {
+-  CoreUnraisableRecord& r = core_unraisable_record();
+-  std::lock_guard<std::mutex> lk(r.mu);
+-  *what = r.what ? r.what : "";
++  CoreRecord r;
++  try {
++    std::lock_guard<std::mutex> lk(g_core_records.mu);
++    r = g_core_records.first_ever;
++  } catch (const std::exception&) {
++  }
++  *what = r.what ? (r.who ? std::string(r.who) + ": " + r.what : std::string(r.what)) : std::string();
+   *device = r.device;
+   *error = r.error;
+ }
+ 
+-// P1T-FIX6 (FIX5 residual R7): the recorded failures not raised yet (count; the first of them, "" when it was recorded
+-// while an earlier report was being raised and is therefore not named), and their consumption by the raise. The count
+-// is atomic (a Storage may die on any thread); the named first one is kept under the record's mutex. Prior art: the
+-// add-on's N1 / V6-03 raise-once records (tc_signal dlpack_operand.cpp); no specific external prior art known to me.
+-void dlpack_unreported_unraisable(unsigned long long* count, std::string* what, int* device, int* error) {
+-  CoreUnraisableRecord& r = core_unraisable_record();
+-  std::lock_guard<std::mutex> lk(r.mu);
+-  *count = g_core_unraisable_unreported.load();
+-  *what = r.unreported_what ? r.unreported_what : "";
+-  *device = r.unreported_device;
+-  *error = r.unreported_error;
++// P1T-FIX9 (V9-02, sweep (n)): THE snapshot (see the store above). Taken once under the mutex; never allocates, never
++// throws. The covered records still held by name are listed oldest first; `oldest_unnamed` counts the covered ones the
++// ring no longer holds (they are older than every named one).
++void dlpack_unreported_unraisable_raw(CoreFailureSnapshot* out) noexcept {
++  CoreFailureSnapshot& o = *out;
++  o = CoreFailureSnapshot{};
++  o.lockless = g_core_lockless.load();  // read first: every lockless record counted so far is covered
++  try {
++    std::lock_guard<std::mutex> lk(g_core_records.mu);
++    CoreRecordStore& s = g_core_records;
++    apply_deferred_ack(s);
++    o.locked = true;
++    o.hi = s.recorded;
++    const unsigned long long sequenced = s.recorded - s.acked;
++    const unsigned long long first_held =
++        s.recorded >= static_cast<unsigned long long>(kCoreNamedRecords) ? s.recorded - kCoreNamedRecords + 1 : 1;
++    for (unsigned long long q = (s.acked + 1 > first_held ? s.acked + 1 : first_held); q <= s.recorded; ++q) {
++      const CoreRecord& r = s.ring[q % kCoreNamedRecords];
++      if (r.seq != q) continue;
++      o.seq[o.named] = r.seq;
++      o.who[o.named] = r.who;
++      o.what[o.named] = r.what;
++      o.device[o.named] = r.device;
++      o.error[o.named] = r.error;
++      ++o.named;
++    }
++    o.oldest_unnamed = sequenced - static_cast<unsigned long long>(o.named);
++    o.count = sequenced + o.lockless;
++  } catch (const std::exception&) {
++    // A mutex failure (never observed): the atomic mirrors give the count; nothing is named.
++    o.locked = false;
++    o.hi = g_core_recorded_seen.load();
++    unsigned long long acked = g_core_acked_seen.load();
++    const unsigned long long up = g_core_ack_upto.load();
++    if (up > acked) acked = up;
++    o.oldest_unnamed = o.hi > acked ? o.hi - acked : 0;
++    o.count = o.oldest_unnamed + o.lockless;
++  }
+ }
+ 
+-// P1T-FIX8 (sweep (k)): the external form of throw_after_consuming for bindings.cpp's P1-T raises (declared there).
+-[[noreturn]] void throw_cuda_report_after_consuming(const std::string& msg) { throw_after_consuming(msg); }
+-
+-// P1T-FIX8, round-8 review finding V8-02 (MINOR), sweep (l): the same snapshot WITHOUT allocating, for the exit
+-// runner's last-chance report (the site text is a static string; FIX6's snapshot copied it into a std::string, which
+-// is what threw bad_alloc and left the exit log empty). A mutex failure (never observed) still yields the count, unnamed.
++// The FIX8 four-value form (count, and the first covered record when it is held by name; the reviewers' host probes).
+ void dlpack_unreported_unraisable_raw(unsigned long long* count, const char** what, int* device, int* error) noexcept {
+-  *what = nullptr;
+-  *device = -1;
+-  *error = 0;
++  CoreFailureSnapshot s;
++  dlpack_unreported_unraisable_raw(&s);
++  *count = s.count;
++  const bool first_named = s.named > 0 && s.oldest_unnamed == 0;
++  *what = first_named ? s.what[0] : nullptr;
++  *device = first_named ? s.device[0] : -1;
++  *error = first_named ? s.error[0] : 0;
++}
++
++// P1T-FIX9: acknowledges EXACTLY the records `s` covers: every sequenced record up to s.hi, and s.lockless of the
++// lockless count. Called only once the report built from `s` exists. Never allocates, never throws.
++void dlpack_ack_unraisable(const CoreFailureSnapshot& s) noexcept {
++  if (s.lockless > 0) {
++    unsigned long long cur = g_core_lockless.load();
++    while (!g_core_lockless.compare_exchange_weak(cur, cur > s.lockless ? cur - s.lockless : 0ULL)) {
++    }
++  }
++  if (s.hi == 0) return;
+   try {
+-    CoreUnraisableRecord& r = core_unraisable_record();
+-    std::lock_guard<std::mutex> lk(r.mu);
+-    *count = g_core_unraisable_unreported.load();
+-    *what = r.unreported_what;
+-    *device = r.unreported_device;
+-    *error = r.unreported_error;
++    std::lock_guard<std::mutex> lk(g_core_records.mu);
++    CoreRecordStore& c = g_core_records;
++    apply_deferred_ack(c);
++    if (s.hi > c.acked) c.acked = s.hi;  // only ever advances; a record with a larger number stays
++    g_core_acked_seen.store(c.acked);
+   } catch (const std::exception&) {
+-    *count = g_core_unraisable_unreported.load();
+-  }
++    // A mutex failure (never observed): the bound is kept, and the next lock holder applies it.
++    unsigned long long cur = g_core_ack_upto.load();
++    while (cur < s.hi && !g_core_ack_upto.compare_exchange_weak(cur, s.hi)) {
++    }
++    g_core_ack_deferred.fetch_add(1);
++  }
++}
++unsigned long long dlpack_ack_deferred() { return g_core_ack_deferred.load(); }
++
++// P1T-FIX9: the external form of record_and_consume, for bindings.cpp's P1-T raises (the export fence, from_dlpack,
++// empty). Records one failed call, then consumes its slot entry.
++unsigned long long dlpack_record_and_consume(const char* who, const char* what, int device, cudaError_t e) noexcept {
++  return record_and_consume(who, what, device, e);
++}
++
++// P1T-FIX9: the text of the records a snapshot covers, except those numbered in `skip` (a raise's own records, which
++// its own message describes). Allocates (only while a report is being built; a bad_alloc propagates and nothing is
++// acknowledged). Each named record: its path, the failed call and what it was for, its device and its error.
++std::string dlpack_describe_records(const CoreFailureSnapshot& s, const unsigned long long* skip, int n_skip,
++                                    unsigned long long skip_lockless) {
++  std::string out;
++  int listed = 0;
++  for (int i = 0; i < s.named; ++i) {
++    bool own = false;
++    for (int j = 0; j < n_skip; ++j) own = own || (skip[j] != 0 && skip[j] == s.seq[i]);
++    if (own) continue;
++    out += listed++ == 0 ? "" : "; ";
++    out += "(" + std::to_string(listed) + ") ";
++    if (s.who[i]) out += std::string(s.who[i]) + ": ";
++    out += std::string(s.what[i] ? s.what[i] : "a CUDA call") + " [CUDA device " + std::to_string(s.device[i]) + ": " +
++           cudaGetErrorName(static_cast<cudaError_t>(s.error[i])) + ": " +
++           cudaGetErrorString(static_cast<cudaError_t>(s.error[i])) + "]";
++  }
++  unsigned long long own_unnamed = 0;  // own records the ring no longer holds (counted in oldest_unnamed)
++  for (int j = 0; j < n_skip; ++j) {
++    bool held = false;
++    for (int i = 0; i < s.named; ++i) held = held || s.seq[i] == skip[j];
++    own_unnamed += (skip[j] != 0 && skip[j] <= s.hi && !held) ? 1 : 0;
++  }
++  const unsigned long long oldest_unnamed = s.oldest_unnamed > own_unnamed ? s.oldest_unnamed - own_unnamed : 0;
++  if (oldest_unnamed > 0)
++    out += std::string(listed ? "; " : "") +
++           (s.locked ? std::to_string(oldest_unnamed) + " earlier one(s) not named (more than " +
++                           std::to_string(kCoreNamedRecords) +
++                           " failures were recorded before they were reported; only the latest " +
++                           std::to_string(kCoreNamedRecords) + " are kept by name)"
++                     : std::to_string(oldest_unnamed) + " not named (the record lock could not be taken to read "
++                                                        "them)");
++  const unsigned long long lockless = s.lockless > skip_lockless ? s.lockless - skip_lockless : 0;
++  if (lockless > 0)
++    out += std::string(listed || oldest_unnamed ? "; " : "") + std::to_string(lockless) +
++           " recorded without a name (the record lock could not be taken when they were recorded)";
++  return out;
+ }
+ 
+-void dlpack_ack_unraisable(unsigned long long count) noexcept {
+-  auto consume = [count] {
+-    unsigned long long cur = g_core_unraisable_unreported.load();
+-    while (!g_core_unraisable_unreported.compare_exchange_weak(cur, cur > count ? cur - count : 0ULL)) {
+-    }
+-  };
++// P1T-FIX9 (V9-01, sweeps (k) / (m)): how every P1-T core raise on a failed CUDA call reports it. The caller has
++// already RECORDED each of its failed calls (core_record: its sequence number in `own`) and only then consumed the error
++// slot, BEFORE any other CUDA call or allocation. Here the report is built from ONE snapshot: `head` (the caller's own
++// message, naming its failed calls) plus every other recorded P1-T failure not reported yet; only once the
++// std::runtime_error exists is that snapshot acknowledged. A bad_alloc while building it propagates (MemoryError) with
++// every record in place, for the next tensor_cuda.synchronize() or the exit reader. Prior art: FIX5 V5-02
++// (record-before-consume), FIX6 V6-03 (clear only after the diagnostic exists), FIX8 sweep (k); CUDA 12.6 Programming
++// Guide 3.2.12 (one error variable per host thread, overwritten by the next failing call).
++// TEST HOOKS (P1T-FIX9 V9-02 tests only; nothing calls dlpack_test_arm_records in production): `n` records made by
++// ANOTHER native thread (std::thread, joined: the writer path of a Storage dying on another thread) when a report
++// reaches boundary `at`, the place round 9's probe used (right after the snapshot) and every later one.
++std::atomic<int> g_test_records_at{0};
++std::atomic<int> g_test_records_n{0};
++void dlpack_test_arm_records(int at, int n) noexcept {
++  g_test_records_n.store(n);
++  g_test_records_at.store(at);
++}
++void dlpack_test_records_at(int boundary) noexcept {
++  int expected = boundary;
++  if (boundary == 0 || !g_test_records_at.compare_exchange_strong(expected, 0)) return;
++  const int n = g_test_records_n.exchange(0);
+   try {
+-    CoreUnraisableRecord& r = core_unraisable_record();
+-    std::lock_guard<std::mutex> lk(r.mu);
+-    consume();
+-    // The named one was just raised; a failure recorded since the snapshot stays counted, unnamed.
+-    r.unreported_what = nullptr;
+-    r.unreported_device = -1;
+-    r.unreported_error = 0;
++    std::thread([n] {
++      for (int i = 0; i < n; ++i)
++        core_record("test hook", i == 0 ? "a first failure recorded by another native thread inside a report "
++                                          "(cudaStreamSynchronize)"
++                                        : "a second failure recorded by another native thread inside a report "
++                                          "(cudaEventQuery)",
++                    i, i == 0 ? cudaErrorInvalidValue : cudaErrorLaunchFailure);
++    }).join();
+   } catch (const std::exception&) {
+-    consume();  // a mutex failure (never observed): consume the count; a stale name is only a label
+   }
+ }
+ 
++[[noreturn]] void throw_core_report(std::string head, const unsigned long long* own, int n_own) {
++  unsigned long long own_lockless = 0;
++  for (int i = 0; i < n_own; ++i) own_lockless += own[i] == 0 ? 1 : 0;
++  CoreFailureSnapshot s;
++  dlpack_unreported_unraisable_raw(&s);
++  dlpack_test_records_at(6);
++  const std::string others = dlpack_describe_records(s, own, n_own, own_lockless);
++  if (!others.empty())
++    head += "; also reported here, recorded earlier on P1-T core paths and not reported yet: " + others;
++  std::runtime_error report(head);
++  dlpack_ack_unraisable(s);  // noexcept: acknowledged exactly once, now that the report exists
++  throw report;
++}
++
+ // P1T-FIX4 (sweep, implicit current device): TensorCUDA labels its OWN allocations cuda:0 (Device::from_string, which
+ // predates P1-T, maps every "cuda..." string to index 0) while the Storage constructor allocates on whatever device is
+ // current; an imported Storage is labeled with the producer's device. So the label is proven here against the
+@@ -475,10 +672,15 @@ std::string cuda_storage_device_mismatch(const NDArray& a, const char* who) {
+   cudaPointerAttributes attr{};
+   const cudaError_t e = cudaPointerGetAttributes(&attr, a.data_ptr());
+   // P1T-FIX7 (sweep (j)): the failed query is about this pointer; which device holds it is what it could not tell.
+-  if (e != cudaSuccess)
+-    raise_cuda_failure(std::string(who) + ": cudaPointerGetAttributes failed for element 0 (the tensor is labeled cuda:" +
+-                           std::to_string(a.device.index) + "; the device of its allocation is unknown)",
+-                       e);
++  if (e != cudaSuccess) {  // P1T-FIX9 (sweep (m)): recorded, then consumed, before the message is built
++    const unsigned long long seq = record_and_consume(
++        who, "the label proof's cudaPointerGetAttributes of element 0 failed (the device of its allocation is unknown)",
++        a.device.index, e);
++    throw_core_report(std::string(who) + ": cudaPointerGetAttributes failed for element 0 (the tensor is labeled cuda:" +
++                          std::to_string(a.device.index) + "; the device of its allocation is unknown) (" +
++                          cuda_error_text(e) + ")",
++                      &seq, 1);
++  }
+   if (attr.type == cudaMemoryTypeUnregistered)
+     return std::string(who) + ": this tensor is labeled cuda:" + std::to_string(a.device.index) +
+            " but its memory is not a CUDA allocation the driver knows; refused";
+@@ -649,12 +851,18 @@ void fill_(NDArray& a, double value) {
+   const std::string mismatch = cuda_storage_device_mismatch(a, "fill_");
+   if (!mismatch.empty()) throw std::runtime_error(mismatch);
+   CheckedDeviceGuard guard(a.device.index, "fill_");
+-  const cudaError_t pending = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
+-  if (pending != cudaSuccess)
+-    throw_after_consuming(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
+-                             cudaGetErrorName(pending) + ": " + cudaGetErrorString(pending) +
+-                             "), from earlier work outside this call; taken from the error slot and reported here, nothing was launched "
+-                             "(P1T-FIX7: the call that set it and its device are unknown; the slot records neither)");
++  const cudaError_t pending = cudaPeekAtLastError();  // P1T-FIX9 (sweep (m)): recorded, then consumed, then reported
++  if (pending != cudaSuccess) {
++    const unsigned long long seq = record_and_consume(
++        "fill_", "a CUDA error was already pending in this thread before the launch (from earlier work outside this "
++                 "call; the call that set it and its device are unknown: the error slot records neither)", -1, pending);
++    throw_core_report(std::string("fill_: a CUDA error was already pending in this thread before the launch (") +
++                          cuda_error_text(pending) +
++                          "), from earlier work outside this call; taken from the error slot and reported here, nothing "
++                          "was launched (P1T-FIX7: the call that set it and its device are unknown; the slot records "
++                          "neither)",
++                      &seq, 1);
++  }
+   DISPATCH_FLOAT(a.dtype, T, {
+     // P1T-FIX5 V5-04: blocks <= 2^31-1 (checked above), so this conversion is exact and blocks * kT >= n.
+     fill_kernel<T><<<static_cast<unsigned int>(blocks), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+@@ -666,12 +874,17 @@ void fill_(NDArray& a, double value) {
+   // "CUDA error at fill_" (that helper's text). Prior art: PyTorch's C10_CUDA_KERNEL_LAUNCH_CHECK note ("CUDA kernel
+   // errors might be asynchronously reported at some other API call").
+   {
+-    const cudaError_t le = cudaPeekAtLastError();  // P1T-FIX8 (sweep (k)): consumed once its report exists
+-    if (le != cudaSuccess)
+-      throw_after_consuming(std::string("CUDA error at fill_: ") + cudaGetErrorName(le) + ": " +
+-                               cudaGetErrorString(le) + " (cudaGetLastError right after launching fill_kernel on CUDA "
+-                               "device " + std::to_string(a.device.index) +
+-                               ": the launch's own error, or an asynchronous error of earlier work on that device)");
++    const cudaError_t le = cudaPeekAtLastError();  // P1T-FIX9 (sweep (m)): recorded, then consumed, then reported
++    if (le != cudaSuccess) {
++      const unsigned long long seq = record_and_consume(
++          "fill_", "the launch check right after fill_kernel (cudaGetLastError: the launch's own error, or an "
++                   "asynchronous error of earlier work on that device)", a.device.index, le);
++      throw_core_report(std::string("CUDA error at fill_: ") + cuda_error_text(le) +
++                            " (cudaGetLastError right after launching fill_kernel on CUDA device " +
++                            std::to_string(a.device.index) +
++                            ": the launch's own error, or an asynchronous error of earlier work on that device)",
++                        &seq, 1);
++    }
+   }
+   a.mark_modified();  // the write is queued: bump the revision BEFORE a restore failure can raise
+   guard.restore();

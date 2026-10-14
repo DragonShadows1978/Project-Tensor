@@ -1,0 +1,35 @@
+[
+  {
+    "oom": "plain",
+    "cleanup": "single",
+    "rc": 1,
+    "stdout": "",
+    "stderr": "  File \"<string>\", line 3\n    print(json.dumps(n.fence(sys.argv[1]=='oom',sys.argv[2]=='compound'))))\n                                                                          ^\nSyntaxError: unmatched ')'\n"
+  },
+  {
+    "oom": "oom",
+    "cleanup": "single",
+    "rc": 1,
+    "stdout": "",
+    "stderr": "  File \"<string>\", line 3\n    print(json.dumps(n.fence(sys.argv[1]=='oom',sys.argv[2]=='compound'))))\n                                                                          ^\nSyntaxError: unmatched ')'\n"
+  },
+  {
+    "oom": "plain",
+    "cleanup": "compound",
+    "rc": 1,
+    "stdout": "",
+    "stderr": "  File \"<string>\", line 3\n    print(json.dumps(n.fence(sys.argv[1]=='oom',sys.argv[2]=='compound'))))\n                                                                          ^\nSyntaxError: unmatched ')'\n"
+  },
+  {
+    "oom": "oom",
+    "cleanup": "compound",
+    "rc": 1,
+    "stdout": "",
+    "stderr": "  File \"<string>\", line 3\n    print(json.dumps(n.fence(sys.argv[1]=='oom',sys.argv[2]=='compound'))))\n                                                                          ^\nSyntaxError: unmatched ')'\n"
+  }
+]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev9/artifacts/p1t_rev9/probes/core_fence_cpu.py", line 15, in <module>
+    assert all(r['rc']==0 for r in rows),rows
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [{'oom': 'plain', 'cleanup': 'single', 'rc': 1, 'stdout': '', 'stderr': '  File "<string>", line 3\n    print(json.dumps(n.fence(sys.argv[1]==\'oom\',sys.argv[2]==\'compound\'))))\n                                                                          ^\nSyntaxError: unmatched \')\'\n'}, {'oom': 'oom', 'cleanup': 'single', 'rc': 1, 'stdout': '', 'stderr': '  File "<string>", line 3\n    print(json.dumps(n.fence(sys.argv[1]==\'oom\',sys.argv[2]==\'compound\'))))\n                                                                          ^\nSyntaxError: unmatched \')\'\n'}, {'oom': 'plain', 'cleanup': 'compound', 'rc': 1, 'stdout': '', 'stderr': '  File "<string>", line 3\n    print(json.dumps(n.fence(sys.argv[1]==\'oom\',sys.argv[2]==\'compound\'))))\n                                                                          ^\nSyntaxError: unmatched \')\'\n'}, {'oom': 'oom', 'cleanup': 'compound', 'rc': 1, 'stdout': '', 'stderr': '  File "<string>", line 3\n    print(json.dumps(n.fence(sys.argv[1]==\'oom\',sys.argv[2]==\'compound\'))))\n                                                                          ^\nSyntaxError: unmatched \')\'\n'}]

@@ -1,0 +1,19 @@
+[
+  {
+    "mode": "written",
+    "rc": 0,
+    "stdout": "{\"fired\": 1, \"stats\": {\"released\": 0, \"leaked_interpreter_shutdown\": 0, \"leaked_drain_failure\": 0, \"deleter_exceptions\": 0, \"leaked_closing\": 0, \"lock_failures\": 0, \"in_flight\": 0, \"closing\": true, \"shutdown_calls\": 1, \"shutdown_in_flight_at_close\": 0, \"shutdown_timeouts\": 0, \"shutdown_still_in_flight\": 0, \"shutdown_wait_us\": 44, \"shutdown_diagnostics\": 0, \"shutdown_diag_default_used\": 0, \"shutdown_runner_closes\": 0, \"shutdown_runner_in_flight_at_close\": 0, \"shutdown_lock_retries\": 0, \"shutdown_lock_diagnostics\": 0, \"shutdown_log_fallbacks\": 0, \"unraisable_unreported\": 0, \"exit_report_unwritten\": false, \"device_restore_failures\": 0, \"unraisable_errors\": 1, \"first_unraisable_what\": \"race probe: cudaStreamSynchronize failed\", \"first_unraisable_device\": 0, \"first_unraisable_error\": \"cudaErrorInvalidValue\"}}\n",
+    "stderr": "tensor_cuda: 1 CUDA failure(s) on DLPack release / fill_ paths that could not raise where they happened (P1-T core; reported once, by tensor_cuda.synchronize() or at interpreter exit), the first: race probe: cudaStreamSynchronize failed [CUDA device 0: cudaErrorInvalidValue: invalid argument] (logged by tensor_cuda's interpreter-exit hook)\n"
+  },
+  {
+    "mode": "unwritten",
+    "rc": 0,
+    "stdout": "{\"fired\": 1, \"stats\": {\"released\": 0, \"leaked_interpreter_shutdown\": 0, \"leaked_drain_failure\": 0, \"deleter_exceptions\": 0, \"leaked_closing\": 0, \"lock_failures\": 0, \"in_flight\": 0, \"closing\": true, \"shutdown_calls\": 1, \"shutdown_in_flight_at_close\": 0, \"shutdown_timeouts\": 0, \"shutdown_still_in_flight\": 0, \"shutdown_wait_us\": 42, \"shutdown_diagnostics\": 0, \"shutdown_diag_default_used\": 0, \"shutdown_runner_closes\": 0, \"shutdown_runner_in_flight_at_close\": 0, \"shutdown_lock_retries\": 0, \"shutdown_lock_diagnostics\": 0, \"shutdown_log_fallbacks\": 1, \"unraisable_unreported\": 0, \"exit_report_unwritten\": false, \"device_restore_failures\": 0, \"unraisable_errors\": 1, \"first_unraisable_what\": \"race probe: cudaStreamSynchronize failed\", \"first_unraisable_device\": 0, \"first_unraisable_error\": \"cudaErrorInvalidValue\"}}\n",
+    "stderr": "tensor_cuda: at interpreter exit, a report of 1 CUDA failure(s) on DLPack release / fill_ paths (P1-T core; raised at exit but not written by the exit hook; written here by the exit runner, its last reader; allocation-free summary), the first not named (recorded while an earlier report was being raised)\n"
+  }
+]
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_p1trev9/artifacts/p1t_rev9/probes/core_snapshot_cpu.py", line 27, in <module>
+    assert 'race probe: cudaStreamSynchronize failed' in rows[1]['stderr'] and 'cudaErrorInvalidValue' in rows[1]['stderr'], 'acknowledged report summary uses the earlier empty snapshot and loses its known record'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: acknowledged report summary uses the earlier empty snapshot and loses its known record

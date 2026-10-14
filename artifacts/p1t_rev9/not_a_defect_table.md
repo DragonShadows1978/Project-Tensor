@@ -1,0 +1,5 @@
+| Item | Verdict |
+|---|---|
+| N1 | CORRECTLY NOT A DEFECT |
+| N2 | CORRECTLY NOT A DEFECT |
+| N3 | CORRECTLY NOT A DEFECT |
