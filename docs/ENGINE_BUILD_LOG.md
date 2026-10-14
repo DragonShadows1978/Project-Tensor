@@ -3,12 +3,12 @@
 The compiled engine `tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so` is gitignored, so git
 history alone does not show which binary consumers load. Every install is recorded here.
 
-## 2026-10-13 ~19:15 EDT: installed d6b1b7ad (main ff8f25d sources, P1-T DLPack) and the new tc_signal add-on 30aee4e6
+## 2026-10-13 ~19:15 EDT: installed d6b1b7ad (main 3a678e0 sources, P1-T DLPack) and the new tc_signal add-on 30aee4e6
 
 - **Installed, core:** sha256 `d6b1b7ad1d87e0d7d5eed70cff94b33e469e6f18b857d78679110e6b2dce3c24`.
   - It was copied, not rebuilt, from fork worktree `Fork/tensor_fork_voice/WorkTree/tensor_fork_voice_wt_fix8`, built
     with `./build.sh 89` from e4cf1d6.
-  - Main ff8f25d's `tensor_cuda/` and `tc_signal/` are identical to e4cf1d6 (`git diff --quiet e4cf1d6 ff8f25d -- tensor_cuda tc_signal`).
+  - Main 3a678e0's `tensor_cuda/` and `tc_signal/` are identical to e4cf1d6 (`git diff --quiet e4cf1d6 3a678e0 -- tensor_cuda tc_signal`).
   - It is the binary behind the P1-T FIX8 lead verification and the round-9 review.
 - **Installed, add-on (new):** `tc_signal/tc_signal/_tc_signal.cpython-312-x86_64-linux-gnu.so`, sha256
   `30aee4e67fbe80320863cf9d0d4b7748dca46c0db7a3689f70bcc9d9e8dc782b`. It is gitignored, and it does not link

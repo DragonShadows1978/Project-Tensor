@@ -4,7 +4,7 @@
 TensorCUDA, and it keeps them out of TensorCUDA's core. David, 2026-10-12: "I don't want to build it directly INTO the
 core of TensorCUDA - It needs to be separate". Plan: `Fork/tensor_fork_voice/docs/P1T_TENSOR_ALT_PLAN.md` §4.
 
-Status (merged to Project-Tensor main 2026-10-13, ff8f25d): all six op families are in. They are `conv1d` (T2),
+Status (merged to Project-Tensor main 2026-10-13, 3a678e0): all six op families are in. They are `conv1d` (T2),
 `conv_transpose1d` (T3), the ONNX `lstm` (T4), `instance_norm1d` / `layer_norm` / `group_norm` (T5), and
 `upsample_nearest1d` / `reflection_pad1d` / `rint` (T6). Voice's acceptance suite passes 249/249 on the installed
 build. Two MINOR open issues (V9-01, V9-02) are in core's error diagnostics, not here; see
