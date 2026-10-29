@@ -1,0 +1,683 @@
+--- base/tensor_cuda/src/kernels.cu
++++ arm/tensor_cuda/src/kernels.cu
+@@ -4,6 +4,7 @@
+ // back in the array's dtype, so fp32 and fp16 share one implementation.
+ 
+ #include "tc/core.h"
++#include "tc/apa_dk_ste.h"
+ 
+ #include <cuda_runtime.h>
+ #include <cuda_fp16.h>
+@@ -2333,7 +2334,12 @@
+ // constants; gradients flow only through the score dots and the softmax. That
+ // makes this backward far simpler than a general FlashAttention backward — no
+ // gradient through the threshold, and unselected keys feed gradient through q
+-// only (kq is detached).
++// only (kq is detached). TC_APA_DK_STE=1 instead treats the quantizer as
++// identity for dK only; forward, selection, dQ, dV and score arithmetic stay
++// unchanged. Prior art: Bengio, Leonard and Courville (2013), straight-through
++// estimator; Dao et al. (2022), FlashAttention saved-lse recomputation (existing).
++// Unverified - lead to check: "Bengio 2013 straight through estimator" and
++// "Dao 2022 FlashAttention backward". Ours: opt-in key-only integration.
+ //
+ // Forward (training) additionally saves, per query row, the logsumexp
+ // L_se = gmax + log(denom) and the threshold thr, so the backward recomputes
+@@ -2520,7 +2526,7 @@
+ // (multiple query rows touch the same KV row). Two passes over keys: pass A
+ // computes the softmax-jacobian row term rowdot = sum_j p_j (dO . v_j); pass B
+ // uses it to form dScore_j and scatters the gradients.
+-template <typename T, int DMAX>
++template <typename T, int DMAX, bool DK_STE = false>
+ __global__ void apa_selective_bwd_kernel(
+     const T* q, const T* k, const T* kq, const T* v, const T* dO,
+     const float* lse, const float* thr_in,
+@@ -2605,8 +2611,10 @@
+       // dQ accumulates dscore*scale * key (selected: k_j; else: kq_j detached -> still feeds q)
+       float kv = sel ? ld<T>(kj, d) : ld<T>(kqj, d);
+       dq_acc[d] += dscore * scale * kv;
+-      // dK only for selected keys (kq is detached, so unselected dk = 0)
+-      if (sel) atomicAdd(&dkj[d], (T)(dscore * scale * qsh[d]));
++      // Off: dK only for selected keys. On: identity derivative through kq.
++      // Prior art: Bengio et al. 2013 STE; unverified - lead to check.
++      // false specialization constant-folds to the original selected-only guard.
++      if (sel || DK_STE) atomicAdd(&dkj[d], (T)(dscore * scale * qsh[d]));
+     }
+   }
+   // reduce dq_acc across threads -> write dq[row]
+@@ -2692,8 +2700,10 @@
+     int cap = D > VD ? D : VD;
+     if (cap>TC_APA_MAXD) throw std::runtime_error("apa_selective_bwd: head_dim exceeds cap");
+     DISPATCH_FLOAT(q.dtype, T, {
++    auto dispatch_ste = [&](auto ste_tag) {
++      constexpr bool DK_STE = decltype(ste_tag)::value;
+       auto launch=[&](auto tag){ constexpr int DMAX=decltype(tag)::value;
+-        apa_selective_bwd_kernel<T,DMAX><<<rows,threads>>>(
++        apa_selective_bwd_kernel<T,DMAX,DK_STE><<<rows,threads>>>(
+           static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+           static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+           static_cast<T*>(dO.data_ptr()),
+@@ -2705,13 +2715,16 @@
+       else if (cap<=128) launch(std::integral_constant<int,128>{});
+       else if (cap<=256) launch(std::integral_constant<int,256>{});
+       else launch(std::integral_constant<int,512>{});
++    };
++    if (apa_dk_ste_enabled()) dispatch_ste(std::true_type{});
++    else dispatch_ste(std::false_type{});
+     });
+     cuda_check_last("apa_selective_bwd");
+   }
+   return {dq, dk, dv};
+ }
+ 
+-// BP-KERNEL-1 opt-in variants; original kernel and launcher above are untouched.
++// BP-KERNEL-1 opt-in variants; STE=false retains original arithmetic.
+ // Prior art: NVIDIA CUDA atomicAdd / mixed-precision FP32 accumulation (system,
+ // publication year unverified — lead to check: CUDA BF16 FP32 atomic accumulation).
+ // Taken: wider scratch reduction then one cast; ours: native APA b/c/d isolation.
+@@ -2719,7 +2732,7 @@
+ // Related valid atomics-free dK/dV: key-parallel attention backward passes,
+ // Dao et al., FlashAttention (2022), unverified — lead to check that paper's
+ // backward work partitioning. Not implemented in this order.
+-template <typename T, int DMAX, bool WRITE_KV, bool OUTPUT_DOT>
++template <typename T, int DMAX, bool WRITE_KV, bool OUTPUT_DOT, bool DK_STE = false>
+ __global__ void apa_selective_bwd_bk1_kernel(
+     const T* q, const T* k, const T* kq, const T* v, const T* dO,
+     const float* lse, const float* thr_in,
+@@ -2740,7 +2753,7 @@
+   const T* kbase = k + kvbh * S * D;
+   const T* kqbase = kq + kvbh * S * D;
+   const T* vbase = v + kvbh * S * VD;
+-  float* dkbase = WRITE_KV ? dk + kvbh * S * D : nullptr;
++  float* dkbase = (WRITE_KV || DK_STE) ? dk + kvbh * S * D : nullptr;
+   float* dvbase = WRITE_KV ? dv + kvbh * S * VD : nullptr;
+ 
+   __shared__ float qsh[DMAX];
+@@ -2805,7 +2818,7 @@
+     float dov = 0.f; for (int d = 0; d < VD; ++d) dov += dOsh[d] * ld<T>(vj, d);
+     float dscore = p * (dov - rowdot);
+     float* dvj = WRITE_KV ? dvbase + (int64_t)j * VD : nullptr;
+-    float* dkj = WRITE_KV ? dkbase + (int64_t)j * D : nullptr;
++    float* dkj = (WRITE_KV || DK_STE) ? dkbase + (int64_t)j * D : nullptr;
+     for (int d = 0; d < VD; ++d) {
+       // dV_j += p * dO
+       if constexpr (WRITE_KV) atomicAdd(&dvj[d], p * dOsh[d]);
+@@ -2814,9 +2827,10 @@
+       // dQ accumulates dscore*scale * key (selected: k_j; else: kq_j detached -> still feeds q)
+       float kv = sel ? ld<T>(kj, d) : ld<T>(kqj, d);
+       dq_acc[d] += dscore * scale * kv;
+-      // dK only for selected keys (kq is detached, so unselected dk = 0)
+-      if constexpr (WRITE_KV) {
+-        if (sel) atomicAdd(&dkj[d], dscore * scale * qsh[d]);
++      // Off: dK only for selected keys. On: identity derivative through kq.
++      // Prior art: Bengio et al. 2013 STE; key-only, no change to dV.
++      if constexpr (WRITE_KV || DK_STE) {
++        if ((sel || DK_STE) && (WRITE_KV || !sel)) atomicAdd(&dkj[d], dscore * scale * qsh[d]);
+       }
+     }
+   }
+@@ -2846,22 +2860,25 @@
+   const int B=q.shape[0], H=q.shape[1], L=q.shape[2], D=q.shape[3];
+   const int S=k.shape[2], VD=v.shape[3], KVH=k.shape[1], group=H/KVH;
+   NDArray dq(q.shape, q.dtype, q.device);
+-  // c retains a's output allocation/zeroing overhead; no kernel writes dK/dV.
++  // c is the deletion diagnostic: off writes no dK/dV; STE adds only
++  // previously unselected dK contributions, preserving its selected-key ablation.
+   const bool write_kv = variant != "c";
+-  NDArray dk = NDArray::zeros(k.shape, write_kv ? DType::Float32 : q.dtype, q.device);
++  NDArray dk = NDArray::zeros(k.shape, (write_kv || apa_dk_ste_enabled()) ? DType::Float32 : q.dtype, q.device);
+   NDArray dv = NDArray::zeros(v.shape, write_kv ? DType::Float32 : q.dtype, q.device);
+   const int rows=B*H*L, threads=128, cap=D>VD?D:VD;
+   DISPATCH_FLOAT(q.dtype, T, {
++    auto dispatch_ste = [&](auto ste_tag) {
++      constexpr bool DK_STE = decltype(ste_tag)::value;
+     auto launch=[&](auto tag, auto write_tag, auto dot_tag) {
+       constexpr int DMAX=decltype(tag)::value;
+       constexpr bool WRITE_KV=decltype(write_tag)::value;
+       constexpr bool OUTPUT_DOT=decltype(dot_tag)::value;
+-      apa_selective_bwd_bk1_kernel<T,DMAX,WRITE_KV,OUTPUT_DOT><<<rows,threads>>>(
++      apa_selective_bwd_bk1_kernel<T,DMAX,WRITE_KV,OUTPUT_DOT,DK_STE><<<rows,threads>>>(
+         static_cast<T*>(q.data_ptr()), static_cast<T*>(k.data_ptr()),
+         static_cast<T*>(kq.data_ptr()), static_cast<T*>(v.data_ptr()),
+         static_cast<T*>(dO.data_ptr()), static_cast<float*>(lse.data_ptr()),
+         static_cast<float*>(thr.data_ptr()), static_cast<T*>(dq.data_ptr()),
+-        WRITE_KV ? static_cast<float*>(dk.data_ptr()) : nullptr,
++        (WRITE_KV || DK_STE) ? static_cast<float*>(dk.data_ptr()) : nullptr,
+         WRITE_KV ? static_cast<float*>(dv.data_ptr()) : nullptr,
+         static_cast<T*>(out.data_ptr()), B,H,L,S,D,VD,scale,is_causal?1:0,KVH,group);
+     };
+@@ -2874,10 +2891,13 @@
+     else if (cap<=128) pick(std::integral_constant<int,128>{});
+     else if (cap<=256) pick(std::integral_constant<int,256>{});
+     else pick(std::integral_constant<int,512>{});
++    };
++    if (apa_dk_ste_enabled()) dispatch_ste(std::true_type{});
++    else dispatch_ste(std::false_type{});
+   });
+   cuda_check_last("apa_selective_bwd_bk1");
+   if (write_kv) return {dq, dk.astype(q.dtype), dv.astype(q.dtype)};
+-  return {dq, dk, dv};
++  return {dq, apa_dk_ste_enabled() ? dk.astype(q.dtype) : dk, dv};
+ }
+ 
+ 
+@@ -2891,7 +2911,7 @@
+ // ours here is its integration with key ownership and the registered fallback.
+ // Unverified — lead to check: "FlashAttention-2 backward Dao 2023 dK dV"
+ // and "FlashAttention 2022 Di dO O". No tensor-core/tiling claim.
+-template <typename T, int DMAX>
++template <typename T, int DMAX, bool DK_STE = false>
+ __global__ void apa_selective_bwd_bk2_kv_kernel(
+     const T* q, const T* k, const T* kq, const T* v, const T* dO,
+     const float* lse, const float* thr, const float* rowdot, T* dk, T* dv,
+@@ -2932,7 +2952,8 @@
+     for (int d=0; d<VD; ++d) dov+=ld<T>(doi,d)*vs[d];
+     float ds=prob*(dov-rowdot[row])*scale;
+     for (int d=0; d<VD; ++d) av[d]+=prob*ld<T>(doi,d);
+-    if (selected) for (int d=0; d<D; ++d) ak[d]+=ds*ld<T>(qi,d);
++    // Prior art: Bengio et al. 2013 STE; retain key-owner reduction order.
++    if (selected || DK_STE) for (int d=0; d<D; ++d) ak[d]+=ds*ld<T>(qi,d);
+   }
+   __shared__ float wk[4][DMAX], wv[4][DMAX];
+   for (int d=0; d<D; ++d) {
+@@ -2973,6 +2994,8 @@
+     event_check(cudaEventRecord(events[0]));
+   }
+   DISPATCH_FLOAT(q.dtype, T, {
++    auto dispatch_ste = [&](auto ste_tag) {
++      constexpr bool DK_STE = decltype(ste_tag)::value;
+     auto launch=[&](auto tag, auto dot_tag) {
+       constexpr int DMAX=decltype(tag)::value;
+       constexpr bool DOT=decltype(dot_tag)::value;
+@@ -2986,7 +3009,7 @@
+         static_cast<T*>(out.data_ptr()),B,H,L,S,D,VD,scale,is_causal?1:0,KVH,group,
+         static_cast<float*>(rowdot.data_ptr()));
+       if(bk3::profile) event_check(cudaEventRecord(events[1]));
+-      apa_selective_bwd_bk2_kv_kernel<T,DMAX><<<B*KVH*S,128>>>(
++      apa_selective_bwd_bk2_kv_kernel<T,DMAX,DK_STE><<<B*KVH*S,128>>>(
+         static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+         static_cast<T*>(kq.data_ptr()),static_cast<T*>(v.data_ptr()),
+         static_cast<T*>(dO.data_ptr()),static_cast<float*>(lse.data_ptr()),
+@@ -3002,6 +3025,9 @@
+     else if (cap<=128) pick(std::integral_constant<int,128>{});
+     else if (cap<=256) pick(std::integral_constant<int,256>{});
+     else pick(std::integral_constant<int,512>{});
++    };
++    if (apa_dk_ste_enabled()) dispatch_ste(std::true_type{});
++    else dispatch_ste(std::false_type{});
+   });
+   cuda_check_last("apa_selective_bwd_bk2");
+   if(bk3::profile) {
+@@ -3046,7 +3072,7 @@
+   wmma::mma_sync(c,af,bf,c);
+ }
+ 
+-template<bool KEY, bool DENSE>
++template<bool KEY, bool DENSE, bool DK_STE = false>
+ __global__ void backward(const BF* q, const BF* k, const BF* kq, const BF* v,
+     const BF* dout, const BF* out, const float* lse, const float* thr,
+     BF* dq, BF* dk, BF* dv, int H,int KVH,int L,int S,int D,int VD,
+@@ -3128,7 +3154,9 @@
+         }
+         if(visible) {p=__expf(sc-lse[row]); ds=p*(dov[z]-rd[i])*scale;}
+         int dst=KEY?j*T+i:z;
+-        sel[dst]=__float2bfloat16(selected?ds:0.f);
++        // Prior art: Bengio et al. 2013 STE. Only KEY coefficients change;
++        // query half retains selected/exact and bulk/quantized coefficients.
++        sel[dst]=__float2bfloat16((selected || (KEY && DK_STE))?ds:0.f);
+         bulkds[dst]=__float2bfloat16(selected?0.f:ds);
+         prob[dst]=__float2bfloat16(p);
+       }
+@@ -3194,17 +3222,19 @@
+     }
+     auto launch=[&](auto dense) {
+       constexpr bool DT=decltype(dense)::value;
+-      auto half=[&](auto key) {
++      auto half=[&](auto key, auto ste) {
+         constexpr bool KY=decltype(key)::value;
+-        bk3::backward<KY,DT><<<dim3(((KY?S:L)+15)/16,B*(KY?KVH:H)),128>>>(
++        constexpr bool STE=decltype(ste)::value;
++        bk3::backward<KY,DT,STE><<<dim3(((KY?S:L)+15)/16,B*(KY?KVH:H)),128>>>(
+           (bk3::BF*)q.data_ptr(),(bk3::BF*)k.data_ptr(),(bk3::BF*)kq.data_ptr(),(bk3::BF*)v.data_ptr(),
+           (bk3::BF*)dO.data_ptr(),(bk3::BF*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),
+           (bk3::BF*)dq.data_ptr(),(bk3::BF*)dk.data_ptr(),(bk3::BF*)dv.data_ptr(),H,KVH,L,S,D,VD,scale,causal);
+         cuda_check_last("apa_selective_bwd_bk3");
+       };
+-      half(std::false_type{});
++      half(std::false_type{}, std::false_type{});
+       if(bk3::profile) check(cudaEventRecord(events[1]));
+-      half(std::true_type{});
++      if (apa_dk_ste_enabled()) half(std::true_type{}, std::true_type{});
++      else half(std::true_type{}, std::false_type{});
+     };
+     if(variant=="g1") launch(std::false_type{}); else launch(std::true_type{});
+     if(bk3::profile) {
+--- base/tensor_cuda/src/ops.cpp
++++ arm/tensor_cuda/src/ops.cpp
+@@ -8,12 +8,27 @@
+ #include "tc/ops.h"
+ #include "tc/bp_op_timing.h"
+ #include "tc/tf32.h"
++#include "tc/apa_dk_ste.h"
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
+ 
+ #include <stdexcept>
+ #include <utility>
+ #include <vector>
+ 
+ namespace tc {
++bool apa_dk_ste_enabled() {
++  static const bool enabled = [] {
++    const char* value = std::getenv("TC_APA_DK_STE");
++    if (value && std::strcmp(value, "0") != 0 && std::strcmp(value, "1") != 0)
++      throw std::runtime_error("tensor_cuda: TC_APA_DK_STE must be unset, 0, or 1");
++    const bool on = value && std::strcmp(value, "1") == 0;
++    std::fprintf(stderr, "tensor_cuda: TC_APA_DK_STE=%d\n", int(on));
++    return on;
++  }();
++  return enabled;
++}
+ // BP-KERNEL-2 explicit engine control; default a does not capture saved O.
+ // Prior art: Project-Tensor opt-in variant dispatch (2026), taken; ours:
+ // capture dispatch choice per forward graph so replay uses the selected arm.
+--- base/tensor_cuda/src/bindings.cpp
++++ arm/tensor_cuda/src/bindings.cpp
+@@ -12,6 +12,7 @@
+ #include "tc/bp_op_timing.h"
+ #include "tc/ops.h"
+ #include "tc/tf32.h"
++#include "tc/apa_dk_ste.h"
+ 
+ namespace tc {
+ // Prior art: pybind11 (Jakob 2015) and BP-KERNEL-2 binding pattern, taken.
+@@ -217,6 +218,7 @@
+ }  // namespace
+ 
+ PYBIND11_MODULE(_tensor_cuda, m) {
++  (void)tc::apa_dk_ste_enabled();
+   m.doc() = "Project Tensor — standalone CUDA tensor engine (no PyTorch).";
+ 
+   py::class_<Tensor>(m, "Tensor")
+--- base/tensor_cuda/src/attention_tf32.cu
++++ arm/tensor_cuda/src/attention_tf32.cu
+@@ -10,6 +10,7 @@
+ // p and dS NEVER pass through BF16. Their MMA operands DO round to TF32;
+ // FP32 storage/accumulation is not full-FP32 multiplication precision.
+ #include "tc/tf32.h"
++#include "tc/apa_dk_ste.h"
+ #include <cuda_runtime.h>
+ #include <mma.h>
+ #include <algorithm>
+@@ -82,7 +83,7 @@
+ }
+ #endif
+ 
+-template<bool KEY>
++template<bool KEY, bool DK_STE = false>
+ __global__ void backward(const float* q, const float* k, const float* kq, const float* v,
+     const float* dout, const float* out, const float* lse, const float* thr,
+     float* dq, float* dk, float* dv, int H,int KVH,int L,int S,int D,int VD,
+@@ -171,7 +172,9 @@
+           ds=singleton?0.f:p*(dov[z]-rd[i])*scale;
+         }
+         int dst=KEY?j*T+i:z;
+-        sel[dst]=(selected?ds:0.f);
++        // Prior art: Bengio et al. 2013 STE (unverified - lead to check).
++        // Key-only coefficient, same ds; query and value halves untouched.
++        sel[dst]=((selected || (KEY && DK_STE))?ds:0.f);
+         bulkds[dst]=(selected?0.f:ds);
+         prob[dst]=(p);
+       }
+@@ -456,15 +459,18 @@
+       throw std::runtime_error("PT-TF32-1: saved forward/dO must be same CUDA FP32");
+   tf32_check_device(q);
+   NDArray dq(q.shape,q.dtype,q.device),dk(k.shape,k.dtype,k.device),dv(v.shape,v.dtype,v.device);
+-  auto half=[&](auto tag) {
++  auto half=[&](auto tag, auto ste) {
+     constexpr bool KEY=decltype(tag)::value;
+-    pt_tf32::backward<KEY><<<dim3(((KEY?S:L)+15)/16,B*(KEY?KVH:H)),128>>>(
++    constexpr bool STE=decltype(ste)::value;
++    pt_tf32::backward<KEY,STE><<<dim3(((KEY?S:L)+15)/16,B*(KEY?KVH:H)),128>>>(
+         (float*)q.data_ptr(),(float*)k.data_ptr(),(float*)kq.data_ptr(),(float*)v.data_ptr(),
+         (float*)dO.data_ptr(),(float*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),
+         (float*)dq.data_ptr(),(float*)dk.data_ptr(),(float*)dv.data_ptr(),H,KVH,L,S,D,VD,scale,causal);
+     cuda_check_last("PT-TF32-1 backward");
+   };
+-  half(std::false_type{});half(std::true_type{});
++  half(std::false_type{}, std::false_type{});
++  if (apa_dk_ste_enabled()) half(std::true_type{}, std::true_type{});
++  else half(std::true_type{}, std::false_type{});
+   return {dq,dk,dv};
+ }
+ } // namespace tc
+--- /dev/null
++++ arm/tensor_cuda/include/tc/apa_dk_ste.h
+@@ -0,0 +1,8 @@
++#pragma once
++
++namespace tc {
++// Process-wide, frozen at extension initialization; no CUDA calls.
++// Prior art: environment opt-ins in Project-Tensor (2026), taken; strict
++// parsing and once-only receipt for the APA key STE experiment are ours.
++bool apa_dk_ste_enabled();
++}
+--- /dev/null
++++ arm/tensor_cuda/src/embed_deterministic.cu
+@@ -0,0 +1,125 @@
++// PT-DET-1: opt-in deterministic embedding backward. Default path stays in kernels.cu.
++#include "tc/core.h"
++#include "tc/deterministic_embed.h"
++
++#include <cub/device/device_radix_sort.cuh>
++#include <cuda_bf16.h>
++#include <cuda_fp16.h>
++#include <cuda_runtime.h>
++#include <climits>
++#include <cstdlib>
++#include <cstring>
++
++namespace tc {
++namespace {
++// Prior art: PyTorch deterministic-algorithms mode (2021), taken as an opt-in
++// policy. Ours: thread-local family for embedding and gather/top-k backward.
++// PT-DET-2: canonical environment wins when present; legacy name is a fallback.
++// Exactly "1" enables it. Either setter overrides this one shared state.
++// No CUDA call in initialization/get/set; no arbitrary-op determinism promise.
++thread_local bool deterministic = [] {
++  const char* env = std::getenv("TC_DETERMINISTIC");
++  if (!env) env = std::getenv("TC_DET_EMBED_BWD");
++  return env && std::strcmp(env, "1") == 0;
++}();
++
++void check(cudaError_t status, const char* where) {
++  if (status != cudaSuccess)
++    throw std::runtime_error(std::string(where) + ": " + cudaGetErrorString(status));
++}
++
++__global__ void init_positions(int64_t* positions, int64_t n) {
++  int64_t p = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (p < n) positions[p] = p;
++}
++
++// Prior art: CUB/NVIDIA stable radix sort (CUDA 12.6, 2024) guarantees equal
++// keys preserve ascending original positions. Segmented reduction + single
++// output ownership follows deterministic scatter-add practice (PyTorch 2021).
++// See deterministic_embed.h for references and Demmel/Nguyen (2013) boundary.
++// Ours: a CTA for each possible segment start and 256-feature tile; non-start
++// CTAs exit immediately. No float atomics, no host transfer, no cached IDs.
++template <class T>
++__global__ void reduce_segments(const T* grad, const int64_t* keys,
++                                const int64_t* positions, float* out,
++                                int64_t n, int64_t vocab, int64_t width) {
++  int64_t first = blockIdx.x, token = keys[first];
++  if (first && keys[first - 1] == token) return;
++  // Forward's valid-token contract still applies. Guard output addressing
++  // here as well; invalid IDs are never used to address the output gradient.
++  if (token < 0 || token >= vocab) return;
++  int64_t feature = int64_t(blockIdx.y) * blockDim.x + threadIdx.x;
++  if (feature >= width) return;
++  // Ordinary upper_bound (binary search), identical for every active thread.
++  int64_t lo = first + 1, hi = n;
++  while (lo < hi) {
++    int64_t mid = lo + (hi - lo) / 2;
++    if (keys[mid] == token) lo = mid + 1;
++    else hi = mid;
++  }
++  out[token * width + feature] = det_embed::segment_sum(grad, positions, first, lo, width, feature);
++}
++
++template <class T>
++void launch(const NDArray& grad, const NDArray& keys, const NDArray& positions,
++            NDArray& out, int64_t n, int64_t vocab, int64_t width) {
++  reduce_segments<T><<<dim3(static_cast<unsigned>(n), static_cast<unsigned>((width + 255) / 256)), 256>>>(
++      static_cast<const T*>(grad.data_ptr()), static_cast<const int64_t*>(keys.data_ptr()),
++      static_cast<const int64_t*>(positions.data_ptr()), static_cast<float*>(out.data_ptr()),
++      n, vocab, width);
++  cuda_check_last("det embedding segmented reduction");
++}
++}  // namespace
++
++void set_deterministic(bool enabled) { deterministic = enabled; }
++bool get_deterministic() { return deterministic; }
++void set_deterministic_embed_bwd(bool enabled) { set_deterministic(enabled); }
++bool get_deterministic_embed_bwd() { return get_deterministic(); }
++
++NDArray embedding_backward_deterministic(const NDArray& grad, const NDArray& idx,
++                                         const Shape& weight_shape, DType weight_dtype) {
++  if (weight_shape.empty() || weight_shape[0] <= 0 || idx.dtype != DType::Int64 ||
++      grad.device.type != idx.device.type || grad.device.index != idx.device.index)
++    throw std::runtime_error("det embedding: invalid weight shape, indices or device");
++  for (auto size : weight_shape)
++    if (size <= 0) throw std::runtime_error("det embedding: invalid weight shape");
++  int64_t vocab = weight_shape[0], width = numel_of(weight_shape) / vocab, n = idx.numel();
++  if (n > INT_MAX || (width + 255) / 256 > 65535 || grad.numel() != n * width)
++    throw std::runtime_error("det embedding: unsupported dimensions");
++  if (grad.dtype != DType::Float32 && grad.dtype != DType::Float16 && grad.dtype != DType::BFloat16)
++    throw std::runtime_error("det embedding: grad must be floating point");
++  if (weight_dtype != DType::Float32 && weight_dtype != DType::Float16 && weight_dtype != DType::BFloat16)
++    throw std::runtime_error("det embedding: weight must be floating point");
++  if (!grad.device.is_cuda()) {
++    if (grad.dtype != DType::Float32 || weight_dtype != DType::Float32)
++      throw std::runtime_error("det embedding: CPU path supports float32 only");
++    NDArray out(weight_shape, DType::Float32, grad.device);
++    det_embed::backward_cpu(static_cast<const float*>(grad.data_ptr()),
++                          static_cast<const int64_t*>(idx.data_ptr()),
++                          static_cast<float*>(out.data_ptr()), n, vocab, width);
++    return out;
++  }
++  NDArray out = NDArray::zeros(weight_shape, DType::Float32, grad.device);
++  if (!n) return out.astype(weight_dtype);
++  NDArray input_positions({n}, DType::Int64, grad.device);
++  NDArray keys({n}, DType::Int64, grad.device), positions({n}, DType::Int64, grad.device);
++  init_positions<<<static_cast<unsigned>((n + 255) / 256), 256>>>(
++      static_cast<int64_t*>(input_positions.data_ptr()), n);
++  cuda_check_last("det embedding init positions");
++  auto ids = static_cast<const int64_t*>(idx.data_ptr());
++  auto in_pos = static_cast<const int64_t*>(input_positions.data_ptr());
++  auto key_out = static_cast<int64_t*>(keys.data_ptr());
++  auto pos_out = static_cast<int64_t*>(positions.data_ptr());
++  size_t bytes = 0;
++  check(cub::DeviceRadixSort::SortPairs(nullptr, bytes, ids, key_out, in_pos, pos_out, int(n)),
++        "det embedding sort workspace");
++  NDArray scratch({static_cast<int64_t>(bytes)}, DType::Uint8, grad.device);
++  check(cub::DeviceRadixSort::SortPairs(scratch.data_ptr(), bytes, ids, key_out, in_pos, pos_out, int(n)),
++        "det embedding stable sort");
++  if (grad.dtype == DType::Float32) launch<float>(grad, keys, positions, out, n, vocab, width);
++  else if (grad.dtype == DType::Float16) launch<__half>(grad, keys, positions, out, n, vocab, width);
++  else launch<__nv_bfloat16>(grad, keys, positions, out, n, vocab, width);
++  // Temporaries free on the engine's legacy default stream after their users.
++  return out.astype(weight_dtype);
++}
++}  // namespace tc
+--- /dev/null
++++ arm/tensor_cuda/src/gather_deterministic.cu
+@@ -0,0 +1,101 @@
++// PT-DET-2: general gather/top-k VJP; the OFF path remains in kernels.cu.
++#include "tc/deterministic_gather.h"
++#include <cub/device/device_radix_sort.cuh>
++#include <cuda_bf16.h>
++#include <cuda_fp16.h>
++#include <cuda_runtime.h>
++
++namespace tc {
++namespace {
++void check(cudaError_t status, const char* where) {
++  if (status != cudaSuccess)
++    throw std::runtime_error(std::string(where) + ": " + cudaGetErrorString(status));
++}
++
++// Prior art and taken/ours boundary: deterministic_gather.h. Flat destination
++// keys include ALL non-gather coordinates: equal class IDs across distinct
++// loss rows must not be combined. Stable sorting preserves original positions.
++__global__ void make_keys(const int64_t* index, int64_t* keys, int64_t* positions,
++                          det_gather::Spec s) {
++  const int64_t p = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (p >= s.count) return;
++  positions[p] = p;
++  keys[p] = det_gather::destination(p, index[p], s);
++  // The existing gather requires valid indices. Fail asynchronously on invalid
++  // device indices instead of making an out-of-bounds access or reading IDs back.
++  if (keys[p] < 0) asm("trap;");
++}
++
++// Taken: sorted segmented reduction / single ownership (CUB/PyTorch, above).
++// Ours: one thread at each segment start, ascending-position FP64 sum shared
++// with PT-DET-1, then one FP32 store. No floating atomic and no host ID readback.
++template <class T>
++__global__ void reduce_segments(const T* grad, const int64_t* keys,
++                                const int64_t* positions, float* out, int64_t n) {
++  const int64_t first = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (first >= n) return;
++  const int64_t key = keys[first];
++  if (key < 0 || (first && keys[first - 1] == key)) return;
++  int64_t last = first + 1;
++  while (last < n && keys[last] == key) ++last;
++  out[key] = det_embed::segment_sum(grad, positions, first, last, 1, 0);
++}
++
++template <class T>
++void launch(const NDArray& src, const NDArray& keys, const NDArray& positions,
++            NDArray& out, int64_t n) {
++  reduce_segments<T><<<static_cast<unsigned>((n + 255) / 256), 256>>>(
++      static_cast<const T*>(src.data_ptr()), static_cast<const int64_t*>(keys.data_ptr()),
++      static_cast<const int64_t*>(positions.data_ptr()), static_cast<float*>(out.data_ptr()), n);
++  cuda_check_last("det gather segmented reduction");
++}
++
++bool floating(DType dt) {
++  return dt == DType::Float32 || dt == DType::Float16 || dt == DType::BFloat16;
++}
++}  // namespace
++
++NDArray scatter_add_deterministic(const Shape& shape, DType dtype, int dim,
++                                   const NDArray& index, const NDArray& src) {
++  const auto s = det_gather::make_spec(shape, index.shape, dim);
++  if (src.shape != index.shape || index.dtype != DType::Int64 ||
++      index.device.type != src.device.type || index.device.index != src.device.index ||
++      !floating(src.dtype) || !floating(dtype))
++    throw std::runtime_error("det gather: invalid source, index, dtype or device");
++  if (!src.device.is_cuda()) {
++    if (src.dtype != DType::Float32 || dtype != DType::Float32)
++      throw std::runtime_error("det gather: CPU path supports float32 only");
++    NDArray out(shape, dtype, src.device);
++    det_gather::backward_cpu(static_cast<const float*>(src.data_ptr()),
++                            static_cast<const int64_t*>(index.data_ptr()),
++                            static_cast<float*>(out.data_ptr()), s);
++    return out;
++  }
++  NDArray out = NDArray::zeros(shape, DType::Float32, src.device);
++  if (!s.count) return out.astype(dtype);
++  NDArray input_keys({s.count}, DType::Int64, src.device);
++  NDArray input_positions({s.count}, DType::Int64, src.device);
++  NDArray keys({s.count}, DType::Int64, src.device), positions({s.count}, DType::Int64, src.device);
++  make_keys<<<static_cast<unsigned>((s.count + 255) / 256), 256>>>(
++      static_cast<const int64_t*>(index.data_ptr()), static_cast<int64_t*>(input_keys.data_ptr()),
++      static_cast<int64_t*>(input_positions.data_ptr()), s);
++  cuda_check_last("det gather destination keys");
++  auto in_keys = static_cast<const int64_t*>(input_keys.data_ptr());
++  auto in_positions = static_cast<const int64_t*>(input_positions.data_ptr());
++  auto out_keys = static_cast<int64_t*>(keys.data_ptr());
++  auto out_positions = static_cast<int64_t*>(positions.data_ptr());
++  size_t bytes = 0;
++  check(cub::DeviceRadixSort::SortPairs(nullptr, bytes, in_keys, out_keys,
++                                       in_positions, out_positions, int(s.count)),
++        "det gather sort workspace");
++  NDArray scratch({static_cast<int64_t>(bytes)}, DType::Uint8, src.device);
++  check(cub::DeviceRadixSort::SortPairs(scratch.data_ptr(), bytes, in_keys, out_keys,
++                                       in_positions, out_positions, int(s.count)),
++        "det gather stable sort");
++  if (src.dtype == DType::Float32) launch<float>(src, keys, positions, out, s.count);
++  else if (src.dtype == DType::Float16) launch<__half>(src, keys, positions, out, s.count);
++  else launch<__nv_bfloat16>(src, keys, positions, out, s.count);
++  // Stream-ordered storage lifetime matches PT-DET-1 and the engine allocator.
++  return out.astype(dtype);
++}
++}  // namespace tc
+--- /dev/null
++++ arm/tensor_cuda/include/tc/deterministic_gather.h
+@@ -0,0 +1,84 @@
++#pragma once
++
++#include "tc/core.h"
++#include "tc/deterministic_embed.h"
++#include <climits>
++#include <limits>
++
++// Prior art: CUB/Merrill/NVIDIA stable radix sort and sorted segmented
++// scatter-add (2011 onward; CUDA 12.6, 2024); PyTorch deterministic indexing
++// (1.9, 2021). Taken: group equal destinations, one fixed-order owner per
++// segment. Ours: contiguous n-D gather destination mapping and integration
++// with the PT-DET-1 (2026) shared FP64 sum. Demmel/Nguyen (ARITH 2013) is
++// reproducibility context only; this is not an order-independent accumulator.
++// https://pytorch.org/blog/pytorch-1-9-released/
++// https://www.acsel-lab.com/arithmetic/arith21/papers/p54.pdf
++// CUB stability: installed cub/device/device_radix_sort.cuh, "Stability".
++#ifdef __CUDACC__
++#define TC_GATHER_HD __host__ __device__
++#else
++#define TC_GATHER_HD
++#endif
++
++namespace tc::det_gather {
++struct Spec {
++  int ndim, dim;
++  int64_t index_strides[TC_MAX_DIMS], output_strides[TC_MAX_DIMS];
++  int64_t axis_size, count, output_count;
++};
++
++inline Spec make_spec(const Shape& shape, const Shape& index_shape, int dim) {
++  const int nd = static_cast<int>(shape.size());
++  if (nd < 1 || nd > TC_MAX_DIMS || index_shape.size() != shape.size())
++    throw std::runtime_error("det gather: invalid rank");
++  if (dim < 0) dim += nd;
++  if (dim < 0 || dim >= nd) throw std::runtime_error("det gather: invalid dimension");
++  Spec s{};
++  s.ndim = nd; s.dim = dim; s.axis_size = shape[dim];
++  s.count = 1; s.output_count = 1;
++  for (int d = nd - 1; d >= 0; --d) {
++    if (shape[d] < 0 || index_shape[d] < 0 || (d != dim && index_shape[d] > shape[d]))
++      throw std::runtime_error("det gather: invalid shape");
++    s.index_strides[d] = s.count;
++    s.output_strides[d] = s.output_count;
++    if ((index_shape[d] && s.count > INT_MAX / index_shape[d]) ||
++        (shape[d] && s.output_count > std::numeric_limits<int64_t>::max() / shape[d]))
++      throw std::runtime_error("det gather: unsupported dimensions");
++    s.count *= index_shape[d]; s.output_count *= shape[d];
++  }
++  // Output/temporary byte counts must fit signed engine allocation arithmetic.
++  if (s.output_count > std::numeric_limits<int64_t>::max() / int64_t(sizeof(float)))
++    throw std::runtime_error("det gather: output too large");
++  return s;
++}
++
++TC_GATHER_HD inline int64_t destination(int64_t position, int64_t index, const Spec& s) {
++  if (index < 0 || index >= s.axis_size) return -1;
++  int64_t rem = position, offset = 0;
++  for (int d = 0; d < s.ndim; ++d) {
++    const int64_t coordinate = rem / s.index_strides[d];
++    rem -= coordinate * s.index_strides[d];
++    offset += (d == s.dim ? index : coordinate) * s.output_strides[d];
++  }
++  return offset;
++}
++
++inline void backward_cpu(const float* grad, const int64_t* index, float* out, const Spec& s) {
++  if (s.output_count) std::fill(out, out + s.output_count, 0.f);
++  if (!s.count) return;
++  std::vector<int64_t> keys(s.count);
++  for (int64_t p = 0; p < s.count; ++p) {
++    keys[p] = destination(p, index[p], s);
++    if (keys[p] < 0) throw std::runtime_error("det gather: index out of range");
++  }
++  auto positions = det_embed::sorted_positions(keys.data(), s.count, s.output_count);
++  for (int64_t first = 0; first < s.count;) {
++    const int64_t key = keys[positions[first]];
++    int64_t last = first + 1;
++    while (last < s.count && keys[positions[last]] == key) ++last;
++    out[key] = det_embed::segment_sum(grad, positions.data(), first, last, 1, 0);
++    first = last;
++  }
++}
++}  // namespace tc::det_gather
++#undef TC_GATHER_HD

@@ -1,0 +1,152 @@
+# Every file written by STE5B
+
+Paths relative to workspace; symlinks explicitly marked. Original lead files were only read.
+
+- artifacts/apa_ste5/capture5.py
+- artifacts/apa_ste5/verify5.py
+- artifacts/apa_ste5/tests/test_verify5.py
+- artifacts/apa_ste5/STE5B_REGISTRATION.json
+- artifacts/apa_ste5/STE5B_LEDGER.md
+- artifacts/apa_ste5/STE5B_REPORT.md
+- artifacts/apa_ste5/INPUT_PINS_AMENDMENT_002.json
+- artifacts/apa_ste5/STE5B.diff
+- artifacts/apa_ste5/STE5B_OPERAND_CENSUS.md
+- artifacts/apa_ste5/STE5B_FILES_WRITTEN.md
+- artifacts/apa_ste5/receipts/S5_CPU.json
+- artifacts/apa_ste5/receipts/cpu.xml
+- artifacts/apa_ste5/receipts/cpu.log
+- artifacts/apa_ste5/scratch/ste5b/baseline.json
+- artifacts/apa_ste5/scratch/ste5b/before/capture5.py
+- artifacts/apa_ste5/scratch/ste5b/before/common.py
+- artifacts/apa_ste5/scratch/ste5b/before/tests/test_verify5.py
+- artifacts/apa_ste5/scratch/ste5b/before/verify5.py
+- artifacts/apa_ste5/scratch/ste5b/before-premise.json
+- artifacts/apa_ste5/scratch/ste5b/before-premise.log
+- artifacts/apa_ste5/scratch/ste5b/before-premise.md
+- artifacts/apa_ste5/scratch/ste5b/before-premise.rc
+- artifacts/apa_ste5/scratch/ste5b/cpu.log
+- artifacts/apa_ste5/scratch/ste5b/cpu.rc
+- artifacts/apa_ste5/scratch/ste5b/cpu.xml
+- artifacts/apa_ste5/scratch/ste5b/existing-premise.json
+- artifacts/apa_ste5/scratch/ste5b/existing-premise.log
+- artifacts/apa_ste5/scratch/ste5b/existing-premise.md
+- artifacts/apa_ste5/scratch/ste5b/existing-premise.rc
+- artifacts/apa_ste5/scratch/ste5b/integrity.json
+- artifacts/apa_ste5/scratch/ste5b/previous-S5_CPU.json
+- artifacts/apa_ste5/scratch/ste5b/previous-cpu.log
+- artifacts/apa_ste5/scratch/ste5b/previous-cpu.xml
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_duplicate_governor_fails0/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_duplicate_governor_failscurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_duplicate_governor_fails0 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc0/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc1/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc2/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc3/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc4/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc5/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc6/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc7/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc8/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc9/_tensor_cuda.py
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproccurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_f4_real_extension_subproc9 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_failscurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_fails0 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_whole_ve0/missing.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_whole_ve0/missing.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_whole_vecurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_missing_governor_whole_ve0 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-0/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-0/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-1/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-1/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-grapa/run-2/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-2/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-0/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-0/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-1/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-1/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-2/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/captures/ste5v1-base-small/run-2/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/premise.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis0/premise.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-0/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-0/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-1/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-1/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-grapa/run-2/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-2/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-0/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-0/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-1/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-1/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-2/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/captures/ste5v1-base-small/run-2/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/premise.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis1/premise.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-0/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-0/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-1/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-1/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-grapa/run-2/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-2/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-0/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-0/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-1/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-1/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-2/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/captures/ste5v1-base-small/run-2/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/premise.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis2/premise.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-0/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-0/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-1/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-1/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-grapa/run-2/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-2/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-0/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-0/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-1/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-1/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-2/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/captures/ste5v1-base-small/run-2/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/premise.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis3/premise.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-0/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-0/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-1/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-1/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-grapa/run-2/grapa.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-grapa/run-2/grapa.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-0/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-0/small1.npz
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-0/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-0/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-1/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-1/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-1/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-1/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-2/capture.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-2/small1.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small1.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/captures/ste5v1-base-small/run-2/small2.npz -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/lead/ste5v1-base-small/run-2/small2.npz (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/premise.json
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4/premise.md
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premiscurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_real_capture_shape_premis4 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_ra0/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_ra1/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_racurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_ra1 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_re0/governor.tsv
+- artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_recurrent -> /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/ste5b/pytest/test_wrong_governor_outcome_re0 (test symlink; target unchanged)
+- artifacts/apa_ste5/scratch/ste5b/stage-check.log
+- artifacts/apa_ste5/scratch/ste5b/stage-check.rc

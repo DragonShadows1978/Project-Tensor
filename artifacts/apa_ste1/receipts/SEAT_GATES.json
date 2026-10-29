@@ -1,0 +1,41 @@
+{
+  "evidence_class": "CPU source inspection / unit tests / build; GPU staged only",
+  "S-G1": {
+    "PASS": true,
+    "receipt": "CENSUS.md",
+    "scope": "every selective-training forward/backward entry/kernel/dispatch and specified GRAPA call"
+  },
+  "S-G2": {
+    "PASS": true,
+    "receipt": "receipts/cpu_artifacts.xml",
+    "tests": 23,
+    "scope": "NumPy64 central differences on/off, dense refine-all, source operand preservation and import parsing; actual staged manifest/input bytes and command bounds"
+  },
+  "S-G3": {
+    "PASS": true,
+    "receipt": [
+      "receipts/BUILD_RECEIPT.json",
+      "receipts/SWITCH_IMPORT.json"
+    ],
+    "scope": "CUDA12.6 CPU build, staged CPU load; valid switch prints once, invalid fails"
+  },
+  "S-G4": {
+    "PASS": true,
+    "receipt": [
+      "SELECTED_ONLY_MUTANT.patch",
+      "MUTATION.json"
+    ],
+    "scope": "CPU oracle kills off-equivalent selected-only mutant; L-G3 killing check staged; production mutant not GPU-executed"
+  },
+  "lead_gates": {
+    "status": "STAGED NOT RUN",
+    "commands": "GPU_COMMANDS.sh",
+    "pass_rules": "GPU_PASS_RULES.md"
+  },
+  "additional_literal_SASS_identity": {
+    "PASS": false,
+    "receipt": "receipts/SASS_IDENTITY.json",
+    "reason": "7 specializations have shared-address immediate differences; 12 base backward specializations exact"
+  },
+  "engine_use": "Requires lead GPU PASS and cross-model review; no promotion performed"
+}
