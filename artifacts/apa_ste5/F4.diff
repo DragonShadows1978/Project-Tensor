@@ -1,0 +1,21 @@
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -14,9 +14,16 @@
+ 
+ import numpy as np
+ 
++# Prior art: Python importlib.import_module / ModuleNotFoundError (Python 3.6,
++# 2016; unverified - lead to check). Preserve extension initialization errors;
++# only a missing packaged extension permits the existing top-level fallback.
++from importlib import import_module as _import_module
++
+ try:
+-    from . import _tensor_cuda as _C
+-except ImportError:  # pragma: no cover
++    _C = _import_module(f"{__name__}._tensor_cuda")
++except ModuleNotFoundError as _extension_error:  # pragma: no cover
++    if _extension_error.name != f"{__name__}._tensor_cuda":
++        raise
+     import _tensor_cuda as _C  # fallback when the .so sits on PYTHONPATH
+ 
+ Tensor = _C.Tensor

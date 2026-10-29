@@ -1,0 +1,639 @@
+.................FFFFFFFFFFFFF....                                       [100%]
+=================================== FAILURES ===================================
+________________ test_f4_real_extension_subprocess[2-package0] _________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/tensor_cuda')
+value = '2'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc0')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc0'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+________________ test_f4_real_extension_subprocess[2-package1] _________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda')
+value = '2'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc1')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc1'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+_________________ test_f4_real_extension_subprocess[-package0] _________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/tensor_cuda')
+value = ''
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc2')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc2'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+_________________ test_f4_real_extension_subprocess[-package1] _________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda')
+value = ''
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc3')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc3'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+________________ test_f4_real_extension_subprocess[1 -package0] ________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/tensor_cuda')
+value = '1 '
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc4')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc4'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+________________ test_f4_real_extension_subprocess[1 -package1] ________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda')
+value = '1 '
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc5')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc5'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+________________ test_f4_real_extension_subprocess[ 1-package0] ________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/tensor_cuda')
+value = ' 1'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc6')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc6'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+________________ test_f4_real_extension_subprocess[ 1-package1] ________________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda')
+value = ' 1'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc7')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc7'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+_______________ test_f4_real_extension_subprocess[true-package0] _______________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/tensor_cuda')
+value = 'true'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc8')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc8'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+_______________ test_f4_real_extension_subprocess[true-package1] _______________
+
+package = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda')
+value = 'true'
+tmp_path = PosixPath('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste5/scratch/pytest/test_f4_real_extension_subproc9')
+
+    @pytest.mark.parametrize('package',[c.ROOT/'tensor_cuda',c.ARM_PACKAGE.parent])
+    @pytest.mark.parametrize('value',['2','','1 ',' 1','true'])
+    def test_f4_real_extension_subprocess(package,value,tmp_path):
+        # A stray fallback module must not mask an initializer error.
+        (tmp_path/'_tensor_cuda.py').write_text('raise RuntimeError("STRAY FALLBACK WAS USED")\n')
+        code='''import sys,json
+    sys.path[:0]=[sys.argv[1],sys.argv[2]]
+    try:
+     import tensor_cuda
+    except Exception as exc:
+     print(json.dumps({'type':type(exc).__name__,'message':str(exc)}))
+    else:
+     raise AssertionError('invalid switch accepted')
+    '''
+        env=dict(os.environ,TC_APA_DK_STE=value,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(package),str(tmp_path)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+        row=json.loads(result.stdout)
+>       assert row['type']=='ImportError',result
+E       AssertionError: CompletedProcess(args=['/usr/bin/python3', '-I', '-B', '-c', "import sys,json
+E         sys.path[:0]=[sys.argv[1],sys.argv[2]]\...ubproc9'], returncode=0, stdout='{"type": "ModuleNotFoundError", "message": "No module named \'numpy\'"}
+E         ', stderr='')
+E       assert 'ModuleNotFoundError' == 'ImportError'
+E         
+E         - ImportError
+E         + ModuleNotFoundError
+
+artifacts/apa_ste5/tests/test_verify5.py:146: AssertionError
+_______________________ test_valid_switch_import_only[0] _______________________
+
+value = '0'
+
+    @pytest.mark.parametrize('value',['0','1',None])
+    def test_valid_switch_import_only(value):
+        code='import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")'
+        env=dict(os.environ,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        if value is None: env.pop('TC_APA_DK_STE',None)
+        else: env['TC_APA_DK_STE']=value
+>       result=subprocess.run([sys.executable,'-I','-B','-c',code,str(c.ARM_PACKAGE.parent)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+
+artifacts/apa_ste5/tests/test_verify5.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = 20, check = True
+popenargs = (['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED"...rgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda'],)
+kwargs = {'env': {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLUTTER_IM_MODULE': 'ibus', 'CODEX_CI': '1', 'CODEX_MANAGED_BY_NPM': '1', ...}, 'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/usr/bin/python3', '-I', '-B', '-c', 'import s...>
+stdout = ''
+stderr = 'Traceback (most recent call last):\n  File "<string>", line 1, in <module>\n  File "/mnt/ForgeRealm/Project-Tensor/Fo...nsor_cuda/__init__.py", line 15, in <module>\n    import numpy as np\nModuleNotFoundError: No module named \'numpy\'\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")', '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda']' returned non-zero exit status 1.
+
+/usr/lib/python3.12/subprocess.py:571: CalledProcessError
+_______________________ test_valid_switch_import_only[1] _______________________
+
+value = '1'
+
+    @pytest.mark.parametrize('value',['0','1',None])
+    def test_valid_switch_import_only(value):
+        code='import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")'
+        env=dict(os.environ,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        if value is None: env.pop('TC_APA_DK_STE',None)
+        else: env['TC_APA_DK_STE']=value
+>       result=subprocess.run([sys.executable,'-I','-B','-c',code,str(c.ARM_PACKAGE.parent)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+
+artifacts/apa_ste5/tests/test_verify5.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = 20, check = True
+popenargs = (['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED"...rgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda'],)
+kwargs = {'env': {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLUTTER_IM_MODULE': 'ibus', 'CODEX_CI': '1', 'CODEX_MANAGED_BY_NPM': '1', ...}, 'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/usr/bin/python3', '-I', '-B', '-c', 'import s...>
+stdout = ''
+stderr = 'Traceback (most recent call last):\n  File "<string>", line 1, in <module>\n  File "/mnt/ForgeRealm/Project-Tensor/Fo...nsor_cuda/__init__.py", line 15, in <module>\n    import numpy as np\nModuleNotFoundError: No module named \'numpy\'\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")', '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda']' returned non-zero exit status 1.
+
+/usr/lib/python3.12/subprocess.py:571: CalledProcessError
+_____________________ test_valid_switch_import_only[None] ______________________
+
+value = None
+
+    @pytest.mark.parametrize('value',['0','1',None])
+    def test_valid_switch_import_only(value):
+        code='import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")'
+        env=dict(os.environ,CUDA_VISIBLE_DEVICES='',PYTHONDONTWRITEBYTECODE='1')
+        if value is None: env.pop('TC_APA_DK_STE',None)
+        else: env['TC_APA_DK_STE']=value
+>       result=subprocess.run([sys.executable,'-I','-B','-c',code,str(c.ARM_PACKAGE.parent)],env=env,
+                              text=True,capture_output=True,timeout=20,check=True)
+
+artifacts/apa_ste5/tests/test_verify5.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = 20, check = True
+popenargs = (['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED"...rgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda'],)
+kwargs = {'env': {'AI_AGENT': 'claude-code_2-1-296_agent', 'CLUTTER_IM_MODULE': 'ibus', 'CODEX_CI': '1', 'CODEX_MANAGED_BY_NPM': '1', ...}, 'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/usr/bin/python3', '-I', '-B', '-c', 'import s...>
+stdout = ''
+stderr = 'Traceback (most recent call last):\n  File "<string>", line 1, in <module>\n  File "/mnt/ForgeRealm/Project-Tensor/Fo...nsor_cuda/__init__.py", line 15, in <module>\n    import numpy as np\nModuleNotFoundError: No module named \'numpy\'\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/python3', '-I', '-B', '-c', 'import sys;sys.path.insert(0,sys.argv[1]);import tensor_cuda;print("IMPORTED")', '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_ste1/artifacts/apa_ste1/engine/tensor_cuda']' returned non-zero exit status 1.
+
+/usr/lib/python3.12/subprocess.py:571: CalledProcessError
+=========================== short test summary info ============================
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[2-package0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[2-package1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[-package0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[-package1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[1 -package0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[1 -package1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[ 1-package0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[ 1-package1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[true-package0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_f4_real_extension_subprocess[true-package1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_valid_switch_import_only[0]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_valid_switch_import_only[1]
+FAILED artifacts/apa_ste5/tests/test_verify5.py::test_valid_switch_import_only[None]
+13 failed, 21 passed in 1.17s

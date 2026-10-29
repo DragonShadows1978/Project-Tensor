@@ -1,0 +1,27 @@
+.......F..........                                                       [100%]
+=================================== FAILURES ===================================
+______________________ test_off_kernel_operands_unchanged ______________________
+
+    def test_off_kernel_operands_unchanged():
+        for filename,names in [('kernels.cu',['apa_selective_bwd_kernel','apa_selective_bwd_bk1_kernel','apa_selective_bwd_bk2_kv_kernel','backward']),('attention_tf32.cu',['backward'])]:
+            old=(BASE/'src'/filename).read_text();new=(ROOT/'tensor_cuda/src'/filename).read_text()
+            for name in names:
+                x=body(new,name)
+                x=x.replace('(WRITE_KV || DK_STE)', 'WRITE_KV')
+                x=x.replace('((sel || DK_STE) && (WRITE_KV || !sel))','(sel)')
+                x=x.replace('(sel || DK_STE)', '(sel)').replace('(selected || DK_STE)', '(selected)')
+                x=x.replace('(selected || (KEY && DK_STE))', 'selected')
+>               assert tokens(body(old,name))==tokens(x),name
+E               AssertionError: apa_selective_bwd_bk1_kernel
+E               assert '{introw=bloc...dqrow,d,s);}}' == '{introw=bloc...dqrow,d,s);}}'
+E                 
+E                 Skipping 2074 identical leading characters in diff, use -v to show
+E                 - fconstexprWRITE_KV{if(sel)atomicAdd(&dkj[d],dscore*scale*qsh[d]);}}}constunsignedFULL=0xffffffffu;intlane=tid&31,warp=tid>>5,nwarp=(nt+31)>>5;__shared__floatwpart[4][DMAX];for(intd=0;d<D;++d){floatval=dq_acc[d];#pragmaunrollfor(intoff=16;off>0;off>>=1)val+=__shfl_down_sync(FULL,val,off);if(lane==0)wpart[warp][d]=val;}__syncthreads();T*dqrow=dq+(int64_t)row*D;for(intd=tid;d<D;d+=nt){floats=0.f;for(intw=0;w<nwarp;++w)s+=wpart[w][d];st<T>(dqrow,d,s);}}
+E                 + fconstexpr(WRITE_KV){if(sel)atomicAdd(&dkj[d],dscore*...
+E                 
+E                 ...Full output truncated (2 lines hidden), use '-vv' to show
+
+artifacts/apa_ste1/tests/test_source.py:43: AssertionError
+=========================== short test summary info ============================
+FAILED artifacts/apa_ste1/tests/test_source.py::test_off_kernel_operands_unchanged
+1 failed, 17 passed in 2.36s

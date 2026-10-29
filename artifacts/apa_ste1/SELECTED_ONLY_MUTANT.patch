@@ -1,0 +1,49 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -2701,7 +2701,7 @@
+     if (cap>TC_APA_MAXD) throw std::runtime_error("apa_selective_bwd: head_dim exceeds cap");
+     DISPATCH_FLOAT(q.dtype, T, {
+     auto dispatch_ste = [&](auto ste_tag) {
+-      constexpr bool DK_STE = decltype(ste_tag)::value;
++      constexpr bool DK_STE = false; // MUTANT: selected-only, switch ignored
+       auto launch=[&](auto tag){ constexpr int DMAX=decltype(tag)::value;
+         apa_selective_bwd_kernel<T,DMAX,DK_STE><<<rows,threads>>>(
+           static_cast<T*>(q.data_ptr()),static_cast<T*>(k.data_ptr()),
+@@ -2868,7 +2868,7 @@
+   const int rows=B*H*L, threads=128, cap=D>VD?D:VD;
+   DISPATCH_FLOAT(q.dtype, T, {
+     auto dispatch_ste = [&](auto ste_tag) {
+-      constexpr bool DK_STE = decltype(ste_tag)::value;
++      constexpr bool DK_STE = false; // MUTANT: selected-only, switch ignored
+     auto launch=[&](auto tag, auto write_tag, auto dot_tag) {
+       constexpr int DMAX=decltype(tag)::value;
+       constexpr bool WRITE_KV=decltype(write_tag)::value;
+@@ -2995,7 +2995,7 @@
+   }
+   DISPATCH_FLOAT(q.dtype, T, {
+     auto dispatch_ste = [&](auto ste_tag) {
+-      constexpr bool DK_STE = decltype(ste_tag)::value;
++      constexpr bool DK_STE = false; // MUTANT: selected-only, switch ignored
+     auto launch=[&](auto tag, auto dot_tag) {
+       constexpr int DMAX=decltype(tag)::value;
+       constexpr bool DOT=decltype(dot_tag)::value;
+@@ -3224,7 +3224,7 @@
+       constexpr bool DT=decltype(dense)::value;
+       auto half=[&](auto key, auto ste) {
+         constexpr bool KY=decltype(key)::value;
+-        constexpr bool STE=decltype(ste)::value;
++        constexpr bool STE=false; // MUTANT: selected-only, switch ignored
+         bk3::backward<KY,DT,STE><<<dim3(((KY?S:L)+15)/16,B*(KY?KVH:H)),128>>>(
+           (bk3::BF*)q.data_ptr(),(bk3::BF*)k.data_ptr(),(bk3::BF*)kq.data_ptr(),(bk3::BF*)v.data_ptr(),
+           (bk3::BF*)dO.data_ptr(),(bk3::BF*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),
+--- a/tensor_cuda/src/attention_tf32.cu
++++ b/tensor_cuda/src/attention_tf32.cu
+@@ -461,7 +461,7 @@
+   NDArray dq(q.shape,q.dtype,q.device),dk(k.shape,k.dtype,k.device),dv(v.shape,v.dtype,v.device);
+   auto half=[&](auto tag, auto ste) {
+     constexpr bool KEY=decltype(tag)::value;
+-    constexpr bool STE=decltype(ste)::value;
++    constexpr bool STE=false; // MUTANT: selected-only, switch ignored
+     pt_tf32::backward<KEY,STE><<<dim3(((KEY?S:L)+15)/16,B*(KEY?KVH:H)),128>>>(
+         (float*)q.data_ptr(),(float*)k.data_ptr(),(float*)kq.data_ptr(),(float*)v.data_ptr(),
+         (float*)dO.data_ptr(),(float*)out.data_ptr(),(float*)lse.data_ptr(),(float*)thr.data_ptr(),

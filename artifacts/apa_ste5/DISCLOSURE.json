@@ -1,0 +1,86 @@
+{
+  "1_variants": {
+    "GRAPA": "backward g1 / forward h, including a_base; scripts/cc78_launch.py:230-234 in grapa_wt_cc80",
+    "a": "STE3 envelopes and float64 comparisons; REV1 oracle and accumulation-error disclosure below. Not GRAPA arm settings.",
+    "f_pass_a": "STE4 lead/VERIFY4.json ACCEPT: all D-G1..D-G6 PASS on small1, small2 and GRAPA shape, with forward a. Exact byte controls plus conditional elementwise bound; not a g1 proof.",
+    "g1": "STE5 stages g1/h on small1, small2 and B1 H16 KVH16 L=S4096 D128 VD64 causal BF16; 3 fresh processes/config. GPU evidence PENDING lead; no GRAPA-shape g1 claim yet. Receipt after run: artifacts/apa_ste5/lead/VERIFY5.json.",
+    "others": "STE1 small-shape evidence only; no GRAPA-shape validation or compatibility claim for other variants."
+  },
+  "2_switch": {
+    "inherited_environment": "An inherited 1 enables STE even if an arm omits the variable. GRAPA-side scrubbing/assertion is F5 and remains outside this engine change.",
+    "invalid": "Other strings raise ImportError naming TC_APA_DK_STE and allowed unset, 0, or 1; no fallback masks extension initializer errors.",
+    "path": "ops.cpp:21-31 -> bindings.cpp:221 -> kernels.cu:3157-3159 (g1). Unchanged .so af9ffce4; F4 changes only Python import-error handling.",
+    "rule": "On adds dScore*scale*q for visible unselected pairs to dK through identity STE of quantized K. Selected pairs, forward, dQ and dV keep their rules; finite gates test resulting bytes.",
+    "semantics": "TC_APA_DK_STE unset or 0 = off (shipped default); 1 = on. Read once during extension import, cached process-wide. Change requires a fresh process. Experiment engine."
+  },
+  "3_variant_a_BF16_accumulation": {
+    "delta_certain_key_elements": {
+      "cosine": 0.9968871417811772,
+      "n": 6943232,
+      "ref_norm": 4.202263381360506,
+      "relL2": 0.07884180873722425,
+      "slope": 0.9937189568366868
+    },
+    "envelopes": "artifacts/apa_ste4/VARIANT_A_DISCLOSURE.json and .md (5 runs/config, all within/cross pairs); REV1 findings F2 supersede their atomic-order-only wording.",
+    "grapa_off_certain_key_elements": {
+      "maxabs": 0.0025969468999907375,
+      "n": 6943232,
+      "relL2": 0.03189101334890789,
+      "ulp_elem_max": 6487891.2712819055,
+      "ulp_elem_p50": 2.813392389381022,
+      "ulp_elem_p99": 110.09266765295605,
+      "ulp_elem_p999": 1121.9107775427544
+    },
+    "grapa_on_certain_key_elements": {
+      "maxabs": 0.008524584587828912,
+      "n": 6943232,
+      "relL2": 0.070597991543809,
+      "ulp_elem_max": 13238061.688818395,
+      "ulp_elem_p50": 7.030622852382848,
+      "ulp_elem_p99": 272.34479887405763,
+      "ulp_elem_p999": 2732.5062667774428
+    },
+    "grapa_run0_all_elements": {
+      "off_common_part_relL2_mean2": 0.02959131304783189,
+      "off_error_relL2_run0": 0.030358750436514658,
+      "off_runtorun_relL2": 0.01395537416542289,
+      "off_slope_vs_R_off": 0.9987426752873071,
+      "on_common_part_relL2_mean2": 0.06356319024441412,
+      "on_error_relL2_run0": 0.06564382621163437,
+      "on_runtorun_relL2": 0.03358182632852732,
+      "on_slope_vs_R_on": 0.9946628044220391
+    },
+    "scope": "REV1 oracle.json certain-key metrics exclude 11,292 keys with selection uncertainty: 6,943,232 elements retained; order_vs_bias.json split uses all elements of two runs. On rel-L2 about 6.56-7.06%, off 3.04-3.19%; per-element on ULP median 7.03, p99 272.34 on certain keys. Do not confuse ULP at max reference magnitude with per-element percentiles.",
+    "summary": "BF16-destination accumulation error, with both common error and run-to-run ordering spread; not merely atomic-order noise. Base dK/dV are not bitwise repeatable. At refine-all the on/off dK computation is the same, subject to accumulation ordering."
+  },
+  "4_STE4_bound": {
+    "BOUND_sha256": "136dfcd30dec86444bd8a79500066b04b592bc2f7a37ffa683bba90cd1896628",
+    "conditions": "f_pass_a only: FP32 accumulation/key ownership then one BF16 RN store; decoded BF16 inputs, finite no-overflow IEEE RN arithmetic; stated CUDA exp/log/sqrt contracts and domains. Not a g1 bound. No mask in the STE4 element gate. Finite validation does not prove all-input or library-contract correctness.",
+    "formula": "For every element: |decode(dk)-R_rule| <= Epre + 2^-8*(|R_rule|+Epre) + 2^-134, with outward float64 guards. Epre includes coefficient, selection-interval, FP32 reduction, float64 evaluation and FTZ floors; see complete derivation BOUND.md.",
+    "receipt": "artifacts/apa_ste4/BOUND.md; lead/VERIFY4.json; REV1 K3 confirms zero element failures and byte controls"
+  },
+  "5_cost": {
+    "g1_h": "PENDING lead timing: one APA forward h + backward g1 pair at GRAPA shape, off/on, 2 samples after one warmup; verify5 reports raw samples, means and on-minus-off difference.",
+    "prior_variant_a": "REV1 K5: about +10.2% backward single-call kernel delta (n=2, 14 ms spread), inapplicable to g1/h. No g1 step cost inferred.",
+    "step_time": "GRAPA arm step time comes from GRAPA own smoke. A single APA-call delta is not a step-time projection."
+  },
+  "6_provenance": {
+    "arm": "af9ffce4733628caac5b6bd7a345de86c66c1f67d5150a53d7454b3d4bcb3760; no .so or kernel change in STE5. Identical F4 Python file at source and in engine package.",
+    "base": "69b154cd2e9a5a7cbe288e1419d963697e5add57d2b4ee827c4c78a273ff2c5c; source baseline f2c686e plus three restored untracked files, byte-identical to base build inputs.",
+    "registration": "STE4 registration was committed with data; temporal ordering rests on registered_utc, mtimes and capture-recorded hashes (REV1 F6). STE5 thresholds are the immutable lead order; INPUT_PINS.json is written before CPU gates and any lead capture. This seat registers no new gate; future amendments must be separate files.",
+    "restored_sources": {
+      "include/tc/deterministic_gather.h": {
+        "from": "/mnt/ForgeRealm/Project-Tensor/WorkTree/tensor_wt_det_cert/tensor_cuda/include/tc/deterministic_gather.h",
+        "sha256": "0bab127a26b3c775024ea8ffa0c5c5e629b2cf2609f42611c120d70b68aff95c"
+      },
+      "src/embed_deterministic.cu": {
+        "from": "/mnt/ForgeRealm/Project-Tensor/WorkTree/tensor_wt_det_cert/tensor_cuda/src/embed_deterministic.cu",
+        "sha256": "44e7182a5e00fec534f681dabc4349c3bef433612f4e7355e0cb2731f70529b7"
+      },
+      "src/gather_deterministic.cu": {
+        "from": "/mnt/ForgeRealm/Project-Tensor/WorkTree/tensor_wt_det_cert/tensor_cuda/src/gather_deterministic.cu",
+        "sha256": "05ce1d3e814521823f8f77bdff347c632112f4ba3f290246eaf9fa77870b4758"
+      }
+    }
+  }
+}

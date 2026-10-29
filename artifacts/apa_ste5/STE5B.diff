@@ -1,0 +1,118 @@
+--- before/artifacts/apa_ste5/capture5.py
++++ after/artifacts/apa_ste5/capture5.py
+@@ -66,6 +66,9 @@
+         'switch_environment': actual, 'all_selected': all_selected, 'variant': 'g1',
+         'so_sha256': c.digest((c.BASE_PACKAGE if which == 'base' else c.ARM_PACKAGE)/c.SO_NAME),
+         'driver_sha256': c.digest(__file__), 'input_pins_sha256': c.digest(c.HERE/'INPUT_PINS.json'),
++        # Crash amendment STE5B: preserve the verifier's strict amendment binding.
++        # Prior art: no prior art known to me; no new algorithm.
++        'effective_pins_sha256': c.evidence_pins_digest(),
+         'pid': os.getpid(), 'host': socket.gethostname(), 'gpu_identity': identity,
+         'CUDA_VISIBLE_DEVICES': os.environ.get('CUDA_VISIBLE_DEVICES'),
+         'TC_DETERMINISTIC': os.environ['TC_DETERMINISTIC'],
+--- before/artifacts/apa_ste5/verify5.py
++++ after/artifacts/apa_ste5/verify5.py
+@@ -63,6 +63,11 @@
+ def validate_capture(config, suite, run):
+     path = c.folder(config, suite, run)
+     meta = json.loads((path/'capture.json').read_text())
++    # Prior art: no prior art known to me; schema repair, no new algorithm.
++    # Never infer a capture-time amendment binding from today's pin files.
++    assert 'effective_pins_sha256' in meta, (
++        f're-capture required: {path}/capture.json lacks effective_pins_sha256; '
++        'capture-time amendment binding was not recorded')
+     which, switch, all_selected = c.CONFIGS[config]
+     for key,value in {'config':config, 'suite':suite, 'run':run, 'which':which,
+                       'switch_environment':None if switch is None else str(switch),
+--- before/artifacts/apa_ste5/tests/test_verify5.py
++++ after/artifacts/apa_ste5/tests/test_verify5.py
+@@ -5,6 +5,7 @@
+ lead to check. Test cases fixed by STE5; ours adds real small-fixture parity.
+ """
+ import copy
++import ast
+ import importlib.util
+ import json
+ import os
+@@ -183,3 +184,81 @@
+ 
+ def test_ulp_subnormal_spacing():
+     assert ref.ulp(np.array([0.,2.**-126,1.])).tolist()==[2.**-133,2.**-133,2.**-7]
++
++
++@pytest.mark.parametrize('defect', [None, 'missing_binding', 'wrong_binding',
++                                  'wrong_input_pin', 'one_bit_tensor'])
++def test_real_capture_shape_premise_cli(tmp_path, defect):
++    # Prior art: no prior art known to me; no new algorithm.
++    # Faithful real exports, with only new-writer provenance supplied for this
++    # CPU fixture. These are NOT re-captures or admissible GPU gate evidence.
++    # Compare the full key set to the actual capture5 writer, so a future writer
++    # schema change cannot silently leave this integration fixture behind.
++    tree=ast.parse((HERE/'capture5.py').read_text())
++    emitted=[node.args[1] for node in ast.walk(tree)
++             if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
++             and isinstance(node.func.value,ast.Name) and node.func.value.id=='c'
++             and node.func.attr=='put']
++    assert len(emitted)==1 and isinstance(emitted[0],ast.Dict)
++    writer_keys={key.value for key in emitted[0].keys}
++    exported=tmp_path/'captures'
++    exported.mkdir()
++    (exported/'governor.tsv').write_bytes((c.LEAD/'governor.tsv').read_bytes())
++    for suite in ('small','grapa'):
++        for run in range(c.N):
++            source=c.folder('base',suite,run)
++            target=exported/c.label('base',suite)/f'run-{run}'
++            target.mkdir(parents=True)
++            meta=json.loads((source/'capture.json').read_text())
++            meta.update(driver_sha256=c.digest(HERE/'capture5.py'),
++                        effective_pins_sha256=c.evidence_pins_digest())
++            assert set(meta)==writer_keys
++            if suite=='small' and run==0:
++                if defect=='missing_binding':
++                    del meta['effective_pins_sha256']
++                elif defect=='wrong_binding':
++                    meta['effective_pins_sha256']='0'*64
++                elif defect=='wrong_input_pin':
++                    meta['input_pins_sha256']='0'*64
++            for case in meta['cases']:
++                name=case['name']
++                if defect=='one_bit_tensor' and suite=='small' and run==0 and name=='small1':
++                    with np.load(source/f'{name}.npz',allow_pickle=False) as f:
++                        words={k:f[k] for k in f.files}
++                    words['dk'].flat[0] ^= np.uint16(1)
++                    with (target/f'{name}.npz').open('xb') as f:
++                        np.savez(f,**words)
++                    case['sha256']=c.digest(target/f'{name}.npz')
++                else:
++                    (target/f'{name}.npz').symlink_to(source/f'{name}.npz')
++            (target/'capture.json').write_text(json.dumps(meta))
++    output=tmp_path/'premise.json'
++    # Use the actual CLI entry point/--premise; redirect only the read root to
++    # the faithful export. All pin, governor and tensor checks stay active.
++    code='''import runpy,sys
++sys.path.insert(0,sys.argv[1])
++import common as c
++c.LEAD=c.Path(sys.argv[2])
++sys.argv=[str(c.HERE/'verify5.py'),'--premise','--output',sys.argv[3]]
++runpy.run_path(sys.argv[0],run_name='__main__')
++'''
++    result=subprocess.run([sys.executable,'-B','-c',code,str(HERE),str(exported),str(output)],
++                          text=True,capture_output=True,timeout=120)
++    report=json.loads(output.read_text())
++    assert 'KeyError' not in report.get('error',''),result
++    if defect is None:
++        assert result.returncode==0 and report['PASS'],report
++        assert report['gates']=={'G-G1':True}
++        assert len(report['base_inventory'])==6 and len(report['identity'])==54
++        assert all(r['PASS'] for r in report['identity'])
++        assert all(r['PASS'] for r in report['governor_base'].values())
++    elif defect=='one_bit_tensor':
++        assert result.returncode==1 and not report['PASS']
++        assert report['gates']=={'G-G1':False}
++        assert any(not r['PASS'] for r in report['identity'])
++    else:
++        assert result.returncode==1 and not report['PASS'] and report['gates']=={}
++        expected={'missing_binding':'re-capture required',
++                  'wrong_binding':'wrong capture metadata',
++                  'wrong_input_pin':'wrong capture metadata'}[defect]
++        assert expected in report['error'],report
