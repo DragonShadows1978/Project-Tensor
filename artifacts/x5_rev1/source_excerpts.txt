@@ -1,0 +1,1089 @@
+FILE lean/apa_certs/ApaCerts/Spec.lean LINES 1-131
+1: import Mathlib
+2: 
+3: /-!
+4: # APA certificate statements (TX3 X5): lead-written, immutable
+5: 
+6: This file is the trust boundary. Each `<name>_stmt` states one claim from the APA primer
+7: (`/mnt/Shared/APA_Primer/APA_Primer.md`). Each `<name>_nv_stmt` states that its hypotheses are satisfiable (a
+8: non-vacuity witness). A seat proves `theorem <name> : <name>_stmt` and `theorem <name>_nv : <name>_nv_stmt` in
+9: `ApaCerts/Proofs.lean`. `ApaCerts/Check.lean` (also lead-written) pins each proof to its statement and prints its axioms.
+10: 
+11: **Conventions.**
+12: - One attention row has keys `0..n`, indexed by `Fin (n+1)`, so every row is nonempty.
+13: - Indices are zero-based: the primer's "key 1" is key `0` here.
+14: - `bulk` is a key's cheap (quantised) score, and `exact` its full-precision score.
+15: - The definitions mirror production code where noted.
+16: -/
+17: 
+18: namespace ApaCerts
+19: 
+20: open Finset
+21: 
+22: noncomputable section
+23: open Classical
+24: 
+25: /-- Running (prefix) maximum of `b` over keys `0..j`: the SP rule's `max(bulk[0..j])`. -/
+26: def prefixMax {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) : ℝ :=
+27:   (univ.filter (fun i : Fin (n+1) => i ≤ j)).sup' ⟨j, by simp⟩ b
+28: 
+29: /-- Maximum of `b` over the whole row. -/
+30: def rowMax {n : ℕ} (b : Fin (n+1) → ℝ) : ℝ :=
+31:   univ.sup' univ_nonempty b
+32: 
+33: /-- Prefix maximum of `b` restricted to one split-K partition `P` that contains key `j`. -/
+34: def localPrefixMax {n : ℕ} (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (j : Fin (n+1)) (hj : j ∈ P) : ℝ :=
+35:   (P.filter (fun i => i ≤ j)).sup' ⟨j, by simp [hj]⟩ b
+36: 
+37: /-- The SP refine rule (primer §4.1, Q2): refine key `j` iff `bulk_j ≥ max(bulk[0..j]) − δ`. -/
+38: def spRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+39:   prefixMax bulk j - δ ≤ bulk j
+40: 
+41: /-- The final-maximum rule: refine key `j` iff `bulk_j ≥ max(bulk) − δ`. -/
+42: def finalRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+43:   rowMax bulk - δ ≤ bulk j
+44: 
+45: /-- The scores the online softmax sees: the exact score where a key is refined, the bulk score elsewhere. -/
+46: def mixedScores {n : ℕ} (bulk exact : Fin (n+1) → ℝ) (refined : Fin (n+1) → Prop) : Fin (n+1) → ℝ :=
+47:   fun i => if refined i then exact i else bulk i
+48: 
+49: /-- One row's attention output for scalar values `V`. Every key stays in the single softmax denominator. -/
+50: def rowOutput {n : ℕ} (scores V : Fin (n+1) → ℝ) : ℝ :=
+51:   (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i))
+52: 
+53: /-- The two-pass kernel's z-score rule (production `apa_selective_kernel`, `tensor_cuda/src/kernels.cu`, at b4da646:
+54: pass 1 accumulates `a = |bulk|` and `a*a`; `mean = total/cnt`; `var = total_sq/cnt − mean*mean`;
+55: `thr = mean + zthr*sqrtf(fmaxf(var, 0))`; pass 2 refines iff `fabsf(bulk) >= thr`). Real arithmetic, no rounding. -/
+56: def zRefined {n : ℕ} (b : Fin (n+1) → ℝ) (z : ℝ) (j : Fin (n+1)) : Prop :=
+57:   let N : ℝ := n + 1
+58:   let mean := (∑ i, |b i|) / N
+59:   let var := (∑ i, |b i| ^ 2) / N - mean ^ 2
+60:   mean + z * Real.sqrt (max var 0) ≤ |b j|
+61: 
+62: /-! ## 1. `sp_skip_final`: a skipped key stays skipped (primer §4.1, Q2: the SP rule is monotone, hence
+63: exactly single-pass). A skip decided at key `j` is still a skip against every later prefix maximum, and against the
+64: final maximum. -/
+65: def sp_skip_final_stmt : Prop :=
+66:   ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j k : Fin (n+1)),
+67:     ¬ spRefined b δ j → (j ≤ k → b j < prefixMax b k - δ) ∧ ¬ finalRefined b δ j
+68: 
+69: def sp_skip_final_nv_stmt : Prop :=
+70:   ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), ¬ spRefined b δ j
+71: 
+72: /-! ## 2. `sp_mask_superset`: the SP mask contains the final-maximum mask (primer §1 / §4.1: SP "replaced the
+73: rule", and its mask is a superset of the final-max mask). The witness shows the containment can be strict. -/
+74: def sp_mask_superset_stmt : Prop :=
+75:   ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)),
+76:     finalRefined b δ j → spRefined b δ j
+77: 
+78: def sp_mask_superset_nv_stmt : Prop :=
+79:   ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), spRefined b δ j ∧ ¬ finalRefined b δ j
+80: 
+81: /-! ## 3. `splitk_contains`: split-K selection contains the global SP rule, but output equality fails
+82: (primer §4.2). A partition-local prefix maximum is never above the global one, so a key refined by the global
+83: SP rule is refined in its partition. Counterexample: bulk [2,0], exact [2,10], V = [0,1], δ = 0. Global SP (one
+84: partition) against split-K with partitions {0} and {1}: the outputs differ by more than 0.8. -/
+85: def splitk_contains_stmt : Prop :=
+86:   (∀ (n : ℕ) (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) (hj : j ∈ P),
+87:       localPrefixMax P b j hj ≤ prefixMax b j ∧
+88:       (spRefined b δ j → localPrefixMax P b j hj - δ ≤ b j)) ∧
+89:   (let bulk : Fin (1+1) → ℝ := ![2, 0]
+90:    let exact : Fin (1+1) → ℝ := ![2, 10]
+91:    let V : Fin (1+1) → ℝ := ![0, 1]
+92:    let globalOut := rowOutput (mixedScores bulk exact (fun i => spRefined bulk 0 i)) V
+93:    let splitOut := rowOutput
+94:      (mixedScores bulk exact (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)) V
+95:    (0.8 : ℝ) < |splitOut - globalOut|)
+96: 
+97: def splitk_contains_nv_stmt : Prop :=
+98:   ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (P : Finset (Fin (1+1))) (j : Fin (1+1)), j ∈ P ∧ spRefined b δ j
+99: 
+100: /-! ## 4. `z_not_single_pass`: the z-score rule cannot run in one irrevocable pass (primer §4.1, Q1). The
+101: rows [1,0,0,0] and [1,0,0,10] share the prefix [1], yet for every `z ∈ [0, √3]` key 0 is refined in the first and
+102: not in the second. So no decision that sees only the prefix (here: key 0's bulk value) agrees with the rule on both
+103: rows. -/
+104: def z_not_single_pass_stmt : Prop :=
+105:   ∀ z : ℝ, 0 ≤ z → z ≤ Real.sqrt 3 →
+106:     zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0 ∧
+107:     ¬ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0 ∧
+108:     ∀ f : ℝ → Prop,
+109:       ¬ ((f 1 ↔ zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0) ∧
+110:          (f 1 ↔ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0))
+111: 
+112: def z_not_single_pass_nv_stmt : Prop :=
+113:   ∃ z : ℝ, 0 ≤ z ∧ z ≤ Real.sqrt 3
+114: 
+115: /-! ## 5. `sp2_certificate`: the SP2 δ certificate (primer §4.3). Suppose every key's bulk error is at most
+116: `errq` (the primer's `e_q`). If the SP rule with `δ = ln(1/ε) + 2·errq` skips key `j`, then its true weight is
+117: below `ε` times the true maximum's weight: `exp(exact_j) < ε · exp(max exact)`. This is the true-weight form. -/
+118: def sp2_certificate_stmt : Prop :=
+119:   ∀ (n : ℕ) (bulk exact : Fin (n+1) → ℝ) (errq ε : ℝ) (j : Fin (n+1)),
+120:     0 < ε →
+121:     (∀ i, |bulk i - exact i| ≤ errq) →
+122:     ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j →
+123:     Real.exp (exact j) < ε * Real.exp (rowMax exact)
+124: 
+125: def sp2_certificate_nv_stmt : Prop :=
+126:   ∃ (bulk exact : Fin (1+1) → ℝ) (errq ε : ℝ) (j : Fin (1+1)),
+127:     0 < ε ∧ (∀ i, |bulk i - exact i| ≤ errq) ∧ ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j
+128: 
+129: end
+130: 
+131: end ApaCerts
+
+FILE lean/apa_certs/ApaCerts/Proofs.lean LINES 1-329
+1: import ApaCerts.Spec
+2: 
+3: /-!
+4: # APA certificate proofs (TX3 X5): seat-written proofs of the lead's statements
+5: 
+6: Every theorem here has exactly the type of its `<name>_stmt` in `ApaCerts/Spec.lean`; `ApaCerts/Check.lean` pins
+7: each one. Helper lemmas come first.
+8: 
+9: **Prior art (Prior Art Directive, AGENTS.md).**
+10: - The prefix-maximum facts (`le_prefixMax`, `prefixMax_le`, `prefixMax_mono`, `prefixMax_le_rowMax`,
+11:   `exists_prefixMax_eq`, `localPrefixMax_le_prefixMax`) are thin wrappers over Mathlib's `Finset.le_sup'`,
+12:   `Finset.sup'_le` and `Finset.exists_mem_eq_sup'` (Mathlib, `Mathlib/Data/Finset/Lattice/Fold.lean`): a supremum
+13:   over a larger index set is larger, and a finite nonempty supremum in a linear order is attained. Standard order
+14:   theory; nothing here is mine beyond the instantiation.
+15: - The SP rule `bulk_j ≥ max(bulk[0..j]) − δ` and its monotonicity argument are BLASST's running-maximum criterion
+16:   (Yuan, Shinn et al., arXiv 2512.12087, MLSys 2026), applied in APA to precision instead of block skipping (primer
+17:   §7, lead-verified [R32]). What I took: the criterion as stated by the lead. What is mine: only the Lean proof.
+18: - The SP2 certificate proof is the standard exp/log monotonicity argument (exp is strictly increasing,
+19:   `exp (a + log ε) = ε · exp a` for `ε > 0`), plus the triangle bound `|bulk − exact| ≤ e_q` applied twice, once at
+20:   the skipped key and once at the prefix argmax. The derivation of δ = ln(1/ε) + 2·e_q is SP2's (primer §4.3, [R06]);
+21:   BLASST's ln λ threshold is the same quantity without the 2·e_q margin.
+22: - The numeric bounds `exp 1 > 2.7182818283`, `exp 2 > 7`, `exp 6 ≥ 7`, `exp 10 > 49 · exp 2` use Mathlib's
+23:   `Real.exp_one_gt_d9` (`Mathlib/Analysis/Complex/ExponentialBounds.lean`) and `Real.add_one_le_exp`
+24:   (`Mathlib/Analysis/Complex/Exponential.lean`); the SP2 witness uses `Real.log_le_sub_one_of_pos`
+25:   (`log x ≤ x − 1`). Standard bounds; no prior art beyond Mathlib is claimed for their use here.
+26: - The z-score counterexample rows are the lead's / SP1's (primer §4.1, [R24]); the proof is direct evaluation.
+27: - Split-K counterexample: SP1.1's (primer §4.2, [R26]); the proof is direct evaluation.
+28: -/
+29: 
+30: namespace ApaCerts
+31: 
+32: open Finset
+33: 
+34: /-! ## Helper lemmas: prefix and row maxima
+35: 
+36: Prior art: Mathlib `Finset.le_sup'` / `Finset.sup'_le` / `Finset.exists_mem_eq_sup'` (standard finite-supremum
+37: order theory); no prior art known to me beyond that for these instantiations. -/
+38: 
+39: /-- Every key at or before `j` is at most the prefix maximum at `j`. -/
+40: theorem le_prefixMax {n : ℕ} (b : Fin (n+1) → ℝ) {i j : Fin (n+1)} (hij : i ≤ j) :
+41:     b i ≤ prefixMax b j := by
+42:   unfold prefixMax
+43:   exact Finset.le_sup' b (by simp [hij])
+44: 
+45: /-- The prefix maximum at `j` is at most any common upper bound of keys `0..j`. -/
+46: theorem prefixMax_le {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) {c : ℝ}
+47:     (h : ∀ i, i ≤ j → b i ≤ c) : prefixMax b j ≤ c := by
+48:   unfold prefixMax
+49:   exact Finset.sup'_le _ _ (fun i hi => h i (by simpa using hi))
+50: 
+51: /-- The running maximum never decreases (the monotonicity behind the SP rule; BLASST's running max). -/
+52: theorem prefixMax_mono {n : ℕ} (b : Fin (n+1) → ℝ) {j k : Fin (n+1)} (hjk : j ≤ k) :
+53:     prefixMax b j ≤ prefixMax b k :=
+54:   prefixMax_le b j (fun _ hi => le_prefixMax b (hi.trans hjk))
+55: 
+56: /-- Every key is at most the row maximum. -/
+57: theorem le_rowMax {n : ℕ} (b : Fin (n+1) → ℝ) (i : Fin (n+1)) : b i ≤ rowMax b := by
+58:   unfold rowMax
+59:   exact Finset.le_sup' b (Finset.mem_univ i)
+60: 
+61: /-- A prefix maximum is at most the final (row) maximum. -/
+62: theorem prefixMax_le_rowMax {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) :
+63:     prefixMax b j ≤ rowMax b :=
+64:   prefixMax_le b j (fun i _ => le_rowMax b i)
+65: 
+66: /-- The prefix maximum is attained at some key `m ≤ j`. -/
+67: theorem exists_prefixMax_eq {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) :
+68:     ∃ m, m ≤ j ∧ prefixMax b j = b m := by
+69:   unfold prefixMax
+70:   obtain ⟨m, hm, h⟩ := Finset.exists_mem_eq_sup'
+71:     (⟨j, by simp⟩ : (univ.filter (fun i : Fin (n+1) => i ≤ j)).Nonempty) b
+72:   exact ⟨m, by simpa using hm, h⟩
+73: 
+74: /-- A partition-local prefix maximum is never above the global prefix maximum (primer §4.2). -/
+75: theorem localPrefixMax_le_prefixMax {n : ℕ} (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (j : Fin (n+1))
+76:     (hj : j ∈ P) : localPrefixMax P b j hj ≤ prefixMax b j := by
+77:   unfold localPrefixMax
+78:   exact Finset.sup'_le _ _ (fun i hi => le_prefixMax b (Finset.mem_filter.mp hi).2)
+79: 
+80: /-- On a singleton partition the local prefix maximum is the key itself. -/
+81: theorem localPrefixMax_singleton {n : ℕ} (b : Fin (n+1) → ℝ) (i : Fin (n+1)) :
+82:     localPrefixMax {i} b i (mem_singleton_self i) = b i := by
+83:   apply le_antisymm
+84:   · unfold localPrefixMax
+85:     refine Finset.sup'_le _ _ (fun x hx => ?_)
+86:     have hx' : x = i := Finset.mem_singleton.mp (Finset.mem_filter.mp hx).1
+87:     rw [hx']
+88:   · unfold localPrefixMax
+89:     exact Finset.le_sup' b (by simp)
+90: 
+91: /-- One row's output on a two-key row, written out. -/
+92: theorem rowOutput_two (s V : Fin (1+1) → ℝ) :
+93:     rowOutput s V = (Real.exp (s 0) * V 0 + Real.exp (s 1) * V 1) / (Real.exp (s 0) + Real.exp (s 1)) := by
+94:   unfold rowOutput
+95:   rw [Fin.sum_univ_two, Fin.sum_univ_two]
+96: 
+97: /-! ## 1. `sp_skip_final` (primer §4.1, Q2). Prior art: BLASST running-max criterion (arXiv 2512.12087); the
+98: monotone-prefix argument is `prefixMax_mono` + `prefixMax_le_rowMax` (Mathlib `Finset.sup'` order facts). -/
+99: 
+100: theorem sp_skip_final : sp_skip_final_stmt := by
+101:   intro n b δ j k hskip
+102:   unfold spRefined at hskip
+103:   rw [not_le] at hskip
+104:   refine ⟨fun hjk => ?_, ?_⟩
+105:   · have h := prefixMax_mono b hjk
+106:     linarith
+107:   · unfold finalRefined
+108:     rw [not_le]
+109:     have h := prefixMax_le_rowMax b j
+110:     linarith
+111: 
+112: /-- Witness: bulk [1, 0], δ = 0; key 1 is skipped (1 − 0 > 0). -/
+113: theorem sp_skip_final_nv : sp_skip_final_nv_stmt := by
+114:   refine ⟨![1, 0], 0, 1, ?_⟩
+115:   unfold spRefined
+116:   rw [not_le]
+117:   have h0 := le_prefixMax (![1, 0] : Fin (1+1) → ℝ) (show (0 : Fin (1+1)) ≤ 1 by decide)
+118:   simp at h0 ⊢
+119:   linarith
+120: 
+121: /-! ## 2. `sp_mask_superset` (primer §1.3 / §4.1). Prior art: as §1 (BLASST criterion; Mathlib `Finset.sup'`). -/
+122: 
+123: theorem sp_mask_superset : sp_mask_superset_stmt := by
+124:   intro n b δ j h
+125:   unfold finalRefined at h
+126:   unfold spRefined
+127:   have h' := prefixMax_le_rowMax b j
+128:   linarith
+129: 
+130: /-- Witness of strictness: bulk [0, 1], δ = 0; key 0 is SP-refined (prefix max 0) but not final-refined (max 1). -/
+131: theorem sp_mask_superset_nv : sp_mask_superset_nv_stmt := by
+132:   refine ⟨![0, 1], 0, 0, ?_, ?_⟩
+133:   · unfold spRefined
+134:     have h : prefixMax (![0, 1] : Fin (1+1) → ℝ) 0 ≤ 0 := by
+135:       apply prefixMax_le
+136:       intro i hi
+137:       fin_cases i
+138:       · simp
+139:       · exact absurd hi (by decide)
+140:     simpa using h
+141:   · unfold finalRefined
+142:     rw [not_le]
+143:     have h1 := le_rowMax (![0, 1] : Fin (1+1) → ℝ) 1
+144:     simp at h1 ⊢
+145:     linarith
+146: 
+147: /-! ## 3. `splitk_contains` (primer §4.2). Containment: `localPrefixMax_le_prefixMax` (Mathlib `Finset.sup'_le`).
+148: Counterexample: SP1.1's [R26], evaluated with `Real.exp_one_gt_d9` and `Real.add_one_le_exp`. -/
+149: 
+150: /-- Global SP on bulk [2, 0], δ = 0: key 0 is refined. -/
+151: theorem sp_ex_refined0 : spRefined (![2, 0] : Fin (1+1) → ℝ) 0 0 := by
+152:   unfold spRefined
+153:   have h : prefixMax (![2, 0] : Fin (1+1) → ℝ) 0 ≤ 2 := by
+154:     apply prefixMax_le
+155:     intro i _
+156:     fin_cases i <;> simp
+157:   simpa using h
+158: 
+159: /-- Global SP on bulk [2, 0], δ = 0: key 1 is skipped. -/
+160: theorem sp_ex_skip1 : ¬ spRefined (![2, 0] : Fin (1+1) → ℝ) 0 1 := by
+161:   unfold spRefined
+162:   rw [not_le]
+163:   have h0 := le_prefixMax (![2, 0] : Fin (1+1) → ℝ) (show (0 : Fin (1+1)) ≤ 1 by decide)
+164:   simp at h0 ⊢
+165:   linarith
+166: 
+167: theorem splitk_contains : splitk_contains_stmt := by
+168:   refine ⟨fun n P b δ j hj => ?_, ?_⟩
+169:   · have h := localPrefixMax_le_prefixMax P b j hj
+170:     refine ⟨h, fun hr => ?_⟩
+171:     unfold spRefined at hr
+172:     linarith
+173:   · -- Global SP scores: key 0 refined (exact 2), key 1 skipped (bulk 0).
+174:     have hglob : mixedScores (![2, 0] : Fin (1+1) → ℝ) ![2, 10] (fun i => spRefined ![2, 0] 0 i) = ![2, 0] := by
+175:       funext i
+176:       fin_cases i
+177:       · exact (ite_eq_left sp_ex_refined0).trans (by simp)
+178:       · exact ite_eq_right sp_ex_skip1
+179:     -- Split-K with singleton partitions: every key is refined, so the scores are the exact ones.
+180:     have hsplit : mixedScores (![2, 0] : Fin (1+1) → ℝ) ![2, 10]
+181:         (fun i => localPrefixMax {i} ![2, 0] i (mem_singleton_self i) - 0 ≤ ![2, 0] i) = ![2, 10] := by
+182:       funext i
+183:       have hc : localPrefixMax {i} (![2, 0] : Fin (1+1) → ℝ) i (mem_singleton_self i) - 0 ≤ ![2, 0] i := by
+184:         rw [localPrefixMax_singleton, sub_zero]
+185:       exact ite_eq_left hc
+186:     dsimp only
+187:     rw [hglob, hsplit, rowOutput_two, rowOutput_two]
+188:     simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Real.exp_zero]
+189:     norm_num
+190:     -- Goal (norm_num's normal form): 4/5 < |exp 10 / (exp 2 + exp 10) - (exp 2 + 1)⁻¹|.
+191:     have he1 : (2.7182818283 : ℝ) < Real.exp 1 := Real.exp_one_gt_d9
+192:     have he2 : Real.exp 2 = Real.exp 1 * Real.exp 1 := by
+193:       rw [← Real.exp_add]; norm_num
+194:     have ha : (7 : ℝ) < Real.exp 2 := by rw [he2]; nlinarith
+195:     have he6 : (7 : ℝ) ≤ Real.exp 6 := by
+196:       have := Real.add_one_le_exp (6 : ℝ); linarith
+197:     have he10 : Real.exp 10 = Real.exp 2 * (Real.exp 2 * Real.exp 6) := by
+198:       rw [← Real.exp_add, ← Real.exp_add]; norm_num
+199:     have hpos2 : 0 < Real.exp 2 := Real.exp_pos 2
+200:     have h49 : (49 : ℝ) < Real.exp 2 * Real.exp 6 := by nlinarith
+201:     have hc : 49 * Real.exp 2 < Real.exp 10 := by
+202:       have := mul_lt_mul_of_pos_left h49 hpos2
+203:       rw [he10]; linarith
+204:     have hA : (49 / 50 : ℝ) < Real.exp 10 / (Real.exp 2 + Real.exp 10) := by
+205:       rw [lt_div_iff₀ (by positivity)]; linarith
+206:     have hB : (Real.exp 2 + 1)⁻¹ < (1 : ℝ) / 8 := by
+207:       rw [inv_eq_one_div, div_lt_div_iff₀ (by positivity) (by norm_num)]; linarith
+208:     rw [lt_abs]
+209:     left
+210:     linarith
+211: 
+212: /-- Witness: bulk [2, 0], δ = 0, partition {0}, key 0 (refined globally, and a member of its partition). -/
+213: theorem splitk_contains_nv : splitk_contains_nv_stmt :=
+214:   ⟨![2, 0], 0, {0}, 0, mem_singleton_self 0, sp_ex_refined0⟩
+215: 
+216: /-! ## 4. `z_not_single_pass` (primer §4.1, Q1). Rows are SP1's [R24]; the proof evaluates the lead's real-number
+217: transcription of the production z-score threshold. Prior art: no prior art known to me for the impossibility
+218: argument itself (primer §7 lists it as APA's own); the sqrt facts are Mathlib's `Real.sqrt_mul`, `Real.sqrt_sq`. -/
+219: 
+220: /-- `zRefined` with its `let`s unfolded. -/
+221: theorem zRefined_iff {n : ℕ} (b : Fin (n+1) → ℝ) (z : ℝ) (j : Fin (n+1)) :
+222:     zRefined b z j ↔
+223:       (∑ i, |b i|) / ((n : ℝ) + 1) +
+224:         z * Real.sqrt (max ((∑ i, |b i| ^ 2) / ((n : ℝ) + 1) - ((∑ i, |b i|) / ((n : ℝ) + 1)) ^ 2) 0)
+225:         ≤ |b j| :=
+226:   Iff.rfl
+227: 
+228: theorem z_not_single_pass : z_not_single_pass_stmt := by
+229:   intro z hz0 hz3
+230:   have hA : zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0 := by
+231:     rw [zRefined_iff]
+232:     have hs1 : (∑ i, |(![1, 0, 0, 0] : Fin (3+1) → ℝ) i|) = 1 := by
+233:       simp [Fin.sum_univ_four]
+234:     have hs2 : (∑ i, |(![1, 0, 0, 0] : Fin (3+1) → ℝ) i| ^ 2) = 1 := by
+235:       simp [Fin.sum_univ_four]
+236:     have hN : ((3 : ℕ) : ℝ) + 1 = 4 := by norm_num
+237:     have hv : max ((1 : ℝ) / 4 - (1 / 4) ^ 2) 0 = 3 / 16 := by
+238:       rw [max_eq_left (by norm_num)]; norm_num
+239:     have hb0 : |(![1, 0, 0, 0] : Fin (3+1) → ℝ) 0| = 1 := by simp
+240:     rw [hs1, hs2, hN, hv, hb0]
+241:     -- z · √(3/16) ≤ √3 · √(3/16) = √(9/16) = 3/4.
+242:     have hst : Real.sqrt 3 * Real.sqrt (3 / 16) = 3 / 4 := by
+243:       rw [← Real.sqrt_mul (by norm_num), show (3 : ℝ) * (3 / 16) = (3 / 4) ^ 2 by norm_num]
+244:       exact Real.sqrt_sq (by norm_num)
+245:     have hle : z * Real.sqrt (3 / 16) ≤ Real.sqrt 3 * Real.sqrt (3 / 16) :=
+246:       mul_le_mul_of_nonneg_right hz3 (Real.sqrt_nonneg _)
+247:     linarith
+248:   have hB : ¬ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0 := by
+249:     rw [zRefined_iff, not_le]
+250:     have hs1 : (∑ i, |(![1, 0, 0, 10] : Fin (3+1) → ℝ) i|) = 11 := by
+251:       simp [Fin.sum_univ_four]; norm_num
+252:     have hN : ((3 : ℕ) : ℝ) + 1 = 4 := by norm_num
+253:     have hb0 : |(![1, 0, 0, 10] : Fin (3+1) → ℝ) 0| = 1 := by simp
+254:     rw [hs1, hN, hb0]
+255:     have hnn : 0 ≤ z * Real.sqrt (max ((∑ i, |(![1, 0, 0, 10] : Fin (3+1) → ℝ) i| ^ 2) / 4 - (11 / 4) ^ 2) 0) :=
+256:       mul_nonneg hz0 (Real.sqrt_nonneg _)
+257:     linarith
+258:   exact ⟨hA, hB, fun f ⟨h1, h2⟩ => hB (h2.mp (h1.mpr hA))⟩
+259: 
+260: /-- Witness: z = 0 (the lower boundary). -/
+261: theorem z_not_single_pass_nv : z_not_single_pass_nv_stmt :=
+262:   ⟨0, le_refl 0, Real.sqrt_nonneg 3⟩
+263: 
+264: /-! ## 5. `sp2_certificate` (primer §4.3). Prior art: SP2's δ derivation [R06]; BLASST's ln λ threshold
+265: (arXiv 2512.12087); standard exp/log monotonicity (`Real.exp_lt_exp`, `Real.exp_add`, `Real.exp_log`,
+266: `Real.log_inv`); the attained prefix maximum is Mathlib's `Finset.exists_mem_eq_sup'`. -/
+267: 
+268: theorem sp2_certificate : sp2_certificate_stmt := by
+269:   intro n bulk exact errq ε j hε herr hskip
+270:   unfold spRefined at hskip
+271:   rw [not_le] at hskip
+272:   -- The prefix maximum is attained at some key m ≤ j.
+273:   obtain ⟨m, _, hm⟩ := exists_prefixMax_eq bulk j
+274:   rw [hm] at hskip
+275:   have hj := abs_le.mp (herr j)
+276:   have hmm := abs_le.mp (herr m)
+277:   have hmax := le_rowMax exact m
+278:   have hlog : Real.log (1 / ε) = - Real.log ε := by rw [one_div, Real.log_inv]
+279:   rw [hlog] at hskip
+280:   -- exact_j ≤ bulk_j + e_q < bulk_m + log ε − e_q ≤ exact_m + log ε ≤ max exact + log ε.
+281:   have key : exact j < rowMax exact + Real.log ε := by
+282:     linarith [hj.1, hj.2, hmm.1, hmm.2]
+283:   calc Real.exp (exact j) < Real.exp (rowMax exact + Real.log ε) := Real.exp_lt_exp.mpr key
+284:     _ = ε * Real.exp (rowMax exact) := by rw [Real.exp_add, Real.exp_log hε, mul_comm]
+285: 
+286: /-- Witness: bulk [10, 0], exact [9, 1], e_q = 1, ε = 1/2, key 1. Then δ = ln 2 + 2 ≤ 3 and 10 − δ > 0. -/
+287: theorem sp2_certificate_nv : sp2_certificate_nv_stmt := by
+288:   refine ⟨![10, 0], ![9, 1], 1, 1 / 2, 1, by norm_num, ?_, ?_⟩
+289:   · intro i
+290:     fin_cases i <;> norm_num
+291:   · unfold spRefined
+292:     rw [not_le]
+293:     have h0 := le_prefixMax (![10, 0] : Fin (1+1) → ℝ) (show (0 : Fin (1+1)) ≤ 1 by decide)
+294:     have hl : Real.log (1 / (1 / 2)) ≤ 1 := by
+295:       have := Real.log_le_sub_one_of_pos (show (0 : ℝ) < 1 / (1 / 2) by norm_num)
+296:       norm_num at this ⊢
+297:       linarith
+298:     simp at h0 ⊢
+299:     linarith
+300: 
+301: /-! ## Boundary instantiations (order operand census)
+302: 
+303: Each universal theorem applied at a boundary named in Spec's comments. These add no claim beyond the ten theorems;
+304: they only show the boundaries sit inside the proved statements. Prior art: none needed (direct instantiation). -/
+305: 
+306: /-- z exactly at √3: key 0 of [1,0,0,0] is still refined (its threshold equals |bulk_0| = 1 exactly). -/
+307: example : zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) (Real.sqrt 3) 0 :=
+308:   (z_not_single_pass (Real.sqrt 3) (Real.sqrt_nonneg 3) le_rfl).1
+309: 
+310: /-- z exactly at 0: the threshold is the mean; key 0 of [1,0,0,10] is still not refined. -/
+311: example : ¬ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) 0 0 :=
+312:   (z_not_single_pass 0 le_rfl (Real.sqrt_nonneg 3)).2.1
+313: 
+314: /-- δ = 0 on a single-key row (n = 0): the final-max rule refines the only key, hence so does the SP rule. -/
+315: example (b : Fin (0+1) → ℝ) : spRefined b 0 0 := by
+316:   apply sp_mask_superset 0 b 0 0
+317:   unfold finalRefined rowMax
+318:   rw [sub_zero]
+319:   refine Finset.sup'_le _ _ (fun i _ => ?_)
+320:   fin_cases i
+321:   exact le_rfl
+322: 
+323: /-- errq = 0 (exact bulk scores): the SP2 certificate still holds. -/
+324: example (n : ℕ) (bulk exact : Fin (n+1) → ℝ) (ε : ℝ) (j : Fin (n+1)) (hε : 0 < ε)
+325:     (h0 : ∀ i, |bulk i - exact i| ≤ 0) (hskip : ¬ spRefined bulk (Real.log (1 / ε) + 2 * 0) j) :
+326:     Real.exp (exact j) < ε * Real.exp (rowMax exact) :=
+327:   sp2_certificate n bulk exact 0 ε j hε h0 hskip
+328: 
+329: end ApaCerts
+
+FILE lean/apa_certs/ApaCerts/Check.lean LINES 1-35
+1: import ApaCerts.Proofs
+2: 
+3: /-!
+4: # X5 check (lead-written, immutable)
+5: 
+6: Each proof must have exactly its statement's type. The build fails if a name is missing or a type differs. The
+7: axioms printed must be among `propext`, `Classical.choice` and `Quot.sound`.
+8: -/
+9: 
+10: namespace ApaCerts.Check
+11: open ApaCerts
+12: 
+13: example : sp_skip_final_stmt := sp_skip_final
+14: example : sp_skip_final_nv_stmt := sp_skip_final_nv
+15: example : sp_mask_superset_stmt := sp_mask_superset
+16: example : sp_mask_superset_nv_stmt := sp_mask_superset_nv
+17: example : splitk_contains_stmt := splitk_contains
+18: example : splitk_contains_nv_stmt := splitk_contains_nv
+19: example : z_not_single_pass_stmt := z_not_single_pass
+20: example : z_not_single_pass_nv_stmt := z_not_single_pass_nv
+21: example : sp2_certificate_stmt := sp2_certificate
+22: example : sp2_certificate_nv_stmt := sp2_certificate_nv
+23: 
+24: end ApaCerts.Check
+25: 
+26: #print axioms ApaCerts.sp_skip_final
+27: #print axioms ApaCerts.sp_skip_final_nv
+28: #print axioms ApaCerts.sp_mask_superset
+29: #print axioms ApaCerts.sp_mask_superset_nv
+30: #print axioms ApaCerts.splitk_contains
+31: #print axioms ApaCerts.splitk_contains_nv
+32: #print axioms ApaCerts.z_not_single_pass
+33: #print axioms ApaCerts.z_not_single_pass_nv
+34: #print axioms ApaCerts.sp2_certificate
+35: #print axioms ApaCerts.sp2_certificate_nv
+
+FILE /mnt/Shared/APA_Primer/APA_Primer.md LINES 38-114
+38: ## 1. What APA is
+39: 
+40: ### 1.1 Plain language
+41: 
+42: In attention, `softmax(q·kᵀ/√d)` is exponential. A few keys near the top score take nearly all the weight, and most keys
+43: end up multiplied by almost zero. APA's bet is that those near-zero keys do not need a precise score. They need **a**
+44: score, so they stay in the denominator, but a cheap one will do. The keys that carry the weight get the exact dot
+45: product [R10, R11].
+46: 
+47: ### 1.2 Precisely: the data path (quoted from the kernels)
+48: 
+49: For one query row `q`, with keys `k_j`, low-precision keys `k̂_j` ("kq"), values `v_j`, and scale `1/√D`:
+50: 
+51: 1. **Bulk score, every eligible key:** `bulk_j = (q · k̂_j) · scale`. `k̂_j` is the key after TurboQuant-style
+52:    quantisation: per-head rotation plus a Lloyd–Max codebook at 2 or 4 bits (the fused INT4/INT8 paths are separate
+53:    variants). In the evaluated `apa_selective` and SP kernels, `k̂` is **dequantised back into the key dtype (fp32 in the
+54:    SP measurements)**. It is not packed low-bit storage [R12]. So the "low precision" is in the *values* of `k̂`, not in
+55:    the arithmetic width of the kernel. The INT4-internal fused kernel from APAMQ is the exception: it reads packed INT4
+56:    [R21].
+57: 2. **Selection.** Two rules exist (§3, §4).
+58: 3. **Refine:** for selected keys, `score_j = (q · k_j) · scale` against the full-precision key. Unselected keys keep
+59:    `score_j = bulk_j`.
+60: 4. **Exact online softmax over all keys** with full-precision `V`. An optional learned sink logit is folded into the
+61:    denominator once [R04, R10].
+62: 
+63: The original **two-pass** rule, verbatim from `tensor_cuda/src/kernels.cu` (`apa_selective_kernel`) [R01, R02]:
+64: 
+65: ```cuda
+66: // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+67:       float a = fabsf(dot * scale);
+68:       sum += a; sumsq += a * a;
+69:   ...
+70:   float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));          // kernels.cu:1225
+71:   // Pass 2: SINGLE pass with an online softmax (FlashAttention-style).
+72:       if (fabsf(bulk) >= thr) {                                // kernels.cu:1252
+73:         ... ex = q · k_j ...; score = ex * scale;
+74:       } else { score = bulk; }
+75: ```
+76: 
+77: `zthr = Φ⁻¹(1 − refine)`, computed host-side in `quant.py:176` [R03]. The **single-pass** rule, verbatim from
+78: `apa_selective_sp_kernel` [R04]:
+79: 
+80: ```cuda
+81:     const float bulk = __shfl_sync(FULL, dot, 0) * scale;
+82:     bulk_max = fmaxf(bulk_max, bulk);
+83:     const bool refine = bulk >= bulk_max - delta;            // kernels.cu:7896
+84: ```
+85: 
+86: The split-K decode variant uses a partition-local inclusive prefix instead: `refine = valid && bulk >= prefix - delta`
+87: (`apa_sp1_1.cuh:73`) [R05].
+88: 
+89: ### 1.3 "One-sided" and "never over-claim": what the blend does and does not promise
+90: 
+91: *The order uses these phrases. I did not find either one verbatim in the sources (see §8, RED). What follows is the
+92: sourced content they most plausibly refer to.*
+93: 
+94: - **The two rules differ in which side they look at.** The z-score rule thresholds `|bulk|`, so it refines strongly
+95:   **negative** scores as well as strongly positive ones [R01, R02]. The running-max rule is **signed and one-sided**. It
+96:   refines only keys whose bulk score is within δ of the running maximum, and a large negative score is never refined
+97:   [R04]. SP3 measured the consequence: the z-score rule "selects |bulk| size, not softmax weight". It leaves 92% of the
+98:   softmax mass on unrefined keys, while the running-max tail leaves 13% (model perplexity study, MiniCPM3-4B) [R29].
+99: - **The single pass errs in one direction only.** The running maximum never decreases, so a key skipped at step j would
+100:   also be skipped against any later or final maximum. A key refined early may prove unnecessary, which "costs work but
+101:   never correctness" relative to the final-max rule (proof + 40,000-draw unit test) [R24]. The kernel comment says the
+102:   same: "A skipped key stays below final_bulk_max-delta; an early refinement may be conservative" [R04]. The Hunyuan3D
+103:   run showed the same direction for the z-score quantile rule: its off-nominal blocks over-refined (0.23–0.24 versus
+104:   0.15), "never under" (E2E visual) [R36].
+105: - **What the blend does *not* promise:**
+106:   - The paper says the output deviation is "bounded by the bulk-quantization error on the un-refined set" [R11]. SP2
+107:     made that bound exact: `δ = ln(1/ε) + 2·e_q` [R06]. On real 2- and 4-bit keys it is **vacuous**. It refines
+108:     ≥ 99.6% of keys at 2 bits, and 69–100% at 4 bits [R27].
+109:   - The paper argues the skipped weight "was … already going to be near zero" [R11]. SP3 found the z-score tail
+110:     skipping a key with relative weight 1.0 on **every** layer [R29].
+111:   - Under split-K, extra refinements change the output, so partitioned output is **not** equal to global-prefix output.
+112:     SP1.1 disproved that equality with an explicit counterexample [R26].
+113:   - Operationally, "never over-claim" is the house rule: no model-quality claim from a kernel sweep [R47].
+114: 
+
+FILE /mnt/Shared/APA_Primer/APA_Primer.md LINES 238-299
+238: ## 4. Single pass: the APA-SP arc (2026-09-05 → 09-08)
+239: 
+240: All GPU cells were lead-run on an RTX 4070 SUPER 12 GB. Seats had no GPU. Every pre-existing kernel body was hash-pinned
+241: byte-identical, and the new path sits behind `TC_APA_SP=1`, default OFF [R07, R24].
+242: 
+243: ### 4.1 SP1: impossibility and a replacement rule
+244: 
+245: | Question | Result | Evidence |
+246: |---|---|---|
+247: | Q1: can the z-score rule run in one irrevocable pass? | **No.** Bulk rows `[1,0,0,0]` and `[1,0,0,10]` share a prefix, but key 1 lands on opposite sides of the threshold. Any walk that decides key 1 before seeing key 4 gets one case wrong. Scoped honestly: with unbounded buffering a "single read" is trivial, so no unrestricted impossibility is claimed. | reasoning/proof + CPU unit test [R24] |
+248: | Q2: is there an order-safe rule? | `refine iff bulk_j ≥ max(bulk[0..j]) − δ` is monotone, so it is exactly single-pass. **40,000** seeded full-key row draws gave **0** mask mismatches, max online-vs-offline output difference 3.58e-7. | unit test [R24] |
+249: | Overlap with the z-score tail | ~45% (prefill 45.2%, decode 45.7%). The lead registered ≥ 80% (**MISS**); the seat registered ≤ 65% (**HIT**). | unit test [R24] |
+250: | Q3: speed versus two-pass | Prefill: S=512 1.09–1.47×, S=2048 1.44–1.67×, S=8192 1.68–1.90×. Decode, one block per row: **0.06–0.41×** (a loss). | kernel sweep [R25] |
+251: | Deviation versus dense at matched fraction | Single pass sits 0.50–0.90× of two-pass's deviation on prefill: "the max-relative tail is the BETTER tail." Of 48 classes, 47 passed G2, and 33 were eligible for matched comparison. | kernel sweep [R25, R26] |
+252: 
+253: The one G2 failure was the **baseline two-pass kernel** against its own NumPy emulator (0.0016 > 0.001). SP1.1
+254: reconstructed it to head 3 / query 1137 / key 737: fp32 dot-order plus stats-order at a threshold boundary. The verdict
+255: is `EMULATOR_ORDER_SENSITIVE`. The original FAIL is kept, not widened away [R48].
+256: 
+257: ### 4.2 SP1.1: split-K decode
+258: 
+259: A partition-local prefix maximum is never above the global one, so a local skip is always a global skip. Selection
+260: **contains** the global rule. **Output equality is disproved:** extra refinements change output. The counterexample is
+261: bulk [2,0], exact [2,10], V=[0,1], δ=0, where the outputs differ by more than 0.8 [R26].
+262: 
+263: Results (G2 24/24 exact, about 2e-7 against the emulator; kernel sweep):
+264: 
+265: | Decode S | Split-K SP versus two-pass |
+266: |---|---|
+267: | 2048 | 0.88–1.29× |
+268: | 8192 | 1.8–2.5× |
+269: | 32768 | 3.0–5.3× |
+270: 
+271: Caveat: only 5 of 24 rows ran at a matched refine fraction. The registered δ missed the z fraction on 19 rows, and those
+272: rows do not count as matched wins [R26]. SP1 and SP1.1 merged to Project-Tensor main (62a982e) on the owner's order [R26].
+273: 
+274: ### 4.3 SP2: deriving δ, and finding the tail is a heuristic
+275: 
+276: SP2 derived the margin as `δ(ε, e_q) = ln(1/ε) + 2·e_q` (`apa_sp2.cuh:7`, reasoning/proof) [R06]:
+277: 
+278: - `ε` is a relative-weight floor.
+279: - `e_q` bounds the bulk error of **every** key.
+280: - The margin is 2·e_q because both sides of the comparison are quantised.
+281: 
+282: The certificate is: skip ⇒ `w_j < ε·w*`. The aggregate bound is useless at N·ε ≥ 1, and the seat flagged that before
+283: the GPU ran [R06].
+284: 
+285: Measured e_q over 13.8M logits (kernel sweep) [R27]:
+286: 
+287: | Bulk width | e_q at D64 | e_q at D128 |
+288: |---|---|---|
+289: | 2-bit | 2.32 | 1.97 |
+290: | 4-bit | 1.01 | 0.87 |
+291: 
+292: With those values, the provable rule refines ≥ 99.6% of keys at 2 bits, and 69% (ε=0.1) to 100% (ε≤0.003) at 4 bits,
+293: against two-pass's 15.5% [R27].
+294: 
+295: **"The APA tail is a heuristic"** at these widths. No relative-weight guarantee backs either the z-score or the δ
+296: selection [R27]. The bonus: refine-all single pass (fraction 1.0, relative Frobenius error 1e-6) is still **1.4×
+297: faster** than two-pass at 15%, and up to 4.8× on split-K decode. Two-pass's cost is its two walks, not its refine dots
+298: [R27].
+299: 
+
+FILE /mnt/Shared/APA_Primer/APA_Primer.md LINES 454-467
+454: ## 7. Prior art
+455: 
+456: *My own identifications carry "unverified — lead to check" and search terms. I had no network. The entries from the
+457: lead's proxy-checked comparison [R32] and the paper's reference list (verified 2026-07-02, [R09]) are marked as such.*
+458: 
+459: | Work | Relation | What APA takes | What is APA's own | Status |
+460: |---|---|---|---|---|
+461: | **BLASST**, Yuan, Shinn et al., arXiv 2512.12087 (MLSys 2026) | Skips key blocks > ln λ below the running exact max | The running-max criterion and its justification. ln(1/ε) ≡ ln λ | Applying it to *precision* (refine, not drop), per key, on the quantised score; the 2·e_q margin; the monotone/exactness proof; split-K containment; the z-score impossibility | lead-verified [R32] |
+462: | **ThriftAttention**, Sharratt, arXiv 2605.23081 (2026) | FP16 top-k blocks / FP4 rest, merged via online softmax | The observation that quantisation error matters ∝ softmax weight | Per-key selection inside the pass, no pre-pass, trainable backward | lead-verified [R32]; in paper refs [R09] |
+463: | **SALE**, Ji et al., arXiv 2505.24179 (2025) | Routes on 4-bit QK estimates, then **drops** blocks | Route-on-quantised-scores | Keep the tail | paper refs [R09] |
+464: | **MCBP**, Wang et al., arXiv 2509.10372 (2025) | Low-bit filtering picks top-k keys, then drops the rest | — | No drop | paper refs [R09] |
+465: | **FlashAttention** (Dao et al. 2022), **FA-2** (Dao 2023); online softmax (Milakov & Gimelshein 2018); flash-decoding split-K | Exact tiled attention; running-max rescale; split-K merge | The online softmax, split-K merge, tiling (g1/h kernels) | — | standard; paper refs [R09] |
+466: | **TurboQuant**, Zandieh et al., arXiv 2504.19874 (ICLR 2026) | Rotated vector quantiser preserving inner products | The bulk quantiser (in-project implementation) | — | paper refs [R09] |
+467: | **Straight-through estimator**, Bengio et al. 2013 | Gradient through hard selection | GRAPA's stop-gradient selection | — | paper refs [R09] |
+
+FILE /mnt/Shared/APA_Primer/APA_Primer.md LINES 525-558
+525: ## Appendix: receipts (full detail in `APA_Primer_receipts.json`)
+526: 
+527: PT = `/mnt/ForgeRealm/Project-Tensor`, main HEAD d62c170. Board = `/mnt/ForgeRealm/AI_Research_Board.md`. SH = `/mnt/Shared`.
+528: 
+529: | Tag | Receipt |
+530: |---|---|
+531: | R01 | PT `tensor_cuda/src/kernels.cu:1146-1300` (apa_selective_kernel), thr at :1225 |
+532: | R02 | PT `kernels.cu:1252`, `:1284` — `if (fabsf(bulk) >= thr)` |
+533: | R03 | PT `tensor_cuda/tensor_cuda/quant.py:176-177` |
+534: | R04 | PT `kernels.cu:7857-7934` (apa_selective_sp_kernel), rule at :7896 |
+535: | R05 | PT `tensor_cuda/src/apa_sp1_1.cuh:73` |
+536: | R06 | PT `tensor_cuda/src/apa_sp2.cuh:7`; `docs/APA_SP2_DELTA_DERIVATION.md` |
+537: | R07 | PT `kernels.cu:7950-7952`; `README.md:60-86` |
+538: | R08 | PT `docs/APA.md:3-29` |
+539: | R09 | PT `docs/APA_PAPER_DRAFT.md:1-32`, refs :675-739 |
+540: | R10 | `APA_PAPER_DRAFT.md` §2.1, §8 |
+541: | R11 | `APA_PAPER_DRAFT.md` §2.2, §3.1-3.2 |
+542: | R12 | `APA_SP2_DELTA_DERIVATION.md` "measurement protocol" para; `quant.py:1-9, 111-125` |
+543: | R13 | `collatz-experimental-data/IME-primer.md:1-60, 86-128, 154` |
+544: | R14 | AtlasForge `missions/mission_4482de7b/mission_config.json`; `workspace/AtlasForge/mission_4482de7b/artifacts/report.md` |
+545: | R15 | `APA_PAPER_DRAFT.md` §3.4 |
+546: | R16 | Comparison of R13 / R14 / R15 (this primer) |
+547: | R17 | AtlasForge `workspace/APA-Quant_*` directory mtimes 2026-05-21..05-29 |
+548: | R18 | `APA_PAPER_DRAFT.md` §4.3, App. B.1/B.3 |
+549: | R19 | SH `APA_SPD1_Speed_Chain_2026-09-06.md` "Predictions"; Board 1373-1380 |
+550: | R20 | SH `APA_SPD1_Speed_Chain_2026-09-06.md` "Memory and accuracy" |
+551: | R21 | PT `docs/APA_MQA_ROOTCAUSE_LEDGER.md:24-107`; Board 31-60 |
+552: | R22 | `APA_MQA_ROOTCAUSE_LEDGER.md:176-200` |
+553: | R23 | `APA_MQA_ROOTCAUSE_LEDGER.md:178-183` |
+554: | R24 | PT `docs/APA_SP1_LEDGER.md:146`; SH `APA_SP1_Report_2026-09-05.md:12-35`; Board 1287-1318 |
+555: | R25 | SH `APA_SP1_Report_2026-09-05.md:37-56` |
+556: | R26 | PT `docs/APA_SP1_1_REPORT.md`; Board 1319-1342 |
+557: | R27 | Board 1382-1398; SH `APA_SP2_Delta_Governance_Result_2026-09-06.md` |
+558: | R28 | SH `APA_SPD1_Speed_Chain_2026-09-06.md` (branch apa-spd1 3d8c89a); Board 1399-1414 |
+
+FILE /mnt/ForgeRealm/reference/openai-math-notes/receipts/tx3_opus/MUTATIONS.md LINES 284-314
+284: ### X5. M12 → APA certificates as Lean comparator statements
+285: Target objects: the primer's "reasoning/proof" receipts: SP running-max monotonicity and SP1 impossibility
+286: (primer:247-248), SP1.1 containment and its output counterexample (primer:257-262), SP2 δ certificate (primer:274-284).
+287: 
+288: Changes and survival:
+289: 1. *The paper's trusted 220-line statement + proof pattern (lean:ComparatorChallenges/SubexponentialSAT.lean:191-218)
+290:    becomes one short statement file per claim, written by the lead before any proof.* Survival: the trust boundary is the
+291:    statement, as in the paper.
+292: 2. *No machine model is needed:* these are statements over ℝ (max, exp, log, sqrt). Survival: Mathlib covers them.
+293: 3. Statements:
+294:    - `sp_skip_final`: if b_j < max_{i ≤ j} b_i − δ then b_j < max_i b_i − δ (a skipped key stays skipped).
+295:    - `sp_mask_superset`: {j | b_j ≥ max_all − δ} ⊆ {j | b_j ≥ max_{i≤j} b_i − δ}.
+296:    - `splitk_contains`: a partition-local prefix max ≤ the global one, so the local mask ⊇ the global mask; plus the
+297:      counterexample bulk [2,0], exact [2,10], V = [0,1], δ = 0 with outputs differing by > 0.8.
+298:    - `z_not_single_pass`: for zthr ∈ [0, √3], no decision function of the prefix [1] agrees with the z-score mask on both
+299:      rows [1,0,0,0] and [1,0,0,10] (key 1 is refined in the first, not in the second).
+300:    - `sp2_certificate`: if |bulk_i − exact_i| ≤ e_q for all i and b_j < max bulk − δ with δ = ln(1/ε) + 2e_q, then
+301:      exp(exact_j) < ε·exp(max exact).
+302:    Survival: each is a few lines of real analysis; the margins are forced to be stated exactly.
+303: 
+304: Registered test: operand = the five statements above, in one comparator file plus proofs. Metric = `lake build` with
+305: zero `sorry`, axioms as in X2, and a non-vacuity witness per statement. Win: all five. Baseline: prose receipts.
+306: Cost: 1-2 seat-days + lead build. Evidence class: machine-checked proof.
+307: Cheapest artifact that passes while missing the point: weakened statements (contradictory hypotheses). Excluded by
+308: lead-written statements and non-vacuity witnesses.
+309: 
+310: Side value: the order calls APA-SP "an exact reformulation"; the primer says it "replaced the rule" (primer:28) and that
+311: its mask is a superset of the final-max mask. Writing `sp_mask_superset` forces one precise meaning.
+312: 
+313: Risks: a statement can be true yet not the one the receipt meant (e.g. the SP2 certificate in its bulk-weight versus
+314: true-weight form); the lead must match each statement to its receipt before proofs start.
+
+FILE /mnt/ForgeRealm/Project-Tensor/tensor_cuda/src/kernels.cu LINES 1580-1750
+1580: __global__ void apa_selective_kernel(
+1581:     const T* q, const T* k, const T* kq, const T* v, T* out,
+1582:     int B, int H, int L, int S, int D, int VD, float scale, float zthr,
+1583:     int is_causal, int KVH, int group) {
+1584:   // GQA-aware: q has H query heads; k/kq/v have KVH key/value heads (KVH <= H,
+1585:   // group = H/KVH). Query head h reads KV head h/group, so the KV tensors are
+1586:   // NEVER expanded to H heads — saves materializing the 4x-repeated k_rep/v_rep.
+1587:   int row = blockIdx.x;            // flat (b,h,i) over the Q heads
+1588:   int i = row % L;
+1589:   int bh = row / L;
+1590:   int b = bh / H;
+1591:   int h = bh % H;
+1592:   int kv_h = h / group;            // which of the KVH heads this query head uses
+1593:   int tid = threadIdx.x;
+1594:   int nt = blockDim.x;
+1595:   const unsigned FULL = 0xffffffffu;
+1596:   int lane = tid & 31;
+1597:   int warp = tid >> 5;
+1598:   int nwarp = nt >> 5;              // == 4 for nt=128
+1599: 
+1600:   const T* qrow = q + (int64_t)row * D;
+1601:   int64_t kvbh = (int64_t)b * KVH + kv_h;
+1602:   const T* kbase = k + kvbh * S * D;
+1603:   const T* kqbase = kq + kvbh * S * D;
+1604:   const T* vbase = v + kvbh * S * VD;
+1605: 
+1606:   // Load this query vector into shared memory (D <= DMAX <= TC_APA_MAXD).
+1607:   __shared__ float qsh[DMAX];
+1608:   for (int d = tid; d < D; d += nt) qsh[d] = ld<T>(qrow, d);
+1609:   __syncthreads();
+1610: 
+1611:   // BOTTOM-RIGHT causal: query row i sits at ABSOLUTE key index
+1612:   // (S-L)+i (the prefill-continuation / cache regime where S>L), so it
+1613:   // sees keys 0..(S-L)+i. The old s_max=i+1 was top-left — correct only
+1614:   // at S==L (square, no cache), and SILENTLY blinds queries to the most
+1615:   // recent S-L keys otherwise (the 121->11M ppl bug class). Reduces to
+1616:   // i+1 exactly when S==L.
+1617:   int s_max = is_causal ? ((S - L) + i + 1) : S;
+1618:   __shared__ float red[256];
+1619: 
+1620:   // Pass 1: bulk scores -> sum/sumsq of |bulk| for the z-score threshold.
+1621:   // WCOOP=true: each warp owns a strided subset of keys; within a key, lanes
+1622:   // split D contiguously and shfl-reduce the dot (see block comment).
+1623:   // WCOOP=false: pre-A5 per-thread strided keys (each thread's sum/sumsq is a
+1624:   // genuine disjoint partial).
+1625:   float sum = 0.f, sumsq = 0.f;
+1626:   if constexpr (WCOOP) {
+1627:     for (int j = warp; j < s_max; j += nwarp) {
+1628:       const T* kqj = kqbase + (int64_t)j * D;
+1629:       float dot = 0.f;
+1630:       for (int d = lane; d < D; d += 32) dot += qsh[d] * ld<T>(kqj, d);
+1631:       #pragma unroll
+1632:       for (int off = 16; off > 0; off >>= 1) dot += __shfl_down_sync(FULL, dot, off);
+1633:       dot = __shfl_sync(FULL, dot, 0);   // broadcast the warp's dot to all lanes
+1634:       float a = fabsf(dot * scale);
+1635:       sum += a; sumsq += a * a;
+1636:     }
+1637:   } else {
+1638:     for (int j = tid; j < s_max; j += nt) {
+1639:       const T* kqj = kqbase + (int64_t)j * D;
+1640:       float dot = 0.f;
+1641:       for (int d = 0; d < D; ++d) dot += qsh[d] * ld<T>(kqj, d);
+1642:       float a = fabsf(dot * scale);
+1643:       sum += a; sumsq += a * a;
+1644:     }
+1645:   }
+1646:   // WCOOP: sum/sumsq are per-WARP totals, identical across all 32 lanes of
+1647:   // the owning warp (redundant, not partial) — only lane 0 contributes, else
+1648:   // each warp's contribution is overcounted 32x. Per-thread: all contribute.
+1649:   red[tid] = (WCOOP && lane != 0) ? 0.f : sum; __syncthreads();
+1650:   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+1651:   float total = red[0]; __syncthreads();
+1652:   red[tid] = (WCOOP && lane != 0) ? 0.f : sumsq; __syncthreads();
+1653:   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+1654:   float total_sq = red[0]; __syncthreads();
+1655: 
+1656:   float cnt = (float)s_max;
+1657:   float mean = total / cnt;
+1658:   float var = total_sq / cnt - mean * mean;
+1659:   float thr = mean + zthr * sqrtf(fmaxf(var, 0.f));
+1660: 
+1661:   // Pass 2: SINGLE pass with an online softmax (FlashAttention-style).
+1662:   // WCOOP=true: per-WARP state, all 32 lanes carrying identical (m, l)
+1663:   // (redundant scalar work, cheap) while VALUE accumulation is split across
+1664:   // lanes: lane `lane` owns acc slots d = lane, lane+32, ... (ceil(VD/32)
+1665:   // registers). WCOOP=false: pre-A5 per-thread state, full acc[VD] each.
+1666:   float m = -1e30f, l = 0.f;
+1667:   constexpr int ACCN = WCOOP ? ((DMAX + 31) / 32) : DMAX;
+1668:   float acc[ACCN];
+1669:   if constexpr (WCOOP) {
+1670:     #pragma unroll
+1671:     for (int dl = 0; dl < ACCN; ++dl) acc[dl] = 0.f;
+1672:   } else {
+1673:     for (int d = 0; d < VD; ++d) acc[d] = 0.f;
+1674:   }
+1675: 
+1676:   if constexpr (WCOOP) {
+1677:     for (int j = warp; j < s_max; j += nwarp) {
+1678:       const T* kqj = kqbase + (int64_t)j * D;
+1679:       float bulk = 0.f;
+1680:       for (int d = lane; d < D; d += 32) bulk += qsh[d] * ld<T>(kqj, d);
+1681:       #pragma unroll
+1682:       for (int off = 16; off > 0; off >>= 1) bulk += __shfl_down_sync(FULL, bulk, off);
+1683:       bulk = __shfl_sync(FULL, bulk, 0);
+1684:       bulk *= scale;
+1685:       float score;
+1686:       if (fabsf(bulk) >= thr) {
+1687:         const T* kj = kbase + (int64_t)j * D;
+1688:         float ex = 0.f;
+1689:         for (int d = lane; d < D; d += 32) ex += qsh[d] * ld<T>(kj, d);
+1690:         #pragma unroll
+1691:         for (int off = 16; off > 0; off >>= 1) ex += __shfl_down_sync(FULL, ex, off);
+1692:         ex = __shfl_sync(FULL, ex, 0);
+1693:         score = ex * scale;
+1694:       } else {
+1695:         score = bulk;
+1696:       }
+1697:       // online softmax update — identical formula on every lane (redundant,
+1698:       // not partitioned: m/l are scalars, not worth splitting across lanes).
+1699:       float m_new = fmaxf(m, score);
+1700:       float corr = __expf(m - m_new);
+1701:       float w = __expf(score - m_new);
+1702:       l = l * corr + w;
+1703:       const T* vj = vbase + (int64_t)j * VD;
+1704:       #pragma unroll
+1705:       for (int dl = 0; dl < ACCN; ++dl) {
+1706:         int d = lane + dl * 32;
+1707:         if (d < VD) acc[dl] = acc[dl] * corr + w * ld<T>(vj, d);
+1708:       }
+1709:       m = m_new;
+1710:     }
+1711:   } else {
+1712:     for (int j = tid; j < s_max; j += nt) {
+1713:       const T* kqj = kqbase + (int64_t)j * D;
+1714:       float bulk = 0.f;
+1715:       for (int d = 0; d < D; ++d) bulk += qsh[d] * ld<T>(kqj, d);
+1716:       bulk *= scale;
+1717:       float score;
+1718:       if (fabsf(bulk) >= thr) {
+1719:         const T* kj = kbase + (int64_t)j * D;
+1720:         float ex = 0.f;
+1721:         for (int d = 0; d < D; ++d) ex += qsh[d] * ld<T>(kj, d);
+1722:         score = ex * scale;
+1723:       } else {
+1724:         score = bulk;
+1725:       }
+1726:       // online softmax update
+1727:       float m_new = fmaxf(m, score);
+1728:       float corr = __expf(m - m_new);
+1729:       float w = __expf(score - m_new);
+1730:       l = l * corr + w;
+1731:       const T* vj = vbase + (int64_t)j * VD;
+1732:       for (int d = 0; d < VD; ++d) acc[d] = acc[d] * corr + w * ld<T>(vj, d);
+1733:       m = m_new;
+1734:     }
+1735:   }
+1736: 
+1737:   // Merge the per-thread (WCOOP=false) or per-warp-replicated (WCOOP=true)
+1738:   // online-softmax states. m's max-reduction is duplicate-safe either way;
+1739:   // l is a SUM, so under WCOOP only lane 0 of each warp contributes (every
+1740:   // lane holds the identical warp-total — 32x overcount otherwise).
+1741:   red[tid] = m; __syncthreads();
+1742:   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] = fmaxf(red[tid], red[tid+off]); __syncthreads(); }
+1743:   float gmax = red[0]; __syncthreads();
+1744: 
+1745:   float rescale = __expf(m - gmax);
+1746:   // denom
+1747:   red[tid] = (WCOOP && lane != 0) ? 0.f : (l * rescale); __syncthreads();
+1748:   for (int off = nt / 2; off > 0; off >>= 1) { if (tid < off) red[tid] += red[tid+off]; __syncthreads(); }
+1749:   float denom = red[0]; __syncthreads();
+1750:   float inv = denom > 0.f ? 1.f / denom : 0.f;
+
+FILE /mnt/ForgeRealm/Project-Tensor/docs/APA_SP2_DELTA_DERIVATION.md LINES 9-58
+9: Let the eligible keys be the bottom-right causal prefix (or all keys for
+10: noncausal attention). Assume nonempty, finite logits, `0 < epsilon <= 1`,
+11: and a finite, nonnegative constant `e_q` that bounds **every** eligible key's
+12: bulk error for this pass. Write `s_j = scale * q dot k_j`, `b_j = bulk_j`,
+13: `|b_j-s_j| <= e_q`, and `s_star = max_j s_j`. The proof first uses real
+14: arithmetic. CUDA arithmetic qualifications appear below.
+15: 
+16: With `Z = sum_j exp(s_j)`, define `w_j = exp(s_j)/Z` and
+17: `w_star = exp(s_star)/Z`. An unchanged sink, if present, simply adds its
+18: exponential to Z and has zero value numerator; all ratios below still hold.
+19: Set `a = ln(1/epsilon) = -ln(epsilon) >= 0`. Since exponentiation is strictly
+20: increasing, `s_j < s_star-a` implies
+21: `w_j/w_star = exp(s_j-s_star) < exp(-a) = epsilon`.
+22: 
+23: The inclusive running bulk maximum at key j is `m_j = max_{i<=j} b_i` over
+24: eligible visited keys. There is a visited key t attaining m_j. The error
+25: assumption gives `s_j <= b_j+e_q` and `s_t >= b_t-e_q = m_j-e_q`.
+26: The full-set exact maximum is at least s_t, hence `s_star >= m_j-e_q`.
+27: Consequently,
+28: 
+29: ```
+30: b_j < m_j - (a + 2 e_q)
+31: => s_j <= b_j + e_q < m_j - e_q - a <= s_star - a
+32: => w_j < epsilon * w_star.
+33: ```
+34: 
+35: Every inequality either uses the assumed absolute-error bound, the strict
+36: skip comparison, or the maximum over a superset. The **algorithm** skips iff
+37: `b_j < m_j-delta`, refining otherwise, with
+38: `delta(epsilon,e_q) = ln(1/epsilon) + 2 e_q`, in scaled-logit units.
+39: This is a sufficient certificate of being below the floor, not an iff
+40: characterization of all keys whose exact weight is below it. Equality at
+41: the cutoff refines. Epsilon is dimensionless (relative weight); e_q and
+42: delta have the unit of the scaled logits. Changing scale changes e_q too.
+43: 
+44: The prefix subtlety helps safety: the full exact maximum can only be larger
+45: than the exact logit of the key setting the current prefix maximum. A future
+46: large key tightens the weight ratio bound for an earlier skip; it cannot
+47: invalidate that skip. It can make an earlier refinement unnecessary.
+48: 
+49: For fixed delta, `m_l >= m_j` for any later l, and therefore
+50: `b_j < m_j-delta <= m_l-delta`: a skip stays a skip under larger prefix or
+51: final maxima. Under ordered key partitions, the local prefix maximum
+52: `m_p(j) <= m_j`, because it ranges over a subset. Thus a local skip satisfies
+53: `b_j < m_p(j)-delta <= m_j-delta`; the same exact-weight proof applies using
+54: the key that set m_p(j). Partition refinement contains global-prefix
+55: refinement. With a shared frozen e_q, decreasing epsilon increases delta,
+56: so the refine sets nest. None of these statements equates the resulting
+57: mixed-score output to global-prefix output or proves that extra refinement
+58: monotonically reduces output error. SP1.1's counterexample still applies.
+
+FILE /mnt/ForgeRealm/Project-Tensor/docs/APA_SP1_1_REPORT.md LINES 7-15
+7: Part A — proof and implementation
+8: 
+9: For key j in ordered partition p, let M_p(j) be its local inclusive bulk-prefix maximum, and G(j) the whole-row inclusive bulk-prefix maximum. The partition's visited keys are a subset of the global prefix, so M_p(j) <= G(j). If the global rule selects j, bulk_j >= G(j)-delta >= M_p(j)-delta, hence the local rule selects it too. Equivalently a local skip satisfies bulk_j < M_p(j)-delta <= G(j)-delta and remains a global skip. Replacing G(j) with the final whole-row maximum also proves containment of the final-max window. This assumes identical finite bulk scores and delta>=0; changing dot accumulation order can still move an fp32 boundary.
+10: 
+11: The output claim needs qualification. Extra local refinements replace bulk scores with exact scores and can change output. They are not guaranteed to cost only work. For bulk=[2,0], exact=[2,10], V=[0,1], delta=0, separate singleton partitions refine both keys; the global prefix refines only the first. With sink=0 the outputs differ by more than 0.8. This explicit counterexample is pinned.
+12: 
+13: For the actual partition-selected mixed scores s_j, each partial holds m_p=max(s_j), l_p=sum(exp(s_j-m_p)), a_p=sum(exp(s_j-m_p)*V_j). With M=max_p(m_p), summing l_p*exp(m_p-M) and a_p*exp(m_p-M) gives exactly the materialized softmax numerator and denominator in real arithmetic. The sink contributes once to the denominator at merge. CPU tests check this identity within the registered atol=rtol=0.001, including empty partitions, random noncontiguous ordered subsets, ties, ragged tails and sinks. Equality is to partition-selected materialization, not global-prefix output or dense attention.
+14: 
+15: [Kernel](../tensor_cuda/src/apa_sp1_1.cuh:5), [launcher](../tensor_cuda/src/apa_sp1_1.cuh:149), [entry routing](../tensor_cuda/src/kernels.cu:7477), [unchanged merge](../tensor_cuda/src/kernels.cu:1672), [CPU pin](../tensor_cuda/tests/test_apa_sp1_1.py:42). All L=1 SP calls use num_parts=max(1,ceil(S/2048)); part_keys is the existing TC_APA_SPLITK_PART_KEYS=128*16 via the existing fixed-layout helper. Thus S=2048/8192/32768 gives P=1/4/16. The inherited 128-thread DMAX dispatch uses per-thread dots for cap<=64 and four warp-cooperative dots per tile otherwise. Inclusive tile prefixes carry forward across tiles. Prefill retains the original SP1 kernel. The same TC_APA_SP=1 opt-in applies, and existing attention kernel bodies—including SP1—are byte-identical. The optional sink uses the original merge exactly once.
+
+FILE /mnt/Shared/APA_SP1_Report_2026-09-05.md LINES 12-35
+12: ## Q1 — the current z-score rule
+13: 
+14: Impossible for irrevocable streaming, by a four-key counterexample.
+15: Bulk scores `[1, 0, 0, 0]` and `[1, 0, 0, 10]` share the same prefix
+16: but the z-score threshold, which depends on the mean and standard
+17: deviation over all keys, puts key 1 on opposite sides of the refine
+18: line. Any single walk that must decide key 1 before seeing key 4 gets
+19: one of the two cases wrong. Pinned by a CPU test. Astra scoped it
+20: honestly: with unbounded buffering a "single read" is trivially
+21: possible, so no unrestricted impossibility is claimed.
+22: 
+23: ## Q2 — an order-safe rule
+24: 
+25: Refine key j iff `bulk_j ≥ max(bulk[0..j]) − δ`. The running max never
+26: decreases, so a key skipped at time j is still below the final line
+27: later; a key refined early may turn out unnecessary, which costs work
+28: but never correctness. This is exactly single-pass, and it rides the
+29: running max that online softmax already maintains. CPU sweep: 40,000
+30: seeded draws across four shape classes, zero selection mismatches, max
+31: output difference 3.6e-7.
+32: 
+33: The rule selects a different tail. Overlap with the z-score tail is
+34: about 45 percent on both prefill and decode. I registered 80 percent
+35: or better and missed. Astra registered 65 percent or less and hit.
+
+FILE /mnt/ForgeRealm/Project-Tensor/tensor_cuda/tests/test_apa_sp1_1.py LINES 42-74
+42: def test_random_partition_monotonicity_and_online_merge():
+43:     reg = json.loads((ART/'registration_sp1_1.json').read_text())['part_A']['cpu_pin']
+44:     rng = np.random.default_rng(reg['seed'])
+45:     for trial in range(reg['random_trials']):
+46:         S = int(rng.integers(1,reg['max_keys']+1))
+47:         P = int(rng.integers(1,reg['max_parts']+1))
+48:         bulk = rng.standard_normal(S,dtype=np.float32)
+49:         exact = bulk + rng.standard_normal(S,dtype=np.float32)*np.float32(.1)
+50:         values = rng.standard_normal((S,reg['value_dim']),dtype=np.float32)
+51:         if trial % 7 == 0: bulk[:] = 0  # inclusive ties
+52:         delta = reg['deltas'][trial%len(reg['deltas'])]
+53:         # Noncontiguous random partitions preserve original order in each subset.
+54:         labels = rng.integers(P,size=S)
+55:         parts = [np.flatnonzero(labels==p) for p in range(P)]
+56:         if trial % 2:
+57:             parts = np.split(np.arange(S),np.sort(rng.integers(0,S+1,size=P-1)))
+58:         sink = np.float32(rng.normal()*10) if trial%3 else None
+59:         got,mask = sp.partition_online(bulk,exact,values,delta,parts,sink)
+60:         global_mask = ref.prefix_mask(bulk,delta)
+61:         assert not np.any(global_mask & ~mask)
+62:         assert not np.any((bulk>=bulk.max()-np.float32(delta)) & ~mask)
+63:         want = ref.dense_scores(np.where(mask,exact,bulk),values,sinks=sink)
+64:         np.testing.assert_allclose(got,want,atol=reg['atol'],rtol=reg['rtol'])
+65: 
+66: 
+67: def test_extra_refinement_changes_output_and_cannot_be_called_work_only():
+68:     bulk=np.array([2,0],np.float32);exact=np.array([2,10],np.float32)
+69:     values=np.array([[0],[1]],np.float32)
+70:     got,mask=sp.partition_online(bulk,exact,values,0,[[0],[1]],sink=0)
+71:     global_mask=ref.prefix_mask(bulk,0)
+72:     assert mask.tolist()==[True,True] and global_mask.tolist()==[True,False]
+73:     global_out=ref.dense_scores(np.where(global_mask,exact,bulk),values,sinks=0)
+74:     assert float(abs(got-global_out).max())>.8
+
+FILE /mnt/ForgeRealm/Project-Tensor/tensor_cuda/tests/apa_sp1_reference.py LINES 18-50
+18:     bulk = np.asarray(bulk, dtype=F)
+19:     valid = np.ones(bulk.shape, bool) if lengths is None else (
+20:         np.arange(bulk.shape[-1]) < np.asarray(lengths)[..., None])
+21:     a = np.where(valid, np.abs(bulk), F(0))
+22:     n = valid.sum(-1).astype(F)
+23:     mean = a.sum(-1, dtype=F) / n
+24:     var = (a * a).sum(-1, dtype=F) / n - mean * mean
+25:     thr = mean + F(z) * np.sqrt(np.maximum(var, F(0)))
+26:     return valid & (np.abs(bulk) >= thr[..., None]), thr
+27: 
+28: 
+29: def prefix_mask(bulk, delta, lengths=None):
+30:     bulk = np.asarray(bulk, dtype=F)
+31:     mask = bulk >= np.maximum.accumulate(bulk, axis=-1) - F(delta)
+32:     if lengths is not None:
+33:         mask &= np.arange(bulk.shape[-1]) < np.asarray(lengths)[..., None]
+34:     return mask
+35: 
+36: 
+37: def dense_scores(scores, values, lengths=None, sinks=None):
+38:     """Independent materialized softmax, batched or single row, fp32."""
+39:     scores, values = np.asarray(scores, dtype=F), np.asarray(values, dtype=F)
+40:     if lengths is not None:
+41:         scores = np.where(np.arange(scores.shape[-1]) < np.asarray(lengths)[..., None],
+42:                           scores, F(-np.inf))
+43:     maximum = scores.max(-1)
+44:     if sinks is not None:
+45:         maximum = np.maximum(maximum, np.asarray(sinks, dtype=F))
+46:     w = np.exp(scores - maximum[..., None])
+47:     den = w.sum(-1, dtype=F)
+48:     if sinks is not None:
+49:         den += np.exp(np.asarray(sinks, dtype=F) - maximum)
+50:     return np.einsum('...s,...sv->...v', w, values, optimize=False) / den[..., None]
+
+FILE /mnt/ForgeRealm/Project-Tensor/tensor_cuda/tests/apa_sp1_reference.py LINES 178-191
+178: def counterexample(z):
+179:     q = np.array([1], dtype=F)
+180:     k = np.array([[2], [0], [0], [-10]], dtype=F)
+181:     v = np.array([[1], [0], [0], [0]], dtype=F)
+182:     records = []
+183:     for last in [0, 10]:
+184:         kq = np.array([[1], [0], [0], [last]], dtype=F)
+185:         out, mask, thr = row_two_pass(q, k, kq, v, 1, z)
+186:         buffered, bm = row_buffered_one_read(q, k, kq, v, 1, z)
+187:         np.testing.assert_array_equal(mask, bm)
+188:         np.testing.assert_allclose(out, buffered, atol=1e-3, rtol=1e-3)
+189:         records.append(dict(last=last, threshold=float(thr), mask=mask.tolist(), output=out.tolist()))
+190:     assert records[0]['mask'][0] and not records[1]['mask'][0]
+191:     return records
+
+FILE /mnt/ForgeRealm/Project-Tensor/artifacts/apa_sp1/registration.json LINES 108-118
+108:       3.85,
+109:       3.9,
+110:       3.95,
+111:       4.0
+112:     ],
+113:     "matching": "Select smallest grid delta minimizing absolute realized-fraction difference from z-score on calibration rows; freeze per (kind,S,D,causal) before holdout. No accuracy/timing-based tuning. If holdout absolute fraction difference exceeds 0.02, unmatched/RED; no matched-comparison claim."
+114:   },
+115:   "zthr": 1.0364333894937898,
+116:   "refine_percentile": 0.15,
+117:   "data": {
+118:     "distribution": "independent standard-normal fp32 q,K,V; kq=K+0.1*independent standard-normal noise, as perturbed-K mechanism in existing selective tests but unit-scale stress; not a quantizer-quality evaluation",

@@ -1,0 +1,36 @@
+FILE /mnt/ForgeRealm/Project-Tensor/tensor_cuda/tests/apa_sp1_1_reference.py
+19: def partition_online(bulk, exact, values, delta, partitions, sink=None):
+20:     """Literal per-partition online recurrence and merge; arbitrary ordered subsets.
+21: 
+22:     Empty partitions are the identity. A partition must preserve key order;
+23:     all nonempty partitions together must cover each key exactly once.
+24:     """
+25:     bulk, exact, values = (np.asarray(x, dtype=F) for x in (bulk, exact, values))
+26:     mask = np.zeros(len(bulk), bool)
+27:     partials = []
+28:     for indices in partitions:
+29:         mx, m, den = F(-np.inf), F(-np.inf), F(0)
+30:         acc = np.zeros(values.shape[-1], F)
+31:         for j in indices:
+32:             mx = max(mx, bulk[j])
+33:             mask[j] = bulk[j] >= F(mx - F(delta))
+34:             score = exact[j] if mask[j] else bulk[j]
+35:             nxt = max(m, score)
+36:             corr, w = np.exp(F(m-nxt)), np.exp(F(score-nxt))
+37:             den = F(den*corr+w)
+38:             acc = acc*corr+w*values[j]
+39:             m = nxt
+40:         if den > 0:
+41:             partials.append((m, den, acc))
+42:     m = max(p[0] for p in partials)
+43:     den, acc = F(0), np.zeros(values.shape[-1], F)
+44:     for pm, pl, pa in partials:
+45:         corr = np.exp(F(pm-m))
+46:         den = F(den+pl*corr)
+47:         acc += pa*corr
+48:     if sink is not None:
+49:         nxt = max(m, F(sink))
+50:         corr = np.exp(F(m-nxt))
+51:         den = F(den*corr+np.exp(F(F(sink)-nxt)))
+52:         acc *= corr
+53:     return acc/den, mask

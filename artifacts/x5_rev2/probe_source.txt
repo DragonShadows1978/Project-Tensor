@@ -1,0 +1,477 @@
+import ApaCerts.Check
+
+/-!
+# APA certificate statements (TX3 X5): lead-written, immutable
+
+This file is the trust boundary. Each `<name>_stmt` states one claim from the APA primer
+(`/mnt/Shared/APA_Primer/APA_Primer.md`). Each `<name>_nv_stmt` states that its hypotheses are satisfiable (a
+non-vacuity witness). A seat proves `theorem <name> : <name>_stmt` and `theorem <name>_nv : <name>_nv_stmt` in
+`ApaCerts/Proofs.lean`. `ApaCerts/Check.lean` (also lead-written) pins each proof to its statement and prints its axioms.
+
+**Conventions.**
+- One attention row has keys `0..n`, indexed by `Fin (n+1)`, so every row is nonempty.
+- Indices are zero-based: the primer's "key 1" is key `0` here.
+- `bulk` is a key's cheap (quantised) score, and `exact` its full-precision score.
+- The definitions mirror production code where noted.
+-/
+
+namespace Rev1Source
+
+open Finset
+
+noncomputable section
+open Classical
+
+/-- Running (prefix) maximum of `b` over keys `0..j`: the SP rule's `max(bulk[0..j])`. -/
+def prefixMax {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) : ℝ :=
+  (univ.filter (fun i : Fin (n+1) => i ≤ j)).sup' ⟨j, by simp⟩ b
+
+/-- Maximum of `b` over the whole row. -/
+def rowMax {n : ℕ} (b : Fin (n+1) → ℝ) : ℝ :=
+  univ.sup' univ_nonempty b
+
+/-- Prefix maximum of `b` restricted to one split-K partition `P` that contains key `j`. -/
+def localPrefixMax {n : ℕ} (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (j : Fin (n+1)) (hj : j ∈ P) : ℝ :=
+  (P.filter (fun i => i ≤ j)).sup' ⟨j, by simp [hj]⟩ b
+
+/-- The SP refine rule (primer §4.1, Q2): refine key `j` iff `bulk_j ≥ max(bulk[0..j]) − δ`. -/
+def spRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+  prefixMax bulk j - δ ≤ bulk j
+
+/-- The final-maximum rule: refine key `j` iff `bulk_j ≥ max(bulk) − δ`. -/
+def finalRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+  rowMax bulk - δ ≤ bulk j
+
+/-- The scores the online softmax sees: the exact score where a key is refined, the bulk score elsewhere. -/
+def mixedScores {n : ℕ} (bulk exact : Fin (n+1) → ℝ) (refined : Fin (n+1) → Prop) : Fin (n+1) → ℝ :=
+  fun i => if refined i then exact i else bulk i
+
+/-- One row's attention output for scalar values `V`. Every key stays in the single softmax denominator. -/
+def rowOutput {n : ℕ} (scores V : Fin (n+1) → ℝ) : ℝ :=
+  (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i))
+
+/-- The two-pass kernel's z-score rule (production `apa_selective_kernel`, `tensor_cuda/src/kernels.cu`, at b4da646:
+pass 1 accumulates `a = |bulk|` and `a*a`; `mean = total/cnt`; `var = total_sq/cnt − mean*mean`;
+`thr = mean + zthr*sqrtf(fmaxf(var, 0))`; pass 2 refines iff `fabsf(bulk) >= thr`). Real arithmetic, no rounding. -/
+def zRefined {n : ℕ} (b : Fin (n+1) → ℝ) (z : ℝ) (j : Fin (n+1)) : Prop :=
+  let N : ℝ := n + 1
+  let mean := (∑ i, |b i|) / N
+  let var := (∑ i, |b i| ^ 2) / N - mean ^ 2
+  mean + z * Real.sqrt (max var 0) ≤ |b j|
+
+/-! ## 1. `sp_skip_final`: a skipped key stays skipped (primer §4.1, Q2: the SP rule is monotone, hence
+exactly single-pass). A skip decided at key `j` is still a skip against every later prefix maximum, and against the
+final maximum. -/
+def sp_skip_final_stmt : Prop :=
+  ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j k : Fin (n+1)),
+    ¬ spRefined b δ j → (j ≤ k → b j < prefixMax b k - δ) ∧ ¬ finalRefined b δ j
+
+def sp_skip_final_nv_stmt : Prop :=
+  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), ¬ spRefined b δ j
+
+/-! ## 2. `sp_mask_superset`: the SP mask contains the final-maximum mask (primer §1 / §4.1: SP "replaced the
+rule", and its mask is a superset of the final-max mask). The witness shows the containment can be strict. -/
+def sp_mask_superset_stmt : Prop :=
+  ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)),
+    finalRefined b δ j → spRefined b δ j
+
+def sp_mask_superset_nv_stmt : Prop :=
+  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), spRefined b δ j ∧ ¬ finalRefined b δ j
+
+/-! ## 3. `splitk_contains`: split-K selection contains the global SP rule, but output equality fails
+(primer §4.2). A partition-local prefix maximum is never above the global one, so a key refined by the global
+SP rule is refined in its partition. Counterexample: bulk [2,0], exact [2,10], V = [0,1], δ = 0. Global SP (one
+partition) against split-K with partitions {0} and {1}: the outputs differ by more than 0.8. -/
+def splitk_contains_stmt : Prop :=
+  (∀ (n : ℕ) (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) (hj : j ∈ P),
+      localPrefixMax P b j hj ≤ prefixMax b j ∧
+      (spRefined b δ j → localPrefixMax P b j hj - δ ≤ b j)) ∧
+  (let bulk : Fin (1+1) → ℝ := ![2, 0]
+   let exact : Fin (1+1) → ℝ := ![2, 10]
+   let V : Fin (1+1) → ℝ := ![0, 1]
+   let globalOut := rowOutput (mixedScores bulk exact (fun i => spRefined bulk 0 i)) V
+   let splitOut := rowOutput
+     (mixedScores bulk exact (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)) V
+   (0.8 : ℝ) < |splitOut - globalOut|)
+
+def splitk_contains_nv_stmt : Prop :=
+  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (P : Finset (Fin (1+1))) (j : Fin (1+1)), j ∈ P ∧ spRefined b δ j
+
+/-! ## 4. `z_not_single_pass`: the z-score rule cannot run in one irrevocable pass (primer §4.1, Q1). The
+rows [1,0,0,0] and [1,0,0,10] share the prefix [1], yet for every `z ∈ [0, √3]` key 0 is refined in the first and
+not in the second. So no decision that sees only the prefix (here: key 0's bulk value) agrees with the rule on both
+rows. -/
+def z_not_single_pass_stmt : Prop :=
+  ∀ z : ℝ, 0 ≤ z → z ≤ Real.sqrt 3 →
+    zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0 ∧
+    ¬ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0 ∧
+    ∀ f : ℝ → Prop,
+      ¬ ((f 1 ↔ zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0) ∧
+         (f 1 ↔ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0))
+
+def z_not_single_pass_nv_stmt : Prop :=
+  ∃ z : ℝ, 0 ≤ z ∧ z ≤ Real.sqrt 3
+
+/-! ## 5. `sp2_certificate`: the SP2 δ certificate (primer §4.3). Suppose every key's bulk error is at most
+`errq` (the primer's `e_q`). If the SP rule with `δ = ln(1/ε) + 2·errq` skips key `j`, then its true weight is
+below `ε` times the true maximum's weight: `exp(exact_j) < ε · exp(max exact)`. This is the true-weight form. -/
+def sp2_certificate_stmt : Prop :=
+  ∀ (n : ℕ) (bulk exact : Fin (n+1) → ℝ) (errq ε : ℝ) (j : Fin (n+1)),
+    0 < ε →
+    (∀ i, |bulk i - exact i| ≤ errq) →
+    ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j →
+    Real.exp (exact j) < ε * Real.exp (rowMax exact)
+
+def sp2_certificate_nv_stmt : Prop :=
+  ∃ (bulk exact : Fin (1+1) → ℝ) (errq ε : ℝ) (j : Fin (1+1)),
+    0 < ε ∧ (∀ i, |bulk i - exact i| ≤ errq) ∧ ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j
+
+end
+
+end Rev1Source
+
+/-!
+# APA certificate statements (TX3 X5): lead-written, immutable
+
+This file is the trust boundary. Each `<name>_stmt` states one claim from the APA primer
+(`/mnt/Shared/APA_Primer/APA_Primer.md`). Each `<name>_nv_stmt` states that its hypotheses are satisfiable (a
+non-vacuity witness). A seat proves `theorem <name> : <name>_stmt` and `theorem <name>_nv : <name>_nv_stmt` in
+`ApaCerts/Proofs.lean`. Amended after the fidelity review TX3-X5-REV1: sink-aware split-K counterexample (F1) and
+antecedent witness for `sp_mask_superset` (F2). `ApaCerts/Check.lean` (also lead-written) pins each proof to its statement and prints its axioms.
+
+**Conventions.**
+- One attention row has keys `0..n`, indexed by `Fin (n+1)`, so every row is nonempty.
+- Indices are zero-based: the primer's "key 1" is key `0` here.
+- `bulk` is a key's cheap (quantised) score, and `exact` its full-precision score.
+- The definitions mirror production code where noted.
+-/
+
+namespace CurrentSource
+
+open Finset
+
+noncomputable section
+open Classical
+
+/-- Running (prefix) maximum of `b` over keys `0..j`: the SP rule's `max(bulk[0..j])`. -/
+def prefixMax {n : ℕ} (b : Fin (n+1) → ℝ) (j : Fin (n+1)) : ℝ :=
+  (univ.filter (fun i : Fin (n+1) => i ≤ j)).sup' ⟨j, by simp⟩ b
+
+/-- Maximum of `b` over the whole row. -/
+def rowMax {n : ℕ} (b : Fin (n+1) → ℝ) : ℝ :=
+  univ.sup' univ_nonempty b
+
+/-- Prefix maximum of `b` restricted to one split-K partition `P` that contains key `j`. -/
+def localPrefixMax {n : ℕ} (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (j : Fin (n+1)) (hj : j ∈ P) : ℝ :=
+  (P.filter (fun i => i ≤ j)).sup' ⟨j, by simp [hj]⟩ b
+
+/-- The SP refine rule (primer §4.1, Q2): refine key `j` iff `bulk_j ≥ max(bulk[0..j]) − δ`. -/
+def spRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+  prefixMax bulk j - δ ≤ bulk j
+
+/-- The final-maximum rule: refine key `j` iff `bulk_j ≥ max(bulk) − δ`. -/
+def finalRefined {n : ℕ} (bulk : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) : Prop :=
+  rowMax bulk - δ ≤ bulk j
+
+/-- The scores the online softmax sees: the exact score where a key is refined, the bulk score elsewhere. -/
+def mixedScores {n : ℕ} (bulk exact : Fin (n+1) → ℝ) (refined : Fin (n+1) → Prop) : Fin (n+1) → ℝ :=
+  fun i => if refined i then exact i else bulk i
+
+/-- One row's attention output for scalar values `V`. Every key stays in the single softmax denominator. -/
+def rowOutput {n : ℕ} (scores V : Fin (n+1) → ℝ) : ℝ :=
+  (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i))
+
+/-- One row's attention output with an attention sink of logit `sink`. The sink adds `exp(sink)` once to the
+denominator and carries no value (SP1.1 reference `dense_scores(..., sinks=...)`,
+`tensor_cuda/tests/apa_sp1_reference.py`; the online merge adds the sink once to the denominator). -/
+def rowOutputWithSink {n : ℕ} (scores V : Fin (n+1) → ℝ) (sink : ℝ) : ℝ :=
+  (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i) + Real.exp sink)
+
+/-- The two-pass kernel's z-score rule (production `apa_selective_kernel`, `tensor_cuda/src/kernels.cu`, at b4da646:
+pass 1 accumulates `a = |bulk|` and `a*a`; `mean = total/cnt`; `var = total_sq/cnt − mean*mean`;
+`thr = mean + zthr*sqrtf(fmaxf(var, 0))`; pass 2 refines iff `fabsf(bulk) >= thr`). Real arithmetic, no rounding. -/
+def zRefined {n : ℕ} (b : Fin (n+1) → ℝ) (z : ℝ) (j : Fin (n+1)) : Prop :=
+  let N : ℝ := n + 1
+  let mean := (∑ i, |b i|) / N
+  let var := (∑ i, |b i| ^ 2) / N - mean ^ 2
+  mean + z * Real.sqrt (max var 0) ≤ |b j|
+
+/-! ## 1. `sp_skip_final`: a skipped key stays skipped (primer §4.1, Q2: the SP rule is monotone, hence
+exactly single-pass). A skip decided at key `j` is still a skip against every later prefix maximum, and against the
+final maximum. -/
+def sp_skip_final_stmt : Prop :=
+  ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j k : Fin (n+1)),
+    ¬ spRefined b δ j → (j ≤ k → b j < prefixMax b k - δ) ∧ ¬ finalRefined b δ j
+
+def sp_skip_final_nv_stmt : Prop :=
+  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), ¬ spRefined b δ j
+
+/-! ## 2. `sp_mask_superset`: the SP mask contains the final-maximum mask (primer §1 / §4.1: SP "replaced the
+rule", and its mask is a superset of the final-max mask). The witness shows the containment can be strict. -/
+def sp_mask_superset_stmt : Prop :=
+  ∀ (n : ℕ) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)),
+    finalRefined b δ j → spRefined b δ j
+
+def sp_mask_superset_nv_stmt : Prop :=
+  (∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), finalRefined b δ j) ∧
+  (∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), spRefined b δ j ∧ ¬ finalRefined b δ j)
+
+/-! ## 3. `splitk_contains`: split-K selection contains the global SP rule, but output equality fails
+(primer §4.2). A partition-local prefix maximum is never above the global one, so a key refined by the global
+SP rule is refined in its partition. Counterexample: bulk [2,0], exact [2,10], V = [0,1], δ = 0, with an attention
+sink of logit 0 as in the receipt (and also without a sink). Global SP (one partition) against split-K with
+partitions {0} and {1}: the outputs differ by more than 0.8. -/
+def splitk_contains_stmt : Prop :=
+  (∀ (n : ℕ) (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) (hj : j ∈ P),
+      localPrefixMax P b j hj ≤ prefixMax b j ∧
+      (spRefined b δ j → localPrefixMax P b j hj - δ ≤ b j)) ∧
+  (let bulk : Fin (1+1) → ℝ := ![2, 0]
+   let exact : Fin (1+1) → ℝ := ![2, 10]
+   let V : Fin (1+1) → ℝ := ![0, 1]
+   let globalScores := mixedScores bulk exact (fun i => spRefined bulk 0 i)
+   let splitScores :=
+     mixedScores bulk exact (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)
+   -- The receipt's instance (SP1.1 report; `test_extra_refinement_changes_output...`): sink logit 0.
+   (0.8 : ℝ) < |rowOutputWithSink splitScores V 0 - rowOutputWithSink globalScores V 0| ∧
+   -- The same instance without a sink.
+   (0.8 : ℝ) < |rowOutput splitScores V - rowOutput globalScores V|)
+
+def splitk_contains_nv_stmt : Prop :=
+  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (P : Finset (Fin (1+1))) (j : Fin (1+1)), j ∈ P ∧ spRefined b δ j
+
+/-! ## 4. `z_not_single_pass`: the z-score rule cannot run in one irrevocable pass (primer §4.1, Q1). The
+rows [1,0,0,0] and [1,0,0,10] share the prefix [1], yet for every `z ∈ [0, √3]` key 0 is refined in the first and
+not in the second. So no decision that sees only the prefix (here: key 0's bulk value) agrees with the rule on both
+rows. -/
+def z_not_single_pass_stmt : Prop :=
+  ∀ z : ℝ, 0 ≤ z → z ≤ Real.sqrt 3 →
+    zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0 ∧
+    ¬ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0 ∧
+    ∀ f : ℝ → Prop,
+      ¬ ((f 1 ↔ zRefined (![1, 0, 0, 0] : Fin (3+1) → ℝ) z 0) ∧
+         (f 1 ↔ zRefined (![1, 0, 0, 10] : Fin (3+1) → ℝ) z 0))
+
+def z_not_single_pass_nv_stmt : Prop :=
+  ∃ z : ℝ, 0 ≤ z ∧ z ≤ Real.sqrt 3
+
+/-! ## 5. `sp2_certificate`: the SP2 δ certificate (primer §4.3). Suppose every key's bulk error is at most
+`errq` (the primer's `e_q`). If the SP rule with `δ = ln(1/ε) + 2·errq` skips key `j`, then its true weight is
+below `ε` times the true maximum's weight: `exp(exact_j) < ε · exp(max exact)`. This is the true-weight form. -/
+def sp2_certificate_stmt : Prop :=
+  ∀ (n : ℕ) (bulk exact : Fin (n+1) → ℝ) (errq ε : ℝ) (j : Fin (n+1)),
+    0 < ε →
+    (∀ i, |bulk i - exact i| ≤ errq) →
+    ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j →
+    Real.exp (exact j) < ε * Real.exp (rowMax exact)
+
+def sp2_certificate_nv_stmt : Prop :=
+  ∃ (bulk exact : Fin (1+1) → ℝ) (errq ε : ℝ) (j : Fin (1+1)),
+    0 < ε ∧ (∀ i, |bulk i - exact i| ≤ errq) ∧ ¬ spRefined bulk (Real.log (1 / ε) + 2 * errq) j
+
+end
+
+end CurrentSource
+
+namespace X5Rev2Probe
+open ApaCerts Finset
+noncomputable section
+open Classical
+-- Prior art: source transcription/equality checks only; REV1 (2026) baseline.
+-- These rfl checks bind the current text to imported definitions, guarding stale Spec .olean files.
+example : @CurrentSource.prefixMax = @ApaCerts.prefixMax := rfl
+example : @CurrentSource.rowMax = @ApaCerts.rowMax := rfl
+example : @CurrentSource.localPrefixMax = @ApaCerts.localPrefixMax := rfl
+example : @CurrentSource.spRefined = @ApaCerts.spRefined := rfl
+example : @CurrentSource.finalRefined = @ApaCerts.finalRefined := rfl
+example : @CurrentSource.mixedScores = @ApaCerts.mixedScores := rfl
+example : @CurrentSource.rowOutput = @ApaCerts.rowOutput := rfl
+example : @CurrentSource.rowOutputWithSink = @ApaCerts.rowOutputWithSink := rfl
+example : @CurrentSource.zRefined = @ApaCerts.zRefined := rfl
+example : @CurrentSource.sp_skip_final_stmt = @ApaCerts.sp_skip_final_stmt := rfl
+example : @CurrentSource.sp_skip_final_nv_stmt = @ApaCerts.sp_skip_final_nv_stmt := rfl
+example : @CurrentSource.sp_mask_superset_stmt = @ApaCerts.sp_mask_superset_stmt := rfl
+example : @CurrentSource.sp_mask_superset_nv_stmt = @ApaCerts.sp_mask_superset_nv_stmt := rfl
+example : @CurrentSource.splitk_contains_stmt = @ApaCerts.splitk_contains_stmt := rfl
+example : @CurrentSource.splitk_contains_nv_stmt = @ApaCerts.splitk_contains_nv_stmt := rfl
+example : @CurrentSource.z_not_single_pass_stmt = @ApaCerts.z_not_single_pass_stmt := rfl
+example : @CurrentSource.z_not_single_pass_nv_stmt = @ApaCerts.z_not_single_pass_nv_stmt := rfl
+example : @CurrentSource.sp2_certificate_stmt = @ApaCerts.sp2_certificate_stmt := rfl
+example : @CurrentSource.sp2_certificate_nv_stmt = @ApaCerts.sp2_certificate_nv_stmt := rfl
+example : @Rev1Source.prefixMax = @ApaCerts.prefixMax := rfl
+example : @Rev1Source.rowMax = @ApaCerts.rowMax := rfl
+example : @Rev1Source.localPrefixMax = @ApaCerts.localPrefixMax := rfl
+example : @Rev1Source.spRefined = @ApaCerts.spRefined := rfl
+example : @Rev1Source.finalRefined = @ApaCerts.finalRefined := rfl
+example : @Rev1Source.mixedScores = @ApaCerts.mixedScores := rfl
+example : @Rev1Source.rowOutput = @ApaCerts.rowOutput := rfl
+example : @Rev1Source.zRefined = @ApaCerts.zRefined := rfl
+example : @Rev1Source.sp_skip_final_stmt = @ApaCerts.sp_skip_final_stmt := rfl
+example : @Rev1Source.sp_skip_final_nv_stmt = @ApaCerts.sp_skip_final_nv_stmt := rfl
+example : @Rev1Source.sp_mask_superset_stmt = @ApaCerts.sp_mask_superset_stmt := rfl
+example : @Rev1Source.splitk_contains_nv_stmt = @ApaCerts.splitk_contains_nv_stmt := rfl
+example : @Rev1Source.z_not_single_pass_stmt = @ApaCerts.z_not_single_pass_stmt := rfl
+example : @Rev1Source.z_not_single_pass_nv_stmt = @ApaCerts.z_not_single_pass_nv_stmt := rfl
+example : @Rev1Source.sp2_certificate_stmt = @ApaCerts.sp2_certificate_stmt := rfl
+example : @Rev1Source.sp2_certificate_nv_stmt = @ApaCerts.sp2_certificate_nv_stmt := rfl
+
+-- Prior art: REV1 F1/F2 proposed restatements (2026). Conjunction projection shows retained strength.
+example : splitk_contains_stmt → Rev1Source.splitk_contains_stmt := by
+  intro h
+  exact ⟨h.1, h.2.2⟩
+example : sp_mask_superset_nv_stmt → Rev1Source.sp_mask_superset_nv_stmt := fun h => h.2
+example : sp_mask_superset_nv_stmt →
+    ∃ (b : Fin 2 → ℝ) (δ : ℝ) (j : Fin 2), finalRefined b δ j := fun h => h.1
+
+-- Prior art: SP1/SP1.1 receipt operands (2026), BLASST running-max criterion
+-- (Yuan/Shinn et al. 2025/2026; literature unverified, lead to check: BLASST running maximum),
+-- Mathlib finite-supremum order facts. Direct evaluation, no new selector or algorithm.
+def bulk : Fin 2 → ℝ := ![2,0]
+def exactScores : Fin 2 → ℝ := ![2,10]
+def values : Fin 2 → ℝ := ![0,1]
+def globalScores := mixedScores bulk exactScores (fun i => spRefined bulk 0 i)
+def splitScores := mixedScores bulk exactScores
+  (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)
+
+theorem global_refine0 : spRefined bulk 0 0 := by
+  unfold spRefined
+  have h : prefixMax bulk 0 ≤ 2 := by
+    apply prefixMax_le
+    intro i _
+    fin_cases i <;> norm_num [bulk]
+  norm_num [bulk] at h ⊢
+  exact h
+
+theorem global_skip1 : ¬ spRefined bulk 0 1 := by
+  unfold spRefined
+  rw [not_le]
+  have h := le_prefixMax bulk (show (0 : Fin 2) ≤ 1 by decide)
+  norm_num [bulk] at h ⊢
+  linarith
+
+theorem global_scores_eq : globalScores = ![2,0] := by
+  funext i
+  fin_cases i
+  · change (if spRefined bulk 0 0 then exactScores 0 else bulk 0) = 2
+    rw [ite_eq_left global_refine0]
+    rfl
+  · change (if spRefined bulk 0 1 then exactScores 1 else bulk 1) = 0
+    rw [ite_eq_right global_skip1]
+    rfl
+
+theorem split_scores_eq : splitScores = ![2,10] := by
+  funext i
+  have h : localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i := by
+    rw [localPrefixMax_singleton, sub_zero]
+  change (if localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i
+    then exactScores i else bulk i) = (![2,10] : Fin 2 → ℝ) i
+  rw [ite_eq_left h]
+  rfl
+
+-- Prior art: SP1.1 R26 (2026), standard softmax sink normalization;
+-- online softmax Milakov/Gimelshein (2018), FlashAttention Dao et al. (2022).
+-- Taken: denominator convention. New: only exact source-linked formula evaluation.
+-- Literature unverified, lead to check: online normalizer calculation for softmax.
+example : rowOutputWithSink globalScores values 0 = 1 / (Real.exp 2 + 2) := by
+  rw [global_scores_eq, rowOutputWithSink_two]
+  simp only [values, Matrix.cons_val_zero, Matrix.cons_val_one, Real.exp_zero,
+    mul_zero, mul_one, zero_add]
+  rw [show Real.exp 2 + 1 + 1 = Real.exp 2 + 2 by ring]
+example : rowOutputWithSink splitScores values 0 =
+    Real.exp 10 / (Real.exp 2 + Real.exp 10 + 1) := by
+  rw [split_scores_eq, rowOutputWithSink_two]
+  norm_num [values]
+example : (0.8 : ℝ) < |rowOutputWithSink splitScores values 0 - rowOutputWithSink globalScores values 0| :=
+  splitk_contains.2.1
+example : (0.8 : ℝ) < |rowOutput splitScores values - rowOutput globalScores values| :=
+  splitk_contains.2.2
+
+-- F2: independently evaluate both masks at the positive-antecedent key.
+example : finalRefined (![0,1] : Fin 2 → ℝ) 0 1 ∧ spRefined (![0,1] : Fin 2 → ℝ) 0 1 := by
+  constructor
+  · unfold finalRefined rowMax
+    rw [sub_zero]
+    apply Finset.sup'_le
+    intro i _
+    fin_cases i <;> norm_num
+  · unfold spRefined
+    have h : prefixMax (![0,1] : Fin 2 → ℝ) 1 ≤ 1 := by
+      apply prefixMax_le
+      intro i _
+      fin_cases i <;> norm_num
+    norm_num at h ⊢
+    exact h
+
+-- S1 active skip, with a strictly later key, rather than only k=j.
+example : ¬ spRefined (![2,1,3] : Fin 3 → ℝ) 0 1 := by
+  unfold spRefined
+  rw [not_le]
+  have h := le_prefixMax (![2,1,3] : Fin 3 → ℝ) (show (0 : Fin 3) ≤ 1 by decide)
+  norm_num at h ⊢
+  linarith
+example : (1 : ℝ) < prefixMax (![2,1,3] : Fin 3 → ℝ) 2 - 0 := by
+  have h := le_prefixMax (![2,1,3] : Fin 3 → ℝ) (show (2 : Fin 3) ≤ 2 by decide)
+  norm_num at h ⊢
+  linarith
+
+-- S3 proper, nonsingleton partition; equal full-row partitions would hide reversed containment.
+example : localPrefixMax ({1,2} : Finset (Fin 3)) (![2,0,1] : Fin 3 → ℝ) 1 (by simp) = 0 := by
+  unfold localPrefixMax
+  apply le_antisymm
+  · apply Finset.sup'_le
+    intro i hi
+    have hip := Finset.mem_filter.mp hi
+    have hi1 : i = 1 := by
+      fin_cases i
+      · norm_num at hip
+      · rfl
+      · norm_num at hip
+    subst i
+    norm_num
+  · exact Finset.le_sup' (![2,0,1] : Fin 3 → ℝ)
+      (show (1 : Fin 3) ∈ ({1,2} : Finset (Fin 3)).filter (fun i => i ≤ 1) by decide)
+
+-- S4: endpoint instances of SP1's shared-prefix pair; no assertion beyond [0,sqrt 3].
+example : zRefined (![1,0,0,0] : Fin 4 → ℝ) 0 0 ∧
+    ¬ zRefined (![1,0,0,10] : Fin 4 → ℝ) 0 0 :=
+  ⟨(z_not_single_pass 0 le_rfl (Real.sqrt_nonneg 3)).1,
+   (z_not_single_pass 0 le_rfl (Real.sqrt_nonneg 3)).2.1⟩
+example : zRefined (![1,0,0,0] : Fin 4 → ℝ) (Real.sqrt 3) 0 ∧
+    ¬ zRefined (![1,0,0,10] : Fin 4 → ℝ) (Real.sqrt 3) 0 :=
+  ⟨(z_not_single_pass _ (Real.sqrt_nonneg 3) le_rfl).1,
+   (z_not_single_pass _ (Real.sqrt_nonneg 3) le_rfl).2.1⟩
+
+-- S5: SP2 R06 (2026), triangle-bound/exp-log reasoning; direct antecedent census.
+example : (0 : ℝ) < 1/2 ∧
+    (∀ i : Fin 2, |(![10,0] : Fin 2 → ℝ) i - (![9,1] : Fin 2 → ℝ) i| ≤ 1) ∧
+    ¬ spRefined (![10,0] : Fin 2 → ℝ) (Real.log (1 / (1/2)) + 2*1) 1 := by
+  refine ⟨by norm_num, ?_, ?_⟩
+  · intro i
+    fin_cases i <;> norm_num
+  · unfold spRefined
+    rw [not_le]
+    have h := le_prefixMax (![10,0] : Fin 2 → ℝ) (show (0 : Fin 2) ≤ 1 by decide)
+    have hl := Real.log_le_sub_one_of_pos (show (0 : ℝ) < 2 by norm_num)
+    norm_num at h hl ⊢
+    linarith
+end
+end X5Rev2Probe
+example : ApaCerts.sp_skip_final_stmt := ApaCerts.sp_skip_final
+#print axioms ApaCerts.sp_skip_final
+example : ApaCerts.sp_skip_final_nv_stmt := ApaCerts.sp_skip_final_nv
+#print axioms ApaCerts.sp_skip_final_nv
+example : ApaCerts.sp_mask_superset_stmt := ApaCerts.sp_mask_superset
+#print axioms ApaCerts.sp_mask_superset
+example : ApaCerts.sp_mask_superset_nv_stmt := ApaCerts.sp_mask_superset_nv
+#print axioms ApaCerts.sp_mask_superset_nv
+example : ApaCerts.splitk_contains_stmt := ApaCerts.splitk_contains
+#print axioms ApaCerts.splitk_contains
+example : ApaCerts.splitk_contains_nv_stmt := ApaCerts.splitk_contains_nv
+#print axioms ApaCerts.splitk_contains_nv
+example : ApaCerts.z_not_single_pass_stmt := ApaCerts.z_not_single_pass
+#print axioms ApaCerts.z_not_single_pass
+example : ApaCerts.z_not_single_pass_nv_stmt := ApaCerts.z_not_single_pass_nv
+#print axioms ApaCerts.z_not_single_pass_nv
+example : ApaCerts.sp2_certificate_stmt := ApaCerts.sp2_certificate
+#print axioms ApaCerts.sp2_certificate
+example : ApaCerts.sp2_certificate_nv_stmt := ApaCerts.sp2_certificate_nv
+#print axioms ApaCerts.sp2_certificate_nv

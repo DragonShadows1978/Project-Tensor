@@ -1,0 +1,31 @@
+APPROVE. [Report](/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_x5/docs/TX3_X5_REV2_REPORT.md) and [findings](/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_x5/artifacts/x5_rev2/findings.json) are complete. Spec/Proofs/Check line references below are the reviewed Lean files.
+
+| Question | Statement | Verdict | Evidence |
+|---|---|---|---|
+| S1 | sp_skip_final | FAITHFUL | Unchanged. Spec 72–77; Proofs 118–137. |
+| S2 | sp_mask_superset | FAITHFUL | Main claim unchanged; antecedent witness added. Spec 81–87; Proofs 141–171. |
+| S3 | splitk_contains | FAITHFUL | Containment retained; sink-0 and sink-free gaps both required. Spec 54–58, 94–110; Proofs 194–253. |
+| S4 | z_not_single_pass | FAITHFUL | Unchanged, including z=0 and z=√3. Spec 116–125; Proofs 267–301. |
+| S5 | sp2_certificate | FAITHFUL | Unchanged full-key error premise and 2·errq margin. Spec 130–139; Proofs 307–339. |
+| S6 | Each non-vacuity witness | ADEQUATE | S1 ADEQUATE; S2 ADEQUATE; S3 ADEQUATE; S4 ADEQUATE; S5 ADEQUATE. |
+| S7 | All ten theorems for public recording | APPROVE | Both findings closed; no open findings. Check 13–35; passing Lean probe. |
+
+**F1 — CLOSED (original severity MAJOR): S3 omitted the receipt’s sink.** The amendment adds exp(sink) exactly once to the denominator, with no numerator contribution, and uses sink=0 in both outputs of the required >0.8 conjunct. Universal containment and the earlier sink-free gap are retained. Evidence: Spec 54–58, 94–107; Proofs 194–249; SP1.1 report 9–13; receipt test 67–74; reference 37–50; passing Lean probe and independent operand recomputation. Proposed restatement, now implemented: retain containment and require both the sink-0 and sink-free gaps for bulk [2,0], exact [2,10], V [0,1], δ=0 and singleton partitions. Prior art: SP1.1 R26 (2026), standard softmax sink normalization; review only, no new algorithm.
+
+**F2 — CLOSED (original severity MINOR): S2’s witness missed its antecedent.** The amended conjunction requires an existential with finalRefined true and retains the strictness existential. Its positive witness is bulk [0,1], δ=0, key 1: rowMax=prefixMax=1, so finalRefined and spRefined both hold. Key 0 still witnesses strict containment. Evidence: Spec 81–87; Proofs 148–171; Check 15–16; independent Lean evaluation. Proposed restatement, now implemented: (∃ b δ j, finalRefined b δ j) ∧ (∃ b δ j, spRefined b δ j ∧ ¬finalRefined b δ j). Prior art: REV1 F2 (2026), SP1 R24 (2026), BLASST’s running-max criterion; review only, no new algorithm.
+
+Raw receipt operands: bulk [2,0], exact [2,10], V [0,1], δ=0, partitions {0}/{1}, sink logit 0. Inclusive prefix maxima give global mask [true,false] and split mask [true,true], hence mixed scores [2,0] and [2,10]. The sink contributes exp(0)=1 once and contributes zero to the numerator.
+
+Using rowOutputWithSink:
+
+- Global: (e²·0 + e⁰·1)/(e² + e⁰ + e⁰) = 1/(e²+2) ≈ **0.106506978919200751**.
+- Split: (e²·0 + e¹⁰·1)/(e² + e¹⁰ + e⁰) = e¹⁰/(e²+e¹⁰+1) ≈ **0.999619282443397359**.
+- Absolute gap ≈ **0.893112303524196608 > 0.8**.
+
+The retained sink-free outputs are 0.119202922022117556 and 0.999664649869533522, with gap 0.880461727847415966. Operands were extracted from the original test by AST, not copied from the lead’s figures. Decimal values use 80 digits; Lean separately checks the exact formulas and both strict gap conjuncts.
+
+Lean probe passed; all ten axiom sets are {propext, Classical.choice, Quot.sound}. Reviewed inputs and .lake metadata stayed unchanged. No build or git command ran; baseline identity used REV1’s hash-verified source archive.
+
+## Prior art
+
+SP1/SP1.1/SP2 receipts (2026); BLASST (Yuan, Shinn et al., 2025/2026); online softmax (Milakov and Gimelshein, 2018); FlashAttention (Dao et al., 2022); Mathlib finite-supremum facts. Taken: existing rules, operands and normalization; new: independent fidelity review only. External literature unverified — lead to check: “BLASST running maximum”, “online normalizer calculation for softmax”. Source-site annotations are in the scratch probe and arithmetic driver, with matching ledger entries.
