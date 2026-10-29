@@ -111,6 +111,18 @@ materializes S×S; a window is a cell, so N is sized from the floor's
 spread. Production routing to the single pass is a separate, still-open
 decision.
 
+**Machine-checked claims (2026-10).** Five of the rules above are proved in
+Lean 4 with Mathlib, over real arithmetic, using only Lean's standard axioms:
+- a key the single pass skips stays skipped against the final maximum;
+- the single-pass mask contains the final-maximum mask;
+- split-K refines at least what the global rule refines, but its output can
+  still differ (an explicit counterexample, with and without a sink);
+- the z-score rule cannot be decided in one irrevocable pass;
+- the SP2 δ certificate holds.
+
+The statements, proofs, build steps and the two cross-model reviews of the
+statements are in [lean/apa_certs](lean/apa_certs/README.md).
+
 ## Research and evaluation targets
 
 This table names evaluation coverage, not engine or GRM certification. APA has

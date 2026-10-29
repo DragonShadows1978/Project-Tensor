@@ -1,0 +1,61 @@
+--- REV1 hash-verified Spec.lean
++++ current Spec.lean
+@@ -6,7 +6,8 @@
+ This file is the trust boundary. Each `<name>_stmt` states one claim from the APA primer
+ (`/mnt/Shared/APA_Primer/APA_Primer.md`). Each `<name>_nv_stmt` states that its hypotheses are satisfiable (a
+ non-vacuity witness). A seat proves `theorem <name> : <name>_stmt` and `theorem <name>_nv : <name>_nv_stmt` in
+-`ApaCerts/Proofs.lean`. `ApaCerts/Check.lean` (also lead-written) pins each proof to its statement and prints its axioms.
++`ApaCerts/Proofs.lean`. Amended after the fidelity review TX3-X5-REV1: sink-aware split-K counterexample (F1) and
++antecedent witness for `sp_mask_superset` (F2). `ApaCerts/Check.lean` (also lead-written) pins each proof to its statement and prints its axioms.
+ 
+ **Conventions.**
+ - One attention row has keys `0..n`, indexed by `Fin (n+1)`, so every row is nonempty.
+@@ -50,6 +51,12 @@
+ def rowOutput {n : ℕ} (scores V : Fin (n+1) → ℝ) : ℝ :=
+   (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i))
+ 
++/-- One row's attention output with an attention sink of logit `sink`. The sink adds `exp(sink)` once to the
++denominator and carries no value (SP1.1 reference `dense_scores(..., sinks=...)`,
++`tensor_cuda/tests/apa_sp1_reference.py`; the online merge adds the sink once to the denominator). -/
++def rowOutputWithSink {n : ℕ} (scores V : Fin (n+1) → ℝ) (sink : ℝ) : ℝ :=
++  (∑ i, Real.exp (scores i) * V i) / (∑ i, Real.exp (scores i) + Real.exp sink)
++
+ /-- The two-pass kernel's z-score rule (production `apa_selective_kernel`, `tensor_cuda/src/kernels.cu`, at b4da646:
+ pass 1 accumulates `a = |bulk|` and `a*a`; `mean = total/cnt`; `var = total_sq/cnt − mean*mean`;
+ `thr = mean + zthr*sqrtf(fmaxf(var, 0))`; pass 2 refines iff `fabsf(bulk) >= thr`). Real arithmetic, no rounding. -/
+@@ -76,12 +83,14 @@
+     finalRefined b δ j → spRefined b δ j
+ 
+ def sp_mask_superset_nv_stmt : Prop :=
+-  ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), spRefined b δ j ∧ ¬ finalRefined b δ j
++  (∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), finalRefined b δ j) ∧
++  (∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (j : Fin (1+1)), spRefined b δ j ∧ ¬ finalRefined b δ j)
+ 
+ /-! ## 3. `splitk_contains`: split-K selection contains the global SP rule, but output equality fails
+ (primer §4.2). A partition-local prefix maximum is never above the global one, so a key refined by the global
+-SP rule is refined in its partition. Counterexample: bulk [2,0], exact [2,10], V = [0,1], δ = 0. Global SP (one
+-partition) against split-K with partitions {0} and {1}: the outputs differ by more than 0.8. -/
++SP rule is refined in its partition. Counterexample: bulk [2,0], exact [2,10], V = [0,1], δ = 0, with an attention
++sink of logit 0 as in the receipt (and also without a sink). Global SP (one partition) against split-K with
++partitions {0} and {1}: the outputs differ by more than 0.8. -/
+ def splitk_contains_stmt : Prop :=
+   (∀ (n : ℕ) (P : Finset (Fin (n+1))) (b : Fin (n+1) → ℝ) (δ : ℝ) (j : Fin (n+1)) (hj : j ∈ P),
+       localPrefixMax P b j hj ≤ prefixMax b j ∧
+@@ -89,10 +98,13 @@
+   (let bulk : Fin (1+1) → ℝ := ![2, 0]
+    let exact : Fin (1+1) → ℝ := ![2, 10]
+    let V : Fin (1+1) → ℝ := ![0, 1]
+-   let globalOut := rowOutput (mixedScores bulk exact (fun i => spRefined bulk 0 i)) V
+-   let splitOut := rowOutput
+-     (mixedScores bulk exact (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)) V
+-   (0.8 : ℝ) < |splitOut - globalOut|)
++   let globalScores := mixedScores bulk exact (fun i => spRefined bulk 0 i)
++   let splitScores :=
++     mixedScores bulk exact (fun i => localPrefixMax {i} bulk i (mem_singleton_self i) - 0 ≤ bulk i)
++   -- The receipt's instance (SP1.1 report; `test_extra_refinement_changes_output...`): sink logit 0.
++   (0.8 : ℝ) < |rowOutputWithSink splitScores V 0 - rowOutputWithSink globalScores V 0| ∧
++   -- The same instance without a sink.
++   (0.8 : ℝ) < |rowOutput splitScores V - rowOutput globalScores V|)
+ 
+ def splitk_contains_nv_stmt : Prop :=
+   ∃ (b : Fin (1+1) → ℝ) (δ : ℝ) (P : Finset (Fin (1+1))) (j : Fin (1+1)), j ∈ P ∧ spRefined b δ j

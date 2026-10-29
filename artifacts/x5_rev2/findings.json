@@ -1,0 +1,190 @@
+{
+  "review": "TX3-X5-REV2",
+  "status": "COMPLETE",
+  "overall": "APPROVE",
+  "scope": "Five exact real-arithmetic claims and five non-vacuity witnesses. Statement fidelity only; no proof-correctness, floating-point, kernel, speed, packaging or model-quality assessment.",
+  "verdicts": [
+    {
+      "question": "S1",
+      "statement": "sp_skip_final",
+      "verdict": "FAITHFUL",
+      "basis": "Unchanged. Spec 72–77; Proofs 118–137."
+    },
+    {
+      "question": "S2",
+      "statement": "sp_mask_superset",
+      "verdict": "FAITHFUL",
+      "basis": "Main claim unchanged; antecedent witness added. Spec 81–87; Proofs 141–171."
+    },
+    {
+      "question": "S3",
+      "statement": "splitk_contains",
+      "verdict": "FAITHFUL",
+      "basis": "Containment retained; sink-0 and sink-free gaps both required. Spec 54–58, 94–110; Proofs 194–253."
+    },
+    {
+      "question": "S4",
+      "statement": "z_not_single_pass",
+      "verdict": "FAITHFUL",
+      "basis": "Unchanged, including z=0 and z=√3. Spec 116–125; Proofs 267–301."
+    },
+    {
+      "question": "S5",
+      "statement": "sp2_certificate",
+      "verdict": "FAITHFUL",
+      "basis": "Unchanged full-key error premise and 2·errq margin. Spec 130–139; Proofs 307–339."
+    },
+    {
+      "question": "S6",
+      "statement": "Each non-vacuity witness",
+      "verdict": "ADEQUATE",
+      "basis": "S1 ADEQUATE; S2 ADEQUATE; S3 ADEQUATE; S4 ADEQUATE; S5 ADEQUATE."
+    },
+    {
+      "question": "S7",
+      "statement": "All ten theorems for public recording",
+      "verdict": "APPROVE",
+      "basis": "Both findings closed; no open findings. Check 13–35; passing Lean probe."
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MAJOR",
+      "severity_scope": "inherited REV1 severity, closed in current review",
+      "status": "CLOSED",
+      "title": "Missing sink in split-K receipt instance",
+      "full_text": "**F1 — CLOSED (original severity MAJOR): S3 omitted the receipt’s sink.** The amendment adds exp(sink) exactly once to the denominator, with no numerator contribution, and uses sink=0 in both outputs of the required >0.8 conjunct. Universal containment and the earlier sink-free gap are retained. Evidence: Spec 54–58, 94–107; Proofs 194–249; SP1.1 report 9–13; receipt test 67–74; reference 37–50; passing Lean probe and independent operand recomputation. Proposed restatement, now implemented: retain containment and require both the sink-0 and sink-free gaps for bulk [2,0], exact [2,10], V [0,1], δ=0 and singleton partitions. Prior art: SP1.1 R26 (2026), standard softmax sink normalization; review only, no new algorithm.",
+      "proposed_restatement": "Retain universal containment and require both sink-0 and sink-free >0.8 gaps on original operands.",
+      "evidence_class": [
+        "source inspection",
+        "Lean elaboration",
+        "CPU Decimal recomputation"
+      ],
+      "prior_art": "SP1.1 R26 (2026), standard softmax sink normalization; no new algorithm."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "severity_scope": "inherited REV1 severity, closed in current review",
+      "status": "CLOSED",
+      "title": "Non-vacuity witness missed the antecedent",
+      "full_text": "**F2 — CLOSED (original severity MINOR): S2’s witness missed its antecedent.** The amended conjunction requires an existential with finalRefined true and retains the strictness existential. Its positive witness is bulk [0,1], δ=0, key 1: rowMax=prefixMax=1, so finalRefined and spRefined both hold. Key 0 still witnesses strict containment. Evidence: Spec 81–87; Proofs 148–171; Check 15–16; independent Lean evaluation. Proposed restatement, now implemented: (∃ b δ j, finalRefined b δ j) ∧ (∃ b δ j, spRefined b δ j ∧ ¬finalRefined b δ j). Prior art: REV1 F2 (2026), SP1 R24 (2026), BLASST’s running-max criterion; review only, no new algorithm.",
+      "proposed_restatement": "Conjoin an existential finalRefined witness with the existing strictness existential.",
+      "evidence_class": [
+        "source inspection",
+        "Lean elaboration"
+      ],
+      "prior_art": "REV1 F2 (2026), SP1 R24 (2026), BLASST running-max criterion; no new algorithm."
+    }
+  ],
+  "new_findings": [],
+  "open_findings": [],
+  "witnesses": [
+    {
+      "statement": "sp_skip_final_nv",
+      "verdict": "ADEQUATE",
+      "instance": "bulk=[1,0], delta=0, j=1: 0<1 is an active skip.",
+      "sources": "Spec 76–77; Proofs 130–137",
+      "attack": "A one-key delta=0 row has no skip and would make an implication vacuous. The actual witness has two keys. A separate [2,1,3], j=1, k=2 instance exercises a strictly later prefix (Lean-checked)."
+    },
+    {
+      "statement": "sp_mask_superset_nv",
+      "verdict": "ADEQUATE",
+      "instance": "bulk=[0,1], delta=0; j=1 final-refines and prefix-refines; j=0 prefix-refines but does not final-refine.",
+      "sources": "Spec 85–87; Proofs 148–171",
+      "attack": "Strictness alone makes the main implication antecedent false at j=0. New first conjunct and the independently evaluated j=1 witness close that hole."
+    },
+    {
+      "statement": "splitk_contains_nv",
+      "verdict": "ADEQUATE",
+      "instance": "bulk=[2,0], delta=0, P={0}, j=0 is a member and is globally refined. Output construction is fixed, without a conditional antecedent.",
+      "sources": "Spec 109–110; Proofs 251–253",
+      "attack": "P=univ makes containment equality and could hide a reversed inequality. Separate bulk=[2,0,1], P={1,2}, j=1 gives local prefix 0<global prefix 2. Lean checks local=0. V=0 would make output equality trivial; actual V=[0,1] and changed second score avoid this."
+    },
+    {
+      "statement": "z_not_single_pass_nv",
+      "verdict": "ADEQUATE",
+      "instance": "z=0 lies in [0,sqrt 3]. The same pair is checked at z=sqrt 3 as well.",
+      "sources": "Spec 124–125; Proofs 299–301, 346–352",
+      "attack": "Contradictory z bounds would vacuate the universal claim. z=0 and sqrt 3 satisfy actual bounds. A=[1,0,0,0] has threshold (1+z sqrt 3)/4, at most 1 on the interval; B=[1,0,0,10] has mean 11/4>1 and nonnegative added term. Same first input 1 forces any f to the same decision."
+    },
+    {
+      "statement": "sp2_certificate_nv",
+      "verdict": "ADEQUATE",
+      "instance": "bulk=[10,0], exact=[9,1], errq=1, epsilon=1/2, j=1. Both errors are exactly 1; delta=log 2+2<=3, so 0<10-delta is an active skip.",
+      "sources": "Spec 137–139; Proofs 325–339",
+      "attack": "epsilon>1 could make the weight bound trivial. Actual witness uses epsilon=1/2 and satisfies every-key error bound and skip together; independent Lean evaluation checks all premises."
+    }
+  ],
+  "quantifier_and_scope_checks": [
+    "S1: nonempty inclusive prefixes, signed bulk, strict skip from negating an inclusive refine threshold; same skipped key is compared with every later prefix and final max. All real margins remain quantified.",
+    "S2: finalRefined implies spRefined, not equality of masks or outputs. Antecedent and strictness witnesses are separate existentials; they need not be the same key.",
+    "S3: arbitrary finite P containing j generalizes ordered partition containment; P intersect the inclusive global prefix contains j, so there is no empty-maximum default. No partition-cover hypothesis is needed for the per-key order result. The fixed output comparison uses a genuine covering pair of singletons and one sink after aggregation.",
+    "S4: for each fixed z in [0,sqrt 3], the common first prefix cannot support irrevocable agreement on both rows. This is not an impossibility with unrestricted buffering or a claim for every real z.",
+    "S5: every key has bounded bulk/exact error. Nonempty row implies errq>=0 from that premise. epsilon>0 is sufficient; allowing epsilon>1 generalizes the receipt without weakening it. The strict skipped-key conclusion concerns true weights, not bulk or mixed weights. A common positive softmax denominator (including an unchanged sink) cancels. No aggregate error or empirical universal quantization bound is asserted."
+  ],
+  "baseline_identity_receipt": "artifacts/x5_rev2/baseline_identity.json",
+  "baseline_diff_receipt": "artifacts/x5_rev2/spec_vs_rev1.diff",
+  "baseline_limitation": "NO git prevented the requested commit-range git diff; full hash-verified REV1 archival Spec compared to hash-matched current Spec instead. No assertion of commit-object provenance.",
+  "f1_recomputation": {
+    "evidence_class": "CPU Decimal illustration of exact real formulas; not a floating-point kernel test",
+    "raw_operand_source": "/mnt/ForgeRealm/Project-Tensor/tensor_cuda/tests/test_apa_sp1_1.py:67-74",
+    "precision_decimal_digits": 80,
+    "raw_operands": {
+      "bulk": [
+        2,
+        0
+      ],
+      "exact": [
+        2,
+        10
+      ],
+      "values": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ],
+      "delta": 0,
+      "partitions": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ],
+      "sink": 0
+    },
+    "global_mask": [
+      true,
+      false
+    ],
+    "split_mask": [
+      true,
+      true
+    ],
+    "global_mixed_scores": [
+      2,
+      0
+    ],
+    "split_mixed_scores": [
+      2,
+      10
+    ],
+    "sink_contribution": "1",
+    "global_formula": "1/(exp(2)+2)",
+    "split_formula": "exp(10)/(exp(2)+exp(10)+1)",
+    "global_with_sink": "0.10650697891920075051054610007219094015331554260097208074825425527715500941545736",
+    "split_with_sink": "0.99961928244339735895965769882037573591670289465865372275918656558505833510491480",
+    "gap_with_sink": "0.89311230352419660844911159874818479576338735205768164201093231030790332568945744",
+    "global_without_sink": "0.11920292202211755594027085869760320479361570137103172420159474993902337771168076",
+    "split_without_sink": "0.99966464986953352189612167217086248100266992644720482400390344822833944305916009",
+    "gap_without_sink": "0.88046172784741596595585081347325927620905422507617309980230869828931606534747933"
+  },
+  "verification_receipt": "artifacts/x5_rev2/verification.json",
+  "prior_art": "SP1/SP1.1/SP2 receipts (2026); BLASST (Yuan, Shinn et al., 2025/2026); online softmax (Milakov and Gimelshein, 2018); FlashAttention (Dao et al., 2022); Mathlib finite-supremum facts. Taken: existing rules, operands and normalization; new: independent fidelity review only. External literature unverified — lead to check: “BLASST running maximum”, “online normalizer calculation for softmax”. Source-site annotations are in the scratch probe and arithmetic driver, with matching ledger entries."
+}
