@@ -57,4 +57,12 @@ The reports are in `docs/TX3_X5_REV1_REPORT.md` and `docs/TX3_X5_REV2_REPORT.md`
   statements. A separate statement file, written first and pinned by a check file, is the comparator-challenge
   pattern.
 - The online softmax and split-K merge are standard (Milakov and Gimelshein 2018; Dao et al., FlashAttention, 2022).
-- The APA rules and the claims proved here are this project's.
+- The running-maximum comparator behind the single-pass rule comes from BLASST (Yuan, Shinn et al., "BLASST: Dynamic
+  BLocked Attention Sparsity via Softmax Thresholding", arXiv:2512.12087, 2025). BLASST uses it to skip blocks.
+- This project's contributions:
+  - applying that comparator per key to precision, instead of to skipping;
+  - the two-sided quantization margin;
+  - the z-rule impossibility;
+  - split-K containment and its counterexample;
+  - the δ certificate;
+  - the statements and proofs here.
