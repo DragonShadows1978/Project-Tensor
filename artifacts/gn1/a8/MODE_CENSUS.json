@@ -1,0 +1,51 @@
+{
+  "modes": [
+    {
+      "field": "START.json.audit",
+      "reference": "start_gpu_run.py:14; evidence.py:88; score_gpu.py:18",
+      "role": "Root demotion; audit root cannot be accepted."
+    },
+    {
+      "field": "START.json.control",
+      "reference": "start_gpu_run.py:14; evidence.py:89; score_gpu.py:36-37",
+      "role": "Root demotion; cannot supply a line device mode."
+    },
+    {
+      "field": "parent_result.json.audit",
+      "reference": "run_gpu_line.py:32-33,117,138; evidence.py:400,467-472",
+      "role": "Exact root audit binding plus child-derived mode agreement; demotes device line."
+    },
+    {
+      "field": "parent_result.json.control",
+      "reference": "run_gpu_line.py:34-35,117,138; program_binding.py:69; evidence.py:467-480",
+      "role": "Exact root control binding; demotes device line and cannot promote CPU evidence."
+    },
+    {
+      "field": "invocation.json.audit / child_result.json.audit",
+      "reference": "run_gpu_tests.py:94,128; evidence.py:248",
+      "role": "Child-produced audit bool bound to START audit."
+    },
+    {
+      "field": "G5_SUMMARY.json.lines[label].mode",
+      "reference": "device_evidence.py:78-108; evidence.py:442-443",
+      "role": "Derived output only: device iff complete D2 conjunction, otherwise cpu."
+    },
+    {
+      "field": "GN1_AUDIT / GN1_CONTROL / GN1_CPU_FIXTURE",
+      "reference": "STAGED_GPU_COMMANDS.sh:24-33; run_gpu_tests.py:76-89; start_gpu_run.py:14",
+      "role": "Mode environment inputs; fixture requires control root; device stage clears audit/control and a fixture cannot promote acceptance."
+    }
+  ],
+  "fixture_selectors": [
+    "HOSTILE_MODE",
+    "REV2_MODE",
+    "REV3_SLEEP",
+    "REV4_MA4"
+  ],
+  "fixture_selector_role": "Test payload selection only, not a device-mode authority.",
+  "data_only_unit_modes": [
+    "parent control false/audit false with valid device record accepts",
+    "parent control or audit true demotes device record",
+    "parent GPU declaration with no-device evidence refuses"
+  ]
+}

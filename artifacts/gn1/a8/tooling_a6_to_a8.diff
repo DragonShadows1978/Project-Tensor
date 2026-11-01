@@ -1,0 +1,454 @@
+--- a6/STAGED_GPU_COMMANDS.sh
++++ a8/STAGED_GPU_COMMANDS.sh
+@@ -10,7 +10,7 @@
+ TOOL="$(cd -- "${source_path%/*}" && pwd)"
+ cd -- "$TOOL"
+ export RUNS
+-export TMPDIR="${TMPDIR:-/tmp/gn1_a6_staged}" PYTHONDONTWRITEBYTECODE=1
++export TMPDIR="${TMPDIR:-/tmp/gn1_a8_staged}" PYTHONDONTWRITEBYTECODE=1
+ # D7 compares resolved paths through the shared Python guard.
+ /usr/bin/timeout 5s /usr/bin/python3 -c 'import os; from evidence import scratch_guard; scratch_guard(os.environ["TMPDIR"])'
+ # A5 D3: GNU timeout supervision; runner grace source 115, poll 132,
+@@ -25,6 +25,9 @@
+     GPU_RUN="$TOOL/forge_gpu_run_standin.py"
+     label=candidate_focus
+ else
++    # A7 D2: require a positive child-visible device selection.
++    : "${CUDA_VISIBLE_DEVICES:?nonempty CUDA_VISIBLE_DEVICES required for device lines}"
++    export CUDA_VISIBLE_DEVICES
+     unset GN1_AUDIT GN1_CONTROL
+     unset FORGE_GPU_SUMMARY FORGE_GPU_WINDOW_FILE FORGE_GPU_LOCK
+     # Unknown FORGE_GPU_* variables are rejected by the scorer.
+--- a6/a5_controls.py
++++ a8/a5_controls.py
+@@ -113,7 +113,7 @@
+ def census():
+     # Parser-only execution never calls runner main, takes a lock or reads a
+     # window. Record source and accepted namespaces as operand evidence.
+-    ns = runpy.run_path(REAL, run_name="gn1_a6_parser")
++    ns = runpy.run_path(REAL, run_name="gn1_a8_parser")
+     import contextlib
+     import io
+     options = ["--min", "--max", "--margin", "--self-leasing", "--label", "--status", "--help"]
+--- a6/a6_controls.py
++++ a8/a6_controls.py
+@@ -102,7 +102,7 @@
+ s = score(runs)
+ record("CPU_control_root", "D1 all 58 lines recompute; control root never establishes acceptance",
+        s["exit"] == 1 and not s["summary"]["passed"]
+-       and "control run cannot establish GPU acceptance" in s["summary"]["errors"]
++       and "not a device run: every line requires positive child device evidence" in s["summary"]["errors"]
+        and len(s["summary"]["lines"]) == 58 and all(v["passed"] for v in s["summary"]["lines"].values()), scorer=s)
+ (TOOL/"honest_labels_verified.json").write_text(json.dumps(dict(passed=all(v["passed"] for v in s["summary"]["lines"].values()),
+     root=str(runs.relative_to(TOOL)), labels=58, runner=pins()["runner"],
+--- a6/evidence.py
++++ a8/evidence.py
+@@ -12,11 +12,12 @@
+ from pathlib import Path
+ import xml.etree.ElementTree as ET
+ from runtime_evidence import runtime_modules
++from device_evidence import classify
+ from program_binding import reasons as program_reasons, RUNNER, TIMEOUT, PYTHON
+ 
+ TOOL = Path(__file__).resolve().parent
+ ROOT = TOOL.parents[2]
+-ORDER = "orders/GN1_A6_REV5_FIXES.md"
++ORDER = "orders/GN1_A8_CONTRACT.md"
+ DEVICE_PATTERNS = (
+     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
+     "initialization error", "invalid device ordinal", "CUDA error at",
+@@ -36,7 +37,7 @@
+ def guard(runs):
+     runs = Path(runs).resolve()
+     if not runs.is_relative_to(TOOL) or runs == TOOL or runs.is_relative_to(TOOL / "arms"):
+-        raise ValueError("RUNS must be under a6 and outside arms")
++        raise ValueError("RUNS must be under a8 and outside arms")
+     return runs
+ 
+ 
+@@ -159,7 +160,7 @@
+ 
+ def scratch_guard(value):
+     resolved = Path(value).resolve()
+-    assert resolved.parent == Path("/tmp") and resolved.name.startswith("gn1_a6_"), "TMPDIR must resolve to /tmp/gn1_a6_*"
++    assert resolved.parent == Path("/tmp") and resolved.name.startswith("gn1_a8_"), "TMPDIR must resolve to /tmp/gn1_a8_*"
+     return resolved
+ 
+ 
+@@ -434,6 +435,18 @@
+         for key in ("passed", "reasons", "actual_killers", "forge_outcome", "timeout", "timeout_cause", "outcomes"):
+             assert receipt[key] == result[key], "stored parent receipt disagrees with recomputation: " + key
+         assert receipt["unsealed"] == result["unsealed"], "stored runtime census differs from recomputation"
++        # A7 D2/D3: derive mode solely from the child-owned evidence.
++        # Prior art: CUDA runtime queries/SHA-256, see device_evidence.py;
++        # this exact evidence/mode conjunction is mandated by A7.
++        data = read(attempt / "child_result.json")
++        mode, device_errors = check_line_device(data, seal, receipt)
++        result["mode"] = mode
++        result["reasons"].extend(device_errors)
++        if mode == "device":
++            invocation = read(attempt / "invocation.json")
++            assert invocation["device_evidence"] == data["device_evidence"], "pre-test child device evidence mismatch"
++            captured = datetime.datetime.fromisoformat(data["device_evidence"]["captured_at"])
++            assert datetime.datetime.fromisoformat(receipt["start"]) <= captured <= datetime.datetime.fromisoformat(receipt["child_exited"]), "device evidence timestamp outside child run"
+         result["reasons"].extend(bound_reasons(receipt, line))
+         result["reasons"].extend(program_reasons(receipt, seal, start["control"], start["audit"]))
+         result["passed"] = not result["reasons"]
+@@ -441,3 +454,28 @@
+             result["actual_killers"] = []
+     result.update(selected_attempt=str(selected) if selected else None, attempts=inventory)
+     return result
++
++
++def check_line_device(data, seal, parent):
++    """A8 D2/D3 shared line check; data-only accept-path unit entry point.
++
++    Prior art: A7 CUDA Runtime 12.6 evidence conjunction (NVIDIA, 2024)
++    and SHA-256 (NIST, 2015). This order mandates demote-only booleans.
++    CPU control diagnostics cannot establish device acceptance.
++    """
++    mode, errors = classify(data, seal)
++    for field in ("control", "audit"):
++        if type(parent.get(field)) is not bool:
++            errors.append("mode binding: parent " + field + " is not a boolean")
++    declared_cpu = parent.get("control") is True or parent.get("audit") is True
++    if (mode == "cpu") != declared_cpu:
++        errors.append("mode binding: parent declaration disagrees with child device evidence")
++    # Legacy CPU fixtures remain diagnostic-only. A production declaration
++    # also receives the exact identity failure, even with no device name.
++    if not declared_cpu:
++        e = data.get("device_evidence", {})
++        expected = dict(resolved_path=str((TOOL / "run_gpu_tests.py").resolve()),
++                        sha256=seal["tool_files"]["run_gpu_tests.py"])
++        if not isinstance(e, dict) or e.get("program") != expected:
++            errors.append("device evidence: child program differs from sealed run_gpu_tests.py")
++    return mode, errors
+--- a6/hostile_forge.py
++++ a8/hostile_forge.py
+@@ -29,6 +29,8 @@
+     rc = int(mode[-2:])
+     log(rc, "no-window" if rc==75 else "no-lock")
+     sys.exit(rc)
++# A7 D2: child-owned identity; Meszaros (2007) explicit stand-in.
++from device_evidence import capture
+ from runtime_evidence import atomic_json, module_census, npbool_index_check
+ atomic_json(output / "child_started.json", dict(label=label, pid=os.getpid()))
+ arm, suite = line["arm"], line["suite"]
+@@ -135,6 +137,7 @@
+           nn_sha256=seal["arms"][arm]["nn.py"],engine_sha256=pin["sha256"],
+           seal_sha256=sha(TOOL/"staging_seal.json"),pytest_exit=rc,collected_ids=ids,
+           collection_errors=[],reports=reports,CUDA_VISIBLE_DEVICES="")
++data["device_evidence"] = capture(__file__)
+ data["runtime_modules"] = module_census(TOOL.parents[2])
+ data["equivalence_runtime"] = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+ if mode=="bad_nn_hash":data["nn_sha256"]="0"*64
+--- a6/hostile_scorer.py
++++ a8/hostile_scorer.py
+@@ -77,7 +77,7 @@
+ RESULT.append(dict(control="H1",target="START.json",passed=s["exit"]==1 and "START.json" in str(s),scorer=s))
+ out=Path(os.environ["TMPDIR"])/"outside_guard";out.mkdir(exist_ok=True)
+ s=score(out)
+-RESULT.append(dict(control="H1b",target="run-root guard",passed=s["exit"]!=0 and "RUNS must be under a6" in str(s),scorer=s))
++RESULT.append(dict(control="H1b",target="run-root guard",passed=s["exit"]!=0 and "RUNS must be under a8" in str(s),scorer=s))
+ control("H2_REV1_exact","rev1_device","device-pattern failure")
+ control("H2c_REV1_exact","rev1_device_control","device-pattern failure")
+ control("H3_foreign_arm","foreign_arm","arm/suite binding")
+@@ -185,9 +185,9 @@
+ r=parent(runs,"baseline_focus","real_baseline");s=score(runs)
+ RESULT.append(dict(control="Real_baseline_D5_registration",target="real GN test outcomes and registered baseline D5 exception classes",passed=r["exit"]==0 and s["summary"]["lines"]["baseline_focus"]["passed"],parent=r,scorer=s))
+ runs=start("Resolved_TMPDIR_escape")
+-r=parent(runs,"candidate_focus",TMPDIR="/tmp/gn1_a6_work/../gn1_outside_a3")
++r=parent(runs,"candidate_focus",TMPDIR="/tmp/gn1_a8_work/../gn1_outside_a3")
+ s=score(runs)
+-RESULT.append(dict(control="Resolved_TMPDIR_escape",target="TMPDIR must resolve to /tmp/gn1_a6_*",passed=r["exit"]!=0 and "TMPDIR must resolve" in str(r) and s["exit"]==1,parent=r,scorer=s))
++RESULT.append(dict(control="Resolved_TMPDIR_escape",target="TMPDIR must resolve to /tmp/gn1_a8_*",passed=r["exit"]!=0 and "TMPDIR must resolve" in str(r) and s["exit"]==1,parent=r,scorer=s))
+ result=dict(passed=all(r["passed"] for r in RESULT),controls=RESULT,CPU_only=True,CUDA_VISIBLE_DEVICES="",patterns=list(DEVICE_PATTERNS))
+ (TOOL/"G4_hostile.json").write_text(json.dumps(result,indent=2)+"\n")
+ print(json.dumps(dict(passed=result["passed"],controls=len(RESULT),failed=[r["control"] for r in RESULT if not r["passed"]])))
+--- a6/p116_probe.py
++++ a8/p116_probe.py
+@@ -6,7 +6,7 @@
+ """
+ import datetime,json,os,subprocess,sys,time
+ from pathlib import Path
+-ROOT=Path.cwd();T=ROOT/'artifacts/gn1/a6';sys.path.insert(0,str(T))
++ROOT=Path.cwd();T=ROOT/'artifacts/gn1/a8';sys.path.insert(0,str(T))
+ from control_transport import adapt
+ from evidence import read
+ assert os.environ['CUDA_VISIBLE_DEVICES']==''
+--- a6/rev2_forge.py
++++ a8/rev2_forge.py
+@@ -28,6 +28,8 @@
+ sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+ seal = json.loads((TOOL / "staging_seal.json").read_text())
+ pin = json.loads((TOOL / "engine_pin.json").read_text())
++# A7 D2: child-owned identity; Meszaros (2007) explicit stand-in.
++from device_evidence import capture
+ from runtime_evidence import atomic_json, module_census, npbool_index_check
+ atomic_json(att / "child_started.json", dict(label=label, pid=os.getpid()))
+ if mode == "started_no_result":
+@@ -102,6 +104,11 @@
+             seal_sha256=sha(TOOL / "staging_seal.json"), engine_sha256=pin["sha256"],
+             nn_sha256=seal["arms"][arm]["nn.py"], CUDA_VISIBLE_DEVICES="", files=[], pytest_exit=rc,
+             collected_ids=collected, collection_errors=[], reports=rows)
++# A8 D2: use the sealed child's own capture when it invokes this fixture.
++# Prior art: A7 capture plus Python runpy init_globals (PSF).
++data["device_evidence"] = globals().get("GN1_CHILD_DEVICE_EVIDENCE") or capture(__file__)
++# A7 D2: child-owned pre-result record, also present in CPU fixtures.
++atomic_json(att / "invocation.json", dict(arm=arm, suite=suite, device_evidence=data["device_evidence"]))
+ data["runtime_modules"] = module_census(TOOL.parents[2])
+ data["equivalence_runtime"] = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+ if mode == "sealed_tamper":
+--- a6/rev4_forge.py
++++ a8/rev4_forge.py
+@@ -21,6 +21,8 @@
+ TOOL = Path(os.environ["REV4_MA4"])
+ ROOT = TOOL.parents[2]
+ sys.path.insert(0, str(TOOL))
++# A7 D2: child-owned identity; Meszaros (2007) explicit stand-in.
++from device_evidence import capture
+ from runtime_evidence import atomic_json, module_census, npbool_index_check  # noqa: E402
+ mode = os.environ.get("REV2_MODE", "normal")
+ label = os.environ["GN1_LINE"]
+@@ -57,7 +59,10 @@
+ pin = json.loads((TOOL / "engine_pin.json").read_text())
+ arm, suite = line["arm"], line["suite"]
+ if mode == "started_no_result":
+-    (att / "invocation.json").write_text(json.dumps(dict(arm=arm, suite=suite, note="child started")) + "\n")
++    # A8 D2: evidence belongs in this child's pre-test invocation; there
++    # is no completed result in this mode. Prior art: A7 CUDA capture.
++    (att / "invocation.json").write_text(json.dumps(dict(arm=arm, suite=suite,
++        device_evidence=capture(__file__), note="child started")) + "\n")
+     time.sleep(float(os.environ.get("REV3_SLEEP", "6")))
+     sys.exit(0)
+ ids = census(arm, suite)
+@@ -89,7 +94,7 @@
+     modules.append(dict(module="numpy.random.mtrand", path=next(p for p in seal["external_modules"] if "numpy/random/mtrand" in p),
+                         sha256="0" * 64))
+ if mode == "unsealed_runtime":
+-    modules.append(dict(module="planted", path="artifacts/gn1/a6/planted_rev4.py", sha256="1" * 64))
++    modules.append(dict(module="planted", path="artifacts/gn1/a8/planted_rev4.py", sha256="1" * 64))
+ eq = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+ if mode == "npbool_accepts":
+     # Premise-false operand: what the record must look like if operator.index accepted numpy.bool_.
+@@ -99,7 +104,11 @@
+             nn_sha256=seal["arms"][arm]["nn.py"], CUDA_VISIBLE_DEVICES="", files=[], pytest_exit=rc,
+             collected_ids=list(ids), collection_errors=[], reports=rows, equivalence_runtime=eq,
+             runtime_modules=modules)
+-(att / "invocation.json").write_text(json.dumps(dict(arm=arm, suite=suite)) + "\n")
++# A8 D2: completed fixture evidence is captured by its own writer.
++# Prior art: A7 CUDA runtime capture (NVIDIA 12.6, 2024).
++data["device_evidence"] = capture(__file__)
++(att / "invocation.json").write_text(json.dumps(dict(arm=arm, suite=suite,
++    device_evidence=data["device_evidence"])) + "\n")
+ root = ET.Element("testsuites")
+ ts = ET.SubElement(root, "testsuite", name="pytest")
+ for i in ids:
+--- a6/run_gpu_tests.py
++++ a8/run_gpu_tests.py
+@@ -78,8 +78,15 @@
+         _, record = verify_start(runs)
+         assert record["control"] and os.environ.get("GN1_CONTROL") == "1"
+         assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
++        # A8 D2: the sealed child owns this record even in the CPU fixture.
++        # Prior art: A7 CUDA runtime capture (NVIDIA 12.6, 2024); runpy
++        # init_globals (PSF). Fixture outcomes remain CPU sensitivity data.
++        from device_evidence import capture
++        pin = json.loads((TOOL / "engine_pin.json").read_text())
++        evidence = capture(__file__, ROOT / pin["module"])
+         import runpy
+-        runpy.run_path(str(TOOL / "rev2_forge.py"), run_name="__main__")
++        runpy.run_path(str(TOOL / "rev2_forge.py"), run_name="__main__",
++                       init_globals={"GN1_CHILD_DEVICE_EVIDENCE": evidence})
+         return 0
+     runs = guard(os.environ["RUNS"])
+     seal, start_record = verify_start(runs)
+@@ -115,7 +122,10 @@
+     files = (["tensor_cuda/tests/test_groupnorm_gn1.py", "tensor_cuda/tests/test_ext_phase7.py"]
+              if suite == "focus" else ["tensor_cuda/tests/test_groupnorm_gn1.py"] if suite == "mutation"
+              else json.loads((TOOL / "nn_import_test_files.json").read_text()))
+-    invocation = dict(arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
++    # A7 D2: NVIDIA CUDA Runtime 12.6 via the pinned engine; see device_evidence.py.
++    from device_evidence import capture
++    device_evidence = capture(__file__, tc._C.__file__)
++    invocation = dict(device_evidence=device_evidence, arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
+                       run_root=str(runs), attempt_dir=str(output), seal_sha256=sha(TOOL / "staging_seal.json"),
+                       engine_sha256=sha(module), nn_sha256=sha(package / "nn.py"),
+                       CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"), files=files)
+--- a6/score_gpu.py
++++ a8/score_gpu.py
+@@ -17,8 +17,6 @@
+         seal, start = verify_start(runs)
+         assert not start["audit"], "audit run cannot establish GPU acceptance"
+         # A6 D1: recompute controls for target sensitivity, bar root acceptance.
+-        if start["control"]:
+-            errors.append("control run cannot establish GPU acceptance")
+         for label in lines():
+             try:
+                 summary[label] = recompute_line(runs, label, seal, start)
+@@ -29,6 +27,14 @@
+                 summary[label] = dict(passed=False, reasons=[str(exc) or type(exc).__name__], attempts=inventory)
+     except Exception as exc:
+         errors.append(str(exc) or type(exc).__name__)
++    # A7 D2/D3: no declaration can promote a CPU line. CUDA runtime API
++    # evidence is checked per admitted child; see device_evidence.py.
++    if summary and any(row.get("mode") != "device" for row in summary.values()):
++        errors.append("not a device run: every line requires positive child device evidence")
++    # A8 D3: a root declaration can only demote. A CPU root has one
++    # deciding reason: absent positive device evidence. Prior art: A7.
++    if summary and all(row.get("mode") == "device" for row in summary.values()) and start["control"]:
++        errors.append("control run cannot establish GPU acceptance")
+     passed = not errors and bool(summary) and all(row["passed"] for row in summary.values())
+     result = dict(passed=passed, errors=errors, lines=summary)
+     runs.mkdir(parents=True, exist_ok=True)
+--- a6/seal_staging.py
++++ a8/seal_staging.py
+@@ -18,7 +18,7 @@
+ files = sorted(set(files + [p.name for p in TOOL.glob("*.py")] + [p.name for p in TOOL.glob("ids_*.txt")]))
+ trace=json.loads((TOOL/"import_trace.json").read_text())
+ assert trace["exit"]==0
+-imports={r["path"]:r["sha256"] for r in trace["modules"] if r["local"] and not r["path"].startswith("artifacts/gn1/a6/arms/")}
++imports={r["path"]:r["sha256"] for r in trace["modules"] if r["local"] and not r["path"].startswith("artifacts/gn1/a8/arms/")}
+ external={r["path"]:r["sha256"] for r in trace["modules"] if not r["local"]}
+ # D5 union of collection and all CPU suite runtime origins. Prior art:
+ # Python sys.modules census (PSF), SHA-256/FIPS 180-4 (2015).
+@@ -29,7 +29,7 @@
+     for row in runtime["modules"]:
+         assert "error" not in row, row
+         path=row["path"]
+-        if path.startswith("artifacts/gn1/a6/arms/"):
++        if path.startswith("artifacts/gn1/a8/arms/"):
+             continue
+         target=external if path.startswith(("/", "$HOME/")) else imports
+         assert path not in target or target[path]==row["sha256"], "census byte drift: "+path
+@@ -37,7 +37,7 @@
+ tests=json.loads((TOOL/"nn_import_test_files.json").read_text())
+ files += ["trace_imports.py", "import_trace.json", "REGISTRATION.md", "REGISTRATION.json", "SEAL_IMPORT_TRACE.md", "AMENDMENTS.md"]
+ seal=dict(programs=pins(), staged_environment=dict(PATH=PATH, FORGE_GPU_KILL_GRACE="10", FORGE_GPU_POLL="5", FORGE_GPU_RUN_LOG="{attempt_dir}/forge.log"), order_commit=(TOOL/"order_commit.txt").read_text().strip(),
+-          order_sha256=sha(ROOT/"orders/GN1_A6_REV5_FIXES.md"),
++          order_sha256=sha(ROOT/"orders/GN1_A8_CONTRACT.md"),
+           engine_sha256=json.loads((TOOL/"engine_pin.json").read_text())["sha256"],
+           tool_files={f:sha(TOOL/f) for f in files},test_files={f:sha(ROOT/f) for f in tests},
+           import_modules=imports, external_modules=external, import_trace_sha256=sha(TOOL/"import_trace.json"),
+--- a6/verify_scope.py
++++ a8/verify_scope.py
+@@ -16,7 +16,7 @@
+     import hashlib
+     assert hashlib.sha256(git("show","cf922891:"+n)).hexdigest()==h,n
+ changed=git("diff","--name-only","HEAD").decode().splitlines()
+-assert all(n.startswith(("artifacts/gn1/a6/","logs/")) for n in changed),changed
++assert all(n.startswith(("artifacts/gn1/a8/","logs/")) for n in changed),changed
+ save("G1_scope.json",dict(passed=True,product_byte_identical_cf922891=True,frozen=frozen,changed_tracked=changed,product=read(TOOL/"product_before.json")))
+ seal=verify_seal()
+ for arm in seal["arms"]:verify_arm(arm,seal)
+--- /dev/null
++++ a8/device_evidence.py
+@@ -0,0 +1,108 @@
++"""A7 D2/D3 child-owned device evidence, read-only validation.
++
++Prior art: NVIDIA CUDA Runtime API 12.6 (2024), cudaGetDevice,
++cudaGetDeviceProperties_v2, cudaRuntimeGetVersion, cudaDriverGetVersion;
++CPython ctypes (PSF, Python 2.5, 2006) C ABI calls; SHA-256 FIPS180-4
++(NIST, 2015). Source: CUDA 12.6 cuda_runtime_api.h:172,1816,9958,9987;
++driver_types.h:2284-2286 (name is the first 256-byte field).
++Taken: the existing CUDA runtime queries through the pinned engine's loaded
++ELF dependency handle. Ours: the order's exact evidence conjunction and
++per-line mode derivation. No attestation or numerical algorithm is claimed.
++Historical API attribution unverified -- lead to check: CUDA Runtime API
++12.6 device management version management; Python ctypes 2.5 history.
++"""
++import ctypes
++import datetime
++import hashlib
++import os
++from pathlib import Path
++
++TOOL = Path(__file__).resolve().parent
++CALLS = ("cudaGetDevice", "cudaGetDeviceProperties_v2", "cudaRuntimeGetVersion", "cudaDriverGetVersion")
++
++
++def identity(path):
++    p = Path(path).resolve(strict=True)
++    return dict(resolved_path=str(p), sha256=hashlib.sha256(p.read_bytes()).hexdigest())
++
++
++def capture(program, engine=None):
++    """Called by the receipt's writer, before pytest; never by the parent.
++
++    CUDA 12.6's cudaDeviceProp begins with char name[256]. An aligned 64KiB
++    storage block reserves more than its complete declared struct (header
++    source captured in DEVICE_API_SOURCES.json); only that first field is
++    decoded. This calls the v2 ABI explicitly, not the legacy struct ABI.
++    """
++    result = dict(program=identity(program), CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
++                  device_name=None, cuda_runtime_version=None, cuda_driver_version=None,
++                  device_ordinal=None, native_status={}, engine_sha256=None,
++                  provider="pinned-engine:libcudart", query_error=None,
++                  captured_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
++    if engine is None:
++        result["query_error"] = "CPU stand-in: engine not loaded"
++        return result
++    try:
++        result["engine_sha256"] = identity(engine)["sha256"]
++        runtime = ctypes.CDLL(str(Path(engine).resolve(strict=True)))
++        def integer(name):
++            out = ctypes.c_int(-1)
++            fn = getattr(runtime, name)
++            fn.argtypes = [ctypes.POINTER(ctypes.c_int)]
++            fn.restype = ctypes.c_int
++            status = fn(ctypes.byref(out))
++            result["native_status"][name] = str(status)
++            if status != 0:
++                raise RuntimeError(name + " status " + str(status))
++            return out.value
++        # Record versions even when the device is hidden; none of these
++        # queries allocates device memory or executes a test/kernel.
++        result["cuda_runtime_version"] = str(integer("cudaRuntimeGetVersion"))
++        result["cuda_driver_version"] = str(integer("cudaDriverGetVersion"))
++        ordinal = integer("cudaGetDevice")
++        result["device_ordinal"] = str(ordinal)
++        storage = (ctypes.c_longdouble * 4096)()
++        fn = runtime.cudaGetDeviceProperties_v2
++        fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
++        fn.restype = ctypes.c_int
++        status = fn(ctypes.byref(storage), ordinal)
++        result["native_status"]["cudaGetDeviceProperties_v2"] = str(status)
++        if status != 0:
++            raise RuntimeError("cudaGetDeviceProperties_v2 status " + str(status))
++        result["device_name"] = ctypes.string_at(ctypes.addressof(storage), 256).split(b"\0", 1)[0].decode("ascii")
++    except Exception as exc:
++        result["query_error"] = str(exc) or type(exc).__name__
++    return result
++
++
++def classify(data, seal):
++    """Positive evidence is a conjunction, independent of every declared mode.
++
++    CPU receipts remain usable for line sensitivity checks. Any attempted
++    positive device claim must satisfy every field, including the sealed
++    real child's path/digest. An empty CVD cannot establish a device line.
++    This is consistency validation of editable receipts, not authentication.
++    """
++    e = data.get("device_evidence")
++    if not isinstance(e, dict):
++        return "cpu", []
++    errors = []
++    claimed = e.get("device_name") is not None
++    try:
++        assert e["program"] == dict(resolved_path=str((TOOL / "run_gpu_tests.py").resolve()),
++                                    sha256=seal["tool_files"]["run_gpu_tests.py"]), "child program differs from sealed run_gpu_tests.py"
++        assert type(e["CUDA_VISIBLE_DEVICES"]) is str and e["CUDA_VISIBLE_DEVICES"] != "", "CUDA_VISIBLE_DEVICES empty or missing"
++        assert e["CUDA_VISIBLE_DEVICES"] == data["CUDA_VISIBLE_DEVICES"], "child CUDA_VISIBLE_DEVICES evidence mismatch"
++        assert type(e["device_name"]) is str and bool(e["device_name"].strip()), "device name absent"
++        for name in ("cuda_runtime_version", "cuda_driver_version", "device_ordinal"):
++            assert type(e[name]) is str and e[name].isascii() and e[name].isdecimal(), name + " is not an exact decimal string"
++            assert name == "device_ordinal" or int(e[name]) > 0, name + " is zero"
++        assert e["native_status"] == {name: "0" for name in CALLS}, "native query status not successful"
++        assert e["engine_sha256"] == seal["engine_sha256"], "device query engine differs from pin"
++        assert e["provider"] == "pinned-engine:libcudart" and e["query_error"] is None, "device query unavailable"
++        datetime.datetime.fromisoformat(e["captured_at"])
++    except Exception as exc:
++        if claimed:
++            errors.append("device evidence: " + (str(exc) or type(exc).__name__))
++        return "cpu", errors
++    return "device", errors
