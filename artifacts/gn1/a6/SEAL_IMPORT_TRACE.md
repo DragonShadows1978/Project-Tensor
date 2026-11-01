@@ -1,0 +1,9 @@
+# A4 runtime seal
+
+The seal is the union of the real native package collection trace and the sys.modules origin census after CPU stand-in execution of focus, mutation and regression suites. Each suite runs in a fresh interpreter. Native collection is CPU-only and imports the pinned binary without invoking GPU operations. Runtime execution uses the NumPy stand-in and no binary.
+
+After pytest.main the real child records the path and SHA-256 of every sys.modules entry with __file__. Paths are canonical and home paths use $HOME. Unreadable origins become recorded reasons. The parent and scorer compare every recorded origin against the seal's tool, arm, test, local import and external maps. A known sealed origin with a different digest fails the line as runtime module tamper. An origin the seal never saw is listed as unsealed in both parent and scorer receipts, does not itself fail the line, and must be reviewed by the lead. This includes paths reached only on a real device. This is a finite import census, not a claim to cover all possible GPU import paths.
+
+The stand-in supports GroupNorm, not the entire engine. The regression trace preserves unsupported call and setup failures and skips and requires setup coverage for every collected ID. An explicit CPU diagnostic uses numpy.random.seed and numpy.testing.assert_equal on ID uniqueness, ensuring both lazy NumPy namespaces are included even where an unsupported engine operation would stop before a test assertion. These calibration imports are labeled separately from test outcomes in each runtime trace. No test or product assertion changes.
+
+Prior art: Python sys.modules/__file__ origin inspection (PSF, year unverified - lead to check Python sys.modules module origins); SHA-256 FIPS 180-4 (2015). Atomic start/result publication uses POSIX rename(2), IEEE Std 1003.1 (year unverified - lead to check POSIX rename atomic replacement). A4 binds these mechanisms to GN1 receipts.

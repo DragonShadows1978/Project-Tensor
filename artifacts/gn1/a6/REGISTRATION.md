@@ -1,0 +1,27 @@
+# Immutable A6 registration
+
+{
+  "date": "2026-11-01T20:19:31.009669+00:00",
+  "order": "orders/GN1_A6_REV5_FIXES.md",
+  "order_sha256": "3ec57513d2fb0129d457f1bb4e7c899b9c7990ce16ed2ef9e7f81a0ceab1ab24",
+  "commit": "1de3ed5b63addceb1a012deccb94fd8f2721b763",
+  "gates": {
+    "G1": "exact frozen bytes and mapped D1-D4 tooling diff",
+    "G2": "earlier CPU references and native collection; A5 IDs",
+    "G3": "unchanged module and source map; 56 copies",
+    "G4": "all 283 A5 targets plus REV5 and D0(c) controls",
+    "G5": "unchanged 54 mutants reached;51 killed;3 equivalent on CPU",
+    "G6": "58 staged labels; verified regeneration; audit; honest real-runner CPU controls"
+  },
+  "acceptance": "G1-G6 all PASS",
+  "P117": "all G4 controls meet target",
+  "P118": "honest 58 labels pass line recomputation with real runner and declared CPU controls",
+  "CUDA_VISIBLE_DEVICES": "",
+  "threads": 1,
+  "budget_seconds": 7200,
+  "command_ceiling_seconds": 1199,
+  "threat_model": "D0 verbatim in immutable order",
+  "mode": "CPU controls cannot establish GPU acceptance"
+}
+
+The supplied order is the immutable plan. No gate has run. Every gate/launch is recorded before execution. All acceptance criteria and predictions are those of that order. No GPU. D4 double-write failure falls back to scorer incomplete-receipt refusal.
