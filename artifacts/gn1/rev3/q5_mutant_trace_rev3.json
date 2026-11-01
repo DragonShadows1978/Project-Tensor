@@ -1,0 +1,3176 @@
+{
+ "summary": {
+  "m14_default_binding": {
+   "mutant_default_eps": 0.001,
+   "candidate_default_eps": 1e-05,
+   "binding_differs": true
+  },
+  "mutants": 52,
+  "single_site_all": true,
+  "inside_groupnorm_all": true,
+  "reach_all": false,
+  "not_reached": [
+   "M14"
+  ],
+  "witness_fails_on_mutant": [
+   "D5_bias_dtype",
+   "D5_bias_length",
+   "D5_bias_rank",
+   "D5_c_bool",
+   "D5_c_index",
+   "D5_c_int",
+   "D5_c_npbool",
+   "D5_c_positive",
+   "D5_c_store",
+   "D5_channels",
+   "D5_g_bool",
+   "D5_g_index",
+   "D5_g_int",
+   "D5_g_npbool",
+   "D5_g_positive",
+   "D5_g_store",
+   "D5_input_dtype",
+   "D5_rank",
+   "D5_weight_dtype",
+   "D5_weight_length",
+   "D5_weight_rank",
+   "M01",
+   "M02",
+   "M03",
+   "M04m",
+   "M04v",
+   "M05",
+   "M06in",
+   "M06out",
+   "M07cast",
+   "M07fast",
+   "M08cast",
+   "M08fast",
+   "M09cast",
+   "M09fast",
+   "M10",
+   "M11",
+   "M12",
+   "M13",
+   "M14",
+   "M15b",
+   "M15w",
+   "M15x",
+   "M16",
+   "M17b",
+   "M17w",
+   "M18b",
+   "M18w",
+   "V1",
+   "V2",
+   "V4"
+  ],
+  "witness_passes_on_mutant": [
+   "V3"
+  ],
+  "witness_fails_on_candidate": [],
+  "v3_cases": 432,
+  "v3_all_identical": true,
+  "v3_accepted_cases": 54
+ },
+ "mutants": [
+  {
+   "id": "D5_bias_dtype",
+   "witness": "test_dtype_refusal[int64-bias]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    554
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.bias.dtype not in (\"float32\", \"float16\", \"bfloat16\"):",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_bias_length",
+   "witness": "test_parameter_shape_refusal[short-bias]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    564
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.bias.shape[0] != self.C:",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_bias_rank",
+   "witness": "test_parameter_shape_refusal[matrix61-bias]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    562
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.bias.ndim != 1:",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_c_bool",
+   "witness": "test_positive_integer_refusal[true-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    526
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "isinstance(num_channels, bool)",
+   "new": "False"
+  },
+  {
+   "id": "D5_c_index",
+   "witness": "test_index_counts[np_int64-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    529
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_channels))",
+   "new": "(num_channels if isinstance(num_channels, int) else (_ for _ in ()).throw(TypeError('not P"
+  },
+  {
+   "id": "D5_c_int",
+   "witness": "test_positive_integer_refusal[float-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    529
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_channels))",
+   "new": "int(num_channels)"
+  },
+  {
+   "id": "D5_c_npbool",
+   "witness": "test_index_counts[np_int64-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    526
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "isinstance(num_channels, np.bool_)",
+   "new": "not isinstance(num_channels, np.bool_)"
+  },
+  {
+   "id": "D5_c_positive",
+   "witness": "test_positive_integer_refusal[negative-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    532
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "num_channels <= 0",
+   "new": "False"
+  },
+  {
+   "id": "D5_c_store",
+   "witness": "test_index_counts[np_int64-num_channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    529
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_channels))",
+   "new": "num_channels"
+  },
+  {
+   "id": "D5_channels",
+   "witness": "test_shape_refusal[channels]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    548
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if x.shape[1] != self.C:",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_g_bool",
+   "witness": "test_positive_integer_refusal[true-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    518
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "isinstance(num_groups, bool)",
+   "new": "False"
+  },
+  {
+   "id": "D5_g_index",
+   "witness": "test_index_counts[np_int64-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    521
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_groups))",
+   "new": "(num_groups if isinstance(num_groups, int) else (_ for _ in ()).throw(TypeError('not Pytho"
+  },
+  {
+   "id": "D5_g_int",
+   "witness": "test_positive_integer_refusal[float-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    521
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_groups))",
+   "new": "int(num_groups)"
+  },
+  {
+   "id": "D5_g_npbool",
+   "witness": "test_index_counts[np_int64-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    518
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "isinstance(num_groups, np.bool_)",
+   "new": "not isinstance(num_groups, np.bool_)"
+  },
+  {
+   "id": "D5_g_positive",
+   "witness": "test_positive_integer_refusal[negative-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    524
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "num_groups <= 0",
+   "new": "False"
+  },
+  {
+   "id": "D5_g_store",
+   "witness": "test_index_counts[np_int64-num_groups]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    521
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "int(operator.index(num_groups))",
+   "new": "num_groups"
+  },
+  {
+   "id": "D5_input_dtype",
+   "witness": "test_dtype_refusal[int64-input]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    550
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if x.dtype not in (\"float32\", \"float16\", \"bfloat16\"):",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_rank",
+   "witness": "test_shape_refusal[rank1]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    546
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if x.ndim < 2:",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_weight_dtype",
+   "witness": "test_dtype_refusal[int64-weight]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    552
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.weight.dtype not in (\"float32\", \"float16\", \"bfloat16\"):",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_weight_length",
+   "witness": "test_parameter_shape_refusal[short-weight]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    560
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.weight.shape[0] != self.C:",
+   "new": "if False:"
+  },
+  {
+   "id": "D5_weight_rank",
+   "witness": "test_parameter_shape_refusal[matrix61-weight]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    558
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if self.weight.ndim != 1:",
+   "new": "if False:"
+  },
+  {
+   "id": "M01",
+   "witness": "test_forward_values[float32-r2-n1-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    579
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "var = g.var([2], True)",
+   "new": "var = g.var([2], True) * (g.shape[2] / (g.shape[2] - 1))"
+  },
+  {
+   "id": "M02",
+   "witness": "test_near_epsilon[forward-float32]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    580
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "(var + self.eps).pow(-0.5)",
+   "new": "(var.pow(0.5) + self.eps).pow(-1.0)"
+  },
+  {
+   "id": "M03",
+   "witness": "test_near_epsilon[forward-float32]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    580
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "(var + self.eps).pow(-0.5)",
+   "new": "var.pow(-0.5)"
+  },
+  {
+   "id": "M04m",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    579
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "mean = g.mean([2], True)",
+   "new": "mean = g.mean([1], True)"
+  },
+  {
+   "id": "M04v",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    579
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "var = g.var([2], True)",
+   "new": "var = g.var([1], True)"
+  },
+  {
+   "id": "M05",
+   "witness": "test_forward_values[float32-r2-n1-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    576
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+   "new": "g = x.reshape([N, self.G, C * math.prod(spatial)])"
+  },
+  {
+   "id": "M06in",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    576
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+   "new": "x.reshape([N, C // self.G, self.G] + spatial).permute([0, 2, 1] + list(range(3, 3 + len(sp"
+  },
+  {
+   "id": "M06out",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    581
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g = g.reshape([N, C] + spatial)",
+   "new": "g = g.reshape([N, self.G, C // self.G] + spatial).permute([0, 2, 1] + list(range(3, 3 + le"
+  },
+  {
+   "id": "M07cast",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    588
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * weight.reshape(wshape) + bias.reshape(wshape)",
+   "new": "g + bias.reshape(wshape)"
+  },
+  {
+   "id": "M07fast",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    585
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+   "new": "g + self.bias.reshape(wshape)"
+  },
+  {
+   "id": "M08cast",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    588
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * weight.reshape(wshape) + bias.reshape(wshape)",
+   "new": "g * weight.reshape(wshape)"
+  },
+  {
+   "id": "M08fast",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    585
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+   "new": "g * self.weight.reshape(wshape)"
+  },
+  {
+   "id": "M09cast",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    588
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * weight.reshape(wshape) + bias.reshape(wshape)",
+   "new": "g * bias.reshape(wshape) + weight.reshape(wshape)"
+  },
+  {
+   "id": "M09fast",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    585
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+   "new": "g * self.bias.reshape(wshape) + self.weight.reshape(wshape)"
+  },
+  {
+   "id": "M10",
+   "witness": "test_nondivisible_refusal",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    534
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if num_channels % num_groups != 0:",
+   "new": "if False and num_channels % num_groups != 0:"
+  },
+  {
+   "id": "M11",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    582
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "wshape = [1, C] + [1] * len(spatial)",
+   "new": "wshape = [1, C] + [1] * (len(spatial) + 1)"
+  },
+  {
+   "id": "M12",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    580
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "g = (g - mean) * (var + self.eps).pow(-0.5)",
+   "new": "g = g"
+  },
+  {
+   "id": "M13",
+   "witness": "test_forward_values[float32-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    580
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "(var + self.eps).pow(-0.5)",
+   "new": "(var + self.eps).pow(-1.0)"
+  },
+  {
+   "id": "M14",
+   "witness": "test_constructor_defaults",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    511
+   ],
+   "witness_reaches_edit": false,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "def __init__(self, num_groups, num_channels, eps=1e-5):",
+   "new": "def __init__(self, num_groups, num_channels, eps=1e-3):"
+  },
+  {
+   "id": "M15b",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    587
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.bias if self.bias.dtype == \"float32\" else self.bias.astype(\"float32\")",
+   "new": "self.bias if self.bias.dtype == dtype else self.bias.astype(dtype)"
+  },
+  {
+   "id": "M15w",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    586
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.weight if self.weight.dtype == \"float32\" else self.weight.astype(\"float32\")",
+   "new": "self.weight if self.weight.dtype == dtype else self.weight.astype(dtype)"
+  },
+  {
+   "id": "M15x",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    571
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if dtype in (\"float16\", \"bfloat16\"):",
+   "new": "if False:"
+  },
+  {
+   "id": "M16",
+   "witness": "test_mixed_parameters[forward-default-float16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    589
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "return output if output.dtype == dtype else output.astype(dtype)",
+   "new": "return output"
+  },
+  {
+   "id": "M17b",
+   "witness": "test_distinct_parameter_dtypes[forward-w32-b16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    587
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.bias if self.bias.dtype == \"float32\" else self.bias.astype(\"float32\")",
+   "new": "self.bias if dtype == \"float32\" else (self.bias if self.bias.dtype == \"float32\" else self."
+  },
+  {
+   "id": "M17w",
+   "witness": "test_distinct_parameter_dtypes[forward-w16-b32]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    586
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.weight if self.weight.dtype == \"float32\" else self.weight.astype(\"float32\")",
+   "new": "self.weight if dtype == \"float32\" else (self.weight if self.weight.dtype == \"float32\" else"
+  },
+  {
+   "id": "M18b",
+   "witness": "test_mixed_parameters[forward-half-float16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    587
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.bias if self.bias.dtype == \"float32\" else self.bias.astype(\"float32\")",
+   "new": "self.bias"
+  },
+  {
+   "id": "M18w",
+   "witness": "test_mixed_parameters[forward-half-float16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    586
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "self.weight if self.weight.dtype == \"float32\" else self.weight.astype(\"float32\")",
+   "new": "self.weight"
+  },
+  {
+   "id": "V1",
+   "witness": "test_distinct_parameter_dtypes[forward-w32-b16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    584
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "and self.bias.dtype == \"float32\"",
+   "new": "and True"
+  },
+  {
+   "id": "V2",
+   "witness": "test_distinct_parameter_dtypes[forward-w16-b32]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    583
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "and self.weight.dtype == \"float32\"",
+   "new": "and True"
+  },
+  {
+   "id": "V3",
+   "witness": "test_forward_values[float16-r3-n2-g2-default]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    571
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 0,
+   "witness_exit_on_candidate": 0,
+   "equivalence": "EQUIVALENCES.md#v3",
+   "old": "if dtype in (\"float16\", \"bfloat16\"):",
+   "new": "if dtype != \"float32\":"
+  },
+  {
+   "id": "V4",
+   "witness": "test_mixed_parameters[forward-default-float16]",
+   "hunks": 1,
+   "removed_lines": 1,
+   "added_lines": 1,
+   "single_site": true,
+   "inside_groupnorm": true,
+   "edited_line": [
+    583
+   ],
+   "witness_reaches_edit": true,
+   "witness_exit_on_mutant": 1,
+   "witness_exit_on_candidate": 0,
+   "equivalence": null,
+   "old": "if (dtype == \"float32\" and",
+   "new": "if (True and"
+  }
+ ],
+ "v3": [
+  {
+   "case": "float32/float32/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float32/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float32/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "float16/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "float16/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "ok"
+  },
+  {
+   "case": "bfloat16/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bfloat16/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "int64/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "bool/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float32/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/float16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bfloat16/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/int64/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/bool/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/float32/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/float32/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/float16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/float16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/bfloat16/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/bfloat16/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/int64/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/int64/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/bool/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/bool/bwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/uint8/fwd",
+   "identical": true,
+   "candidate": "raise"
+  },
+  {
+   "case": "uint8/uint8/uint8/bwd",
+   "identical": true,
+   "candidate": "raise"
+  }
+ ]
+}
