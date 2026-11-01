@@ -143,6 +143,10 @@ Do not re-review what REV1 and REV2 found sound unless A3 changed it.
 - **L21:** the remote is public. No personal names, no raw quotes, home paths as `$HOME/...`, and no local tool paths.
 - **L25:** threads at 1.
 - **L26:** the lead touches nothing in this worktree while you run.
+- **L33:** this review runs no GPU command. The installed runner is used only on CPU children, with its window and
+  lock redirected to scratch, as REV2 did. A3's staged GPU lines are read, not run.
+- **L48:** where you exercise A3's staged lines on CPU, run them exactly as written (same script, same argv), with
+  only the runner redirected as above.
 - **L34:** a Claude seat (Opus 5.5) reviews Codex's work, which makes the review cross-model.
 - **L40:** outputs go under `artifacts/gn1/rev3/` or `/tmp/gn1_rev3_*`.
 - **L41:** question 5 checks that every mutant's witness reaches its edit site.
