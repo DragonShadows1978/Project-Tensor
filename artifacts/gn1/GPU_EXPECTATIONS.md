@@ -1,0 +1,13 @@
+# GPU expectations, before execution
+
+Every run_line parent must exit 0, meaning its child's registered raw exit and detailed test checks matched. The L45 receipt is parent_result.json, emitted after subprocess.run returns, with child exit, timeout flag and timestamps. No raw failure is relabeled as a child PASS. Unknown collection/device/setup errors never count as kills.
+
+One label per shell invocation, each externally bounded below 20 minutes. Run labels in gpu_lines.json order under a single explicit RUNS. Each actual forge invocation starts in artifacts/gn1 (the tooling directory), has --max, and wraps an inner GNU timeout. RUNS has no default; duplicate labels refuse to overwrite. START.json records date output, order git log and content seal before the first line. Parent enforces 25 GiB free on ForgeRealm and 20 GiB on root. TMPDIR, pytest basetemp, forge log, stdout, JUnit, child and parent receipts all reside under RUNS. Threads=1.
+
+Baseline focus expected pytest=1: 294 failures, 12 passes, 306 IDs. The 292 new numerical GroupNorm IDs and the existing phase7 norms ID fail with reshape: element count mismatch. The new refusal ID also fails because the baseline lacks D1 (DID NOT RAISE); this is an explicit order-consistency clarification, not an unrelated failure. Five CPU reference IDs and constructor defaults pass, as do the six other phase7 tests. Candidate focus expected 306 passes, pytest=0.
+
+Regression: both arms have exactly 362 IDs across ten test files importing nn. Baseline expected pytest=1 from the registered GroupNorm failures; candidate expected pytest=0, with existing full-shape opt-in skips allowed only in regression. Every baseline-passing exact node ID must still pass; missing tests, setup errors and changed census invalidate the lane. Existing optional skip IDs remain visible.
+
+Mutants: each expected pytest=1, 299 collected IDs, no setup/collection failure. Parent records exact call-phase failing IDs as actual_killers; predicted witnesses in MUTANTS.md are not evidence of a kill. A passing candidate_focus parent receipt in the same RUNS is mandatory before any mutant. All 14 must die or the lead and reviewer must provide an output-equivalence proof. score_gpu.py aggregates the 18 completed real-GPU parent receipts; no audit can satisfy G5.
+
+CPU --audit substitutes forge_gpu_run_standin.py for forge-gpu-run, preserves --max and the inner timeout and runs only the five CPU reference tests through the SAME candidate focus parent/child plumbing. It uses hidden CUDA and imports but never allocates a device tensor. It is plumbing evidence only.

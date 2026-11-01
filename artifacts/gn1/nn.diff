@@ -1,0 +1,30 @@
+diff --git a/tensor_cuda/tensor_cuda/nn.py b/tensor_cuda/tensor_cuda/nn.py
+index 673cc988..781b488b 100644
+--- a/tensor_cuda/tensor_cuda/nn.py
++++ b/tensor_cuda/tensor_cuda/nn.py
+@@ -510,6 +510,13 @@ class BatchNorm1D(Module):
+ class GroupNorm(Module):
+     def __init__(self, num_groups, num_channels, eps=1e-5):
+         super().__init__()
++        # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
++        # divisibility refusal (docs unverified — lead to check: "GroupNorm").
++        if num_channels % num_groups != 0:
++            raise ValueError(
++                f"num_channels ({num_channels}) must be divisible by "
++                f"num_groups ({num_groups})"
++            )
+         self.G, self.C, self.eps = num_groups, num_channels, eps
+         self.weight = parameter(np.ones(num_channels))
+         self.bias = parameter(np.zeros(num_channels))
+@@ -517,7 +524,10 @@ class GroupNorm(Module):
+     def forward(self, x):
+         N, C = x.shape[0], x.shape[1]
+         spatial = list(x.shape[2:])
+-        g = x.reshape([N, self.G, -1])
++        # Explicit extent: NDArray::reshape does not infer -1.
++        g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])
++        # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
++        # as required by Wu and He (2018) and PyTorch GroupNorm.
+         mean = g.mean([2], True); var = g.var([2], True)
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
