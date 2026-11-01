@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M18w/nn.py
+@@ -562,7 +562,7 @@
+         if (dtype == "float32" and self.weight.dtype == "float32"
+                 and self.bias.dtype == "float32"):
+             return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+-        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
++        weight = self.weight
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+         output = g * weight.reshape(wshape) + bias.reshape(wshape)
+         return output if output.dtype == dtype else output.astype(dtype)

@@ -1,0 +1,38 @@
+diff --git a/tensor_cuda/tensor_cuda/nn.py b/tensor_cuda/tensor_cuda/nn.py
+index 21342154..7e78267b 100644
+--- a/tensor_cuda/tensor_cuda/nn.py
++++ b/tensor_cuda/tensor_cuda/nn.py
+@@ -512,6 +512,14 @@ class GroupNorm(Module):
+         super().__init__()
+         # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+         # divisibility refusal (docs unverified — lead to check: "GroupNorm").
++        # A2 domain checks, inspired by PyTorch GroupNorm argument validation;
++        # exact positive-int/bool policy is the GN1 A2 requirement.
++        if (isinstance(num_groups, bool) or not isinstance(num_groups, int)
++                or num_groups <= 0):
++            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
++        if (isinstance(num_channels, bool) or not isinstance(num_channels, int)
++                or num_channels <= 0):
++            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+         if num_channels % num_groups != 0:
+             raise ValueError(
+                 f"num_channels ({num_channels}) must be divisible by "
+@@ -522,6 +530,18 @@ class GroupNorm(Module):
+         self.bias = parameter(np.zeros(num_channels))
+ 
+     def forward(self, x):
++        # Prior art: PyTorch GroupNorm rank/channel checks (version unverified
++        # — lead to check); A2 explicitly limits this engine's dtype domain.
++        if x.ndim < 2:
++            raise ValueError(f"GroupNorm input rank ({x.ndim}) must be at least 2")
++        if x.shape[1] != self.C:
++            raise ValueError(f"GroupNorm input channels ({x.shape[1]}) must equal num_channels ({self.C})")
++        if x.dtype not in ("float32", "float16", "bfloat16"):
++            raise TypeError(f"GroupNorm input dtype {x.dtype!r} is unsupported")
++        if self.weight.dtype not in ("float32", "float16", "bfloat16"):
++            raise TypeError(f"GroupNorm weight dtype {self.weight.dtype!r} is unsupported")
++        if self.bias.dtype not in ("float32", "float16", "bfloat16"):
++            raise TypeError(f"GroupNorm bias dtype {self.bias.dtype!r} is unsupported")
+         # Prior art: PyTorch half normalization uses float32 accumulation;
+         # Micikevicius et al. (2018), Mixed Precision Training (both unverified
+         # — lead to check: "PyTorch group_norm acc_type half"). Round 1's

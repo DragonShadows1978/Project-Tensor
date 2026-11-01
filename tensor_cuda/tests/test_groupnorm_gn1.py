@@ -133,7 +133,13 @@ def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, con
     if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
         assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
     expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
-    output = layer(x)
+    # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+    # by a structural mutant violates this assertion. The parent separately
+    # voids every device-pattern failure, including chained exceptions.
+    try:
+        output = layer(x)
+    except (RuntimeError, ValueError, TypeError) as exc:
+        raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
     atol, rtol = TOLERANCES[dtype]["forward"]
     assert output.dtype == dtype
     assert output.shape == xn.shape
@@ -223,9 +229,8 @@ def test_constructor_defaults():
 
 def test_nondivisible_refusal():
     from tensor_cuda import nn
-    with pytest.raises(ValueError) as caught:
-        nn.GroupNorm(4, 6)
-    assert "4" in str(caught.value) and "6" in str(caught.value)
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(4, 6))
+    assert "4" in str(error) and "6" in str(error)
 
 
 # Prior art: IEEE 754 round-to-nearest/ties-to-even (1985/2019), emulated on
@@ -336,3 +341,63 @@ def test_reference_low_variance_central_differences(dtype, configuration, varian
         fd[pos] = (fp - fm) / (2 * h)
     assert np.isfinite(analytical[index]).all() and np.isfinite(fd).all()
     assert np.allclose(analytical[index], fd, atol=2e-7, rtol=2e-7), operand
+
+
+# Prior art: PyTorch GroupNorm domain checks (living implementation unverified
+# — lead to check). A2 requires a positive Python int with bool excluded and
+# explicit rank/channel/dtype refusals, rather than incidental engine errors.
+def _expect_refusal(kind, operation):
+    error = None
+    try:
+        operation()
+    except Exception as exc:
+        error = exc
+    assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+    return error
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("value", (0, -2, 2.0, True, False, "2", None),
+                         ids=("zero", "negative", "float", "true", "false", "string", "none"))
+def test_positive_integer_refusal(name, value):
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = value
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+    assert name in str(error) and "positive integer" in str(error)
+
+
+@pytest.mark.parametrize("shape", ((), (6,), (2, 4, 3)), ids=("rank0", "rank1", "channels"))
+def test_shape_refusal(shape):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.zeros(shape), dtype="float32")))
+    assert ("rank" if len(shape) < 2 else "channels") in str(error)
+
+
+@pytest.mark.parametrize("operand", ("input", "weight", "bias"))
+@pytest.mark.parametrize("dtype", ("int64", "bool", "uint8"))
+def test_dtype_refusal(dtype, operand):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    x = tc.tensor(np.ones((2, 6)), dtype=dtype if operand == "input" else "float32")
+    if operand != "input":
+        setattr(layer, operand, tc.tensor(np.ones(6), dtype=dtype))
+    error = _expect_refusal(TypeError, lambda: layer(x))
+    assert dtype in str(error) and operand in str(error)
+
+
+@pytest.mark.parametrize("weight_dtype,bias_dtype", (("float32", "float16"), ("float16", "float32")),
+                         ids=("w32-b16", "w16-b32"))
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_distinct_parameter_dtypes(weight_dtype, bias_dtype, backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs((2, 6, 4))
+    layer = nn.GroupNorm(3, 6)
+    layer.weight = _leaf(tc, w, weight_dtype)
+    layer.bias = _leaf(tc, b, bias_dtype)
+    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                  3, 1e-5, "float32", backward)

@@ -1,0 +1,65 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________________ test_near_epsilon[forward-float32] ______________________
+
+dtype = 'float32', backward = False
+
+    @pytest.mark.parametrize("dtype", DTYPES)
+    @pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+    def test_near_epsilon(dtype, backward):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        # Exactly representable group variance equal to eps: ignoring eps changes
+        # normalization by sqrt(2), well outside even the BF16 forward budget.
+        eps = 2.**-12 if dtype == "float32" else 0.25
+        amplitude = 2.**-6 if dtype == "float32" else 0.5
+        values = np.tile([-amplitude, amplitude], 24).reshape(2, 6, 4)
+        values += np.repeat([0., 0.25, 0.5], 2).reshape(1, 6, 1)
+        assert np.array_equal(values.reshape(2, 3, 8).var(axis=2), np.full((2, 3), eps))
+        _, w, b, projection = _inputs(values.shape)
+        layer = nn.GroupNorm(3, 6, eps=eps)
+        layer.weight = _leaf(tc, w, dtype)
+        layer.bias = _leaf(tc, b, dtype)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      3, eps, dtype, backward)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a2/mutants/M02/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x79239ce77200>
+x = <cpu_shim.Tensor object at 0x79239ce772c0>
+projection = <cpu_shim.Tensor object at 0x79239ce76480>, groups = 3
+eps = 0.000244140625, dtype = 'float32', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+        atol, rtol = TOLERANCES[dtype]["forward"]
+        assert output.dtype == dtype
+        assert output.shape == xn.shape
+        assert np.isfinite(expected).all() and np.isfinite(output.numpy()).all(), "nonfinite forward"
+>       assert np.allclose(output.numpy(), expected, atol=atol, rtol=rtol), "forward values"
+E       AssertionError: forward values
+E       assert False
+E        +  where False = <function allclose at 0x7923a4c9adb0>(array([[[-0.86730766,  0.11730769, -0.86730766,  0.11730769],\n        [ 1.36346149, -0.11346155,  1.36346149, -0.11346...  [-0.11153847,  1.61153841, -0.11153847,  1.61153841],\n        [-1.23269236,  0.98269236, -1.23269236,  0.98269236]]]), array([[[-0.72855339, -0.02144661, -0.72855339, -0.02144661],\n        [ 1.15533009,  0.09466991,  1.15533009,  0.09466...  [ 0.13128157,  1.36871843,  0.13128157,  1.36871843],\n        [-0.92049513,  0.67049513, -0.92049513,  0.67049513]]]), atol=3e-05, rtol=3e-05)
+E        +    where <function allclose at 0x7923a4c9adb0> = np.allclose
+E        +    and   array([[[-0.86730766,  0.11730769, -0.86730766,  0.11730769],\n        [ 1.36346149, -0.11346155,  1.36346149, -0.11346...  [-0.11153847,  1.61153841, -0.11153847,  1.61153841],\n        [-1.23269236,  0.98269236, -1.23269236,  0.98269236]]]) = numpy()
+E        +      where numpy = <cpu_shim.Tensor object at 0x79239ce749e0>.numpy
+
+tensor_cuda/tests/test_groupnorm_gn1.py:147: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_near_epsilon[forward-float32]
+1 failed in 0.16s

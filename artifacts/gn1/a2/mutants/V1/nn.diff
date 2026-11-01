@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ V1/nn.py
+@@ -560,7 +560,7 @@
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+         if (dtype == "float32" and self.weight.dtype == "float32"
+-                and self.bias.dtype == "float32"):
++                and True):
+             return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
