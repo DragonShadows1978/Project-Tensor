@@ -1,0 +1,150 @@
+{
+  "passed": true,
+  "case_count": 324,
+  "powf_max_ulp_assumption": 4,
+  "powf_relative_bound": 4.76837158203125e-07,
+  "literature_status": "unverified \u2014 lead to check: CUDA Math API single precision powf maximum ulp error",
+  "first_order": true,
+  "compute_fp32": {
+    "forward": {
+      "ratio": 0.4856821142040266,
+      "id": "test_near_epsilon[forward-float32]",
+      "operand": "y",
+      "dtype": "float32"
+    },
+    "backward": {
+      "ratio": 0.9073368234728002,
+      "id": "test_low_variance[backward-var1e-4-half-bfloat16]",
+      "operand": "dx",
+      "dtype": "bfloat16"
+    }
+  },
+  "destination_budgets": {
+    "float32": {
+      "forward": {
+        "ratio": 0.4856821142040266,
+        "id": "test_near_epsilon[forward-float32]",
+        "operand": "y",
+        "index": [
+          0,
+          4,
+          0
+        ],
+        "error_bound": 1.648329668877588e-05,
+        "reference": 0.13128156646177103,
+        "budget": 3.393844699385313e-05,
+        "margin_fraction": 0.5143178857959734
+      },
+      "backward": {
+        "ratio": 0.8032506780083494,
+        "id": "test_near_epsilon[backward-float32]",
+        "operand": "dx",
+        "index": [
+          1,
+          5,
+          2
+        ],
+        "error_bound": 0.000895253805011237,
+        "reference": 2.7151283300957734,
+        "budget": 0.001114538499028732,
+        "margin_fraction": 0.19674932199165063
+      }
+    },
+    "float16": {
+      "forward": {
+        "ratio": 0.9436507286135873,
+        "id": "test_forward_values[float16-r5-n2-g2-default]",
+        "operand": "y",
+        "index": [
+          1,
+          3,
+          0,
+          0,
+          2
+        ],
+        "error_bound": 0.0014979623731619103,
+        "reference": 3.0047843899318574,
+        "budget": 0.0015874118757505948,
+        "margin_fraction": 0.05634927138641266
+      },
+      "backward": {
+        "ratio": 0.9378048534319822,
+        "id": "test_low_variance[backward-var1e-4-half-float16]",
+        "operand": "dx",
+        "index": [
+          0,
+          3,
+          0
+        ],
+        "error_bound": 0.0006311494092391897,
+        "reference": -0.47287898067776735,
+        "budget": 0.0006730071900667192,
+        "margin_fraction": 0.062195146568017834
+      }
+    },
+    "bfloat16": {
+      "forward": {
+        "ratio": 0.9924320553207834,
+        "id": "test_forward_values[bfloat16-r5-n2-g2-default]",
+        "operand": "y",
+        "index": [
+          1,
+          3,
+          0,
+          0,
+          2
+        ],
+        "error_bound": 0.011774062437354618,
+        "reference": 3.006256689688948,
+        "budget": 0.011863847377993945,
+        "margin_fraction": 0.0075679446792166205
+      },
+      "backward": {
+        "ratio": 0.9819712139249308,
+        "id": "test_low_variance[backward-var1e-4-half-bfloat16]",
+        "operand": "dx",
+        "index": [
+          0,
+          3,
+          0
+        ],
+        "error_bound": 0.002232633530944489,
+        "reference": -0.46880308158819595,
+        "budget": 0.002273624215541585,
+        "margin_fraction": 0.018028786075069192
+      }
+    }
+  },
+  "tolerances": {
+    "float32": {
+      "forward": [
+        3e-05,
+        3e-05
+      ],
+      "backward": [
+        0.0003,
+        0.0003
+      ]
+    },
+    "float16": {
+      "forward": [
+        3.0044450759887697e-05,
+        0.0005182958984375
+      ],
+      "backward": [
+        0.00030017628669738765,
+        0.000788427734375
+      ]
+    },
+    "bfloat16": {
+      "forward": [
+        3.01171875e-05,
+        0.0039363671875
+      ],
+      "backward": [
+        0.00030117187499999995,
+        0.004207421875
+      ]
+    }
+  }
+}

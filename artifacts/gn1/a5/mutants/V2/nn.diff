@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ V2/nn.py
+@@ -580,7 +580,7 @@
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+-        if (dtype == "float32" and self.weight.dtype == "float32"
++        if (dtype == "float32" and True
+                 and self.bias.dtype == "float32"):
+             return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")

@@ -1,0 +1,86 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_index_counts[np_int64-num_channels] ___________________
+
+self = <tensor_cuda.nn.GroupNorm object at 0x76d2a80c5af0>, num_groups = 2
+num_channels = np.int64(6), eps = 1e-05
+
+    def __init__(self, num_groups, num_channels, eps=1e-5):
+        super().__init__()
+        # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+        # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+        # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
+        # integer-index protocol; excluding both boolean types is D5 policy.
+        import operator
+        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        try:
+            num_groups = int(operator.index(num_groups))
+        except TypeError as exc:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
+        if num_groups <= 0:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
+            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+        try:
+>           num_channels = (num_channels if isinstance(num_channels, int) else (_ for _ in ()).throw(TypeError('not Python int')))
+                                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+artifacts/gn1/a5/mutants/D5_c_index/nn.py:529: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <tuple_iterator object at 0x76d2a80ceb60>
+
+>   num_channels = (num_channels if isinstance(num_channels, int) else (_ for _ in ()).throw(TypeError('not Python int')))
+E   TypeError: not Python int
+
+artifacts/gn1/a5/mutants/D5_c_index/nn.py:529: TypeError
+
+The above exception was the direct cause of the following exception:
+
+name = 'num_channels', kind = <class 'numpy.int64'>
+
+    @pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+    @pytest.mark.parametrize("kind", (np.int64, np.int32, np.uint8, _IndexCount),
+                             ids=("np_int64", "np_int32", "np_uint8", "index_object"))
+    def test_index_counts(name, kind):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        args = dict(num_groups=2, num_channels=6)
+        args[name] = kind(args[name])
+>       layer = nn.GroupNorm(**args)
+                ^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_groupnorm_gn1.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tensor_cuda.nn.GroupNorm object at 0x76d2a80c5af0>, num_groups = 2
+num_channels = np.int64(6), eps = 1e-05
+
+    def __init__(self, num_groups, num_channels, eps=1e-5):
+        super().__init__()
+        # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+        # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+        # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
+        # integer-index protocol; excluding both boolean types is D5 policy.
+        import operator
+        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        try:
+            num_groups = int(operator.index(num_groups))
+        except TypeError as exc:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
+        if num_groups <= 0:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
+            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+        try:
+            num_channels = (num_channels if isinstance(num_channels, int) else (_ for _ in ()).throw(TypeError('not Python int')))
+        except TypeError as exc:
+>           raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)") from exc
+E           ValueError: num_channels (np.int64(6)) must be a positive integer (bool excluded)
+
+artifacts/gn1/a5/mutants/D5_c_index/nn.py:531: ValueError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_index_counts[np_int64-num_channels]
+1 failed in 0.08s

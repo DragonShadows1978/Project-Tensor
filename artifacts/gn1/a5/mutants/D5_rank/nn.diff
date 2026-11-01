@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ D5_rank/nn.py
+@@ -543,7 +543,7 @@
+     def forward(self, x):
+         # Prior art: PyTorch GroupNorm rank/channel checks (version unverified
+         # — lead to check); A2 explicitly limits this engine's dtype domain.
+-        if x.ndim < 2:
++        if False:
+             raise ValueError(f"GroupNorm input rank ({x.ndim}) must be at least 2")
+         if x.shape[1] != self.C:
+             raise ValueError(f"GroupNorm input channels ({x.shape[1]}) must equal num_channels ({self.C})")

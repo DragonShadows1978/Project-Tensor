@@ -1,0 +1,137 @@
+........................................................................ [ 17%]
+........................................................................ [ 34%]
+........................................................................ [ 52%]
+........................................................................ [ 69%]
+........................................................................ [ 87%]
+.............................................FFFFFFF                     [100%]
+=================================== FAILURES ===================================
+________________________________ test_math_ops _________________________________
+
+    def test_math_ops():
+        x = tc.tensor(np.array([0.5, 1.0, 2.0], np.float32))
+>       assert np.allclose(_np(x.log2()), np.log2([0.5, 1, 2]), atol=1e-4)
+                               ^^^^^^
+E       AttributeError: 'Tensor' object has no attribute 'log2'
+
+tensor_cuda/tests/test_ext_phase7.py:16: AttributeError
+_________________________ test_prod_cumsum_flip_gather _________________________
+
+    def test_prod_cumsum_flip_gather():
+        x = tc.tensor(np.array([[1.0, 2.0, 3.0]], np.float32))
+>       assert np.allclose(_np(x.prod([1])), [6.0])
+                               ^^^^^^
+E       AttributeError: 'Tensor' object has no attribute 'prod'
+
+tensor_cuda/tests/test_ext_phase7.py:23: AttributeError
+_________________________________ test_argmax __________________________________
+
+    def test_argmax():
+        x = tc.tensor(np.array([[1.0, 9.0, 3.0]], np.float32))
+>       assert _np(x.argmax(1))[0] == 1
+                   ^^^^^^^^
+E       AttributeError: 'Tensor' object has no attribute 'argmax'
+
+tensor_cuda/tests/test_ext_phase7.py:32: AttributeError
+____________________________ test_norms_and_conv1d _____________________________
+
+    def test_norms_and_conv1d():
+        x = tc.tensor(np.random.randn(4, 8).astype(np.float32))
+>       assert nn.BatchNorm1D(8)(x).shape == (4, 8)
+               ^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_ext_phase7.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tensor_cuda.nn.BatchNorm1D object at 0x74acc21c77d0>, num_features = 8
+eps = 1e-05, momentum = 0.1
+
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
+        super().__init__()
+        self.eps, self.momentum, self.C = eps, momentum, num_features
+        self.weight = parameter(np.ones(num_features))
+        self.bias = parameter(np.zeros(num_features))
+>       self.running_mean = tc.zeros(num_features)
+                            ^^^^^^^^
+E       AttributeError: module 'tensor_cuda' has no attribute 'zeros'
+
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:491: AttributeError
+____________________________ test_decoder_and_alibi ____________________________
+
+    def test_decoder_and_alibi():
+        x = tc.tensor(np.random.randn(2, 5, 32).astype(np.float32))
+        mem = tc.tensor(np.random.randn(2, 7, 32).astype(np.float32))
+        dec = nn.TransformerDecoderLayer(32, 4, 64)
+>       assert dec(x, mem).shape == (2, 5, 32)
+               ^^^^^^^^^^^
+
+tensor_cuda/tests/test_ext_phase7.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:91: in __call__
+    return self.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:815: in forward
+    x = self.norm1(x + self.self_attn(x, is_causal=tgt_causal))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:91: in __call__
+    return self.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:311: in forward
+    q = self._split(self.q_proj(x), B, L)
+                    ^^^^^^^^^^^^^^
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:91: in __call__
+    return self.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tensor_cuda.nn.Linear object at 0x74acc2208bc0>
+x = <cpu_shim.Tensor object at 0x74acc2208110>
+
+    def forward(self, x):
+        w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
+>       out = tc.matmul(x, w, trans_b=True)
+              ^^^^^^^^^
+E       AttributeError: module 'tensor_cuda' has no attribute 'matmul'
+
+artifacts/gn1/a5/arms/candidate/tensor_cuda/nn.py:107: AttributeError
+________________________ test_weight_tie_single_update _________________________
+
+    def test_weight_tie_single_update():
+        emb = nn.Embedding(10, 4)
+        head = nn.Linear(4, 10)
+>       tc.weight_tie(emb, "weight", head, "weight")
+        ^^^^^^^^^^^^^
+E       AttributeError: module 'tensor_cuda' has no attribute 'weight_tie'
+
+tensor_cuda/tests/test_ext_phase7.py:57: AttributeError
+____________________________ test_scheduler_family _____________________________
+
+    def test_scheduler_family():
+        lin = nn.Linear(2, 2)
+>       opt = optim.SGD(lin.parameters(), lr=1.0)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_ext_phase7.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+artifacts/gn1/a5/arms/candidate/tensor_cuda/optim.py:33: in __init__
+    self._buf = {id(p): _zeros_like_param(p) for p in self.params}
+                        ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+p = <cpu_shim.Tensor object at 0x74acc2113a40>
+
+    def _zeros_like_param(p):
+>       return tc.zeros(tuple(p.shape), dtype=p.dtype, device=p.device.split(":")[0])
+               ^^^^^^^^
+E       AttributeError: module 'tensor_cuda' has no attribute 'zeros'
+
+artifacts/gn1/a5/arms/candidate/tensor_cuda/optim.py:13: AttributeError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_math_ops - AttributeError: ...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_prod_cumsum_flip_gather - A...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_argmax - AttributeError: 'T...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_norms_and_conv1d - Attribut...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_decoder_and_alibi - Attribu...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_weight_tie_single_update - ...
+FAILED tensor_cuda/tests/test_ext_phase7.py::test_scheduler_family - Attribut...
+7 failed, 405 passed in 0.91s
+runtime census focus 548 modules 412 calls 1
