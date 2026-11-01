@@ -159,6 +159,8 @@ against it.
   - pytest 9.0.2.
 - **L02:** the smoke is G2 and G4 on CPU. The lead's GPU run is the first device execution.
 - **L03:** n/a. The mutants stand in for a coverage bar.
+- **L04:** n/a. There is no builder with fallback rungs. The "fallback" in D4 is the scorer's existing handling of an
+  incomplete receipt.
 - **L05:** the owner is the GPU tooling under `artifacts/gn1/`.
 - **L06:** n/a. No size threshold.
 - **L07:** n/a. Nothing visual.
