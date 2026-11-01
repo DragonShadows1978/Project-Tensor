@@ -1,0 +1,2308 @@
+--- a3/AMENDMENTS.md
++++ a4/AMENDMENTS.md
+@@ -3,3 +3,6 @@
+ - Initial G5 receipts retained under initial_mutation/: parameter-rank witnesses matrix23 were masked by length checks; matrix61 isolates rank. NumPy here refuses numpy.bool_ in operator.index itself, making deletion of the explicit numpy boolean clause equivalent. Register negation of that clause, witnessed by a valid NumPy integer, instead. This is a standard predicate-negation mutant, not a weakened test. Direct GroupNorm ValueError kills must follow D2/D3, not an assertion-only CPU shortcut. No product or tolerance change.
+ 
+ - CPU control Real_baseline_D5_registration gets a 50 s parent bound rather than A2’s 20 s fixture default. It executes/formats the complete 405-ID real GN file, including 375 expected baseline failures; the initial 20 s timeout is retained. Staged line bounds and all acceptance predicates are unchanged.
++
++## A4 runtime census diagnostic correction
++The initial regression trace exited 1 solely because the author instrument required a call report for every ID, even for unsupported stand-in setup. Its receipts are retained with .initial. The registered mechanism is import coverage, not legacy engine correctness: require no collection errors and a setup report for every collected ID, record all call/setup/error/skip outcomes unchanged. This changes no test, product, acceptance threshold, or G2/G5 assertion. Device-only imports absent from this trace remain explicitly unsealed at GPU time per D5.
+--- a3/EQUIVALENCES.md
++++ a4/EQUIVALENCES.md
+@@ -13,3 +13,15 @@
+ Prior art: elementary case analysis (no specific prior art known to me);
+ mutation equivalence classification, DeMillo/Lipton/Sayward (1978), unverified
+ — lead to check: equivalent mutants.
++
++## numpy-bool-g
++
++`E_npbool_g`: delete the numpy.bool_ clause at nn.py:518 (replace it by False).
++
++## numpy-bool-c
++
++`E_npbool_c`: delete the numpy.bool_ clause at nn.py:526 (replace it by False).
++
++Both proofs use PEP 357 (2006): built-in bool is still rejected; for a numpy.bool_ operand, NumPy 2.4.2 operator.index raises TypeError, caught by the following validation path. Every other operand follows the unchanged path. Therefore each single-site deletion has identical acceptance and normalized storage under this NumPy version. This is a version-dependent equivalence, not an unconditional proof for future NumPy releases. Every equivalence line records the arm interpreter's NumPy version and the live operator.index(numpy.bool_(True)) result. Acceptance invalidates the equivalence and fails the line. Expected exit 0 for both. The two inverted clauses D5_g_npbool/D5_c_npbool remain reach checks.
++
++Prior art: PEP 357 (2006), equivalent mutation analysis (Offutt/Voas, year unverified - lead to check). A4 adds the version-bound live obligation and GN1 receipt binding.
+--- a3/MUTANTS.md
++++ a4/MUTANTS.md
+@@ -1,60 +1,62 @@
+-# Mutant table
++# A4 CPU mutant results
+ 
+-All 52 load and differ at one source site inside GroupNorm. 51 are killed on the CPU stand-in; V3 is the previously registered equivalence. Actual GPU killers remain null. Each row has full phases, call-only trace and source diff under mutants/<ID>/. M14 records default binding rather than import-time reach.
++54 single-site mutants reach their changed expression during call phase (M14 by recorded call-phase default binding). 51 CPU kills and three passing equivalences. These are not GPU kills. Negations D5_g_npbool and D5_c_npbool remain reach checks. Both new deletion arms additionally pass all 405 real GN tests: E_npbool_g_full_cpu.json and E_npbool_c_full_cpu.json.
+ 
+-| Mutant | Edit line | Registered witness | Call reach | CPU result | G5 |
+-| --- | --- | --- | --- | --- | --- |
+-| D5_bias_dtype | 554 | test_dtype_refusal[int64-bias] | 554 | CPU kill: AssertionError | PASS |
+-| D5_bias_length | 564 | test_parameter_shape_refusal[short-bias] | 564 | CPU kill: AssertionError | PASS |
+-| D5_bias_rank | 562 | test_parameter_shape_refusal[matrix61-bias] | 562 | CPU kill: AssertionError | PASS |
+-| D5_c_bool | 526 | test_positive_integer_refusal[true-num_channels] | 526 | CPU kill: AssertionError | PASS |
+-| D5_c_index | 529 | test_index_counts[np_int64-num_channels] | 529 | CPU kill: ValueError | PASS |
+-| D5_c_int | 529 | test_positive_integer_refusal[float-num_channels] | 529 | CPU kill: AssertionError | PASS |
+-| D5_c_npbool | 526 | test_index_counts[np_int64-num_channels] | 526 | CPU kill: ValueError | PASS |
+-| D5_c_positive | 532 | test_positive_integer_refusal[negative-num_channels] | 532 | CPU kill: AssertionError | PASS |
+-| D5_c_store | 529 | test_index_counts[np_int64-num_channels] | 529 | CPU kill: AssertionError | PASS |
+-| D5_channels | 548 | test_shape_refusal[channels] | 548 | CPU kill: AssertionError | PASS |
+-| D5_g_bool | 518 | test_positive_integer_refusal[true-num_groups] | 518 | CPU kill: AssertionError | PASS |
+-| D5_g_index | 521 | test_index_counts[np_int64-num_groups] | 521 | CPU kill: ValueError | PASS |
+-| D5_g_int | 521 | test_positive_integer_refusal[float-num_groups] | 521 | CPU kill: AssertionError | PASS |
+-| D5_g_npbool | 518 | test_index_counts[np_int64-num_groups] | 518 | CPU kill: ValueError | PASS |
+-| D5_g_positive | 524 | test_positive_integer_refusal[negative-num_groups] | 524 | CPU kill: AssertionError | PASS |
+-| D5_g_store | 521 | test_index_counts[np_int64-num_groups] | 521 | CPU kill: AssertionError | PASS |
+-| D5_input_dtype | 550 | test_dtype_refusal[int64-input] | 550 | CPU kill: AssertionError | PASS |
+-| D5_rank | 546 | test_shape_refusal[rank1] | 546 | CPU kill: AssertionError | PASS |
+-| D5_weight_dtype | 552 | test_dtype_refusal[int64-weight] | 552 | CPU kill: AssertionError | PASS |
+-| D5_weight_length | 560 | test_parameter_shape_refusal[short-weight] | 560 | CPU kill: AssertionError | PASS |
+-| D5_weight_rank | 558 | test_parameter_shape_refusal[matrix61-weight] | 558 | CPU kill: AssertionError | PASS |
+-| M01 | 579 | test_forward_values[float32-r2-n1-g2-default] | 579 | CPU kill: AssertionError | PASS |
+-| M02 | 580 | test_near_epsilon[forward-float32] | 580 | CPU kill: AssertionError | PASS |
+-| M03 | 580 | test_near_epsilon[forward-float32] | 580 | CPU kill: AssertionError | PASS |
+-| M04m | 579 | test_forward_values[float32-r3-n2-g2-default] | 579 | CPU kill: AssertionError | PASS |
+-| M04v | 579 | test_forward_values[float32-r3-n2-g2-default] | 579 | CPU kill: AssertionError | PASS |
+-| M05 | 576 | test_forward_values[float32-r2-n1-g2-default] | 576 | CPU kill: AssertionError | PASS |
+-| M06in | 576 | test_forward_values[float32-r3-n2-g2-default] | 576 | CPU kill: AssertionError | PASS |
+-| M06out | 581 | test_forward_values[float32-r3-n2-g2-default] | 581 | CPU kill: AssertionError | PASS |
+-| M07cast | 588 | test_forward_values[float16-r3-n2-g2-default] | 588 | CPU kill: AssertionError | PASS |
+-| M07fast | 585 | test_forward_values[float32-r3-n2-g2-default] | 585 | CPU kill: AssertionError | PASS |
+-| M08cast | 588 | test_forward_values[float16-r3-n2-g2-default] | 588 | CPU kill: AssertionError | PASS |
+-| M08fast | 585 | test_forward_values[float32-r3-n2-g2-default] | 585 | CPU kill: AssertionError | PASS |
+-| M09cast | 588 | test_forward_values[float16-r3-n2-g2-default] | 588 | CPU kill: AssertionError | PASS |
+-| M09fast | 585 | test_forward_values[float32-r3-n2-g2-default] | 585 | CPU kill: AssertionError | PASS |
+-| M10 | 534 | test_nondivisible_refusal | 534 | CPU kill: AssertionError | PASS |
+-| M11 | 582 | test_forward_values[float32-r3-n2-g2-default] | 582 | CPU kill: AssertionError | PASS |
+-| M12 | 580 | test_forward_values[float32-r3-n2-g2-default] | 580 | CPU kill: AssertionError | PASS |
+-| M13 | 580 | test_forward_values[float32-r3-n2-g2-default] | 580 | CPU kill: AssertionError | PASS |
+-| M14 | 511 | test_constructor_defaults | default eps=0.001 bound in actual call | CPU kill: AssertionError | PASS |
+-| M15b | 587 | test_forward_values[float16-r3-n2-g2-default] | 587 | CPU kill: AssertionError | PASS |
+-| M15w | 586 | test_forward_values[float16-r3-n2-g2-default] | 586 | CPU kill: AssertionError | PASS |
+-| M15x | 571 | test_forward_values[float16-r3-n2-g2-default] | 571 | CPU kill: AssertionError | PASS |
+-| M16 | 589 | test_mixed_parameters[forward-default-float16] | 589 | CPU kill: AssertionError | PASS |
+-| M17b | 587 | test_distinct_parameter_dtypes[forward-w32-b16] | 587 | CPU kill: AssertionError | PASS |
+-| M17w | 586 | test_distinct_parameter_dtypes[forward-w16-b32] | 586 | CPU kill: AssertionError | PASS |
+-| M18b | 587 | test_mixed_parameters[forward-half-float16] | 587 | CPU kill: AssertionError | PASS |
+-| M18w | 586 | test_mixed_parameters[forward-half-float16] | 586 | CPU kill: AssertionError | PASS |
+-| V1 | 584 | test_distinct_parameter_dtypes[forward-w32-b16] | 584 | CPU kill: AssertionError | PASS |
+-| V2 | 583 | test_distinct_parameter_dtypes[forward-w16-b32] | 583 | CPU kill: AssertionError | PASS |
+-| V3 | 571 | test_forward_values[float16-r3-n2-g2-default] | 571 | equivalent; passes | PASS |
+-| V4 | 583 | test_mixed_parameters[forward-default-float16] | 583 | CPU kill: AssertionError | PASS |
++Prior art: DeMillo/Lipton/Sayward (1978); Offutt/Voas RIP and equivalent mutation analysis (year unverified - lead to check); PEP 357 (2006).
+ 
+-Initial instrument/registration failures and their unchanged receipts are retained in initial_mutation/. Matrix61 isolates parameter rank from length; NumPy 2.4.2 already refuses numpy.bool_ in operator.index, so the explicit boolean-clause deletion is equivalent here. The replacement predicate-negation mutant, named inverted, is killed by a valid NumPy count. AMENDMENTS.md records this correction before the final gate.
++| Mutant | CPU result | Reached lines | Equivalence | Trace |
++|---|---|---|---|---|
++| D5_bias_dtype | KILLED | [554] |  | mutants/D5_bias_dtype/trace.json |
++| D5_bias_length | KILLED | [564] |  | mutants/D5_bias_length/trace.json |
++| D5_bias_rank | KILLED | [562] |  | mutants/D5_bias_rank/trace.json |
++| D5_c_bool | KILLED | [526] |  | mutants/D5_c_bool/trace.json |
++| D5_c_index | KILLED | [529] |  | mutants/D5_c_index/trace.json |
++| D5_c_int | KILLED | [529] |  | mutants/D5_c_int/trace.json |
++| D5_c_npbool | KILLED | [526] |  | mutants/D5_c_npbool/trace.json |
++| D5_c_positive | KILLED | [532] |  | mutants/D5_c_positive/trace.json |
++| D5_c_store | KILLED | [529] |  | mutants/D5_c_store/trace.json |
++| D5_channels | KILLED | [548] |  | mutants/D5_channels/trace.json |
++| D5_g_bool | KILLED | [518] |  | mutants/D5_g_bool/trace.json |
++| D5_g_index | KILLED | [521] |  | mutants/D5_g_index/trace.json |
++| D5_g_int | KILLED | [521] |  | mutants/D5_g_int/trace.json |
++| D5_g_npbool | KILLED | [518] |  | mutants/D5_g_npbool/trace.json |
++| D5_g_positive | KILLED | [524] |  | mutants/D5_g_positive/trace.json |
++| D5_g_store | KILLED | [521] |  | mutants/D5_g_store/trace.json |
++| D5_input_dtype | KILLED | [550] |  | mutants/D5_input_dtype/trace.json |
++| D5_rank | KILLED | [546] |  | mutants/D5_rank/trace.json |
++| D5_weight_dtype | KILLED | [552] |  | mutants/D5_weight_dtype/trace.json |
++| D5_weight_length | KILLED | [560] |  | mutants/D5_weight_length/trace.json |
++| D5_weight_rank | KILLED | [558] |  | mutants/D5_weight_rank/trace.json |
++| E_npbool_c | PASS equivalence | [526] | EQUIVALENCES.md#numpy-bool-c | mutants/E_npbool_c/trace.json |
++| E_npbool_g | PASS equivalence | [518] | EQUIVALENCES.md#numpy-bool-g | mutants/E_npbool_g/trace.json |
++| M01 | KILLED | [579] |  | mutants/M01/trace.json |
++| M02 | KILLED | [580] |  | mutants/M02/trace.json |
++| M03 | KILLED | [580] |  | mutants/M03/trace.json |
++| M04m | KILLED | [579] |  | mutants/M04m/trace.json |
++| M04v | KILLED | [579] |  | mutants/M04v/trace.json |
++| M05 | KILLED | [576] |  | mutants/M05/trace.json |
++| M06in | KILLED | [576] |  | mutants/M06in/trace.json |
++| M06out | KILLED | [581] |  | mutants/M06out/trace.json |
++| M07cast | KILLED | [588] |  | mutants/M07cast/trace.json |
++| M07fast | KILLED | [585] |  | mutants/M07fast/trace.json |
++| M08cast | KILLED | [588] |  | mutants/M08cast/trace.json |
++| M08fast | KILLED | [585] |  | mutants/M08fast/trace.json |
++| M09cast | KILLED | [588] |  | mutants/M09cast/trace.json |
++| M09fast | KILLED | [585] |  | mutants/M09fast/trace.json |
++| M10 | KILLED | [534] |  | mutants/M10/trace.json |
++| M11 | KILLED | [582] |  | mutants/M11/trace.json |
++| M12 | KILLED | [580] |  | mutants/M12/trace.json |
++| M13 | KILLED | [580] |  | mutants/M13/trace.json |
++| M14 | KILLED | call default binding |  | mutants/M14/trace.json |
++| M15b | KILLED | [587] |  | mutants/M15b/trace.json |
++| M15w | KILLED | [586] |  | mutants/M15w/trace.json |
++| M15x | KILLED | [571] |  | mutants/M15x/trace.json |
++| M16 | KILLED | [589] |  | mutants/M16/trace.json |
++| M17b | KILLED | [587] |  | mutants/M17b/trace.json |
++| M17w | KILLED | [586] |  | mutants/M17w/trace.json |
++| M18b | KILLED | [587] |  | mutants/M18b/trace.json |
++| M18w | KILLED | [586] |  | mutants/M18w/trace.json |
++| V1 | KILLED | [584] |  | mutants/V1/trace.json |
++| V2 | KILLED | [583] |  | mutants/V2/trace.json |
++| V3 | PASS equivalence | [571] | EQUIVALENCES.md#v3 | mutants/V3/trace.json |
++| V4 | KILLED | [583] |  | mutants/V4/trace.json |
+--- a3/REGISTRATION.md
++++ a4/REGISTRATION.md
+@@ -1 +1,3 @@
+-Immutable user amendment A3, at 86e3ec8fd8874adf97307e40cc1928f6890bcdf7. G1–G6 all pass required. P94 every hostile control meets target. P95 V4 and all new D5 mutants killed by registered witnesses. CPU only; no tolerance changes. D2 engine refusal kill requires same-root passing candidate on same input, GroupNorm call phase, no device pattern, original exception recorded. D3 uses raising frame. D4 independently recomputes exact runner outcomes and timeout cause; incomplete parent attempts retain child failures. D7 resolved scratch guard and import-traced seal.
++# A4 registration
++
++The immutable plan is orders/GN1_A4_REV3_FIXES.md. D1-D7 and G1-G6 are binding. Acceptance requires all six gates. P108 and P109 are registered in REGISTRATION.json before any gates. CPU only; GPU hidden; threads 1.
+--- a3/SEAL_IMPORT_TRACE.md
++++ a4/SEAL_IMPORT_TRACE.md
+@@ -1,29 +1,9 @@
+-# Import-traced seal
++# A4 runtime seal
+ 
+-Collected 468 regression IDs; traced/censused 534 module origins (21 local, 513 external). Nine local arm modules are covered by each arm map; the other 12 local modules and all 513 external origins are pinned directly. The trace uses module-execution profiling plus the loaded-module origin census, and the seal pins the trace itself. Child verify_start calls verify_seal before importing its arm.
++The seal is the union of the real native package collection trace and the sys.modules origin census after CPU stand-in execution of focus, mutation and regression suites. Each suite runs in a fresh interpreter. Native collection is CPU-only and imports the pinned binary without invoking GPU operations. Runtime execution uses the NumPy stand-in and no binary.
+ 
+-| Imported local module | SHA-256 | Child pin |
+-| --- | --- | --- |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/__init__.py | f801ff5bb4b8487b45e79a2c98334f14cc94a80fdb096a578e9441f5a2bf7bf6 | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so | c9b7dc610421010a8b11e8e3af74d1a9ad99928dabb98835aa6c265754daf8ce | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/apa_sp2.py | 018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07 | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/functional.py | ef8d1fa2aa2b4f7e818d01c17377ab026d763f690de23fb8831de67f0b131c6e | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/nn.py | fea952f3ebeb0694044245d6e2fc98acadbdb04ccad9ddd5790fae89be761ca5 | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/optim.py | 41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/quant.py | 9bb2093df1fa751022400791579afebfe904e7c616d3cd090e0746266829ecd7 | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/quantization/__init__.py | d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f | arm map |
+-| artifacts/gn1/a3/arms/candidate/tensor_cuda/quantization/affine.py | 8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943 | arm map |
+-| artifacts/gn1/a3/trace_imports.py | 09f38f92907d8ceef6d609621d995b77713271347a8d9525e85da7b3849290ed | import_modules |
+-| scripts/apa_om135_core.py | cb2f5dd76c9ab7552bc5b8aca7ee0ff4462acc3f05c97156616bdf661336f849 | import_modules |
+-| tensor_cuda/tests/test_apa_om135_imm.py | 8ac67998194ce0cca0dd5ad507bcb0811e2fb4f4c220dc5ccc1a3419623fd4b3 | import_modules |
+-| tensor_cuda/tests/test_attention_phase5.py | 23e533cf0b5742cdef46f1a731cbd96c8535e41f2a05da6c6f71a9fdc28961a7 | import_modules |
+-| tensor_cuda/tests/test_conv_phase3b.py | 2e225ab94c2ded7b559a3c8d8f4d751be91ca848587e41574b17a3f24d8430a8 | import_modules |
+-| tensor_cuda/tests/test_ext_phase7.py | 8ec82d0438a28057036fca1721c990e19ced5828b5cb57918762326fd7e47455 | import_modules |
+-| tensor_cuda/tests/test_groupnorm_gn1.py | 0933bed97114a776832790b4045a06640b92097731f114a5913042c1419f49e7 | import_modules |
+-| tensor_cuda/tests/test_hy3d_engine_ops.py | 55b30170c63711b44f5efc41f4250e3c69b6e969d58378f619576227931efe9d | import_modules |
+-| tensor_cuda/tests/test_integration.py | ffc947c62c2028890d47030817a2611e6a936c80fffe57f5af8a58115d1bdf1c | import_modules |
+-| tensor_cuda/tests/test_nn_phase3.py | 2c0a66f3bff5ec2a920d4939fe1d986fc203036d5bb767dbb12693ef0478b1f5 | import_modules |
+-| tensor_cuda/tests/test_phase9.py | db0de76dc3d1d5d76cbcfcf6d816c77700836b1e143ae5b718a2904318f37f95 | import_modules |
+-| tensor_cuda/tests/test_rnn_phase5b.py | 0a87495014abe357185eaf5a589666d9e49722cf3bd21895eb170e394ad54f29 | import_modules |
++After pytest.main the real child records the path and SHA-256 of every sys.modules entry with __file__. Paths are canonical and home paths use $HOME. Unreadable origins become recorded reasons. The parent and scorer compare every recorded origin against the seal's tool, arm, test, local import and external maps. A known sealed origin with a different digest fails the line as runtime module tamper. An origin the seal never saw is listed as unsealed in both parent and scorer receipts, does not itself fail the line, and must be reviewed by the lead. This includes paths reached only on a real device. This is a finite import census, not a claim to cover all possible GPU import paths.
+ 
+-Complete external origins and digests are in import_trace.json and staging_seal.json. `$HOME/` expands only for verification. G4_extra.json demonstrates the parent, child and scorer refusing a changed helper pin; the read-only helper file itself was never edited.
++The stand-in supports GroupNorm, not the entire engine. The regression trace preserves unsupported call and setup failures and skips and requires setup coverage for every collected ID. An explicit CPU diagnostic uses numpy.random.seed and numpy.testing.assert_equal on ID uniqueness, ensuring both lazy NumPy namespaces are included even where an unsupported engine operation would stop before a test assertion. These calibration imports are labeled separately from test outcomes in each runtime trace. No test or product assertion changes.
++
++Prior art: Python sys.modules/__file__ origin inspection (PSF, year unverified - lead to check Python sys.modules module origins); SHA-256 FIPS 180-4 (2015). Atomic start/result publication uses POSIX rename(2), IEEE Std 1003.1 (year unverified - lead to check POSIX rename atomic replacement). A4 binds these mechanisms to GN1 receipts.
+--- a3/STAGED_GPU_COMMANDS.sh
++++ a4/STAGED_GPU_COMMANDS.sh
+@@ -6,7 +6,7 @@
+ TOOL="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ cd -- "$TOOL"
+ export RUNS
+-export TMPDIR="${TMPDIR:-/tmp/gn1_a3_staged}" PYTHONDONTWRITEBYTECODE=1
++export TMPDIR="${TMPDIR:-/tmp/gn1_a4_staged}" PYTHONDONTWRITEBYTECODE=1
+ # D7 compares resolved paths through the shared Python guard.
+ timeout 5s python3 -c 'import os; from evidence import scratch_guard; scratch_guard(os.environ["TMPDIR"])'
+ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+@@ -23,173 +23,178 @@
+ timeout 20s python3 start_gpu_run.py
+ case "$label" in
+   baseline_focus) # expected child 1; parent 0
+-    timeout 350s python3 run_gpu_line.py baseline_focus 1 330 "$GPU_RUN" --min 250 --max 300 --label gn1-a3-baseline_focus -- timeout --kill-after=10s 240s python3 run_gpu_tests.py baseline focus
++    timeout 350s python3 run_gpu_line.py baseline_focus 1 330 "$GPU_RUN" --min 250 --max 300 --label gn1-a4-baseline_focus -- timeout --kill-after=10s 240s python3 run_gpu_tests.py baseline focus
+     ;;
+   candidate_focus) # expected child 0; parent 0
+-    timeout 350s python3 run_gpu_line.py candidate_focus 0 330 "$GPU_RUN" --min 250 --max 300 --label gn1-a3-candidate_focus -- timeout --kill-after=10s 240s python3 run_gpu_tests.py candidate focus
++    timeout 350s python3 run_gpu_line.py candidate_focus 0 330 "$GPU_RUN" --min 250 --max 300 --label gn1-a4-candidate_focus -- timeout --kill-after=10s 240s python3 run_gpu_tests.py candidate focus
+     ;;
+   baseline_regression) # expected child 1; parent 0
+-    timeout 950s python3 run_gpu_line.py baseline_regression 1 930 "$GPU_RUN" --min 850 --max 900 --label gn1-a3-baseline_regression -- timeout --kill-after=10s 840s python3 run_gpu_tests.py baseline regression
++    timeout 950s python3 run_gpu_line.py baseline_regression 1 930 "$GPU_RUN" --min 850 --max 900 --label gn1-a4-baseline_regression -- timeout --kill-after=10s 840s python3 run_gpu_tests.py baseline regression
+     ;;
+   candidate_regression) # expected child 0,1; parent 0
+-    timeout 950s python3 run_gpu_line.py candidate_regression 0,1 930 "$GPU_RUN" --min 850 --max 900 --label gn1-a3-candidate_regression -- timeout --kill-after=10s 840s python3 run_gpu_tests.py candidate regression
++    timeout 950s python3 run_gpu_line.py candidate_regression 0,1 930 "$GPU_RUN" --min 850 --max 900 --label gn1-a4-candidate_regression -- timeout --kill-after=10s 840s python3 run_gpu_tests.py candidate regression
+     ;;
+   D5_bias_dtype) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_bias_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_bias_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_dtype mutation
++    timeout 290s python3 run_gpu_line.py D5_bias_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_bias_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_dtype mutation
+     ;;
+   D5_bias_length) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_bias_length 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_bias_length -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_length mutation
++    timeout 290s python3 run_gpu_line.py D5_bias_length 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_bias_length -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_length mutation
+     ;;
+   D5_bias_rank) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_bias_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_bias_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_rank mutation
++    timeout 290s python3 run_gpu_line.py D5_bias_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_bias_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_bias_rank mutation
+     ;;
+   D5_c_bool) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_bool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_bool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_bool mutation
++    timeout 290s python3 run_gpu_line.py D5_c_bool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_bool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_bool mutation
+     ;;
+   D5_c_index) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_index 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_index -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_index mutation
++    timeout 290s python3 run_gpu_line.py D5_c_index 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_index -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_index mutation
+     ;;
+   D5_c_int) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_int 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_int -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_int mutation
++    timeout 290s python3 run_gpu_line.py D5_c_int 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_int -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_int mutation
+     ;;
+   D5_c_npbool) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_npbool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_npbool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_npbool mutation
++    timeout 290s python3 run_gpu_line.py D5_c_npbool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_npbool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_npbool mutation
+     ;;
+   D5_c_positive) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_positive 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_positive -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_positive mutation
++    timeout 290s python3 run_gpu_line.py D5_c_positive 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_positive -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_positive mutation
+     ;;
+   D5_c_store) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_c_store 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_c_store -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_store mutation
++    timeout 290s python3 run_gpu_line.py D5_c_store 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_c_store -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_c_store mutation
+     ;;
+   D5_channels) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_channels 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_channels -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_channels mutation
++    timeout 290s python3 run_gpu_line.py D5_channels 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_channels -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_channels mutation
+     ;;
+   D5_g_bool) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_bool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_bool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_bool mutation
++    timeout 290s python3 run_gpu_line.py D5_g_bool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_bool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_bool mutation
+     ;;
+   D5_g_index) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_index 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_index -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_index mutation
++    timeout 290s python3 run_gpu_line.py D5_g_index 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_index -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_index mutation
+     ;;
+   D5_g_int) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_int 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_int -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_int mutation
++    timeout 290s python3 run_gpu_line.py D5_g_int 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_int -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_int mutation
+     ;;
+   D5_g_npbool) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_npbool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_npbool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_npbool mutation
++    timeout 290s python3 run_gpu_line.py D5_g_npbool 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_npbool -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_npbool mutation
+     ;;
+   D5_g_positive) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_positive 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_positive -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_positive mutation
++    timeout 290s python3 run_gpu_line.py D5_g_positive 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_positive -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_positive mutation
+     ;;
+   D5_g_store) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_g_store 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_g_store -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_store mutation
++    timeout 290s python3 run_gpu_line.py D5_g_store 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_g_store -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_g_store mutation
+     ;;
+   D5_input_dtype) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_input_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_input_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_input_dtype mutation
++    timeout 290s python3 run_gpu_line.py D5_input_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_input_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_input_dtype mutation
+     ;;
+   D5_rank) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_rank mutation
++    timeout 290s python3 run_gpu_line.py D5_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_rank mutation
+     ;;
+   D5_weight_dtype) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_weight_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_weight_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_dtype mutation
++    timeout 290s python3 run_gpu_line.py D5_weight_dtype 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_weight_dtype -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_dtype mutation
+     ;;
+   D5_weight_length) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_weight_length 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_weight_length -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_length mutation
++    timeout 290s python3 run_gpu_line.py D5_weight_length 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_weight_length -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_length mutation
+     ;;
+   D5_weight_rank) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py D5_weight_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-D5_weight_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_rank mutation
++    timeout 290s python3 run_gpu_line.py D5_weight_rank 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-D5_weight_rank -- timeout --kill-after=10s 180s python3 run_gpu_tests.py D5_weight_rank mutation
+     ;;
+   M01) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M01 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M01 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M01 mutation
++    timeout 290s python3 run_gpu_line.py M01 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M01 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M01 mutation
+     ;;
+   M02) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M02 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M02 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M02 mutation
++    timeout 290s python3 run_gpu_line.py M02 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M02 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M02 mutation
+     ;;
+   M03) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M03 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M03 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M03 mutation
++    timeout 290s python3 run_gpu_line.py M03 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M03 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M03 mutation
+     ;;
+   M04m) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M04m 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M04m -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M04m mutation
++    timeout 290s python3 run_gpu_line.py M04m 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M04m -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M04m mutation
+     ;;
+   M04v) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M04v 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M04v -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M04v mutation
++    timeout 290s python3 run_gpu_line.py M04v 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M04v -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M04v mutation
+     ;;
+   M05) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M05 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M05 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M05 mutation
++    timeout 290s python3 run_gpu_line.py M05 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M05 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M05 mutation
+     ;;
+   M06in) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M06in 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M06in -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M06in mutation
++    timeout 290s python3 run_gpu_line.py M06in 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M06in -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M06in mutation
+     ;;
+   M06out) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M06out 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M06out -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M06out mutation
++    timeout 290s python3 run_gpu_line.py M06out 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M06out -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M06out mutation
+     ;;
+   M07cast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M07cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M07cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M07cast mutation
++    timeout 290s python3 run_gpu_line.py M07cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M07cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M07cast mutation
+     ;;
+   M07fast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M07fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M07fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M07fast mutation
++    timeout 290s python3 run_gpu_line.py M07fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M07fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M07fast mutation
+     ;;
+   M08cast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M08cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M08cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M08cast mutation
++    timeout 290s python3 run_gpu_line.py M08cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M08cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M08cast mutation
+     ;;
+   M08fast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M08fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M08fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M08fast mutation
++    timeout 290s python3 run_gpu_line.py M08fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M08fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M08fast mutation
+     ;;
+   M09cast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M09cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M09cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M09cast mutation
++    timeout 290s python3 run_gpu_line.py M09cast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M09cast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M09cast mutation
+     ;;
+   M09fast) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M09fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M09fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M09fast mutation
++    timeout 290s python3 run_gpu_line.py M09fast 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M09fast -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M09fast mutation
+     ;;
+   M10) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M10 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M10 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M10 mutation
++    timeout 290s python3 run_gpu_line.py M10 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M10 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M10 mutation
+     ;;
+   M11) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M11 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M11 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M11 mutation
++    timeout 290s python3 run_gpu_line.py M11 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M11 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M11 mutation
+     ;;
+   M12) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M12 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M12 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M12 mutation
++    timeout 290s python3 run_gpu_line.py M12 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M12 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M12 mutation
+     ;;
+   M13) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M13 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M13 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M13 mutation
++    timeout 290s python3 run_gpu_line.py M13 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M13 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M13 mutation
+     ;;
+   M14) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M14 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M14 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M14 mutation
++    timeout 290s python3 run_gpu_line.py M14 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M14 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M14 mutation
+     ;;
+   M15b) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M15b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M15b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15b mutation
++    timeout 290s python3 run_gpu_line.py M15b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M15b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15b mutation
+     ;;
+   M15w) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M15w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M15w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15w mutation
++    timeout 290s python3 run_gpu_line.py M15w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M15w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15w mutation
+     ;;
+   M15x) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M15x 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M15x -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15x mutation
++    timeout 290s python3 run_gpu_line.py M15x 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M15x -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M15x mutation
+     ;;
+   M16) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M16 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M16 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M16 mutation
++    timeout 290s python3 run_gpu_line.py M16 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M16 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M16 mutation
+     ;;
+   M17b) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M17b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M17b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M17b mutation
++    timeout 290s python3 run_gpu_line.py M17b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M17b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M17b mutation
+     ;;
+   M17w) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M17w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M17w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M17w mutation
++    timeout 290s python3 run_gpu_line.py M17w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M17w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M17w mutation
+     ;;
+   M18b) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M18b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M18b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M18b mutation
++    timeout 290s python3 run_gpu_line.py M18b 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M18b -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M18b mutation
+     ;;
+   M18w) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py M18w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-M18w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M18w mutation
++    timeout 290s python3 run_gpu_line.py M18w 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-M18w -- timeout --kill-after=10s 180s python3 run_gpu_tests.py M18w mutation
+     ;;
+   V1) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py V1 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-V1 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V1 mutation
++    timeout 290s python3 run_gpu_line.py V1 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-V1 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V1 mutation
+     ;;
+   V2) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py V2 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-V2 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V2 mutation
++    timeout 290s python3 run_gpu_line.py V2 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-V2 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V2 mutation
+     ;;
+   V3) # expected child 0; parent 0
+-    timeout 290s python3 run_gpu_line.py V3 0 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-V3 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V3 mutation
++    timeout 290s python3 run_gpu_line.py V3 0 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-V3 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V3 mutation
+     ;;
+   V4) # expected child 1; parent 0
+-    timeout 290s python3 run_gpu_line.py V4 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a3-V4 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V4 mutation
+-    ;;
+-  *) echo "unknown registered label" >&2; exit 64 ;;
++    timeout 290s python3 run_gpu_line.py V4 1 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-V4 -- timeout --kill-after=10s 180s python3 run_gpu_tests.py V4 mutation
++    ;;
++  E_npbool_g) # expected child 0; parent 0
++    timeout 290s python3 run_gpu_line.py E_npbool_g 0 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-E_npbool_g -- timeout --kill-after=10s 180s python3 run_gpu_tests.py E_npbool_g mutation
++    ;;
++  E_npbool_c) # expected child 0; parent 0
++    timeout 290s python3 run_gpu_line.py E_npbool_c 0 270 "$GPU_RUN" --min 190 --max 240 --label gn1-a4-E_npbool_c -- timeout --kill-after=10s 180s python3 run_gpu_tests.py E_npbool_c mutation
++    ;;
++  *) exit 64 ;;
+ esac
+-# Final scorer, after all labels: RUNS=/same/root timeout 120s python3 score_gpu.py
+--- /dev/null
++++ a4/a4_controls.py
+@@ -0,0 +1,286 @@
++"""A4 G4 new targets, through the real A4 parent and scorer.
++
++Prior art: REV3 B6/B7/B7b/B8/C7b/E5 (2026); Meszaros fault injection (2007);
++GNU timeout/POSIX signals, BSD flock (year unverified, lead to check).
++The installed runner uses only CPU children and scratch ownership files.
++"""
++import datetime
++import fcntl
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++import time
++from evidence import TOOL, lines, read, sha, evaluate, verify_start
++
++assert os.environ.get('CUDA_VISIBLE_DEVICES') == ''
++BASE = TOOL / 'a4_runs'
++BASE.mkdir(exist_ok=False)
++SCRATCH = Path(os.environ['TMPDIR']) / 'a4_controls'
++SCRATCH.mkdir(exist_ok=False)
++PY = sys.executable
++RESULT = []
++
++
++def env(runs, **extra):
++    e = dict(os.environ, RUNS=str(runs), REV2_MODE='normal', REV2_NO_LOG='1',
++             FORGE_GPU_SUMMARY=str(SCRATCH / 'summary.log'),
++             FORGE_GPU_WINDOW_FILE=str(SCRATCH / 'GPU_WINDOW'),
++             FORGE_GPU_LOCK=str(SCRATCH / 'lock'), FORGE_GPU_POLL='0.05',
++             FORGE_GPU_KILL_GRACE='0.2')
++    e.pop('GN1_AUDIT', None)
++    e.update(extra)
++    assert all(Path(e[k]).resolve().is_relative_to(SCRATCH) for k in
++               ('FORGE_GPU_SUMMARY', 'FORGE_GPU_WINDOW_FILE', 'FORGE_GPU_LOCK'))
++    return e
++
++
++def launch(args, e, bound=100, popen=False):
++    with (BASE / 'LAUNCHES.jsonl').open('a') as f:
++        f.write(json.dumps(dict(time=datetime.datetime.now(datetime.timezone.utc).isoformat(),
++                               args=args, bound=bound, RUNS=e['RUNS'], mode=e['REV2_MODE'])) + '\n')
++    cmd = ['timeout', '--kill-after=2s', str(bound)+'s', *args]
++    if popen:
++        return subprocess.Popen(cmd, cwd=TOOL, env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
++    p = subprocess.run(cmd, cwd=TOOL, env=e, capture_output=True, text=True)
++    return dict(exit=p.returncode, stdout=p.stdout[-1500:], stderr=p.stderr[-3000:])
++
++
++def start(name):
++    runs = BASE / name
++    assert launch([PY, '-B', 'start_gpu_run.py'], env(runs))['exit'] == 0
++    return runs
++
++
++def command(label='candidate_focus', outer=None, maximum=None, minimum=None, inner=None, margin=1):
++    line = lines()[label]
++    return [PY, '-B', 'run_gpu_line.py', label,
++            ','.join(map(str, line['expected_child_exits'])), str(line['outer'] if outer is None else outer),
++            'forge-gpu-run', '--min', str(line['minimum'] if minimum is None else minimum),
++            '--max', str(line['maximum'] if maximum is None else maximum), '--margin', str(margin),
++            '--label', 'gn1-a4-cpu', '--', 'timeout', '--kill-after=0.2s',
++            str(line['inner'] if inner is None else inner)+'s', PY,
++            str(TOOL / 'rev2_forge.py'), 'run_gpu_tests.py', line['arm'], line['suite']]
++
++
++def collect(runs, label, r):
++    paths = sorted((runs / label).glob('attempt-*/parent_result.json'))
++    r['parent'] = read(paths[-1]) if paths else None
++    return r
++
++
++def parent(runs, label='candidate_focus', mode='normal', **kw):
++    e = kw.pop('extra', {})
++    return collect(runs, label, launch(command(label, **kw), env(runs, REV2_MODE=mode, **e)))
++
++
++def finish(p, runs, label='candidate_focus'):
++    out, err = p.communicate(timeout=110)
++    return collect(runs, label, dict(exit=p.returncode, stdout=out[-1500:], stderr=err[-3000:]))
++
++
++def score(runs, label='candidate_focus'):
++    r = launch([PY, '-B', 'score_gpu.py'], env(runs))
++    r['line'] = read(runs / 'G5_SUMMARY.json')['lines'][label]
++    return r
++
++
++def record(name, rule, passed, **data):
++    RESULT.append(dict(control=name, target=rule, passed=bool(passed), **data))
++    (TOOL / 'G4_a4.json').write_text(json.dumps(dict(passed=all(r['passed'] for r in RESULT), controls=RESULT), indent=2)+'\n')
++    print(name, 'PASS' if passed else 'FAIL', flush=True)
++
++
++def summary(event):
++    (SCRATCH / 'summary.log').write_text(datetime.datetime.now(datetime.timezone.utc).isoformat()+' | '+event+'\n')
++
++
++def absent():
++    p = SCRATCH / 'summary.log'
++    if p.exists():
++        p.rename(SCRATCH / ('summary.saved.'+str(time.time_ns())))
++
++
++def wait_for(fn):
++    deadline = time.monotonic()+15
++    while not fn():
++        assert time.monotonic() < deadline, 'control startup deadline'
++        time.sleep(.02)
++
++
++# REV3 B6: the actual runner is SIGTERM'd while flock is held; no row/marker.
++runs = start('B6_lock_outer')
++summary('COOLDOWN 3600s')
++fd = os.open(SCRATCH / 'lock', os.O_CREAT | os.O_RDWR, 0o600)
++fcntl.flock(fd, fcntl.LOCK_EX)
++try:
++    first = parent(runs, outer=2, maximum=60, minimum=1)
++finally:
++    fcntl.flock(fd, fcntl.LOCK_UN)
++    os.close(fd)
++absent()
++second = parent(runs)
++s = score(runs)
++record('B6_lock_outer_retry', 'D2 no start operands -> not admitted; retry admitted',
++       first['parent']['admission']=='not_admitted' and first['parent']['exit']==124
++       and second['exit']==0 and s['line']['passed'] and len(s['line']['attempts'])==2,
++       first=first, retry=second, scorer=s)
++
++# REV3 B7/B7b: deadline at 3s, outer at 4s, kill grace extends to 6s.
++for name, mode in [('B7_grace_no_result', 'started_no_result'), ('B7b_grace_result', 'hang_after_result')]:
++    runs = start(name)
++    first = parent(runs, mode=mode, outer=4, maximum=6, minimum=1, margin=3,
++                   extra=dict(FORGE_GPU_KILL_GRACE='3', A4_SLEEP='20'))
++    retry = parent(runs)
++    s = score(runs)
++    row = (runs/'candidate_focus/attempt-0001/forge.log').read_text().splitlines()[-1].split('\t')[-2:]
++    record(name, 'D3 outer fires in runner grace -> outer-timeout; D2 no retry',
++           first['exit']==1 and first['parent']['timeout_cause']=='outer-timeout'
++           and row==['timeout','143'] and retry['exit']==1 and not s['line']['passed'],
++           first=first, retry=retry, scorer=s, raw_row=row)
++
++# REV3 B8: change the scratch window after the CPU child marker.
++runs = start('B8_window_grace')
++summary('COOLDOWN 3600s')
++p = launch(command(outer=3, maximum=60, minimum=1, margin=4),
++           env(runs, REV2_MODE='started_no_result', FORGE_GPU_KILL_GRACE='4'), popen=True)
++wait_for(lambda: (runs/'candidate_focus/attempt-0001/child_started.json').exists())
++summary('RUN7 CYCLE 1 TRAINING')
++first = finish(p, runs)
++s = score(runs)
++row = (runs/'candidate_focus/attempt-0001/forge.log').read_text().splitlines()[-1].split('\t')[-2:]
++record('B8_window_grace', 'D3 window-closed/143 with exit124 -> outer-timeout',
++       first['exit']==1 and first['parent']['timeout_cause']=='outer-timeout'
++       and row==['window-closed','143'] and not s['line']['passed'], first=first, scorer=s, raw_row=row)
++absent()
++
++# C7b: kill only our own parent, leave the started child bounded by its timeout.
++runs = start('C7b_started_parent_interrupted')
++e = env(runs, REV2_MODE='started_no_result', REV2_NO_LOG='0')
++cmd = command()
++# This case uses the CPU stand-in directly, so its bounded process stays in
++# the same group as the timeout supervising the parent (no orphan wait).
++sep = cmd.index('forge-gpu-run')
++cmd = cmd[:sep]+[PY, str(TOOL/'rev2_forge.py'), '--min','250','--max','300','--',
++                 'timeout','240s','python3','run_gpu_tests.py','candidate','focus']
++interrupted = launch(cmd, e, bound=1)
++retry = parent(runs)
++s = score(runs)
++record('C7b_started_no_result', 'D2/D4 started incomplete child admitted and failed; no retry',
++       (runs/'candidate_focus/attempt-0001/invocation.json').exists()
++       and not (runs/'candidate_focus/attempt-0001/child_result.json').exists()
++       and retry['exit']==1 and 'label already has an admitted attempt' in retry['stderr']
++       and s['line']['attempts'][0]['admission']=='admitted' and not s['line']['passed'],
++       interrupted=interrupted, retry=retry, scorer=s)
++
++# E5 both original incomplete shape and a completed parent reading bad JSON.
++runs = start('E5_truncated_incomplete')
++att = runs/'candidate_focus/attempt-0001'
++att.mkdir(parents=True)
++(att/'child_result.json').write_text('{"pytest_exit":')
++retry = parent(runs)
++s = score(runs)
++record('E5_truncated_incomplete', 'D4 JSON parse problem recorded; clean retry refusal',
++       retry['exit']==1 and 'Traceback' not in retry['stderr']
++       and any('Expecting value' in x for x in s['line']['reasons']) and not s['line']['passed'],
++       retry=retry, scorer=s)
++runs = start('E5_truncated_completed')
++r = parent(runs, mode='truncated')
++s = score(runs)
++record('E5_truncated_completed', 'D4 evaluate never raises; JSON reason in parent and scorer',
++       r['exit']==1 and any('Expecting value' in x for x in r['parent']['reasons'])
++       and not s['line']['passed'], parent=r, scorer=s)
++
++for mode, accept, needle in [('sealed_tamper',False,'runtime module tamper'),('unsealed',True,'device_only')]:
++    runs = start('D5_'+mode)
++    target = TOOL/'runtime_sentinel.py'
++    original = target.read_bytes()
++    try:
++        r = parent(runs, mode=mode)
++        altered = sha(target)
++    finally:
++        target.write_bytes(original)
++    s = score(runs)
++    ok = (r['exit']==0 and s['line']['passed'] and needle in str(s['line']['unsealed'])
++          if accept else r['exit']==1 and needle in str(r['parent']['reasons']) and not s['line']['passed'])
++    record('D5_'+mode, 'D5 '+('unknown origins listed without veto' if accept else 'sealed runtime digest mismatch veto'),
++           ok, parent=r, scorer=s)
++
++runs = start('D6_live')
++assert parent(runs)['exit']==0
++for label in ('E_npbool_g','E_npbool_c'):
++    r = parent(runs, label)
++    s = score(runs, label)
++    live = read(runs/label/'attempt-0001/child_result.json')['equivalence_runtime']
++    record('D6_live_'+label, 'D6 arm interpreter NumPy 2.4.2 rejects numpy.bool_ through operator.index',
++           r['exit']==0 and s['line']['passed'] and live['numpy_version']=='2.4.2'
++           and live['accepts_numpy_bool'] is False, parent=r, scorer=s, live=live)
++runs = start('D6_invalidated')
++assert parent(runs)['exit']==0
++r = parent(runs, 'E_npbool_g', mode='equivalence_accepts')
++s = score(runs, 'E_npbool_g')
++record('D6_acceptance_invalidates', 'D6 live acceptance invalidates equivalence',
++       r['exit']==1 and 'equivalence invalid' in str(r['parent']['reasons']) and not s['line']['passed'], parent=r, scorer=s)
++
++# Start from an honest completed line and alter exactly one binding field.
++runs = start('D7_fields')
++assert parent(runs)['exit']==0
++path = runs/'candidate_focus/attempt-0001/parent_result.json'
++original = path.read_text()
++for field in ('outer','maximum','minimum','inner','expected_exits'):
++    receipt = json.loads(original)
++    if field=='outer':
++        receipt['outer_bound_seconds'] += 1
++    elif field=='expected_exits':
++        receipt['expected_child_exits'] = [1]
++    else:
++        cmd = receipt['command']
++        if field in ('maximum','minimum'):
++            at=cmd.index('--max' if field=='maximum' else '--min')+1
++        else:
++            at=cmd.index('--')+3  # timeout, --kill-after=..., duration
++        cmd[at] = str(int(cmd[at].removesuffix('s'))+1)+('s' if field=='inner' else '')
++    path.write_text(json.dumps(receipt,indent=2)+'\n')
++    s=score(runs)
++    record('D7_'+field, 'D7 exact '+field+' binding to gpu_lines.json',
++           not s['line']['passed'] and 'gpu_lines.json' in str(s['line']['reasons']), scorer=s)
++    path.write_text(original)
++assert score(runs)['line']['passed']
++
++# D3 malformed attribution still traverses the real parent/scorer, no direct
++# evaluator substitution. A4 must record a reason instead of crashing.
++runs = start('D3_unattributable')
++# A malformed row cannot be produced by the installed runner. Use the same
++# synthetic runner transport as inherited malformed-log controls, through the
++# unmodified real parent/scorer; the real-runner interruption cases above stay
++# on the installed runner.
++cmd = command()
++at = cmd.index('forge-gpu-run')
++cmd = cmd[:at] + [PY, str(TOOL/'rev2_forge.py'), *cmd[at+1:]]
++r = collect(runs, 'candidate_focus', launch(cmd, env(runs, REV2_MODE='unattributable', REV2_NO_LOG='0')))
++s = score(runs)
++record('D3_evaluate_never_raises', 'D3 attribution exception becomes a parent reason; scorer rejects',
++       r['exit']==1 and r['parent'] is not None
++       and any('runner attribution' in x for x in r['parent']['reasons'])
++       and not s['line']['passed'], parent=r, scorer=s)
++
++# D2 operand isolation: each form of start evidence independently burns an
++# incomplete label. The real parent recovery and scorer see the raw operand.
++for operand in ('marker','invocation','ran','timeout','window-closed','junit'):
++    runs=start('D2_operand_'+operand)
++    att=runs/'candidate_focus/attempt-0001'
++    att.mkdir(parents=True)
++    if operand in ('ran','timeout','window-closed'):
++        (att/'forge.log').write_text('x\tx\tx\tx\tx\tx\tx\t'+operand+'\t0\n')
++    else:
++        name={'marker':'child_started.json','invocation':'invocation.json','junit':'junit.xml'}[operand]
++        (att/name).write_text('{}')
++    retry=parent(runs)
++    s=score(runs)
++    record('D2_start_'+operand, 'D2 positive start evidence independently admits incomplete failure',
++           retry['exit']==1 and 'label already has an admitted attempt' in retry['stderr']
++           and s['line']['attempts'][0]['admission']=='admitted' and not s['line']['passed'],
++           retry=retry,scorer=s)
++
++sys.exit(0 if all(r['passed'] for r in RESULT) else 1)
+--- a3/arm_maps.json
++++ a4/arm_maps.json
+@@ -252,6 +252,28 @@
+     "quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943",
+     "_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "c9b7dc610421010a8b11e8e3af74d1a9ad99928dabb98835aa6c265754daf8ce"
+   },
++  "E_npbool_c": {
++    "__init__.py": "f801ff5bb4b8487b45e79a2c98334f14cc94a80fdb096a578e9441f5a2bf7bf6",
++    "apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
++    "functional.py": "ef8d1fa2aa2b4f7e818d01c17377ab026d763f690de23fb8831de67f0b131c6e",
++    "nn.py": "90840e352c5a5e3cece18d5e55fa940bc102119b6ae930b4e033b213759c24f4",
++    "optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
++    "quant.py": "9bb2093df1fa751022400791579afebfe904e7c616d3cd090e0746266829ecd7",
++    "quantization/__init__.py": "d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f",
++    "quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943",
++    "_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "c9b7dc610421010a8b11e8e3af74d1a9ad99928dabb98835aa6c265754daf8ce"
++  },
++  "E_npbool_g": {
++    "__init__.py": "f801ff5bb4b8487b45e79a2c98334f14cc94a80fdb096a578e9441f5a2bf7bf6",
++    "apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
++    "functional.py": "ef8d1fa2aa2b4f7e818d01c17377ab026d763f690de23fb8831de67f0b131c6e",
++    "nn.py": "49d6d0801416ffc1b6385b736f8bf8f7bf585938ab697f7da063298ca0895db0",
++    "optim.py": "41693c324d5ea2f081ec7777ce8165fbc65d04a7b557fce27ff6d9b9a24457ee",
++    "quant.py": "9bb2093df1fa751022400791579afebfe904e7c616d3cd090e0746266829ecd7",
++    "quantization/__init__.py": "d29a048409906800e68bbed774978764045451b4451eb2d31ec9d5343293658f",
++    "quantization/affine.py": "8bf31258f8635fa4948d08805fb4909ea6a36189d40f0ee2cc589b796c5e3943",
++    "_tensor_cuda.cpython-312-x86_64-linux-gnu.so": "c9b7dc610421010a8b11e8e3af74d1a9ad99928dabb98835aa6c265754daf8ce"
++  },
+   "M01": {
+     "__init__.py": "f801ff5bb4b8487b45e79a2c98334f14cc94a80fdb096a578e9441f5a2bf7bf6",
+     "apa_sp2.py": "018a26b6bf7acfd85bc23e5084d0367952e1b2c81898da8585c8ecda302a9f07",
+--- a3/build_mutants.py
++++ a4/build_mutants.py
+@@ -76,6 +76,11 @@
+     for arg, short in (("num_groups", "g"), ("num_channels", "c")):
+         add("D5_"+short+"_npbool", "numpy_bool_exclusion_inverted", f"isinstance({arg}, np.bool_)", f"not isinstance({arg}, np.bool_)",
+             f"test_index_counts[np_int64-{arg}]")
++        # D6 equivalent mutant: PEP 357 (2006), NumPy 2.4.2 __index__
++        # refusal; live proof required, see EQUIVALENCES.md. DeMillo et al.
++        # (1978), equivalent mutation analysis (Offutt/Voas, year unverified).
++        add("E_npbool_"+short, "numpy_bool_clause_deleted", f"isinstance({arg}, np.bool_)", "False",
++            f"test_numpy_bool_refusal[true-{arg}]", "EQUIVALENCES.md#numpy-bool-"+short)
+         add("D5_"+short+"_index", "index_protocol_rejected", f"int(operator.index({arg}))",
+             f"({arg} if isinstance({arg}, int) else (_ for _ in ()).throw(TypeError('not Python int')))",
+             f"test_index_counts[np_int64-{arg}]")
+--- a3/cpu_checks.py
++++ a4/cpu_checks.py
+@@ -79,6 +79,11 @@
+     killed = bool(acceptable_killers(result))
+     assert all(i in json.loads((TOOL / "G2_shim.json").read_text())["collected_ids"] for i in acceptable_killers(result))
+     equivalent = bool(m["equivalence"]) and result["exit"] == 0
++    live = None
++    if mid.startswith("E_npbool_"):
++        from runtime_evidence import npbool_index_check
++        live = npbool_index_check()
++        equivalent = equivalent and not live["accepts_numpy_bool"] and live["numpy_version"] == "2.4.2"
+     default_binding = None
+     if mid == "M14":
+         import inspect
+@@ -86,7 +91,7 @@
+         default_binding = dict(mechanism="default-argument binding", parameter="eps",
+                                value=inspect.signature(tensor_cuda.nn.GroupNorm).parameters["eps"].default,
+                                witness_call_executed=bool(calls), call_phase_bindings=result["constructor_bindings"])
+-    row = dict(default_binding=default_binding, trace_phase="call only", id=mid, witness=m["predicted_witness"], edited_lines=changed, reached_lines=hit,
++    row = dict(equivalence_runtime=live, default_binding=default_binding, trace_phase="call only", id=mid, witness=m["predicted_witness"], edited_lines=changed, reached_lines=hit,
+                reached=bool(hit) or bool(default_binding), loads=True, differs=True, cpu_killed=killed, cpu_assertion_killed=any(r["outcome"] == "failed" and r.get("exception_class") == "AssertionError" for r in calls),
+                cpu_refusal_killed=any(r["outcome"] == "failed" and r.get("exception_class") in ("TypeError", "ValueError") and r.get("groupnorm_refusal") for r in calls),
+                equivalence=m["equivalence"], passed=(bool(hit) or bool(default_binding)) and not result["collection_errors"] and (killed or equivalent), trace=result)
+--- /dev/null
++++ a4/equivalence_execution.py
+@@ -0,0 +1,34 @@
++"""D6 full real-test CPU executions, separate from synthetic GPU staging.
++Prior art: PEP 357 (2006); equivalent mutation analysis Offutt/Voas
++(year unverified, lead to check); pytest (Krekel et al., 2004+).
++"""
++import contextlib
++import json
++import os
++from pathlib import Path
++import sys
++import pytest
++from cpu_shim import install
++from run_gpu_tests import Reports
++from runtime_evidence import npbool_index_check
++
++TOOL=Path(__file__).resolve().parent
++ROOT=TOOL.parents[2]
++assert os.environ.get('CUDA_VISIBLE_DEVICES')==''
++label=sys.argv[1]
++assert label in ('E_npbool_g','E_npbool_c')
++install(TOOL/'arms'/label/'tensor_cuda/nn.py')
++plugin=Reports()
++live=npbool_index_check()
++with (TOOL/(label+'_full_cpu.log')).open('x') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
++    rc=int(pytest.main(['-q','-p','no:cacheprovider','--import-mode=importlib','--rootdir='+str(ROOT),
++                       str(ROOT/'tensor_cuda/tests/test_groupnorm_gn1.py')],plugins=[plugin]))
++result=dict(label=label,exit=rc,live=live,collected_ids=plugin.ids,reports=plugin.reports,
++            collection_errors=plugin.collection_errors,
++            passed=rc==0 and not plugin.collection_errors and len(plugin.ids)==405
++                   and all(r['outcome']=='passed' for r in plugin.reports)
++                   and live['accepts_numpy_bool'] is False and live['numpy_version']=='2.4.2',
++            evidence_class='real tests with CPU stand-in; no GPU claim')
++(TOOL/(label+'_full_cpu.json')).write_text(json.dumps(result,indent=2)+'\n')
++print(label,rc,len(plugin.ids),live)
++sys.exit(0 if result['passed'] else 1)
+--- a3/evidence.py
++++ a4/evidence.py
+@@ -11,10 +11,11 @@
+ import re
+ from pathlib import Path
+ import xml.etree.ElementTree as ET
++from runtime_evidence import runtime_modules
+ 
+ TOOL = Path(__file__).resolve().parent
+ ROOT = TOOL.parents[2]
+-ORDER = "orders/GN1_A3_REV2_FIXES.md"
++ORDER = "orders/GN1_A4_REV3_FIXES.md"
+ DEVICE_PATTERNS = (
+     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
+     "initialization error", "invalid device ordinal", "CUDA error at",
+@@ -34,7 +35,7 @@
+ def guard(runs):
+     runs = Path(runs).resolve()
+     if not runs.is_relative_to(TOOL) or runs == TOOL or runs.is_relative_to(TOOL / "arms"):
+-        raise ValueError("RUNS must be under a3 and outside arms")
++        raise ValueError("RUNS must be under a4 and outside arms")
+     return runs
+ 
+ 
+@@ -156,7 +157,7 @@
+ 
+ def scratch_guard(value):
+     resolved = Path(value).resolve()
+-    assert resolved.parent == Path("/tmp") and resolved.name.startswith("gn1_a3_"), "TMPDIR must resolve to /tmp/gn1_a3_*"
++    assert resolved.parent == Path("/tmp") and resolved.name.startswith("gn1_a4_"), "TMPDIR must resolve to /tmp/gn1_a4_*"
+     return resolved
+ 
+ 
+@@ -187,6 +188,10 @@
+     row = forge_row(path)
+     if row is None or row[0] == "ran" and row[1] in (143, 137) and row[1] != rc:
+         return "outer-timeout"
++    # D3 / REV3 B7, B7b, B8: outer timeout caught inside runner kill grace.
++    # Prior art: GNU timeout/POSIX signal exit convention; REV3 reproduction.
++    if row[0] in ("timeout", "window-closed") and row[1] in (143, 137):
++        return "outer-timeout"
+     if row == ("timeout", rc):
+         return "runner-deadline"
+     if row == ("window-closed", rc):
+@@ -197,8 +202,13 @@
+ 
+ 
+ def not_admitted(attempt, rc, cause):
+-    return not (attempt / "child_result.json").exists() and (
+-        rc == 75 and cause in ("no-window", "rechecked-out") or rc == 76 and cause == "no-lock")
++    # D2: a single positive start operand burns the label, even if the parent
++    # or child was interrupted. Prior art: REV3's evidence-based admission
++    # rule (2026); no prior art known to me beyond the order for this predicate.
++    row = forge_row(attempt / "forge.log")
++    return not (any((attempt / name).exists() for name in
++                    ("child_started.json", "invocation.json", "junit.xml", "child_result.json"))
++                or row is not None and row[0] in ("ran", "timeout", "window-closed"))
+ 
+ 
+ def acceptable_killers(data):
+@@ -221,19 +231,23 @@
+     data = None
+     killers = []
+     outcomes = {}
+-    if rc not in line["expected_child_exits"]:
+-        reasons.append("expected exits %s, got %s" % (line["expected_child_exits"], rc))
++    unsealed = []
+     try:
++        if rc not in line["expected_child_exits"]:
++            reasons.append("expected exits %s, got %s" % (line["expected_child_exits"], rc))
+         data = read(attempt / "child_result.json")
+         assert type(data["pytest_exit"]) is int, "child exit is not an integer"
+         assert data["pytest_exit"] == rc, "child exit/summary mismatch"
+         assert data["arm"] == line["arm"] and data["suite"] == line["suite"], "child arm/suite binding mismatch"
+         assert data["audit"] == audit and data["run_root"] == str(runs) and data["attempt_dir"] == str(attempt), "child run-root/audit binding mismatch"
++        assert (attempt / "child_started.json").is_file(), "missing child start marker"
+         package = verify_arm(line["arm"], seal)
+         pin = read(TOOL / "engine_pin.json")
+         assert data["nn_sha256"] == seal["arms"][line["arm"]]["nn.py"] == sha(package / "nn.py"), "nn.py binding mismatch"
+         assert data["engine_sha256"] == seal["engine_sha256"] == pin["sha256"], "engine binding mismatch"
+         assert data["seal_sha256"] == sha(TOOL / "staging_seal.json"), "child seal mismatch"
++        runtime_errors, unsealed = runtime_modules(data["runtime_modules"], seal, TOOL, ROOT)
++        reasons.extend(runtime_errors)
+         assert not data["collection_errors"], "collection errors"
+         ids = data["collected_ids"]
+         assert len(ids) == len(set(ids)) and sorted(ids) == sorted(census(line["arm"], line["suite"], audit)), "test-ID census mismatch"
+@@ -259,6 +273,10 @@
+         elif line["suite"] == "mutation":
+             if line.get("equivalence"):
+                 assert line["equivalence"] == seal["equivalences"].get(line["label"]), "unsealed equivalence proof"
++                if line["label"] != "V3":
++                    live = data["equivalence_runtime"]
++                    assert live["numpy_version"] == seal["numpy_version"], "equivalence NumPy version mismatch"
++                    assert live["accepts_numpy_bool"] is False and live["exception_class"] == "TypeError", "operator.index accepts numpy.bool_: equivalence invalid"
+                 if any(o != "passed" for o in outcomes.values()):
+                     reasons.append("equivalent mutant did not pass")
+             else:
+@@ -278,14 +296,41 @@
+         any_failure = any(r["outcome"] == "failed" for r in data["reports"])
+         if rc == 0 and any_failure or rc == 1 and not any_failure:
+             reasons.append("pytest exit inconsistent with failures")
+-    except (AssertionError, KeyError, ValueError, TypeError, OSError, ET.ParseError) as exc:
++    except Exception as exc:
+         reasons.append(str(exc) or type(exc).__name__)
+-    cause = forge_outcome(attempt / "forge.log", rc)
+-    if cause != "ran":
+-        reasons.append("forge outcome: " + cause)
++    cause, timeout_reason = "unreadable", None
++    try:
++        cause = forge_outcome(attempt / "forge.log", rc)
++        if cause != "ran":
++            reasons.append("forge outcome: " + cause)
++        timeout_reason = timeout_cause(attempt / "forge.log", rc)
++    except Exception as exc:
++        reasons.append("runner attribution: " + (str(exc) or type(exc).__name__))
+     return dict(passed=not reasons, reasons=reasons, actual_killers=killers if not reasons else [],
+                 outcomes=outcomes, forge_outcome=cause, timeout=cause == "timeout",
+-                timeout_cause=timeout_cause(attempt / "forge.log", rc))
++                timeout_cause=timeout_reason, unsealed=unsealed)
++
++
++def bound_reasons(receipt, line):
++    """D7 exact integer binding. Prior art: GN1 registration/REV3; no novel rule."""
++    reasons = []
++    try:
++        assert type(receipt["outer_bound_seconds"]) is int and receipt["outer_bound_seconds"] == line["outer"], "outer bound differs from gpu_lines.json"
++        command = receipt["command"]
++        split = command.index("--")
++        runner, inner = command[:split], command[split+1:]
++        for option, field in (("--max", "maximum"), ("--min", "minimum")):
++            assert runner.count(option) == 1, option + " missing/duplicate"
++            value = runner[runner.index(option)+1]
++            assert re.fullmatch(r"[0-9]+", value) and int(value) == line[field], option + " differs from gpu_lines.json"
++        assert inner[0] == "timeout", "inner timeout missing"
++        # GNU timeout permits options before DURATION, including --kill-after.
++        duration = next(v for v in inner[1:] if not v.startswith("-"))
++        assert re.fullmatch(r"[0-9]+s?", duration) and int(duration.removesuffix("s")) == line["inner"], "inner timeout differs from gpu_lines.json"
++        assert receipt["expected_child_exits"] == line["expected_child_exits"] and all(type(v) is int for v in receipt["expected_child_exits"]), "expected exits differ from gpu_lines.json"
++    except Exception as exc:
++        reasons.append("bound binding: " + (str(exc) or type(exc).__name__))
++    return reasons
+ 
+ 
+ def attempts(runs, label):
+@@ -325,14 +370,13 @@
+     result = dict(passed=False, reasons=["no admitted attempt"], actual_killers=[], outcomes={})
+     for attempt in attempts(runs, label):
+         if not (attempt / "parent_result.json").exists():
+-            has_child = (attempt / "child_result.json").exists()
+-            inventory.append(dict(attempt=attempt.name, admission="admitted" if has_child else "not_admitted", incomplete=True))
+-            if not has_child:
++            refused = not_admitted(attempt, None, None)
++            inventory.append(dict(attempt=attempt.name, admission="not_admitted" if refused else "admitted", incomplete=True))
++            if refused:
+                 continue
+             assert selected is None, "multiple admitted attempts"
+             selected = attempt
+-            child_rc = read(attempt / "child_result.json")["pytest_exit"]
+-            result = evaluate(runs, attempt, line, child_rc, start["audit"], seal)
++            result = evaluate(runs, attempt, line, None, start["audit"], seal)
+             # L45: a completed child can expose a failure but cannot establish
+             # acceptance without its parent's post-exit record. Never retry it.
+             result["reasons"].append("incomplete: missing parent completion receipt")
+@@ -376,5 +420,10 @@
+             result["actual_killers"] = []
+         for key in ("passed", "reasons", "actual_killers", "forge_outcome", "timeout", "timeout_cause", "outcomes"):
+             assert receipt[key] == result[key], "stored parent receipt disagrees with recomputation: " + key
++        assert receipt["unsealed"] == result["unsealed"], "stored runtime census differs from recomputation"
++        result["reasons"].extend(bound_reasons(receipt, line))
++        result["passed"] = not result["reasons"]
++        if not result["passed"]:
++            result["actual_killers"] = []
+     result.update(selected_attempt=str(selected) if selected else None, attempts=inventory)
+     return result
+--- /dev/null
++++ a4/extra_controls.py
+@@ -0,0 +1,58 @@
++"""A3's four supplementary targets through A4's parent/child/scorer.
++Prior art: Meszaros (2007) fault injection; A3 G4_extra; SHA-256 FIPS 180-4.
++Only A4 receipt/seal copies are perturbed; restored in finally blocks.
++"""
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++from evidence import TOOL, lines, read
++assert os.environ.get('CUDA_VISIBLE_DEVICES') == ''
++ROWS=[]
++runs=TOOL/'hostile_runs/Full_valid_synthetic'
++env=dict(os.environ,RUNS=str(runs))
++
++
++def run(args, **extra):
++    e=dict(env,**extra)
++    with (TOOL/'extra_launches.jsonl').open('a') as f:
++        f.write(json.dumps(dict(args=args,RUNS=e['RUNS']))+'\n')
++    p=subprocess.run(['timeout','60s',sys.executable,'-B',*args],cwd=TOOL,env=e,capture_output=True,text=True)
++    return dict(exit=p.returncode,stdout=p.stdout[-1500:],stderr=p.stderr[-2000:])
++
++
++p=runs/'candidate_focus/attempt-0001/parent_result.json'
++original=p.read_text()
++try:
++    d=json.loads(original);d['timeout_cause']='outer-timeout';p.write_text(json.dumps(d))
++    r=run(['score_gpu.py'])
++    s=read(runs/'G5_SUMMARY.json')
++    ROWS.append(dict(control='Stored_timeout_cause_tamper',target='stored timeout cause differs from log',
++                     passed=r['exit']==1 and 'stored timeout cause differs from log' in str(s),result=r))
++finally:
++    p.write_text(original)
++
++p=TOOL/'staging_seal.json'
++original=p.read_text()
++try:
++    d=json.loads(original);d['import_modules']['scripts/apa_om135_core.py']='0'*64
++    p.write_text(json.dumps(d,indent=2)+'\n')
++    child=TOOL/'extra_child_attempt';child.mkdir(exist_ok=False)
++    line=lines()['candidate_focus']
++    for name,args,extra in (
++        ('parent',['run_gpu_line.py','candidate_focus','0',str(line['outer']),sys.executable,
++                   'hostile_forge.py','--min',str(line['minimum']),'--max',str(line['maximum']),
++                   '--','timeout',str(line['inner'])+'s','python3','run_gpu_tests.py','candidate','focus'],{}),
++        ('child',['run_gpu_tests.py','candidate','focus'],dict(GN1_ATTEMPT=str(child),GN1_LINE='candidate_focus')),
++        ('scorer',['score_gpu.py'],{})):
++        r=run(args,**extra)
++        ROWS.append(dict(control='Import_helper_pin_'+name,target='import module seal mismatch: scripts/apa_om135_core.py',
++                         passed=r['exit']!=0 and 'import module seal mismatch: scripts/apa_om135_core.py' in str(r),result=r))
++finally:
++    p.write_text(original)
++r=run(['score_gpu.py'])
++out=dict(passed=all(x['passed'] for x in ROWS) and r['exit']==0,controls=ROWS,restored_full_valid_scorer_exit=r['exit'])
++(TOOL/'G4_extra.json').write_text(json.dumps(out,indent=2)+'\n')
++print(json.dumps(dict(passed=out['passed'],controls=len(ROWS))))
++sys.exit(0 if out['passed'] else 1)
+--- a3/gpu_lines.json
++++ a4/gpu_lines.json
+@@ -9,7 +9,8 @@
+     "inner": 240,
+     "maximum": 300,
+     "outer": 330,
+-    "expected_parent_exit": 0
++    "expected_parent_exit": 0,
++    "minimum": 250
+   },
+   {
+     "label": "candidate_focus",
+@@ -21,7 +22,8 @@
+     "inner": 240,
+     "maximum": 300,
+     "outer": 330,
+-    "expected_parent_exit": 0
++    "expected_parent_exit": 0,
++    "minimum": 250
+   },
+   {
+     "label": "baseline_regression",
+@@ -33,7 +35,8 @@
+     "inner": 840,
+     "maximum": 900,
+     "outer": 930,
+-    "expected_parent_exit": 0
++    "expected_parent_exit": 0,
++    "minimum": 850
+   },
+   {
+     "label": "candidate_regression",
+@@ -46,7 +49,8 @@
+     "inner": 840,
+     "maximum": 900,
+     "outer": 930,
+-    "expected_parent_exit": 0
++    "expected_parent_exit": 0,
++    "minimum": 850
+   },
+   {
+     "label": "D5_bias_dtype",
+@@ -59,7 +63,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_bias_length",
+@@ -72,7 +77,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_bias_rank",
+@@ -85,7 +91,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_bool",
+@@ -98,7 +105,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_index",
+@@ -111,7 +119,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_int",
+@@ -124,7 +133,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_npbool",
+@@ -137,7 +147,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_positive",
+@@ -150,7 +161,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_c_store",
+@@ -163,7 +175,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_channels",
+@@ -176,7 +189,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_bool",
+@@ -189,7 +203,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_index",
+@@ -202,7 +217,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_int",
+@@ -215,7 +231,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_npbool",
+@@ -228,7 +245,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_positive",
+@@ -241,7 +259,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_g_store",
+@@ -254,7 +273,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_input_dtype",
+@@ -267,7 +287,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_rank",
+@@ -280,7 +301,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_weight_dtype",
+@@ -293,7 +315,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_weight_length",
+@@ -306,7 +329,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "D5_weight_rank",
+@@ -319,7 +343,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M01",
+@@ -332,7 +357,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M02",
+@@ -345,7 +371,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M03",
+@@ -358,7 +385,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M04m",
+@@ -371,7 +399,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M04v",
+@@ -384,7 +413,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M05",
+@@ -397,7 +427,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M06in",
+@@ -410,7 +441,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M06out",
+@@ -423,7 +455,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M07cast",
+@@ -436,7 +469,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M07fast",
+@@ -449,7 +483,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M08cast",
+@@ -462,7 +497,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M08fast",
+@@ -475,7 +511,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M09cast",
+@@ -488,7 +525,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M09fast",
+@@ -501,7 +539,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M10",
+@@ -514,7 +553,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M11",
+@@ -527,7 +567,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M12",
+@@ -540,7 +581,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M13",
+@@ -553,7 +595,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M14",
+@@ -566,7 +609,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M15b",
+@@ -579,7 +623,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M15w",
+@@ -592,7 +637,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M15x",
+@@ -605,7 +651,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M16",
+@@ -618,7 +665,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M17b",
+@@ -631,7 +679,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M17w",
+@@ -644,7 +693,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M18b",
+@@ -657,7 +707,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "M18w",
+@@ -670,7 +721,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "V1",
+@@ -683,7 +735,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "V2",
+@@ -696,7 +749,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
+   },
+   {
+     "label": "V3",
+@@ -709,7 +763,8 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": "EQUIVALENCES.md#v3"
++    "equivalence": "EQUIVALENCES.md#v3",
++    "minimum": 190
+   },
+   {
+     "label": "V4",
+@@ -722,6 +777,35 @@
+     "inner": 180,
+     "maximum": 240,
+     "outer": 270,
+-    "equivalence": null
++    "equivalence": null,
++    "minimum": 190
++  },
++  {
++    "label": "E_npbool_g",
++    "arm": "E_npbool_g",
++    "suite": "mutation",
++    "expected_child_exits": [
++      0
++    ],
++    "expected_parent_exit": 0,
++    "inner": 180,
++    "minimum": 190,
++    "maximum": 240,
++    "outer": 270,
++    "equivalence": "EQUIVALENCES.md#numpy-bool-g"
++  },
++  {
++    "label": "E_npbool_c",
++    "arm": "E_npbool_c",
++    "suite": "mutation",
++    "expected_child_exits": [
++      0
++    ],
++    "expected_parent_exit": 0,
++    "inner": 180,
++    "minimum": 190,
++    "maximum": 240,
++    "outer": 270,
++    "equivalence": "EQUIVALENCES.md#numpy-bool-c"
+   }
+ ]
+--- a3/hostile_forge.py
++++ a4/hostile_forge.py
+@@ -29,6 +29,8 @@
+     rc = int(mode[-2:])
+     log(rc, "no-window" if rc==75 else "no-lock")
+     sys.exit(rc)
++from runtime_evidence import atomic_json, module_census, npbool_index_check
++atomic_json(output / "child_started.json", dict(label=label, pid=os.getpid()))
+ arm, suite = line["arm"], line["suite"]
+ ids = census(arm,suite)
+ reports = [dict(id=i,when="call",outcome="passed",detail="",exception_class=None,groupnorm_refusal=False) for i in ids]
+@@ -133,6 +135,8 @@
+           nn_sha256=seal["arms"][arm]["nn.py"],engine_sha256=pin["sha256"],
+           seal_sha256=sha(TOOL/"staging_seal.json"),pytest_exit=rc,collected_ids=ids,
+           collection_errors=[],reports=reports,CUDA_VISIBLE_DEVICES="")
++data["runtime_modules"] = module_census(TOOL.parents[2])
++data["equivalence_runtime"] = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+ if mode=="bad_nn_hash":data["nn_sha256"]="0"*64
+ if mode=="bad_engine_hash":data["engine_sha256"]="0"*64
+ if mode=="collection_error":data["collection_errors"]=["hostile collection error"]
+--- a3/hostile_scorer.py
++++ a4/hostile_scorer.py
+@@ -21,6 +21,7 @@
+ 
+ 
+ def invoke(args, e):
++    with (TOOL/"hostile_launches.jsonl").open("a") as log: log.write(json.dumps(dict(args=args,RUNS=e.get("RUNS"),mode=e.get("HOSTILE_MODE")))+"\n")
+     r=subprocess.run(["timeout","60s",sys.executable,"-B",*args],cwd=TOOL,env=e,capture_output=True,text=True)
+     return dict(exit=r.returncode,stdout=r.stdout[-3000:],stderr=r.stderr[-3000:])
+ 
+@@ -32,10 +33,11 @@
+     return runs
+ 
+ 
+-def parent(runs,label,mode="normal",bound=20,**extra):
++def parent(runs,label,mode="normal",bound=None,**extra):
+     line=lines()[label]
++    bound = line["outer"] if bound is None else bound
+     ex=",".join(map(str,line["expected_child_exits"]))
+-    r=invoke(["run_gpu_line.py",label,ex,str(bound),sys.executable,"hostile_forge.py","--max","30","--","timeout","10s","python3","run_gpu_tests.py",line["arm"],line["suite"]],env(runs,mode,**extra))
++    r=invoke(["run_gpu_line.py",label,ex,str(bound),sys.executable,"hostile_forge.py","--min",str(line["minimum"]),"--max",str(line["maximum"]),"--","timeout",str(line["inner"])+"s","python3","run_gpu_tests.py",line["arm"],line["suite"]],env(runs,mode,**extra))
+     paths=sorted((runs/label).glob("attempt-*/parent_result.json"))
+     r["receipt"]=str(paths[-1].relative_to(TOOL)) if paths else None
+     r["parent"]=read(paths[-1]) if paths else None
+@@ -70,7 +72,7 @@
+ RESULT.append(dict(control="H1",target="START.json",passed=s["exit"]==1 and "START.json" in str(s),scorer=s))
+ out=Path(os.environ["TMPDIR"])/"outside_guard";out.mkdir(exist_ok=True)
+ s=score(out)
+-RESULT.append(dict(control="H1b",target="run-root guard",passed=s["exit"]!=0 and "RUNS must be under a3" in str(s),scorer=s))
++RESULT.append(dict(control="H1b",target="run-root guard",passed=s["exit"]!=0 and "RUNS must be under a4" in str(s),scorer=s))
+ control("H2_REV1_exact","rev1_device","device-pattern failure")
+ control("H2c_REV1_exact","rev1_device_control","device-pattern failure")
+ control("H3_foreign_arm","foreign_arm","arm/suite binding")
+@@ -175,12 +177,12 @@
+ r=parent(runs,"candidate_regression","regression_dual_failure");s=score(runs)
+ RESULT.append(dict(control="D6_dual_failure",target="legacy call failure plus teardown error accepted",passed=r["exit"]==0 and s["summary"]["lines"]["candidate_regression"]["passed"],parent=r,scorer=s))
+ runs=start("Real_baseline_D5_registration")
+-r=parent(runs,"baseline_focus","real_baseline",bound=50);s=score(runs)
++r=parent(runs,"baseline_focus","real_baseline");s=score(runs)
+ RESULT.append(dict(control="Real_baseline_D5_registration",target="real GN test outcomes and registered baseline D5 exception classes",passed=r["exit"]==0 and s["summary"]["lines"]["baseline_focus"]["passed"],parent=r,scorer=s))
+ runs=start("Resolved_TMPDIR_escape")
+-r=parent(runs,"candidate_focus",TMPDIR="/tmp/gn1_a3_work/../gn1_outside_a3")
++r=parent(runs,"candidate_focus",TMPDIR="/tmp/gn1_a4_work/../gn1_outside_a3")
+ s=score(runs)
+-RESULT.append(dict(control="Resolved_TMPDIR_escape",target="TMPDIR must resolve to /tmp/gn1_a3_*",passed=r["exit"]!=0 and "TMPDIR must resolve" in str(r) and s["exit"]==1,parent=r,scorer=s))
++RESULT.append(dict(control="Resolved_TMPDIR_escape",target="TMPDIR must resolve to /tmp/gn1_a4_*",passed=r["exit"]!=0 and "TMPDIR must resolve" in str(r) and s["exit"]==1,parent=r,scorer=s))
+ result=dict(passed=all(r["passed"] for r in RESULT),controls=RESULT,CPU_only=True,CUDA_VISIBLE_DEVICES="",patterns=list(DEVICE_PATTERNS))
+ (TOOL/"G4_hostile.json").write_text(json.dumps(result,indent=2)+"\n")
+ print(json.dumps(dict(passed=result["passed"],controls=len(RESULT),failed=[r["control"] for r in RESULT if not r["passed"]])))
+--- a3/mutants.json
++++ a4/mutants.json
+@@ -269,6 +269,32 @@
+     "expected_child_exit": 1,
+     "actual_gpu_killer": null,
+     "sha256": "e0a6a613062e86317e06cce8cd5c4cefcddf801440891c476c1fedde7c13d2b4",
++    "edit_sites": 1,
++    "minimal_runnable_form": "one expression at one source site; no multiline edits"
++  },
++  {
++    "id": "E_npbool_c",
++    "name": "numpy_bool_clause_deleted",
++    "old": "isinstance(num_channels, np.bool_)",
++    "new": "False",
++    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_numpy_bool_refusal[true-num_channels]",
++    "equivalence": "EQUIVALENCES.md#numpy-bool-c",
++    "expected_child_exit": 0,
++    "actual_gpu_killer": null,
++    "sha256": "90840e352c5a5e3cece18d5e55fa940bc102119b6ae930b4e033b213759c24f4",
++    "edit_sites": 1,
++    "minimal_runnable_form": "one expression at one source site; no multiline edits"
++  },
++  {
++    "id": "E_npbool_g",
++    "name": "numpy_bool_clause_deleted",
++    "old": "isinstance(num_groups, np.bool_)",
++    "new": "False",
++    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_numpy_bool_refusal[true-num_groups]",
++    "equivalence": "EQUIVALENCES.md#numpy-bool-g",
++    "expected_child_exit": 0,
++    "actual_gpu_killer": null,
++    "sha256": "49d6d0801416ffc1b6385b736f8bf8f7bf585938ab697f7da063298ca0895db0",
+     "edit_sites": 1,
+     "minimal_runnable_form": "one expression at one source site; no multiline edits"
+   },
+--- a3/order_commit.txt
++++ a4/order_commit.txt
+@@ -1 +1 @@
+-86e3ec8fd8874adf97307e40cc1928f6890bcdf7
++3810fe3a4c8e493c5fc7ca5fd9fe2975959eaadc
+--- /dev/null
++++ a4/replay_driver.py
+@@ -0,0 +1,16 @@
++"""Final-seal G4 foreground replay. Prior art: A3 bounded gate driver."""
++import os
++from pathlib import Path
++import subprocess
++import sys
++TOOL=Path(__file__).resolve().parent
++ROOT=TOOL.parents[2]
++for gate,script,args,bound in (
++    ('hostile_gate','hostile_scorer.py',[],600),
++    ('runner_gate','runner_controls.py',[],400),
++    ('rev2_gate','rev2_controls.py',['a','c','d'],600),
++    ('extra_gate','extra_controls.py',[],220),
++    ('a4_controls_gate','a4_controls.py',[],580)):
++    result=subprocess.run(['timeout',str(bound+10)+'s',sys.executable,'-B',str(TOOL/'run_cpu_gate.py'),
++                           gate,str(bound),sys.executable,'-B',str(TOOL/script),*args],cwd=ROOT,env=os.environ)
++    assert result.returncode==0,gate
+--- a3/rev2_controls.py
++++ a4/rev2_controls.py
+@@ -31,7 +31,7 @@
+ BASE = MA2 / ("rev2_runs_" + time.strftime("%H%M%S"))
+ TOOLS = Path(os.environ["TMPDIR"]) / "rev2_tools"
+ FORGE = Path(os.environ["TMPDIR"]) / "rev2_forge"
+-REAL_FORGE = subprocess.check_output(["bash", "-lc", "command -v forge-gpu-run"], text=True).strip()
++REAL_FORGE = "forge-gpu-run"
+ PY = sys.executable
+ RESULTS = []
+ # Adaptation: A2's parent asserts TMPDIR.startswith("/tmp/gn1_a2_"), while this order allows writes only under
+@@ -55,6 +55,7 @@
+ 
+ 
+ def run(args, env, timeout=120):
++    with (OUT/"rev2_launches.jsonl").open("a") as log: log.write(json.dumps(dict(args=args,RUNS=env.get("RUNS")))+"\n")
+     p = subprocess.run(["timeout", str(timeout)+"s", *args], cwd=MA2, env=env, capture_output=True, text=True, timeout=timeout)
+     return dict(exit=p.returncode, stdout=p.stdout[-2500:], stderr=p.stderr[-2500:])
+ 
+@@ -66,10 +67,22 @@
+     return runs
+ 
+ 
+-def parent(runs, label, gpu_run, tail, bound=30, expected=None, popen=False, **env):
++def parent(runs, label, gpu_run, tail, bound=None, expected=None, popen=False, **env):
+     from_lines = json.loads((MA2 / "gpu_lines.json").read_text())
+     line = next(r for r in from_lines if r["label"] == label)
++    bound = line["outer"] if bound is None else bound
+     ex = expected or ",".join(map(str, line["expected_child_exits"]))
++    # D7: bind valid scaffolding to the sealed row; explicit hostile bounds stay hostile.
++    gpu_run = list(gpu_run)
++    tail = list(tail)
++    if "--min" not in gpu_run and "--max" not in gpu_run:
++        at = gpu_run.index("--")
++        gpu_run[at:at] = ["--min", str(line["minimum"]), "--max", str(line["maximum"])]
++    elif "hostile" in gpu_run:
++        gpu_run[gpu_run.index("--min")+1] = str(line["minimum"])
++        gpu_run[gpu_run.index("--max")+1] = str(line["maximum"])
++    if tail and tail[0] == "timeout" and tail[1] == "10s":
++        tail[1] = str(line["inner"]) + "s"
+     args = [PY, "-B", "run_gpu_line.py", label, ex, str(bound), *gpu_run, *tail]
+     e = base_env(RUNS=str(runs), **env)
+     if popen:
+@@ -341,7 +354,7 @@
+     first = parent(runs, "baseline_focus", real_forge(1, 60, 2, "rev2-D5a"), child, bound=60,
+                    REV2_MODE="normal", REV2_NO_LOG="1")
+     os.replace(FORGE / "summary.log", FORGE / "summary.moved")  # no-run state: the window is open
+-    second = parent(runs, "baseline_focus", real_forge(1, 60, 2, "rev2-D5b"), child, bound=60,
++    second = parent(runs, "baseline_focus", real_forge(250, 300, 2, "rev2-D5b"), ["timeout", "240s", *child], bound=330,
+                     REV2_MODE="normal", REV2_NO_LOG="1")
+     sc = score(runs, "baseline_focus")
+     ok = ((first["parent"] or {}).get("admission") == "not_admitted" and first["forge_log_last"] == ["no-window", "75"]
+--- a3/rev2_forge.py
++++ a4/rev2_forge.py
+@@ -28,6 +28,12 @@
+ sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+ seal = json.loads((TOOL / "staging_seal.json").read_text())
+ pin = json.loads((TOOL / "engine_pin.json").read_text())
++from runtime_evidence import atomic_json, module_census, npbool_index_check
++atomic_json(att / "child_started.json", dict(label=label, pid=os.getpid()))
++if mode == "started_no_result":
++    atomic_json(att / "invocation.json", dict(arm=line["arm"], suite=line["suite"]))
++    time.sleep(10)
++    sys.exit(0)
+ arm, suite = line["arm"], line["suite"]
+ ids = census(arm, suite)
+ reports = {i: dict(id=i, when="call", outcome="passed", detail="", exception_class=None, groupnorm_refusal=False)
+@@ -96,7 +102,28 @@
+             seal_sha256=sha(TOOL / "staging_seal.json"), engine_sha256=pin["sha256"],
+             nn_sha256=seal["arms"][arm]["nn.py"], CUDA_VISIBLE_DEVICES="", files=[], pytest_exit=rc,
+             collected_ids=collected, collection_errors=[], reports=rows)
+-(att / "child_result.json").write_text(json.dumps(data, indent=2) + "\n")
++data["runtime_modules"] = module_census(TOOL.parents[2])
++data["equivalence_runtime"] = npbool_index_check() if line.get("equivalence") and label != "V3" else None
++if mode == "sealed_tamper":
++    import runtime_sentinel
++    target = Path(runtime_sentinel.__file__)
++    target.write_bytes(target.read_bytes() + b"# tampered at runtime\n")
++    data["runtime_modules"] = module_census(TOOL.parents[2])
++if mode == "unsealed":
++    path = Path(os.environ["TMPDIR"]) / "device_only_unsealed.py"
++    path.write_text("# CPU control for a device-only import origin\n")
++    import importlib.util
++    spec = importlib.util.spec_from_file_location("device_only", path)
++    module = importlib.util.module_from_spec(spec)
++    sys.modules["device_only"] = module
++    spec.loader.exec_module(module)
++    data["runtime_modules"] = module_census(TOOL.parents[2])
++if mode == "equivalence_accepts":
++    data["equivalence_runtime"]["accepts_numpy_bool"] = True
++if mode == "truncated":
++    (att / "child_result.json").write_text('{"pytest_exit":')
++else:
++    atomic_json(att / "child_result.json", data)
+ root = ET.Element("testsuites")
+ ts = ET.SubElement(root, "testsuite", name="pytest")
+ for i in collected:  # pytest 9 junitxml shape: one entry per ID, two only for call failure + teardown error
+@@ -114,10 +141,12 @@
+     for e in errs:
+         ET.SubElement(case, "error", message=e["detail"]).text = e["detail"]
+ ET.ElementTree(root).write(att / "junit.xml", encoding="unicode")
+-if mode in ("hang", "hang_failure"):
+-    time.sleep(3)
++if mode in ("hang", "hang_failure", "hang_after_result"):
++    time.sleep(float(os.environ.get("A4_SLEEP", "3")))
++if mode == "unattributable":
++    rc = 124
+ logged = rc + 1 if mode == "log_mismatch" else rc
+-fields = [datetime.datetime.now(datetime.timezone.utc).isoformat(), str(TOOL), label, "halted", "-", "0", "0", "ran",
++fields = [datetime.datetime.now(datetime.timezone.utc).isoformat(), str(TOOL), label, "halted", "-", "0", "0", "no-lock" if mode == "unattributable" else "ran",
+           str(logged)]
+ if os.environ.get("REV2_NO_LOG") != "1":  # under the REAL forge-gpu-run, the runner writes its own row
+     with open(os.environ["FORGE_GPU_RUN_LOG"], "a") as f:
+--- a3/run_cpu_gate.py
++++ a4/run_cpu_gate.py
+@@ -20,6 +20,9 @@
+ scratch_guard(env["TMPDIR"])
+ Path(env["TMPDIR"]).mkdir(exist_ok=True, parents=True)
+ start = datetime.datetime.now(datetime.timezone.utc).isoformat()
++(out / (name + '.launch.json')).write_text(json.dumps(dict(
++    name=name, start=start, bound_seconds=int(seconds), command=command,
++    CUDA_VISIBLE_DEVICES='', TMPDIR=env['TMPDIR']), indent=2) + '\n')
+ with (out / (name + ".log")).open("x") as log:
+     child = subprocess.run(["timeout", "--kill-after=10s", seconds + "s", *command],
+                            cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
+--- a3/run_gpu_line.py
++++ a4/run_gpu_line.py
+@@ -40,7 +40,9 @@
+     previous = attempts(runs, label)
+     if previous:
+         prior = recompute_line(runs, label, seal, start_record)
+-        assert all(p["admission"] == "not_admitted" for p in prior["attempts"]), "label already has an admitted attempt (including incomplete child)"
++        if not all(p["admission"] == "not_admitted" for p in prior["attempts"]):
++            print(json.dumps(dict(error="label already has an admitted attempt (including incomplete child)", prior=prior)), file=sys.stderr)
++            return 1
+     output = base / ("attempt-%04d" % (len(previous) + 1))
+     output.mkdir(parents=True, exist_ok=False)
+     env = dict(os.environ, RUNS=str(runs), GN1_LINE=label, GN1_ATTEMPT=str(output),
+@@ -57,7 +59,7 @@
+     completed = utc()
+     cause = forge_outcome(output / "forge.log", rc)
+     refused = not_admitted(output, rc, cause)
+-    result = (dict(passed=False, reasons=["not admitted: " + cause], actual_killers=[], outcomes={}, forge_outcome=cause, timeout=False, timeout_cause=None)
++    result = (dict(passed=False, reasons=["not admitted: " + cause], actual_killers=[], outcomes={}, forge_outcome=cause, timeout=False, timeout_cause=timeout_cause(output / "forge.log", rc), unsealed=[])
+               if refused else evaluate(runs, output, line, rc, audit, seal))
+     if not refused and not audit and line["suite"] == "mutation":
+         try:
+--- a3/run_gpu_tests.py
++++ a4/run_gpu_tests.py
+@@ -9,6 +9,14 @@
+ from pathlib import Path
+ import sys
+ import traceback
++
++# D2: first executable child action after standard-library definitions/imports,
++# before evidence, engine, pytest or NumPy. Imported Reports users do not start
++# a child. Prior art: POSIX rename(2), see runtime_evidence.py.
++from runtime_evidence import atomic_json, module_census, npbool_index_check
++if __name__ == "__main__":
++    atomic_json(Path(os.environ["GN1_ATTEMPT"]) / "child_started.json",
++                dict(pid=os.getpid(), label=os.environ["GN1_LINE"]))
+ 
+ from evidence import guard, verify_start, verify_arm, lines
+ 
+@@ -110,10 +118,12 @@
+         args += ["-k", "reference"]
+     args += [str(ROOT / file) for file in files]
+     plugin = Reports()
++    equivalence_runtime = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+     rc = int(pytest.main(args, plugins=[plugin]))
+     result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids,
+-                  collection_errors=plugin.collection_errors, reports=plugin.reports)
+-    (output / "child_result.json").write_text(json.dumps(result, indent=2) + "\n")
++                  collection_errors=plugin.collection_errors, reports=plugin.reports,
++                  equivalence_runtime=equivalence_runtime, runtime_modules=module_census(ROOT))
++    atomic_json(output / "child_result.json", result)
+     return rc
+ 
+ 
+--- a3/runner_controls.py
++++ a4/runner_controls.py
+@@ -11,7 +11,7 @@
+ SCRATCH.mkdir(exist_ok=False)
+ BASE=TOOL/"runner_runs"
+ BASE.mkdir(exist_ok=False)
+-REAL=shutil.which("forge-gpu-run")
++REAL="forge-gpu-run"
+ PY=sys.executable
+ RESULT=[]
+ 
+@@ -30,6 +30,7 @@
+     return e
+ 
+ def invoke(args,e,seconds=90):
++    with (TOOL/"runner_launches.jsonl").open("a") as log: log.write(json.dumps(dict(args=args,RUNS=e.get("RUNS")))+"\n")
+     r=subprocess.run(["timeout",str(seconds)+"s",*args],cwd=TOOL,env=e,capture_output=True,text=True)
+     return dict(exit=r.returncode,stdout=r.stdout[-2000:],stderr=r.stderr[-2000:])
+ def start(name):
+@@ -37,13 +38,18 @@
+     r=invoke([PY,"-B","start_gpu_run.py"],env(runs));assert r["exit"]==0,r
+     return runs
+ 
+-def command(label,kind="valid",inner=20):
++def command(label,kind="valid",inner=None):
+     line=lines()[label]
++    inner=line["inner"] if inner is None else inner
+     target=([PY,str(TOOL/"rev2_forge.py")] if kind=="valid" else [PY,str(SCRATCH/"sleeper.py")])
+     return ["timeout","--kill-after=0.2s",str(inner)+"s",*target,"run_gpu_tests.py",line["arm"],line["suite"]]
+ 
+-def args(label,tail,bound=30,minimum=0.1,maximum=20):
+-    line=lines()[label];ex=",".join(map(str,line["expected_child_exits"]))
++def args(label,tail,bound=None,minimum=None,maximum=None):
++    line=lines()[label]
++    bound=line["outer"] if bound is None else bound
++    minimum=line["minimum"] if minimum is None else minimum
++    maximum=line["maximum"] if maximum is None else maximum
++    ex=",".join(map(str,line["expected_child_exits"]))
+     return [PY,"-B","run_gpu_line.py",label,ex,str(bound),REAL,"--min",str(minimum),"--max",str(maximum),"--margin","0.3","--label","a3-cpu-control","--",*tail]
+ 
+ def collect(runs,label,r):
+@@ -97,7 +103,7 @@
+ line=lines()["candidate_focus"]
+ bad=[PY,"-B","run_gpu_line.py","candidate_focus","0","20",REAL,"--min","2","--max","1","--",*command("candidate_focus")]
+ r=collect(runs,"candidate_focus",invoke(bad,env(runs)))
+-record("Runner_no_window64_usage",runs,"candidate_focus",r,"no-window")
++record("Runner_no_window64_usage",runs,"candidate_focus",r,"no-window",admission="not_admitted")
+ # no-lock with an actually held scratch lock.
+ runs=start("no_lock");summary([(time.time(),"COOLDOWN 2s")])
+ fd=os.open(SCRATCH/"lock",os.O_CREAT|os.O_RDWR,0o600);fcntl.flock(fd,fcntl.LOCK_EX)
+@@ -118,7 +124,7 @@
+ # B2 runner deadline; B3 clamp to a closed window; B4 parent's outer bound;
+ # B5 inner timeout. Each is attributed from the runner's raw nine-field row.
+ runs=start("runner_deadline");absent()
+-r=parent(runs,"candidate_focus",command("candidate_focus","sleep"),maximum=1.5)
++r=parent(runs,"candidate_focus",command("candidate_focus","sleep"),maximum=1.5,minimum=0.1)
+ record("B2_runner_deadline",runs,"candidate_focus",r,"timeout","runner-deadline")
+ runs=start("window_closed");summary([(time.time(),"COOLDOWN 3600s")])
+ p=asynchronous_parent(runs,"candidate_focus",command("candidate_focus","sleep"))
+@@ -126,7 +132,7 @@
+ r=finish(p,runs,"candidate_focus")
+ record("B3_window_closed",runs,"candidate_focus",r,"window-closed","window-closed")
+ runs=start("outer_timeout");absent()
+-r=parent(runs,"candidate_focus",command("candidate_focus","sleep"),bound=2,maximum=60)
++r=parent(runs,"candidate_focus",command("candidate_focus","sleep"),bound=2,maximum=60,minimum=1)
+ record("B4_outer_timeout",runs,"candidate_focus",r,"log-exit-mismatch","outer-timeout")
+ runs=start("inner_timeout");absent()
+ r=parent(runs,"candidate_focus",command("candidate_focus","sleep",inner=0.5))
+@@ -148,7 +154,7 @@
+     # cannot execute the deliberately invalid CPU command at argv[0].
+     r=parent(runs,"candidate_focus",[str(missing),"run_gpu_tests.py","candidate","focus"])
+     record("Runner_ran_cannot_start"+str(code),runs,"candidate_focus",r,"ran")
+-result=dict(passed=all(r["passed"] for r in RESULT),controls=RESULT,installed_runner_sha256=__import__('hashlib').sha256(Path(REAL).read_bytes()).hexdigest(),CPU_only=True)
++result=dict(passed=all(r["passed"] for r in RESULT),controls=RESULT,installed_runner_sha256=__import__('hashlib').sha256(Path(shutil.which(REAL)).read_bytes()).hexdigest(),CPU_only=True)
+ (TOOL/"G4_runner.json").write_text(json.dumps(result,indent=2)+"\n")
+ print("runner controls",len(RESULT),"passed",result["passed"])
+ sys.exit(0 if result["passed"] else 1)
+--- /dev/null
++++ a4/runtime_driver.py
+@@ -0,0 +1,7 @@
++"""D5 foreground trace driver. Prior art: A3 bounded subprocess gate driver."""
++import os,subprocess,sys
++from pathlib import Path
++p=Path(__file__).resolve().parent
++for suite in ('focus','mutation'):
++ r=subprocess.run(['timeout','240s',sys.executable,'-B',str(p/'run_cpu_gate.py'),'runtime_'+suite+'_gate','220','python3','-B',str(p/'trace_runtime.py'),suite],env=os.environ)
++ assert r.returncode==0
+--- /dev/null
++++ a4/runtime_evidence.py
+@@ -0,0 +1,78 @@
++"""A4 D2/D4/D5/D6 evidence primitives; no engine import.
++
++Prior art: atomic publication by POSIX rename(2), IEEE Std 1003.1
++(year unverified, lead to check 'POSIX rename atomic replacement'); Python
++sys.modules/__file__ census, PSF (year unverified, lead to check 'Python
++sys.modules module origins'); SHA-256 FIPS 180-4 (2015); operator.index,
++PEP 357 (2006). GN1-specific receipt fields are the application here.
++"""
++import hashlib
++import json
++import os
++from pathlib import Path
++import sys
++
++
++def atomic_json(path, data):
++    path = Path(path)
++    temporary = path.with_name(path.name + '.tmp.' + str(os.getpid()))
++    with temporary.open('x') as stream:
++        json.dump(data, stream, indent=2)
++        stream.write('\n')
++        stream.flush()
++        os.fsync(stream.fileno())
++    os.replace(temporary, path)
++
++
++def module_census(root):
++    rows = []
++    for name, module in sorted(list(sys.modules.items())):
++        origin = getattr(module, '__file__', None)
++        if not origin:
++            continue
++        path = Path(origin).resolve()
++        display = (str(path.relative_to(root)) if path.is_relative_to(root)
++                   else str(path).replace(str(Path.home()) + '/', '$HOME/', 1))
++        row = dict(module=name, path=display)
++        try:
++            row['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
++        except OSError as exc:
++            row['error'] = type(exc).__name__ + ': ' + str(exc)
++        rows.append(row)
++    return rows
++
++
++def npbool_index_check():
++    import operator
++    import numpy
++    result = dict(numpy_version=numpy.__version__)
++    try:
++        result['value'] = operator.index(numpy.bool_(True))
++        result['accepts_numpy_bool'] = True
++    except TypeError as exc:
++        result.update(accepts_numpy_bool=False, exception_class='TypeError',
++                      message=str(exc))
++    return result
++
++
++def runtime_modules(rows, seal, tool, root):
++    """Compare every recorded origin with all seal namespaces, list unknowns."""
++    known = dict(seal['external_modules'], **seal['import_modules'])
++    prefix = str(tool.relative_to(root)) + '/'
++    known.update({prefix + n: h for n, h in seal['tool_files'].items()})
++    known.update(seal['test_files'])
++    for arm, files in seal['arms'].items():
++        known.update({prefix + 'arms/' + arm + '/tensor_cuda/' + n: h
++                      for n, h in files.items()})
++    errors, unsealed = [], []
++    assert isinstance(rows, list) and rows, 'missing runtime module census'
++    for row in rows:
++        path = row['path']
++        if row.get('error'):
++            errors.append('runtime module unreadable: ' + path)
++        elif path in known:
++            if row['sha256'] != known[path]:
++                errors.append('runtime module tamper: ' + path)
++        else:
++            unsealed.append(row)
++    return errors, unsealed
+--- /dev/null
++++ a4/runtime_sentinel.py
+@@ -0,0 +1,2 @@
++"""D5 hostile runtime-import operand; prior art: Meszaros (2007) fault injection."""
++VALUE = 1
+--- a3/seal_staging.py
++++ a4/seal_staging.py
+@@ -4,6 +4,7 @@
+ import hashlib
+ import json
+ from pathlib import Path
++import numpy as np
+ TOOL=Path(__file__).resolve().parent
+ ROOT=TOOL.parents[2]
+ sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+@@ -16,16 +17,31 @@
+ files = sorted(set(files + [p.name for p in TOOL.glob("*.py")] + [p.name for p in TOOL.glob("ids_*.txt")]))
+ trace=json.loads((TOOL/"import_trace.json").read_text())
+ assert trace["exit"]==0
+-imports={r["path"]:r["sha256"] for r in trace["modules"] if r["local"] and not r["path"].startswith("artifacts/gn1/a3/arms/")}
++imports={r["path"]:r["sha256"] for r in trace["modules"] if r["local"] and not r["path"].startswith("artifacts/gn1/a4/arms/")}
+ external={r["path"]:r["sha256"] for r in trace["modules"] if not r["local"]}
++# D5 union of collection and all CPU suite runtime origins. Prior art:
++# Python sys.modules census (PSF), SHA-256/FIPS 180-4 (2015).
++for suite in ("focus", "mutation", "regression"):
++    runtime=json.loads((TOOL/("runtime_trace_"+suite+".json")).read_text())
++    assert not runtime["collection_errors"]
++    files.append("runtime_trace_"+suite+".json")
++    for row in runtime["modules"]:
++        assert "error" not in row, row
++        path=row["path"]
++        if path.startswith("artifacts/gn1/a4/arms/"):
++            continue
++        target=external if path.startswith(("/", "$HOME/")) else imports
++        assert path not in target or target[path]==row["sha256"], "census byte drift: "+path
++        target[path]=row["sha256"]
+ tests=json.loads((TOOL/"nn_import_test_files.json").read_text())
+-files += ["trace_imports.py", "import_trace.json", "REGISTRATION.md"]
++files += ["trace_imports.py", "import_trace.json", "REGISTRATION.md", "REGISTRATION.json", "SEAL_IMPORT_TRACE.md", "AMENDMENTS.md"]
+ seal=dict(order_commit=(TOOL/"order_commit.txt").read_text().strip(),
+-          order_sha256=sha(ROOT/"orders/GN1_A3_REV2_FIXES.md"),
++          order_sha256=sha(ROOT/"orders/GN1_A4_REV3_FIXES.md"),
+           engine_sha256=json.loads((TOOL/"engine_pin.json").read_text())["sha256"],
+           tool_files={f:sha(TOOL/f) for f in files},test_files={f:sha(ROOT/f) for f in tests},
+           import_modules=imports, external_modules=external, import_trace_sha256=sha(TOOL/"import_trace.json"),
+-          arms=json.loads((TOOL/"arm_maps.json").read_text()),equivalences={"V3":"EQUIVALENCES.md#v3"})
++          arms=json.loads((TOOL/"arm_maps.json").read_text()), numpy_version=np.__version__,
++          equivalences={"V3":"EQUIVALENCES.md#v3", "E_npbool_g":"EQUIVALENCES.md#numpy-bool-g", "E_npbool_c":"EQUIVALENCES.md#numpy-bool-c"})
+ path=TOOL/"staging_seal.json"
+ if path.exists():
+     old=sha(path);archive=TOOL/("staging_seal.previous."+old+".json")
+--- a3/trace_imports.py
++++ a4/trace_imports.py
+@@ -31,7 +31,7 @@
+ rows=[]
+ for f,name in sorted(seen.items()):
+     p=Path(f)
+-    rows.append(dict(module=name,path=str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p),local=p.is_relative_to(ROOT),sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
++    rows.append(dict(module=name,path=str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p).replace(str(Path.home())+"/", "$HOME/", 1),local=p.is_relative_to(ROOT),sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+ result=dict(exit=rc,collected_ids=plugin.ids,modules=rows,method="module execution profile plus sys.modules origin census")
+ (TOOL/"import_trace.json").write_text(json.dumps(result,indent=2)+"\n")
+ assert rc==0
+--- /dev/null
++++ a4/trace_runtime.py
+@@ -0,0 +1,48 @@
++"""D5 runtime census of each suite, using only the CPU stand-in.
++
++Prior art: Python sys.modules origins (PSF, year unverified, lead to check);
++pytest hooks (Krekel et al., 2004+); A3 NumPy stand-in. This instrument records
++imports even when unsupported non-GN operations fail. No device code runs.
++"""
++import json
++import os
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++from runtime_evidence import module_census
++
++TOOL = Path(__file__).resolve().parent
++ROOT = TOOL.parents[2]
++assert os.environ.get('CUDA_VISIBLE_DEVICES') == ''
++suite = sys.argv[1]
++from cpu_shim import install
++tc = install(TOOL / 'arms/candidate/tensor_cuda/nn.py')
++# Optim imports _C at collection. No native extension is loaded here and
++# unsupported legacy engine calls fail as ordinary CPU stand-in failures.
++tc._C = SimpleNamespace()
++sys.path.insert(1, str(ROOT))
++import numpy as np
++import pytest
++from run_gpu_tests import Reports
++np.random.seed(571)
++files = (['tensor_cuda/tests/test_groupnorm_gn1.py', 'tensor_cuda/tests/test_ext_phase7.py']
++         if suite == 'focus' else ['tensor_cuda/tests/test_groupnorm_gn1.py']
++         if suite == 'mutation' else json.loads((TOOL / 'nn_import_test_files.json').read_text()))
++plugin = Reports()
++rc = int(pytest.main(['-q', '-p', 'no:cacheprovider', '--import-mode=importlib',
++                     '--rootdir=' + str(ROOT), *[str(ROOT / f) for f in files]], plugins=[plugin]))
++# Explicit CPU instrument diagnostic exercises the same lazy NumPy testing API
++# referenced by the regression suite even if an unsupported engine op precedes
++# it. Kept separate from the recorded test outcomes and disclosed in the trace.
++np.testing.assert_equal(len(plugin.ids), len(set(plugin.ids)))
++result = dict(suite=suite, exit=rc, collected_ids=plugin.ids,
++              call_count=sum(r['when'] == 'call' for r in plugin.reports),
++              collection_errors=plugin.collection_errors, reports=plugin.reports,
++              modules=module_census(ROOT),
++              calibration='np.random.seed(571); np.testing.assert_equal ID uniqueness',
++              evidence_class='CPU stand-in import census; no GPU or legacy correctness claim')
++(TOOL / ('runtime_trace_' + suite + '.json')).write_text(json.dumps(result, indent=2) + '\n')
++assert not plugin.collection_errors
++assert {r['id'] for r in plugin.reports if r['when'] == 'setup'} == set(plugin.ids)
++assert rc in (0, 1)
++print('runtime census', suite, len(result['modules']), 'modules', result['call_count'], 'calls', rc)
+--- a3/verify_scope.py
++++ a4/verify_scope.py
+@@ -1,39 +1,23 @@
+-"""A3 G1/G3. Prior art: SHA-256/FIPS 180-4, A2 structural scope gate.
+-Read-only git and explicit frozen/source maps; no traversal outside named trees.
+-"""
++"""A4 G1/G3 exact frozen maps. Prior art: SHA-256 FIPS 180-4 (2015)."""
+ import json,subprocess
+ from pathlib import Path
+ from evidence import TOOL,ROOT,read,sha,verify_seal,verify_arm
+ 
++def save(n,obj):(TOOL/n).write_text(json.dumps(obj,indent=2)+"\n")
+ def git(*args):return subprocess.check_output(["git",*args],cwd=ROOT)
+-def save(name,obj):(TOOL/name).write_text(json.dumps(obj,indent=2)+"\n")
+-def outside(s):
+-    a=s.index("class GroupNorm(");b=s.index("\n\nclass InstanceNorm2D",a)
+-    return s[:a],s[b:]
+-candidate=(ROOT/"tensor_cuda/tensor_cuda/nn.py").read_text()
+-base=git("show","0e1dea3:tensor_cuda/tensor_cuda/nn.py").decode()
+-a2=git("show","bd30498a:tensor_cuda/tensor_cuda/nn.py").decode()
+-assert outside(candidate)==outside(base)==outside(a2)
+-expected=a2
+-for old,new in read(TOOL/"d5_edits.json"):
+-    assert expected.count(old)==1
+-    expected=expected.replace(old,new,1)
+-assert expected==candidate
+-files=git("diff","--name-only","0e1dea3","--",".",":(exclude)artifacts/gn1",":(exclude)orders",":(exclude)logs").decode().splitlines()
+-assert files==["tensor_cuda/tensor_cuda/nn.py","tensor_cuda/tests/test_groupnorm_gn1.py"],files
+-for ref,name in [("0e1dea3","changes_vs_base.patch"),("bd30498a","changes_vs_a2.patch")]:
+-    (TOOL/name).write_bytes(git("diff",ref,"--","tensor_cuda/tensor_cuda/nn.py","tensor_cuda/tests/test_groupnorm_gn1.py"))
+-(TOOL/"nn_vs_bd30498a.diff").write_bytes(git("diff","bd30498a","--","tensor_cuda/tensor_cuda/nn.py"))
+ frozen={}
+-for d in ["a2","rev1","rev2"]:
++for d in ("a3","rev1","rev2","rev3"):
+     after={str(p.relative_to(ROOT)):sha(p) for p in (TOOL.parent/d).rglob("*") if p.is_file()}
+     save(d+"_frozen_after.json",after)
+     assert after==read(TOOL/(d+"_frozen_before.json")),d
+     frozen[d]=dict(files=len(after),before_map_sha256=sha(TOOL/(d+"_frozen_before.json")),after_map_sha256=sha(TOOL/(d+"_frozen_after.json")))
+-# Whole tracked scope relative to the amendment commit, excluding allowed files.
++for n,h in read(TOOL/"product_before.json").items():
++    assert sha(ROOT/n)==h
++    import hashlib
++    assert hashlib.sha256(git("show","cf922891:"+n)).hexdigest()==h,n
+ changed=git("diff","--name-only","HEAD").decode().splitlines()
+-assert all(n in files or n.startswith(("artifacts/gn1/a3/","logs/")) for n in changed),changed
+-save("G1_scope.json",dict(passed=True,diff_files=files,nn_D5_only_vs_A2=True,nn_outside_GroupNorm_identical=True,frozen=frozen,changed_tracked=changed))
++assert all(n.startswith(("artifacts/gn1/a4/","logs/")) for n in changed),changed
++save("G1_scope.json",dict(passed=True,product_byte_identical_cf922891=True,frozen=frozen,changed_tracked=changed,product=read(TOOL/"product_before.json")))
+ seal=verify_seal()
+ for arm in seal["arms"]:verify_arm(arm,seal)
+ pin=read(TOOL/"engine_pin.json")
+@@ -41,7 +25,6 @@
+ source_map=read(TOOL.parent/"engine_sources_after.json")
+ actual={n:sha(Path(n) if Path(n).is_absolute() else ROOT/n) for n in source_map}
+ assert source_map==actual
+-assert sha(TOOL.parent/"engine_sources_after.json")==pin["source_map_sha256"]
+ save("engine_sources_verified.json",actual)
+ save("G3_pin.json",dict(passed=True,module_sha256=pin["sha256"],source_map_sha256=pin["source_map_sha256"],source_files=len(actual),module_copies=len(seal["arms"]),symlinks=0,builds=0))
+ print("G1 PASS; G3 PASS",len(seal["arms"]),"arms")

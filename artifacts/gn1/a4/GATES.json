@@ -1,0 +1,48 @@
+{
+  "verdict": "ACCEPT (CPU gates only)",
+  "gates": [
+    {
+      "gate": "G1",
+      "status": "PASS",
+      "detail": "Product/test byte-identical to cf922891; frozen a3/rev1/rev2/rev3 maps equal; every tooling hunk mapped.",
+      "receipts": "G1_scope.json; *_frozen_{before,after}.json; changes_vs_a3.patch; TOOLING_HUNK_MAP.json"
+    },
+    {
+      "gate": "G2",
+      "status": "PASS",
+      "detail": "405/405 GN CPU stand-in tests; native44 reference/domain IDs and57 metadata guards; both arms import/collect; all five ID files equal A3; 324-case tolerance derivation unchanged.",
+      "receipts": "G2_shim.json; G2_driver.json; cpu_candidate_mutation_references.json; native_validation.json; tolerance_bounds.json; pytorch_behavior.json; ids_*.txt"
+    },
+    {
+      "gate": "G3",
+      "status": "PASS",
+      "detail": "56 module copies match original pin; 72 source-map files unchanged; zero rebuilds and zero arm symlinks.",
+      "receipts": "G3_pin.json; engine_sources_verified.json; arm_maps.json"
+    },
+    {
+      "gate": "G4",
+      "status": "PASS",
+      "detail": "131/131 targets:107 inherited and24 A4, all against the final seal.",
+      "receipts": "G4_all.json; G4_CONTROLS.md; G4_hostile.json; G4_runner.json; hostile_rev2_acd.json; G4_extra.json; G4_a4.json"
+    },
+    {
+      "gate": "G5",
+      "status": "PASS",
+      "detail": "54 single-site mutants load/differ/reach in call phase;51 CPU kills and3 equivalent passes. Both new deletions also pass all405 real GN tests.",
+      "receipts": "G5_mutants.json; mutants/*/trace.json; E_npbool_g_full_cpu.json; E_npbool_c_full_cpu.json"
+    },
+    {
+      "gate": "G6",
+      "status": "PASS",
+      "detail": "58 staged labels with exact bounds/exits; two complete honest stand-in roots score0; seal-verified arm regeneration; native audit29 reference calls.",
+      "receipts": "G6_staging.json; staging_exact_bounds.json; regeneration_verified.json; audit_gate.json; STAGED_GPU_COMMANDS.sh; delivery_verify.json"
+    }
+  ],
+  "predictions": {
+    "P108": "HELD",
+    "P109": "HELD"
+  },
+  "seal_sha256": "647175e302683ba6be090a7e8d677f3fe1eb06c1af422aa757a66e9c5c575683",
+  "GPU_execution": false,
+  "review": "GN1-REV4 pending lead dispatch"
+}
