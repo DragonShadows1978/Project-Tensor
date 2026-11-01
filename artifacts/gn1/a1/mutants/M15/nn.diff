@@ -1,0 +1,22 @@
+--- candidate/nn.py
++++ M15/nn.py
+@@ -527,7 +527,7 @@
+         # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
+         # equations stay unchanged; A1 keeps pow backward intermediates in FP32.
+         dtype = x.dtype
+-        if dtype in ("float16", "bfloat16"):
++        if False and dtype in ("float16", "bfloat16"):
+             x = x.astype("float32")
+         N, C = x.shape[0], x.shape[1]
+         spatial = list(x.shape[2:])
+@@ -542,8 +542,8 @@
+         if (dtype == "float32" and self.weight.dtype == "float32"
+                 and self.bias.dtype == "float32"):
+             return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+-        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+-        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
++        weight = self.weight if self.weight.dtype == dtype else self.weight.astype(dtype)
++        bias = self.bias if self.bias.dtype == dtype else self.bias.astype(dtype)
+         output = g * weight.reshape(wshape) + bias.reshape(wshape)
+         return output if output.dtype == dtype else output.astype(dtype)
+ 

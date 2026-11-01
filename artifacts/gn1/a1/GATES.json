@@ -1,0 +1,111 @@
+{
+  "verdict": "ACCEPT",
+  "registered_acceptance": "G1-G4",
+  "G1": {
+    "passed": true,
+    "tracked_files": 7595,
+    "changed": [
+      "tensor_cuda/tensor_cuda/nn.py",
+      "tensor_cuda/tests/test_groupnorm_gn1.py"
+    ],
+    "other_tracked_identical": 7593,
+    "readonly_files_unchanged": 445,
+    "groupnorm_only": true,
+    "round1_constructor_unchanged": true,
+    "round1_forward_change": "D1 only; original FP32 math sequence byte-identical",
+    "receipts": [
+      "tracked_before.json",
+      "tracked_after.json",
+      "base_sha256.json",
+      "round1_sha256.json",
+      "readonly_before.json",
+      "readonly_after.json",
+      "scope_vs_base.json",
+      "scope_vs_round1.json",
+      "changes_vs_base.patch",
+      "changes_vs_round1.patch",
+      "float32_identity.json"
+    ]
+  },
+  "G2": {
+    "passed": true,
+    "reference_checks": 29,
+    "refusal_checks": 1,
+    "summary": {
+      "groupnorm_ids": 351,
+      "focus_ids": 358,
+      "regression_ids": 414,
+      "audit_ids": 29,
+      "new_ids": 52,
+      "changed_existing_ids": 194,
+      "float32_ids": 98,
+      "overflow_cases": 16,
+      "float16_overflow_cases": 8
+    },
+    "receipts": [
+      "reference_checks_preloaded.json",
+      "cpu_candidate_mutation_references.json",
+      "collect_baseline_focus.json",
+      "collect_candidate_focus.json",
+      "collect_baseline_regression.json",
+      "collect_candidate_regression.json",
+      "arithmetic_checks.json",
+      "overflow_arithmetic.json",
+      "test_id_tolerances.json"
+    ],
+    "first_failed_attempt_retained": "reference_checks.json/log: import-path issue, 29 references passed; corrected by explicit arm preload"
+  },
+  "G3": {
+    "passed": true,
+    "rebuild": false,
+    "module": "tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "sha256": "c9b7dc610421010a8b11e8e3af74d1a9ad99928dabb98835aa6c265754daf8ce",
+    "source_map_sha256": "98ef59cd48200fb4af38caf9dd017022f0ad032b7f42082dfd1574506b470a5c",
+    "source_count": 72,
+    "build_tree_unchanged": true,
+    "arms": 20,
+    "baseline_package_matches": "0e1dea3 SHA256 map",
+    "same_module_symlink_every_arm": true
+  },
+  "G4": {
+    "passed": true,
+    "staged_lines": 22,
+    "mutants": 18,
+    "syntax_exit": 0,
+    "expected_parent_exit_each": 0,
+    "audit_child_exit": 0,
+    "audit_parent_exit": 0,
+    "audit_timeout": false,
+    "audit_reference_calls": 29,
+    "audit_cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a1",
+    "parent_recorded_after_child_exit": true,
+    "gpu_execution": false,
+    "mutant_kills_claimed": false,
+    "receipts": [
+      "STAGED_GPU_COMMANDS.sh",
+      "gpu_lines.json",
+      "MUTANTS.md",
+      "mutants.json",
+      "mutant_validation.json",
+      "staging_seal.json",
+      "audit_cpu/START.json",
+      "audit_cpu/candidate_focus/child_result.json",
+      "audit_cpu/candidate_focus/parent_result.json",
+      "audit_cpu/candidate_focus/stdout.log"
+    ]
+  },
+  "G5": "NOT RUN; lead after clean cross-model review",
+  "predictions": {
+    "P84": {
+      "status": "NOT HELD",
+      "meaning": "not established, not refuted: no GPU cases or M15 kill ran; lead G5 pending",
+      "cpu_evidence": "budgets strictly tighter than round one; overflow arithmetic supports predicted M15 intermediate failure"
+    },
+    "P85": {
+      "status": "HELD",
+      "meaning": "98 original float32/float32 IDs and tolerances preserved; byte-identical math statement sequence, no casts",
+      "additional_mixed_witnesses": "two new float32-input/half-parameter IDs are separately counted; total FP32-input engine IDs now 100"
+    }
+  },
+  "completed_utc": "2026-11-01T14:47:33.237473+00:00"
+}

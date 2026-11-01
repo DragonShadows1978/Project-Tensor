@@ -522,6 +522,13 @@ class GroupNorm(Module):
         self.bias = parameter(np.zeros(num_channels))
 
     def forward(self, x):
+        # Prior art: PyTorch half normalization uses float32 accumulation;
+        # Micikevicius et al. (2018), Mixed Precision Training (both unverified
+        # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
+        # equations stay unchanged; A1 keeps pow backward intermediates in FP32.
+        dtype = x.dtype
+        if dtype in ("float16", "bfloat16"):
+            x = x.astype("float32")
         N, C = x.shape[0], x.shape[1]
         spatial = list(x.shape[2:])
         # Explicit extent: NDArray::reshape does not infer -1.
@@ -532,7 +539,13 @@ class GroupNorm(Module):
         g = (g - mean) * (var + self.eps).pow(-0.5)
         g = g.reshape([N, C] + spatial)
         wshape = [1, C] + [1] * len(spatial)
-        return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+        if (dtype == "float32" and self.weight.dtype == "float32"
+                and self.bias.dtype == "float32"):
+            return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+        output = g * weight.reshape(wshape) + bias.reshape(wshape)
+        return output if output.dtype == dtype else output.astype(dtype)
 
 
 class InstanceNorm2D(Module):

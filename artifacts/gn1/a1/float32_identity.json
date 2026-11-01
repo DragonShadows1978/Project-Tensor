@@ -1,0 +1,20 @@
+{
+  "float32_ids": 98,
+  "ids_unchanged": true,
+  "tolerances_unchanged": true,
+  "math_statements": [
+    "N, C = x.shape[0], x.shape[1]",
+    "spatial = list(x.shape[2:])",
+    "g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+    "mean = g.mean([2], True)",
+    "var = g.var([2], True)",
+    "g = (g - mean) * (var + self.eps).pow(-0.5)",
+    "g = g.reshape([N, C] + spatial)",
+    "wshape = [1, C] + [1] * len(spatial)",
+    "return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)"
+  ],
+  "math_statement_bytes_identical": true,
+  "math_sha256": "d1c87a381d0a74e4b48fe8e03ed28c124b89e8bb061ec3619ae6b17f6e241991",
+  "no_casts_reached": true,
+  "proof": "x dtype float32 skips upcast; all-float32 condition returns before parameter/output casts"
+}
