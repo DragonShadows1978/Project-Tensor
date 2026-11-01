@@ -1,0 +1,37 @@
+[
+  {
+    "path": "/usr/local/cuda-12.6/targets/x86_64-linux/include/cuda_runtime_api.h",
+    "sha256": "487fe8d3561aa7399596f0787497df29a6b5d33ab69e90f2c4914b07ba0da17f",
+    "lines": {
+      "172": "#define cudaGetDeviceProperties cudaGetDeviceProperties_v2",
+      "1816": "extern __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device);",
+      "9958": "extern __host__ cudaError_t CUDARTAPI cudaDriverGetVersion(int *driverVersion);",
+      "9987": "extern __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaRuntimeGetVersion(int *runtimeVersion);"
+    }
+  },
+  {
+    "path": "/usr/local/cuda-12.6/targets/x86_64-linux/include/driver_types.h",
+    "sha256": "c67950a4315c9af376b9e9f224e7c0d88bcd7172d35f620449d5a0d9d87042a4",
+    "lines": {
+      "2284": "struct __device_builtin__ cudaDeviceProp",
+      "2286": "    char         name[256];                  /**< ASCII string identifying device */"
+    }
+  },
+  {
+    "path": "tensor_cuda/src/bindings.cpp",
+    "sha256": "1d04c8478401a955ed149be0189308b5c5021edf6b22e380aa7da51c23e3d149",
+    "lines": {
+      "1798": "PYBIND11_MODULE(_tensor_cuda, m) {",
+      "1807": "      .def_property_readonly(\"device\", [](Tensor& t) { return t.device().str(); })"
+    }
+  },
+  {
+    "path": "tensor_cuda/src/kernels.cu",
+    "sha256": "d90124e0132a2f8fca339b876fcb263f259f646ceb7b6cbb1bb9a255c1e1fe66",
+    "lines": {
+      "136": "  cudaGetDevice(&dev);",
+      "1840": "// constant keeps the launcher branch-free and avoids a cudaGetDeviceProperties",
+      "1843": "// a runtime cudaGetDeviceProperties query \u2014 left as a follow-up, not required"
+    }
+  }
+]
