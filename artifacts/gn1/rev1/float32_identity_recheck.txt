@@ -1,0 +1,28 @@
+round1 forward statements: 9
+  R1| N, C = (x.shape[0], x.shape[1])
+  R1| spatial = list(x.shape[2:])
+  R1| g = x.reshape([N, self.G, C // self.G * math.prod(spatial)])
+  R1| mean = g.mean([2], True)
+  R1| var = g.var([2], True)
+  R1| g = (g - mean) * (var + self.eps).pow(-0.5)
+  R1| g = g.reshape([N, C] + spatial)
+  R1| wshape = [1, C] + [1] * len(spatial)
+  R1| return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+candidate forward statements: 15
+  C | dtype = x.dtype
+  C | if dtype in ('float16', 'bfloat16'):     x = x.astype('float32')
+  C | N, C = (x.shape[0], x.shape[1])
+  C | spatial = list(x.shape[2:])
+  C | g = x.reshape([N, self.G, C // self.G * math.prod(spatial)])
+  C | mean = g.mean([2], True)
+  C | var = g.var([2], True)
+  C | g = (g - mean) * (var + self.eps).pow(-0.5)
+  C | g = g.reshape([N, C] + spatial)
+  C | wshape = [1, C] + [1] * len(spatial)
+  C | if dtype == 'float32' and self.weight.dtype == 'float32' and (self.bias.dtype == 'float32'):     return g * self.weight.reshape(wshape) + self.bias.re
+  C | weight = self.weight if self.weight.dtype == 'float32' else self.weight.astype('float32')
+  C | bias = self.bias if self.bias.dtype == 'float32' else self.bias.astype('float32')
+  C | output = g * weight.reshape(wshape) + bias.reshape(wshape)
+  C | return output if output.dtype == dtype else output.astype(dtype)
+candidate all-float32 path == round1 forward (AST-unparsed, statement by statement): True
+round1 nn.py sha256 d35b0b586cd45c9866f75bfc6d45301eadd8eb1e9aacb7457b2971d3dae36193

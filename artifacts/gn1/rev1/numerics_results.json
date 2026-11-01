@@ -1,0 +1,221 @@
+{
+  "oracle": {
+    "max_rel_diff_test_oracle_vs_reviewer_loops": 3.590378746528262e-15,
+    "reviewer_fd_vs_loop_vjp_max_abs": 9.36554833685932e-10,
+    "fd_case": "test_backward_values[float32-r4-n2-g2-default]",
+    "hand_case": {
+      "y": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "dx": [
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "dw": [
+        -1.0,
+        0.0
+      ],
+      "db": [
+        1.0,
+        0.0
+      ],
+      "expected": {
+        "y": [
+          [
+            -1.0,
+            1.0
+          ]
+        ],
+        "dx": [
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "dw": [
+          -1.0,
+          0.0
+        ],
+        "db": [
+          1.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "honest": {
+    "max_emulated_ratio": 0.9599102112375119,
+    "argmax_emulated": "test_forward_values[bfloat16-r4-n2-g2-default]",
+    "max_fp32_only_emulated_ratio_vs_fp32_budget": 0.013979917383925606,
+    "argmax_fp32_only": "test_forward_values[float32-r5-n2-g2-default]"
+  },
+  "bound": {
+    "max_running_bound_ratio_vs_fp32_budget": 0.9073368234728002,
+    "top12_by_bound": [
+      [
+        "test_low_variance[backward-var1e-4-half-bfloat16]",
+        0.8225920525769893,
+        0.9073368234728002,
+        0.0035928916768007842
+      ],
+      [
+        "test_low_variance[backward-var1e-4-half-float16]",
+        0.6155794291896061,
+        0.905316157490109,
+        0.003345457842518129
+      ],
+      [
+        "test_near_epsilon[backward-float32]",
+        0.0012012360289738132,
+        0.8032506780083494,
+        0.0012012360289738132
+      ],
+      [
+        "test_near_epsilon[forward-float32]",
+        0.0010242406561341293,
+        0.4856821142040266,
+        0.0010242406561341293
+      ],
+      [
+        "test_forward_values[float16-r5-n2-g1-default]",
+        0.7952756299429459,
+        0.38618013337388546,
+        0.004636065703561416
+      ],
+      [
+        "test_backward_values[float16-r5-n2-g1-default]",
+        0.7952756299429459,
+        0.38618013337388546,
+        0.004636065703561416
+      ],
+      [
+        "test_forward_values[float32-r5-n2-g1-default]",
+        0.011424247020270064,
+        0.38615727479091544,
+        0.011424247020270064
+      ],
+      [
+        "test_backward_values[float32-r5-n2-g1-default]",
+        0.011424247020270064,
+        0.38615727479091544,
+        0.011424247020270064
+      ],
+      [
+        "test_forward_values[bfloat16-r5-n2-g1-default]",
+        0.8648804471897326,
+        0.38612067934395855,
+        0.003412704348970916
+      ],
+      [
+        "test_backward_values[bfloat16-r5-n2-g1-default]",
+        0.8648804471897326,
+        0.38612067934395855,
+        0.003412704348970916
+      ],
+      [
+        "test_forward_values[bfloat16-r5-n2-g1-eps0125]",
+        0.8788470943136664,
+        0.33199614067769234,
+        0.003662920334009294
+      ],
+      [
+        "test_backward_values[bfloat16-r5-n2-g1-eps0125]",
+        0.8788470943136664,
+        0.33199614067769234,
+        0.003662920334009294
+      ]
+    ],
+    "columns": "id, emulated ratio vs destination tolerance, running-bound ratio vs fp32 budget, fp32-only emulated ratio vs fp32 budget"
+  },
+  "mutants": {
+    "M01": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]",
+      "forward_ratio": 4906.938474079018,
+      "max_abs_err": 0.3722784621266433,
+      "honest_ratio_on_witness": 0.0017058150414757316
+    },
+    "M02": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_near_epsilon[forward-float32]",
+      "forward_ratio": 8890.743465348323,
+      "max_abs_err": 0.4162629363210699,
+      "honest_ratio_on_witness": 0.0010242406561341293
+    },
+    "M03": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_near_epsilon[forward-float32]",
+      "forward_ratio": 9383.632135605432,
+      "max_abs_err": 0.4393398282201788,
+      "honest_ratio_on_witness": 0.0010242406561341293
+    },
+    "M04": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+      "forward_ratio": 53184.54508043589,
+      "max_abs_err": 3.9332491003312313,
+      "honest_ratio_on_witness": 0.005215678408016734
+    },
+    "M05": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]",
+      "raises": "RuntimeError: reshape: element count mismatch"
+    },
+    "M12": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+      "forward_ratio": 41037.15249470264,
+      "max_abs_err": 2.518931969288751,
+      "honest_ratio_on_witness": 0.005215678408016734
+    },
+    "M13": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+      "forward_ratio": 28266.75015649739,
+      "max_abs_err": 1.9954106403523242,
+      "honest_ratio_on_witness": 0.005215678408016734
+    },
+    "M15": {
+      "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_low_variance[backward-var1e-6-half-float16]",
+      "pow_m15_max": Infinity,
+      "dx_finite": false,
+      "dw_finite": true
+    }
+  },
+  "extra_mutants": {
+    "nocenter": {
+      "n_killing_ids": 304,
+      "first": [
+        "test_forward_values[float32-r2-n1-g1-default]",
+        "test_backward_values[float32-r2-n1-g1-default]",
+        "test_forward_values[float32-r2-n1-g1-eps0125]",
+        "test_backward_values[float32-r2-n1-g1-eps0125]",
+        "test_forward_values[float32-r2-n1-g2-default]"
+      ]
+    },
+    "bf16_not_upcast": {
+      "n_killing_ids": 101,
+      "first": [
+        [
+          "test_forward_values[bfloat16-r2-n1-g1-default]",
+          9.328866546664367
+        ],
+        [
+          "test_backward_values[bfloat16-r2-n1-g1-default]",
+          9.328866546664367
+        ],
+        [
+          "test_forward_values[bfloat16-r2-n1-g1-eps0125]",
+          46.86904632097078
+        ],
+        [
+          "test_backward_values[bfloat16-r2-n1-g1-eps0125]",
+          46.86904632097078
+        ],
+        [
+          "test_forward_values[bfloat16-r2-n1-g2-default]",
+          2.3588673165127547
+        ]
+      ]
+    }
+  },
+  "n_value_ids": 320
+}
