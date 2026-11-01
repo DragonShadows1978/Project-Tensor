@@ -1,0 +1,275 @@
+.                                                                        [100%]
+1 passed in 0.11s
+P0_honest 0 passed None False 0 False
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_forward_values[float32-r3-n2-g2-default] _________________
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x76cc151a6540>
+x = <a2_cpu_shim.Tensor object at 0x76cc150743b0>
+projection = <a2_cpu_shim.Tensor object at 0x76cc15074380>, groups = 2
+eps = 1e-05, dtype = 'float32', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+>           output = layer(x)
+                     ^^^^^^^^
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:91: in __call__
+    return self.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:559: in forward
+    g = (g - mean) * (var + self.eps).pow(-0.5)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <a2_cpu_shim.Tensor object at 0x76cc150751c0>, p = -0.5
+
+    def bad(self, p):
+>       raise RuntimeError("pow: unsupported exponent path")  # a non-device engine RuntimeError
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: pow: unsupported exponent path
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/rev2/q3_probe.py:77: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+dtype = 'float32', shape = (2, 6, 5), groups = 2, eps = 1e-05
+
+    @pytest.mark.parametrize("dtype,shape,groups,eps", _cases(False))
+    def test_forward_values(dtype, shape, groups, eps):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        values, w, b, projection = _inputs(shape)
+        layer = nn.GroupNorm(groups, shape[1]) if eps == 1e-5 else nn.GroupNorm(groups, shape[1], eps=eps)
+        layer.weight = _leaf(tc, w, dtype)
+        layer.bias = _leaf(tc, b, dtype)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      groups, eps, dtype, False)
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x76cc151a6540>
+x = <a2_cpu_shim.Tensor object at 0x76cc150743b0>
+projection = <a2_cpu_shim.Tensor object at 0x76cc15074380>, groups = 2
+eps = 1e-05, dtype = 'float32', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+>           raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+E           AssertionError: GroupNorm refused a registered valid input: pow: unsupported exponent path
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:142: AssertionError
+=========================== short test summary info ============================
+FAILED gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]
+1 failed in 0.08s
+P1_generic_engine_RuntimeError 1 failed AssertionError False 1 False
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________________ test_constructor_defaults ___________________________
+
+    def test_constructor_defaults():
+        from tensor_cuda import nn
+>       layer = nn.GroupNorm(2, 6)
+                ^^^^^^^^^^^^^^^^^^
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:529: in __init__
+    self.weight = parameter(np.ones(num_channels))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:18: in parameter
+    return tc.tensor(array, device=device, dtype=dtype, requires_grad=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1., 1., 1., 1., 1., 1.]), device = 'cuda', dtype = 'float32'
+requires_grad = True
+
+    def factory(data, device="cuda", dtype="float32", requires_grad=False):
+        if requires_grad:
+>           raise TypeError("tensor(): incompatible function arguments (engine factory)")
+E           TypeError: tensor(): incompatible function arguments (engine factory)
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/rev2/q3_probe.py:92: TypeError
+=========================== short test summary info ============================
+FAILED gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py::test_constructor_defaults
+1 failed in 0.05s
+P2_engine_TypeError_under_GroupNorm_init 1 failed TypeError True 1 False
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_forward_values[float32-r3-n2-g2-default] _________________
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x76cc14f1dcd0>
+x = <a2_cpu_shim.Tensor object at 0x76cc14f1d1f0>
+projection = <a2_cpu_shim.Tensor object at 0x76cc14f1dc10>, groups = 2
+eps = 1e-05, dtype = 'float32', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+>           output = layer(x)
+                     ^^^^^^^^
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:91: in __call__
+    return self.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/nn.py:559: in forward
+    g = (g - mean) * (var + self.eps).pow(-0.5)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <a2_cpu_shim.Tensor object at 0x76cc14f1e6c0>, p = -0.5
+
+    def bad(self, p):
+>       raise RuntimeError("CUDA error at pow_kernel: an illegal memory access was encountered")
+E       RuntimeError: CUDA error at pow_kernel: an illegal memory access was encountered
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/rev2/q3_probe.py:83: RuntimeError
+
+The above exception was the direct cause of the following exception:
+
+dtype = 'float32', shape = (2, 6, 5), groups = 2, eps = 1e-05
+
+    @pytest.mark.parametrize("dtype,shape,groups,eps", _cases(False))
+    def test_forward_values(dtype, shape, groups, eps):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        values, w, b, projection = _inputs(shape)
+        layer = nn.GroupNorm(groups, shape[1]) if eps == 1e-5 else nn.GroupNorm(groups, shape[1], eps=eps)
+        layer.weight = _leaf(tc, w, dtype)
+        layer.bias = _leaf(tc, b, dtype)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      groups, eps, dtype, False)
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x76cc14f1dcd0>
+x = <a2_cpu_shim.Tensor object at 0x76cc14f1d1f0>
+projection = <a2_cpu_shim.Tensor object at 0x76cc14f1dc10>, groups = 2
+eps = 1e-05, dtype = 'float32', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+>           raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+E           AssertionError: GroupNorm refused a registered valid input: CUDA error at pow_kernel: an illegal memory access was encountered
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:142: AssertionError
+=========================== short test summary info ============================
+FAILED gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]
+1 failed in 0.06s
+P3_device_fault_in_forward 1 failed AssertionError False 1 True
+{
+ "P0_honest": {
+  "node": "test_forward_values[float32-r3-n2-g2-default]",
+  "pytest_exit": 0,
+  "call_outcome": "passed",
+  "exception_class": null,
+  "groupnorm_refusal": false,
+  "acceptable_killers": [],
+  "device_veto": false
+ },
+ "P1_generic_engine_RuntimeError": {
+  "node": "test_forward_values[float32-r3-n2-g2-default]",
+  "pytest_exit": 1,
+  "call_outcome": "failed",
+  "exception_class": "AssertionError",
+  "groupnorm_refusal": false,
+  "acceptable_killers": [
+   "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]"
+  ],
+  "device_veto": false
+ },
+ "P2_engine_TypeError_under_GroupNorm_init": {
+  "node": "test_constructor_defaults",
+  "pytest_exit": 1,
+  "call_outcome": "failed",
+  "exception_class": "TypeError",
+  "groupnorm_refusal": true,
+  "acceptable_killers": [
+   "tensor_cuda/tests/test_groupnorm_gn1.py::test_constructor_defaults"
+  ],
+  "device_veto": false
+ },
+ "P3_device_fault_in_forward": {
+  "node": "test_forward_values[float32-r3-n2-g2-default]",
+  "pytest_exit": 1,
+  "call_outcome": "failed",
+  "exception_class": "AssertionError",
+  "groupnorm_refusal": false,
+  "acceptable_killers": [
+   "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]"
+  ],
+  "device_veto": true
+ },
+ "source_pattern_census": {
+  "files": 51,
+  "hits": [
+   {
+    "file": "artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py",
+    "line": 1459,
+    "pattern": "cudaMalloc",
+    "text": "loading: allocations made while disabled use raw cudaMalloc (persistents"
+   },
+   {
+    "file": "artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py",
+    "line": 1462,
+    "pattern": "cudaMalloc",
+    "text": "are pooled, removing the cudaMalloc/cudaFree serialization tax.\"\"\""
+   }
+  ]
+ }
+}

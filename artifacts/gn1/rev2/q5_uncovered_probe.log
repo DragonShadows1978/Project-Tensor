@@ -1,0 +1,115 @@
+.                                                                        [100%]
+1 passed in 0.10s
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_mixed_parameters[forward-default-float16] ________________
+
+dtype = 'float16', configuration = 'default', backward = False
+
+    @pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
+    @pytest.mark.parametrize("configuration", ("default", "half"))
+    @pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+    def test_mixed_parameters(dtype, configuration, backward):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        values, w, b, projection = _inputs((2, 6, 4))
+        layer = nn.GroupNorm(3, 6)
+        _configure_parameters(tc, layer, w, b, configuration)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      3, 1e-5, dtype, backward)
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_tmp/V4_fastpath_input_check/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x75558bcf75f0>
+x = <a2_cpu_shim.Tensor object at 0x75558bcf7620>
+projection = <a2_cpu_shim.Tensor object at 0x75558bcf75c0>, groups = 3
+eps = 1e-05, dtype = 'float16', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+        atol, rtol = TOLERANCES[dtype]["forward"]
+>       assert output.dtype == dtype
+E       AssertionError: assert 'float32' == 'float16'
+E         
+E         - float16
+E         + float32
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError
+=========================== short test summary info ============================
+FAILED gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py::test_mixed_parameters[forward-default-float16]
+1 failed in 0.07s
+.                                                                        [100%]
+1 passed in 0.02s
+.                                                                        [100%]
+1 passed in 0.02s
+.                                                                        [100%]
+1 passed in 0.02s
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_mixed_parameters[forward-default-bfloat16] ________________
+
+dtype = 'bfloat16', configuration = 'default', backward = False
+
+    @pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
+    @pytest.mark.parametrize("configuration", ("default", "half"))
+    @pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+    def test_mixed_parameters(dtype, configuration, backward):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        values, w, b, projection = _inputs((2, 6, 4))
+        layer = nn.GroupNorm(3, 6)
+        _configure_parameters(tc, layer, w, b, configuration)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      3, 1e-5, dtype, backward)
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/tmp/gn1_rev2_tmp/V4_fastpath_input_check/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x75558bc836e0>
+x = <a2_cpu_shim.Tensor object at 0x75558bc80ad0>
+projection = <a2_cpu_shim.Tensor object at 0x75558bc829f0>, groups = 3
+eps = 1e-05, dtype = 'bfloat16', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant violates this assertion. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+        atol, rtol = TOLERANCES[dtype]["forward"]
+>       assert output.dtype == dtype
+E       AssertionError: assert 'float32' == 'bfloat16'
+E         
+E         - bfloat16
+E         + float32
+
+gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError
+=========================== short test summary info ============================
+FAILED gn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py::test_mixed_parameters[forward-default-bfloat16]
+1 failed in 0.03s
+{"test_mixed_parameters[forward-default-float16]": {"candidate": 0, "mutant": 1}, "test_forward_values[float16-r3-n2-g2-default]": {"candidate": 0, "mutant": 0}, "test_mixed_parameters[forward-default-bfloat16]": {"candidate": 0, "mutant": 1}}

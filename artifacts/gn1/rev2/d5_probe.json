@@ -1,0 +1,1278 @@
+{
+ "summary": {
+  "torch_version": "2.11.0+cu130",
+  "constructor_np_integer_refused_by_A2": [
+   "num_groups/np_int64",
+   "num_groups/np_int32",
+   "num_groups/np_uint8",
+   "num_channels/np_int64",
+   "num_channels/np_int32",
+   "num_channels/np_uint8"
+  ],
+  "accept_all_A1_accepted_also_A2": true,
+  "accept_identical_outputs": true,
+  "accept_A2_dtypes_ok": true,
+  "accept_rows": 75,
+  "A1_refused_in_accept_matrix": [],
+  "refusals_A2": [
+   [
+    "rank0",
+    "ValueError"
+   ],
+   [
+    "rank1",
+    "ValueError"
+   ],
+   [
+    "channels_rank2",
+    "ValueError"
+   ],
+   [
+    "channels_rank3",
+    "ValueError"
+   ],
+   [
+    "channels_rank4_more",
+    "ValueError"
+   ],
+   [
+    "int64/input",
+    "TypeError"
+   ],
+   [
+    "int64/weight",
+    "TypeError"
+   ],
+   [
+    "int64/bias",
+    "TypeError"
+   ],
+   [
+    "bool/input",
+    "TypeError"
+   ],
+   [
+    "bool/weight",
+    "TypeError"
+   ],
+   [
+    "bool/bias",
+    "TypeError"
+   ],
+   [
+    "uint8/input",
+    "TypeError"
+   ],
+   [
+    "uint8/weight",
+    "TypeError"
+   ],
+   [
+    "uint8/bias",
+    "TypeError"
+   ]
+  ],
+  "param_shape": [
+   [
+    "weight_shape_2x3",
+    "accepted",
+    "refused"
+   ],
+   [
+    "weight_shape_6x1",
+    "accepted",
+    "refused"
+   ],
+   [
+    "weight_shape_1x6x1",
+    "accepted",
+    "refused"
+   ]
+  ]
+ },
+ "rows": [
+  {
+   "section": "constructor",
+   "case": "num_groups/zero",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ZeroDivisionError",
+    "message": "integer modulo by zero"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (0) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "ZeroDivisionError",
+    "message": "integer modulo by zero"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/negative",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (-2) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "Expected num groups to be greater than 0, got -2"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/float",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (2.0) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "group_norm(): argument 'num_groups' (position 2) must be int, not float"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/float_nonint",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (6) must be divisible by num_groups (2.5)"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (2.5) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (6) must be divisible by num_groups (2.5)"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/true",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (True) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "group_norm(): argument 'num_groups' (position 2) must be int, not bool"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/false",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ZeroDivisionError",
+    "message": "integer modulo by zero"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (False) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "ZeroDivisionError",
+    "message": "integer modulo by zero"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/string",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'int' and 'str'"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups ('2') must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'int' and 'str'"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/none",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'int' and 'NoneType'"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (None) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'int' and 'NoneType'"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/np_int64",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (np.int64(2)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/np_int32",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (np.int32(2)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_groups/np_uint8",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_groups (np.uint8(2)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/zero",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (0) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/negative",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "negative dimensions are not allowed"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (-2) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "Trying to create tensor with negative dimension -2: [-2]"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/float",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "expected a sequence of integers or a single integer, got '2.0'"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (2.0) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "empty() received an invalid combination of arguments - got (float, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints size, *, tuple of na"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/float_nonint",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (2.5) must be divisible by num_groups (2)"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (2.5) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (2.5) must be divisible by num_groups (2)"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/true",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (True) must be divisible by num_groups (2)"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (True) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (True) must be divisible by num_groups (2)"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/false",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "expected a sequence of integers or a single integer, got 'False'"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (False) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "empty() received an invalid combination of arguments - got (bool, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints size, *, tuple of nam"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/string",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "not all arguments converted during string formatting"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels ('2') must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "not all arguments converted during string formatting"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/none",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'NoneType' and 'int'"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (None) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "unsupported operand type(s) for %: 'NoneType' and 'int'"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/np_int64",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (np.int64(6)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/np_int32",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (np.int32(6)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "constructor",
+   "case": "num_channels/np_uint8",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "num_channels (np.uint8(6)) must be a positive integer (bool excluded)"
+   },
+   "torch_ctor_and_forward": {
+    "outcome": "accepted"
+   }
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float32,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=float16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w=bfloat16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float32,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=float16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w=bfloat16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float32,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=float16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=float32,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=float32,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=float16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=float16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=bfloat16,fwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w=bfloat16,b=bfloat16,bwd",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_dtypes_ok": true,
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w/b float32,no-grad w=True,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w/b float32,no-grad w=True,b=False",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float32,w/b float32,no-grad w=False,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w/b float32,no-grad w=True,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w/b float32,no-grad w=True,b=False",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=float16,w/b float32,no-grad w=False,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w/b float32,no-grad w=True,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w/b float32,no-grad w=True,b=False",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "x=bfloat16,w/b float32,no-grad w=False,b=True",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6),G=2,float32",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6),G=2,float16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6),G=2,bfloat16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6),G=6,float32",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6),G=6,float16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6),G=6,bfloat16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6, 2, 3),G=2,float32",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6, 2, 3),G=2,float16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(2, 6, 2, 3),G=2,bfloat16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6, 2, 2, 3),G=1,float32",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6, 2, 2, 3),G=1,float16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "accept",
+   "case": "shape=(1, 6, 2, 2, 3),G=1,bfloat16",
+   "A1": "accepted",
+   "A2": "accepted",
+   "A2_identical_to_A1": true
+  },
+  {
+   "section": "refuse",
+   "case": "rank0",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "IndexError",
+    "message": "tuple index out of range"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "GroupNorm input rank (0) must be at least 2"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "rank1",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "IndexError",
+    "message": "tuple index out of range"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "GroupNorm input rank (1) must be at least 2"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "channels_rank2",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "reshape: element count mismatch"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "GroupNorm input channels (4) must equal num_channels (6)"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "channels_rank3",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "reshape: element count mismatch"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "GroupNorm input channels (4) must equal num_channels (6)"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "channels_rank4_more",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "reshape: element count mismatch"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "GroupNorm input channels (12) must equal num_channels (6)"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "int64/input",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "int64"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm input dtype 'int64' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "int64/weight",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm weight dtype 'int64' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "int64/bias",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm bias dtype 'int64' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "bool/input",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "bool"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm input dtype 'bool' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "bool/weight",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm weight dtype 'bool' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "bool/bias",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm bias dtype 'bool' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "uint8/input",
+   "A1": {
+    "outcome": "refused",
+    "exception_class": "ValueError",
+    "message": "uint8"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm input dtype 'uint8' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "uint8/weight",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm weight dtype 'uint8' is unsupported"
+   }
+  },
+  {
+   "section": "refuse",
+   "case": "uint8/bias",
+   "A1": {
+    "outcome": "accepted"
+   },
+   "A2": {
+    "outcome": "refused",
+    "exception_class": "TypeError",
+    "message": "GroupNorm bias dtype 'uint8' is unsupported"
+   }
+  },
+  {
+   "section": "param_shape",
+   "case": "weight_shape_2x3",
+   "A2": {
+    "outcome": "accepted"
+   },
+   "torch": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "Expected weight to be a vector of size equal to the number of channels in input, but got weight of shape [2, 3] and input of shape [2, 6, 4]"
+   }
+  },
+  {
+   "section": "param_shape",
+   "case": "weight_shape_6x1",
+   "A2": {
+    "outcome": "accepted"
+   },
+   "torch": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "Expected weight to be a vector of size equal to the number of channels in input, but got weight of shape [6, 1] and input of shape [2, 6, 4]"
+   }
+  },
+  {
+   "section": "param_shape",
+   "case": "weight_shape_1x6x1",
+   "A2": {
+    "outcome": "accepted"
+   },
+   "torch": {
+    "outcome": "refused",
+    "exception_class": "RuntimeError",
+    "message": "Expected weight to be a vector of size equal to the number of channels in input, but got weight of shape [1, 6, 1] and input of shape [2, 6, 4]"
+   }
+  }
+ ]
+}
