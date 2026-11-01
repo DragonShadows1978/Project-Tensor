@@ -1,0 +1,56 @@
+{
+ "review": "GN1-REV4",
+ "reviewer": "Claude Opus 5.5 (Agent-tool seat)",
+ "target": "A4 a14c0aad (receipts artifacts/gn1/a4/)",
+ "status": "complete",
+ "verdict": "REJECT",
+ "findings": [
+  {
+   "id": "R4-F01",
+   "severity": "MINOR",
+   "owner": "GPU tooling (a4/), D7",
+   "where": "a4/evidence.py:322-325 (--max/--min: exact-token count and the next token) and a4/evidence.py:328-329 (inner duration = first token after 'timeout' that does not start with '-')",
+   "title": "D7 bound binding accepts commands whose effective runner or inner bounds differ from gpu_lines.json",
+   "reproduction": "hostile_rev4.py part d (hostile_rev4_cd.json), through A4's real parent and scorer in the seal-verified mirror, line candidate_focus (outer 330, max 300, min 250, inner 240). The scorer passes the line (passed=true, reasons=[]) for each of: runner argv '--min 250 --max 300 --max=900'; '--min 250 --max 300 --mi 1'; '--min 250 --max 300 --min=1'; inner 'timeout -k 240 900s ...'; inner 'timeout --kill-after 240 900s ...'. The installed runner's own parser (argparse; parse only, no lease) applies maximum 900.0, minimum 1.0 and minimum 1.0 for the first three. GNU timeout takes the value after -k as the kill-after, so the duration is 900s; the probe 'timeout -k 5 1s sleep 4' exits 124 after 1.0 s. The registered controls (outer 329, --max 299, --min 251, inner 239s) are refused, so only these spellings are missed.",
+   "fix": "Bind by exact form, not token search: require runner[1:] == ['--min', str(min), '--max', str(max), '--label', label] (or parse with a copy of the runner's argparse spec and compare the parsed namespace), and require the inner command to equal ['timeout', '--kill-after=10s', '%ds' % inner, 'python3', 'run_gpu_tests.py', arm, suite]. Add the five spellings above as G4 controls."
+  },
+  {
+   "id": "R4-F02",
+   "severity": "MINOR",
+   "owner": "GPU tooling (a4/): run_gpu_line.py, evidence.py, STAGED_GPU_COMMANDS.sh",
+   "where": "a4/run_gpu_line.py:56-58 (outer 'timeout --kill-after=10s'; rc is Python's raw returncode); a4/evidence.py:185-187 (timeout_cause considers only 124 and 137); a4/STAGED_GPU_COMMANDS.sh (no FORGE_GPU_KILL_GRACE, so the runner's grace defaults to 10 s, equal to the outer kill-after); installed runner lines 115 (default grace 10) and 209-215 (waits the full grace after TERM before its own group KILL)",
+   "title": "Under the staged configuration, an outer-bound expiry during the run phase is recorded with exit -9, no runner row and no timeout cause",
+   "reproduction": "hostile_rev4.py part n (hostile_rev4_bn.json), real installed runner redirected to scratch, FORGE_GPU_KILL_GRACE unset as in the staged script, staged inner 'timeout --kill-after=10s 240s', outer bound 4 s. N2b (child obeys TERM): parent receipt exit -9, forge_outcome 'missing', timeout_cause null, no forge.log row, parent wall 14.12 s. N2c (child ignores TERM): the same. The runner catches TERM and waits its full 10 s grace; the outer timeout's KILL at +10 s goes to its own process group, killing the runner before its log row and its own group KILL, and killing the outer timeout itself, so Python sees -9 rather than 124 or 137. N2 (TERM-ignoring child without the inner wrapper): the child is still alive after the parent returns (the reviewer killed its own descendant). With the staged inner wrapper (N2c) the inner kill-after reaps it. A4's controls always set FORGE_GPU_KILL_GRACE (0.2, 3 or 4 s), and no G4 receipt has exit -9. The line fails closed (admitted by its marker, never retried), but the cause D3 requires is lost on this path.",
+   "fix": "Normalize the outer exit (rc < 0 becomes 128 - rc) before attribution, and attribute 137 with no runner row to outer-timeout. Make the runner's grace finish before the outer KILL: either set FORGE_GPU_KILL_GRACE below the outer kill-after in STAGED_GPU_COMMANDS.sh, or raise the outer --kill-after above the runner's grace plus its poll. If the outer kill-after grows, raise the script-level timeout to keep its margin. Add a G4 control with the staged grace (env unset)."
+  },
+  {
+   "id": "R4-F03",
+   "severity": "NIT",
+   "owner": "GPU tooling (a4/)",
+   "where": "a4/run_gpu_line.py:62 (timeout_cause called outside any try in the not-admitted branch); a4/evidence.py:201 (raises for rows no-lock, rechecked-out, no-window or unrecognized when rc is 124 or 137)",
+   "title": "The parent still dies without a receipt when a not-admitted attempt has a non-start runner row and an outer-bound exit",
+   "reproduction": "hostile_rev4.py part c, case N5 (hostile_rev4_cd.json): a runner stand-in writes the row 'no-lock 76', as the real runner's finally block does, and is still alive when the outer bound fires (rc 124). The parent exits 1 with 'ValueError: cannot attribute timeout from runner log' at run_gpu_line.py:62 and evidence.py:201, and writes no parent_result.json. With the real runner the window is narrow: a TERM between the finally-block log row and process exit, or a malformed final row. The consequence is benign, because the retry is allowed and the scorer is correct, but D3's rule that every problem becomes a recorded reason does not hold here.",
+   "fix": "Make timeout_cause total: return 'outer-timeout' for any row whose outcome is not a start outcome when rc is 124 or 137, and 'unattributed' instead of raising. Or wrap the call at :62 and record the failure as a reason. Add N5 as a G4 control."
+  },
+  {
+   "id": "R4-F04",
+   "severity": "NIT",
+   "owner": "GPU tooling (a4/)",
+   "where": "a4/run_gpu_line.py:90-91 (parent_result.json written with open('x') and write, not atomically); a4/run_gpu_line.py:42 then evidence.py:386 (a prior attempt's receipt is read outside any try)",
+   "title": "A truncated parent_result.json crashes every later parent for that label (the R3-F04 class, for the parent's own receipt)",
+   "reproduction": "hostile_rev4.py part c, case N4 (hostile_rev4_cd.json): an honest attempt's parent_result.json is truncated to half, as a parent killed mid-write would leave it. The next parent for the label exits 1 with a json.decoder.JSONDecodeError traceback. It fails closed, and the scorer records 'Expecting property name enclosed in double quotes: line 245 column 4'.",
+   "fix": "Publish parent_result.json atomically: write a temporary file, then os.link it to the final name (this keeps the 'x' no-overwrite property) or os.replace it after an existence check. In the parent's prior-attempt check, catch read and parse errors and refuse with a JSON error line, as A4 now does for an admitted prior attempt. Add N4 as a G4 control."
+  }
+ ],
+ "closure": {
+  "R3-F01": "FIXED (B6, N1)",
+  "R3-F02": "FIXED for B7, B7b, B8; adjacent defects R4-F02 and R4-F03",
+  "R3-F03": "FIXED (C7b; N3, 10 start-evidence classes)",
+  "R3-F04": "FIXED for child_result.json (E5, E5b); adjacent defect R4-F04",
+  "R3-F05": "FIXED (runtime accesses: 23 loaded, 0 unpinned; D5 tamper fails; unsealed listed and passes)",
+  "R3-F06": "FIXED (E_npbool_g/c single-site deletions pass 405/405; the premise-false live record fails)",
+  "D7": "NOT FIXED (R4-F01)"
+ },
+ "questions": {"Q1": "see closure", "Q2": "SOUND", "Q3": "UNSOUND (R4-F02, R4-F03, R4-F04)", "Q4": "SOUND", "Q5": "UNSOUND (R4-F01); equivalences sound", "Q6": "SOUND"},
+ "counts": {"BLOCKER": 0, "MAJOR": 0, "MINOR": 2, "NIT": 2}
+}

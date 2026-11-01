@@ -1,0 +1,47 @@
+{
+  "numpy": "2.4.2",
+  "operator.index(np.True_)": "TypeError: 'numpy.bool' object cannot be interpreted as an integer",
+  "operator.index(np.False_)": "TypeError: 'numpy.bool' object cannot be interpreted as an integer",
+  "candidate": {
+    "exit": 0,
+    "calls": 405,
+    "failed": 0,
+    "failed_sample": []
+  },
+  "E_npbool_g::diff": "--- candidate/nn.py\n+++ E_npbool_g/nn.py\n@@ -515,7 +515,7 @@\n         # Prior art: Python operator.index, PEP 357 (2006). A3 takes the\n         # integer-index protocol; excluding both boolean types is D5 policy.\n         import operator\n-        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):\n+        if isinstance(num_groups, bool) or False:\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\n         try:\n             num_groups = int(operator.index(num_groups))\n",
+  "E_npbool_g": {
+    "exit": 0,
+    "calls": 405,
+    "failed": 0,
+    "failed_sample": []
+  },
+  "E_npbool_c::diff": "--- candidate/nn.py\n+++ E_npbool_c/nn.py\n@@ -523,7 +523,7 @@\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\") from exc\n         if num_groups <= 0:\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\n-        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):\n+        if isinstance(num_channels, bool) or False:\n             raise ValueError(f\"num_channels ({num_channels!r}) must be a positive integer (bool excluded)\")\n         try:\n             num_channels = int(operator.index(num_channels))\n",
+  "E_npbool_c": {
+    "exit": 0,
+    "calls": 405,
+    "failed": 0,
+    "failed_sample": []
+  },
+  "D5_g_npbool::diff": "--- candidate/nn.py\n+++ D5_g_npbool/nn.py\n@@ -515,7 +515,7 @@\n         # Prior art: Python operator.index, PEP 357 (2006). A3 takes the\n         # integer-index protocol; excluding both boolean types is D5 policy.\n         import operator\n-        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):\n+        if isinstance(num_groups, bool) or not isinstance(num_groups, np.bool_):\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\n         try:\n             num_groups = int(operator.index(num_groups))\n",
+  "D5_g_npbool": {
+    "exit": 1,
+    "calls": 405,
+    "failed": 367,
+    "failed_sample": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g1-default]",
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g1-eps0125]",
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]"
+    ]
+  },
+  "D5_c_npbool::diff": "--- candidate/nn.py\n+++ D5_c_npbool/nn.py\n@@ -523,7 +523,7 @@\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\") from exc\n         if num_groups <= 0:\n             raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\n-        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):\n+        if isinstance(num_channels, bool) or not isinstance(num_channels, np.bool_):\n             raise ValueError(f\"num_channels ({num_channels!r}) must be a positive integer (bool excluded)\")\n         try:\n             num_channels = int(operator.index(num_channels))\n",
+  "D5_c_npbool": {
+    "exit": 1,
+    "calls": 405,
+    "failed": 358,
+    "failed_sample": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g1-default]",
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g1-eps0125]",
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]"
+    ]
+  }
+}
