@@ -1,0 +1,306 @@
+1: #!/usr/bin/env python3
+2: """Run a GPU command inside GRAPA run 7's available window.
+3: 
+4: Usage:
+5:   forge-gpu-run [--min S] [--max S] [--margin S] [--self-leasing]
+6:                 [--label TEXT] -- <cmd> [args...]
+7:   forge-gpu-run --status [--min S]
+8: 
+9: Spec: /mnt/ForgeRealm/SystemOps/docs/GPU_WINDOW.md.
+10: GW2: re-read running windows periodically; deadlines only move earlier.
+11: 10-20 incident: Tensor held the GPU lock beyond cooldown; leg 3 timed out, losing about 1.5 h.
+12: """
+13: 
+14: import argparse
+15: import datetime as dt
+16: import errno
+17: import fcntl
+18: import math
+19: import os
+20: import re
+21: import signal
+22: import subprocess
+23: import sys
+24: import time
+25: from dataclasses import dataclass
+26: 
+27: 
+28: ISO = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)"
+29: EVENT = re.compile(rf"^({ISO}) \| (.*)$")
+30: COOLDOWN = re.compile(r"^(?:INTER-CYCLE )?COOLDOWN (\d+)s$")
+31: HALT = re.compile(r"^(?:RUN7 STOP\b|CONTINUOUS HALT\b|CONTINUOUS END\b|RUN7 CYCLE PAUSED\b)")
+32: 
+33: 
+34: @dataclass(frozen=True)
+35: class Window:
+36:     state: str
+37:     end: float | None = None
+38: 
+39: 
+40: def timestamp(value):
+41:     if not re.fullmatch(ISO, value):
+42:         raise ValueError("expected ISO-8601 timestamp with offset")
+43:     return dt.datetime.fromisoformat(value).timestamp()
+44: 
+45: 
+46: def iso(value):
+47:     return dt.datetime.fromtimestamp(value, dt.timezone.utc).isoformat()
+48: 
+49: 
+50: def window(summary, window_file, missing_end):
+51:     # Taken: fail-closed parsing and the state table in System-Claude's GW1
+52:     # GPU_WINDOW.md (2026). Ours: strict parsing and same-inode mtime validation.
+53:     last = None
+54:     try:
+55:         with open(summary, encoding="utf-8") as stream:
+56:             for line in stream:
+57:                 match = EVENT.fullmatch(line.rstrip("\n"))
+58:                 if match:
+59:                     try:
+60:                         last = (timestamp(match[1]), match[2])
+61:                     except ValueError:
+62:                         return Window("busy")
+63:     except FileNotFoundError:
+64:         return Window("no run", missing_end)
+65:     except (OSError, UnicodeError):
+66:         return Window("busy")
+67:     if last is None:
+68:         return Window("busy")
+69:     when, event = last
+70:     cooldown = COOLDOWN.fullmatch(event)
+71:     if cooldown:
+72:         try:
+73:             end = when + int(cooldown[1])
+74:             iso(end)  # Reject unrepresentable timestamps before using them.
+75:             return Window("cooldown", end)
+76:         except (ValueError, OverflowError, OSError):
+77:             return Window("busy")
+78:     if not HALT.match(event):
+79:         return Window("busy")
+80:     try:
+81:         with open(window_file, encoding="utf-8") as stream:
+82:             contents = stream.read()
+83:             modified = os.fstat(stream.fileno()).st_mtime
+84:         match = re.fullmatch(r"open-until ([^\r\n]+)\n?", contents)
+85:         if match and modified >= when:
+86:             end = timestamp(match[1])
+87:             if end > time.time():
+88:                 return Window("halted", end)
+89:     except (OSError, ValueError, OverflowError, UnicodeError):
+90:         pass
+91:     return Window("halted")
+92: 
+93: 
+94: class UsageError(Exception):
+95:     pass
+96: 
+97: 
+98: class Parser(argparse.ArgumentParser):
+99:     def error(self, message):
+100:         raise UsageError(message)
+101: 
+102: 
+103: def options(argv):
+104:     parser = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+105:     parser.add_argument("--min", type=float, default=120, dest="minimum")
+106:     parser.add_argument("--max", type=float, default=600, dest="maximum")
+107:     parser.add_argument("--margin", type=float, default=30)
+108:     parser.add_argument("--self-leasing", action="store_true")
+109:     parser.add_argument("--label")
+110:     parser.add_argument("--status", action="store_true")
+111:     split = argv.index("--") if "--" in argv else len(argv)
+112:     args = parser.parse_args(argv[:split])
+113:     args.command = argv[split + 1:]
+114:     try:
+115:         args.grace = float(os.environ.get("FORGE_GPU_KILL_GRACE", "10"))
+116:     except ValueError:
+117:         raise UsageError("FORGE_GPU_KILL_GRACE must be a finite nonnegative number") from None
+118:     values = (args.minimum, args.maximum, args.margin, args.grace)
+119:     if any(not math.isfinite(n) or n < 0 for n in values):
+120:         raise UsageError("seconds must be finite and nonnegative")
+121:     if args.minimum > args.maximum:
+122:         raise UsageError("--min must not exceed --max")
+123:     if args.margin < args.grace:
+124:         raise UsageError("--margin must cover the kill grace")
+125:     if args.status:
+126:         if split < len(argv):
+127:             raise UsageError("--status takes no command")
+128:     elif split == len(argv) or not args.command:
+129:         raise UsageError("a nonempty command after -- is required")
+130:     if not args.status:
+131:         try:
+132:             args.poll = float(os.environ.get("FORGE_GPU_POLL", "5"))
+133:         except ValueError:
+134:             raise UsageError("FORGE_GPU_POLL must be a finite positive number") from None
+135:         if not math.isfinite(args.poll) or args.poll <= 0:
+136:             raise UsageError("FORGE_GPU_POLL must be a finite positive number")
+137:     return args
+138: 
+139: 
+140: def log_line(path, label, state, end, budget, waited, outcome, rc):
+141:     # Taken: O_APPEND single-write records (POSIX/IEEE, 1988, year unverified).
+142:     # Ours: GW1's nine-field receipt, escaping control separators in user text.
+143:     def clean(text):
+144:         return str(text).replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
+145: 
+146:     try:
+147:         fields = (iso(time.time()), os.getcwd(), label, state,
+148:                   iso(end) if end is not None else "-", f"{budget:.6f}",
+149:                   f"{waited:.6f}", outcome, str(rc))
+150:         data = ("\t".join(clean(field) for field in fields) + "\n").encode()
+151:         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC, 0o666)
+152:         try:
+153:             if os.write(fd, data) != len(data):
+154:                 raise OSError("short log write")
+155:         finally:
+156:             os.close(fd)
+157:     except (OSError, ValueError) as exc:
+158:         print(f"forge-gpu-run: warning: cannot write log: {exc}", file=sys.stderr)
+159: 
+160: 
+161: def supervise(command, deadline, grace, poll, read_deadline):
+162:     # Taken: POSIX sessions/process groups (IEEE, 1988) and GNU coreutils
+163:     # timeout's TERM-then-KILL supervision (year unverified — lead to check:
+164:     # 'POSIX setsid kill process group', 'GNU timeout kill-after history').
+165:     # Ours: retain the group through the full grace even when its leader exits.
+166:     requested = 0
+167: 
+168:     def caught(signum, _frame):
+169:         nonlocal requested
+170:         if not requested:
+171:             requested = signum
+172: 
+173:     old = {sig: signal.signal(sig, caught) for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+174:     try:
+175:         try:
+176:             child = subprocess.Popen(command, start_new_session=True, close_fds=True)
+177:         except OSError as exc:
+178:             print(f"forge-gpu-run: cannot start command: {exc}", file=sys.stderr)
+179:             return (127 if exc.errno == errno.ENOENT else 126), "ran"
+180:         next_poll = time.monotonic() + poll
+181:         window_closed = False
+182:         while True:
+183:             if requested or time.monotonic() >= deadline:
+184:                 rc = 128 + requested if requested else 124
+185:                 outcome = "ran" if requested else "window-closed" if window_closed else "timeout"
+186:                 break
+187:             rc = child.poll()
+188:             if rc is not None:
+189:                 return (rc if rc >= 0 else 128 - rc), "ran"
+190:             # TR GW2 step 4a: re-read live ownership without delaying reaping.
+191:             # Taken: System-Claude GPU_WINDOW.md (2026), fail-closed policy;
+192:             # PEP 418 (2012), monotonic deadlines (unverified — lead to check:
+193:             # 'PEP 418 monotonic timeout'). Ours: clamp-only integration with
+194:             # GW1's 20ms child checks and existing TERM/grace/group-KILL path.
+195:             if time.monotonic() >= next_poll:
+196:                 candidate = read_deadline()
+197:                 now = time.monotonic()
+198:                 if candidate < deadline:
+199:                     deadline = candidate
+200:                     window_closed = True
+201:                 next_poll = now + poll
+202:                 if now >= deadline:
+203:                     continue
+204:             time.sleep(min(0.02, max(0, deadline - time.monotonic())))
+205:         try:
+206:             os.killpg(child.pid, signal.SIGTERM)
+207:         except ProcessLookupError:
+208:             pass
+209:         grace_end = time.monotonic() + grace
+210:         while time.monotonic() < grace_end:
+211:             child.poll()
+212:             time.sleep(min(0.02, max(0, grace_end - time.monotonic())))
+213:         try:
+214:             os.killpg(child.pid, signal.SIGKILL)
+215:         except ProcessLookupError:
+216:             pass
+217:         child.wait()
+218:         return (128 + requested if requested else rc), outcome
+219:     finally:
+220:         for sig, handler in old.items():
+221:             signal.signal(sig, handler)
+222: 
+223: 
+224: def main(argv):
+225:     log = os.environ.get("FORGE_GPU_RUN_LOG", "/tmp/forge-gpu-run.log")
+226:     try:
+227:         args = options(argv)
+228:     except UsageError as exc:
+229:         print(f"forge-gpu-run: {exc}", file=sys.stderr)
+230:         log_line(log, "-", "busy", None, 0, 0, "no-window", 64)
+231:         return 64
+232: 
+233:     summary = os.environ.get("FORGE_GPU_SUMMARY", "/mnt/ForgeRealm/grapa_run7/summary.log")
+234:     window_file = os.environ.get("FORGE_GPU_WINDOW_FILE", "/mnt/ForgeRealm/grapa_run7/GPU_WINDOW")
+235:     started_wall, started_mono = time.time(), time.monotonic()
+236:     missing_end = started_wall + args.maximum
+237:     initial = window(summary, window_file, missing_end)
+238:     state, end = initial.state, initial.end
+239:     budget = min(end - args.margin - time.time(), args.maximum) if end is not None else 0
+240:     if args.status:
+241:         print(f"state: {state}\nwindow end: {iso(end) if end is not None else '-'}\n"
+242:               f"seconds left: {max(0, end - time.time()) if end is not None else 0:.3f}")
+243:         return 0 if end is not None and budget >= args.minimum else 75
+244: 
+245:     label = args.label if args.label is not None else args.command[0]
+246:     waited, fd, rc, outcome = 0.0, None, 75, "no-window"
+247:     try:
+248:         if end is None or budget < args.minimum:
+249:             return rc
+250:         # Taken: monotonic absolute deadlines, Python PEP 418 (2012;
+251:         # unverified — lead to check: 'PEP 418 monotonic timeout').
+252:         # Ours: ONE window deadline shared by acquisition and execution; an
+253:         # absent summary retains its initial synthetic end through the recheck.
+254:         deadline = started_mono + (end - started_wall) - args.margin
+255:         if not args.self_leasing:
+256:             wait_start = time.monotonic()
+257:             try:
+258:                 fd = os.open(os.environ.get("FORGE_GPU_LOCK", "/tmp/forge-gpu.lock"),
+259:                              os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o666)
+260:                 # Taken: BSD flock(2), whole-file advisory locks (1980s;
+261:                 # unverified — lead to check: 'BSD flock history'). Ours:
+262:                 # nonblocking polling bounded by the same execution deadline.
+263:                 while True:
+264:                     left = min(deadline - time.monotonic(), end - args.margin - time.time()) - args.minimum
+265:                     if left <= 0:
+266:                         rc, outcome = 76, "no-lock"
+267:                         return rc
+268:                     try:
+269:                         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+270:                         break
+271:                     except BlockingIOError:
+272:                         time.sleep(min(0.05, left))
+273:             except OSError as exc:
+274:                 print(f"forge-gpu-run: cannot acquire lock: {exc}", file=sys.stderr)
+275:                 rc, outcome = 76, "no-lock"
+276:                 return rc
+277:             finally:
+278:                 waited = time.monotonic() - wait_start
+279:         checked = window(summary, window_file, missing_end)
+280:         if checked != initial:
+281:             rc, outcome = 75, "rechecked-out"
+282:             return rc
+283:         budget = min(deadline - time.monotonic(), end - args.margin - time.time(), args.maximum)
+284:         if budget < args.minimum:
+285:             rc, outcome = 75, "rechecked-out"
+286:             return rc
+287:         def read_deadline():
+288:             # GW2: reuse the admission clock mapping so an unchanged end
+289:             # cannot acquire rounding drift or a fresh synthetic no-run end.
+290:             current = window(summary, window_file, missing_end)
+291:             if (current.end is None or current.state == "busy"
+292:                     or (current.state == "no run" and initial.state != "no run")):
+293:                 return time.monotonic()
+294:             return started_mono + (current.end - started_wall) - args.margin
+295: 
+296:         rc, outcome = supervise(args.command, min(deadline, time.monotonic() + budget),
+297:                                 args.grace, args.poll, read_deadline)
+298:         return rc
+299:     finally:
+300:         if fd is not None:
+301:             os.close(fd)
+302:         log_line(log, label, state, end, max(0, budget), waited, outcome, rc)
+303: 
+304: 
+305: if __name__ == "__main__":
+306:     sys.exit(main(sys.argv[1:]))

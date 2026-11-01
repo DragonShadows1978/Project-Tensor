@@ -1,0 +1,88 @@
+{
+  "default_binding": null,
+  "trace_phase": "call only",
+  "id": "D5_c_positive",
+  "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]",
+  "edited_lines": [
+    532
+  ],
+  "reached_lines": [
+    532
+  ],
+  "reached": true,
+  "loads": true,
+  "differs": true,
+  "cpu_assertion_killed": true,
+  "equivalence": null,
+  "passed": true,
+  "trace": {
+    "exit": 1,
+    "collected_ids": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]"
+    ],
+    "reports": [
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]",
+        "when": "setup",
+        "outcome": "passed",
+        "detail": "",
+        "exception_class": null,
+        "groupnorm_refusal": false
+      },
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]",
+        "when": "call",
+        "outcome": "failed",
+        "detail": "name = 'num_channels', value = -2\n\n    @pytest.mark.parametrize(\"name\", (\"num_groups\", \"num_channels\"))\n    @pytest.mark.parametrize(\"value\", (0, -2, 2.0, True, False, \"2\", None),\n                             ids=(\"zero\", \"negative\", \"float\", \"true\", \"false\", \"string\", \"none\"))\n    def test_positive_integer_refusal(name, value):\n        from tensor_cuda import nn\n        args = dict(num_groups=2, num_channels=6)\n        args[name] = value\n        error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))\n>       assert name in str(error) and \"positive integer\" in str(error)\nE       AssertionError: assert ('num_channels' in 'negative dimensions are not allowed')\nE        +  where 'negative dimensions are not allowed' = str(ValueError('negative dimensions are not allowed'))\n\ntensor_cuda/tests/test_groupnorm_gn1.py:369: AssertionError",
+        "exception_class": "AssertionError",
+        "groupnorm_refusal": false,
+        "engine_refusal": false,
+        "wrapped_engine_refusal": false,
+        "original_exception_class": null,
+        "original_exception_message": null
+      },
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]",
+        "when": "teardown",
+        "outcome": "passed",
+        "detail": "",
+        "exception_class": null,
+        "groupnorm_refusal": false
+      }
+    ],
+    "collection_errors": [],
+    "executed_lines": [
+      23,
+      24,
+      25,
+      26,
+      29,
+      34,
+      36,
+      512,
+      517,
+      518,
+      520,
+      521,
+      524,
+      526,
+      528,
+      529,
+      532,
+      534,
+      539,
+      540
+    ],
+    "constructor_bindings": [
+      {
+        "eps": 1e-05
+      },
+      {
+        "eps": null
+      }
+    ],
+    "failed_ids": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]"
+    ]
+  }
+}

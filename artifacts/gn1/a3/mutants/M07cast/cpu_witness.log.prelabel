@@ -1,0 +1,59 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_forward_values[float16-r3-n2-g2-default] _________________
+
+dtype = 'float16', shape = (2, 6, 5), groups = 2, eps = 1e-05
+
+    @pytest.mark.parametrize("dtype,shape,groups,eps", _cases(False))
+    def test_forward_values(dtype, shape, groups, eps):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        values, w, b, projection = _inputs(shape)
+        layer = nn.GroupNorm(groups, shape[1]) if eps == 1e-5 else nn.GroupNorm(groups, shape[1], eps=eps)
+        layer.weight = _leaf(tc, w, dtype)
+        layer.bias = _leaf(tc, b, dtype)
+>       _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                      groups, eps, dtype, False)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tc = <module 'tensor_cuda' from '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a3/mutants/M07cast/__init__.py'>
+layer = <tensor_cuda.nn.GroupNorm object at 0x78128eb00da0>
+x = <cpu_shim.Tensor object at 0x78128eb00aa0>
+projection = <cpu_shim.Tensor object at 0x78128eb006e0>, groups = 2, eps = 1e-05
+dtype = 'float16', backward = False
+
+    def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+        # Reference uses only represented source operands, never the engine's output.
+        xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+        pn = projection.numpy().astype(np.float64)
+        grouped = xn.reshape(xn.shape[0], groups, -1)
+        if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+            assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+        expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+        # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+        # by a structural mutant or its engine violates this assertion (A3 D2).
+        # The original exception class/message is preserved and read by evidence.
+        # Kill requires a same-root candidate pass for this input. The parent separately
+        # voids every device-pattern failure, including chained exceptions.
+        try:
+            output = layer(x)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            raise AssertionError(f"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}") from exc
+        atol, rtol = TOLERANCES[dtype]["forward"]
+        assert output.dtype == dtype
+        assert output.shape == xn.shape
+        assert np.isfinite(expected).all() and np.isfinite(output.numpy()).all(), "nonfinite forward"
+>       assert np.allclose(output.numpy(), expected, atol=atol, rtol=rtol), "forward values"
+E       AssertionError: forward values
+E       assert False
+E        +  where False = <function allclose at 0x78129686c170>(array([[[-1.33105469, -1.66699219, -1.43457031, -1.49511719,\n         -1.03808594],\n        [ 1.52441406,  1.96679688,....36938477,\n          2.25585938],\n        [ 0.3605957 , -0.2512207 , -0.26367188,  1.5078125 ,\n          0.98974609]]]), array([[[-0.85309284, -1.02100629, -0.90468806, -0.93491248,\n         -0.70670284],\n        [-0.04955794, -0.38156862,....41693969,\n          2.06680267],\n        [ 0.42128327, -0.26692115, -0.28088696,  1.71234545,\n          1.12888466]]]), atol=3.0044450759887697e-05, rtol=0.0005182958984375)
+E        +    where <function allclose at 0x78129686c170> = np.allclose
+E        +    and   array([[[-1.33105469, -1.66699219, -1.43457031, -1.49511719,\n         -1.03808594],\n        [ 1.52441406,  1.96679688,....36938477,\n          2.25585938],\n        [ 0.3605957 , -0.2512207 , -0.26367188,  1.5078125 ,\n          0.98974609]]]) = numpy()
+E        +      where numpy = <cpu_shim.Tensor object at 0x78128eb028a0>.numpy
+
+tensor_cuda/tests/test_groupnorm_gn1.py:149: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float16-r3-n2-g2-default]
+1 failed in 0.07s

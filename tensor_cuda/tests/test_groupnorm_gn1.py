@@ -134,12 +134,14 @@ def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, con
         assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
     expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
     # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
-    # by a structural mutant violates this assertion. The parent separately
+    # by a structural mutant or its engine violates this assertion (A3 D2).
+    # The original exception class/message is preserved and read by evidence.
+    # Kill requires a same-root candidate pass for this input. The parent separately
     # voids every device-pattern failure, including chained exceptions.
     try:
         output = layer(x)
     except (RuntimeError, ValueError, TypeError) as exc:
-        raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
+        raise AssertionError(f"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}") from exc
     atol, rtol = TOLERANCES[dtype]["forward"]
     assert output.dtype == dtype
     assert output.shape == xn.shape
@@ -401,3 +403,52 @@ def test_distinct_parameter_dtypes(weight_dtype, bias_dtype, backward):
     layer.bias = _leaf(tc, b, bias_dtype)
     _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
                   3, 1e-5, "float32", backward)
+
+
+# Prior art: Python index protocol, PEP 357 (2006); boundary testing Myers
+# (1979, unverified — lead to check). D5 specifies boolean exclusion.
+class _IndexCount:
+    def __init__(self, value):
+        self.value = value
+
+    def __index__(self):
+        return self.value
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("kind", (np.int64, np.int32, np.uint8, _IndexCount),
+                         ids=("np_int64", "np_int32", "np_uint8", "index_object"))
+def test_index_counts(name, kind):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = kind(args[name])
+    layer = nn.GroupNorm(**args)
+    assert type(layer.G) is int and type(layer.C) is int
+    values, w, b, projection = _inputs((2, 6, 5))
+    layer.weight = _leaf(tc, w, "float32")
+    layer.bias = _leaf(tc, b, "float32")
+    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                  2, 1e-5, "float32", False)
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("value", (np.bool_(True), np.bool_(False)), ids=("true", "false"))
+def test_numpy_bool_refusal(name, value):
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = value
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+    assert name in str(error) and "positive integer" in str(error)
+
+
+@pytest.mark.parametrize("operand", ("weight", "bias"))
+@pytest.mark.parametrize("shape", ((), (2, 3), (6, 1), (1, 6, 1), (5,), (7,)),
+                         ids=("scalar", "matrix23", "matrix61", "rank3", "short", "long"))
+def test_parameter_shape_refusal(operand, shape):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    setattr(layer, operand, tc.tensor(np.ones(shape), dtype="float32"))
+    error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.ones((2, 6, 3)), dtype="float32")))
+    assert operand in str(error)

@@ -1,0 +1,52 @@
+diff --git a/tensor_cuda/tensor_cuda/nn.py b/tensor_cuda/tensor_cuda/nn.py
+index 7e78267b..52e17bd2 100644
+--- a/tensor_cuda/tensor_cuda/nn.py
++++ b/tensor_cuda/tensor_cuda/nn.py
+@@ -512,13 +512,24 @@ class GroupNorm(Module):
+         super().__init__()
+         # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+         # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+-        # A2 domain checks, inspired by PyTorch GroupNorm argument validation;
+-        # exact positive-int/bool policy is the GN1 A2 requirement.
+-        if (isinstance(num_groups, bool) or not isinstance(num_groups, int)
+-                or num_groups <= 0):
++        # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
++        # integer-index protocol; excluding both boolean types is D5 policy.
++        import operator
++        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+-        if (isinstance(num_channels, bool) or not isinstance(num_channels, int)
+-                or num_channels <= 0):
++        try:
++            num_groups = int(operator.index(num_groups))
++        except TypeError as exc:
++            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
++        if num_groups <= 0:
++            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
++        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
++            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
++        try:
++            num_channels = int(operator.index(num_channels))
++        except TypeError as exc:
++            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)") from exc
++        if num_channels <= 0:
+             raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+         if num_channels % num_groups != 0:
+             raise ValueError(
+@@ -542,6 +553,16 @@ class GroupNorm(Module):
+             raise TypeError(f"GroupNorm weight dtype {self.weight.dtype!r} is unsupported")
+         if self.bias.dtype not in ("float32", "float16", "bfloat16"):
+             raise TypeError(f"GroupNorm bias dtype {self.bias.dtype!r} is unsupported")
++        # Prior art: PyTorch GroupNorm parameter shape validation (observed
++        # separately on CPU). D5 requires explicit refusal before tensor ops.
++        if self.weight.ndim != 1:
++            raise ValueError("GroupNorm weight must have rank 1")
++        if self.weight.shape[0] != self.C:
++            raise ValueError(f"GroupNorm weight length must equal num_channels ({self.C})")
++        if self.bias.ndim != 1:
++            raise ValueError("GroupNorm bias must have rank 1")
++        if self.bias.shape[0] != self.C:
++            raise ValueError(f"GroupNorm bias length must equal num_channels ({self.C})")
+         # Prior art: PyTorch half normalization uses float32 accumulation;
+         # Micikevicius et al. (2018), Mixed Precision Training (both unverified
+         # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
