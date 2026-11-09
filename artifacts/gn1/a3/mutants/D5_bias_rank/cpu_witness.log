@@ -1,0 +1,38 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________ test_parameter_shape_refusal[matrix61-bias] __________________
+
+operand = 'bias', shape = (6, 1)
+
+    @pytest.mark.parametrize("operand", ("weight", "bias"))
+    @pytest.mark.parametrize("shape", ((), (2, 3), (6, 1), (1, 6, 1), (5,), (7,)),
+                             ids=("scalar", "matrix23", "matrix61", "rank3", "short", "long"))
+    def test_parameter_shape_refusal(operand, shape):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        layer = nn.GroupNorm(2, 6)
+        setattr(layer, operand, tc.tensor(np.ones(shape), dtype="float32"))
+>       error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.ones((2, 6, 3)), dtype="float32")))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_groupnorm_gn1.py:453: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+kind = <class 'ValueError'>
+operation = <function test_parameter_shape_refusal.<locals>.<lambda> at 0x782cd7918ea0>
+
+    def _expect_refusal(kind, operation):
+        error = None
+        try:
+            operation()
+        except Exception as exc:
+            error = exc
+>       assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+E       AssertionError: expected ValueError, got None
+E       assert False
+E        +  where False = isinstance(None, <class 'ValueError'>)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:357: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[matrix61-bias]
+1 failed in 0.05s

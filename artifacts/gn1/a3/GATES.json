@@ -1,0 +1,46 @@
+{
+  "verdict": "ACCEPT (CPU gates only)",
+  "gates": [
+    {
+      "gate": "G1",
+      "status": "PASS",
+      "detail": "GroupNorm-only nn.py change; D5-only vs bd30498a; test file; frozen maps equal",
+      "receipts": "G1_scope.json; changes_vs_base.patch; changes_vs_a2.patch; nn_vs_bd30498a.diff"
+    },
+    {
+      "gate": "G2",
+      "status": "PASS",
+      "detail": "405/405 real GN tests on CPU stand-in; 44 native reference/domain IDs; 57 native metadata guards; both arms collect",
+      "receipts": "G2_shim.json; cpu_candidate_mutation_references.json; native_validation.json; ids_*.txt"
+    },
+    {
+      "gate": "G3",
+      "status": "PASS",
+      "detail": "54 module copies match original pin/source map; zero builds or arm symlinks",
+      "receipts": "G3_pin.json; engine_sources_verified.json; arm_maps.json"
+    },
+    {
+      "gate": "G4",
+      "status": "PASS",
+      "detail": "107/107 final hostile targets: 52 A2-derived, 13 real-runner, 38 REV2, 4 supplementary",
+      "receipts": "G4_hostile.json; G4_runner.json; hostile_rev2_acd.json; G4_extra.json"
+    },
+    {
+      "gate": "G5",
+      "status": "PASS",
+      "detail": "52 load/differ/reach; 51 CPU kills; V3 passes as registered equivalence; M14 actual default binding",
+      "receipts": "G5_mutants.json; mutants/*/trace.json"
+    },
+    {
+      "gate": "G6",
+      "status": "PASS",
+      "detail": "56 staged labels; both full stand-in roots score 0; arm regeneration matches seal; audit 29 IDs passes",
+      "receipts": "G6_staging.json; regeneration_verified.json; delivery_verify.json; STAGED_GPU_COMMANDS.sh"
+    }
+  ],
+  "predictions": {
+    "P94": "HELD",
+    "P95": "HELD"
+  },
+  "GPU_execution": false
+}

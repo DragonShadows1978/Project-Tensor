@@ -1,0 +1,22 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_positive_integer_refusal[negative-num_channels] _____________
+
+name = 'num_channels', value = -2
+
+    @pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+    @pytest.mark.parametrize("value", (0, -2, 2.0, True, False, "2", None),
+                             ids=("zero", "negative", "float", "true", "false", "string", "none"))
+    def test_positive_integer_refusal(name, value):
+        from tensor_cuda import nn
+        args = dict(num_groups=2, num_channels=6)
+        args[name] = value
+        error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+>       assert name in str(error) and "positive integer" in str(error)
+E       AssertionError: assert ('num_channels' in 'negative dimensions are not allowed')
+E        +  where 'negative dimensions are not allowed' = str(ValueError('negative dimensions are not allowed'))
+
+tensor_cuda/tests/test_groupnorm_gn1.py:367: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[negative-num_channels]
+1 failed in 0.13s

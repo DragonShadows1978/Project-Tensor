@@ -1,0 +1,39 @@
+{
+  "root_modes": [
+    "audit",
+    "control"
+  ],
+  "parent_modes": [
+    "audit",
+    "control"
+  ],
+  "child_modes": [
+    "audit"
+  ],
+  "derived_line_modes": [
+    "cpu",
+    "device"
+  ],
+  "device_fields": [
+    "program.resolved_path",
+    "program.sha256",
+    "CUDA_VISIBLE_DEVICES",
+    "device_name",
+    "cuda_runtime_version",
+    "cuda_driver_version",
+    "device_ordinal",
+    "native_status",
+    "engine_sha256",
+    "provider",
+    "query_error",
+    "captured_at"
+  ],
+  "native_calls": [
+    "cudaGetDevice",
+    "cudaGetDeviceProperties_v2",
+    "cudaRuntimeGetVersion",
+    "cudaDriverGetVersion"
+  ],
+  "mutation_combinations": "2 root-control states x 2 all-parent-control states x 2 all-child-evidence states; each singleton/complement with both root states",
+  "comparison": "exact strings, program paths and SHA-256, exact argv lists; versions are emitted as decimal strings"
+}

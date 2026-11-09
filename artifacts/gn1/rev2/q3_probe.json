@@ -1,0 +1,65 @@
+{
+  "P0_honest": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "pytest_exit": 0,
+    "call_outcome": "passed",
+    "exception_class": null,
+    "groupnorm_refusal": false,
+    "acceptable_killers": [],
+    "device_veto": false,
+    "detail_head": ""
+  },
+  "P1_generic_engine_RuntimeError": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "acceptable_killers": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]"
+    ],
+    "device_veto": false,
+    "detail_head": "n validity (DeMillo/Lipton/Sayward 1978): a valid input refused\n        # by a structural mutant violates this assertion. The parent separately\n        # voids every device-pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: pow: unsupported exponent path\n\ngn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:142: AssertionError"
+  },
+  "P2_engine_TypeError_under_GroupNorm_init": {
+    "node": "test_constructor_defaults",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "TypeError",
+    "groupnorm_refusal": true,
+    "acceptable_killers": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_constructor_defaults"
+    ],
+    "device_veto": false,
+    "detail_head": "^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndata = array([1., 1., 1., 1., 1., 1.]), device = 'cuda', dtype = 'float32'\nrequires_grad = True\n\n    def factory(data, device=\"cuda\", dtype=\"float32\", requires_grad=False):\n        if requires_grad:\n>           raise TypeError(\"tensor(): incompatible function arguments (engine factory)\")\nE           TypeError: tensor(): incompatible function arguments (engine factory)\n\n/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/rev2/q3_probe.py:92: TypeError"
+  },
+  "P3_device_fault_in_forward": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "acceptable_killers": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]"
+    ],
+    "device_veto": true,
+    "detail_head": "978): a valid input refused\n        # by a structural mutant violates this assertion. The parent separately\n        # voids every device-pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: CUDA error at pow_kernel: an illegal memory access was encountered\n\ngn1_rev2_regen/W/tensor_cuda/tests/test_groupnorm_gn1.py:142: AssertionError"
+  },
+  "source_pattern_census": {
+    "files": 51,
+    "hits": [
+      {
+        "file": "artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py",
+        "line": 1459,
+        "pattern": "cudaMalloc",
+        "text": "loading: allocations made while disabled use raw cudaMalloc (persistents"
+      },
+      {
+        "file": "artifacts/gn1/a2/arms/candidate/tensor_cuda/__init__.py",
+        "line": 1462,
+        "pattern": "cudaMalloc",
+        "text": "are pooled, removing the cudaMalloc/cudaFree serialization tax.\"\"\""
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+# Prior art: Meszaros (2007) fault injection; A2 tamper controls.
+import json,os,sys,subprocess,hashlib
+from pathlib import Path
+p=Path('artifacts/gn1/a3').resolve();runs=p/'hostile_runs/Full_valid_synthetic'
+env=dict(os.environ,RUNS=str(runs));rows=[]
+def run(args,e=env):
+ r=subprocess.run(['timeout','30s',sys.executable,'-B',*args],cwd=p,env=e,capture_output=True,text=True)
+ return dict(exit=r.returncode,stdout=r.stdout[-1600:],stderr=r.stderr[-1600:])
+rec=runs/'candidate_focus/attempt-0001/parent_result.json';old=rec.read_bytes();d=json.loads(old);d['timeout_cause']='outer-timeout';bad=(json.dumps(d,indent=2)+'\n').encode()
+(p/'timeout_cause_tampered_parent.json').write_bytes(bad)
+try:
+ rec.write_bytes(bad);r=run(['score_gpu.py']);rows.append(dict(control='Stored_timeout_cause_tamper',target='stored timeout cause differs from log',passed=r['exit']==1 and 'stored timeout cause differs from log' in str(r),scorer=r))
+finally:rec.write_bytes(old)
+assert run(['score_gpu.py'])['exit']==0
+seal=p/'staging_seal.json';original=seal.read_bytes();d=json.loads(original);d['import_modules']['scripts/apa_om135_core.py']='0'*64
+bad=(json.dumps(d,indent=2)+'\n').encode();(p/'helper_pin_tampered_seal.json').write_bytes(bad)
+try:
+ seal.write_bytes(bad)
+ for name,args,e,rc in [('Import_helper_pin_parent',['run_gpu_line.py','candidate_focus','0','20',sys.executable,'hostile_forge.py','run_gpu_tests.py','candidate','focus'],env,1),('Import_helper_pin_child',['run_gpu_tests.py','candidate','focus'],dict(env,GN1_LINE='candidate_focus',GN1_ATTEMPT=str(runs/'candidate_focus/attempt-0001')),2),('Import_helper_pin_scorer',['score_gpu.py'],env,1)]:
+  r=run(args,e);rows.append(dict(control=name,target='import module seal mismatch: scripts/apa_om135_core.py',passed=r['exit']==rc and 'import module seal mismatch: scripts/apa_om135_core.py' in str(r),result=r))
+finally:seal.write_bytes(original)
+assert hashlib.sha256(seal.read_bytes()).hexdigest()==hashlib.sha256(original).hexdigest()
+r=run(['score_gpu.py']);assert r['exit']==0,r
+result=dict(passed=all(r['passed'] for r in rows),controls=rows,restored_full_valid_scorer_exit=r['exit'],seal_sha256=hashlib.sha256(original).hexdigest())
+(p/'G4_extra.json').write_text(json.dumps(result,indent=2)+'\n');print('extra',result['passed'],len(rows));assert result['passed']

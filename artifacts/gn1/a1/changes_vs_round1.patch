@@ -1,0 +1,226 @@
+diff --git a/tensor_cuda/tensor_cuda/nn.py b/tensor_cuda/tensor_cuda/nn.py
+index 781b488b..21342154 100644
+--- a/tensor_cuda/tensor_cuda/nn.py
++++ b/tensor_cuda/tensor_cuda/nn.py
+@@ -522,6 +522,13 @@ class GroupNorm(Module):
+         self.bias = parameter(np.zeros(num_channels))
+ 
+     def forward(self, x):
++        # Prior art: PyTorch half normalization uses float32 accumulation;
++        # Micikevicius et al. (2018), Mixed Precision Training (both unverified
++        # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
++        # equations stay unchanged; A1 keeps pow backward intermediates in FP32.
++        dtype = x.dtype
++        if dtype in ("float16", "bfloat16"):
++            x = x.astype("float32")
+         N, C = x.shape[0], x.shape[1]
+         spatial = list(x.shape[2:])
+         # Explicit extent: NDArray::reshape does not infer -1.
+@@ -532,7 +539,13 @@ class GroupNorm(Module):
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+-        return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
++        if (dtype == "float32" and self.weight.dtype == "float32"
++                and self.bias.dtype == "float32"):
++            return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
++        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
++        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
++        output = g * weight.reshape(wshape) + bias.reshape(wshape)
++        return output if output.dtype == dtype else output.astype(dtype)
+ 
+ 
+ class InstanceNorm2D(Module):
+diff --git a/tensor_cuda/tests/test_groupnorm_gn1.py b/tensor_cuda/tests/test_groupnorm_gn1.py
+index 8358e76e..46bc6d47 100644
+--- a/tensor_cuda/tests/test_groupnorm_gn1.py
++++ b/tensor_cuda/tests/test_groupnorm_gn1.py
+@@ -13,17 +13,19 @@ import numpy as np
+ import pytest
+ 
+ 
+-# Prior art: Higham (1996/2002), standard gamma_n floating-point error bound
+-# (citation unverified — lead to check); GN1 chooses the finite-domain budgets.
+-# (atol, rtol), derived before GPU: n<=72, float32 accumulation gamma_71<4.24e-6;
+-# normal non-singleton variance>=1/64 and bounded inputs/projections. Low precision
+-# stores each op: forward budgets ~40u16/~30ubf, backward ~120u16/~90ubf cover
+-# centering, inverse std and VJP cancellation. Absolute floors handle zero grads.
+-# Float32 forward ~7*gamma_71; backward ~70*gamma_71, incl. near-eps invstd<=46.
++# Prior art: Higham (1996/2002), IEEE 754 rounding; PyTorch normalization
++# accumulation and Micikevicius et al. (2018), Mixed Precision Training.
++# Unverified — lead to check named sources. A1: represented inputs, round one's
++# FP32 compute budget, then exactly one output/leaf-gradient rounding. For FP32
++# error A+R*abs(ref), final rounding gives (1+u)*A+s, (1+u)*R+u;
++# u16=2^-11, s16=2^-25; ubf=2^-8, sbf=2^-134 (subnormal half-step).
++# Frozen before gates in artifacts/gn1/a1/REGISTRATION.md. No GPU-derived tuning.
+ TOLERANCES = {
+     "float32": {"forward": (3e-5, 3e-5), "backward": (3e-4, 3e-4)},
+-    "float16": {"forward": (0.02, 0.02), "backward": (0.06, 0.06)},
+-    "bfloat16": {"forward": (0.12, 0.12), "backward": (0.35, 0.35)},
++    "float16": {"forward": (3.0044450759887697e-5, 0.0005182958984375),
++                "backward": (0.00030017628669738765, 0.000788427734375)},
++    "bfloat16": {"forward": (3.01171875e-5, 0.0039363671875),
++                 "backward": (0.00030117187499999995, 0.004207421875)},
+ }
+ DTYPES = tuple(TOLERANCES)
+ SHAPES = ((1, 6), (2, 6), (1, 6, 5), (2, 6, 5),
+@@ -123,26 +125,29 @@ def _inputs(shape):
+     return x, w, b, projection
+ 
+ 
+-def _check_values(tc, layer, x, projection, groups, eps, dtype, backward):
++def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+     # Reference uses only represented source operands, never the engine's output.
+     xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+     pn = projection.numpy().astype(np.float64)
+     grouped = xn.reshape(xn.shape[0], groups, -1)
+-    if grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
++    if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+         assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+     expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+     output = layer(x)
+     atol, rtol = TOLERANCES[dtype]["forward"]
+     assert output.dtype == dtype
+     assert output.shape == xn.shape
++    assert np.isfinite(expected).all() and np.isfinite(output.numpy()).all(), "nonfinite forward"
+     assert np.allclose(output.numpy(), expected, atol=atol, rtol=rtol), "forward values"
+     if backward:
+         (output * projection).sum().backward()
+-        atol, rtol = TOLERANCES[dtype]["backward"]
+         for name, tensor, expected_grad in zip(("x", "weight", "bias"),
+                                                (x, layer.weight, layer.bias), grads):
+             assert tensor.grad is not None, name + " gradient unreachable"
++            assert tensor.grad.dtype == tensor.dtype, name + " gradient dtype"
++            atol, rtol = TOLERANCES[tensor.dtype]["backward"]
+             actual = tensor.grad.numpy().astype(np.float64)
++            assert np.isfinite(expected_grad).all() and np.isfinite(actual).all(), name + " nonfinite gradient"
+             assert actual.shape == expected_grad.shape, name
+             assert np.allclose(actual, expected_grad, atol=atol, rtol=rtol), name + " gradient values"
+ 
+@@ -156,10 +161,8 @@ def _cases(backward):
+         for shape in SHAPES:
+             for groups in (1, 2, 6):
+                 for eps in (1e-5, 0.125):
+-                    # Source-proven FP16 pow backward overflow for singleton
+-                    # eps=1e-5, registered in AMENDMENT_01; forward is still tested.
+-                    if backward and dtype == "float16" and len(shape) == 2 and groups == 6 and eps == 1e-5:
+-                        continue
++                    # A1 restores both singleton default-eps FP16 backward IDs:
++                    # float32 compute keeps eps**(-1.5) representable.
+                     label = f"{dtype}-r{len(shape)}-n{shape[0]}-g{groups}-" + ("default" if eps == 1e-5 else "eps0125")
+                     cases.append(pytest.param(dtype, shape, groups, eps, id=label))
+     return cases
+@@ -223,3 +226,113 @@ def test_nondivisible_refusal():
+     with pytest.raises(ValueError) as caught:
+         nn.GroupNorm(4, 6)
+     assert "4" in str(caught.value) and "6" in str(caught.value)
++
++
++# Prior art: IEEE 754 round-to-nearest/ties-to-even (1985/2019), emulated on
++# host only for CPU reference validation. This never replaces an engine run.
++def represented(data, dtype):
++    values = np.asarray(data, dtype=np.float32)
++    if dtype == "float16":
++        return values.astype(np.float16).astype(np.float64)
++    if dtype == "bfloat16":
++        bits = values.view(np.uint32)
++        rounded = (bits + np.uint32(0x7fff) + ((bits >> 16) & 1)) & np.uint32(0xffff0000)
++        return rounded.view(np.float32).astype(np.float64)
++    return values.astype(np.float64)
++
++
++def low_variance_inputs(variance):
++    # A1's own finite census: exactly symmetric represented centers, extent 8.
++    # |q|<=.75 and invstd<=317 keep FP32 VJP error within round one's budget.
++    amplitude = np.sqrt(variance)
++    values = np.tile([-amplitude, amplitude], 24).reshape(2, 6, 4)
++    _, w, b, _ = _inputs(values.shape)
++    projection = np.tile([-.5, -.25, .125, .375, .25, -.125, .5, -.375], 6).reshape(values.shape)
++    return values, w, b, projection
++
++
++def _configure_parameters(tc, layer, w, b, configuration):
++    if configuration == "default":
++        # Exercise the module's own untouched float32 parameters.
++        assert layer.weight.dtype == layer.bias.dtype == "float32"
++    else:
++        assert configuration == "half"
++        layer.weight = _leaf(tc, w, "float32")
++        layer.bias = _leaf(tc, b, "float32")
++        assert layer.half() is layer  # actual public mixed-precision path
++        assert layer.weight.dtype == layer.bias.dtype == "float16"
++    assert layer.parameters() == [layer.weight, layer.bias]
++
++
++@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
++@pytest.mark.parametrize("configuration", ("default", "half"))
++@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
++def test_mixed_parameters(dtype, configuration, backward):
++    import tensor_cuda as tc
++    from tensor_cuda import nn
++    values, w, b, projection = _inputs((2, 6, 4))
++    layer = nn.GroupNorm(3, 6)
++    _configure_parameters(tc, layer, w, b, configuration)
++    _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
++                  3, 1e-5, dtype, backward)
++
++
++@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
++@pytest.mark.parametrize("configuration", ("default", "half"))
++@pytest.mark.parametrize("variance", (1e-4, 1e-6), ids=("var1e-4", "var1e-6"))
++@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
++def test_low_variance(dtype, configuration, variance, backward):
++    import tensor_cuda as tc
++    from tensor_cuda import nn
++    values, w, b, projection = low_variance_inputs(variance)
++    layer = nn.GroupNorm(3, 6)
++    _configure_parameters(tc, layer, w, b, configuration)
++    x = _leaf(tc, values, dtype)
++    actual_variance = x.numpy().astype(np.float64).reshape(2, 3, 8).var(axis=2)
++    # Input representation moves the decimal target by <1%; never relabel it
++    # as exact decimal variance. Every group remains in the overflow domain.
++    assert np.all(np.abs(actual_variance / variance - 1) < .01)
++    assert np.all((actual_variance + layer.eps)**(-1.5) > 65504)
++    _check_values(tc, layer, x, tc.tensor(projection, dtype=dtype),
++                  3, layer.eps, dtype, backward, conditioned=False)
++
++
++@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
++def test_fp32_input_half_parameters(backward):
++    import tensor_cuda as tc
++    from tensor_cuda import nn
++    values, w, b, projection = _inputs((2, 6, 4))
++    layer = nn.GroupNorm(3, 6)
++    _configure_parameters(tc, layer, w, b, "half")
++    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
++                  3, 1e-5, "float32", backward)
++
++
++@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
++@pytest.mark.parametrize("configuration", ("default", "half"))
++@pytest.mark.parametrize("variance", (1e-4, 1e-6), ids=("var1e-4", "var1e-6"))
++@pytest.mark.parametrize("operand", ("x", "weight", "bias"))
++def test_reference_low_variance_central_differences(dtype, configuration, variance, operand):
++    # Classical central differences; Fornberg (1988), unverified lead to check.
++    # h=2^-25; h^2/(var+eps)<9e-11. Registration derives atol=rtol=2e-7.
++    values, w, b, projection = low_variance_inputs(variance)
++    x = represented(values, dtype)
++    if configuration == "default":
++        w, b = np.ones(6), np.zeros(6)
++    else:
++        w, b = represented(w, "float16"), represented(b, "float16")
++    projection = represented(projection, dtype)
++    args = [x, w, b]
++    index = ("x", "weight", "bias").index(operand)
++    _, analytical = groupnorm_reference(x, 3, w, b, 1e-5, projection)
++    fd = np.empty_like(args[index])
++    h = 2.**-25
++    for pos in np.ndindex(fd.shape):
++        plus, minus = [v.copy() for v in args], [v.copy() for v in args]
++        plus[index][pos] += h
++        minus[index][pos] -= h
++        fp = np.sum(groupnorm_reference(plus[0], 3, plus[1], plus[2], 1e-5) * projection)
++        fm = np.sum(groupnorm_reference(minus[0], 3, minus[1], minus[2], 1e-5) * projection)
++        fd[pos] = (fp - fm) / (2 * h)
++    assert np.isfinite(analytical[index]).all() and np.isfinite(fd).all()
++    assert np.allclose(analytical[index], fd, atol=2e-7, rtol=2e-7), operand

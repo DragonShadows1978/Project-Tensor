@@ -1,0 +1,132 @@
+{
+ "param_dtype_census": [
+  [
+   "bfloat16",
+   "bfloat16",
+   "bfloat16"
+  ],
+  [
+   "bfloat16",
+   "float16",
+   "float16"
+  ],
+  [
+   "bfloat16",
+   "float32",
+   "float32"
+  ],
+  [
+   "float16",
+   "float16",
+   "float16"
+  ],
+  [
+   "float16",
+   "float32",
+   "float32"
+  ],
+  [
+   "float32",
+   "float16",
+   "float16"
+  ],
+  [
+   "float32",
+   "float32",
+   "float32"
+  ]
+ ],
+ "any_weight_bias_dtype_differ": false,
+ "variants": {
+  "V1_no_bias_check": {
+   "registered_ids_same_forward": 320,
+   "registered_ids_differing": [],
+   "n_registered": 320,
+   "outside_census": {
+    "x f32, w f32, b f16": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "raise",
+      "RuntimeError: ew_binary dtype mismatch"
+     ]
+    },
+    "x f32, w f16, b f32": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "ok",
+      "float32"
+     ]
+    }
+   }
+  },
+  "V2_no_weight_check": {
+   "registered_ids_same_forward": 320,
+   "registered_ids_differing": [],
+   "n_registered": 320,
+   "outside_census": {
+    "x f32, w f32, b f16": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "ok",
+      "float32"
+     ]
+    },
+    "x f32, w f16, b f32": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "raise",
+      "RuntimeError: ew_binary dtype mismatch"
+     ]
+    }
+   }
+  },
+  "V3_upcast_any_non_fp32": {
+   "registered_ids_same_forward": 320,
+   "registered_ids_differing": [],
+   "n_registered": 320,
+   "outside_census": {
+    "x f32, w f32, b f16": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "ok",
+      "float32"
+     ]
+    },
+    "x f32, w f16, b f32": {
+     "candidate": [
+      "ok",
+      "float32"
+     ],
+     "variant": [
+      "ok",
+      "float32"
+     ]
+    }
+   }
+  }
+ },
+ "V3_note": "Engine: DISPATCH_FLOAT refuses int64/bool/uint8 in reduce/ew ops (kernels.cu:567-573), so the candidate refuses an int64 x inside g.mean; V3 would cast it to float32 (ops::cast) and return a truncated int64 output. No registered test uses a non-float x.",
+ "input_validation": {
+  "GroupNorm(-2, 6)": "constructed; forward: RuntimeError: stand-in: negative extent reached the engine (the engine itself would accept it)",
+  "GroupNorm(0, 6)": "constructor: ZeroDivisionError: integer modulo by zero",
+  "GroupNorm(2.0, 6)": "constructed; forward ok shape [1, 6]",
+  "GroupNorm(6, 6)": "constructed; forward ok shape [1, 6]",
+  "GroupNorm(2,6) on C=4 input": "RuntimeError: reshape: element count mismatch",
+  "engine_numel_of([1,-2,-3])": 6
+ }
+}

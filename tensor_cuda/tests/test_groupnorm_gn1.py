@@ -1,0 +1,454 @@
+"""GN1 independent value/gradient tests, with CPU-verifiable float64 oracle.
+
+Prior art: Wu and He (2018), Group Normalization (formula and contiguous
+channel grouping); PyTorch GroupNorm docs (biased variance/refusal, living
+version unverified — lead to check). Analytic VJP is the chain rule for that
+formula. Classical central finite differences (Fornberg 1988 is an unverified
+lead for numerical differentiation), used only to validate the independent
+oracle. Fixtures and error budgets are GN1's, frozen before GPU execution in
+artifacts/gn1/REGISTRATION.md and AMENDMENT_01.md. No PyTorch dependency.
+"""
+
+import numpy as np
+import pytest
+
+
+# Prior art: Higham (1996/2002), IEEE 754 rounding; PyTorch normalization
+# accumulation and Micikevicius et al. (2018), Mixed Precision Training.
+# Unverified — lead to check named sources. A1: represented inputs, round one's
+# FP32 compute budget, then exactly one output/leaf-gradient rounding. For FP32
+# error A+R*abs(ref), final rounding gives (1+u)*A+s, (1+u)*R+u;
+# u16=2^-11, s16=2^-25; ubf=2^-8, sbf=2^-134 (subnormal half-step).
+# Frozen before gates in artifacts/gn1/a1/REGISTRATION.md. No GPU-derived tuning.
+TOLERANCES = {
+    "float32": {"forward": (3e-5, 3e-5), "backward": (3e-4, 3e-4)},
+    "float16": {"forward": (3.0044450759887697e-5, 0.0005182958984375),
+                "backward": (0.00030017628669738765, 0.000788427734375)},
+    "bfloat16": {"forward": (3.01171875e-5, 0.0039363671875),
+                 "backward": (0.00030117187499999995, 0.004207421875)},
+}
+DTYPES = tuple(TOLERANCES)
+SHAPES = ((1, 6), (2, 6), (1, 6, 5), (2, 6, 5),
+          (1, 6, 2, 3), (2, 6, 2, 3), (1, 6, 2, 2, 3), (2, 6, 2, 2, 3))
+
+
+def groupnorm_reference(x, groups, weight, bias, eps, projection=None):
+    """Float64 population statistics and analytic scalar-projection VJP.
+
+    Wu/He 2018 normalization, implemented independently using NumPy axis tuples.
+    No TensorCUDA op or implementation output enters this oracle.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    weight = np.asarray(weight, dtype=np.float64)
+    bias = np.asarray(bias, dtype=np.float64)
+    n, c = x.shape[:2]
+    grouped = x.reshape(n, groups, c // groups, *x.shape[2:])
+    axes = tuple(range(2, grouped.ndim))
+    centered = grouped - grouped.mean(axis=axes, keepdims=True)
+    variance = np.mean(centered * centered, axis=axes, keepdims=True)
+    invstd = 1.0 / np.sqrt(variance + eps)
+    normalized = (centered * invstd).reshape(x.shape)
+    affine_shape = (1, c) + (1,) * (x.ndim - 2)
+    output = normalized * weight.reshape(affine_shape) + bias.reshape(affine_shape)
+    if projection is None:
+        return output
+    projection = np.asarray(projection, dtype=np.float64)
+    q = (projection * weight.reshape(affine_shape)).reshape(grouped.shape)
+    dx = invstd * (q - q.mean(axis=axes, keepdims=True)
+                  - centered * invstd**2
+                  * (q * centered).mean(axis=axes, keepdims=True))
+    channel_axes = (0,) + tuple(range(2, x.ndim))
+    dw = (projection * normalized).sum(axis=channel_axes)
+    db = projection.sum(axis=channel_axes)
+    return output, (dx.reshape(x.shape), dw, db)
+
+
+@pytest.mark.parametrize("example", ("two_groups_rank2", "per_channel_rank3"))
+def test_reference_hand_values(example):
+    # Exact binary means/variances and sqrt(var+eps) equal 1 or 2: zero tolerance.
+    if example == "two_groups_rank2":
+        x = np.array([[0., 2., 4., 6.]])
+        groups, w, b, eps = 2, [2., 4., 6., 8.], [1., 2., 3., 4.], 3.
+        means, variances = [1., 5.], [1., 1.]
+        expected = [[0., 4., 0., 8.]]
+    else:
+        x = np.array([[[0., 1.], [2., 3.]]])
+        groups, w, b, eps = 2, [2., 4.], [1., -1.], 0.75
+        means, variances = [0.5, 2.5], [0.25, 0.25]
+        expected = [[[0., 2.], [-3., 1.]]]
+    flat = x.reshape(1, groups, -1)
+    assert np.array_equal(flat.mean(axis=2).ravel(), means)
+    assert np.array_equal(flat.var(axis=2).ravel(), variances)
+    assert np.array_equal(groupnorm_reference(x, groups, w, b, eps), expected)
+
+
+@pytest.mark.parametrize("operand", ("x", "weight", "bias"))
+def test_reference_central_differences(operand):
+    # Central difference O(h^2)+O(eps64/h), eps>=0.125, small bounded inputs;
+    # h=2^-18 gives >100x margin at atol=rtol=2e-7. Classical technique, no novelty.
+    rng = np.random.default_rng(817)
+    x = rng.uniform(-0.5, 0.5, (2, 4, 2))
+    w = np.array([0.5, -0.75, 1.25, 1.5])
+    b = np.array([-0.5, 0.25, 0.75, -0.25])
+    projection = rng.uniform(-1., 1., x.shape)
+    args = [x, w, b]
+    index = ("x", "weight", "bias").index(operand)
+    _, analytical = groupnorm_reference(x, 2, w, b, 0.125, projection)
+    fd = np.empty_like(args[index])
+    h = 2.**-18
+    for pos in np.ndindex(fd.shape):
+        plus = [v.copy() for v in args]
+        minus = [v.copy() for v in args]
+        plus[index][pos] += h
+        minus[index][pos] -= h
+        fp = np.sum(groupnorm_reference(plus[0], 2, plus[1], plus[2], 0.125) * projection)
+        fm = np.sum(groupnorm_reference(minus[0], 2, minus[1], minus[2], 0.125) * projection)
+        fd[pos] = (fp - fm) / (2 * h)
+    assert np.allclose(analytical[index], fd, atol=2e-7, rtol=2e-7), operand
+
+
+def _leaf(tc, data, dtype):
+    # BF16 tensor() casts, which creates an op node whose grad is released by
+    # backward. Detach then require grad: test actual typed leaf parameters/x.
+    result = tc.tensor(data, dtype=dtype).detach()
+    result.requires_grad = True
+    return result
+
+
+def _inputs(shape):
+    rng = np.random.default_rng(121 + len(shape) * 11 + shape[0])
+    x = rng.uniform(-1., 1., shape)
+    x += (0.25 * np.arange(shape[1])).reshape((1, shape[1]) + (1,) * (len(shape) - 2))
+    w = np.array([0.5, -0.75, 1.25, -1.5, 0.875, 1.125])
+    b = np.array([-0.375, 0.625, 0.25, -0.5, 0.75, -0.125])
+    projection = rng.uniform(-1., 1., shape)
+    return x, w, b, projection
+
+
+def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, conditioned=True):
+    # Reference uses only represented source operands, never the engine's output.
+    xn, wn, bn = (t.numpy().astype(np.float64) for t in (x, layer.weight, layer.bias))
+    pn = projection.numpy().astype(np.float64)
+    grouped = xn.reshape(xn.shape[0], groups, -1)
+    if conditioned and grouped.shape[-1] > 1 and eps in (1e-5, 0.125):
+        assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+    expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+    # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+    # by a structural mutant or its engine violates this assertion (A3 D2).
+    # The original exception class/message is preserved and read by evidence.
+    # Kill requires a same-root candidate pass for this input. The parent separately
+    # voids every device-pattern failure, including chained exceptions.
+    try:
+        output = layer(x)
+    except (RuntimeError, ValueError, TypeError) as exc:
+        raise AssertionError(f"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}") from exc
+    atol, rtol = TOLERANCES[dtype]["forward"]
+    assert output.dtype == dtype
+    assert output.shape == xn.shape
+    assert np.isfinite(expected).all() and np.isfinite(output.numpy()).all(), "nonfinite forward"
+    assert np.allclose(output.numpy(), expected, atol=atol, rtol=rtol), "forward values"
+    if backward:
+        (output * projection).sum().backward()
+        for name, tensor, expected_grad in zip(("x", "weight", "bias"),
+                                               (x, layer.weight, layer.bias), grads):
+            assert tensor.grad is not None, name + " gradient unreachable"
+            assert tensor.grad.dtype == tensor.dtype, name + " gradient dtype"
+            atol, rtol = TOLERANCES[tensor.dtype]["backward"]
+            actual = tensor.grad.numpy().astype(np.float64)
+            assert np.isfinite(expected_grad).all() and np.isfinite(actual).all(), name + " nonfinite gradient"
+            assert actual.shape == expected_grad.shape, name
+            assert np.allclose(actual, expected_grad, atol=atol, rtol=rtol), name + " gradient values"
+
+
+def _cases(backward):
+    # Prior art: DeMillo, Lipton and Sayward (1978), mutation testing. These
+    # value/gradient cases target the registered GN1 one-decision mutants;
+    # artifacts/gn1/MUTANTS.md names each predicted witness, not an observed kill.
+    cases = []
+    for dtype in DTYPES:
+        for shape in SHAPES:
+            for groups in (1, 2, 6):
+                for eps in (1e-5, 0.125):
+                    # A1 restores both singleton default-eps FP16 backward IDs:
+                    # float32 compute keeps eps**(-1.5) representable.
+                    label = f"{dtype}-r{len(shape)}-n{shape[0]}-g{groups}-" + ("default" if eps == 1e-5 else "eps0125")
+                    cases.append(pytest.param(dtype, shape, groups, eps, id=label))
+    return cases
+
+
+@pytest.mark.parametrize("dtype,shape,groups,eps", _cases(False))
+def test_forward_values(dtype, shape, groups, eps):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs(shape)
+    layer = nn.GroupNorm(groups, shape[1]) if eps == 1e-5 else nn.GroupNorm(groups, shape[1], eps=eps)
+    layer.weight = _leaf(tc, w, dtype)
+    layer.bias = _leaf(tc, b, dtype)
+    _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                  groups, eps, dtype, False)
+
+
+@pytest.mark.parametrize("dtype,shape,groups,eps", _cases(True))
+def test_backward_values(dtype, shape, groups, eps):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs(shape)
+    layer = nn.GroupNorm(groups, shape[1]) if eps == 1e-5 else nn.GroupNorm(groups, shape[1], eps=eps)
+    layer.weight = _leaf(tc, w, dtype)
+    layer.bias = _leaf(tc, b, dtype)
+    _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                  groups, eps, dtype, True)
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_near_epsilon(dtype, backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    # Exactly representable group variance equal to eps: ignoring eps changes
+    # normalization by sqrt(2), well outside even the BF16 forward budget.
+    eps = 2.**-12 if dtype == "float32" else 0.25
+    amplitude = 2.**-6 if dtype == "float32" else 0.5
+    values = np.tile([-amplitude, amplitude], 24).reshape(2, 6, 4)
+    values += np.repeat([0., 0.25, 0.5], 2).reshape(1, 6, 1)
+    assert np.array_equal(values.reshape(2, 3, 8).var(axis=2), np.full((2, 3), eps))
+    _, w, b, projection = _inputs(values.shape)
+    layer = nn.GroupNorm(3, 6, eps=eps)
+    layer.weight = _leaf(tc, w, dtype)
+    layer.bias = _leaf(tc, b, dtype)
+    _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                  3, eps, dtype, backward)
+
+
+def test_constructor_defaults():
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    assert layer.eps == 1e-5
+    assert np.array_equal(layer.weight.numpy(), np.ones(6))
+    assert np.array_equal(layer.bias.numpy(), np.zeros(6))
+    assert layer.weight.requires_grad and layer.bias.requires_grad
+
+
+def test_nondivisible_refusal():
+    from tensor_cuda import nn
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(4, 6))
+    assert "4" in str(error) and "6" in str(error)
+
+
+# Prior art: IEEE 754 round-to-nearest/ties-to-even (1985/2019), emulated on
+# host only for CPU reference validation. This never replaces an engine run.
+def represented(data, dtype):
+    values = np.asarray(data, dtype=np.float32)
+    if dtype == "float16":
+        return values.astype(np.float16).astype(np.float64)
+    if dtype == "bfloat16":
+        bits = values.view(np.uint32)
+        rounded = (bits + np.uint32(0x7fff) + ((bits >> 16) & 1)) & np.uint32(0xffff0000)
+        return rounded.view(np.float32).astype(np.float64)
+    return values.astype(np.float64)
+
+
+def low_variance_inputs(variance):
+    # A1's own finite census: exactly symmetric represented centers, extent 8.
+    # |q|<=.75 and invstd<=317 keep FP32 VJP error within round one's budget.
+    amplitude = np.sqrt(variance)
+    values = np.tile([-amplitude, amplitude], 24).reshape(2, 6, 4)
+    _, w, b, _ = _inputs(values.shape)
+    projection = np.tile([-.5, -.25, .125, .375, .25, -.125, .5, -.375], 6).reshape(values.shape)
+    return values, w, b, projection
+
+
+def _configure_parameters(tc, layer, w, b, configuration):
+    if configuration == "default":
+        # Exercise the module's own untouched float32 parameters.
+        assert layer.weight.dtype == layer.bias.dtype == "float32"
+    else:
+        assert configuration == "half"
+        layer.weight = _leaf(tc, w, "float32")
+        layer.bias = _leaf(tc, b, "float32")
+        assert layer.half() is layer  # actual public mixed-precision path
+        assert layer.weight.dtype == layer.bias.dtype == "float16"
+    assert layer.parameters() == [layer.weight, layer.bias]
+
+
+@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
+@pytest.mark.parametrize("configuration", ("default", "half"))
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_mixed_parameters(dtype, configuration, backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs((2, 6, 4))
+    layer = nn.GroupNorm(3, 6)
+    _configure_parameters(tc, layer, w, b, configuration)
+    _check_values(tc, layer, _leaf(tc, values, dtype), tc.tensor(projection, dtype=dtype),
+                  3, 1e-5, dtype, backward)
+
+
+@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
+@pytest.mark.parametrize("configuration", ("default", "half"))
+@pytest.mark.parametrize("variance", (1e-4, 1e-6), ids=("var1e-4", "var1e-6"))
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_low_variance(dtype, configuration, variance, backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = low_variance_inputs(variance)
+    layer = nn.GroupNorm(3, 6)
+    _configure_parameters(tc, layer, w, b, configuration)
+    x = _leaf(tc, values, dtype)
+    actual_variance = x.numpy().astype(np.float64).reshape(2, 3, 8).var(axis=2)
+    # Input representation moves the decimal target by <1%; never relabel it
+    # as exact decimal variance. Every group remains in the overflow domain.
+    assert np.all(np.abs(actual_variance / variance - 1) < .01)
+    assert np.all((actual_variance + layer.eps)**(-1.5) > 65504)
+    _check_values(tc, layer, x, tc.tensor(projection, dtype=dtype),
+                  3, layer.eps, dtype, backward, conditioned=False)
+
+
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_fp32_input_half_parameters(backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs((2, 6, 4))
+    layer = nn.GroupNorm(3, 6)
+    _configure_parameters(tc, layer, w, b, "half")
+    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                  3, 1e-5, "float32", backward)
+
+
+@pytest.mark.parametrize("dtype", ("float16", "bfloat16"))
+@pytest.mark.parametrize("configuration", ("default", "half"))
+@pytest.mark.parametrize("variance", (1e-4, 1e-6), ids=("var1e-4", "var1e-6"))
+@pytest.mark.parametrize("operand", ("x", "weight", "bias"))
+def test_reference_low_variance_central_differences(dtype, configuration, variance, operand):
+    # Classical central differences; Fornberg (1988), unverified lead to check.
+    # h=2^-25; h^2/(var+eps)<9e-11. Registration derives atol=rtol=2e-7.
+    values, w, b, projection = low_variance_inputs(variance)
+    x = represented(values, dtype)
+    if configuration == "default":
+        w, b = np.ones(6), np.zeros(6)
+    else:
+        w, b = represented(w, "float16"), represented(b, "float16")
+    projection = represented(projection, dtype)
+    args = [x, w, b]
+    index = ("x", "weight", "bias").index(operand)
+    _, analytical = groupnorm_reference(x, 3, w, b, 1e-5, projection)
+    fd = np.empty_like(args[index])
+    h = 2.**-25
+    for pos in np.ndindex(fd.shape):
+        plus, minus = [v.copy() for v in args], [v.copy() for v in args]
+        plus[index][pos] += h
+        minus[index][pos] -= h
+        fp = np.sum(groupnorm_reference(plus[0], 3, plus[1], plus[2], 1e-5) * projection)
+        fm = np.sum(groupnorm_reference(minus[0], 3, minus[1], minus[2], 1e-5) * projection)
+        fd[pos] = (fp - fm) / (2 * h)
+    assert np.isfinite(analytical[index]).all() and np.isfinite(fd).all()
+    assert np.allclose(analytical[index], fd, atol=2e-7, rtol=2e-7), operand
+
+
+# Prior art: PyTorch GroupNorm domain checks (living implementation unverified
+# — lead to check). A2 requires a positive Python int with bool excluded and
+# explicit rank/channel/dtype refusals, rather than incidental engine errors.
+def _expect_refusal(kind, operation):
+    error = None
+    try:
+        operation()
+    except Exception as exc:
+        error = exc
+    assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+    return error
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("value", (0, -2, 2.0, True, False, "2", None),
+                         ids=("zero", "negative", "float", "true", "false", "string", "none"))
+def test_positive_integer_refusal(name, value):
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = value
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+    assert name in str(error) and "positive integer" in str(error)
+
+
+@pytest.mark.parametrize("shape", ((), (6,), (2, 4, 3)), ids=("rank0", "rank1", "channels"))
+def test_shape_refusal(shape):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.zeros(shape), dtype="float32")))
+    assert ("rank" if len(shape) < 2 else "channels") in str(error)
+
+
+@pytest.mark.parametrize("operand", ("input", "weight", "bias"))
+@pytest.mark.parametrize("dtype", ("int64", "bool", "uint8"))
+def test_dtype_refusal(dtype, operand):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    x = tc.tensor(np.ones((2, 6)), dtype=dtype if operand == "input" else "float32")
+    if operand != "input":
+        setattr(layer, operand, tc.tensor(np.ones(6), dtype=dtype))
+    error = _expect_refusal(TypeError, lambda: layer(x))
+    assert dtype in str(error) and operand in str(error)
+
+
+@pytest.mark.parametrize("weight_dtype,bias_dtype", (("float32", "float16"), ("float16", "float32")),
+                         ids=("w32-b16", "w16-b32"))
+@pytest.mark.parametrize("backward", (False, True), ids=("forward", "backward"))
+def test_distinct_parameter_dtypes(weight_dtype, bias_dtype, backward):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    values, w, b, projection = _inputs((2, 6, 4))
+    layer = nn.GroupNorm(3, 6)
+    layer.weight = _leaf(tc, w, weight_dtype)
+    layer.bias = _leaf(tc, b, bias_dtype)
+    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                  3, 1e-5, "float32", backward)
+
+
+# Prior art: Python index protocol, PEP 357 (2006); boundary testing Myers
+# (1979, unverified — lead to check). D5 specifies boolean exclusion.
+class _IndexCount:
+    def __init__(self, value):
+        self.value = value
+
+    def __index__(self):
+        return self.value
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("kind", (np.int64, np.int32, np.uint8, _IndexCount),
+                         ids=("np_int64", "np_int32", "np_uint8", "index_object"))
+def test_index_counts(name, kind):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = kind(args[name])
+    layer = nn.GroupNorm(**args)
+    assert type(layer.G) is int and type(layer.C) is int
+    values, w, b, projection = _inputs((2, 6, 5))
+    layer.weight = _leaf(tc, w, "float32")
+    layer.bias = _leaf(tc, b, "float32")
+    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                  2, 1e-5, "float32", False)
+
+
+@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+@pytest.mark.parametrize("value", (np.bool_(True), np.bool_(False)), ids=("true", "false"))
+def test_numpy_bool_refusal(name, value):
+    from tensor_cuda import nn
+    args = dict(num_groups=2, num_channels=6)
+    args[name] = value
+    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+    assert name in str(error) and "positive integer" in str(error)
+
+
+@pytest.mark.parametrize("operand", ("weight", "bias"))
+@pytest.mark.parametrize("shape", ((), (2, 3), (6, 1), (1, 6, 1), (5,), (7,)),
+                         ids=("scalar", "matrix23", "matrix61", "rank3", "short", "long"))
+def test_parameter_shape_refusal(operand, shape):
+    import tensor_cuda as tc
+    from tensor_cuda import nn
+    layer = nn.GroupNorm(2, 6)
+    setattr(layer, operand, tc.tensor(np.ones(shape), dtype="float32"))
+    error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.ones((2, 6, 3)), dtype="float32")))
+    assert operand in str(error)

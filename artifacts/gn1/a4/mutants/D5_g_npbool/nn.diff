@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ D5_g_npbool/nn.py
+@@ -515,7 +515,7 @@
+         # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
+         # integer-index protocol; excluding both boolean types is D5 policy.
+         import operator
+-        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
++        if isinstance(num_groups, bool) or not isinstance(num_groups, np.bool_):
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+         try:
+             num_groups = int(operator.index(num_groups))

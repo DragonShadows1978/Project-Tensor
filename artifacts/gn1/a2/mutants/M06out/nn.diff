@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M06out/nn.py
+@@ -557,7 +557,7 @@
+         # as required by Wu and He (2018) and PyTorch GroupNorm.
+         mean = g.mean([2], True); var = g.var([2], True)
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+-        g = g.reshape([N, C] + spatial)
++        g = g.reshape([N, self.G, C // self.G] + spatial).permute([0, 2, 1] + list(range(3, 3 + len(spatial)))).reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+         if (dtype == "float32" and self.weight.dtype == "float32"
+                 and self.bias.dtype == "float32"):

@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ D5_weight_rank/nn.py
+@@ -555,7 +555,7 @@
+             raise TypeError(f"GroupNorm bias dtype {self.bias.dtype!r} is unsupported")
+         # Prior art: PyTorch GroupNorm parameter shape validation (observed
+         # separately on CPU). D5 requires explicit refusal before tensor ops.
+-        if self.weight.ndim != 1:
++        if False:
+             raise ValueError("GroupNorm weight must have rank 1")
+         if self.weight.shape[0] != self.C:
+             raise ValueError(f"GroupNorm weight length must equal num_channels ({self.C})")

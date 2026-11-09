@@ -1,0 +1,129 @@
+{
+  "review": "GN1-REV1",
+  "reviewer": "Claude Opus 5.5 (Agent-tool seat), cross-model review of Codex GPT-6.1 Sol work",
+  "reviewed_commits": {"round1": "50b3418f", "a1": "0c6a4244", "order": "1498cf9b", "base": "0e1dea3"},
+  "status": "complete",
+  "verdict": "REJECT",
+  "counts": {"BLOCKER": 0, "MAJOR": 2, "MINOR": 5, "NIT": 4},
+  "findings": [
+    {
+      "id": "R1-F01",
+      "severity": "MAJOR",
+      "owner": "GPU tooling (artifacts/gn1/a1/run_gpu_line.py)",
+      "file_line": "artifacts/gn1/a1/run_gpu_line.py:49-52",
+      "title": "Device-failure filter misses the engine's own CUDA error text, so a device fault counts as a mutant kill",
+      "detail": "The engine reports kernel faults through cuda_check_last as 'CUDA error at <op>: <cudaGetErrorString>' (tensor_cuda/src/kernels.cu:100-105), e.g. 'an illegal memory access was encountered', 'unspecified launch failure', 'the launch timed out and was terminated'. None of the six filter words ('cudaMalloc', 'no CUDA-capable device', 'CUDA driver', 'cudaError', 'initialization error', 'invalid device ordinal') occurs in that text. A sticky device fault fails every later test, and evaluate() then counts the mutant as killed. A1's own MUTANTS.md says device failures are invalid kills.",
+      "reproduction": "rev1/hostile_scorer.py case H2 (real run_gpu_line.py, sha256 equal to staging_seal): M07 line, stand-in child reports 351 failures 'RuntimeError: CUDA error at reduce_lastdim: an illegal memory access was encountered', exit 1 -> parent_result passed=true, reasons=[], 351 actual_killers. Control H2c with 'cudaErrorIllegalAddress' -> rejected ('device/setup failure'). Receipt: rev1/hostile_results.json.",
+      "fix": "Add 'CUDA error at' (and 'cudaMallocAsync failed', 'out of memory', 'illegal memory access', 'unspecified launch failure', 'launch timed out') to the device patterns, or invert the rule: a kill counts only when no failure matches a device pattern AND at least one failing ID that exercises nn.GroupNorm fails with an AssertionError or one of the registered structural refusals (reshape element count mismatch, ew_binary dtype mismatch, broadcast mismatch, DID NOT RAISE)."
+    },
+    {
+      "id": "R1-F02",
+      "severity": "MAJOR",
+      "owner": "GPU tooling (artifacts/gn1/a1/run_gpu_line.py)",
+      "file_line": "artifacts/gn1/a1/run_gpu_line.py:22-68, 99-101, 115",
+      "title": "The parent trusts the child's summary without binding it to the line: arm, suite, nn sha256, engine sha256 and JUnit are never cross-checked",
+      "detail": "evaluate() takes data['suite'] and data['arm'] from child_result.json and never compares them, or data['nn_sha256']/data['engine_sha256'], with the arm and suite in its own command and the sealed hashes. junit.xml, written by pytest itself, is never read. A mutant line is therefore counted as killed by failures from another arm, and a focus line passes on a summary that pytest's own JUnit contradicts. Any failing call counts as a kill, including the pure-NumPy test_reference_* IDs that no mutant can affect.",
+      "reproduction": "rev1/hostile_scorer.py: H3 (M09 line; child summary arm='baseline', reshape-error failures) -> passed=true, 290 killers; H4 (candidate_focus; child summary all passed, junit.xml failures=3) -> passed=true. Receipt: rev1/hostile_results.json. (H3b, a suite swap with exit 0, is rejected only by the exit-code check.)",
+      "fix": "In the parent, derive arm and suite from its own argv and require data['arm']==arm, data['suite']==suite, data['nn_sha256']==staging_seal arms[arm]['nn.py'], data['engine_sha256']==engine_pin sha256; parse junit.xml and require its per-test outcomes to equal the call reports; for mutation lines require at least one killer outside test_reference_*."
+    },
+    {
+      "id": "R1-F03",
+      "severity": "MINOR",
+      "owner": "GPU tooling (artifacts/gn1/a1/score_gpu.py)",
+      "file_line": "artifacts/gn1/a1/score_gpu.py:101-110",
+      "title": "The G5 scorer accepts parent receipts alone: no START record, no child results, no exit re-check, and a RUNS root outside a1",
+      "detail": "score_gpu.py reads only parent_result.json's passed/timeout/audit flags. It does not check START.json (the L59 start record and its seal hash), child_result.json, the expected exit from gpu_lines.json, or that RUNS lies under a1 (run_gpu_line.py and run_gpu_tests.py both refuse that).",
+      "reproduction": "rev1/hostile_scorer.py H1: 22 forged parent_result.json files (passed=true), no START.json, no child results -> G5_SUMMARY passed=true, scorer exit 0. H1b: same files under /tmp (outside a1) -> scorer exit 0. Receipt: rev1/hostile_results.json.",
+      "fix": "Scorer re-verifies: START.json present, audit=false, seal_sha256 equal to the current staging_seal.json; per line, child_result.json present, exit == pytest_exit == gpu_lines.json expected exit, the F02 bindings, killers drawn from the child's failed calls; same RUNS-under-a1 guard as the parent."
+    },
+    {
+      "id": "R1-F04",
+      "severity": "MINOR",
+      "owner": "mutant set (artifacts/gn1/a1/mutants, MUTANTS.md)",
+      "file_line": "artifacts/gn1/a1/arms/M07|M08|M09/tensor_cuda/nn.py:544,547; M06 nn.py:535-537,542-543; M15 nn.py:530,545-546; M17 nn.py:545-549",
+      "title": "Six mutants are multi-site edits, and M07/M08/M09's second site is never reached by their registered witness",
+      "detail": "Round 1 D4 defines a mutant as 'the fixed nn.py with one edit'; review Q4 asks for single edits. M06, M07, M08, M09, M15 and M17 edit two or more sites. For M07/M08/M09 the registered witness test_forward_values[float32-r3-n2-g2-default] takes the float32 fast path and executes line 544 only. The edit at line 547 (the mixed-precision affine) is never executed by the witness, so no mutant receipt can show that the mixed branch's weight/bias decisions are pinned. Value tests at float16/bfloat16 would very likely kill single-site variants at line 547, but no registered mutant demonstrates it.",
+      "reproduction": "rev1/shim_trace.py (real arm nn.py files under a NumPy stand-in engine, sys.settrace): M07/M08/M09 edited_lines [544, 547], edited_lines_executed [544]. Receipt: rev1/shim_trace_results.json.",
+      "fix": "Split M07/M08/M09 into single-site mutants for the fast path (line 544) and the mixed path (line 547), each with a witness that reaches its site (for example test_forward_values[float16-r3-n2-g2-default] for line 547). Split M06 or record why its paired edits are the minimal compilable form; do the same for M15 and M17, where the second edit keeps the mutant from failing on a dtype mismatch."
+    },
+    {
+      "id": "R1-F05",
+      "severity": "MINOR",
+      "owner": "test file (tensor_cuda/tests/test_groupnorm_gn1.py) and mutant set",
+      "file_line": "tensor_cuda/tensor_cuda/nn.py:542-543 (per-parameter dtype checks), nn.py:530 (upcast predicate)",
+      "title": "Decisions no mutant covers and no test pins: mixed weight/bias dtypes, and refusal of non-float input",
+      "detail": "Every registered value ID has weight dtype == bias dtype; the census has 7 (x, w, b) combinations and none differs between w and b. No ID uses a non-float x. So three single-edit variants give the same forward on all 320 value IDs: V1 drops 'and self.bias.dtype == \"float32\"'; V2 drops the weight check; V3 uses 'dtype != \"float32\"' as the upcast predicate. They differ on accepted inputs: V1 raises 'ew_binary dtype mismatch' for x f32, w f32, b f16, and V2 for x f32, w f16, b f32, where the candidate returns the correct float32 output. V3 would cast an int64 x to float32 and return a truncated int64 output, where the candidate refuses in the engine (DISPATCH_FLOAT, kernels.cu:567-573).",
+      "reproduction": "rev1/decisions_probe.py -> rev1/decisions_probe_results.json (param_dtype_census, any_weight_bias_dtype_differ=false, variants V1-V3: registered_ids_same_forward=320/320, outside_census outcomes).",
+      "fix": "Add value tests with weight dtype != bias dtype (float32 x with f32/f16 and f16/f32 parameters; float16 x with mixed parameters) and a refusal test for int64 x. Register V1, V2 and V3 as mutants with these witnesses."
+    },
+    {
+      "id": "R1-F06",
+      "severity": "MINOR",
+      "owner": "product (tensor_cuda/tensor_cuda/nn.py, GroupNorm)",
+      "file_line": "tensor_cuda/tensor_cuda/nn.py:515 (constructor), 535 and 544-547 (forward)",
+      "title": "Accepted inputs that are wrong: num_groups <= 0, and no explicit channel/rank check",
+      "detail": "The only constructor check is num_channels % num_groups != 0. GroupNorm(0, 6) raises ZeroDivisionError, not the class's ValueError. GroupNorm(-2, 6) is accepted, because 6 % -2 == 0. Its forward calls reshape([N, -2, -3*prod(spatial)]), and NDArray::reshape accepts that: numel_of multiplies the signs, (-2)*(-3) = 6 = numel (kernels.cu:80-88, 757-760). Negative extents then reach reduce_impl and the allocator. An input whose x.shape[1] != num_channels is refused only incidentally, by 'reshape: element count mismatch' on the weight. Rank 0 or 1 input raises IndexError.",
+      "reproduction": "rev1/decisions_probe.py input_validation: GroupNorm(-2, 6) constructed, forward reaches a negative extent (the stand-in stops there; engine argument from kernels.cu:80-88); GroupNorm(0, 6) -> ZeroDivisionError; engine_numel_of([1,-2,-3]) = 6. The engine cannot allocate without a GPU, so the engine-side step is argued from source. PyTorch's behaviour for these inputs is unverified - lead to check: 'torch.nn.GroupNorm negative num_groups'.",
+      "fix": "In __init__, raise ValueError naming the values when num_groups or num_channels is not a positive int. In forward, raise ValueError when x.ndim < 2 or x.shape[1] != self.C. Add refusal tests (GroupNorm(0, 6), GroupNorm(-2, 6), a channel mismatch) and one mutant per check."
+    },
+    {
+      "id": "R1-F07",
+      "severity": "MINOR",
+      "owner": "GPU tooling (STAGED_GPU_COMMANDS.sh candidate_regression line, run_gpu_line.py)",
+      "file_line": "artifacts/gn1/a1/STAGED_GPU_COMMANDS.sh:38-39 (expected child 0); artifacts/gn1/a1/run_gpu_line.py:24-25, 63-67, 102-114",
+      "title": "The candidate regression line requires every test in 10 files to pass, which is stricter than the order's regression rule",
+      "detail": "Round 1 D5(c) defines a regression as a test that passes on the baseline and fails on the candidate. The staged line expects child exit 0, so any failure that is already present on both arms (a pre-existing, unrelated defect) makes the line, and G5, RED with no regression. No receipt shows that these 10 files all pass on 0e1dea3 on this GPU, so the expected exit 0 is an unreceipted prediction. The failure mode is a false RED, not a false PASS.",
+      "reproduction": "Argument from code: evaluate() appends 'expected exit 0, got 1' whenever any call fails, before and independently of the regressions.json comparison at lines 102-114.",
+      "fix": "For candidate_regression, accept child exit 0 or 1 and pass iff regressions.json is empty and every candidate failure also failed on the baseline. Alternatively, cite a receipt that all 10 files pass at 0e1dea3 on this device, and register exit 0 as a prediction whose miss is reported separately from 'regression'."
+    },
+    {
+      "id": "R1-F08",
+      "severity": "NIT",
+      "owner": "GPU tooling (artifacts/gn1/a1/run_gpu_line.py)",
+      "file_line": "artifacts/gn1/a1/run_gpu_line.py:77-79, 94-96",
+      "title": "A lease refusal (no window or no lock) permanently consumes the label in its run root",
+      "detail": "The parent creates RUNS/<label> before forge-gpu-run decides whether to admit the line. An exit of 75 or 76 leaves a failed receipt, and a retry in the same root dies with FileExistsError and writes no receipt. Mutation lines need candidate_focus in the same root, and candidate_regression needs baseline_regression, so one refusal forces all 22 lines to be rerun in a new root. It fails closed.",
+      "reproduction": "rev1/hostile_scorer.py H5: first attempt exit 75 -> receipt passed=false; retry in the same root -> FileExistsError traceback, no new receipt. Receipt: rev1/hostile_results.json.",
+      "fix": "When rc is 75 or 76 and no child_result.json exists, record a 'not_admitted' receipt under RUNS/<label>/attempt-<n>/ and allow a retry; the parent and scorer use the single admitted attempt."
+    },
+    {
+      "id": "R1-F09",
+      "severity": "NIT",
+      "owner": "tolerance documents",
+      "file_line": "artifacts/gn1/TOLERANCES.md:7-8 ('~7x', '~70x gamma_71'); artifacts/gn1/a1/TOLERANCES.md:13 ('20*u32*.75*317<2.84e-4')",
+      "title": "The float32 budgets are stated as multipliers, not derived",
+      "detail": "The factors 7, 70 and 20 are not derived. The low-variance line leaves a 5% margin on an unexplained factor. The budgets do hold: the reviewer's first-order running error bound of the engine's float32 graph (CUDA powf taken as 4 ulp, unverified) peaks at 0.907 of the float32 budget (test_low_variance[backward-var1e-4-half-*]). The next highest is 0.803 (test_near_epsilon[backward-float32]). Emulated float32 error, worst of three summation orders, peaks at 0.014 of budget. The written arithmetic does not show any of this.",
+      "reproduction": "rev1/run_numerics.py -> rev1/numerics_results.json (bound.top12_by_bound, honest.*).",
+      "fix": "Replace the multipliers with a bound. Either cite rev1's running bound or write the per-op derivation. State the powf ulp assumption and the margin."
+    },
+    {
+      "id": "R1-F10",
+      "severity": "NIT",
+      "owner": "staging (artifacts/gn1/a1/arms, artifacts/gn1/arms)",
+      "file_line": "artifacts/gn1/a1/arms/*/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so (symlinks); git status '?? artifacts/gn1/a1/arms/'",
+      "title": "The arms G5 runs are untracked, and each arm's engine is an absolute symlink into the worktree package",
+      "detail": "Commit 0c6a4244 does not contain the 20 arm directories, so G5 can run only in this worktree. Each arm's engine is a symlink to $WORKTREE/tensor_cuda/tensor_cuda/_tensor_cuda...so, and round 1's mutant arms also use file and directory symlinks. Integrity holds: the seal pins every arm file by sha256, and the reviewer's maps match it (rev1/arms_probe_results.json). This machine's standing seat law says never create symlinks. Whether that law binds Codex seats is not stated in HOUSE_RULES.md; the lead should rule.",
+      "reproduction": "ls -la artifacts/gn1/a1/arms/candidate/tensor_cuda; git status --short; rev1/arms_probe_results.json so_symlink_targets.",
+      "fix": "Lead rules on symlinks. If they are disallowed: load the pinned module by explicit path (importlib.machinery.ExtensionFileLoader on the pinned file), or copy the file into each arm with the sha256 check kept. Commit the arm Python sources, or a script that regenerates them, so G5 can be reproduced from the commit."
+    },
+    {
+      "id": "R1-F11",
+      "severity": "NIT",
+      "owner": "GPU tooling (artifacts/gn1/a1/run_gpu_line.py)",
+      "file_line": "artifacts/gn1/a1/run_gpu_line.py:118",
+      "title": "The 'timeout' flag also labels forge-gpu-run's window-closed exit as a timeout",
+      "detail": "forge-gpu-run returns 124 for both 'timeout' and 'window-closed' (the installed forge-gpu-run script, supervise(), lines 184-185). It records which one in FORGE_GPU_RUN_LOG, and the parent points that log at <line>/forge.log but never reads it. Pass/fail is unaffected, since 124 never equals an expected exit, but the receipt can misstate the cause.",
+      "reproduction": "Argument from both sources. H6 in rev1/hostile_results.json shows the timeout path is recorded (exit 124, timeout=true, passed=false).",
+      "fix": "Read the last line of <line>/forge.log and record forge_outcome (ran, timeout, window-closed, no-window, no-lock) next to the exit."
+    }
+  ],
+  "checked_sound": [
+    "Q1: the float32 path equals round 1's, re-run by AST statement comparison (rev1/float32_identity_recheck.txt: True); every other dtype/parameter configuration in the census computes in float32, with gradients in each leaf's dtype by the cast backward (ops.cpp:1058-1065)",
+    "Q2: the test oracle is independent: it uses only represented source operands read before the forward; it agrees with the reviewer's loop implementation to 3.6e-15; the reviewer's own VJP derivation matches its own central differences (9.4e-10); hand case x=[1,3], G=1, eps=0 matches exactly",
+    "Q3: every value mutant exceeds its witness tolerance by >= 4906x; honest float32 error is within budget (running bound max 0.907, emulation max 0.014); low-precision destination tolerances are correctly composed ((1+u)A+s, (1+u)R+u)",
+    "Q4: every witness reaches its mutant's edited line (M14 by call-path argument: the default eps is evaluated at definition time and the witness calls GroupNorm(2, 6) without eps)",
+    "Q5: setup failures, collection errors, timeouts, a child hang after writing a passing summary (H6), a suite swap with the wrong exit (H3b) and a cudaError-worded device failure (H2c) are all rejected by the real parent",
+    "Q6: every arm differs from the candidate only in nn.py; baseline .py files equal 0e1dea3; the seal matches disk; the single .so target's sha256 equals the pin; the import probe per arm class resolves tensor_cuda, nn, functional and _C to the right files, also after test_apa_om135_imm's sys.path insert",
+    "Q7: outside artifacts/gn1, orders and logs only nn.py (all hunks inside the GroupNorm class, lines 510-548) and the new test file changed; 7595 tracked sha256 values recomputed, 0 mismatches; the regression file census equals a grep of nn importers (10/10)"
+  ]
+}

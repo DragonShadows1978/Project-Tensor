@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M12/nn.py
+@@ -556,7 +556,7 @@
+         # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
+         # as required by Wu and He (2018) and PyTorch GroupNorm.
+         mean = g.mean([2], True); var = g.var([2], True)
+-        g = (g - mean) * (var + self.eps).pow(-0.5)
++        g = g
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+         if (dtype == "float32" and self.weight.dtype == "float32"

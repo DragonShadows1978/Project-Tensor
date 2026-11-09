@@ -1,0 +1,37 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_positive_integer_refusal[true-num_groups] ________________
+
+name = 'num_groups', value = True
+
+    @pytest.mark.parametrize("name", ("num_groups", "num_channels"))
+    @pytest.mark.parametrize("value", (0, -2, 2.0, True, False, "2", None),
+                             ids=("zero", "negative", "float", "true", "false", "string", "none"))
+    def test_positive_integer_refusal(name, value):
+        from tensor_cuda import nn
+        args = dict(num_groups=2, num_channels=6)
+        args[name] = value
+>       error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_groupnorm_gn1.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+kind = <class 'ValueError'>
+operation = <function test_positive_integer_refusal.<locals>.<lambda> at 0x76d2a7ea6e80>
+
+    def _expect_refusal(kind, operation):
+        error = None
+        try:
+            operation()
+        except Exception as exc:
+            error = exc
+>       assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+E       AssertionError: expected ValueError, got None
+E       assert False
+E        +  where False = isinstance(None, <class 'ValueError'>)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:357: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_positive_integer_refusal[true-num_groups]
+1 failed in 0.05s

@@ -1,0 +1,76 @@
+{
+ "review": "GN1-REV5",
+ "reviewer": "Claude Opus 5.5 (Agent-tool seat); cross-model re-review of Codex's A5",
+ "target": "A5 24ddbff3 (receipts artifacts/gn1/a5/)",
+ "order_commit": "e914aa49",
+ "status": "complete",
+ "verdict": "REJECT",
+ "findings": [
+  {
+   "id": "R5-F01",
+   "severity": "MINOR",
+   "owner": "GPU tooling (a5/evidence.py)",
+   "where": "a5/evidence.py:330-331 (bound_reasons compares runner[1:] only; runner[0] = command[0] is never compared with the registered GPU_RUN 'forge-gpu-run', STAGED_GPU_COMMANDS.sh:17)",
+   "title": "The scorer accepts any single-token runner executable, so a wrapper can make the installed runner apply a different bound, and skip the GPU lock, while the receipt argv is exactly canonical",
+   "reproduction": "hostile_rev5.py part q, case Q2_wrapped_runner_command0 (hostile_rev5_q.json). command = [/tmp/gn1_rev5_tools/wrapped-runner, --min 250 --max 300 --label candidate_focus, --, timeout --kill-after=10s 240s python3 run_gpu_tests.py candidate focus]; the wrapper execs the REAL installed runner with '--max 900 --self-leasing' appended. The kernel's view (/proc cmdline recorded by the PATH python3 dispatcher) shows the runner ran with '--max 900 --self-leasing'; the runner's own row records budget 869.999977 (honest control Q2_control_real_runner_honest: 269.999960) and waited 0.000000 while the reviewer HELD the scratch lock (control Q2_control_real_runner_lock_held: the unwrapped runner waited 20 s and refused with no-lock 76). Parent passed=true; scorer line passed=true, reasons []. Q_honest also passes with a fixture runner (standin-runner) as command[0].",
+   "fix": "Bind command[0]: require runner[0] == 'forge-gpu-run' (the staged GPU_RUN) in bound_reasons, and have the parent record the resolved runner path (shutil.which with the child's PATH) and its sha256, which the scorer compares with a sealed pin of the installed runner (sha256 ad6c0a22...e107, as D3_ARITHMETIC.md records). CPU controls then need a fixture installed under that name or a declared control mode that cannot establish acceptance. Add the wrapper case as a G4 control."
+  },
+  {
+   "id": "R5-F02",
+   "severity": "MINOR",
+   "owner": "GPU tooling (a5/run_gpu_line.py, a5/STAGED_GPU_COMMANDS.sh, a5/evidence.py)",
+   "where": "a5/run_gpu_line.py:54-58 (child env = os.environ plus fixed keys: PATH, FORGE_GPU_SUMMARY, FORGE_GPU_WINDOW_FILE, FORGE_GPU_LOCK, FORGE_GPU_KILL_GRACE, FORGE_GPU_POLL pass through) and :62 (outer 'timeout' resolved by PATH); receipt :99-104 records none of them nor the resolved executables; STAGED_GPU_COMMANDS.sh:15-17 pins grace and poll only and leaves PATH and the summary/window/lock overrides to the caller's environment",
+   "title": "Environment outside argv changes the applied bound or the window/lock the runner honours, and the scorer cannot see it",
+   "reproduction": "hostile_rev5.py part q, case Q2_path_shadow_inner_timeout: a PATH-first 'timeout' rewrites only the registered '--kill-after=10s 240s' to 900s; the kernel's view of the inner process is ['/usr/bin/timeout', '--kill-after=10s', '900s', 'python3', 'run_gpu_tests.py', 'candidate', 'focus'], while the receipt command is exactly canonical; parent passed=true, scorer line passed=true. Separately, every real-runner run in this review used a scratch FORGE_GPU_SUMMARY/WINDOW_FILE/LOCK (runner state 'no run', synthetic end) and was accepted, including all 58 staged lines (P_staged_all_labels_real_runner, G5 passed); A5's own transports (control_transport.py:75-88) put a python3 dispatcher first on PATH and A5's honest roots pass the scorer. FORGE_GPU_KILL_GRACE set outside the script is overridden by STAGED_GPU_COMMANDS.sh:15 and, through the parent directly, cannot produce an accepted line (grace 21 gives raw -9 -> 137, outer-timeout, line fails).",
+   "fix": "In STAGED_GPU_COMMANDS.sh set PATH explicitly (or call /usr/bin/timeout, the pinned interpreter and the pinned runner path) and unset FORGE_GPU_SUMMARY, FORGE_GPU_WINDOW_FILE and FORGE_GPU_LOCK for non-audit lines. In the parent, record the resolved timeout, python3 and runner paths with sha256 and the FORGE_GPU_* environment in parent_result.json; in the scorer, refuse acceptance unless they equal the sealed and staged values. CPU control roots declare a control mode that, like audit, cannot establish acceptance. Add a PATH-shadow and a redirected-window control to G4."
+  },
+  {
+   "id": "R5-F03",
+   "severity": "NIT",
+   "owner": "GPU tooling (a5/score_gpu.py, unchanged since A4)",
+   "where": "a5/score_gpu.py:22 and :27 (except tuples (AssertionError, KeyError, OSError, ValueError, TypeError) omit RecursionError and other Exception subclasses)",
+   "title": "A deeply nested JSON receipt crashes the scorer with a traceback and no G5_SUMMARY.json instead of a recorded reason",
+   "reproduction": "hostile_rev5.py part c (hostile_rev5_c.json): NEW_parent_result_deep_nesting (parent_result.json = 200000 '[' + 200000 ']'), NEW_start_json_deep_nesting (START.json) and NEW_regression_deep_child_result (candidate_regression child_result.json, read again in recompute_line's regression_reasons path): scorer exit 1, Traceback 'RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string', G5_SUMMARY.json not written. The parent handles all three (JSON refusal or receipt with a recorded reason). Fails closed; not reachable by a truncated write.",
+   "fix": "Catch Exception at score_gpu.py:22 and :27 (as the parent now does), recording str(exc) or the type name; add the three deep-nesting cases as G4 controls."
+  },
+  {
+   "id": "R5-F04",
+   "severity": "NIT",
+   "owner": "GPU tooling (a5/evidence.py)",
+   "where": "a5/evidence.py:397 (recompute_line checks only that receipt['exit'] is an int; the D3 field raw_exit written at run_gpu_line.py:101 is never read)",
+   "title": "The scorer does not recompute D3's exit normalisation from raw_exit",
+   "reproduction": "rev5_probe_rawexit.py (rev5_probe_rawexit.json): an honest candidate_focus receipt edited to raw_exit=-9 with exit 0, and a receipt with raw_exit removed, both still pass the scorer (line passed=true, reasons []).",
+   "fix": "In recompute_line require type(raw_exit) is int and exit == (raw_exit if raw_exit >= 0 else 128 - raw_exit), else a recorded reason."
+  },
+  {
+   "id": "R5-F05",
+   "severity": "NIT",
+   "owner": "GPU tooling (a5/run_gpu_line.py)",
+   "where": "a5/run_gpu_line.py:99-104 (receipt built after the protected block; :103 seal_sha256=sha(TOOL/'staging_seal.json') can raise) and :108-112 (mkstemp/write/fsync unprotected)",
+   "title": "D4 is not total after the child exits: a failure while building or writing the receipt leaves no parent receipt",
+   "reproduction": "rev5_probe_postexit.py (rev5_probe_postexit.json): the reviewer's own mirror seal made unreadable while the child runs (mode restored after). The child exits, then the parent prints {\"error\": \"[Errno 13] Permission denied: .../staging_seal.json\"}, exit 1, and publishes no parent_result.json (no temporary either). The scorer fails the line as 'incomplete: missing parent completion receipt' (fails closed).",
+   "fix": "Compute seal_sha256 inside the protected block (falling back to a recorded reason), and on a receipt-write failure retry with a minimal receipt carrying the error, or document the residual."
+  }
+ ],
+ "closure": {
+  "R4-F01": "FIXED (5/5 REV4 spellings refused, 10 new spellings refused, honest passes); adjacent new defects R5-F01, R5-F02",
+  "R4-F02": "FIXED (N2b/N2c grace unset and staged: exit 124, row ran 143, outer-timeout, no live process at return or 11 s later; new grace 18 and 21, staged lock-wait kill)",
+  "R4-F03": "FIXED (N5 plus 6 new row shapes: receipt, recorded reason, no traceback); adjacent R5-F05",
+  "R4-F04": "FIXED (N4, JSON list, invalid UTF-8, temp-without-link); the scorer side of deep nesting is R5-F03"
+ },
+ "questions": {
+  "Q1": "see closure",
+  "Q2": "UNSOUND (R5-F01, R5-F02)",
+  "Q3": "SOUND",
+  "Q4": "UNSOUND (R5-F03, R5-F04, R5-F05)",
+  "Q5": "SOUND",
+  "Q6": "REJECT"
+ },
+ "counts": {
+  "BLOCKER": 0,
+  "MAJOR": 0,
+  "MINOR": 2,
+  "NIT": 3
+ },
+ "prior_art": "Meszaros (2007) test stubs/fault injection; REV3/REV4 harnesses (2026); Python argparse allow_abbrev (Python 3.5, 2015, unverified); GNU coreutils timeout(1) process-group and kill-after semantics (history unverified); POSIX execvp PATH search (IEEE Std 1003.1, year unverified) for the shadow case; Linux procfs cmdline/environ for the kernel view and orphan scan (history unverified); CPython json recursion limit (observed live); SHA-256 FIPS 180-4; DeMillo, Lipton and Sayward (1978) for mutant reach. No novel method claimed."
+}

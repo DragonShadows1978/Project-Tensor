@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M04m/nn.py
+@@ -555,7 +555,7 @@
+         g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])
+         # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
+         # as required by Wu and He (2018) and PyTorch GroupNorm.
+-        mean = g.mean([2], True); var = g.var([2], True)
++        mean = g.mean([1], True); var = g.var([2], True)
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)

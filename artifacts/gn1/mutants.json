@@ -1,0 +1,156 @@
+[
+  {
+    "id": "M01",
+    "name": "unbiased_variance",
+    "old": "var = g.var([2], True)",
+    "new": "var = g.var([2], True) * (g.shape[2] / (g.shape[2] - 1))",
+    "sha256": "8a5b3247ddb06271dbe91167070b628f3d72aa8d9ff5e32d6720dbf7a09e7e26",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M02",
+    "name": "epsilon_outside_sqrt",
+    "old": "(var + self.eps).pow(-0.5)",
+    "new": "(var.pow(0.5) + self.eps).pow(-1.0)",
+    "sha256": "30186b5a7029cd5fe1c1f456999268c866810345d0cf619b7eda9002605ad4de",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_near_epsilon[forward-float32]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M03",
+    "name": "epsilon_ignored",
+    "old": "(var + self.eps).pow(-0.5)",
+    "new": "var.pow(-0.5)",
+    "sha256": "ed542770df353799b3b0b6fe334a68f8e86dedd31b4397072b649ddea84d9825",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_near_epsilon[forward-float32]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M04",
+    "name": "wrong_reduction_axis",
+    "old": "mean = g.mean([2], True); var = g.var([2], True)",
+    "new": "mean = g.mean([1], True); var = g.var([1], True)",
+    "sha256": "f2dd85f4122dd8db00f7c391f80f4a71208b85aa46a1649bd900dfdd73932149",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M05",
+    "name": "wrong_group_extent",
+    "old": "g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+    "new": "g = x.reshape([N, self.G, C * math.prod(spatial)])",
+    "sha256": "ec9909355cbd9602a7c78336b52169a2f19bcdb2071cbf0f86dab85dc285ffca",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r2-n1-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M06",
+    "name": "interleaved_channels",
+    "old": "        g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])\n        # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),\n        # as required by Wu and He (2018) and PyTorch GroupNorm.\n        mean = g.mean([2], True); var = g.var([2], True)\n        g = (g - mean) * (var + self.eps).pow(-0.5)\n        g = g.reshape([N, C] + spatial)",
+    "new": "        g = x.reshape([N, C // self.G, self.G] + spatial).permute(\n            [0, 2, 1] + list(range(3, 3 + len(spatial)))).reshape(\n            [N, self.G, (C // self.G) * math.prod(spatial)])\n        # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),\n        # as required by Wu and He (2018) and PyTorch GroupNorm.\n        mean = g.mean([2], True); var = g.var([2], True)\n        g = (g - mean) * (var + self.eps).pow(-0.5)\n        g = g.reshape([N, self.G, C // self.G] + spatial).permute(\n            [0, 2, 1] + list(range(3, 3 + len(spatial)))).reshape([N, C] + spatial)",
+    "sha256": "f3219247dcd0c4def88057a8d9000e51190af1b385670479d091e439cb4d3baa",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M07",
+    "name": "weight_omitted",
+    "old": "return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+    "new": "return g + self.bias.reshape(wshape)",
+    "sha256": "5aa24fb2a7e3e41a1f72664c382a57d172476cf68a7d42b9910de7ee51c8c46e",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M08",
+    "name": "bias_omitted",
+    "old": "return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+    "new": "return g * self.weight.reshape(wshape)",
+    "sha256": "bb468a805a5eccb52bea4f96b5df079c78dde2af43d52c8fb2fc348f8c6a13e3",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M09",
+    "name": "affine_swapped",
+    "old": "return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)",
+    "new": "return g * self.bias.reshape(wshape) + self.weight.reshape(wshape)",
+    "sha256": "1cf646e029e91cf1fd9b675cd169d3ea92b88bcd7943d9a5ae9c7800ee02e0b4",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M10",
+    "name": "refusal_removed",
+    "old": "if num_channels % num_groups != 0:",
+    "new": "if False and num_channels % num_groups != 0:",
+    "sha256": "e2a3803a1ec12030ae318a0c78a7ca63eba891fcdf6bf85e45d27cf43e5df516",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_nondivisible_refusal",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M11",
+    "name": "broadcast_extra_dimension",
+    "old": "wshape = [1, C] + [1] * len(spatial)",
+    "new": "wshape = [1, C] + [1] * (len(spatial) + 1)",
+    "sha256": "87b03b401d5a1cdc46dd9de2477090c781027d1eab20254e3649e2abc5f08238",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M12",
+    "name": "normalization_omitted",
+    "old": "g = (g - mean) * (var + self.eps).pow(-0.5)",
+    "new": "g = g",
+    "sha256": "d00490a9df1553a53ecc560728102707e9eda080289ebed65d7504195164c4ad",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M13",
+    "name": "wrong_power",
+    "old": "(var + self.eps).pow(-0.5)",
+    "new": "(var + self.eps).pow(-1.0)",
+    "sha256": "01eb98532df949828a2ac30f5811a1a53c608b400d369e70b1ca9344345ceabb",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_forward_values[float32-r3-n2-g2-default]",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  },
+  {
+    "id": "M14",
+    "name": "default_epsilon_changed",
+    "old": "def __init__(self, num_groups, num_channels, eps=1e-5):",
+    "new": "def __init__(self, num_groups, num_channels, eps=1e-3):",
+    "sha256": "ada418aa7553fb33a18ad3a2554fbbcbd4a5989e7073683371fa38be256e8876",
+    "expected_child_exit": 1,
+    "predicted_witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_constructor_defaults",
+    "actual_killer": null,
+    "status": "NOT RUN; lead G5"
+  }
+]

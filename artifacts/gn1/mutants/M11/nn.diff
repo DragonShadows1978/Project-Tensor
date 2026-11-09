@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M11/nn.py
+@@ -531,7 +531,7 @@
+         mean = g.mean([2], True); var = g.var([2], True)
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
+-        wshape = [1, C] + [1] * len(spatial)
++        wshape = [1, C] + [1] * (len(spatial) + 1)
+         return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+ 
+ 

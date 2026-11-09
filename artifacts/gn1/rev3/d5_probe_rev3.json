@@ -1,0 +1,1730 @@
+{
+  "counts": [
+    {
+      "operand": "num_groups",
+      "value": "int2",
+      "A2": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "zero",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (0) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ZeroDivisionError",
+        "message": "integer modulo by zero"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "negative",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (-2) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (-2) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "RuntimeError",
+        "message": "Expected num groups to be greater than 0, got -2"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "float",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (2.0) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (2.0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not float"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "true",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (True) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (True) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not bool"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "false",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (False) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (False) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ZeroDivisionError",
+        "message": "integer modulo by zero"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "string",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups ('2') must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups ('2') must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'int' and 'str'"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "none",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (None) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (None) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'int' and 'NoneType'"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "huge",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (6) must be divisible by num_groups (1180591620717411303424)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (6) must be divisible by num_groups (1180591620717411303424)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (6) must be divisible by num_groups (1180591620717411303424)"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_int8",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.int8(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_int16",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.int16(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_int32",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.int32(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_int64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.int64(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_uint8",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.uint8(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_uint16",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.uint16(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_uint32",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.uint32(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_uint64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.uint64(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_bool_true",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.True_) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.True_) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.bool"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_bool_false",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.False_) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.False_) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.bool"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_float64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.float64(2.0)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.float64(2.0)) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.float64"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_0d_int",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (array(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.ndarray"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_0d_bool",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (array(True)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (array(True)) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.ndarray"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_1d_int",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (array([2])) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (array([2])) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "group_norm(): argument 'num_groups' (position 2) must be int, not numpy.ndarray"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "index_obj",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (<__main__.Idx object at 0x7f4bd63a8cb0>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'int' and 'Idx'"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "index_obj_neg",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (<__main__.Idx object at 0x7f4bd63a9190>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (-2) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'int' and 'Idx'"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "index_returns_bool",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (<__main__.Idx object at 0x7f4bd63a9160>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          1,
+          6
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'int' and 'Idx'"
+      }
+    },
+    {
+      "operand": "num_groups",
+      "value": "np_int64_zero",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (np.int64(0)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_groups (0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "RuntimeError",
+        "message": "Expected num groups to be greater than 0, got 0"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "int2",
+      "A2": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "zero",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (0) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "RuntimeError",
+        "message": "Expected number of channels in input to be divisible by num_groups, but got input of shape [2, 1, 4] and num_groups=2"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "negative",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (-2) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (-2) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "RuntimeError",
+        "message": "Trying to create tensor with negative dimension -2: [-2]"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "float",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (2.0) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (2.0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty() received an invalid combination of arguments - got (float, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints "
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "true",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (True) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (True) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (True) must be divisible by num_groups (2)"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "false",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (False) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (False) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty() received an invalid combination of arguments - got (bool, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints s"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "string",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels ('2') must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels ('2') must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "not all arguments converted during string formatting"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "none",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (None) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (None) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'NoneType' and 'int'"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "huge",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "Maximum allowed dimension exceeded"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "Maximum allowed dimension exceeded"
+      },
+      "d5_expect_accept": true,
+      "a3_ok": false,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty(): argument 'size' failed to unpack the object at pos 1 with error \"Overflow when unpacking long long\nException raised from THPUtils_u"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_int8",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.int8(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_int16",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.int16(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_int32",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.int32(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_int64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.int64(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_uint8",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.uint8(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_uint16",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.uint16(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_uint32",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.uint32(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_uint64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.uint64(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_bool_true",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.True_) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.True_) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (True) must be divisible by num_groups (2)"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_bool_false",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.False_) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.False_) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty() received an invalid combination of arguments - got (numpy.bool, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of "
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_float64",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.float64(2.0)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.float64(2.0)) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty() received an invalid combination of arguments - got (numpy.float64, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple "
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_0d_int",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (array(2)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_0d_bool",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (array(True)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (array(True)) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (True) must be divisible by num_groups (2)"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_1d_int",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (array([2])) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (array([2])) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "empty() received an invalid combination of arguments - got (numpy.ndarray, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple "
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "index_obj",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (<__main__.Idx object at 0x7f4bd63a8cb0>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "accepted",
+        "stored_types": [
+          "int",
+          "int"
+        ],
+        "stored": [
+          2,
+          2
+        ]
+      },
+      "d5_expect_accept": true,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'Idx' and 'int'"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "index_obj_neg",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (<__main__.Idx object at 0x7f4bd63a9190>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (-2) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'Idx' and 'int'"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "index_returns_bool",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (<__main__.Idx object at 0x7f4bd63a9160>) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (1) must be divisible by num_groups (2)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "TypeError",
+        "message": "unsupported operand type(s) for %: 'Idx' and 'int'"
+      }
+    },
+    {
+      "operand": "num_channels",
+      "value": "np_int64_zero",
+      "A2": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (np.int64(0)) must be a positive integer (bool excluded)"
+      },
+      "A3": {
+        "outcome": "refused",
+        "exception_class": "ValueError",
+        "message": "num_channels (0) must be a positive integer (bool excluded)"
+      },
+      "d5_expect_accept": false,
+      "a3_ok": true,
+      "torch": {
+        "outcome": "refused",
+        "exception_class": "RuntimeError",
+        "message": "Expected number of channels in input to be divisible by num_groups, but got input of shape [2, 1, 4] and num_groups=2"
+      }
+    }
+  ],
+  "shapes": [
+    {
+      "operand": "weight",
+      "shape": [],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        2,
+        3
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        2,
+        3
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        6,
+        1
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        6,
+        1
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        1,
+        6
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        1,
+        6
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        1,
+        6,
+        1
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        1,
+        6,
+        1
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        5
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        5
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        7
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        7
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        0
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        0
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        6,
+        0
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "weight",
+      "shape": [
+        6,
+        0
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm weight must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        2,
+        3
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        2,
+        3
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        6,
+        1
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        6,
+        1
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        1,
+        6
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        1,
+        6
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        1,
+        6,
+        1
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        1,
+        6,
+        1
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        5
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        5
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        7
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        7
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        0
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        0
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias length must equal num_channels (6)",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        6,
+        0
+      ],
+      "dtype": "float32",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    },
+    {
+      "operand": "bias",
+      "shape": [
+        6,
+        0
+      ],
+      "dtype": "float16",
+      "ops_before_refusal": [],
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "GroupNorm bias must have rank 1",
+      "ok": true
+    }
+  ],
+  "accepted": {
+    "a2_accepted_configs": 324,
+    "a3_bit_identical": 324,
+    "diffs": []
+  },
+  "torch": "2.11.0+cu130",
+  "summary": {
+    "torch": "2.11.0+cu130",
+    "counts_rows": 54,
+    "counts_ok": 53,
+    "counts_bad": [
+      [
+        "num_channels",
+        "huge",
+        {
+          "outcome": "refused",
+          "exception_class": "ValueError",
+          "message": "Maximum allowed dimension exceeded"
+        }
+      ]
+    ],
+    "shape_rows": 36,
+    "shapes_ok": 36,
+    "shapes_bad": [],
+    "accepted": {
+      "a2_accepted_configs": 324,
+      "a3_bit_identical": 324,
+      "diffs": []
+    }
+  }
+}

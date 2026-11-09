@@ -1,0 +1,164 @@
+{
+  "P0_honest": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 0,
+    "call_outcome": "passed",
+    "exception_class": null,
+    "groupnorm_refusal": false,
+    "wrapped": null,
+    "engine_call": null,
+    "original": [
+      null,
+      null
+    ],
+    "acceptable_kill": false,
+    "device_veto": false,
+    "counts_as_kill": false,
+    "detail_head": ""
+  },
+  "P1_generic_engine_RuntimeError": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "wrapped": true,
+    "engine_call": true,
+    "original": [
+      "RuntimeError",
+      "pow: unsupported exponent path"
+    ],
+    "acceptable_kill": true,
+    "device_veto": false,
+    "counts_as_kill": true,
+    "detail_head": "rately\n        # voids every device-pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: RuntimeError: pow: unsupported exponent path\n\n/tmp/gn1_rev3_m/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError"
+  },
+  "P2_engine_TypeError_under_GroupNorm_init": {
+    "node": "test_constructor_defaults",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "TypeError",
+    "groupnorm_refusal": false,
+    "wrapped": false,
+    "engine_call": false,
+    "original": [
+      null,
+      null
+    ],
+    "acceptable_kill": false,
+    "device_veto": false,
+    "counts_as_kill": false,
+    "detail_head": "         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndata = array([1., 1., 1., 1., 1., 1.]), device = 'cuda', dtype = 'float32'\nrequires_grad = True\n\n    def f(data, device=\"cuda\", dtype=\"float32\", requires_grad=False):\n        if requires_grad:\n>           raise exc_type(\"tensor(): engine factory refusal\")\nE           TypeError: tensor(): engine factory refusal\n\nq3_probe_rev3.py:103: TypeError"
+  },
+  "P3_device_fault_in_forward": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "wrapped": true,
+    "engine_call": true,
+    "original": [
+      "RuntimeError",
+      "CUDA error at pow_kernel: an illegal memory access was encountered"
+    ],
+    "acceptable_kill": true,
+    "device_veto": true,
+    "counts_as_kill": false,
+    "detail_head": "pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: RuntimeError: CUDA error at pow_kernel: an illegal memory access was encountered\n\n/tmp/gn1_rev3_m/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError"
+  },
+  "P4_engine_error_backward_only": {
+    "node": "test_backward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "RuntimeError",
+    "groupnorm_refusal": false,
+    "wrapped": false,
+    "engine_call": false,
+    "original": [
+      null,
+      null
+    ],
+    "acceptable_kill": false,
+    "device_veto": false,
+    "counts_as_kill": false,
+    "detail_head": "gn1/a3/cpu_shim.py:115: in backward\n    for p, gp in zip(t.parents, t.vjp(g)):\n                                ^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\na = (array([[[-1.10890996],\n        [ 1.80802786]],\n\n       [[-0.25475842],\n        [-0.08616751]]]),)\nk = {}\n\n    def bw(*a, **k):\n>       raise RuntimeError(\"pow backward: unsupported exponent path\")\nE       RuntimeError: pow backward: unsupported exponent path\n\nq3_probe_rev3.py:92: RuntimeError"
+  },
+  "P5_generic_engine_ValueError": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "wrapped": true,
+    "engine_call": true,
+    "original": [
+      "ValueError",
+      "pow: exponent domain"
+    ],
+    "acceptable_kill": true,
+    "device_veto": false,
+    "counts_as_kill": true,
+    "detail_head": " parent separately\n        # voids every device-pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: ValueError: pow: exponent domain\n\n/tmp/gn1_rev3_m/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError"
+  },
+  "P6_device_in_context_chain": {
+    "node": "test_forward_values[float32-r3-n2-g2-default]",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "AssertionError",
+    "groupnorm_refusal": false,
+    "wrapped": true,
+    "engine_call": true,
+    "original": [
+      "RuntimeError",
+      "pow: generic failure after device error"
+    ],
+    "acceptable_kill": true,
+    "device_veto": true,
+    "counts_as_kill": false,
+    "detail_head": "      # voids every device-pattern failure, including chained exceptions.\n        try:\n            output = layer(x)\n        except (RuntimeError, ValueError, TypeError) as exc:\n>           raise AssertionError(f\"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}\") from exc\nE           AssertionError: GroupNorm refused a registered valid input: RuntimeError: pow: generic failure after device error\n\n/tmp/gn1_rev3_m/W/tensor_cuda/tests/test_groupnorm_gn1.py:144: AssertionError"
+  },
+  "P7_mutant_D5_g_npbool_init_refusal": {
+    "node": "test_index_counts[np_int64-num_groups]",
+    "arm": "D5_g_npbool",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "ValueError",
+    "groupnorm_refusal": true,
+    "wrapped": false,
+    "engine_call": false,
+    "original": [
+      null,
+      null
+    ],
+    "acceptable_kill": true,
+    "device_veto": false,
+    "counts_as_kill": true,
+    "detail_head": "index, PEP 357 (2006). A3 takes the\n        # integer-index protocol; excluding both boolean types is D5 policy.\n        import operator\n        if isinstance(num_groups, bool) or not isinstance(num_groups, np.bool_):\n>           raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\nE           ValueError: num_groups (np.int64(2)) must be a positive integer (bool excluded)\n\n/tmp/gn1_rev3_m/W/artifacts/gn1/a3/arms/D5_g_npbool/tensor_cuda/nn.py:519: ValueError"
+  },
+  "P8_callee_ValueError_under_init": {
+    "node": "test_constructor_defaults",
+    "arm": "candidate",
+    "pytest_exit": 1,
+    "call_outcome": "failed",
+    "exception_class": "ValueError",
+    "groupnorm_refusal": false,
+    "wrapped": false,
+    "engine_call": false,
+    "original": [
+      null,
+      null
+    ],
+    "acceptable_kill": false,
+    "device_veto": false,
+    "counts_as_kill": false,
+    "detail_head": "       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndata = array([1., 1., 1., 1., 1., 1.]), device = 'cuda', dtype = 'float32'\nrequires_grad = True\n\n    def f(data, device=\"cuda\", dtype=\"float32\", requires_grad=False):\n        if requires_grad:\n>           raise exc_type(\"tensor(): engine factory refusal\")\nE           ValueError: tensor(): engine factory refusal\n\nq3_probe_rev3.py:103: ValueError"
+  }
+}

@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ D5_g_positive/nn.py
+@@ -515,7 +515,7 @@
+         # A2 domain checks, inspired by PyTorch GroupNorm argument validation;
+         # exact positive-int/bool policy is the GN1 A2 requirement.
+         if (isinstance(num_groups, bool) or not isinstance(num_groups, int)
+-                or num_groups <= 0):
++                or False):
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+         if (isinstance(num_channels, bool) or not isinstance(num_channels, int)
+                 or num_channels <= 0):

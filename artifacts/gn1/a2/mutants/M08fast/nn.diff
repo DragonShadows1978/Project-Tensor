@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M08fast/nn.py
+@@ -561,7 +561,7 @@
+         wshape = [1, C] + [1] * len(spatial)
+         if (dtype == "float32" and self.weight.dtype == "float32"
+                 and self.bias.dtype == "float32"):
+-            return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
++            return g * self.weight.reshape(wshape)
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+         output = g * weight.reshape(wshape) + bias.reshape(wshape)

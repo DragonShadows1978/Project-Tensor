@@ -1,0 +1,54 @@
+A_H4_flat AS-EXPECTED
+A_H2_flat AS-EXPECTED
+A_H3_flat AS-EXPECTED
+A_H3b_flat AS-EXPECTED
+A_H2c_flat AS-EXPECTED
+A_H6_flat AS-EXPECTED
+A_H5_first_flat AS-EXPECTED
+A_H5_retry_flat AS-EXPECTED
+A_scorer_flat AS-EXPECTED
+A_H4_attempt AS-EXPECTED
+A_H2_attempt AS-EXPECTED
+A_H3_attempt AS-EXPECTED
+A_H3b_attempt AS-EXPECTED
+A_H2c_attempt AS-EXPECTED
+A_H6_attempt AS-EXPECTED
+A_H5_first_attempt AS-EXPECTED
+A_H5_retry_attempt AS-EXPECTED
+A_scorer_attempt AS-EXPECTED
+A_H1 AS-EXPECTED
+A_H1b AS-EXPECTED
+C1_equivalent_V3_fails AS-EXPECTED
+C2_forge_log_exit_mismatch AS-EXPECTED
+C3_census_missing_id AS-EXPECTED
+C4_unregistered_skip AS-EXPECTED
+C5_baseline_extra_failure AS-EXPECTED
+C6_exit0_with_failure_regression AS-EXPECTED
+C7_child_present_normal AS-EXPECTED
+C7_child_present_hang_failure AS-EXPECTED
+C7_child_never_started AS-EXPECTED
+C8_full_positive AS-EXPECTED
+D_H2_bound AS-EXPECTED
+D_H2c_bound AS-EXPECTED
+D_H3_bound AS-EXPECTED
+D_H3b_bound AS-EXPECTED
+D_kill_plus_teardown_device AS-EXPECTED
+D_honest_kill_text_mentions_pattern AS-EXPECTED
+D_H4_bound AS-EXPECTED
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a3/rev2_controls.py", line 366, in <module>
+    main()
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a3/rev2_controls.py", line 359, in main
+    {"a": part_a, "b": part_b, "c": part_c, "d": part_d}[part]()
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a3/rev2_controls.py", line 339, in part_d
+    summary([(time.time(), "RUN7 CYCLE 3 TRAINING")])  # a non-halt, non-cooldown event -> busy -> no-window
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_gn1/artifacts/gn1/a3/rev2_controls.py", line 178, in summary
+    (FORGE / "summary.log").write_text("".join("%s | %s\n" % (iso(t), ev) for t, ev in lines))
+  File "/usr/lib/python3.12/pathlib.py", line 1049, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/gn1_a3_work/rev2_forge/summary.log'

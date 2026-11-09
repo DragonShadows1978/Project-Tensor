@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M09/nn.py
+@@ -532,7 +532,7 @@
+         g = (g - mean) * (var + self.eps).pow(-0.5)
+         g = g.reshape([N, C] + spatial)
+         wshape = [1, C] + [1] * len(spatial)
+-        return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
++        return g * self.bias.reshape(wshape) + self.weight.reshape(wshape)
+ 
+ 
+ class InstanceNorm2D(Module):

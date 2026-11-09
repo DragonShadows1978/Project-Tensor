@@ -1,0 +1,204 @@
+tensor_cuda/tensor_cuda/nn.py:510: class GroupNorm(Module):
+tensor_cuda/tensor_cuda/nn.py:511:     def __init__(self, num_groups, num_channels, eps=1e-5):
+tensor_cuda/tensor_cuda/nn.py:512:         super().__init__()
+tensor_cuda/tensor_cuda/nn.py:513:         # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+tensor_cuda/tensor_cuda/nn.py:514:         # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+tensor_cuda/tensor_cuda/nn.py:515:         if num_channels % num_groups != 0:
+tensor_cuda/tensor_cuda/nn.py:516:             raise ValueError(
+tensor_cuda/tensor_cuda/nn.py:517:                 f"num_channels ({num_channels}) must be divisible by "
+tensor_cuda/tensor_cuda/nn.py:518:                 f"num_groups ({num_groups})"
+tensor_cuda/tensor_cuda/nn.py:519:             )
+tensor_cuda/tensor_cuda/nn.py:520:         self.G, self.C, self.eps = num_groups, num_channels, eps
+tensor_cuda/tensor_cuda/nn.py:521:         self.weight = parameter(np.ones(num_channels))
+tensor_cuda/tensor_cuda/nn.py:522:         self.bias = parameter(np.zeros(num_channels))
+tensor_cuda/tensor_cuda/nn.py:523: 
+tensor_cuda/tensor_cuda/nn.py:524:     def forward(self, x):
+tensor_cuda/tensor_cuda/nn.py:525:         N, C = x.shape[0], x.shape[1]
+tensor_cuda/tensor_cuda/nn.py:526:         spatial = list(x.shape[2:])
+tensor_cuda/tensor_cuda/nn.py:527:         # Explicit extent: NDArray::reshape does not infer -1.
+tensor_cuda/tensor_cuda/nn.py:528:         g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])
+tensor_cuda/tensor_cuda/nn.py:529:         # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
+tensor_cuda/tensor_cuda/nn.py:530:         # as required by Wu and He (2018) and PyTorch GroupNorm.
+tensor_cuda/tensor_cuda/nn.py:531:         mean = g.mean([2], True); var = g.var([2], True)
+tensor_cuda/tensor_cuda/nn.py:532:         g = (g - mean) * (var + self.eps).pow(-0.5)
+tensor_cuda/tensor_cuda/nn.py:533:         g = g.reshape([N, C] + spatial)
+tensor_cuda/tensor_cuda/nn.py:534:         wshape = [1, C] + [1] * len(spatial)
+tensor_cuda/tensor_cuda/nn.py:535:         return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+tensor_cuda/tensor_cuda/nn.py:536: 
+tensor_cuda/tensor_cuda/nn.py:537: 
+tensor_cuda/tensor_cuda/nn.py:538: class InstanceNorm2D(Module):
+
+tensor_cuda/tests/test_ext_phase7.py:34: 
+tensor_cuda/tests/test_ext_phase7.py:35: def test_norms_and_conv1d():
+tensor_cuda/tests/test_ext_phase7.py:36:     x = tc.tensor(np.random.randn(4, 8).astype(np.float32))
+tensor_cuda/tests/test_ext_phase7.py:37:     assert nn.BatchNorm1D(8)(x).shape == (4, 8)
+tensor_cuda/tests/test_ext_phase7.py:38:     y = tc.tensor(np.random.randn(2, 6, 4, 4).astype(np.float32))
+tensor_cuda/tests/test_ext_phase7.py:39:     assert nn.GroupNorm(3, 6)(y).shape == (2, 6, 4, 4)
+tensor_cuda/tests/test_ext_phase7.py:40:     assert nn.InstanceNorm2D(6)(y).shape == (2, 6, 4, 4)
+tensor_cuda/tests/test_ext_phase7.py:41:     seq = tc.tensor(np.random.randn(2, 3, 10).astype(np.float32))
+tensor_cuda/tests/test_ext_phase7.py:42:     assert nn.Conv1D(3, 5, 3, padding=1)(seq).shape == (2, 5, 10)
+tensor_cuda/tests/test_ext_phase7.py:43: 
+
+tensor_cuda/src/ops.cpp:807: Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+tensor_cuda/src/ops.cpp:808:   NDArray out = reduce_sum(a.data(), axes, keepdim);
+tensor_cuda/src/ops.cpp:809:   Shape in_shape = a.shape();
+tensor_cuda/src/ops.cpp:810:   Shape kshape = keepdim_shape(in_shape, axes);
+tensor_cuda/src/ops.cpp:811:   return Tensor::from_op(out, {a}, "sum", [a, in_shape, kshape](const NDArray& g) {
+tensor_cuda/src/ops.cpp:812:     NDArray gk = g.reshape(kshape);  // restore reduced dims as size 1
+tensor_cuda/src/ops.cpp:813:     NDArray bcast = nadd(NDArray::zeros(in_shape, a.dtype(), a.device()), gk);
+tensor_cuda/src/ops.cpp:814:     a.v->accumulate_grad(bcast);
+tensor_cuda/src/ops.cpp:815:   });
+tensor_cuda/src/ops.cpp:816: }
+tensor_cuda/src/ops.cpp:817: Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+tensor_cuda/src/ops.cpp:818:   int64_t cnt = 1;
+tensor_cuda/src/ops.cpp:819:   int nd = a.ndim();
+tensor_cuda/src/ops.cpp:820:   if (axes.empty()) cnt = a.data().numel();
+tensor_cuda/src/ops.cpp:821:   else for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; cnt *= a.shape()[d]; }
+tensor_cuda/src/ops.cpp:822:   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
+tensor_cuda/src/ops.cpp:823: }
+tensor_cuda/src/ops.cpp:824: 
+tensor_cuda/src/ops.cpp:825: // ------------------------------------------------------------- shape
+tensor_cuda/src/ops.cpp:826: Tensor reshape(const Tensor& a, const Shape& shape) {
+tensor_cuda/src/ops.cpp:827:   NDArray out = a.data().reshape(shape);
+tensor_cuda/src/ops.cpp:828:   Shape in_shape = a.shape();
+tensor_cuda/src/ops.cpp:829:   return Tensor::from_op(out, {a}, "reshape", [a, in_shape](const NDArray& g) {
+tensor_cuda/src/ops.cpp:830:     a.v->accumulate_grad(g.reshape(in_shape));
+tensor_cuda/src/ops.cpp:831:   });
+tensor_cuda/src/ops.cpp:832: }
+tensor_cuda/src/ops.cpp:833: Tensor transpose_last(const Tensor& a) {
+tensor_cuda/src/ops.cpp:834:   NDArray out = transpose2d_last(a.data());
+tensor_cuda/src/ops.cpp:835:   return Tensor::from_op(out, {a}, "transpose", [a](const NDArray& g) {
+
+tensor_cuda/src/ops.cpp:854: Tensor pow_scalar(const Tensor& a, double p) {
+tensor_cuda/src/ops.cpp:855:   NDArray out = ew_pow(a.data(), p);
+tensor_cuda/src/ops.cpp:856:   return Tensor::from_op(out, {a}, "pow", [a, p](const NDArray& g) {
+tensor_cuda/src/ops.cpp:857:     // d/dx x^p = p * x^(p-1)
+tensor_cuda/src/ops.cpp:858:     a.v->accumulate_grad(nmul(g, nmuls(ew_pow(a.data(), p - 1.0), p)));
+tensor_cuda/src/ops.cpp:859:   });
+
+tensor_cuda/src/ops.cpp:915: Tensor var(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+tensor_cuda/src/ops.cpp:916:   Tensor m = mean(a, axes, /*keepdim=*/true);
+tensor_cuda/src/ops.cpp:917:   Tensor d = sub(a, m);
+tensor_cuda/src/ops.cpp:918:   return mean(mul(d, d), axes, keepdim);  // population variance (ddof=0)
+tensor_cuda/src/ops.cpp:919: }
+
+tensor_cuda/src/kernels.cu:568:   do {                                                                   \
+tensor_cuda/src/kernels.cu:569:     if ((DT) == DType::Float32) { using T = float; __VA_ARGS__; }        \
+tensor_cuda/src/kernels.cu:570:     else if ((DT) == DType::Float16) { using T = __half; __VA_ARGS__; }  \
+tensor_cuda/src/kernels.cu:571:     else if ((DT) == DType::BFloat16) { using T = __nv_bfloat16; __VA_ARGS__; } \
+tensor_cuda/src/kernels.cu:572:     else throw std::runtime_error("op supports float32/float16/bfloat16 only"); \
+tensor_cuda/src/kernels.cu:573:   } while (0)
+tensor_cuda/src/kernels.cu:574: 
+
+tensor_cuda/src/kernels.cu:756: }
+tensor_cuda/src/kernels.cu:757: NDArray NDArray::reshape(const Shape& new_shape) const {
+tensor_cuda/src/kernels.cu:758:   if (numel_of(new_shape) != numel()) {
+tensor_cuda/src/kernels.cu:759:     throw std::runtime_error("reshape: element count mismatch");
+tensor_cuda/src/kernels.cu:760:   }
+tensor_cuda/src/kernels.cu:761:   NDArray out = *this;  // shares storage
+tensor_cuda/src/kernels.cu:762:   out.shape = new_shape;
+tensor_cuda/src/kernels.cu:763:   return out;
+tensor_cuda/src/kernels.cu:764: }
+tensor_cuda/src/kernels.cu:765: 
+
+tensor_cuda/src/kernels.cu:896: NDArray ew_binary(const NDArray& a, const NDArray& b, int op) {
+tensor_cuda/src/kernels.cu:897:   if (a.dtype != b.dtype) throw std::runtime_error("ew_binary dtype mismatch");
+tensor_cuda/src/kernels.cu:898:   Shape out_shape = broadcast_shape(a.shape, b.shape);
+tensor_cuda/src/kernels.cu:899:   NDArray out(out_shape, a.dtype, a.device);
+tensor_cuda/src/kernels.cu:900:   int64_t n = out.numel();
+tensor_cuda/src/kernels.cu:901:   if (n == 0) return out;
+tensor_cuda/src/kernels.cu:902:   DimSpec s{};
+tensor_cuda/src/kernels.cu:903:   s.ndim = (int)out_shape.size();
+tensor_cuda/src/kernels.cu:904:   Shape ostr = contiguous_strides(out_shape);
+tensor_cuda/src/kernels.cu:905:   for (int d = 0; d < s.ndim; ++d) { s.out_shape[d] = out_shape[d]; s.out_str[d] = ostr[d]; }
+tensor_cuda/src/kernels.cu:906:   bcast_strides(a.shape, out_shape, s.a_str);
+tensor_cuda/src/kernels.cu:907:   bcast_strides(b.shape, out_shape, s.b_str);
+tensor_cuda/src/kernels.cu:908:   DISPATCH_FLOAT(a.dtype, T, {
+tensor_cuda/src/kernels.cu:909:     binary_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()),
+tensor_cuda/src/kernels.cu:910:         static_cast<T*>(b.data_ptr()), static_cast<T*>(out.data_ptr()), s, n, op);
+tensor_cuda/src/kernels.cu:911:   });
+tensor_cuda/src/kernels.cu:912:   cuda_check_last("ew_binary");
+tensor_cuda/src/kernels.cu:913:   return out;
+tensor_cuda/src/kernels.cu:914: }
+tensor_cuda/src/kernels.cu:915: NDArray ew_scalar(const NDArray& a, double scalar, int op, bool scalar_lhs) {
+tensor_cuda/src/kernels.cu:916:   NDArray out(a.shape, a.dtype, a.device);
+tensor_cuda/src/kernels.cu:917:   int64_t n = a.numel();
+tensor_cuda/src/kernels.cu:918:   if (n == 0) return out;
+tensor_cuda/src/kernels.cu:919:   DISPATCH_FLOAT(a.dtype, T, {
+tensor_cuda/src/kernels.cu:920:     scalar_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()),
+tensor_cuda/src/kernels.cu:921:         static_cast<T*>(out.data_ptr()), n, (float)scalar, op, scalar_lhs ? 1 : 0);
+tensor_cuda/src/kernels.cu:922:   });
+tensor_cuda/src/kernels.cu:923:   cuda_check_last("ew_scalar");
+tensor_cuda/src/kernels.cu:924:   return out;
+
+tensor_cuda/src/kernels.cu:978: // only — for few-outputs/large-reduction shapes (softmax max/sum over
+tensor_cuda/src/kernels.cu:979: // the key axis: 16 outputs x 700 elements) that is 16 serial threads
+tensor_cuda/src/kernels.cu:980: // on the whole GPU, measured 533us for an 11K-element max.
+tensor_cuda/src/kernels.cu:981: template <typename T, int MODE>  // 0=sum 1=max 2=min 3=prod
+tensor_cuda/src/kernels.cu:982: __global__ void reduce_lastdim_kernel(const T* __restrict__ in,
+tensor_cuda/src/kernels.cu:983:                                       T* __restrict__ out,
+tensor_cuda/src/kernels.cu:984:                                       int64_t R, int64_t n_rows) {
+tensor_cuda/src/kernels.cu:985:   int64_t row = blockIdx.x;
+tensor_cuda/src/kernels.cu:986:   if (row >= n_rows) return;
+tensor_cuda/src/kernels.cu:987:   const T* p = in + row * R;
+tensor_cuda/src/kernels.cu:988:   // APA-MF2.1 item 2 (review F1): max/min start at their identities -inf/+inf (was
+tensor_cuda/src/kernels.cu:989:   // -3.4e38f/3.4e38f, which beat any row whose values all lie beyond it, e.g. a visible
+tensor_cuda/src/kernels.cu:990:   // score -3.402e38 next to -inf masked entries -> softmax 0/0). Only the start value
+tensor_cuda/src/kernels.cu:991:   // changed: the result is unchanged whenever the row max >= -3.4e38f (min <= 3.4e38f).
+tensor_cuda/src/kernels.cu:992:   // Prior art: PyTorch amax / FlashAttention-2 (Dao 2023) running max m = -inf.
+tensor_cuda/src/kernels.cu:993:   float acc = MODE == 0 ? 0.f
+tensor_cuda/src/kernels.cu:994:             : (MODE == 1 ? -INFINITY : (MODE == 2 ? INFINITY : 1.f));
+tensor_cuda/src/kernels.cu:995:   for (int64_t i = threadIdx.x; i < R; i += blockDim.x) {
+tensor_cuda/src/kernels.cu:996:     float v = ld<T>(p, i);
+tensor_cuda/src/kernels.cu:997:     if (MODE == 0) acc += v;
+tensor_cuda/src/kernels.cu:998:     else if (MODE == 1) acc = v > acc ? v : acc;
+tensor_cuda/src/kernels.cu:999:     else if (MODE == 2) acc = v < acc ? v : acc;
+tensor_cuda/src/kernels.cu:1000:     else acc *= v;
+tensor_cuda/src/kernels.cu:1001:   }
+tensor_cuda/src/kernels.cu:1002:   __shared__ float sh[256];
+tensor_cuda/src/kernels.cu:1003:   sh[threadIdx.x] = acc;
+tensor_cuda/src/kernels.cu:1004:   __syncthreads();
+tensor_cuda/src/kernels.cu:1005:   for (int off = blockDim.x >> 1; off; off >>= 1) {
+tensor_cuda/src/kernels.cu:1006:     if (threadIdx.x < off) {
+tensor_cuda/src/kernels.cu:1007:       float o = sh[threadIdx.x + off];
+tensor_cuda/src/kernels.cu:1008:       if (MODE == 0) sh[threadIdx.x] += o;
+tensor_cuda/src/kernels.cu:1009:       else if (MODE == 1) sh[threadIdx.x] =
+tensor_cuda/src/kernels.cu:1010:           o > sh[threadIdx.x] ? o : sh[threadIdx.x];
+tensor_cuda/src/kernels.cu:1011:       else if (MODE == 2) sh[threadIdx.x] =
+tensor_cuda/src/kernels.cu:1012:           o < sh[threadIdx.x] ? o : sh[threadIdx.x];
+tensor_cuda/src/kernels.cu:1013:       else sh[threadIdx.x] *= o;
+tensor_cuda/src/kernels.cu:1014:     }
+tensor_cuda/src/kernels.cu:1015:     __syncthreads();
+tensor_cuda/src/kernels.cu:1016:   }
+tensor_cuda/src/kernels.cu:1017:   if (threadIdx.x == 0) st<T>(out, row, sh[0]);
+
+tensor_cuda/src/kernels.cu:1200: NDArray ew_pow(const NDArray& a, double p) {
+tensor_cuda/src/kernels.cu:1201:   NDArray out(a.shape, a.dtype, a.device);
+tensor_cuda/src/kernels.cu:1202:   int64_t n = a.numel();
+tensor_cuda/src/kernels.cu:1203:   if (n) { DISPATCH_FLOAT(a.dtype, T, { pow_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), static_cast<T*>(out.data_ptr()), n, (float)p); }); cuda_check_last("pow"); }
+tensor_cuda/src/kernels.cu:1204:   return out;
+tensor_cuda/src/kernels.cu:1205: }
+
+Baseline nn.py:510-526
+510: class GroupNorm(Module):
+511:     def __init__(self, num_groups, num_channels, eps=1e-5):
+512:         super().__init__()
+513:         self.G, self.C, self.eps = num_groups, num_channels, eps
+514:         self.weight = parameter(np.ones(num_channels))
+515:         self.bias = parameter(np.zeros(num_channels))
+516: 
+517:     def forward(self, x):
+518:         N, C = x.shape[0], x.shape[1]
+519:         spatial = list(x.shape[2:])
+520:         g = x.reshape([N, self.G, -1])
+521:         mean = g.mean([2], True); var = g.var([2], True)
+522:         g = (g - mean) * (var + self.eps).pow(-0.5)
+523:         g = g.reshape([N, C] + spatial)
+524:         wshape = [1, C] + [1] * len(spatial)
+525:         return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+526: 
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_tx3f1m/artifacts/tx3_f1m/LEAD_RERUN1_B.md
+44: - **W5, a product defect on both arms:** `test_ext_phase7.py::test_norms_and_conv1d` fails on production and on the
+45:   candidate. `nn.GroupNorm.forward` calls `x.reshape([N, G, -1])`, and the engine raises `reshape: element count
+46:   mismatch`. This is not a tooling problem, and not caused by TX3. It is ticketed separately (GN1).

@@ -510,19 +510,83 @@ class BatchNorm1D(Module):
 class GroupNorm(Module):
     def __init__(self, num_groups, num_channels, eps=1e-5):
         super().__init__()
+        # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+        # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+        # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
+        # integer-index protocol; excluding both boolean types is D5 policy.
+        import operator
+        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        try:
+            num_groups = int(operator.index(num_groups))
+        except TypeError as exc:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
+        if num_groups <= 0:
+            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
+            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+        try:
+            num_channels = int(operator.index(num_channels))
+        except TypeError as exc:
+            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)") from exc
+        if num_channels <= 0:
+            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+        if num_channels % num_groups != 0:
+            raise ValueError(
+                f"num_channels ({num_channels}) must be divisible by "
+                f"num_groups ({num_groups})"
+            )
         self.G, self.C, self.eps = num_groups, num_channels, eps
         self.weight = parameter(np.ones(num_channels))
         self.bias = parameter(np.zeros(num_channels))
 
     def forward(self, x):
+        # Prior art: PyTorch GroupNorm rank/channel checks (version unverified
+        # — lead to check); A2 explicitly limits this engine's dtype domain.
+        if x.ndim < 2:
+            raise ValueError(f"GroupNorm input rank ({x.ndim}) must be at least 2")
+        if x.shape[1] != self.C:
+            raise ValueError(f"GroupNorm input channels ({x.shape[1]}) must equal num_channels ({self.C})")
+        if x.dtype not in ("float32", "float16", "bfloat16"):
+            raise TypeError(f"GroupNorm input dtype {x.dtype!r} is unsupported")
+        if self.weight.dtype not in ("float32", "float16", "bfloat16"):
+            raise TypeError(f"GroupNorm weight dtype {self.weight.dtype!r} is unsupported")
+        if self.bias.dtype not in ("float32", "float16", "bfloat16"):
+            raise TypeError(f"GroupNorm bias dtype {self.bias.dtype!r} is unsupported")
+        # Prior art: PyTorch GroupNorm parameter shape validation (observed
+        # separately on CPU). D5 requires explicit refusal before tensor ops.
+        if self.weight.ndim != 1:
+            raise ValueError("GroupNorm weight must have rank 1")
+        if self.weight.shape[0] != self.C:
+            raise ValueError(f"GroupNorm weight length must equal num_channels ({self.C})")
+        if self.bias.ndim != 1:
+            raise ValueError("GroupNorm bias must have rank 1")
+        if self.bias.shape[0] != self.C:
+            raise ValueError(f"GroupNorm bias length must equal num_channels ({self.C})")
+        # Prior art: PyTorch half normalization uses float32 accumulation;
+        # Micikevicius et al. (2018), Mixed Precision Training (both unverified
+        # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
+        # equations stay unchanged; A1 keeps pow backward intermediates in FP32.
+        dtype = x.dtype
+        if dtype in ("float16", "bfloat16"):
+            x = x.astype("float32")
         N, C = x.shape[0], x.shape[1]
         spatial = list(x.shape[2:])
-        g = x.reshape([N, self.G, -1])
+        # Explicit extent: NDArray::reshape does not infer -1.
+        g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])
+        # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
+        # as required by Wu and He (2018) and PyTorch GroupNorm.
         mean = g.mean([2], True); var = g.var([2], True)
         g = (g - mean) * (var + self.eps).pow(-0.5)
         g = g.reshape([N, C] + spatial)
         wshape = [1, C] + [1] * len(spatial)
-        return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+        if (dtype == "float32" and self.weight.dtype == "float32"
+                and self.bias.dtype == "float32"):
+            return g * self.weight.reshape(wshape) + self.bias.reshape(wshape)
+        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+        output = g * weight.reshape(wshape) + bias.reshape(wshape)
+        return output if output.dtype == dtype else output.astype(dtype)
 
 
 class InstanceNorm2D(Module):

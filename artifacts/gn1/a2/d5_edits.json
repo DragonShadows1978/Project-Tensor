@@ -1,0 +1,10 @@
+[
+  [
+    "        if num_channels % num_groups != 0:\n            raise ValueError(\n",
+    "        # A2 domain checks, inspired by PyTorch GroupNorm argument validation;\n        # exact positive-int/bool policy is the GN1 A2 requirement.\n        if (isinstance(num_groups, bool) or not isinstance(num_groups, int)\n                or num_groups <= 0):\n            raise ValueError(f\"num_groups ({num_groups!r}) must be a positive integer (bool excluded)\")\n        if (isinstance(num_channels, bool) or not isinstance(num_channels, int)\n                or num_channels <= 0):\n            raise ValueError(f\"num_channels ({num_channels!r}) must be a positive integer (bool excluded)\")\n        if num_channels % num_groups != 0:\n            raise ValueError(\n"
+  ],
+  [
+    "        # Prior art: PyTorch half normalization uses float32 accumulation;\n        # Micikevicius et al. (2018), Mixed Precision Training (both unverified\n",
+    "        # Prior art: PyTorch GroupNorm rank/channel checks (version unverified\n        # \u2014 lead to check); A2 explicitly limits this engine's dtype domain.\n        if x.ndim < 2:\n            raise ValueError(f\"GroupNorm input rank ({x.ndim}) must be at least 2\")\n        if x.shape[1] != self.C:\n            raise ValueError(f\"GroupNorm input channels ({x.shape[1]}) must equal num_channels ({self.C})\")\n        if x.dtype not in (\"float32\", \"float16\", \"bfloat16\"):\n            raise TypeError(f\"GroupNorm input dtype {x.dtype!r} is unsupported\")\n        if self.weight.dtype not in (\"float32\", \"float16\", \"bfloat16\"):\n            raise TypeError(f\"GroupNorm weight dtype {self.weight.dtype!r} is unsupported\")\n        if self.bias.dtype not in (\"float32\", \"float16\", \"bfloat16\"):\n            raise TypeError(f\"GroupNorm bias dtype {self.bias.dtype!r} is unsupported\")\n        # Prior art: PyTorch half normalization uses float32 accumulation;\n        # Micikevicius et al. (2018), Mixed Precision Training (both unverified\n"
+  ]
+]

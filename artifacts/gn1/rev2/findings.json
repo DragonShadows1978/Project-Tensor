@@ -1,0 +1,134 @@
+{
+  "review": "GN1-REV2",
+  "order": "orders/GN1_REV2_REVIEW.md (02be3cb0)",
+  "reviewed": "A2 (bd30498a) against GN1-REV1 findings R1-F01..R1-F11",
+  "reviewer": "Claude Opus 5.5 (Agent-tool seat); author of A2: Codex (gpt-6.1-sol)",
+  "status": "complete",
+  "started": "2026-11-01T11:07-05:00",
+  "finished": "2026-11-01T11:40-05:00",
+  "verdict": "REJECT",
+  "counts": {"BLOCKER": 0, "MAJOR": 0, "MINOR": 4, "NIT": 7},
+  "rev1_findings": {
+    "R1-F01": {"status": "FIXED", "evidence": ["hostile_rev2_d.json D_H2_bound, D_H2c_bound, D_kill_plus_teardown_device", "q3_probe.json P3_device_fault_in_forward", "engine error-text census in REPORT.md Q3"], "related_new": ["R2-F02", "R2-F03"]},
+    "R1-F02": {"status": "FIXED", "evidence": ["hostile_rev2_d.json D_H3_bound, D_H3b_bound, D_H4_bound", "hostile_rev2_c.json C3_census_missing_id", "junit_real_probe.json (444 real IDs agree)"], "related_new": ["R2-F03", "R2-F11"]},
+    "R1-F03": {"status": "FIXED", "evidence": ["hostile_rev2_a.json A_H1, A_H1b", "hostile_rev2_c.json C1-C6 scorer exits, C8_full_positive"]},
+    "R1-F04": {"status": "FIXED", "evidence": ["q5_mutant_trace.json: 41/41 single-site inside GroupNorm; 40/41 reached in the call phase; M14 reached through default-argument binding"], "related_new": ["R2-F08"]},
+    "R1-F05": {"status": "FIXED", "evidence": ["q5_mutant_trace.json V1, V2 witnesses fail on stand-in; V3 identical on 432 dtype cases", "d5_probe.json mixed parameter rows"]},
+    "R1-F06": {"status": "FIXED (listed cases)", "evidence": ["d5_probe.json refusal rows"], "related_new": ["R2-F05", "R2-F06"]},
+    "R1-F07": {"status": "FIXED", "evidence": ["hostile_rev2_c.json C6, C8", "junit_real_probe.json"]},
+    "R1-F08": {"status": "NOT FIXED", "evidence": ["hostile_rev2_b.json B1_rechecked_out_burns_label (real forge-gpu-run)"], "related_new": ["R2-F01", "R2-F07"]},
+    "R1-F09": {"status": "FIXED", "evidence": ["derive_tolerances.py rerun in mirror: tolerance_bounds.json sha256 5051b795... identical to A2's"]},
+    "R1-F10": {"status": "FIXED", "evidence": ["regen_compare.json: 43/43 arms byte-identical to disk and seal; 0 symlinks"]},
+    "R1-F11": {"status": "NOT FIXED", "evidence": ["hostile_rev2_b.json B2-B5"], "related_new": ["R2-F04"]}
+  },
+  "questions": {
+    "Q1": "9 FIXED, 2 NOT FIXED (R1-F08, R1-F11)",
+    "Q2_D5": "UNSOUND (R2-F05 over-refusal, R2-F06 under-refusal)",
+    "Q3_kill_rule_and_device_veto": "UNSOUND (R2-F02, R2-F03); the device veto itself held on every case",
+    "Q4_scorer": "UNSOUND (R2-F01, R2-F04, R2-F07); no forged or stale receipt passed except a fully self-consistent forgery, which no unsigned scheme can refuse",
+    "Q5_mutants": "UNSOUND, NIT-level only (R2-F08, R2-F09); V3 proof correct",
+    "Q6_regeneration": "SOUND",
+    "Q7": "REJECT"
+  },
+  "findings": [
+    {
+      "id": "R2-F01",
+      "severity": "MINOR",
+      "closes_or_relates": "R1-F08 not fixed; D7 unmet",
+      "where": "artifacts/gn1/a2/evidence.py:157 (recognised forge outcomes), evidence.py:295 and run_gpu_line.py:57 (not-admitted predicate); installed forge-gpu-run:281,285",
+      "defect": "The installed forge-gpu-run has a third lease refusal, outcome 'rechecked-out' with exit 75 (the window changed while it waited for the lock, or the budget fell below --min after the wait). A2 recognises only ran/timeout/window-closed/no-window/no-lock, so it maps that log row to 'unrecognized', records the attempt as admitted and failed, and the parent then refuses every retry of the label ('label already has an admitted attempt'). This is R1-F08's exact consequence: every line must rerun in a new run root. D7 requires a 75/76 lease refusal to be 'not admitted' and retryable.",
+      "reproduction": "rev2/hostile_rev2.py part b, case B1, with the REAL forge-gpu-run (summary, window file and lock redirected under /tmp/gn1_rev2_forge; CPU sleeper child). REV2 holds the scratch lock, appends a COOLDOWN event while the runner waits, then releases it. Forge log row: rechecked-out 75. Parent receipt: admission admitted, forge_outcome unrecognized, passed false. The retry exits 1 with 'AssertionError: label already has an admitted attempt'. The scorer fails baseline_focus with its single admitted attempt. Receipt: rev2/hostile_rev2_b.json.",
+      "fix": "Add 'rechecked-out' to forge_outcome's recognised set. Treat (rc 75, cause no-window or rechecked-out) and (rc 76, cause no-lock), with no child_result.json, as not admitted in both run_gpu_line.py and recompute_line. Add a G4 control that uses each outcome word the installed runner can log, read from the runner rather than from a stand-in."
+    },
+    {
+      "id": "R2-F02",
+      "severity": "MINOR",
+      "closes_or_relates": "R1-F01/R1-F02 (D2 kill classes)",
+      "where": "tensor_cuda/tests/test_groupnorm_gn1.py:139-142; artifacts/gn1/a2/hostile_forge.py:76-79; G4_CONTROLS.md rows Generic_RuntimeError_not_kill and Unregistered_TypeError_not_kill",
+      "defect": "D2 counts a kill only for an AssertionError, or a ValueError/TypeError refusal from GroupNorm. The sealed test re-raises ANY RuntimeError, ValueError or TypeError from layer(x) in _check_values as AssertionError, so a generic, non-device engine RuntimeError is counted as a kill. G4's two controls claim the opposite, but they inject exception_class RuntimeError/TypeError directly into a stand-in summary, a shape the sealed test file cannot produce for these calls. The controls are vacuous against the real pipeline, and A2's report does not disclose the widening. The protection against environmental false kills then rests only on the device-pattern list (which the REV2 engine census found complete for the GroupNorm path) and on the candidate-focus precondition.",
+      "reproduction": "rev2/q3_probe.py case P1: the real test ID test_forward_values[float32-r3-n2-g2-default], the real candidate nn.py and A2's real Reports plugin, under A2's NumPy engine stand-in whose pow raises RuntimeError('pow: unsupported exponent path'). Plugin: exception_class AssertionError. evidence.acceptable_killers counts it as a kill, and the device veto does not fire. Receipt: rev2/q3_probe.json.",
+      "fix": "This is a lead decision. Either (a) amend D2 to state that a registered valid input refused by GroupNorm or by any engine op it calls is a kill unless it carries a device pattern, and replace the two controls with controls that run the real test file (as P1 does); or (b) narrow the wrapper to the registered engine refusal texts (for example 'reshape: element count mismatch', 'ew_binary dtype mismatch', 'shapes not broadcastable') and let every other exception propagate with its own class."
+    },
+    {
+      "id": "R2-F03",
+      "severity": "NIT",
+      "closes_or_relates": "R1-F02 (D2 'registered refusal from GroupNorm')",
+      "where": "artifacts/gn1/a2/run_gpu_tests.py:37-39; evidence.py:170-177 (comment: 'must originate in the GroupNorm frame'); G4 control Registered_refusal_positive ('GroupNorm-origin')",
+      "defect": "groupnorm_refusal is true when ANY traceback entry is GroupNorm.forward or GroupNorm.__init__ in nn.py. It does not check where the exception was raised. A ValueError or TypeError raised by an engine call made from inside GroupNorm is therefore classed as a registered GroupNorm refusal.",
+      "reproduction": "rev2/q3_probe.py case P2: test_constructor_defaults, with the engine's tensor factory raising TypeError while GroupNorm.__init__ allocates its parameters. The plugin records exception_class TypeError with groupnorm_refusal true, and acceptable_killers counts it as a kill. Receipt: rev2/q3_probe.json.",
+      "fix": "Classify by the innermost entry (excinfo.traceback[-1]): it must be GroupNorm.forward or __init__ in the arm's nn.py, ideally on one of the registered raise lines. Add a control with a callee-raised TypeError under GroupNorm."
+    },
+    {
+      "id": "R2-F04",
+      "severity": "NIT",
+      "closes_or_relates": "R1-F11 not fixed (D10)",
+      "where": "artifacts/gn1/a2/run_gpu_line.py:83 (outer_timeout_exit=rc in (124, 137)); the field is not checked by the scorer (evidence.py:317)",
+      "defect": "The receipt keeps A1's flag under a new name, and it is still true for every 124. With the real runner it is true when forge's own deadline fired, when the window closed, and when the child's inner timeout fired: three cases where the outer bound did not fire. In the one case where the outer bound did fire, the cause is recorded only as 'log-exit-mismatch', because forge logged 'ran 143' after the TERM. A receipt can therefore still state an outer timeout that did not happen.",
+      "reproduction": "rev2/hostile_rev2.py part b with the REAL forge-gpu-run. B2: forge 'timeout 124', outer_timeout_exit true. B3: 'window-closed 124', true. B5: 'ran 124' (inner child timeout), true. B4 (outer bound fired): forge 'ran 143', forge_outcome 'log-exit-mismatch'. Receipt: rev2/hostile_rev2_b.json.",
+      "fix": "Derive the outer timeout from the runner's row. It fired iff rc is 124 or 137 and the row is missing, or the row says 'ran' with a logged exit of 143 or 137 that differs from rc. Record it as cause 'outer-timeout', drop or rename the old flag, and have the scorer recompute it."
+    },
+    {
+      "id": "R2-F05",
+      "severity": "MINOR",
+      "closes_or_relates": "introduced by the R1-F06 fix (D5)",
+      "where": "tensor_cuda/tensor_cuda/nn.py:517-522",
+      "defect": "The D5 check `not isinstance(v, int)` refuses NumPy integer counts: np.int64, np.int32 and np.uint8 with the value 2 or 6. These are positive integers, so they are inside D5's domain ('not a positive integer (bool excluded)'). A1 accepted them, and PyTorch 2.11 accepts them in both the constructor and forward. GroupNorm now refuses inputs it should accept. No test pins either behaviour.",
+      "reproduction": "rev2/d5_probe.py, constructor rows num_groups/np_int64, np_int32, np_uint8 and num_channels/np_int64, np_int32, np_uint8. A1: accepted. A2: ValueError 'must be a positive integer (bool excluded)'. torch: accepted. Receipt: rev2/d5_probe.json.",
+      "fix": "Accept any integral value through operator.index, excluding bool and numpy.bool_, and store int(value). Add accept tests for NumPy integers and a refusal test for numpy.bool_."
+    },
+    {
+      "id": "R2-F06",
+      "severity": "MINOR",
+      "closes_or_relates": "same class as R1-F06; not listed in D5",
+      "where": "tensor_cuda/tensor_cuda/nn.py:532-545 (no parameter shape check); 564 and 567 (reshape(wshape))",
+      "defect": "Parameter shape is not validated. A weight with C elements in a non-vector shape, (2,3), (6,1) or (1,6,1), is silently reshaped to [1,C,...] and used. A weight of the wrong size is refused only by an incidental engine reshape RuntimeError (kernels.cu:759), the same incidental-refusal pattern R1-F06 reported for a channel mismatch. PyTorch refuses all three shapes ('Expected weight to be a vector of size equal to the number of channels in input'). D5 did not list parameter shape, so this is a scope gap in the order rather than a deviation by A2.",
+      "reproduction": "rev2/d5_probe.py, param_shape rows: A2 accepted, torch refused (RuntimeError). Receipt: rev2/d5_probe.json.",
+      "fix": "In forward, refuse with ValueError when weight.ndim != 1, bias.ndim != 1, or either shape[0] != C. Add a test and a mutant for each check."
+    },
+    {
+      "id": "R2-F07",
+      "severity": "NIT",
+      "closes_or_relates": "D7 class (retries)",
+      "where": "artifacts/gn1/a2/run_gpu_line.py:40-43; evidence.py:283-284",
+      "defect": "If the parent dies after creating attempt-NNNN but before writing parent_result.json (an interrupt, the staged outer `timeout 350s`, a session loss), every later parent for that label crashes reading the missing receipt, and the scorer fails the line. The label cannot be rerun in that root, so every line must rerun in a new root. The outcome is fail-closed: no false pass.",
+      "reproduction": "rev2/hostile_rev2.py part c, case C7. The parent is SIGKILLed after its child wrote child_result.json. The retry exits 1 with FileNotFoundError on attempt-0001/parent_result.json. The scorer shows the line failed. Receipt: rev2/hostile_rev2_c.json.",
+      "fix": "Treat an attempt without a parent receipt as incomplete. If its child_result.json exists, the next parent finalises (evaluates) that attempt rather than retrying, to prevent retry-until-pass. If the child never started, record the attempt as not admitted and allow a retry. The scorer lists incomplete attempts."
+    },
+    {
+      "id": "R2-F08",
+      "severity": "NIT",
+      "closes_or_relates": "R1-F04 evidence (L41)",
+      "where": "artifacts/gn1/a2/MUTANTS.md:36; artifacts/gn1/a2/mutants/M14/trace.json",
+      "defect": "M14 edits the default argument on the `def __init__` line (nn.py:511). That line executes when the class is defined, at import, not when the witness runs. A2's trace counts import-time lines (its executed_lines start at line 1), so '[511] -> [511]' would hold for any test. The kill itself is real: the witness asserts layer.eps == 1e-5 and fails on the mutant. But the reach claim does not come from the witness.",
+      "reproduction": "rev2/q5_mutant_trace.py traces only the witness's call phase. Line 511 is not executed there for M14; every other mutant's edit line is. The M14 witness exits 1 on the mutant and 0 on the candidate. Receipt: rev2/q5_mutant_trace.json.",
+      "fix": "Restrict traces to the call phase. Record M14's reach as default-argument binding observed by the witness's call path."
+    },
+    {
+      "id": "R2-F09",
+      "severity": "NIT",
+      "closes_or_relates": "Q5 (a decision without a mutant; D4)",
+      "where": "tensor_cuda/tensor_cuda/nn.py:562 (fast-path conjunct dtype == \"float32\")",
+      "defect": "V1 and V2 cover the weight and bias conjuncts of the fast-path condition, but no mutant covers its first conjunct, `dtype == \"float32\"`. It is the only GroupNorm decision without a registered mutant. The existing tests do kill the single-site mutant on the stand-in, so this is a registration gap, not a test gap.",
+      "reproduction": "rev2/q5_uncovered_probe.py builds the mutant `True and self.weight.dtype == \"float32\" ...` in /tmp. On the stand-in it is killed by test_mixed_parameters[forward-default-float16] and [forward-default-bfloat16] ('float32' == 'float16' output dtype). test_forward_values[float16-r3-n2-g2-default] does not kill it. Receipt: rev2/q5_uncovered_probe.json.",
+      "fix": "Register it, for example as V4, with witness test_mixed_parameters[forward-default-float16], and stage its GPU line."
+    },
+    {
+      "id": "R2-F10",
+      "severity": "NIT",
+      "closes_or_relates": "A2 tooling guard (L40)",
+      "where": "artifacts/gn1/a2/run_gpu_line.py:48; STAGED_GPU_COMMANDS.sh:11",
+      "defect": "The TMPDIR guard is a string-prefix test, so '/tmp/gn1_a2_boot/../gn1_rev2_tmp' passes it while pytest's basetemp resolves outside /tmp/gn1_a2_*. This review used exactly that path (documented in hostile_rev2.py) to keep its own writes inside /tmp/gn1_rev2_*.",
+      "reproduction": "Every Part A-D parent run in rev2/hostile_rev2_*.json passed the guard with TMPDIR=/tmp/gn1_a2_boot/../gn1_rev2_tmp (resolves to /tmp/gn1_rev2_tmp).",
+      "fix": "Check the resolved path: Path(TMPDIR).resolve().parent == Path('/tmp') and its name starts with 'gn1_a2_'."
+    },
+    {
+      "id": "R2-F11",
+      "severity": "NIT",
+      "closes_or_relates": "R1-F02 binding (D2/D3 seal coverage)",
+      "where": "artifacts/gn1/a2/seal_staging.py:17-21 (test_files = the 10 test files only); tensor_cuda/tests/test_apa_om135_imm.py:25-26",
+      "defect": "A sealed regression file imports scripts/apa_om135_core.py by inserting ROOT/scripts into sys.path. That module is not in the seal, so the regression lines' outcomes depend on an input that neither the child nor the scorer pins. The lead's no-touch rule (L26) limits the practical risk.",
+      "reproduction": "The REV2 mirror built only from the seal could not collect the regression suite ('ModuleNotFoundError: No module named apa_om135_core'; rev2/junit_real_probe.log, first run). With the module copied (sha256 cb2f5dd7..., equal to tracked_after.json) the suite collects 444 IDs, equal to the census.",
+      "fix": "Seal every local module the regression files import (here scripts/apa_om135_core.py) under test_files, and verify it in the child like the test files."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ M06in/nn.py
+@@ -573,7 +573,7 @@
+         N, C = x.shape[0], x.shape[1]
+         spatial = list(x.shape[2:])
+         # Explicit extent: NDArray::reshape does not infer -1.
+-        g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])
++        g = x.reshape([N, C // self.G, self.G] + spatial).permute([0, 2, 1] + list(range(3, 3 + len(spatial)))).reshape([N, self.G, (C // self.G) * math.prod(spatial)])
+         # ops.cpp::var computes mean((x - mean(x))**2), already biased (ddof=0),
+         # as required by Wu and He (2018) and PyTorch GroupNorm.
+         mean = g.mean([2], True); var = g.var([2], True)

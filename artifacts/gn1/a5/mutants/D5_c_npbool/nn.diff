@@ -1,0 +1,11 @@
+--- candidate/nn.py
++++ D5_c_npbool/nn.py
+@@ -523,7 +523,7 @@
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
+         if num_groups <= 0:
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+-        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
++        if isinstance(num_channels, bool) or not isinstance(num_channels, np.bool_):
+             raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+         try:
+             num_channels = int(operator.index(num_channels))

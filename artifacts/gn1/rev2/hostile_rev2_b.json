@@ -1,0 +1,219 @@
+{
+  "base": "/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327",
+  "real_forge": "forge-gpu-run(installed)",
+  "results": [
+    {
+      "case": "B1_rechecked_out_burns_label",
+      "ref": "R1-F08/D7",
+      "expectation": "D7: a 75 lease refusal is 'not admitted' and the label may be retried",
+      "outcome_as_expected": false,
+      "defect_reproduced": true,
+      "first": {
+        "exit": 1,
+        "stdout": "{\"label\": \"baseline_focus\", \"arm\": \"baseline\", \"suite\": \"focus\", \"start\": \"2026-11-01T16:23:28.717069+00:00\", \"child_exited\": \"2026-11-01T16:23:30.696436+00:00\", \"recorded\": \"2026-11-01T16:23:30.696722+00:00\", \"cwd\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2\", \"command\": [\"forge-gpu-run(installed)\", \"--min\", \"1\", \"--max\", \"60\", \"--margin\", \"2\", \"--label\", \"rev2-B1\", \"--\", \"/usr/bin/python3\", \"/tmp/gn1_rev2_tools/sleeper.py\", \"run_gpu_tests.py\", \"baseline\", \"focus\"], \"expected_child_exits\": [1], \"exit\": 75, \"outer_bound_seconds\": 60, \"outer_timeout_exit\": false, \"audit\": false, \"run_root\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out\", \"attempt_dir\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001\", \"seal_sha256\": \"29c286ba945d24a754ce1a55c220fda74e2fad9ae40035d83c707c247f7b6816\", \"admission\": \"admitted\", \"passed\": false, \"reasons\": [\"expected exits [1], got 75\", \"[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001/child_result.json'\", \"forge outcome: unrecognized\"], \"actual_killers\": [], \"outcomes\": {}, \"forge_outcome\": \"unrecognized\", \"timeout\": false}\n",
+        "stderr": "",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 75,
+          "passed": false,
+          "reasons": [
+            "expected exits [1], got 75",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001/child_result.json'",
+            "forge outcome: unrecognized"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "unrecognized",
+          "timeout": false,
+          "outer_timeout_exit": false
+        },
+        "forge_log_last": [
+          "rechecked-out",
+          "75"
+        ]
+      },
+      "retry": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/run_gpu_line.py\", line 93, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/run_gpu_line.py\", line 41, in main\n    assert all(read(p / \"parent_result.json\")[\"admission\"] == \"not_admitted\" for p in previous), \"label already has an admitted attempt\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: label already has an admitted attempt\n",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 75,
+          "passed": false,
+          "reasons": [
+            "expected exits [1], got 75",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001/child_result.json'",
+            "forge outcome: unrecognized"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "unrecognized",
+          "timeout": false,
+          "outer_timeout_exit": false
+        },
+        "forge_log_last": [
+          "rechecked-out",
+          "75"
+        ]
+      },
+      "scorer": {
+        "exit": 1,
+        "stderr": "",
+        "G5_passed": false,
+        "errors": [],
+        "line": {
+          "passed": false,
+          "reasons": [
+            "expected exits [1], got 75",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001/child_result.json'",
+            "forge outcome: unrecognized"
+          ],
+          "attempts": [
+            {
+              "attempt": "attempt-0001",
+              "admission": "admitted",
+              "exit": 75,
+              "forge_outcome": "unrecognized"
+            }
+          ],
+          "selected_attempt": "/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B1_rechecked_out/baseline_focus/attempt-0001"
+        }
+      }
+    },
+    {
+      "case": "B2_forge_timeout_124",
+      "ref": "R1-F11/D10",
+      "expectation": "forge_outcome timeout; outer bound did NOT fire",
+      "outcome_as_expected": true,
+      "run": {
+        "exit": 1,
+        "stdout": "{\"label\": \"candidate_focus\", \"arm\": \"candidate\", \"suite\": \"focus\", \"start\": \"2026-11-01T16:23:31.788865+00:00\", \"child_exited\": \"2026-11-01T16:23:35.867566+00:00\", \"recorded\": \"2026-11-01T16:23:35.867870+00:00\", \"cwd\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2\", \"command\": [\"forge-gpu-run(installed)\", \"--min\", \"1\", \"--max\", \"4\", \"--margin\", \"1\", \"--label\", \"rev2-B2\", \"--\", \"/usr/bin/python3\", \"/tmp/gn1_rev2_tools/sleeper.py\", \"run_gpu_tests.py\", \"candidate\", \"focus\"], \"expected_child_exits\": [0], \"exit\": 124, \"outer_bound_seconds\": 60, \"outer_timeout_exit\": true, \"audit\": false, \"run_root\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B2_forge_timeout\", \"attempt_dir\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B2_forge_timeout/candidate_focus/attempt-0001\", \"seal_sha256\": \"29c286ba945d24a754ce1a55c220fda74e2fad9ae40035d83c707c247f7b6816\", \"admission\": \"admitted\", \"passed\": false, \"reasons\": [\"expected exits [0], got 124\", \"[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B2_forge_timeout/candidate_focus/attempt-0001/child_result.json'\", \"forge outcome: timeout\"], \"actual_killers\": [], \"outcomes\": {}, \"forge_outcome\": \"timeout\", \"timeout\": true}\n",
+        "stderr": "",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 124,
+          "passed": false,
+          "reasons": [
+            "expected exits [0], got 124",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B2_forge_timeout/candidate_focus/attempt-0001/child_result.json'",
+            "forge outcome: timeout"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "timeout",
+          "timeout": true,
+          "outer_timeout_exit": true
+        },
+        "forge_log_last": [
+          "timeout",
+          "124"
+        ]
+      },
+      "outer_timeout_exit_flag": true
+    },
+    {
+      "case": "B3_window_closed_124",
+      "ref": "R1-F11/D10",
+      "expectation": "forge_outcome window-closed; outer bound did NOT fire",
+      "outcome_as_expected": true,
+      "run": {
+        "exit": 1,
+        "stdout": "{\"label\": \"candidate_focus\", \"arm\": \"candidate\", \"suite\": \"focus\", \"start\": \"2026-11-01T16:23:36.725878+00:00\", \"child_exited\": \"2026-11-01T16:23:39.796981+00:00\", \"recorded\": \"2026-11-01T16:23:39.797296+00:00\", \"cwd\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2\", \"command\": [\"forge-gpu-run(installed)\", \"--min\", \"1\", \"--max\", \"60\", \"--margin\", \"1\", \"--label\", \"rev2-B3\", \"--\", \"/usr/bin/python3\", \"/tmp/gn1_rev2_tools/sleeper.py\", \"run_gpu_tests.py\", \"candidate\", \"focus\"], \"expected_child_exits\": [0], \"exit\": 124, \"outer_bound_seconds\": 60, \"outer_timeout_exit\": true, \"audit\": false, \"run_root\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B3_window_closed\", \"attempt_dir\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B3_window_closed/candidate_focus/attempt-0001\", \"seal_sha256\": \"29c286ba945d24a754ce1a55c220fda74e2fad9ae40035d83c707c247f7b6816\", \"admission\": \"admitted\", \"passed\": false, \"reasons\": [\"expected exits [0], got 124\", \"[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B3_window_closed/candidate_focus/attempt-0001/child_result.json'\", \"forge outcome: window-closed\"], \"actual_killers\": [], \"outcomes\": {}, \"forge_outcome\": \"window-closed\", \"timeout\": false}\n",
+        "stderr": "",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 124,
+          "passed": false,
+          "reasons": [
+            "expected exits [0], got 124",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B3_window_closed/candidate_focus/attempt-0001/child_result.json'",
+            "forge outcome: window-closed"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "window-closed",
+          "timeout": false,
+          "outer_timeout_exit": true
+        },
+        "forge_log_last": [
+          "window-closed",
+          "124"
+        ]
+      },
+      "outer_timeout_exit_flag": true
+    },
+    {
+      "case": "B4_outer_bound_124",
+      "ref": "R1-F11/D10",
+      "expectation": "line rejected; cause recorded",
+      "outcome_as_expected": true,
+      "run": {
+        "exit": 1,
+        "stdout": "{\"label\": \"candidate_focus\", \"arm\": \"candidate\", \"suite\": \"focus\", \"start\": \"2026-11-01T16:23:40.689423+00:00\", \"child_exited\": \"2026-11-01T16:23:44.714148+00:00\", \"recorded\": \"2026-11-01T16:23:44.714449+00:00\", \"cwd\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2\", \"command\": [\"forge-gpu-run(installed)\", \"--min\", \"1\", \"--max\", \"60\", \"--margin\", \"1\", \"--label\", \"rev2-B4\", \"--\", \"/usr/bin/python3\", \"/tmp/gn1_rev2_tools/sleeper.py\", \"run_gpu_tests.py\", \"candidate\", \"focus\"], \"expected_child_exits\": [0], \"exit\": 124, \"outer_bound_seconds\": 3, \"outer_timeout_exit\": true, \"audit\": false, \"run_root\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B4_outer_bound\", \"attempt_dir\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B4_outer_bound/candidate_focus/attempt-0001\", \"seal_sha256\": \"29c286ba945d24a754ce1a55c220fda74e2fad9ae40035d83c707c247f7b6816\", \"admission\": \"admitted\", \"passed\": false, \"reasons\": [\"expected exits [0], got 124\", \"[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B4_outer_bound/candidate_focus/attempt-0001/child_result.json'\", \"forge outcome: log-exit-mismatch\"], \"actual_killers\": [], \"outcomes\": {}, \"forge_outcome\": \"log-exit-mismatch\", \"timeout\": false}\n",
+        "stderr": "",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 124,
+          "passed": false,
+          "reasons": [
+            "expected exits [0], got 124",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B4_outer_bound/candidate_focus/attempt-0001/child_result.json'",
+            "forge outcome: log-exit-mismatch"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "log-exit-mismatch",
+          "timeout": false,
+          "outer_timeout_exit": true
+        },
+        "forge_log_last": [
+          "ran",
+          "143"
+        ]
+      },
+      "outer_timeout_exit_flag": true
+    },
+    {
+      "case": "B5_inner_child_timeout_124",
+      "ref": "R1-F11/D10",
+      "expectation": "forge_outcome ran with exit 124; outer bound did NOT fire",
+      "outcome_as_expected": true,
+      "run": {
+        "exit": 1,
+        "stdout": "{\"label\": \"candidate_focus\", \"arm\": \"candidate\", \"suite\": \"focus\", \"start\": \"2026-11-01T16:23:45.504460+00:00\", \"child_exited\": \"2026-11-01T16:23:47.567669+00:00\", \"recorded\": \"2026-11-01T16:23:47.567965+00:00\", \"cwd\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2\", \"command\": [\"forge-gpu-run(installed)\", \"--min\", \"1\", \"--max\", \"60\", \"--margin\", \"1\", \"--label\", \"rev2-B5\", \"--\", \"timeout\", \"2s\", \"/usr/bin/python3\", \"/tmp/gn1_rev2_tools/sleeper.py\", \"run_gpu_tests.py\", \"candidate\", \"focus\"], \"expected_child_exits\": [0], \"exit\": 124, \"outer_bound_seconds\": 60, \"outer_timeout_exit\": true, \"audit\": false, \"run_root\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B5_inner_timeout\", \"attempt_dir\": \"/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B5_inner_timeout/candidate_focus/attempt-0001\", \"seal_sha256\": \"29c286ba945d24a754ce1a55c220fda74e2fad9ae40035d83c707c247f7b6816\", \"admission\": \"admitted\", \"passed\": false, \"reasons\": [\"expected exits [0], got 124\", \"[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B5_inner_timeout/candidate_focus/attempt-0001/child_result.json'\"], \"actual_killers\": [], \"outcomes\": {}, \"forge_outcome\": \"ran\", \"timeout\": false}\n",
+        "stderr": "",
+        "attempts": [
+          "attempt-0001"
+        ],
+        "parent": {
+          "exit": 124,
+          "passed": false,
+          "reasons": [
+            "expected exits [0], got 124",
+            "[Errno 2] No such file or directory: '/tmp/gn1_rev2_regen/W/artifacts/gn1/a2/rev2_runs_112327/B5_inner_timeout/candidate_focus/attempt-0001/child_result.json'"
+          ],
+          "actual_killers": [],
+          "admission": "admitted",
+          "forge_outcome": "ran",
+          "timeout": false,
+          "outer_timeout_exit": true
+        },
+        "forge_log_last": [
+          "ran",
+          "124"
+        ]
+      },
+      "outer_timeout_exit_flag": true
+    }
+  ]
+}

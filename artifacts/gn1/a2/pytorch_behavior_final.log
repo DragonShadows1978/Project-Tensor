@@ -1,0 +1,148 @@
+{
+  "version": "2.11.0+cu130",
+  "device": "cpu",
+  "results": {
+    "nondivisible": {
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "num_channels (6) must be divisible by num_groups (4)"
+    },
+    "num_groups/zero": {
+      "outcome": "refused",
+      "exception_class": "ZeroDivisionError",
+      "message": "integer modulo by zero"
+    },
+    "num_groups/negative": {
+      "outcome": "accepted",
+      "result": "GroupNorm(-2, 6, eps=1e-05, affine=True)"
+    },
+    "num_groups/float": {
+      "outcome": "accepted",
+      "result": "GroupNorm(2.0, 6, eps=1e-05, affine=True)"
+    },
+    "num_groups/true": {
+      "outcome": "accepted",
+      "result": "GroupNorm(True, 6, eps=1e-05, affine=True)"
+    },
+    "num_groups/false": {
+      "outcome": "refused",
+      "exception_class": "ZeroDivisionError",
+      "message": "integer modulo by zero"
+    },
+    "num_groups/string": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "unsupported operand type(s) for %: 'int' and 'str'"
+    },
+    "num_groups/none": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "unsupported operand type(s) for %: 'int' and 'NoneType'"
+    },
+    "num_channels/zero": {
+      "outcome": "accepted",
+      "result": "GroupNorm(2, 0, eps=1e-05, affine=True)"
+    },
+    "num_channels/negative": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "Trying to create tensor with negative dimension -2: [-2]"
+    },
+    "num_channels/float": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "empty() received an invalid combination of arguments - got (float, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints size, *, tuple of names names, torch.memory_format memory_format = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)\n * (tuple of ints size, *, torch.memory_format memory_format = None, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)\n"
+    },
+    "num_channels/true": {
+      "outcome": "refused",
+      "exception_class": "ValueError",
+      "message": "num_channels (True) must be divisible by num_groups (2)"
+    },
+    "num_channels/false": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "empty() received an invalid combination of arguments - got (bool, dtype=NoneType, device=NoneType), but expected one of:\n * (tuple of ints size, *, tuple of names names, torch.memory_format memory_format = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)\n * (tuple of ints size, *, torch.memory_format memory_format = None, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)\n"
+    },
+    "num_channels/string": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "not all arguments converted during string formatting"
+    },
+    "num_channels/none": {
+      "outcome": "refused",
+      "exception_class": "TypeError",
+      "message": "unsupported operand type(s) for %: 'NoneType' and 'int'"
+    },
+    "rank0": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "Expected at least 2 dimensions for input tensor but received 0"
+    },
+    "rank1": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "Expected at least 2 dimensions for input tensor but received 1"
+    },
+    "channels": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "Expected weight to be a vector of size equal to the number of channels in input, but got weight of shape [6] and input of shape [2, 4, 3]"
+    },
+    "torch.int64/input": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): all inputs must share same datatype."
+    },
+    "torch.int64/weight": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): expect parameter to have scalar type of Float"
+    },
+    "torch.int64/bias": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "expected scalar type Float but found Long"
+    },
+    "torch.bool/input": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): all inputs must share same datatype."
+    },
+    "torch.bool/weight": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): expect parameter to have scalar type of Float"
+    },
+    "torch.bool/bias": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "expected scalar type Float but found Bool"
+    },
+    "torch.uint8/input": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): all inputs must share same datatype."
+    },
+    "torch.uint8/weight": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): expect parameter to have scalar type of Float"
+    },
+    "torch.uint8/bias": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "expected scalar type Float but found Byte"
+    },
+    "mixed/torch.float32/torch.float16": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "expected scalar type Float but found Half"
+    },
+    "mixed/torch.float16/torch.float32": {
+      "outcome": "refused",
+      "exception_class": "RuntimeError",
+      "message": "mixed dtype (CPU): expect parameter to have scalar type of Float"
+    }
+  },
+  "verified": true
+}

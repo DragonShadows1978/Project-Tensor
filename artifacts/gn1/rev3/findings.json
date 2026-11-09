@@ -1,0 +1,69 @@
+{
+  "review": "GN1-REV3",
+  "reviewer": "Claude Opus 5.5 (Agent-tool seat)",
+  "target": "A3 cf922891 (receipts artifacts/gn1/a3/)",
+  "status": "complete",
+  "verdict": "REJECT",
+  "findings": [
+    {
+      "id": "R3-F01",
+      "severity": "MINOR",
+      "owner": "GPU tooling (a3/)",
+      "where": "a3/evidence.py:199-201 (not_admitted); a3/run_gpu_line.py:54-61; installed runner lines 255-278 (lock wait runs with the default SIGTERM disposition: handlers are installed only inside supervise(), line 173) and 302 (the finally-block log row is never written when SIGTERM kills the process)",
+      "title": "An outer timeout while the runner waits for the GPU lock is recorded as an admitted failure and the label can never be retried",
+      "reproduction": "hostile_rev3.py part b, case B6 (real installed runner, scratch lock held by the harness, parent bound 4 s): attempt-0001 has no runner row and no invocation.json (child never started), parent records exit 124, admission 'admitted', timeout_cause 'outer-timeout'; the same-root retry dies with 'label already has an admitted attempt'. hostile_rev3_b.json",
+      "fix": "Treat exit 124/137 with no runner row and no child start marker as not admitted (child never started). Have run_gpu_tests.py write a start marker as its first action, before any engine import, and key the rule on it. Add a G4 control that holds the scratch lock past the outer bound."
+    },
+    {
+      "id": "R3-F02",
+      "severity": "MINOR",
+      "owner": "GPU tooling (a3/)",
+      "where": "a3/evidence.py:184-196 (raises), a3/evidence.py:288 (called outside evaluate()'s try), a3/run_gpu_line.py:61 (no guard); installed runner lines 183-186 and 205-218: a TERM caught during the runner's own grace sets `requested`, and line 218 returns 143 with the outcome still 'timeout' or 'window-closed', logged at 302",
+      "title": "timeout_cause() raises on reachable runner rows, so the parent dies without a receipt",
+      "reproduction": "hostile_rev3.py part b, cases B7 (runner deadline, then the outer bound fires inside the runner's kill grace: row timeout/143, exit 124), B7b (same, child_result present) and B8 (window-closed/143, exit 124): the parent exits 1 with 'ValueError: cannot attribute timeout from runner log' and writes no parent_result.json. In B7 and B8 the attempt is then classed 'not_admitted' and retried although the runner's own row shows it ran the child.",
+      "fix": "Map rows (timeout|window-closed, 143 or 137 differing from the exit) with exit 124/137 to 'outer-timeout' (the outer bound fired during the runner's grace), and make evaluate() record any attribution failure as a reason instead of raising. Add the three cases as G4 controls."
+    },
+    {
+      "id": "R3-F03",
+      "severity": "MINOR",
+      "owner": "GPU tooling (a3/)",
+      "where": "a3/evidence.py:327-331 (incomplete-attempt branch of recompute_line); the child's start evidence a3/run_gpu_tests.py:104 (invocation.json, written before pytest) and the runner's own row are not consulted",
+      "title": "'Child never started' is approximated by 'no child_result.json': a child that started and died without a result is retried, and the retry can pass",
+      "reproduction": "hostile_rev3.py part c, case C7b: the child writes invocation.json (as run_gpu_tests.py:104 does before pytest) and sleeps; the parent is killed; attempt-0001 is inventoried 'not_admitted'; the retry is admitted and the scorer passes the label from attempt-0002. B7/B8 reach the same branch with a runner row proving the child ran.",
+      "fix": "Classify an incomplete attempt as not admitted only when there is no evidence the child started: no child start marker/invocation.json, no runner row with outcome ran/timeout/window-closed, and no junit.xml. Otherwise it is admitted, evaluated and failed (never retried). Add C7b as a G4 control."
+    },
+    {
+      "id": "R3-F04",
+      "severity": "NIT",
+      "owner": "GPU tooling (a3/)",
+      "where": "a3/evidence.py:334 (child_result.json read outside evaluate()'s try); a3/run_gpu_tests.py:116 (non-atomic write_text)",
+      "title": "A truncated child_result.json from an interrupted attempt crashes every later parent for that label instead of being evaluated",
+      "reproduction": "hostile_rev3_e.py case E5: attempt-0001 holds only a truncated child_result.json; the next parent exits 1 with json.decoder.JSONDecodeError (traceback), and the scorer fails the label with 'Expecting value: line 1 column 70'. Fails closed, but D4 says an incomplete attempt is 'not fatal' and is evaluated.",
+      "fix": "Read child_rc inside evaluate()'s try (or pass None and let evaluate record the read failure as a reason), so the attempt is admitted, incomplete and failed; write child_result.json atomically (temporary file plus os.replace). Add E5 as a G4 control."
+    },
+    {
+      "id": "R3-F05",
+      "severity": "NIT",
+      "owner": "GPU tooling (a3/)",
+      "where": "a3/trace_imports.py:27 (--collect-only); a3/seal_staging.py:17-20; a3/evidence.py:57-58",
+      "title": "The import-traced seal sees collection only; modules first imported at run time are not pinned",
+      "reproduction": "seal_runtime_imports.py: after numpy and pytest are loaded, the two runtime accesses the sealed code makes (np.random.seed at a3/run_gpu_tests.py:96, used by most sealed tests; np.testing in tensor_cuda/tests/test_hy3d_engine_ops.py) load 23 module files, 19 of them absent from staging_seal.json's 513 external pins (numpy/random/* including mtrand, which generates the test inputs, and numpy/testing/*). Local coverage, R2-F11's subject, is complete: seal_mirror_collect.py collects all 468 regression IDs from a seal-only mirror.",
+      "fix": "Record the import census during execution, not collection: have run_gpu_tests.py write the sys.modules origins (path and sha256) after pytest.main into child_result.json and have evaluate() require each one to be sealed; or trace a real run of each suite on the CPU stand-in plus the child's own runtime path. At minimum, state in SEAL_IMPORT_TRACE.md that runtime imports are not covered."
+    },
+    {
+      "id": "R3-F06",
+      "severity": "NIT",
+      "owner": "tests and mutants (a3/)",
+      "where": "a3/AMENDMENTS.md:3; a3/MUTANTS.md:60; a3/EQUIVALENCES.md (V3 only); staging_seal.json 'equivalences' ({V3}); bar: orders/GN1_A2_REV1_FIXES.md:65",
+      "title": "The equivalent numpy.bool_-clause deletion mutants were dropped instead of being registered with their equivalence proof",
+      "reproduction": "npbool_deletion_probe.py: under NumPy 2.4.2, operator.index(numpy.bool_) raises TypeError (checked live), and deleting `isinstance(x, np.bool_)` at nn.py:518 or nn.py:526 leaves all 405 sealed GN tests passing on the CPU stand-in (both deletions: exit 0, 405 calls, 0 failures). The deletions are equivalent mutants. A3 replaced each with a negation (D5_g_npbool, D5_c_npbool) that refuses every count that is not a numpy.bool_, so any valid count kills it. That proves the clause is reached, not that its refusal is needed. The equivalence is recorded only in AMENDMENTS/MUTANTS prose. It is not in EQUIVALENCES.md or the seal, and it has no staged line, unlike V3.",
+      "fix": "Register the two deletions as sealed equivalences with the operator.index proof, naming the NumPy-version dependency, and stage them with an expected pass as V3 is. Keep the negation mutants as reach checks."
+    }
+  ],
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 0,
+    "MINOR": 3,
+    "NIT": 3
+  }
+}

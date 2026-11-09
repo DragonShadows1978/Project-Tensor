@@ -1,0 +1,30 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________________ test_nondivisible_refusal ___________________________
+
+    def test_nondivisible_refusal():
+        from tensor_cuda import nn
+>       error = _expect_refusal(ValueError, lambda: nn.GroupNorm(4, 6))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_groupnorm_gn1.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+kind = <class 'ValueError'>
+operation = <function test_nondivisible_refusal.<locals>.<lambda> at 0x771111302e80>
+
+    def _expect_refusal(kind, operation):
+        error = None
+        try:
+            operation()
+        except Exception as exc:
+            error = exc
+>       assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+E       AssertionError: expected ValueError, got None
+E       assert False
+E        +  where False = isinstance(None, <class 'ValueError'>)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:357: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_nondivisible_refusal - A...
+1 failed in 0.05s

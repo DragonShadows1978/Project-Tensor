@@ -1,0 +1,55 @@
+{
+  "fields": [
+    {
+      "field": "program.resolved_path / program.sha256",
+      "requirement": "resolved sealed run_gpu_tests.py and exact SHA-256",
+      "source": "a7/device_evidence.py:24-26,37; validation:92-93"
+    },
+    {
+      "field": "native_status.cudaGetDevice / device_ordinal",
+      "requirement": "status \"0\"; nonnegative exact decimal ordinal string",
+      "source": "a7/device_evidence.py:48-56,62-63; validation:97-100"
+    },
+    {
+      "field": "device_name / native_status.cudaGetDeviceProperties_v2",
+      "requirement": "nonempty stripped name; status \"0\"",
+      "source": "a7/device_evidence.py:65-72; validation:96,100"
+    },
+    {
+      "field": "cuda_runtime_version / cuda_driver_version",
+      "requirement": "positive exact decimal strings; query statuses \"0\"",
+      "source": "a7/device_evidence.py:48-61; validation:97-100"
+    },
+    {
+      "field": "CUDA_VISIBLE_DEVICES",
+      "requirement": "nonempty exact string equal to child environment copy",
+      "source": "a7/device_evidence.py:37; validation:94-95"
+    },
+    {
+      "field": "engine_sha256",
+      "requirement": "exact pinned engine digest",
+      "source": "a7/device_evidence.py:46-47; validation:101"
+    },
+    {
+      "field": "provider / query_error",
+      "requirement": "\"pinned-engine:libcudart\" / null",
+      "source": "a7/device_evidence.py:40,73-74; validation:102"
+    },
+    {
+      "field": "captured_at",
+      "requirement": "ISO timestamp; invocation and result equal; within parent child interval",
+      "source": "a7/device_evidence.py:41,103; a8/evidence.py:445-449"
+    }
+  ],
+  "encodings": "Native statuses, versions and ordinal are exact decimal strings as A7 emits; path/digest/environment/name/provider are exact strings. Parent/root modes are exact booleans.",
+  "hidden_probe": "DEVICE_HIDDEN_PROBE.json",
+  "probe_observation": {
+    "cuda_runtime_version": "12060",
+    "cuda_driver_version": "13020",
+    "cudaGetDevice_status": "100",
+    "device_name": null,
+    "CUDA_VISIBLE_DEVICES": ""
+  },
+  "child_ownership": "run_gpu_tests.py:125-132,143-146; CPU fixture:81-89",
+  "source_headers": "DEVICE_API_SOURCES_COMPLETE.json"
+}

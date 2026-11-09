@@ -1,0 +1,115 @@
+{
+  "equivalence_runtime": null,
+  "default_binding": null,
+  "trace_phase": "call only",
+  "id": "D5_weight_length",
+  "witness": "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]",
+  "edited_lines": [
+    560
+  ],
+  "reached_lines": [
+    560
+  ],
+  "reached": true,
+  "loads": true,
+  "differs": true,
+  "cpu_killed": true,
+  "cpu_assertion_killed": true,
+  "cpu_refusal_killed": false,
+  "equivalence": null,
+  "passed": true,
+  "trace": {
+    "exit": 1,
+    "collected_ids": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]"
+    ],
+    "reports": [
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]",
+        "when": "setup",
+        "outcome": "passed",
+        "detail": "",
+        "exception_class": null,
+        "groupnorm_refusal": false
+      },
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]",
+        "when": "call",
+        "outcome": "failed",
+        "detail": "operand = 'weight', shape = (5,)\n\n    @pytest.mark.parametrize(\"operand\", (\"weight\", \"bias\"))\n    @pytest.mark.parametrize(\"shape\", ((), (2, 3), (6, 1), (1, 6, 1), (5,), (7,)),\n                             ids=(\"scalar\", \"matrix23\", \"matrix61\", \"rank3\", \"short\", \"long\"))\n    def test_parameter_shape_refusal(operand, shape):\n        import tensor_cuda as tc\n        from tensor_cuda import nn\n        layer = nn.GroupNorm(2, 6)\n        setattr(layer, operand, tc.tensor(np.ones(shape), dtype=\"float32\"))\n>       error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.ones((2, 6, 3)), dtype=\"float32\")))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntensor_cuda/tests/test_groupnorm_gn1.py:453: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nkind = <class 'ValueError'>\noperation = <function test_parameter_shape_refusal.<locals>.<lambda> at 0x76d2a7ea6fc0>\n\n    def _expect_refusal(kind, operation):\n        error = None\n        try:\n            operation()\n        except Exception as exc:\n            error = exc\n>       assert isinstance(error, kind), f\"expected {kind.__name__}, got {error!r}\"\nE       AssertionError: expected ValueError, got RuntimeError('reshape: element count mismatch')\nE       assert False\nE        +  where False = isinstance(RuntimeError('reshape: element count mismatch'), <class 'ValueError'>)\n\ntensor_cuda/tests/test_groupnorm_gn1.py:357: AssertionError",
+        "exception_class": "AssertionError",
+        "groupnorm_refusal": false,
+        "engine_refusal": false,
+        "wrapped_engine_refusal": false,
+        "original_exception_class": null,
+        "original_exception_message": null
+      },
+      {
+        "id": "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]",
+        "when": "teardown",
+        "outcome": "passed",
+        "detail": "",
+        "exception_class": null,
+        "groupnorm_refusal": false
+      }
+    ],
+    "collection_errors": [],
+    "executed_lines": [
+      18,
+      23,
+      24,
+      25,
+      26,
+      29,
+      30,
+      31,
+      33,
+      34,
+      36,
+      91,
+      512,
+      517,
+      518,
+      520,
+      521,
+      524,
+      526,
+      528,
+      529,
+      532,
+      534,
+      539,
+      540,
+      541,
+      546,
+      548,
+      550,
+      552,
+      554,
+      558,
+      560,
+      562,
+      564,
+      570,
+      571,
+      573,
+      574,
+      576,
+      579,
+      580,
+      581,
+      582,
+      583,
+      584,
+      585
+    ],
+    "constructor_bindings": [
+      {
+        "eps": 1e-05
+      }
+    ],
+    "failed_ids": [
+      "tensor_cuda/tests/test_groupnorm_gn1.py::test_parameter_shape_refusal[short-weight]"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________________ test_dtype_refusal[int64-weight] _______________________
+
+dtype = 'int64', operand = 'weight'
+
+    @pytest.mark.parametrize("operand", ("input", "weight", "bias"))
+    @pytest.mark.parametrize("dtype", ("int64", "bool", "uint8"))
+    def test_dtype_refusal(dtype, operand):
+        import tensor_cuda as tc
+        from tensor_cuda import nn
+        layer = nn.GroupNorm(2, 6)
+        x = tc.tensor(np.ones((2, 6)), dtype=dtype if operand == "input" else "float32")
+        if operand != "input":
+            setattr(layer, operand, tc.tensor(np.ones(6), dtype=dtype))
+>       error = _expect_refusal(TypeError, lambda: layer(x))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tensor_cuda/tests/test_groupnorm_gn1.py:390: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+kind = <class 'TypeError'>
+operation = <function test_dtype_refusal.<locals>.<lambda> at 0x76d2a7ea6a20>
+
+    def _expect_refusal(kind, operation):
+        error = None
+        try:
+            operation()
+        except Exception as exc:
+            error = exc
+>       assert isinstance(error, kind), f"expected {kind.__name__}, got {error!r}"
+E       AssertionError: expected TypeError, got None
+E       assert False
+E        +  where False = isinstance(None, <class 'TypeError'>)
+
+tensor_cuda/tests/test_groupnorm_gn1.py:357: AssertionError
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_groupnorm_gn1.py::test_dtype_refusal[int64-weight]
+1 failed in 0.05s

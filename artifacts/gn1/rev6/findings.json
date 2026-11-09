@@ -1,0 +1,67 @@
+{
+ "review": "GN1-REV6",
+ "order": "orders/GN1_REV6_REVIEW.md @ 81da599b",
+ "reviewer": "Claude Opus 5.5 (cross-model)",
+ "status": "complete",
+ "started": "2026-11-01T17:46-05:00",
+ "verdict": "ACCEPT",
+ "findings": [],
+ "observations": [
+  {
+   "id": "R6-O1",
+   "topic": "Q4 classification",
+   "text": "3 of the 32 class (iii) targets (Import_helper_pin_parent/child/scorer, a6/extra_controls.py:38-53) edit a8/staging_seal.json, a sealed pre-run input, not a run receipt. No honest run produces a seal edit and A8 labelled them so. Their in-scope analogue, changed import-module bytes, was run live by REV6 (rev6_cases_i.json) and is refused by START, the parent before launch, and the scorer. If the lead reads 'receipt' strictly as a run-root receipt, this is a NIT against D4's labelling of 3 rows; fix: relabel, or move them to (i) with REV6's live analogue as the executed target."
+  },
+  {
+   "id": "R6-O2",
+   "topic": "A8 G4 evidence gap",
+   "text": "A8's 6 live environment controls (Actual_env_FORGE_GPU_*) ran under a control START, where program_binding.reasons returns before the environment comparison (program_binding.py:72-73); their only A8 refusal is the root device rule. The environment rule's only A8 witnesses were the class (iii) Recorded_env_* rows (not run). REV6 supplies production-mode live witnesses (Q2_live_gpu_hidden_*, F02_new_live_unknown_var_and_grace18): 'child environment differs from staged environment'. No tooling defect."
+  },
+  {
+   "id": "R6-O3",
+   "topic": "G6/P126 meaning",
+   "text": "The honest 58-line CPU run is the declared CPU control path: real runner (redirected), staged argv exactly, the real run_gpu_tests.py entry, but GN1_CPU_FIXTURE=1 dispatches to rev2_forge.py, which synthesises the test reports, and pins and environment are not compared under a control root. REV6 reproduced it: 58 of 58 line checks pass; the root is refused only for absent device evidence."
+  },
+  {
+   "id": "R6-O4",
+   "topic": "outside C's named environment",
+   "text": "Variables other than PATH and FORGE_GPU_* (PYTHONPATH, PYTHONHOME, LD_LIBRARY_PATH, LD_PRELOAD) pass unrecorded to the runner and the child (run_gpu_line.py:57-60; program_binding.environment records PATH and FORGE_GPU_* only). Device evidence checks the runtime and driver versions only as positive decimals (device_evidence.py:97-99), not equal to the 12060 runtime A7 observed. Optional hardening: pin cuda_runtime_version, or record LD_* and PYTHON* in the environment record."
+  },
+  {
+   "id": "R6-O5",
+   "topic": "L21 public screen",
+   "text": "The literal home path with the account name is in a8/program_binding.py:16, a8/STAGED_GPU_COMMANDS.sh:21 and a8/staging_seal.json (programs). It is unchanged since A6. Screen it before any public push."
+  },
+  {
+   "id": "R6-O6",
+   "topic": "reporting",
+   "text": "evidence.py:441 (new in A8) reads child_result.json for every admitted attempt with a parent receipt. When the file is missing, recompute_line raises, and score_gpu's except path builds the row: the reason is the raw '[Errno 2] ...' text, with no admission fields. The verdict is unaffected: the line is refused. Seen live in NEW_grace_21."
+  },
+  {
+   "id": "R6-O7",
+   "topic": "REV5 harness expectations",
+   "text": "REV5 expected 'line passes' in Q_honest, Q2_control_real_runner_honest, the N5 retry, the lock-wait retry, D5_unsealed and D6. Under the A6+ design those expectations cannot hold: a stand-in runner and a bare-interpreter inner argv are not the pinned production programs, and production CPU lines lack device evidence. In A8 these cases are refused by the pinned-program rules. D5_unsealed and D6's own rules were not re-read under a control root (runtime_evidence.py is unchanged a6 to a8)."
+  }
+ ],
+ "progress": {
+  "Q5_regeneration": "done: regen_compare.json, 56 arms equal seal and on-disk",
+  "Q5_mutant_reach": "done: mutant_reach_compare.json, 54/54 reached (53 edit-site lines, M14 by default-argument binding), 51 killed, 3 equivalent, identical to A8",
+  "Q1_rev5_reruns": "done: hostile_rev6_{q,c,n,p}.json, rev6_probe_{rawexit,postexit}.json; analysis pending",
+  "Q5_honest_58": "done: hostile_rev6_p.json P_staged_all_labels_real_runner AS-EXPECTED (58/58 lines pass line checks, root error only absent device evidence)"
+ },
+ "finished": "2026-11-01T18:20-05:00",
+ "answers": {
+  "Q1": {
+   "R5-F01": "FIXED",
+   "R5-F02": "FIXED",
+   "R5-F03": "FIXED",
+   "R5-F04": "FIXED (also OUT OF SCOPE under C: its reproduction edits a well-formed receipt)",
+   "R5-F05": "FIXED"
+  },
+  "Q2": "SOUND",
+  "Q3": "SOUND",
+  "Q4": "CONFIRMED (qualification O1)",
+  "Q5": "SOUND",
+  "Q6": "ACCEPT"
+ }
+}

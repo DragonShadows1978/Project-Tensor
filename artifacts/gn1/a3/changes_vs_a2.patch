@@ -1,0 +1,126 @@
+diff --git a/tensor_cuda/tensor_cuda/nn.py b/tensor_cuda/tensor_cuda/nn.py
+index 7e78267b..52e17bd2 100644
+--- a/tensor_cuda/tensor_cuda/nn.py
++++ b/tensor_cuda/tensor_cuda/nn.py
+@@ -512,13 +512,24 @@ class GroupNorm(Module):
+         super().__init__()
+         # Prior art: Wu and He (2018), Group Normalization; PyTorch GroupNorm
+         # divisibility refusal (docs unverified — lead to check: "GroupNorm").
+-        # A2 domain checks, inspired by PyTorch GroupNorm argument validation;
+-        # exact positive-int/bool policy is the GN1 A2 requirement.
+-        if (isinstance(num_groups, bool) or not isinstance(num_groups, int)
+-                or num_groups <= 0):
++        # Prior art: Python operator.index, PEP 357 (2006). A3 takes the
++        # integer-index protocol; excluding both boolean types is D5 policy.
++        import operator
++        if isinstance(num_groups, bool) or isinstance(num_groups, np.bool_):
+             raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
+-        if (isinstance(num_channels, bool) or not isinstance(num_channels, int)
+-                or num_channels <= 0):
++        try:
++            num_groups = int(operator.index(num_groups))
++        except TypeError as exc:
++            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)") from exc
++        if num_groups <= 0:
++            raise ValueError(f"num_groups ({num_groups!r}) must be a positive integer (bool excluded)")
++        if isinstance(num_channels, bool) or isinstance(num_channels, np.bool_):
++            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
++        try:
++            num_channels = int(operator.index(num_channels))
++        except TypeError as exc:
++            raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)") from exc
++        if num_channels <= 0:
+             raise ValueError(f"num_channels ({num_channels!r}) must be a positive integer (bool excluded)")
+         if num_channels % num_groups != 0:
+             raise ValueError(
+@@ -542,6 +553,16 @@ class GroupNorm(Module):
+             raise TypeError(f"GroupNorm weight dtype {self.weight.dtype!r} is unsupported")
+         if self.bias.dtype not in ("float32", "float16", "bfloat16"):
+             raise TypeError(f"GroupNorm bias dtype {self.bias.dtype!r} is unsupported")
++        # Prior art: PyTorch GroupNorm parameter shape validation (observed
++        # separately on CPU). D5 requires explicit refusal before tensor ops.
++        if self.weight.ndim != 1:
++            raise ValueError("GroupNorm weight must have rank 1")
++        if self.weight.shape[0] != self.C:
++            raise ValueError(f"GroupNorm weight length must equal num_channels ({self.C})")
++        if self.bias.ndim != 1:
++            raise ValueError("GroupNorm bias must have rank 1")
++        if self.bias.shape[0] != self.C:
++            raise ValueError(f"GroupNorm bias length must equal num_channels ({self.C})")
+         # Prior art: PyTorch half normalization uses float32 accumulation;
+         # Micikevicius et al. (2018), Mixed Precision Training (both unverified
+         # — lead to check: "PyTorch group_norm acc_type half"). Round 1's
+diff --git a/tensor_cuda/tests/test_groupnorm_gn1.py b/tensor_cuda/tests/test_groupnorm_gn1.py
+index 66993818..14815dcc 100644
+--- a/tensor_cuda/tests/test_groupnorm_gn1.py
++++ b/tensor_cuda/tests/test_groupnorm_gn1.py
+@@ -134,12 +134,14 @@ def _check_values(tc, layer, x, projection, groups, eps, dtype, backward, *, con
+         assert np.min(grouped.var(axis=2)) >= 1 / 64, "registered conditioning bound"
+     expected, grads = groupnorm_reference(xn, groups, wn, bn, eps, pn)
+     # Mutation validity (DeMillo/Lipton/Sayward 1978): a valid input refused
+-    # by a structural mutant violates this assertion. The parent separately
++    # by a structural mutant or its engine violates this assertion (A3 D2).
++    # The original exception class/message is preserved and read by evidence.
++    # Kill requires a same-root candidate pass for this input. The parent separately
+     # voids every device-pattern failure, including chained exceptions.
+     try:
+         output = layer(x)
+     except (RuntimeError, ValueError, TypeError) as exc:
+-        raise AssertionError(f"GroupNorm refused a registered valid input: {exc}") from exc
++        raise AssertionError(f"GroupNorm refused a registered valid input: {type(exc).__name__}: {exc}") from exc
+     atol, rtol = TOLERANCES[dtype]["forward"]
+     assert output.dtype == dtype
+     assert output.shape == xn.shape
+@@ -401,3 +403,52 @@ def test_distinct_parameter_dtypes(weight_dtype, bias_dtype, backward):
+     layer.bias = _leaf(tc, b, bias_dtype)
+     _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
+                   3, 1e-5, "float32", backward)
++
++
++# Prior art: Python index protocol, PEP 357 (2006); boundary testing Myers
++# (1979, unverified — lead to check). D5 specifies boolean exclusion.
++class _IndexCount:
++    def __init__(self, value):
++        self.value = value
++
++    def __index__(self):
++        return self.value
++
++
++@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
++@pytest.mark.parametrize("kind", (np.int64, np.int32, np.uint8, _IndexCount),
++                         ids=("np_int64", "np_int32", "np_uint8", "index_object"))
++def test_index_counts(name, kind):
++    import tensor_cuda as tc
++    from tensor_cuda import nn
++    args = dict(num_groups=2, num_channels=6)
++    args[name] = kind(args[name])
++    layer = nn.GroupNorm(**args)
++    assert type(layer.G) is int and type(layer.C) is int
++    values, w, b, projection = _inputs((2, 6, 5))
++    layer.weight = _leaf(tc, w, "float32")
++    layer.bias = _leaf(tc, b, "float32")
++    _check_values(tc, layer, _leaf(tc, values, "float32"), tc.tensor(projection),
++                  2, 1e-5, "float32", False)
++
++
++@pytest.mark.parametrize("name", ("num_groups", "num_channels"))
++@pytest.mark.parametrize("value", (np.bool_(True), np.bool_(False)), ids=("true", "false"))
++def test_numpy_bool_refusal(name, value):
++    from tensor_cuda import nn
++    args = dict(num_groups=2, num_channels=6)
++    args[name] = value
++    error = _expect_refusal(ValueError, lambda: nn.GroupNorm(**args))
++    assert name in str(error) and "positive integer" in str(error)
++
++
++@pytest.mark.parametrize("operand", ("weight", "bias"))
++@pytest.mark.parametrize("shape", ((), (2, 3), (6, 1), (1, 6, 1), (5,), (7,)),
++                         ids=("scalar", "matrix23", "matrix61", "rank3", "short", "long"))
++def test_parameter_shape_refusal(operand, shape):
++    import tensor_cuda as tc
++    from tensor_cuda import nn
++    layer = nn.GroupNorm(2, 6)
++    setattr(layer, operand, tc.tensor(np.ones(shape), dtype="float32"))
++    error = _expect_refusal(ValueError, lambda: layer(tc.tensor(np.ones((2, 6, 3)), dtype="float32")))
++    assert operand in str(error)
