@@ -1,0 +1,2010 @@
+--- _gn1_a8_originals/evidence.py	2026-11-09 12:09:22.291364782 -0500
++++ evidence.py	2026-11-09 13:14:31.120342432 -0500
+@@ -1,29 +1,32 @@
+-"""Shared, read-only evidence recomputation for the A2 parent and scorer.
++"""Shared, read-only evidence recomputation for the ENG1 parent and scorer (adapted from GN1 A8 evidence.py).
+ 
+-Prior art: SHA-256 (NIST 2001); pytest/JUnit (Krekel et al., 2004+);
+-DeMillo/Lipton/Sayward (1978), valid mutation kills; exact paired regression
+-comparison from GN1 D6. A2 adds these order-specific binding conjunctions.
+-Literature unverified — lead to check named sources.
++Prior art: SHA-256 (NIST 2001); pytest/JUnit (Krekel et al., 2004+); DeMillo/Lipton/Sayward (1978), valid mutation
++kills; exact paired regression comparison from GN1 D6. Literature unverified -- lead to check named sources.
++ENG1 changes (ledgered): per-arm engine pins (the arms differ in C++); ENG1 suites (eng1, mutation, regression);
++mutant killers from mutants/mutants.json; the baseline's registered per-ID failures; test IDs normalised by
++stripping the arm prefix; GN1's A4-A8 control/hostile/program-binding conjunctions dropped (GN1 contract C; their
++program_binding.py is not in the tree).
+ """
+ import datetime
++import fnmatch
+ import hashlib
+ import json
+ import re
+ from pathlib import Path
+ import xml.etree.ElementTree as ET
+-from runtime_evidence import runtime_modules
+ from device_evidence import classify
+-from program_binding import reasons as program_reasons, RUNNER, TIMEOUT, PYTHON
++from e6_record import compare
+ 
+ TOOL = Path(__file__).resolve().parent
+ ROOT = TOOL.parents[2]
+-ORDER = "orders/GN1_A8_CONTRACT.md"
++ORDER = "orders/ENG1_ENGINE_DEFECTS.md"
+ DEVICE_PATTERNS = (
+     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
+     "initialization error", "invalid device ordinal", "CUDA error at",
+     "cudaMallocAsync failed", "out of memory", "illegal memory access",
+     "unspecified launch failure", "launch timed out",
+ )
++RUNNER_OUTCOMES = ("ran", "timeout", "window-closed", "no-window", "no-lock", "rechecked-out")
+ 
+ 
+ def sha(p):
+@@ -37,7 +40,7 @@
+ def guard(runs):
+     runs = Path(runs).resolve()
+     if not runs.is_relative_to(TOOL) or runs == TOOL or runs.is_relative_to(TOOL / "arms"):
+-        raise ValueError("RUNS must be under a8 and outside arms")
++        raise ValueError("RUNS must be under artifacts/eng1/tool and outside arms")
+     return runs
+ 
+ 
+@@ -45,37 +48,34 @@
+     return {r["label"]: r for r in read(TOOL / "gpu_lines.json")}
+ 
+ 
++def arm_files(arm):
++    base = TOOL / "arms" / arm
++    # arms/<arm>/artifacts/ is the terrain file's write target (the baseline arm writes there by design; E6/L46),
++    # so it is outside the sealed map.
++    return {str(p.relative_to(base)): sha(p) for p in sorted(base.rglob("*"))
++            if p.is_file() and "__pycache__" not in p.parts and p.relative_to(base).parts[0] != "artifacts"}
++
++
+ def verify_seal():
+     seal = read(TOOL / "staging_seal.json")
+     assert sha(ROOT / ORDER) == seal["order_sha256"], "order seal mismatch"
+-    # order_commit is the immutable commit carrying this amendment. Product
+-    # sources are deterministically transformed by regenerate_arms.py (D9).
+     assert re.fullmatch(r"[0-9a-f]{40}", seal["order_commit"]), "missing order commit"
+     for name, digest in seal["tool_files"].items():
+         assert sha(TOOL / name) == digest, "tool seal mismatch: " + name
+-    for name, digest in seal["test_files"].items():
+-        assert sha(ROOT / name) == digest, "test seal mismatch: " + name
+-    for name, digest in seal["import_modules"].items():
+-        assert sha(ROOT / name) == digest, "import module seal mismatch: " + name
+-    for name, digest in seal["external_modules"].items():
+-        assert sha(Path(name.replace("$HOME/", str(Path.home())+"/", 1))) == digest, "external module seal mismatch: " + name
+-    pin = read(TOOL / "engine_pin.json")
+-    assert sha(ROOT / pin["module"]) == pin["sha256"], "pinned engine mismatch"
+-    assert sha(TOOL.parent / "engine_sources_after.json") == pin["source_map_sha256"], "source map mismatch"
+-    assert pin["sha256"] == seal["engine_sha256"], "engine pin/seal mismatch"
++    for name, digest in seal["registration_files"].items():
++        assert sha(ROOT / name) == digest, "registration seal mismatch: " + name
+     return seal
+ 
+ 
+ def verify_arm(arm, seal):
+-    package = TOOL / "arms" / arm / "tensor_cuda"
+     assert arm in seal["arms"], "unregistered arm"
+-    assert not any(p.is_symlink() for p in (TOOL / "arms" / arm).rglob("*")), "arm contains symlink"
+-    pin = read(TOOL / "engine_pin.json")
+-    assert sha(package / Path(pin["module"]).name) == pin["sha256"], "engine copy differs from pin"
+-    files = {str(p.relative_to(package)): sha(p) for p in package.rglob("*") if p.is_file() and "__pycache__" not in p.parts}
++    base = TOOL / "arms" / arm
++    assert not any(p.is_symlink() for p in base.rglob("*")), "arm contains symlink"
++    files = arm_files(arm)
+     assert files == seal["arms"][arm], "arm file/seal mismatch: " + arm
+-    assert files[Path(pin["module"]).name] == pin["sha256"], "engine copy differs from pin"
+-    return package
++    module = "tensor_cuda/tensor_cuda/" + seal["module_name"]
++    assert files[module] == seal["engine_sha256"][arm], "arm engine differs from its pin"
++    return base / "tensor_cuda"
+ 
+ 
+ def verify_start(runs):
+@@ -86,13 +86,19 @@
+     assert start["seal_sha256"] == sha(TOOL / "staging_seal.json"), "START seal mismatch"
+     assert start["order_sha256"] == seal["order_sha256"] and start["order_commit"] == seal["order_commit"], "START order mismatch"
+     assert isinstance(start["audit"], bool), "START audit missing"
+-    assert type(start["control"]) is bool, "START control mode missing"
+     datetime.datetime.fromisoformat(start["date"])
+     return seal, start
+ 
+ 
+-def census(arm, suite, audit=False):
+-    name = "audit" if audit else "mutation" if suite == "mutation" else arm + "_" + suite
++def norm_id(id_):
++    """Strip the arm prefix so IDs compare across arms: artifacts/eng1/tool/arms/<arm>/tensor_cuda/... ->
++    tensor_cuda/..."""
++    m = re.match(r"artifacts/eng1/tool/arms/[^/]+/(tensor_cuda/.*)$", id_)
++    return m.group(1) if m else id_
++
++
++def census(line, audit=False):
++    name = "audit" if audit else line["census"]
+     return (TOOL / ("ids_" + name + ".txt")).read_text().splitlines()
+ 
+ 
+@@ -129,9 +135,7 @@
+ def junit_outcomes(path, ids, dual_ids=()):
+     mapping = {xml_key(i): i for i in ids}
+     assert len(mapping) == len(ids), "nonunique JUnit ID mapping"
+-    outcomes = {}
+-    parts = {}
+-    details = []
++    outcomes, parts, details = {}, {}, []
+     for case in ET.parse(path).getroot().iter("testcase"):
+         key = (case.get("classname", ""), case.get("name", ""))
+         assert key in mapping, "unregistered JUnit ID: " + str(key)
+@@ -140,9 +144,6 @@
+         assert len(tags) <= 1, "multiple JUnit outcomes"
+         outcome = "error" if "error" in tags else "failed" if "failure" in tags else "skipped" if "skipped" in tags else "passed"
+         if id_ in outcomes:
+-            # pytest 9 emits two entries for a call failure plus teardown
+-            # error (native receipt junit_real_shape.json). Permit precisely
+-            # that pair when the independently read phase reports confirm it.
+             assert id_ in dual_ids and len(parts[id_]) == 1 and {parts[id_][0], outcome} == {"failed", "error"}, "duplicate JUnit ID: " + id_
+             outcomes[id_] = "error"
+             parts[id_].append(outcome)
+@@ -153,14 +154,9 @@
+     return outcomes, details
+ 
+ 
+-# Prior art: REV2 runner attribution rule; GNU timeout/POSIX signal exits.
+-# A3 applies the registered D4 mapping, independently in parent and scorer.
+-RUNNER_OUTCOMES = ("ran", "timeout", "window-closed", "no-window", "no-lock", "rechecked-out")
+-
+-
+ def scratch_guard(value):
+     resolved = Path(value).resolve()
+-    assert resolved.parent == Path("/tmp") and resolved.name.startswith("gn1_a8_"), "TMPDIR must resolve to /tmp/gn1_a8_*"
++    assert resolved.parent == Path("/tmp") and resolved.name.startswith("eng1_"), "TMPDIR must resolve to /tmp/eng1_*"
+     return resolved
+ 
+ 
+@@ -186,8 +182,6 @@
+ 
+ 
+ def timeout_cause(path, rc):
+-    # A5 D4: total attribution. Prior art: GNU coreutils timeout(1), POSIX
+-    # signal exits; REV4 N5 (2026). No novel attribution rule claimed.
+     try:
+         row = forge_row(path)
+     except Exception:
+@@ -208,36 +202,29 @@
+ 
+ 
+ def not_admitted(attempt, rc, cause):
+-    # D2: a single positive start operand burns the label, even if the parent
+-    # or child was interrupted. Prior art: REV3's evidence-based admission
+-    # rule (2026); no prior art known to me beyond the order for this predicate.
+     row = forge_row(attempt / "forge.log")
+     return not (any((attempt / name).exists() for name in
+                     ("child_started.json", "invocation.json", "junit.xml", "child_result.json"))
+                 or row is not None and row[0] in ("ran", "timeout", "window-closed"))
+ 
+ 
+-def acceptable_killers(data):
+-    # D2 lead ruling (a): a wrapped engine refusal counts only in a
+-    # GroupNorm call phase, with original class/message present. evaluate()
+-    # applies the device veto; recompute_line() requires same-root candidate
+-    # pass on each killer ID. Ordinary value assertions remain valid kills.
+-    # D3 unwrapped refusals must originate at GroupNorm's raising frame.
+-    return sorted(r["id"] for r in data["reports"]
+-                  if r["when"] == "call" and r["outcome"] == "failed"
+-                  and r["id"].startswith("tensor_cuda/tests/test_groupnorm_gn1.py::")
+-                  and not r["id"].split("::")[-1].startswith("test_reference_")
+-                  and (r.get("exception_class") == "AssertionError" and (not r.get("wrapped_engine_refusal") or
+-                       r.get("engine_refusal") is True and bool(r.get("original_exception_class")) and isinstance(r.get("original_exception_message"), str)) or
+-                       r.get("exception_class") in ("ValueError", "TypeError") and r.get("groupnorm_refusal") is True))
++def killers_for(label):
++    m = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json")}[label]
++    return m["killers"]
++
++
++def literal_brackets(pattern):
++    """Registered killer patterns use '*' as the only wildcard; '[' and ']' are literal (pytest parameter IDs)."""
++    return pattern.replace("[", "\x00").replace("]", "[]]").replace("\x00", "[[]")
++
++
++def matches(nid, patterns):
++    short = nid.split("::", 1)[1] if "::" in nid else nid
++    return any(fnmatch.fnmatchcase(short, literal_brackets(p)) for p in patterns)
+ 
+ 
+ def evaluate(runs, attempt, line, rc, audit, seal):
+-    reasons = []
+-    data = None
+-    killers = []
+-    outcomes = {}
+-    unsealed = []
++    reasons, killers, outcomes = [], [], {}
+     try:
+         if rc not in line["expected_child_exits"]:
+             reasons.append("expected exits %s, got %s" % (line["expected_child_exits"], rc))
+@@ -247,58 +234,47 @@
+         assert data["arm"] == line["arm"] and data["suite"] == line["suite"], "child arm/suite binding mismatch"
+         assert data["audit"] == audit and data["run_root"] == str(runs) and data["attempt_dir"] == str(attempt), "child run-root/audit binding mismatch"
+         assert (attempt / "child_started.json").is_file(), "missing child start marker"
+-        package = verify_arm(line["arm"], seal)
+-        pin = read(TOOL / "engine_pin.json")
+-        assert data["nn_sha256"] == seal["arms"][line["arm"]]["nn.py"] == sha(package / "nn.py"), "nn.py binding mismatch"
+-        assert data["engine_sha256"] == seal["engine_sha256"] == pin["sha256"], "engine binding mismatch"
++        verify_arm(line["arm"], seal)
++        assert data["engine_sha256"] == seal["engine_sha256"][line["arm"]], "engine binding mismatch"
+         assert data["seal_sha256"] == sha(TOOL / "staging_seal.json"), "child seal mismatch"
+-        runtime_errors, unsealed = runtime_modules(data["runtime_modules"], seal, TOOL, ROOT)
+-        reasons.extend(runtime_errors)
+         assert not data["collection_errors"], "collection errors"
+         ids = data["collected_ids"]
+-        assert len(ids) == len(set(ids)) and sorted(ids) == sorted(census(line["arm"], line["suite"], audit)), "test-ID census mismatch"
++        assert len(ids) == len(set(ids)), "duplicate IDs"
++        assert sorted(norm_id(i) for i in ids) == sorted(census(line, audit)), "test-ID census mismatch"
+         outcomes = summary_outcomes(data)
+-        dual_ids = {id_ for id_ in ids
+-                    if any(r["id"] == id_ and r["when"] == "call" and r["outcome"] == "failed" for r in data["reports"])
+-                    and any(r["id"] == id_ and r["when"] == "teardown" and r["outcome"] == "failed" for r in data["reports"])}
++        dual_ids = {i for i in ids
++                    if any(r["id"] == i and r["when"] == "call" and r["outcome"] == "failed" for r in data["reports"])
++                    and any(r["id"] == i and r["when"] == "teardown" and r["outcome"] == "failed" for r in data["reports"])}
+         xml, xml_details = junit_outcomes(attempt / "junit.xml", ids, dual_ids)
+         assert xml == outcomes, "JUnit/summary outcomes disagree ID by ID"
+-        failed_details = [r["detail"] + " " + str(r.get("original_exception_class", "")) + " " + str(r.get("original_exception_message", "")) for r in data["reports"] if r["outcome"] == "failed"] + xml_details
++        failed_details = [r["detail"] for r in data["reports"] if r["outcome"] == "failed"] + xml_details
+         if any(p.casefold() in t.casefold() for t in failed_details for p in DEVICE_PATTERNS):
+             reasons.append("device-pattern failure: void line")
+-        if line["suite"] != "regression" and any(r["when"] != "call" and r["outcome"] == "failed" for r in data["reports"]):
++        if line["role"] != "regression" and any(r["when"] != "call" and r["outcome"] == "failed" for r in data["reports"]):
+             reasons.append("setup/teardown failures")
+         if any(o == "missing" for o in outcomes.values()):
+             reasons.append("missing test calls")
+-        if line["suite"] != "regression" and any(o == "skipped" for o in outcomes.values()):
++        if line["role"] != "regression" and any(o == "skipped" for o in outcomes.values()):
+             reasons.append("unregistered skip")
+-        failures = {r["id"]: r for r in data["reports"] if r["when"] == "call" and r["outcome"] == "failed"}
+-        if audit or line["arm"] == "candidate" and line["suite"] == "focus":
+-            if any(o != "passed" for o in outcomes.values()):
+-                reasons.append("candidate/reference IDs did not all pass")
+-        elif line["suite"] == "mutation":
+-            if line.get("equivalence"):
+-                assert line["equivalence"] == seal["equivalences"].get(line["label"]), "unsealed equivalence proof"
+-                if line["label"] != "V3":
+-                    live = data["equivalence_runtime"]
+-                    assert live["numpy_version"] == seal["numpy_version"], "equivalence NumPy version mismatch"
+-                    assert live["accepts_numpy_bool"] is False and live["exception_class"] == "TypeError", "operator.index accepts numpy.bool_: equivalence invalid"
+-                if any(o != "passed" for o in outcomes.values()):
+-                    reasons.append("equivalent mutant did not pass")
+-            else:
+-                killers = acceptable_killers(data)
+-                if not killers:
+-                    reasons.append("no real non-reference GroupNorm assertion/refusal kill")
+-        elif line["arm"] == "baseline" and line["suite"] == "focus":
+-            registered = set(read(TOOL / "baseline_expected_failures.json"))
+-            if set(failures) != registered:
+-                reasons.append("baseline failures differ from registration")
+-            new_expected = read(TOOL / "baseline_new_failures.json")
+-            if any(failures.get(i, {}).get("exception_class") != row["exception_class"] for i, row in new_expected.items()):
+-                reasons.append("baseline new D5 exception class differs from registration")
+-            if any("reshape: element count mismatch" not in r["detail"]
+-                   for id_, r in failures.items() if id_ not in new_expected and "refusal" not in id_.split("::")[-1]):
+-                reasons.append("baseline numerical failure is not registered reshape error")
++        failed = sorted(norm_id(i) for i, o in outcomes.items() if o in ("failed", "error"))
++        if audit or line["role"] in ("candidate", "control"):
++            if failed:
++                reasons.append("candidate/control/audit IDs did not all pass: " + repr(failed[:20]))
++        elif line["role"] == "mutant":
++            killers = [i for i in failed if matches(i, killers_for(line["label"]))]
++            if not killers:
++                reasons.append("no registered killer ID failed")
++        elif line["role"] == "baseline":
++            registered = sorted(read(TOOL / "baseline_expected_failures.json"))
++            if failed != registered:
++                reasons.append("baseline failures differ from registration: unexpected %r, missing %r" % (
++                    sorted(set(failed) - set(registered))[:20], sorted(set(registered) - set(failed))[:20]))
++        if line["suite"] == "terrain":
++            rec = data.get("e6_record")
++            assert isinstance(rec, dict), "missing E6 terrain write record"
++            wrote = compare(rec["before"], rec["after"])
++            if wrote != (line["arm"] == "baseline"):
++                reasons.append("E6 record: terrain writes %s on the %s arm" % ("seen" if wrote else "not seen", line["arm"]))
+         any_failure = any(r["outcome"] == "failed" for r in data["reports"])
+         if rc == 0 and any_failure or rc == 1 and not any_failure:
+             reasons.append("pytest exit inconsistent with failures")
+@@ -315,32 +291,8 @@
+     except Exception as exc:
+         reasons.append("runner attribution: " + (str(exc) or type(exc).__name__))
+     return dict(passed=not reasons, reasons=reasons, actual_killers=killers if not reasons else [],
+-                outcomes=outcomes, forge_outcome=cause, timeout=cause == "timeout",
+-                timeout_cause=timeout_reason, unsealed=unsealed)
+-
+-
+-def bound_reasons(receipt, line):
+-    """D7 exact integer binding. Prior art: GN1 registration/REV3; no novel rule."""
+-    reasons = []
+-    try:
+-        assert type(receipt["outer_bound_seconds"]) is int and receipt["outer_bound_seconds"] == line["outer"], "outer bound differs from gpu_lines.json"
+-        command = receipt["command"]
+-        split = command.index("--")
+-        runner, inner = command[:split], command[split+1:]
+-        # A5 D2 / REV4 F01: closed exact-form grammar. Prior art: Python
+-        # argparse allow_abbrev (PSF, Python 3.5, 2015), GNU timeout(1).
+-        # We deliberately accept only the order's argv, not parser aliases.
+-        assert (receipt.get("control") is True or receipt.get("audit") is True or runner[0] == RUNNER), "runner command[0] differs from pinned runner"
+-        assert runner[1:] == ["--min", str(line["minimum"]), "--max", str(line["maximum"]),
+-                              "--label", line["label"]], "runner argv differs from gpu_lines.json"
+-        assert inner == (["timeout", "--kill-after=10s", f'{line["inner"]}s', "python3",
+-                         "run_gpu_tests.py", line["arm"], line["suite"]] if (receipt.get("control") is True or receipt.get("audit") is True) and inner[0] == "timeout" else
+-                         [TIMEOUT, "--kill-after=10s", f'{line["inner"]}s', PYTHON,
+-                         "run_gpu_tests.py", line["arm"], line["suite"]]), "inner argv differs from gpu_lines.json"
+-        assert receipt["expected_child_exits"] == line["expected_child_exits"] and all(type(v) is int for v in receipt["expected_child_exits"]), "expected exits differ from gpu_lines.json"
+-    except Exception as exc:
+-        reasons.append("bound binding: " + (str(exc) or type(exc).__name__))
+-    return reasons
++                outcomes={norm_id(k): v for k, v in outcomes.items()}, forge_outcome=cause, timeout=cause == "timeout",
++                timeout_cause=timeout_reason)
+ 
+ 
+ def attempts(runs, label):
+@@ -353,30 +305,16 @@
+ 
+ 
+ def regression_reasons(old, new):
+-    before, after = summary_outcomes(old), summary_outcomes(new)
+-    errors = []
++    before = {norm_id(k): v for k, v in summary_outcomes(old).items()}
++    after = {norm_id(k): v for k, v in summary_outcomes(new).items()}
+     lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed")
+-    if lost:
+-        errors.append("baseline-passing IDs no longer pass: " + repr(lost))
+-    def fails(data):
+-        result = {}
+-        for r in data["reports"]:
+-            if r["outcome"] == "failed":
+-                result.setdefault(r["id"], set()).add(r.get("exception_class"))
+-        return result
+-    old_fail, new_fail = fails(old), fails(new)
+-    fresh = sorted(i for i, classes in new_fail.items()
+-                   if None in classes or not classes.issubset(old_fail.get(i, set())))
+-    if fresh:
+-        errors.append("candidate failure absent/different exception class on baseline: " + repr(fresh))
+-    return errors
++    return ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
+ 
+ 
+ def recompute_line(runs, label, seal, start, stack=()):
+     assert label not in stack, "dependency cycle"
+     line = lines()[label]
+-    inventory = []
+-    selected = None
++    inventory, selected = [], None
+     result = dict(passed=False, reasons=["no admitted attempt"], actual_killers=[], outcomes={})
+     for attempt in attempts(runs, label):
+         if not (attempt / "parent_result.json").exists():
+@@ -387,95 +325,54 @@
+             assert selected is None, "multiple admitted attempts"
+             selected = attempt
+             result = evaluate(runs, attempt, line, None, start["audit"], seal)
+-            # L45: a completed child can expose a failure but cannot establish
+-            # acceptance without its parent's post-exit record. Never retry it.
++            # L45: a completed child cannot establish acceptance without its parent's post-exit record.
+             result["reasons"].append("incomplete: missing parent completion receipt")
+-            result["passed"] = False
+-            result["actual_killers"] = []
++            result["passed"], result["actual_killers"] = False, []
+             continue
+         receipt = read(attempt / "parent_result.json")
+         assert not receipt.get("receipt_error"), "; ".join(receipt.get("reasons", ["minimal parent error receipt"]))
+         assert receipt["label"] == label and receipt["attempt_dir"] == str(attempt), "parent attempt binding mismatch"
+         assert receipt["expected_child_exits"] == line["expected_child_exits"], "parent expected exits differ from gpu_lines.json"
+         assert receipt["arm"] == line["arm"] and receipt["suite"] == line["suite"] and receipt["audit"] == start["audit"], "parent line binding mismatch"
+-        assert receipt["command"][-3:] == ["run_gpu_tests.py", line["arm"], line["suite"]], "parent command arm/suite mismatch"
+         assert receipt["cwd"] == str(TOOL), "parent cwd mismatch"
+         assert receipt["run_root"] == str(runs) and receipt["seal_sha256"] == sha(TOOL / "staging_seal.json"), "parent run-root/seal mismatch"
+-        assert isinstance(receipt["exit"], int) and not isinstance(receipt["exit"], bool), "exit is not an integer"
+-        # A6 D3: recompute Python negative-signal / POSIX128+signal exit.
+-        assert type(receipt["raw_exit"]) is int, "raw_exit is not an integer"
++        assert type(receipt["raw_exit"]) is int and type(receipt["exit"]) is int, "exit is not an integer"
+         assert receipt["exit"] == (receipt["raw_exit"] if receipt["raw_exit"] >= 0 else 128 - receipt["raw_exit"]), "raw_exit normalisation mismatch"
++        assert type(receipt["timeout"]) is bool, "timeout flag missing"
+         assert datetime.datetime.fromisoformat(start["date"]) <= datetime.datetime.fromisoformat(receipt["start"]) <= datetime.datetime.fromisoformat(receipt["child_exited"]) <= datetime.datetime.fromisoformat(receipt["recorded"]), "parent completion order invalid"
+         cause = forge_outcome(attempt / "forge.log", receipt["exit"])
+         assert receipt["forge_outcome"] == cause, "stored forge cause differs from log"
+         refused = not_admitted(attempt, receipt["exit"], cause)
+-        assert receipt["timeout_cause"] == timeout_cause(attempt / "forge.log", receipt["exit"]), "stored timeout cause differs from log"
+         assert receipt["admission"] == ("not_admitted" if refused else "admitted"), "admission mismatch"
+         inventory.append(dict(attempt=attempt.name, admission=receipt["admission"], exit=receipt["exit"], forge_outcome=cause))
+         if refused:
+-            assert not receipt["passed"] and not receipt["actual_killers"], "refused attempt claims pass/kill"
+-            assert receipt["reasons"] == ["not admitted: " + cause] and receipt["outcomes"] == {} and receipt["timeout"] is False, "stored refused receipt disagrees with recomputation"
+             continue
+         assert selected is None, "multiple admitted attempts"
+         selected = attempt
+         result = evaluate(runs, attempt, line, receipt["exit"], start["audit"], seal)
+-        if not start["audit"] and line["suite"] == "mutation":
+-            dependency = recompute_line(runs, "candidate_focus", seal, start, (*stack, label))
++        if not start["audit"] and line["role"] == "mutant":
++            dependency = recompute_line(runs, "candidate_eng1", seal, start, (*stack, label))
+             if not dependency["passed"] or any(dependency["outcomes"].get(i) != "passed" for i in result["actual_killers"]):
+-                result["reasons"].append("mutations require recomputed passing candidate focus on killer IDs")
+-        if not start["audit"] and label == "candidate_regression":
+-            baseline = recompute_line(runs, "baseline_regression", seal, start, (*stack, label))
++                result["reasons"].append("mutations require a passing candidate_eng1 on the killer IDs")
++        if not start["audit"] and line.get("control_of"):
++            pass  # the control's own pass is its evidence; the mutant line cites it (score_gpu.py)
++        if not start["audit"] and line["role"] == "regression" and line["arm"] == "candidate":
++            baseline = recompute_line(runs, label.replace("candidate_", "baseline_", 1), seal, start, (*stack, label))
+             if not baseline["passed"]:
+                 result["reasons"].append("missing valid completed baseline regression")
+-            elif (attempt / "child_result.json").exists():
+-                result["reasons"] += regression_reasons(read(Path(baseline["selected_attempt"]) / "child_result.json"), read(attempt / "child_result.json"))
+-        result["passed"] = not result["reasons"]
+-        if not result["passed"]:
+-            result["actual_killers"] = []
+-        for key in ("passed", "reasons", "actual_killers", "forge_outcome", "timeout", "timeout_cause", "outcomes"):
++            else:
++                result["reasons"] += regression_reasons(read(Path(baseline["selected_attempt"]) / "child_result.json"),
++                                                        read(attempt / "child_result.json"))
++        for key in ("forge_outcome", "timeout_cause"):
+             assert receipt[key] == result[key], "stored parent receipt disagrees with recomputation: " + key
+-        assert receipt["unsealed"] == result["unsealed"], "stored runtime census differs from recomputation"
+-        # A7 D2/D3: derive mode solely from the child-owned evidence.
+-        # Prior art: CUDA runtime queries/SHA-256, see device_evidence.py;
+-        # this exact evidence/mode conjunction is mandated by A7.
+         data = read(attempt / "child_result.json")
+-        mode, device_errors = check_line_device(data, seal, receipt)
++        mode, device_errors = classify(data, seal)
+         result["mode"] = mode
+         result["reasons"].extend(device_errors)
+-        if mode == "device":
+-            invocation = read(attempt / "invocation.json")
+-            assert invocation["device_evidence"] == data["device_evidence"], "pre-test child device evidence mismatch"
+-            captured = datetime.datetime.fromisoformat(data["device_evidence"]["captured_at"])
+-            assert datetime.datetime.fromisoformat(receipt["start"]) <= captured <= datetime.datetime.fromisoformat(receipt["child_exited"]), "device evidence timestamp outside child run"
+-        result["reasons"].extend(bound_reasons(receipt, line))
+-        result["reasons"].extend(program_reasons(receipt, seal, start["control"], start["audit"]))
++        if (mode == "cpu") != bool(start["audit"]):
++            result["reasons"].append("mode binding: START audit flag disagrees with child device evidence")
+         result["passed"] = not result["reasons"]
+         if not result["passed"]:
+             result["actual_killers"] = []
+     result.update(selected_attempt=str(selected) if selected else None, attempts=inventory)
+     return result
+-
+-
+-def check_line_device(data, seal, parent):
+-    """A8 D2/D3 shared line check; data-only accept-path unit entry point.
+-
+-    Prior art: A7 CUDA Runtime 12.6 evidence conjunction (NVIDIA, 2024)
+-    and SHA-256 (NIST, 2015). This order mandates demote-only booleans.
+-    CPU control diagnostics cannot establish device acceptance.
+-    """
+-    mode, errors = classify(data, seal)
+-    for field in ("control", "audit"):
+-        if type(parent.get(field)) is not bool:
+-            errors.append("mode binding: parent " + field + " is not a boolean")
+-    declared_cpu = parent.get("control") is True or parent.get("audit") is True
+-    if (mode == "cpu") != declared_cpu:
+-        errors.append("mode binding: parent declaration disagrees with child device evidence")
+-    # Legacy CPU fixtures remain diagnostic-only. A production declaration
+-    # also receives the exact identity failure, even with no device name.
+-    if not declared_cpu:
+-        e = data.get("device_evidence", {})
+-        expected = dict(resolved_path=str((TOOL / "run_gpu_tests.py").resolve()),
+-                        sha256=seal["tool_files"]["run_gpu_tests.py"])
+-        if not isinstance(e, dict) or e.get("program") != expected:
+-            errors.append("device evidence: child program differs from sealed run_gpu_tests.py")
+-    return mode, errors
+--- _gn1_a8_originals/run_gpu_line.py	2026-11-09 12:09:22.297364839 -0500
++++ run_gpu_line.py	2026-11-09 13:04:20.598180531 -0500
+@@ -1,7 +1,12 @@
+ #!/usr/bin/env python3
+-"""Foreground A2 supervisor; parent receipt written only after child exit.
+-Prior art: GNU timeout/Python subprocess; DeMillo et al. (1978) valid kills.
+-A2: numbered admission attempts and evidence.py order-specific recomputation.
++"""Foreground ENG1 supervisor (adapted from GN1 A8 run_gpu_line.py): the parent receipt, with the child's exit and
++timeout flag, is written only after the child exits (L45).
++Prior art: GNU timeout / Python subprocess; DeMillo et al. (1978) valid kills; POSIX link(2) no-overwrite
++publication (IEEE Std 1003.1; year unverified -- lead to check).
++ENG1 changes (ledgered): ENG1_* environment names; /tmp/eng1_* scratch; mutant lines depend on a passing
++candidate_eng1 line; GN1's control-mode and program-binding conjunctions dropped (their program_binding.py is not in
++the tree); the timeout flag is recorded explicitly (child exit 124/137 under GNU timeout, or the runner's timeout).
++Usage: run_gpu_line.py LABEL EXPECTED_EXITS OUTER_BOUND RUNNER [runner args] -- timeout ... run_gpu_tests.py ARM SUITE
+ """
+ import datetime
+ import json
+@@ -11,8 +16,8 @@
+ import subprocess
+ import sys
+ import tempfile
+-from program_binding import programs, environment, TIMEOUT
+-from evidence import TOOL, guard, verify_start, lines, evaluate, forge_outcome, attempts, recompute_line, regression_reasons, read, sha, not_admitted, timeout_cause, scratch_guard
++from evidence import (TOOL, guard, verify_start, lines, evaluate, forge_outcome, attempts, recompute_line,
++                      regression_reasons, read, sha, not_admitted, timeout_cause, scratch_guard)
+ 
+ 
+ def utc():
+@@ -29,21 +34,18 @@
+     expected = [int(v) for v in expected_s.split(",")]
+     assert expected == line["expected_child_exits"], "expected exits must match gpu_lines.json"
+     assert command[-3:] == ["run_gpu_tests.py", line["arm"], line["suite"]], "parent command arm/suite mismatch"
+-    audit = os.environ.get("GN1_AUDIT") == "1"
++    audit = os.environ.get("ENG1_AUDIT") == "1"
+     assert audit == start_record["audit"], "START audit mismatch"
+-    control = os.environ.get("GN1_CONTROL") == "1"
+-    assert control == start_record["control"], "START control-mode mismatch"
+-    if not audit and line["suite"] == "mutation":
+-        assert recompute_line(runs, "candidate_focus", seal, start_record)["passed"], "mutations require recomputed passing candidate focus"
+-    if not audit and label == "candidate_regression":
+-        assert recompute_line(runs, "baseline_regression", seal, start_record)["passed"], "candidate regression requires valid baseline"
++    if not audit and line["role"] == "mutant":
++        assert recompute_line(runs, "candidate_eng1", seal, start_record)["passed"], "mutations require a passing candidate_eng1"
++    if not audit and line["role"] == "regression" and line["arm"] == "candidate":
++        assert recompute_line(runs, label.replace("candidate_", "baseline_", 1), seal, start_record)["passed"], "candidate regression requires a valid baseline"
+     if not audit:
+         assert shutil.disk_usage("/mnt/ForgeRealm").free >= 25 * 1024**3, "NVMe free-space rail"
+         assert shutil.disk_usage("/").free >= 20 * 1024**3, "root free-space rail"
+     base = runs / label
+     previous = attempts(runs, label)
+     if previous:
+-        # A5 D5 / REV4 N4: unreadable prior receipts refuse without traceback.
+         try:
+             prior = recompute_line(runs, label, seal, start_record)
+         except Exception as exc:
+@@ -54,105 +56,81 @@
+             return 1
+     output = base / ("attempt-%04d" % (len(previous) + 1))
+     output.mkdir(parents=True, exist_ok=False)
+-    env = dict(os.environ, RUNS=str(runs), GN1_LINE=label, GN1_ATTEMPT=str(output),
+-               TMPDIR=os.environ["TMPDIR"], FORGE_GPU_RUN_LOG=str(output / "forge.log"),
+-               PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
+-               MKL_NUM_THREADS="1", NUMEXPR_NUM_THREADS="1")
+-    env["TMPDIR"] = str(scratch_guard(env["TMPDIR"]))
++    env = dict(os.environ, RUNS=str(runs), ENG1_LINE=label, ENG1_ATTEMPT=str(output),
++               FORGE_GPU_RUN_LOG=str(output / "forge.log"), PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1",
++               OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", NUMEXPR_NUM_THREADS="1")
++    env["TMPDIR"] = str(scratch_guard(os.environ["TMPDIR"]))
+     Path(env["TMPDIR"]).mkdir(exist_ok=True, parents=True)
+-    # A6 D1: resolve/hash actual argv using the child PATH before exec.
+-    # Prior art: POSIX execvp and Linux procfs; see program_binding.py.
+-    program_errors = []
+-    actual_programs = {}
+-    try:
+-        actual_programs = programs(command, env)
+-    except Exception as exc:
+-        program_errors.append(str(exc) or type(exc).__name__)
+-    received_environment = environment(env)
+     start = utc()
+     with (output / "stdout.log").open("x") as log:
+-        child = subprocess.run([TIMEOUT, "--kill-after=20s", str(bound)+"s", *command],
++        child = subprocess.run(["timeout", "--kill-after=20s", str(bound) + "s", *command],
+                                cwd=TOOL, env=env, stdout=log, stderr=subprocess.STDOUT)
+-    # A5 D3: GNU timeout/POSIX 128+signal convention, also used by the runner.
++    # GNU timeout / POSIX 128+signal convention.
+     rc = child.returncode if child.returncode >= 0 else 128 - child.returncode
+     completed = utc()
+-    # A5 D4: every post-exit evaluation problem is a receipted failure.
+-    # Prior art: REV4 N5 fault injection (2026), Meszaros (2007).
++    result = dict(passed=False, reasons=[], actual_killers=[], outcomes={}, forge_outcome="unreadable",
++                  timeout=False, timeout_cause="unattributed")
+     refused = False
+-    result = dict(passed=False, reasons=[], actual_killers=[], outcomes={},
+-                  forge_outcome="unreadable", timeout=False, timeout_cause="unattributed", unsealed=[])
+     seal_sha256 = None
+     try:
+-        # A6 D4: post-exit seal hashing belongs inside protection.
+         seal_sha256 = sha(TOOL / "staging_seal.json")
+         cause = forge_outcome(output / "forge.log", rc)
+         refused = not_admitted(output, rc, cause)
+-        result = (dict(passed=False, reasons=["not admitted: " + cause], actual_killers=[], outcomes={}, forge_outcome=cause, timeout=False, timeout_cause=timeout_cause(output / "forge.log", rc), unsealed=[])
++        result = (dict(passed=False, reasons=["not admitted: " + cause], actual_killers=[], outcomes={},
++                       forge_outcome=cause, timeout=False, timeout_cause=timeout_cause(output / "forge.log", rc))
+                   if refused else evaluate(runs, output, line, rc, audit, seal))
+-        if not refused and not audit and line["suite"] == "mutation":
+-            try:
+-                dependency = recompute_line(runs, "candidate_focus", seal, start_record)
+-                if not dependency["passed"]:
+-                    result["reasons"].append("mutations require recomputed passing candidate focus")
+-            except Exception as exc:
+-                result["reasons"].append("invalid candidate focus: " + str(exc))
+-        if not refused and not audit and label == "candidate_regression":
+-            try:
+-                old = recompute_line(runs, "baseline_regression", seal, start_record)
+-                if not old["passed"]:
+-                    result["reasons"].append("missing valid completed baseline regression")
+-                else:
+-                    result["reasons"] += regression_reasons(read(Path(old["selected_attempt"]) / "child_result.json"), read(output / "child_result.json"))
+-            except Exception as exc:
+-                result["reasons"].append("invalid baseline regression: " + str(exc))
+-            (output / "regressions.json").write_text(json.dumps(result["reasons"], indent=2)+"\n")
++        if not refused and not audit and line["role"] == "mutant":
++            dependency = recompute_line(runs, "candidate_eng1", seal, start_record)
++            if not dependency["passed"]:
++                result["reasons"].append("mutations require a passing candidate_eng1")
++        if not refused and not audit and line["role"] == "regression" and line["arm"] == "candidate":
++            old = recompute_line(runs, label.replace("candidate_", "baseline_", 1), seal, start_record)
++            if not old["passed"]:
++                result["reasons"].append("missing valid completed baseline regression")
++            else:
++                result["reasons"] += regression_reasons(read(Path(old["selected_attempt"]) / "child_result.json"),
++                                                        read(output / "child_result.json"))
++            (output / "regressions.json").write_text(json.dumps(result["reasons"], indent=2) + "\n")
+     except Exception as exc:
+         result["reasons"].append("parent evaluation: " + (str(exc) or type(exc).__name__))
+     result["passed"] = not result["reasons"]
+     if not result["passed"]:
+         result["actual_killers"] = []
+-    receipt = dict(label=label, arm=line["arm"], suite=line["suite"], start=start,
++    # The timeout flag: GNU timeout's 124 (or 137 after --kill-after), attributed through the runner's log.
++    timed_out = rc in (124, 137) or result.get("timeout") is True
++    receipt = dict(result, label=label, arm=line["arm"], suite=line["suite"], role=line["role"], start=start,
+                    child_exited=completed, recorded=utc(), cwd=str(TOOL), command=command,
+-                   expected_child_exits=expected, exit=rc, raw_exit=child.returncode, outer_bound_seconds=bound,
+-                   audit=audit, control=control, programs=actual_programs,
+-                   environment=received_environment, program_errors=program_errors,
+-                   run_root=str(runs), attempt_dir=str(output), seal_sha256=seal_sha256,
+-                   admission="not_admitted" if refused else "admitted", **result)
+-    # A5 D5: POSIX link(2) (IEEE Std 1003.1, year unverified — lead to
+-    # check): atomic name publication with EEXIST/no overwrite. Temp is
+-    # intentionally retained for the lead; no deletion by this seat.
+-    # A6 D4: one minimal retry. Prior art: existing POSIX link publication;
+-    # no prior art known to me for this order-specific retry policy.
++                   expected_child_exits=expected, exit=rc, raw_exit=child.returncode, timeout=timed_out,
++                   outer_bound_seconds=bound, audit=audit, run_root=str(runs), attempt_dir=str(output),
++                   seal_sha256=seal_sha256, admission="not_admitted" if refused else "admitted")
++
+     def publish(data):
+         fd, temporary = tempfile.mkstemp(prefix="parent_result.", suffix=".tmp", dir=output)
+         with os.fdopen(fd, "w") as stream:
+-            stream.write(json.dumps(data, indent=2)+"\n")
++            stream.write(json.dumps(data, indent=2) + "\n")
+             stream.flush()
+             os.fsync(stream.fileno())
+         os.link(temporary, output / "parent_result.json")
++
+     try:
+         publish(receipt)
+     except Exception as exc:
+-        minimal = dict(label=label, attempt_dir=str(output), run_root=str(runs),
+-                       child_exited=completed, recorded=utc(), raw_exit=child.returncode,
+-                       exit=rc, passed=False, actual_killers=[], control=control, audit=audit,
+-                       receipt_error=True, reasons=["parent receipt write failed: " + (str(exc) or type(exc).__name__)])
++        minimal = dict(label=label, attempt_dir=str(output), run_root=str(runs), child_exited=completed,
++                       recorded=utc(), raw_exit=child.returncode, exit=rc, timeout=timed_out, passed=False,
++                       actual_killers=[], audit=audit, receipt_error=True,
++                       reasons=["parent receipt write failed: " + (str(exc) or type(exc).__name__)])
+         try:
+             publish(minimal)
+         except Exception as retry:
+-            # Documented fail-closed fallback: scorer marks a missing parent
+-            # completion receipt incomplete. Never overwrite a prior receipt.
+             print(json.dumps(dict(error=minimal["reasons"][0], retry_error=str(retry) or type(retry).__name__)), file=sys.stderr)
+             return 1
+         print(json.dumps(minimal))
+         return 1
+-    print(json.dumps(receipt))
++    print(json.dumps(dict((k, receipt[k]) for k in ("label", "exit", "timeout", "passed", "reasons", "actual_killers"))))
+     return 0 if receipt["passed"] else 1
+ 
+ 
+ if __name__ == "__main__":
+-    # D4: prelaunch validation/evaluation errors also refuse as JSON. Once
+-    # a child exits, the protected post-exit path above publishes its receipt.
+     try:
+         status = main()
+     except Exception as exc:
+--- _gn1_a8_originals/run_gpu_tests.py	2026-11-09 12:09:22.297364839 -0500
++++ run_gpu_tests.py	2026-11-09 13:04:20.591115811 -0500
+@@ -1,7 +1,11 @@
+ #!/usr/bin/env python3
+-"""Pinned-arm pytest child, invoked only by the staged supervisor.
+-Prior art: pytest (Krekel et al., 2004+, year unverified), report hooks;
+-L45 parent-after-child receipts from the GN1 order. GN1 wiring only.
++"""Pinned-arm pytest child, invoked only by the staged supervisor (adapted from GN1 A8 run_gpu_tests.py).
++Prior art: pytest (Krekel et al., 2004+, year unverified), report hooks; L45 parent-after-child receipts (GN1).
++ENG1 changes (ledgered): ENG1_* environment names; the arm is a package copy plus copies of test_eng1.py and
++test_terrain_render.py under arms/<arm>/tensor_cuda/ (each arm pins its own engine); suites eng1 / mutation /
++control / regression; the regression suite runs the worktree's existing test files with the arm package preloaded
++(GN1's method) plus the arm's own terrain file, and records the E6 write-detection snapshot around the run (L46);
++ENG1_CENSUS_DIR points the E3 census rows at the attempt directory; GN1's GroupNorm-specific report fields dropped.
+ """
+ import hashlib
+ import json
+@@ -10,27 +14,22 @@
+ import sys
+ import traceback
+ 
+-# D2: first executable child action after standard-library definitions/imports,
+-# before evidence, engine, pytest or NumPy. Imported Reports users do not start
+-# a child. Prior art: POSIX rename(2), see runtime_evidence.py.
+-from runtime_evidence import atomic_json, module_census, npbool_index_check
++from runtime_evidence import atomic_json, module_census
+ if __name__ == "__main__":
+-    atomic_json(Path(os.environ["GN1_ATTEMPT"]) / "child_started.json",
+-                dict(pid=os.getpid(), label=os.environ["GN1_LINE"]))
++    atomic_json(Path(os.environ["ENG1_ATTEMPT"]) / "child_started.json",
++                dict(pid=os.getpid(), label=os.environ["ENG1_LINE"]))
+ 
+-from evidence import guard, verify_start, verify_arm, lines
++from evidence import guard, verify_start, verify_arm, lines, read
++from e6_record import snapshot
+ 
+ TOOL = Path(__file__).resolve().parent
+ ROOT = TOOL.parents[2]
+-sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
++sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+ 
+ 
+ class Reports:
+     def __init__(self):
+-        self.ids = []
+-        self.reports = []
+-        self.collection_errors = []
+-        self.exceptions = {}
++        self.ids, self.reports, self.collection_errors, self.exceptions = [], [], [], {}
+ 
+     def pytest_collection_finish(self, session):
+         self.ids = [item.nodeid for item in session.items]
+@@ -41,108 +40,74 @@
+ 
+     def pytest_runtest_makereport(self, item, call):
+         if call.excinfo is not None:
+-            exc = call.excinfo
+-            # D3: the raising frame, not stack presence (REV2 P2).
+-            entry = exc.traceback[-1]
+-            refusal = (entry.frame.f_locals.get("self").__class__.__name__ == "GroupNorm"
+-                       and entry.name in ("forward", "__init__")
+-                       and Path(str(entry.path)).name == "nn.py")
+-            original = exc.value.__cause__
+-            engine_call = False
+-            wrapped = original is not None and str(exc.value).startswith("GroupNorm refused a registered valid input:")
+-            if wrapped:
+-                tb = original.__traceback__
+-                while tb:
+-                    frame = tb.tb_frame
+-                    engine_call |= (frame.f_locals.get("self").__class__.__name__ == "GroupNorm"
+-                                    and frame.f_code.co_name == "forward"
+-                                    and Path(frame.f_code.co_filename).name == "nn.py")
+-                    tb = tb.tb_next
+-            self.exceptions[(item.nodeid, call.when)] = dict(
+-                exception_class=exc.type.__name__, groupnorm_refusal=refusal,
+-                engine_refusal=engine_call, wrapped_engine_refusal=wrapped,
+-                original_exception_class=type(original).__name__ if original else None,
+-                original_exception_message=str(original) if original else None)
++            self.exceptions[(item.nodeid, call.when)] = dict(exception_class=call.excinfo.type.__name__)
+ 
+     def pytest_runtest_logreport(self, report):
+-        self.reports.append(dict(id=report.nodeid, when=report.when,
+-                                 outcome=report.outcome, detail=str(report.longrepr) if report.failed else "",
+-                                 **self.exceptions.get((report.nodeid, report.when), dict(exception_class=None, groupnorm_refusal=False))))
++        self.reports.append(dict(id=report.nodeid, when=report.when, outcome=report.outcome,
++                                 detail=str(report.longrepr)[-4000:] if report.failed else "",
++                                 **self.exceptions.get((report.nodeid, report.when), dict(exception_class=None))))
+ 
+ 
+ def main():
+-    # A6 D1: declared CPU control child. Meszaros (2007) test stub;
+-    # exact staged argv still runs under the real pinned runner/interpreter.
+-    if os.environ.get("GN1_CPU_FIXTURE") == "1":
+-        runs = guard(os.environ["RUNS"])
+-        _, record = verify_start(runs)
+-        assert record["control"] and os.environ.get("GN1_CONTROL") == "1"
+-        assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+-        # A8 D2: the sealed child owns this record even in the CPU fixture.
+-        # Prior art: A7 CUDA runtime capture (NVIDIA 12.6, 2024); runpy
+-        # init_globals (PSF). Fixture outcomes remain CPU sensitivity data.
+-        from device_evidence import capture
+-        pin = json.loads((TOOL / "engine_pin.json").read_text())
+-        evidence = capture(__file__, ROOT / pin["module"])
+-        import runpy
+-        runpy.run_path(str(TOOL / "rev2_forge.py"), run_name="__main__",
+-                       init_globals={"GN1_CHILD_DEVICE_EVIDENCE": evidence})
+-        return 0
+     runs = guard(os.environ["RUNS"])
+     seal, start_record = verify_start(runs)
+-    label = os.environ["GN1_LINE"]
+-    audit = os.environ.get("GN1_AUDIT") == "1"
+-    output = Path(os.environ["GN1_ATTEMPT"]).resolve()
++    label = os.environ["ENG1_LINE"]
++    audit = os.environ.get("ENG1_AUDIT") == "1"
++    output = Path(os.environ["ENG1_ATTEMPT"]).resolve()
+     assert output.parent == runs / label and output.name.startswith("attempt-"), "child attempt guard"
+     assert output.is_dir()
+     arm, suite = sys.argv[1:]
+     line = lines()[label]
+     assert (arm, suite) == (line["arm"], line["suite"]), "child line binding"
+     assert audit == start_record["audit"]
+-    package = verify_arm(arm, seal)
+-    pin = json.loads((TOOL / "engine_pin.json").read_text())
+-    seal = json.loads((TOOL / "staging_seal.json").read_text())
+-    paths = seal["test_files"]
+-    for file, expected in paths.items():
+-        assert sha(ROOT / file) == expected, "changed test " + file
+-    for file, expected in seal["arms"][arm].items():
+-        assert sha(package / file) == expected, "changed arm file " + file
+-    module = ROOT / pin["module"]
+-    assert sha(module) == pin["sha256"], "changed pinned engine"
+-    sys.path.insert(0, str(package.parent))
++    package = verify_arm(arm, seal)  # arms/<arm>/tensor_cuda
++    for file, expected in seal["registration_files"].items():
++        assert sha(ROOT / file) == expected, "changed registered file " + file
++    module = package / "tensor_cuda" / seal["module_name"]
++    assert sha(module) == seal["engine_sha256"][arm], "changed pinned engine"
++    sys.path.insert(0, str(package))
+     sys.path.insert(1, str(ROOT))
+     import tensor_cuda as tc
+     import numpy as np
+     import pytest
+-    assert Path(tc.__file__).resolve() == (package / "__init__.py").resolve()
+-    assert Path(tc.nn.__file__).resolve() == (package / "nn.py").resolve()
+-    assert Path(tc._C.__file__).resolve() == (package / module.name).resolve(), "wrong engine copy imported"
+-    assert sha(package / module.name) == pin["sha256"], "engine copy differs from pin"
++    assert Path(tc.__file__).resolve() == (package / "tensor_cuda" / "__init__.py").resolve(), "wrong package"
++    assert Path(tc._C.__file__).resolve() == module.resolve(), "wrong engine copy imported"
+     np.random.seed(571)
+-    files = (["tensor_cuda/tests/test_groupnorm_gn1.py", "tensor_cuda/tests/test_ext_phase7.py"]
+-             if suite == "focus" else ["tensor_cuda/tests/test_groupnorm_gn1.py"] if suite == "mutation"
+-             else json.loads((TOOL / "nn_import_test_files.json").read_text()))
+-    # A7 D2: NVIDIA CUDA Runtime 12.6 via the pinned engine; see device_evidence.py.
++    terrain = package / "tests" / "test_terrain_render.py"
++    if suite == "regression":
++        files = [str(ROOT / f) for f in read(TOOL / "regression_files.json")]
++    elif suite == "terrain":
++        files = [str(terrain)]
++    else:
++        files = [str(package / "tests" / "test_eng1.py")]
+     from device_evidence import capture
+     device_evidence = capture(__file__, tc._C.__file__)
+     invocation = dict(device_evidence=device_evidence, arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
+                       run_root=str(runs), attempt_dir=str(output), seal_sha256=sha(TOOL / "staging_seal.json"),
+-                      engine_sha256=sha(module), nn_sha256=sha(package / "nn.py"),
+-                      CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"), files=files)
++                      engine_sha256=sha(module), CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
++                      files=[os.path.relpath(f, ROOT) for f in files])
+     (output / "invocation.json").write_text(json.dumps(invocation, indent=2) + "\n")
+-    args = ["-q", "-p", "no:cacheprovider", "--import-mode=importlib",
++    os.environ["ENG1_CENSUS_DIR"] = str(output)
++    # ENG1: the regression files import sibling modules (apa_sp1_reference, test_apa_sp4g_a3), which needs pytest's
++    # default prepend import mode; the eng1 suites keep GN1's importlib mode.
++    mode = "--import-mode=prepend" if suite in ("regression", "terrain") else "--import-mode=importlib"
++    args = ["-q", "-p", "no:cacheprovider", mode, "-rfE",
+             "--rootdir=" + str(ROOT), "--basetemp=" + str(Path(os.environ["TMPDIR"]) / (label + "_pytest")),
+             "--junitxml=" + str(output / "junit.xml")]
+     if audit:
+         assert os.environ.get("CUDA_VISIBLE_DEVICES") == "", "audit requires hidden CUDA"
+-        args += ["-k", "reference"]
+-    args += [str(ROOT / file) for file in files]
++        args += ["-k", "cpu"]
++    elif suite in ("mutation", "control"):
++        # ENG1: C++ mutant and control lines deselect only the E6 test (it exercises no C++; its CPU reference
++        # renders cost ~5 min per line); M14, the E6 mutant, runs the whole file as suite mutation_e6.
++        args += ["-k", "not test_e6_terrain_writes_nothing"]
++    args += files
++    e6_before = snapshot(terrain) if suite == "terrain" else None
+     plugin = Reports()
+-    equivalence_runtime = npbool_index_check() if line.get("equivalence") and label != "V3" else None
+     rc = int(pytest.main(args, plugins=[plugin]))
+-    result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids,
+-                  collection_errors=plugin.collection_errors, reports=plugin.reports,
+-                  equivalence_runtime=equivalence_runtime, runtime_modules=module_census(ROOT))
++    e6 = dict(before=e6_before, after=snapshot(terrain)) if suite == "terrain" else None
++    result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids, collection_errors=plugin.collection_errors,
++                  reports=plugin.reports, e6_record=e6, runtime_modules=module_census(ROOT))
+     atomic_json(output / "child_result.json", result)
+     return rc
+ 
+--- _gn1_a8_originals/score_gpu.py	2026-11-09 12:09:22.299364858 -0500
++++ score_gpu.py	2026-11-09 12:55:07.517978722 -0500
+@@ -1,45 +1,48 @@
+-"""Recompute every verdict from START, seal, child and JUnit; no GPU calls.
+-Prior art: DeMillo et al. (1978), mutation adequacy; paired regression (GN1).
+-A2 never treats a stored parent verdict as its source of truth.
++#!/usr/bin/env python3
++"""Recompute every ENG1 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (adapted from
++GN1 A8 score_gpu.py). Prior art: DeMillo et al. (1978), mutation adequacy; paired regression (GN1 D6).
++ENG1 changes (ledgered): M09 counts only with a passing C_UBSAN control; the E3 census rows are collected from
++candidate_eng1 and reported (not gated); the per-mutant killer IDs are listed.
+ """
+ import json
+ import os
+ import sys
++from pathlib import Path
+ from evidence import TOOL, guard, verify_start, lines, recompute_line
+ 
+ 
+ def main():
+-    # Guard before creating/writing anything: hostile outside roots stay untouched.
+     runs = guard(os.environ["RUNS"])
+-    summary = {}
+-    errors = []
++    summary, errors = {}, []
++    start = {}
+     try:
+         seal, start = verify_start(runs)
+-        assert not start["audit"], "audit run cannot establish GPU acceptance"
+-        # A6 D1: recompute controls for target sensitivity, bar root acceptance.
+         for label in lines():
+             try:
+                 summary[label] = recompute_line(runs, label, seal, start)
+             except Exception as exc:
+-                inventory = []
+-                for path in sorted((runs / label).glob("attempt-*")):
+-                    inventory.append(dict(attempt=path.name, receipt=str(path / "parent_result.json")))
+-                summary[label] = dict(passed=False, reasons=[str(exc) or type(exc).__name__], attempts=inventory)
++                summary[label] = dict(passed=False, reasons=[str(exc) or type(exc).__name__])
+     except Exception as exc:
+         errors.append(str(exc) or type(exc).__name__)
+-    # A7 D2/D3: no declaration can promote a CPU line. CUDA runtime API
+-    # evidence is checked per admitted child; see device_evidence.py.
++    if start.get("audit"):
++        errors.append("audit run cannot establish GPU acceptance")
+     if summary and any(row.get("mode") != "device" for row in summary.values()):
+         errors.append("not a device run: every line requires positive child device evidence")
+-    # A8 D3: a root declaration can only demote. A CPU root has one
+-    # deciding reason: absent positive device evidence. Prior art: A7.
+-    if summary and all(row.get("mode") == "device" for row in summary.values()) and start["control"]:
+-        errors.append("control run cannot establish GPU acceptance")
+-    passed = not errors and bool(summary) and all(row["passed"] for row in summary.values())
+-    result = dict(passed=passed, errors=errors, lines=summary)
++    if "M09" in summary and not summary.get("C_UBSAN", {}).get("passed"):
++        summary["M09"]["passed"] = False
++        summary["M09"].setdefault("reasons", []).append("M09 needs a passing C_UBSAN control")
++    census = []
++    cand = summary.get("candidate_eng1", {}).get("selected_attempt")
++    if cand:
++        census = [json.loads(p.read_text()) for p in sorted(Path(cand).glob("census_*.json"))]
++    passed = not errors and bool(summary) and all(row.get("passed") for row in summary.values())
++    result = dict(passed=passed, errors=errors, lines=summary,
++                  killers={k: v.get("actual_killers") for k, v in summary.items() if lines()[k]["role"] == "mutant"},
++                  e3_census=census)
+     runs.mkdir(parents=True, exist_ok=True)
+-    (runs / "G5_SUMMARY.json").write_text(json.dumps(result, indent=2)+"\n")
+-    print(json.dumps(result))
++    (runs / "G5_SUMMARY.json").write_text(json.dumps(result, indent=2) + "\n")
++    print(json.dumps(dict(passed=passed, errors=errors,
++                          lines={k: (v.get("passed"), v.get("mode"), v.get("reasons", [])[:3]) for k, v in summary.items()})))
+     return 0 if passed else 1
+ 
+ 
+--- _gn1_a8_originals/start_gpu_run.py	2026-11-09 12:09:22.303364896 -0500
++++ start_gpu_run.py	2026-11-09 12:55:07.533978855 -0500
+@@ -1,4 +1,4 @@
+-"""Immutable START binding. Prior art: SHA-256 NIST (2001); GN1 L59/D3."""
++"""Immutable START binding (adapted from GN1 A8; ENG1_AUDIT). Prior art: SHA-256 NIST (2001); GN1 L59/D3."""
+ import datetime
+ import json
+ import os
+@@ -11,12 +11,12 @@
+ runs.mkdir(parents=True, exist_ok=True)
+ record = dict(date=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+               order_commit=seal["order_commit"], order_sha256=seal["order_sha256"],
+-              audit=os.environ.get("GN1_AUDIT") == "1", control=os.environ.get("GN1_CONTROL") == "1", run_root=str(runs),
++              audit=os.environ.get("ENG1_AUDIT") == "1", run_root=str(runs),
+               seal_sha256=sha(TOOL / "staging_seal.json"))
+ if (runs / "START.json").exists():
+     _, old = verify_start(runs)
+-    assert old["audit"] == record["audit"] and old["control"] == record["control"]
++    assert old["audit"] == record["audit"]
+ else:
+     with (runs / "START.json").open("x") as stream:
+-        stream.write(json.dumps(record, indent=2)+"\n")
++        stream.write(json.dumps(record, indent=2) + "\n")
+ print(json.dumps(record))
+--- _gn1_a8_originals/forge_gpu_run_standin.py	2026-11-09 12:09:22.294840651 -0500
++++ forge_gpu_run_standin.py	2026-11-09 12:55:07.545978955 -0500
+@@ -1,13 +1,13 @@
+ #!/usr/bin/env python3
+-"""CPU audit only. Prior art: subprocess/GNU timeout; installed forge log format.
+-Stand-in never leases or calls GPU. Uses the real nine-field outcome format.
++"""CPU audit only (adapted from GN1 A8; ENG1_AUDIT). Prior art: subprocess/GNU timeout; installed forge log format.
++The stand-in never leases or calls the GPU. It writes the real nine-field outcome row after its child exits.
+ """
+ import datetime
+ import os
+ from pathlib import Path
+ import subprocess
+ import sys
+-assert os.environ.get("GN1_AUDIT") == "1"
++assert os.environ.get("ENG1_AUDIT") == "1"
+ assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+ args = sys.argv[1:]
+ command = args[args.index("--")+1:]
+--- _gn1_a8_originals/device_evidence.py	2026-11-09 12:09:22.291364782 -0500
++++ device_evidence.py	2026-11-09 12:55:07.584356757 -0500
+@@ -1,4 +1,5 @@
+-"""A7 D2/D3 child-owned device evidence, read-only validation.
++"""A7 D2/D3 child-owned device evidence, read-only validation (copied from GN1 A8; ENG1 change: the engine
++pin is looked up per arm, seal["engine_sha256"][arm]).
+ 
+ Prior art: NVIDIA CUDA Runtime API 12.6 (2024), cudaGetDevice,
+ cudaGetDeviceProperties_v2, cudaRuntimeGetVersion, cudaDriverGetVersion;
+@@ -98,7 +99,7 @@
+             assert type(e[name]) is str and e[name].isascii() and e[name].isdecimal(), name + " is not an exact decimal string"
+             assert name == "device_ordinal" or int(e[name]) > 0, name + " is zero"
+         assert e["native_status"] == {name: "0" for name in CALLS}, "native query status not successful"
+-        assert e["engine_sha256"] == seal["engine_sha256"], "device query engine differs from pin"
++        assert e["engine_sha256"] == seal["engine_sha256"][data["arm"]], "device query engine differs from the arm pin"
+         assert e["provider"] == "pinned-engine:libcudart" and e["query_error"] is None, "device query unavailable"
+         datetime.datetime.fromisoformat(e["captured_at"])
+     except Exception as exc:
+--- _gn1_a8_originals/gpu_lines.json	2026-11-09 12:09:22.294840651 -0500
++++ gpu_lines.json	2026-11-09 14:13:42.714428253 -0500
+@@ -1,811 +1,338 @@
+ [
+   {
+-    "label": "baseline_focus",
++    "label": "baseline_eng1",
+     "arm": "baseline",
+-    "suite": "focus",
++    "suite": "eng1",
++    "role": "baseline",
++    "census": "eng1",
+     "expected_child_exits": [
+       1
+     ],
+-    "inner": 240,
+-    "maximum": 300,
+-    "outer": 330,
+     "expected_parent_exit": 0,
+-    "minimum": 250
++    "inner": 900,
++    "minimum": 910,
++    "maximum": 960,
++    "outer": 990
+   },
+   {
+-    "label": "candidate_focus",
++    "label": "candidate_eng1",
+     "arm": "candidate",
+-    "suite": "focus",
++    "suite": "eng1",
++    "role": "candidate",
++    "census": "eng1",
+     "expected_child_exits": [
+       0
+     ],
+-    "inner": 240,
+-    "maximum": 300,
+-    "outer": 330,
+     "expected_parent_exit": 0,
+-    "minimum": 250
++    "inner": 900,
++    "minimum": 910,
++    "maximum": 960,
++    "outer": 990
+   },
+   {
+     "label": "baseline_regression",
+     "arm": "baseline",
+     "suite": "regression",
++    "role": "regression",
++    "census": "regression",
+     "expected_child_exits": [
++      0,
+       1
+     ],
+-    "inner": 840,
+-    "maximum": 900,
+-    "outer": 930,
+     "expected_parent_exit": 0,
+-    "minimum": 850
++    "inner": 1050,
++    "minimum": 1060,
++    "maximum": 1110,
++    "outer": 1140
+   },
+   {
+     "label": "candidate_regression",
+     "arm": "candidate",
+     "suite": "regression",
++    "role": "regression",
++    "census": "regression",
+     "expected_child_exits": [
+       0,
+       1
+     ],
+-    "inner": 840,
+-    "maximum": 900,
+-    "outer": 930,
+-    "expected_parent_exit": 0,
+-    "minimum": 850
+-  },
+-  {
+-    "label": "D5_bias_dtype",
+-    "arm": "D5_bias_dtype",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_bias_length",
+-    "arm": "D5_bias_length",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_bias_rank",
+-    "arm": "D5_bias_rank",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 1050,
++    "minimum": 1060,
++    "maximum": 1110,
++    "outer": 1140
+   },
+   {
+-    "label": "D5_c_bool",
+-    "arm": "D5_c_bool",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_c_index",
+-    "arm": "D5_c_index",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_c_int",
+-    "arm": "D5_c_int",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_c_npbool",
+-    "arm": "D5_c_npbool",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_c_positive",
+-    "arm": "D5_c_positive",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_c_store",
+-    "arm": "D5_c_store",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_channels",
+-    "arm": "D5_channels",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_bool",
+-    "arm": "D5_g_bool",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_index",
+-    "arm": "D5_g_index",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_int",
+-    "arm": "D5_g_int",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_npbool",
+-    "arm": "D5_g_npbool",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_positive",
+-    "arm": "D5_g_positive",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_g_store",
+-    "arm": "D5_g_store",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_input_dtype",
+-    "arm": "D5_input_dtype",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "D5_rank",
+-    "arm": "D5_rank",
+-    "suite": "mutation",
++    "label": "baseline_terrain",
++    "arm": "baseline",
++    "suite": "terrain",
++    "role": "regression",
++    "census": "terrain",
+     "expected_child_exits": [
++      0,
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 1050,
++    "minimum": 1060,
++    "maximum": 1110,
++    "outer": 1140
+   },
+   {
+-    "label": "D5_weight_dtype",
+-    "arm": "D5_weight_dtype",
+-    "suite": "mutation",
++    "label": "candidate_terrain",
++    "arm": "candidate",
++    "suite": "terrain",
++    "role": "regression",
++    "census": "terrain",
+     "expected_child_exits": [
++      0,
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 1050,
++    "minimum": 1060,
++    "maximum": 1110,
++    "outer": 1140
+   },
+   {
+-    "label": "D5_weight_length",
+-    "arm": "D5_weight_length",
+-    "suite": "mutation",
++    "label": "C_COPY",
++    "arm": "C_COPY",
++    "suite": "control",
++    "role": "control",
++    "census": "eng1_noe6",
++    "control_of": "M01-M08,M10-M13",
+     "expected_child_exits": [
+-      1
++      0
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "D5_weight_rank",
+-    "arm": "D5_weight_rank",
+-    "suite": "mutation",
++    "label": "C_UBSAN",
++    "arm": "C_UBSAN",
++    "suite": "control",
++    "role": "control",
++    "census": "eng1_noe6",
++    "control_of": "M09",
+     "expected_child_exits": [
+-      1
++      0
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 900,
++    "minimum": 910,
++    "maximum": 960,
++    "outer": 990
+   },
+   {
+     "label": "M01",
+     "arm": "M01",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M02",
+     "arm": "M02",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M03",
+     "arm": "M03",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M04m",
+-    "arm": "M04m",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "M04v",
+-    "arm": "M04v",
++    "label": "M04",
++    "arm": "M04",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M05",
+     "arm": "M05",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M06in",
+-    "arm": "M06in",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M06out",
+-    "arm": "M06out",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M07cast",
+-    "arm": "M07cast",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M07fast",
+-    "arm": "M07fast",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "M08cast",
+-    "arm": "M08cast",
++    "label": "M06",
++    "arm": "M06",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "M08fast",
+-    "arm": "M08fast",
++    "label": "M07",
++    "arm": "M07",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "M09cast",
+-    "arm": "M09cast",
++    "label": "M08",
++    "arm": "M08",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+-    "label": "M09fast",
+-    "arm": "M09fast",
++    "label": "M09",
++    "arm": "M09",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M10",
+     "arm": "M10",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M11",
+     "arm": "M11",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M12",
+     "arm": "M12",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M13",
+     "arm": "M13",
+     "suite": "mutation",
++    "role": "mutant",
++    "census": "eng1_noe6",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
++    "inner": 420,
++    "minimum": 430,
++    "maximum": 480,
++    "outer": 510
+   },
+   {
+     "label": "M14",
+     "arm": "M14",
+-    "suite": "mutation",
++    "suite": "mutation_e6",
++    "role": "mutant",
++    "census": "eng1",
+     "expected_child_exits": [
+       1
+     ],
+     "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M15b",
+-    "arm": "M15b",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M15w",
+-    "arm": "M15w",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M15x",
+-    "arm": "M15x",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M16",
+-    "arm": "M16",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M17b",
+-    "arm": "M17b",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M17w",
+-    "arm": "M17w",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M18b",
+-    "arm": "M18b",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "M18w",
+-    "arm": "M18w",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "V1",
+-    "arm": "V1",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "V2",
+-    "arm": "V2",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "V3",
+-    "arm": "V3",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      0
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": "EQUIVALENCES.md#v3",
+-    "minimum": 190
+-  },
+-  {
+-    "label": "V4",
+-    "arm": "V4",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      1
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": null,
+-    "minimum": 190
+-  },
+-  {
+-    "label": "E_npbool_g",
+-    "arm": "E_npbool_g",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      0
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "minimum": 190,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": "EQUIVALENCES.md#numpy-bool-g"
+-  },
+-  {
+-    "label": "E_npbool_c",
+-    "arm": "E_npbool_c",
+-    "suite": "mutation",
+-    "expected_child_exits": [
+-      0
+-    ],
+-    "expected_parent_exit": 0,
+-    "inner": 180,
+-    "minimum": 190,
+-    "maximum": 240,
+-    "outer": 270,
+-    "equivalence": "EQUIVALENCES.md#numpy-bool-c"
++    "inner": 900,
++    "minimum": 910,
++    "maximum": 960,
++    "outer": 990
+   }
+ ]

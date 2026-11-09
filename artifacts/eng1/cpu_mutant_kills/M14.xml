@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="317.719" timestamp="2026-11-09T12:59:58.696252-05:00" hostname="MilleniumFalcon"><testcase classname="artifacts.eng1.tool.arms.M14.tensor_cuda.tests.test_eng1" name="test_e6_terrain_writes_nothing" time="309.142"><failure message="AssertionError: assert '?? artifacts..._blocky.ppm\n' == ''&#10;  &#10;  + ?? artifacts/eng1/tool/arms/M14/artifacts/wo8a_blocky.ppm">tmp_path = PosixPath('/tmp/eng1_cpu/bt_m14/test_e6_terrain_writes_nothing0')
+
+    def test_e6_terrain_writes_nothing(tmp_path):
+        terrain = PKG_PARENT / "tests" / "test_terrain_render.py"
+        assert terrain.is_file()
+        target = terrain.resolve().parents[2] / "artifacts"
+        before = e6_snapshot(target)
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        args = [sys.executable, "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tmp_path),
+                "--basetemp", str(tmp_path / "basetemp")] + [f"{terrain}::{name}" for name in E6_WRITERS]
+        p = subprocess.run(args, capture_output=True, text=True, timeout=1500, cwd=str(tmp_path), env=env)
+        after = e6_snapshot(target)
+        record = dict(terrain=str(terrain), returncode=p.returncode, tail=p.stdout[-2000:], before=before, after=after)
+        out = Path(os.environ.get("ENG1_CENSUS_DIR") or tmp_path)
+        (out / "e6_record.json").write_text(json.dumps(record, indent=1) + "\n")
+        assert p.returncode == 0, p.stdout[-2000:] + p.stderr[-2000:]
+        assert after["ordered"] == before["ordered"]
+&gt;       assert after["uall"] == before["uall"]
+E       AssertionError: assert '?? artifacts..._blocky.ppm\n' == ''
+E         
+E         + ?? artifacts/eng1/tool/arms/M14/artifacts/wo8a_blocky.ppm
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/M14/tensor_cuda/tests/test_eng1.py:683: AssertionError</failure></testcase></testsuite></testsuites>

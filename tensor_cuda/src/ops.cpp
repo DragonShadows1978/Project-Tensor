@@ -855,6 +855,20 @@ Tensor pow_scalar(const Tensor& a, double p) {
   NDArray out = ew_pow(a.data(), p);
   return Tensor::from_op(out, {a}, "pow", [a, p](const NDArray& g) {
     // d/dx x^p = p * x^(p-1)
+    // ENG1 E2 (FP16-POW1): for float16/bfloat16 inputs, x^(p-1) overflowed in the input dtype (p = -0.5, x = 1e-5:
+    // 3.2e7 > 65504). Those inputs now compute g * p * x^(p-1) in float32 per element, with the same operations in
+    // the same order as below, and cast the product to the input dtype once. float32 runs the unchanged line below.
+    // Prior art: mixed-precision training's float32 math for half-precision tensors (Micikevicius et al., 2018,
+    // "Mixed Precision Training", ICLR; unverified -- lead to check) and PyTorch's opmath_type upcast in its pow
+    // backward kernels (unverified -- lead to check: "pow_tensor_scalar_backward opmath"). Taken: compute wide, round
+    // once. Ours: the choice of the engine's existing astype/ew_pow/nmuls/nmul ops for it.
+    const DType dt = a.data().dtype;
+    if (dt == DType::Float16 || dt == DType::BFloat16) {
+      NDArray x32 = a.data().astype(DType::Float32);
+      NDArray g32 = g.astype(DType::Float32);
+      a.v->accumulate_grad(nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt));
+      return;
+    }
     a.v->accumulate_grad(nmul(g, nmuls(ew_pow(a.data(), p - 1.0), p)));
   });
 }

@@ -755,11 +755,42 @@ NDArray NDArray::astype(DType dt) const {
   return out;
 }
 NDArray NDArray::reshape(const Shape& new_shape) const {
-  if (numel_of(new_shape) != numel()) {
+  // ENG1 E1 (RESHAPE-NEG1): at most one -1, inferred as numel / product(other extents). Refused, each with its own
+  // message: two or more -1; any other negative extent; a -1 when the other extents' product is 0 (ambiguous); a
+  // non-integer inferred extent. A shape without -1 keeps the old check and message; storage sharing is unchanged.
+  // Prior art: PyTorch's reshape/view -1 inference (at::infer_size, ATen InferSize.h) and NumPy's reshape -1 rule
+  // (unverified -- lead to check: "ATen InferSize.h infer_size_impl", "numpy reshape unknown dimension"). Taken: the
+  // one -1 rule and the refusal set. Ours: the messages and their order (negative extents, then the -1 count).
+  Shape resolved = new_shape;
+  int infer_at = -1;
+  for (size_t d = 0; d < new_shape.size(); ++d) {
+    const int64_t e = new_shape[d];
+    if (e == -1) {
+      if (infer_at >= 0)
+        throw std::runtime_error("reshape: only one dimension can be inferred (-1)");
+      infer_at = static_cast<int>(d);
+    } else if (e < 0) {
+      throw std::runtime_error("reshape: invalid shape dimension " + std::to_string(e));
+    }
+  }
+  if (infer_at >= 0) {
+    Shape others = new_shape;
+    others[infer_at] = 1;
+    const int64_t known = numel_of(others);  // >= 0 here: no other extent is negative
+    if (known == 0)
+      throw std::runtime_error("reshape: cannot infer -1 when the other extents' product is 0");
+    const int64_t n = numel();
+    if (n % known != 0)
+      throw std::runtime_error("reshape: cannot infer -1: " + std::to_string(n) +
+                               " elements are not divisible by the other extents' product " +
+                               std::to_string(known));
+    resolved[infer_at] = n / known;
+  }
+  if (numel_of(resolved) != numel()) {
     throw std::runtime_error("reshape: element count mismatch");
   }
   NDArray out = *this;  // shares storage
-  out.shape = new_shape;
+  out.shape = resolved;
   return out;
 }
 
@@ -3823,8 +3854,12 @@ NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
   // itself for the (rare, non-4D) case nd<2 so BOUNDED still degrades
   // safely rather than dividing by zero.
   int64_t Lchunk = (nd >= 2) ? bulk.shape[nd-2] : (bulk.numel() / (S > 0 ? S : 1));
-  int64_t rows = bulk.numel() / S;
   NDArray out(bulk.shape, bulk.dtype, bulk.device);
+  // ENG1 E4 (DIV0-LAST1): a zero last extent or zero rows returns the empty result before the division below and
+  // with no launch (it was a host division by zero, undefined behaviour). Prior art: PyTorch softmax on an empty
+  // dimension returns an empty tensor of the input's shape (unverified -- lead to check: "torch.softmax empty").
+  if (S == 0 || bulk.numel() == 0) return out;
+  int64_t rows = bulk.numel() / S;
   if (rows > 0) {
     // Compile-time dispatch (A5 WCOOP pattern): the legacy Lq<=0 sentinel
     // path runs the BOUNDED=false instantiation, codegen-identical to the
@@ -5337,10 +5372,18 @@ __global__ void topk_kernel(const T* a, T* vals, int64_t* idxs,
 std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest) {
   int nd = a.ndim();
   int64_t S = a.shape[nd - 1];
-  int64_t outer = a.numel() / S;
+  // ENG1 E4 (DIV0-LAST1): k outside [0, S] is refused (this branch had no refusal: k > S returned sentinel values and
+  // index -1); a zero last extent, zero rows or k = 0 returns empty values and indices of shape (..., k) before the
+  // division below and with no launch. Prior art: PyTorch topk's "selected index k out of range" check
+  // (k >= 0 && k <= size) and its empty results for k = 0 (unverified -- lead to check: "torch.topk k out of range").
+  if (k < 0 || (int64_t)k > S)
+    throw std::runtime_error("topk: selected index k=" + std::to_string(k) +
+                             " out of range for last extent " + std::to_string(S));
   Shape os = a.shape; os[nd - 1] = k;
   NDArray vals(os, a.dtype, a.device);
   NDArray idxs(os, DType::Int64, a.device);
+  if (S == 0 || k == 0 || a.numel() == 0) return {vals, idxs};
+  int64_t outer = a.numel() / S;
   if (outer > 0) {
     DISPATCH_FLOAT(a.dtype, T, {
       topk_kernel<T><<<nblk(outer), kT>>>(static_cast<T*>(a.data_ptr()),
@@ -7726,9 +7769,12 @@ NDArray causal_softmax(const NDArray& scores) {
   int64_t L = scores.shape[scores.ndim() - 2];
   int64_t S = scores.shape[scores.ndim() - 1];
   if (S < L) throw std::runtime_error("causal_softmax: S < L (queries outnumber keys)");
-  int64_t rows = scores.numel() / S;
   NDArray out(scores.shape, scores.dtype, scores.device);
-  if (rows == 0 || S == 0) return out;
+  // ENG1 E4 (DIV0-LAST1): the empty-result guard now runs before the division (S = 0 was a host division by zero,
+  // undefined behaviour); the S < L refusal above still runs first, so S = 0 is empty only when L = 0. Prior art:
+  // PyTorch softmax on an empty dimension (unverified -- lead to check: "torch.softmax empty").
+  if (S == 0 || scores.numel() == 0) return out;
+  int64_t rows = scores.numel() / S;
   DISPATCH_FLOAT(scores.dtype, T, {
     causal_softmax_kernel<T><<<(int)rows, kT>>>(
         static_cast<T*>(scores.data_ptr()), static_cast<T*>(out.data_ptr()), L, S);
@@ -7743,9 +7789,12 @@ NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype
     throw std::runtime_error("rms_norm expects fp32 weight (chain stores fp32)");
   int64_t D = x.shape[x.ndim() - 1];
   if (w.numel() != D) throw std::runtime_error("rms_norm weight/dim mismatch");
-  int64_t rows = x.numel() / D;
   NDArray out(x.shape, out_dtype, x.device);
-  if (rows == 0 || D == 0) return out;
+  // ENG1 E4 (DIV0-LAST1): the empty-result guard now runs before the division (D = 0 was a host division by zero,
+  // undefined behaviour). Prior art: PyTorch's RMSNorm/layer norms return an empty tensor of the input's shape for
+  // empty input (unverified -- lead to check: "torch.nn.functional.rms_norm empty").
+  if (D == 0 || x.numel() == 0) return out;
+  int64_t rows = x.numel() / D;
   DISPATCH_FLOAT(x.dtype, XT, {
     DISPATCH_FLOAT(out_dtype, OT, {
       rms_norm_kernel<XT, OT><<<(int)rows, kT>>>(

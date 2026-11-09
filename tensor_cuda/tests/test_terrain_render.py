@@ -2855,7 +2855,7 @@ def test_terrain_render_wo12g_existing_object_reference_regression():
         )
 
 
-def test_terrain_render_wo12g_cpu_repro_and_receipts():
+def test_terrain_render_wo12g_cpu_repro_and_receipts(tmp_path):
     """G-LEAK CPU receipt: historical leak table and corrected zero-leak sweep."""
     after_counts = {}
     receipts = {}
@@ -2882,8 +2882,8 @@ def test_terrain_render_wo12g_cpu_repro_and_receipts():
             receipts["after"] = after_rgb
 
     repo_root = Path(__file__).resolve().parents[2]
-    _write_ppm(repo_root / "artifacts" / "wo12g_before.ppm", receipts["before"])
-    _write_ppm(repo_root / "artifacts" / "wo12g_after.ppm", receipts["after"])
+    _write_ppm(tmp_path / "wo12g_before.ppm", receipts["before"])
+    _write_ppm(tmp_path / "wo12g_after.ppm", receipts["after"])
     print(
         "WO-12G CPU G-LEAK "
         f"cases={len(_WO12G_CASES)} worst_pre_fix="
@@ -3838,7 +3838,7 @@ def test_terrain_render_grounding_plane_semantics():
             assert actual_depth[0, 0] == np.float32(-1.0)
 
 
-def test_terrain_render_wo9br2_ppm_ladder():
+def test_terrain_render_wo9br2_ppm_ladder(tmp_path):
     """WO-9B-r2: front-lit real-mountain smooth-detail receipt ladder."""
     _require_cuda()
     # Keep this on the committed WO-8A mountain-fixture generation path rather
@@ -3863,7 +3863,7 @@ def test_terrain_render_wo9br2_ppm_ladder():
             detail=1,
         )
         assert np.unique(rgb.reshape(-1, 3), axis=0).shape[0] >= 128
-        _write_ppm(repo_root / "artifacts" / f"wo9br2_{label}.ppm", rgb)
+        _write_ppm(tmp_path / f"wo9br2_{label}.ppm", rgb)
 
 
 def _write_ppm(path, rgb):
@@ -3876,7 +3876,7 @@ def _write_ppm(path, rgb):
         handle.write(np.ascontiguousarray(rgb, dtype=np.uint8).tobytes())
 
 
-def test_terrain_render_wo9e_ppm_receipts():
+def test_terrain_render_wo9e_ppm_receipts(tmp_path):
     """WO-9E G6: below, edge-on, and unchanged-overhead P6 receipts."""
     repo_root = Path(__file__).resolve().parents[2]
     counts = {}
@@ -3909,7 +3909,7 @@ def test_terrain_render_wo9e_ppm_receipts():
             assert plane_count == 0
             np.testing.assert_array_equal(rgb, baseline_rgb)
             np.testing.assert_array_equal(depth, baseline_depth)
-        _write_ppm(repo_root / "artifacts" / f"wo9e_{label}.ppm", rgb)
+        _write_ppm(tmp_path / f"wo9e_{label}.ppm", rgb)
     print(
         "WO-9E G6 pixels "
         + " ".join(
@@ -3919,7 +3919,7 @@ def test_terrain_render_wo9e_ppm_receipts():
     )
 
 
-def test_terrain_render_wo9ae_ppm_receipts():
+def test_terrain_render_wo9ae_ppm_receipts(tmp_path):
     """G6: tank-ish front, half-ridge, and 200-voxel engine receipts."""
     repo_root = Path(__file__).resolve().parents[2]
     for label in ("front", "ridge", "far"):
@@ -3938,10 +3938,10 @@ def test_terrain_render_wo9ae_ppm_receipts():
             candidate = info["object_hit"][0]
             assert np.count_nonzero(candidate & object_winner) > 0
             assert np.count_nonzero(candidate & ~object_winner) > 0
-        _write_ppm(repo_root / "artifacts" / f"wo9ae_{label}.ppm", rgb)
+        _write_ppm(tmp_path / f"wo9ae_{label}.ppm", rgb)
 
 
-def test_terrain_render_wo8a_ppm_pair():
+def test_terrain_render_wo8a_ppm_pair(tmp_path):
     """G5: operator-facing same-camera noise-terrain blocky/smooth PPM pair.
 
     The independent references deliberately generate this receipt so it is
@@ -3957,11 +3957,11 @@ def test_terrain_render_wo8a_ppm_pair():
         grid, camera, LIGHT_DIRECTION, PALETTE
     )
     repo_root = Path(__file__).resolve().parents[2]
-    _write_ppm(repo_root / "artifacts" / "wo8a_blocky.ppm", blocky_rgb)
-    _write_ppm(repo_root / "artifacts" / "wo8a_smooth.ppm", smooth_rgb)
+    _write_ppm(tmp_path / "wo8a_blocky.ppm", blocky_rgb)
+    _write_ppm(tmp_path / "wo8a_smooth.ppm", smooth_rgb)
 
 
-def test_terrain_render_wo8c_ppm_triplet():
+def test_terrain_render_wo8c_ppm_triplet(tmp_path):
     """WO-8C G5: same mountain-like terrain and camera at filter 0/1/2."""
     grid = _noise_terrain((256, 256, 96))
     camera = _camera_for_grid(grid.shape)
@@ -3975,7 +3975,7 @@ def test_terrain_render_wo8c_ppm_triplet():
             density_filter=density_filter,
         )
         _write_ppm(
-            repo_root / "artifacts" / f"wo8c_filter{density_filter}.ppm",
+            tmp_path / f"wo8c_filter{density_filter}.ppm",
             rgb,
         )
 

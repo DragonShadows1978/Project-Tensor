@@ -1,0 +1,23 @@
+{
+  "name": "configure",
+  "command": [
+    "cmake",
+    "-S",
+    "/tmp/eng1_ubsan_src/tensor_cuda",
+    "-B",
+    "/tmp/eng1_ubsan_src/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_CUDA_ARCHITECTURES=89",
+    "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
+    "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+    "-DCMAKE_CXX_FLAGS=-fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero",
+    "-DCMAKE_CUDA_FLAGS=-Xcompiler=-fsanitize=integer-divide-by-zero -Xcompiler=-fno-sanitize-recover=integer-divide-by-zero",
+    "-DCMAKE_MODULE_LINKER_FLAGS=-fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero",
+    "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero"
+  ],
+  "start": "2026-11-09T18:06:10.393706+00:00",
+  "end": "2026-11-09T18:06:45.390201+00:00",
+  "exit": 0,
+  "timeout": false,
+  "bound_seconds": 600
+}
