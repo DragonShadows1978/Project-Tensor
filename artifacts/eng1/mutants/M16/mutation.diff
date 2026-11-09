@@ -1,0 +1,11 @@
+--- tensor_cuda/src/conv.cu
++++ M16/tensor_cuda/src/conv.cu
+@@ -142,7 +142,7 @@
+   };
+   const int64_t oh = floor_div((int64_t)d.H + 2 * (int64_t)ph - kh, sh) + 1;
+   const int64_t ow = floor_div((int64_t)d.W + 2 * (int64_t)pw - kw, sw) + 1;
+-  if (oh <= 0 || ow <= 0)
++  if (oh <= 0 || ow < 0) // Prior art: DeMillo et al. 1978 boundary mutation; REV1 F04.
+     throw std::runtime_error(
+         "conv/pool: input extents (H, W) = (" + std::to_string(d.H) + ", " + std::to_string(d.W) +
+         "), kernel (" + std::to_string(kh) + ", " + std::to_string(kw) + "), stride (" + std::to_string(sh) + ", " +

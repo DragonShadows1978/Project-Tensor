@@ -20,9 +20,10 @@ TOOL = Path(__file__).resolve().parent
 ENG1 = TOOL.parent
 ROOT = TOOL.parents[2]
 BASE_COMMIT = "1680764dbeea6d4215eba06b1a450cf345e7db11"
-ORDER_COMMIT = "007137ded4b115919afc3f001626762c8f83cadb"
+ORDER_COMMIT = "3b6a5a867f75a399a563ddf9d693133ec938552b"
+SEAL_NAME = "staging_seal_a1.json"
 MODULE = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
-MUTANTS = json.loads((ENG1 / "mutants" / "mutants.json").read_text())
+MUTANTS = json.loads((ENG1 / "mutants" / "mutants.json").read_text()) + json.loads((ENG1 / "a1/MUTANTS.json").read_text())
 
 
 def sha(p):
@@ -43,7 +44,10 @@ def package_files(commit_tree=False):
 def make_arm(arm, module_src, base=False, terrain_text=None):
     dest = TOOL / "arms" / arm / "tensor_cuda"
     if dest.exists():
-        print("exists", arm)
+        # A1 refreshes only the authorized ENG1 test copy; all engine/package pins stay unchanged.
+        assert sha(dest / "tensor_cuda" / MODULE) == sha(module_src), arm
+        shutil.copy2(ROOT / "tensor_cuda/tests/test_eng1.py", dest / "tests/test_eng1.py")
+        print("refreshed test", arm)
         return
     pkg, tests = dest / "tensor_cuda", dest / "tests"
     for rel in package_files():
@@ -90,9 +94,16 @@ from pathlib import Path
 package, out, *files = sys.argv[1:]
 sys.path.insert(0, package)
 import tensor_cuda, pytest
+selectors={r["test_id"] for r in json.loads(Path(os.environ["ENG1_SOURCE_CLASS"]).read_text())}
+arm=os.environ["ENG1_COLLECT_ARM"]
 assert Path(tensor_cuda.__file__).resolve().parent.parent == Path(package).resolve()
 class P:
     ids, errors = [], []
+    def pytest_collection_modifyitems(self, session, config, items):
+        if arm == "baseline":
+            omitted=[i for i in items if i.nodeid.split("[",1)[0] in selectors]
+            items[:]=[i for i in items if i not in omitted]
+            if omitted: config.hook.pytest_deselected(items=omitted)
     def pytest_collection_finish(self, session): P.ids = [i.nodeid for i in session.items]
     def pytest_collectreport(self, report):
         if report.failed: P.errors.append(str(report.longrepr)[-3000:])
@@ -119,15 +130,18 @@ def collect(arm, suite, k=None):
     else:
         files = [str(pkg / "tests/test_eng1.py")]
     tag = "" if not k else "_cpu" if k == "cpu" else "_noe6"
-    out = Path("/tmp/eng1_tmp") / f"collect_{arm}_{suite}{tag}.json"
-    env = dict(os.environ, ENG1_ROOT=str(ROOT), PYTHONDONTWRITEBYTECODE="1", CUDA_VISIBLE_DEVICES="",
+    out = Path(os.environ["TMPDIR"]) / f"collect_a1_{arm}_{suite}{tag}.json"
+    env = dict(os.environ, ENG1_ROOT=str(ROOT), PYTHONDONTWRITEBYTECODE="1", CUDA_VISIBLE_DEVICES="", ENG1_COLLECT_ARM=arm,
+               ENG1_SOURCE_CLASS=str(TOOL / "source_reading_tests.json"),
                ENG1_IMPORT_MODE="--import-mode=prepend" if suite in ("regression", "terrain") else "--import-mode=importlib")
+    from arm_origin import bound_environment
+    env = bound_environment(pkg, env)
     if k:
         env["ENG1_COLLECT_K"] = k
-    p = subprocess.run([sys.executable, "-B", "-c", COLLECT, str(pkg), str(out), *files], env=env, cwd="/tmp/eng1_tmp",
+    p = subprocess.run([sys.executable, "-B", "-c", COLLECT, str(pkg), str(out), *files], env=env, cwd=os.environ["TMPDIR"],
                        capture_output=True, text=True, timeout=1100)
     data = json.loads(out.read_text())
-    (TOOL / f"collect_{arm}_{suite}{tag}.json").write_text(json.dumps(
+    (TOOL / f"collect_a1_{arm}_{suite}{tag}.json").write_text(json.dumps(
         dict(rc=data["rc"], n=len(data["ids"]), errors=data["errors"], stderr_tail=p.stderr[-2000:]), indent=1) + "\n")
     return data
 
@@ -143,10 +157,14 @@ def step_census():
         data = collect(arm, suite, k)
         ids = sorted(norm(i) for i in data["ids"])
         results[name] = (data["rc"], len(ids), len(data["errors"]))
-        (TOOL / f"ids_{name}.txt").write_text("".join(i + "\n" for i in ids))
-    assert (TOOL / "ids_eng1.txt").read_text() == (TOOL / "ids_eng1_candidate.txt").read_text(), "eng1 IDs differ by arm"
-    assert (TOOL / "ids_regression.txt").read_text() == (TOOL / "ids_regression_candidate.txt").read_text(), "regression IDs differ by arm"
-    assert (TOOL / "ids_terrain.txt").read_text() == (TOOL / "ids_terrain_candidate.txt").read_text(), "terrain IDs differ by arm"
+        (TOOL / f"ids_a1_{name}.txt").write_text("".join(i + "\n" for i in ids))
+    assert (TOOL / "ids_a1_eng1.txt").read_text() == (TOOL / "ids_a1_eng1_candidate.txt").read_text(), "eng1 IDs differ by arm"
+    excluded = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
+    baseline = (TOOL / "ids_a1_regression.txt").read_text().splitlines()
+    candidate = (TOOL / "ids_a1_regression_candidate.txt").read_text().splitlines()
+    assert baseline == [i for i in candidate if i.split("[", 1)[0] not in excluded], "comparison IDs differ"
+    assert excluded <= {i.split("[", 1)[0] for i in candidate}, "unknown source-reader test ID"
+    assert (TOOL / "ids_a1_terrain.txt").read_text() == (TOOL / "ids_a1_terrain_candidate.txt").read_text(), "terrain IDs differ by arm"
     print(json.dumps(results))
 
 
@@ -162,13 +180,13 @@ def step_lines():
             dict(label="baseline_regression", arm="baseline", suite="regression", role="regression", census="regression",
                  expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(REG_INNER)),
             dict(label="candidate_regression", arm="candidate", suite="regression", role="regression",
-                 census="regression", expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(REG_INNER)),
+                 census="regression_candidate", expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(REG_INNER)),
             dict(label="baseline_terrain", arm="baseline", suite="terrain", role="regression", census="terrain",
                  expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(TER_INNER)),
             dict(label="candidate_terrain", arm="candidate", suite="terrain", role="regression", census="terrain",
                  expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(TER_INNER)),
             dict(label="C_COPY", arm="C_COPY", suite="control", role="control", census="eng1_noe6",
-                 control_of="M01-M08,M10-M13", expected_child_exits=[0], expected_parent_exit=0, **bounds(MUT_INNER)),
+                 control_of="M01-M08,M10-M13,M15-M16", expected_child_exits=[0], expected_parent_exit=0, **bounds(MUT_INNER)),
             dict(label="C_UBSAN", arm="C_UBSAN", suite="control", role="control", census="eng1_noe6", control_of="M09",
                  expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG1_INNER))]
     for m in MUTANTS:
@@ -178,7 +196,7 @@ def step_lines():
                          **bounds(ENG1_INNER if py else MUT_INNER)))
     (TOOL / "gpu_lines.json").write_text(json.dumps(rows, indent=2) + "\n")
     # Registered before any GPU run: the baseline's expected failures, per ID (report: derivation per class).
-    ids = (TOOL / "ids_eng1.txt").read_text().split()
+    ids = (TOOL / "ids_a1_eng1.txt").read_text().split()
     pred = json.loads((ENG1 / "cpu_checks.json").read_text())["e2_emulated_predictions"]
     fail = []
     for i in ids:
@@ -189,23 +207,28 @@ def step_lines():
             fail.append(i)
         elif name.startswith("test_e2_pow_grad[") and pred[i]["baseline"]["predicted"] == "fail":
             fail.append(i)
+        elif name.startswith("test_e2_pow_grad_nonpow2["):
+            # Pre-GPU IEEE arithmetic prediction, same E2 targets. Baseline's small bfloat16 intermediates round early.
+            predictions = json.loads((ENG1 / "a1/e2_witnesses.json").read_text())
+            dtype = name.split("[", 1)[1][:-1]
+            if predictions[dtype]["baseline_fails"]: fail.append(i)
         elif name.startswith("test_e4_refuse[topk-"):
             fail.append(i)
         elif name.startswith("test_e5_refuse_cpu[") or name == "test_e6_terrain_writes_nothing":
             fail.append(i)
-    (TOOL / "baseline_expected_failures.json").write_text(json.dumps(sorted(fail), indent=1) + "\n")
+    (TOOL / "baseline_expected_failures_a1.json").write_text(json.dumps(sorted(fail), indent=1) + "\n")
     print(len(rows), "lines;", len(fail), "registered baseline failures of", len(ids))
 
 
 def step_seal():
     arms = sorted(p.name for p in (TOOL / "arms").iterdir())
     from evidence import arm_files
-    seal = dict(order_commit=ORDER_COMMIT, order_sha256=sha(ROOT / "orders/ENG1_ENGINE_DEFECTS.md"),
-                base_commit=BASE_COMMIT, module_name=MODULE,
+    seal = dict(order_commit=ORDER_COMMIT, order_sha256=sha(ROOT / "orders/ENG1_A1_REV1_FIXES.md"),
+                base_commit="5031c765", round1_base_commit=BASE_COMMIT, module_name=MODULE,
                 tool_files={p.name: sha(p) for p in sorted(TOOL.iterdir())
-                            if p.is_file() and p.name not in ("staging_seal.json",) and not p.name.startswith("collect_")},
+                            if p.is_file() and not p.name.startswith(("staging_seal", "collect_"))},
                 registration_files={str(p.relative_to(ROOT)): sha(p) for p in
-                                    [ROOT / "tensor_cuda/tests/test_eng1.py", ENG1 / "mutants/mutants.json"] +
+                                    [ROOT / "tensor_cuda/tests/test_eng1.py", ENG1 / "mutants/mutants.json", ENG1 / "a1/MUTANTS.json", ENG1 / "a1/REGISTRATION.md"] +
                                     [ROOT / f for f in json.loads((TOOL / "regression_files.json").read_text())]},
                 arms={a: arm_files(a) for a in arms},
                 engine_sha256={a: sha(TOOL / "arms" / a / "tensor_cuda/tensor_cuda" / MODULE) for a in arms})
@@ -214,8 +237,8 @@ def step_seal():
     labels = {r["arm"] for r in json.loads((TOOL / "gpu_lines.json").read_text())}
     missing = sorted(labels - set(arms))
     seal["arms_pending"] = missing
-    (TOOL / "staging_seal.json").write_text(json.dumps(seal, indent=1, sort_keys=True) + "\n")
-    print("sealed arms:", arms, "pending:", missing, "seal", sha(TOOL / "staging_seal.json"))
+    (TOOL / SEAL_NAME).write_text(json.dumps(seal, indent=1, sort_keys=True) + "\n")
+    print("sealed arms:", arms, "pending:", missing, "seal", sha(TOOL / SEAL_NAME))
 
 
 def step_script():

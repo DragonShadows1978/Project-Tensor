@@ -8,7 +8,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from evidence import TOOL, guard, verify_start, lines, recompute_line
+from evidence import TOOL, guard, verify_start, lines, recompute_line, summary_outcomes, norm_id
 
 
 def main():
@@ -35,10 +35,19 @@ def main():
     cand = summary.get("candidate_eng1", {}).get("selected_attempt")
     if cand:
         census = [json.loads(p.read_text()) for p in sorted(Path(cand).glob("census_*.json"))]
+    source_outcomes = {}
+    regression = summary.get("candidate_regression", {}).get("selected_attempt")
+    if regression:
+        selectors = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
+        source_outcomes = {norm_id(k): v for k, v in summary_outcomes(json.loads(
+            (Path(regression) / "child_result.json").read_text())).items()
+                           if norm_id(k).split("[", 1)[0] in selectors}
     passed = not errors and bool(summary) and all(row.get("passed") for row in summary.values())
     result = dict(passed=passed, errors=errors, lines=summary,
                   killers={k: v.get("actual_killers") for k, v in summary.items() if lines()[k]["role"] == "mutant"},
-                  e3_census=census)
+                  e3_census=census,
+                  source_reading_tests=json.loads((TOOL / "source_reading_tests.json").read_text()),
+                  source_reader_outcomes=source_outcomes)
     runs.mkdir(parents=True, exist_ok=True)
     (runs / "G5_SUMMARY.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(dict(passed=passed, errors=errors,

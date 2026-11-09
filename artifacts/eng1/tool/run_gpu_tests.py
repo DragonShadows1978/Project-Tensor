@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import traceback
 
 from runtime_evidence import atomic_json, module_census
@@ -21,6 +22,8 @@ if __name__ == "__main__":
 
 from evidence import guard, verify_start, verify_arm, lines, read
 from e6_record import snapshot
+from arm_origin import bound_environment, preflight
+from evidence import SEAL_NAME
 
 TOOL = Path(__file__).resolve().parent
 ROOT = TOOL.parents[2]
@@ -28,8 +31,20 @@ sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
 class Reports:
-    def __init__(self):
+    def __init__(self, arm):
+        self.arm = arm
         self.ids, self.reports, self.collection_errors, self.exceptions = [], [], [], {}
+        self.source_selectors = {r["test_id"] for r in read(TOOL / "source_reading_tests.json")}
+        self.source_readers = []
+
+    def pytest_collection_modifyitems(self, session, config, items):
+        # Prior art: pytest deselection hooks; REV1 F02 source inspection is candidate-only evidence.
+        from evidence import norm_id
+        source = [i for i in items if norm_id(i.nodeid).split("[", 1)[0] in self.source_selectors]
+        self.source_readers = [i.nodeid for i in source]
+        if self.arm == "baseline" and source:
+            items[:] = [i for i in items if i not in source]
+            config.hook.pytest_deselected(items=source)
 
     def pytest_collection_finish(self, session):
         self.ids = [item.nodeid for item in session.items]
@@ -65,6 +80,10 @@ def main():
         assert sha(ROOT / file) == expected, "changed registered file " + file
     module = package / "tensor_cuda" / seal["module_name"]
     assert sha(module) == seal["engine_sha256"][arm], "changed pinned engine"
+    # Process-local preloading is insufficient for test_dlpack's fresh Python subprocesses (REV1 F02).
+    os.environ.update(bound_environment(package))
+    origin = preflight(package, seal["module_name"], seal["engine_sha256"][arm], os.getcwd(),
+                       output / "origin_check.json")
     sys.path.insert(0, str(package))
     sys.path.insert(1, str(ROOT))
     import tensor_cuda as tc
@@ -81,10 +100,10 @@ def main():
     else:
         files = [str(package / "tests" / "test_eng1.py")]
     from device_evidence import capture
-    device_evidence = capture(__file__, tc._C.__file__)
+    device_evidence = capture(__file__, None if audit else tc._C.__file__)
     invocation = dict(device_evidence=device_evidence, arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
-                      run_root=str(runs), attempt_dir=str(output), seal_sha256=sha(TOOL / "staging_seal.json"),
-                      engine_sha256=sha(module), CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
+                      run_root=str(runs), attempt_dir=str(output), seal_sha256=sha(TOOL / SEAL_NAME),
+                      engine_sha256=sha(module), origin_check=origin, CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
                       files=[os.path.relpath(f, ROOT) for f in files])
     (output / "invocation.json").write_text(json.dumps(invocation, indent=2) + "\n")
     os.environ["ENG1_CENSUS_DIR"] = str(output)
@@ -103,11 +122,11 @@ def main():
         args += ["-k", "not test_e6_terrain_writes_nothing"]
     args += files
     e6_before = snapshot(terrain) if suite == "terrain" else None
-    plugin = Reports()
+    plugin = Reports(arm)
     rc = int(pytest.main(args, plugins=[plugin]))
     e6 = dict(before=e6_before, after=snapshot(terrain)) if suite == "terrain" else None
     result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids, collection_errors=plugin.collection_errors,
-                  reports=plugin.reports, e6_record=e6, runtime_modules=module_census(ROOT))
+                  reports=plugin.reports, source_readers=plugin.source_readers, e6_record=e6, runtime_modules=module_census(ROOT))
     atomic_json(output / "child_result.json", result)
     return rc
 

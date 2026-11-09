@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from evidence import (TOOL, guard, verify_start, lines, evaluate, forge_outcome, attempts, recompute_line,
+from evidence import (SEAL_NAME, TOOL, guard, verify_start, lines, evaluate, forge_outcome, attempts, recompute_line,
                       regression_reasons, read, sha, not_admitted, timeout_cause, scratch_guard)
 
 
@@ -73,7 +73,7 @@ def main():
     refused = False
     seal_sha256 = None
     try:
-        seal_sha256 = sha(TOOL / "staging_seal.json")
+        seal_sha256 = sha(TOOL / SEAL_NAME)
         cause = forge_outcome(output / "forge.log", rc)
         refused = not_admitted(output, rc, cause)
         result = (dict(passed=False, reasons=["not admitted: " + cause], actual_killers=[], outcomes={},

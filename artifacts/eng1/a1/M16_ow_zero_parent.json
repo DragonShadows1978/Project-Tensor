@@ -1,0 +1,26 @@
+{
+  "arm": "M16",
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "-c",
+    "import sys,json,pytest;from pathlib import Path\nsys.path.insert(0,sys.argv[1]);import tensor_cuda\nclass P:\n ids=[];reports=[]\n def pytest_collection_finish(self,session):self.ids=[i.nodeid for i in session.items]\n def pytest_runtest_logreport(self,report):self.reports.append(dict(id=report.nodeid,when=report.when,outcome=report.outcome,detail=str(report.longrepr) if report.failed else ''))\np=P();rc=int(pytest.main(sys.argv[3:],plugins=[p]));Path(sys.argv[2]).write_text(json.dumps(dict(exit=rc,collected_ids=p.ids,reports=p.reports),indent=2));raise SystemExit(rc)\n",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/M16/tensor_cuda",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/a1/M16_ow_zero_pytest.json",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--import-mode=importlib",
+    "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1",
+    "--basetemp=/tmp/eng1_a1_eng1/cpu_M16_ow_zero",
+    "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/a1/M16_ow_zero.xml",
+    "-k",
+    "ow_zero",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/M16/tensor_cuda/tests/test_eng1.py"
+  ],
+  "start": "2026-11-09T20:32:26.932434+00:00",
+  "child_exited": "2026-11-09T20:33:09.048043+00:00",
+  "exit": 1,
+  "timeout": false,
+  "selection": "ow_zero"
+}

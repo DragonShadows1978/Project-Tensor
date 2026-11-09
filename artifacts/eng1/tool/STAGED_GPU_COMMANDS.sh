@@ -96,5 +96,11 @@ case "$label" in
   M14) # expected child 1, parent 0; inner 900s, --max 960s, outer 990s
     timeout 1010s python3 run_gpu_line.py M14 1 990 "$GPU_RUN" --min 910 --max 960 --label eng1-M14 -- timeout --kill-after=10s 900s python3 run_gpu_tests.py M14 mutation_e6
     ;;
+  M15) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+    timeout 530s python3 run_gpu_line.py M15 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M15 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M15 mutation
+    ;;
+  M16) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+    timeout 530s python3 run_gpu_line.py M16 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M16 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M16 mutation
+    ;;
   *) echo "unknown ENG1 label: $label" >&2; exit 64 ;;
 esac

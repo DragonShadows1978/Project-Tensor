@@ -2,7 +2,7 @@
 import datetime
 import json
 import os
-from evidence import TOOL, guard, verify_seal, verify_start, sha, verify_arm
+from evidence import SEAL_NAME, TOOL, guard, verify_seal, verify_start, sha, verify_arm
 
 runs = guard(os.environ["RUNS"])
 seal = verify_seal()
@@ -12,7 +12,7 @@ runs.mkdir(parents=True, exist_ok=True)
 record = dict(date=datetime.datetime.now(datetime.timezone.utc).isoformat(),
               order_commit=seal["order_commit"], order_sha256=seal["order_sha256"],
               audit=os.environ.get("ENG1_AUDIT") == "1", run_root=str(runs),
-              seal_sha256=sha(TOOL / "staging_seal.json"))
+              seal_sha256=sha(TOOL / SEAL_NAME))
 if (runs / "START.json").exists():
     _, old = verify_start(runs)
     assert old["audit"] == record["audit"]

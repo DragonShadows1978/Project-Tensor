@@ -16,10 +16,12 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 from device_evidence import classify
 from e6_record import compare
+from arm_origin import validate_origin
 
 TOOL = Path(__file__).resolve().parent
 ROOT = TOOL.parents[2]
-ORDER = "orders/ENG1_ENGINE_DEFECTS.md"
+ORDER = "orders/ENG1_A1_REV1_FIXES.md"
+SEAL_NAME = "staging_seal_a1.json"
 DEVICE_PATTERNS = (
     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
     "initialization error", "invalid device ordinal", "CUDA error at",
@@ -57,7 +59,7 @@ def arm_files(arm):
 
 
 def verify_seal():
-    seal = read(TOOL / "staging_seal.json")
+    seal = read(TOOL / SEAL_NAME)
     assert sha(ROOT / ORDER) == seal["order_sha256"], "order seal mismatch"
     assert re.fullmatch(r"[0-9a-f]{40}", seal["order_commit"]), "missing order commit"
     for name, digest in seal["tool_files"].items():
@@ -83,7 +85,7 @@ def verify_start(runs):
     seal = verify_seal()
     start = read(runs / "START.json")
     assert start["run_root"] == str(runs), "START run-root binding mismatch"
-    assert start["seal_sha256"] == sha(TOOL / "staging_seal.json"), "START seal mismatch"
+    assert start["seal_sha256"] == sha(TOOL / SEAL_NAME), "START seal mismatch"
     assert start["order_sha256"] == seal["order_sha256"] and start["order_commit"] == seal["order_commit"], "START order mismatch"
     assert isinstance(start["audit"], bool), "START audit missing"
     datetime.datetime.fromisoformat(start["date"])
@@ -99,7 +101,7 @@ def norm_id(id_):
 
 def census(line, audit=False):
     name = "audit" if audit else line["census"]
-    return (TOOL / ("ids_" + name + ".txt")).read_text().splitlines()
+    return (TOOL / ("ids_a1_" + name + ".txt")).read_text().splitlines()
 
 
 def summary_outcomes(data):
@@ -209,7 +211,7 @@ def not_admitted(attempt, rc, cause):
 
 
 def killers_for(label):
-    m = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json")}[label]
+    m = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json") + read(TOOL.parent / "a1/MUTANTS.json")}[label]
     return m["killers"]
 
 
@@ -236,7 +238,11 @@ def evaluate(runs, attempt, line, rc, audit, seal):
         assert (attempt / "child_started.json").is_file(), "missing child start marker"
         verify_arm(line["arm"], seal)
         assert data["engine_sha256"] == seal["engine_sha256"][line["arm"]], "engine binding mismatch"
-        assert data["seal_sha256"] == sha(TOOL / "staging_seal.json"), "child seal mismatch"
+        origin = read(attempt / "origin_check.json")
+        assert origin == data["origin_check"], "origin receipt/child binding mismatch"
+        validate_origin(origin, TOOL / "arms" / line["arm"] / "tensor_cuda", seal["module_name"],
+                        seal["engine_sha256"][line["arm"]], TOOL)
+        assert data["seal_sha256"] == sha(TOOL / SEAL_NAME), "child seal mismatch"
         assert not data["collection_errors"], "collection errors"
         ids = data["collected_ids"]
         assert len(ids) == len(set(ids)), "duplicate IDs"
@@ -265,7 +271,7 @@ def evaluate(runs, attempt, line, rc, audit, seal):
             if not killers:
                 reasons.append("no registered killer ID failed")
         elif line["role"] == "baseline":
-            registered = sorted(read(TOOL / "baseline_expected_failures.json"))
+            registered = sorted(read(TOOL / "baseline_expected_failures_a1.json"))
             if failed != registered:
                 reasons.append("baseline failures differ from registration: unexpected %r, missing %r" % (
                     sorted(set(failed) - set(registered))[:20], sorted(set(registered) - set(failed))[:20]))
@@ -305,8 +311,12 @@ def attempts(runs, label):
 
 
 def regression_reasons(old, new):
-    before = {norm_id(k): v for k, v in summary_outcomes(old).items()}
-    after = {norm_id(k): v for k, v in summary_outcomes(new).items()}
+    # Explicit source-path readers run on candidate; they are not numerical arm comparisons (REV1 F02).
+    excluded = {r["test_id"] for r in read(TOOL / "source_reading_tests.json")}
+    before = {norm_id(k): v for k, v in summary_outcomes(old).items()
+              if norm_id(k).split("[", 1)[0] not in excluded}
+    after = {norm_id(k): v for k, v in summary_outcomes(new).items()
+             if norm_id(k).split("[", 1)[0] not in excluded}
     lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed")
     return ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
 
@@ -335,7 +345,7 @@ def recompute_line(runs, label, seal, start, stack=()):
         assert receipt["expected_child_exits"] == line["expected_child_exits"], "parent expected exits differ from gpu_lines.json"
         assert receipt["arm"] == line["arm"] and receipt["suite"] == line["suite"] and receipt["audit"] == start["audit"], "parent line binding mismatch"
         assert receipt["cwd"] == str(TOOL), "parent cwd mismatch"
-        assert receipt["run_root"] == str(runs) and receipt["seal_sha256"] == sha(TOOL / "staging_seal.json"), "parent run-root/seal mismatch"
+        assert receipt["run_root"] == str(runs) and receipt["seal_sha256"] == sha(TOOL / SEAL_NAME), "parent run-root/seal mismatch"
         assert type(receipt["raw_exit"]) is int and type(receipt["exit"]) is int, "exit is not an integer"
         assert receipt["exit"] == (receipt["raw_exit"] if receipt["raw_exit"] >= 0 else 128 - receipt["raw_exit"]), "raw_exit normalisation mismatch"
         assert type(receipt["timeout"]) is bool, "timeout flag missing"
