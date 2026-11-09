@@ -1,0 +1,18 @@
+{
+ "order": "GN1: fix nn.GroupNorm (every call failed on reshape -1) with value-checking tests; amendments A1-A8 (half-precision float32 compute, review fixes, device evidence under contract C)",
+ "author_model": "gpt-6.1-sol",
+ "reviewer_model": "claude-opus-5-5",
+ "verdict": "PASS",
+ "final_review": {
+  "review": "GN1-REV6 (narrow cross-model review of A8 under contract C)",
+  "commit": "e6843a9e",
+  "report": "artifacts/gn1/rev6/REPORT.md",
+  "findings_file": "artifacts/gn1/rev6/findings.json",
+  "findings": 0,
+  "rounds": "REV1-REV5 findings all fixed in A2-A8 and re-reviewed"
+ },
+ "reviewed_tip": "e6843a9e",
+ "gpu_run": "G5 lead GPU run: 58 of 58 lines PASS in device mode with child-written device evidence; ruling artifacts/gn1/LEAD_RULING_G5.md; receipts commit 1680764d",
+ "lead_verification": "G5 exits as registered (baseline fails on GroupNorm IDs only, candidate passes, no regression across nn importers, 51 mutants killed and 3 proven equivalent); public-remote screen of the full diff 0e1dea3..gn1 clean (0 pattern hits, 0 files >= 3 MB, 0 binaries, 0 mode changes); code diff limited to nn.py GroupNorm and tensor_cuda/tests/test_groupnorm_gn1.py, no fork paths",
+ "promoted_tip_difference": "promoted tip = 1680764d + this promotion record (artifacts only); 1680764d adds only G5 receipts over the reviewed tip e6843a9e; no source or test difference from the reviewed tip"
+}
