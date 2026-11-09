@@ -1,0 +1,2335 @@
+{
+  "torch_version": "2.11.0+cu130",
+  "doc_view": "\nview(*shape) -> Tensor\n\nReturns a new tensor with the same data as the :attr:`self` tensor but of a\ndifferent :attr:`shape`.\n\nThe returned tensor shares the same data and must have the same number\nof elements, but may have a different size. For a tensor to be viewed, the new\nview size must be compatible with its original size and stride, i.e., each new\nview dimension must either be a subspace of an original dimension, or only span\nacross original dimensions :math:`d, d+1, \\dots, d+k` that satisfy the following\ncontiguity-like condition that :math:`\\forall i = d, \\dots, d+k-1`,\n\n.. math::\n\n  \\text{stride}[i] = \\text{stride}[i+1] \\times \\text{size}[i+1]\n\nOtherwise, it will not be possible to view :attr:`self` tensor as :attr:`shape`\nwithout copying it (e.g., via :meth:`contiguous`). When it is unclear whether a\n:meth:`view` can be performed, it is advisable to use :meth:`reshape`, which\nreturns a view if the shapes are compatible, and copies (equivalent to calling\n:meth:`contiguous`) otherwise.\n\nArgs:\n    shape (torch.Size or int...): the desired size\n\nExample::\n\n    >>> x = torch.randn(4, 4)\n    >>> x.size()\n    torch.Size([4, 4])\n    >>> y = x.view(16)\n    >>> y.size()\n    torch.Size([16])\n    >>> z = x.view(-1, 8)  # the size -1 is inferred from other dimensions\n    >>> z.size()\n    torch.Size([2, 8])\n\n    >>> a = torch.randn(1, 2, 3, 4)\n    >>> a.size()\n    torch.Size([1, 2, 3, 4])\n    >>> b = a.transpose(1, 2)  # Swaps 2nd and 3rd dimension\n    >>> b.size()\n    torch.Size([1, 3, 2, 4])\n    >>> c = a.view(1, 3, 2, 4)  # Does not change tensor layout in memory\n    >>> c.size()\n    torch.Size([1, 3, 2, 4])\n    >>> torch.equal(b, c)\n    False\n\n\n.. method:: view(dtype) -> Tensor\n   :noindex:\n\nReturns a new tensor with the same data as the :attr:`self` tensor but of a\ndifferent :attr:`dtype`.\n\nIf the element size of :attr:`dtype` is different than that of ``self.dtype``,\nthen the size of the last dimension of the output will be scaled\nproportionally.  For instance, if :attr:`dtype` element size is twice that of\n``self.dtype``, then each pair of elements in the last dimension of\n:attr:`self` will be combined, and the size of the last dimension of the output\nwill be half that of :attr:`self`. If :attr:`dtype` element size is half that\nof ``self.dtype``, then each element in the last dimension of :attr:`self` will\nbe split in two, and the size of the last dimension of the output will be\ndouble that of :attr:`self`. For this to be possible, the following conditions\nmust be true:\n\n    * ``self.dim()`` must be greater than 0.\n    * ``self.stride(-1)`` must be 1.\n\nAdditionally, if the element size of :attr:`dtype` is greater than that of\n``self.dtype``, the following conditions must be true as well:\n\n    * ``self.size(-1)`` must be divisible by the ratio between the element\n      sizes of the dtypes.\n    * ``self.storage_offset()`` must be divisible by the ratio between the\n      element sizes of the dtypes.\n    * The strides of all dimensions, except the last dimension, must be\n      divisible by the ratio between the element sizes of the dtypes.\n\nIf any of the above conditions are not met, an error is thrown.\n\n.. warning::\n\n    This overload is not supported by TorchScript, and using it in a Torchscript\n    program will cause undefined behavior.\n\n\nArgs:\n    dtype (:class:`torch.dtype`): the desired dtype\n\nExample::\n\n    >>> x = torch.randn(4, 4)\n    >>> x\n    tensor([[ 0.9482, -0.0310,  1.4999, -0.5316],\n            [-0.1520,  0.7472,  0.5617, -0.8649],\n            [-2.4724, -0.0334, -0.2976, -0.8499],\n            [-0.2109,  1.9913, -0.9607, -0.6123]])\n    >>> x.dtype\n    torch.float32\n\n    >>> y = x.view(torch.int32)\n    >>> y\n    tensor([[ 1064483442, -1124191867,  1069546515, -1089989247],\n            [-1105482831,  1061112040,  1057999968, -1084397505],\n            [-1071760287, -1123489973, -1097310419, -1084649136],\n            [-1101533110,  1073668768, -1082790149, -1088634448]],\n        dtype=torch.int32)\n    >>> y[0, 0] = 1000000000\n    >>> x\n    tensor([[ 0.0047, -0.0310,  1.4999, -0.5316],\n            [-0.1520,  0.7472,  0.5617, -0.8649],\n            [-2.4724, -0.0334, -0.2976, -0.8499],\n            [-0.2109,  1.9913, -0.9607, -0.6123]])\n\n    >>> x.view(torch.cfloat)\n    tensor([[ 0.0047-0.0310j,  1.4999-0.5316j],\n            [-0.1520+0.7472j,  0.5617-0.8649j],\n            [-2.4724-0.0334j, -0.2976-0.8499j],\n            [-0.2109+1.9913j, -0.9607-0.6123j]])\n    >>> x.view(torch.cfloat).size()\n    torch.Size([4, 2])\n\n    >>> x.view(torch.uint8)\n    tensor([[  0, 202, 154,  59, 182, 243, 253, 188, 185, 252, 191,  63, 240,  22,\n               8, 191],\n            [227, 165,  27, 190, 128,  72,  63,  63, 146, 203,  15,  63,  22, 106,\n              93, 191],\n            [205,  59,  30, 192, 112, 206,   8, 189,   7,  95, 152, 190,  12, 147,\n              89, 191],\n            [ 43, 246,  87, 190, 235, 226, 254,  63, 111, 240, 117, 191, 177, 191,\n              28, 191]], dtype=torch.uint8)\n    >>> x.view(torch.uint8).size()\n    torch.Size([4, 16])\n",
+  "doc_reshape": "\nreshape(input, shape) -> Tensor\n\nReturns a tensor with the same data and number of elements as :attr:`input`,\nbut with the specified shape. When possible, the returned tensor will be a view\nof :attr:`input`. Otherwise, it will be a copy. Contiguous inputs and inputs\nwith compatible strides can be reshaped without copying, but you should not\ndepend on the copying vs. viewing behavior.\n\nSee :meth:`torch.Tensor.view` on when it is possible to return a view.\n\nA single dimension may be -1, in which case it's inferred from the remaining\ndimensions and the number of elements in :attr:`input`.\n\nArgs:\n    input (Tensor): the tensor to be reshaped\n    shape (tuple of int): the new shape\n\nExample::\n\n    >>> a = torch.arange(4.)\n    >>> torch.reshape(a, (2, 2))\n    tensor([[ 0.,  1.],\n            [ 2.,  3.]])\n    >>> b = torch.tensor([[0, 1], [2, 3]])\n    >>> torch.reshape(b, (-1,))\n    tensor([ 0,  1,  2,  3])\n",
+  "doc_topk": "\ntopk(input, k, dim=None, largest=True, sorted=True, *, out=None) -> (Tensor, LongTensor)\n\nReturns the :attr:`k` largest elements of the given :attr:`input` tensor along\na given dimension.\n\nIf :attr:`dim` is not given, the last dimension of the `input` is chosen.\n\nIf :attr:`largest` is ``False`` then the `k` smallest elements are returned.\n\nA namedtuple of `(values, indices)` is returned with the `values` and\n`indices` of the largest `k` elements of each row of the `input` tensor in the\ngiven dimension `dim`.\n\nThe boolean option :attr:`sorted` if ``True``, will make sure that the returned\n`k` elements are themselves sorted\n\n.. note::\n    When using `torch.topk`, the indices of tied elements are not guaranteed to be stable\n    and may vary across different invocations.\n\nArgs:\n    input (Tensor): the input tensor.\n    k (int): the k in \"top-k\"\n    dim (int, optional): the dimension to sort along\n    largest (bool, optional): controls whether to return largest or\n           smallest elements\n    sorted (bool, optional): controls whether to return the elements\n           in sorted order\n\nKeyword args:\n    out (tuple, optional): the output tuple of (Tensor, LongTensor) that can be\n        optionally given to be used as output buffers\n\nExample::\n\n    >>> x = torch.arange(1., 6.)\n    >>> x\n    tensor([ 1.,  2.,  3.,  4.,  5.])\n    >>> torch.topk(x, 3)\n    torch.return_types.topk(values=tensor([5., 4., 3.]), indices=tensor([4, 3, 2]))\n",
+  "doc_maxpool": "Applies a 2D max pooling over an input signal composed of several input planes.\n\n    In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,\n    output :math:`(N, C, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kH, kW)`\n    can be precisely described as:\n\n    .. math::\n        \\begin{aligned}\n            out(N_i, C_j, h, w) ={} & \\max_{m=0, \\ldots, kH-1} \\max_{n=0, \\ldots, kW-1} \\\\\n                                    & \\text{input}(N_i, C_j, \\text{stride[0]} \\times h + m,\n                                                   \\text{stride[1]} \\times w + n)\n        \\end{aligned}\n\n    If :attr:`padding` is non-zero, then the input is implicitly padded with negative infinity on both sides\n    for :attr:`padding` number of points. :attr:`dilation` controls the spacing between the kernel points.\n    It is harder to describe, but this `link`_ has a nice visualization of what :attr:`dilation` does.\n\n    Note:\n        When ceil_mode=True, sliding windows are allowed to go off-bounds if they start within the left padding\n        or the input. Sliding windows that would start in the right padded region are ignored.\n\n    The parameters :attr:`kernel_size`, :attr:`stride`, :attr:`padding`, :attr:`dilation` can either be:\n\n        - a single ``int`` -- in which case the same value is used for the height and width dimension\n        - a ``tuple`` of two ints -- in which case, the first `int` is used for the height dimension,\n          and the second `int` for the width dimension\n\n    Args:\n        kernel_size: the size of the window to take a max over\n        stride: the stride of the window. Default value is :attr:`kernel_size`\n        padding: Implicit negative infinity padding to be added on both sides\n        dilation: a parameter that controls the stride of elements in the window\n        return_indices: if ``True``, will return the max indices along with the outputs.\n                        Useful for :class:`torch.nn.MaxUnpool2d` later\n        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape\n\n    Shape:\n        - Input: :math:`(N, C, H_{in}, W_{in})` or :math:`(C, H_{in}, W_{in})`\n        - Output: :math:`(N, C, H_{out}, W_{out})` or :math:`(C, H_{out}, W_{out})`, where\n\n          .. math::\n              H_{out} = \\left\\lfloor\\frac{H_{in} + 2 * \\text{padding[0]} - \\text{dilation[0]}\n                    \\times (\\text{kernel\\_size[0]} - 1) - 1}{\\text{stride[0]}} + 1\\right\\rfloor\n\n          .. math::\n              W_{out} = \\left\\lfloor\\frac{W_{in} + 2 * \\text{padding[1]} - \\text{dilation[1]}\n                    \\times (\\text{kernel\\_size[1]} - 1) - 1}{\\text{stride[1]}} + 1\\right\\rfloor\n\n    Examples::\n\n        >>> # pool of square window of size=3, stride=2\n        >>> m = nn.MaxPool2d(3, stride=2)\n        >>> # pool of non-square window\n        >>> m = nn.MaxPool2d((3, 2), stride=(2, 1))\n        >>> input = torch.randn(20, 16, 50, 32)\n        >>> output = m(input)\n\n    .. _link:\n        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md\n    ",
+  "empty_cases": [
+    {
+      "target": [
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[4]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        -3,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, -1]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, 0]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, 1]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, 2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -3,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 0 of shape [-3, 4]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -2,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, -1]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, 0]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, 1]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, 2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -2,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 0 of shape [-2, 4]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 1 of shape [-1, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 1 of shape [-1, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        4
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          4
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          4
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 1 of shape [0, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        0,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 1 of shape [0, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        0,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        4
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          4
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          4
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 1 of shape [1, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        1,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 1 of shape [1, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        1,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        1,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        1,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 4]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 1 of shape [2, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        2,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 1 of shape [2, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        2,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 4]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        4,
+        -3
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -3 at index 1 of shape [4, -3]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -3"
+      }
+    },
+    {
+      "target": [
+        4,
+        -2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "invalid shape dimension -2 at index 1 of shape [4, -2]"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: invalid shape dimension -2"
+      }
+    },
+    {
+      "target": [
+        4,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          4,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          4,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        4,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          4,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          4,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        4,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[4, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        4,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[4, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        4,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[4, 4]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -1,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        -1,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        0,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        0,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 0, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        0,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 0, 1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        0,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 0, 2] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 1, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        1,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        1,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        2,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        -1,
+        2,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 2, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        -1,
+        2,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        2,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        -1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        0,
+        -1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, -1, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        -1,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, -1, 1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        -1,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, -1, 2] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        0,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, 0, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        0,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        0,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, 1, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        1,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        1,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        2,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [0, 2, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        0,
+        2,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        2,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        2,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          2,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        -1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        1,
+        -1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [1, -1, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        1,
+        -1,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        -1,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        0,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [1, 0, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        1,
+        0,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        0,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        0,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        1,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        1,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        1,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 1, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        1,
+        1,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 1, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        1,
+        2,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        2,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          1,
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          1,
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        1,
+        2,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 2, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        1,
+        2,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[1, 2, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        -1,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "only one dimension can be inferred"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: only one dimension can be inferred (-1)"
+      }
+    },
+    {
+      "target": [
+        2,
+        -1,
+        0
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [2, -1, 0] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        2,
+        -1,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        -1,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        0,
+        -1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [2, 0, -1] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: cannot infer -1 when the other extents' product is 0"
+      }
+    },
+    {
+      "target": [
+        2,
+        0,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        0,
+        1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          1
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        0,
+        2
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          2
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        1,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        1,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          1,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        1,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 1, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        1,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 1, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        2,
+        -1
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        2,
+        0
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          2,
+          2,
+          0
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          2,
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "target": [
+        2,
+        2,
+        1
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 2, 1]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    },
+    {
+      "target": [
+        2,
+        2,
+        2
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "shape '[2, 2, 2]' is invalid for input of size 0"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "reshape: element count mismatch"
+      }
+    }
+  ],
+  "disagreements": [],
+  "large_empty": [
+    {
+      "target": [
+        0,
+        4611686018427387904,
+        4
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          4611686018427387904,
+          4
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          4611686018427387904,
+          4
+        ]
+      }
+    },
+    {
+      "target": [
+        0,
+        9223372036854775807
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          9223372036854775807
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          9223372036854775807
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        4611686018427387904
+      ],
+      "torch": {
+        "ok": true,
+        "shape": [
+          0,
+          4611686018427387904
+        ]
+      },
+      "candidate": {
+        "ok": true,
+        "shape": [
+          0,
+          4611686018427387904
+        ]
+      }
+    },
+    {
+      "target": [
+        -1,
+        4611686018427387904,
+        4
+      ],
+      "torch": {
+        "ok": false,
+        "error": "RuntimeError",
+        "message": "cannot reshape tensor of 0 elements into shape [-1, 4611686018427387904, 4] because the unspecified dimension size -1 can be any value and is ambiguous"
+      },
+      "candidate": {
+        "ok": false,
+        "error": "OverflowError",
+        "message": "numel_of: the element count of a shape overflows int64"
+      }
+    }
+  ],
+  "geometry": {
+    "checked": 15120,
+    "old_accept_new_reject": 1369,
+    "common_accepted_output_changes": 0,
+    "example": {
+      "H": 3,
+      "kernel": 4,
+      "stride": 2,
+      "padding": 0,
+      "baseline_extent": 1,
+      "candidate_extent": 0
+    }
+  },
+  "terrain_ast_equal_after_path_normalization": true,
+  "terrain_write_calls": 8,
+  "tracked_map_structure": {
+    "before_type": "dict",
+    "before_keys": [
+      "count",
+      "head",
+      "root_rel",
+      "sha256"
+    ]
+  }
+}

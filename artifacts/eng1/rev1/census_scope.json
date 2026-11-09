@@ -1,0 +1,803 @@
+{
+  "reshape_callers": [
+    {
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": 553,
+      "column": 35,
+      "expression": "faces.reshape(-1)",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": 555,
+      "column": 8,
+      "expression": "np.roll(faces, -1, axis=1).reshape(-1)",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": 1394,
+      "column": 13,
+      "expression": "onehot.reshape(logits.shape)",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/functional.py",
+      "line": 189,
+      "column": 53,
+      "expression": "tc.causal_softmax(\n            s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S])",
+      "kind": "engine",
+      "reasoning": "Undo causal-softmax flattening: B*H*L*S; output same element count.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/functional.py",
+      "line": 190,
+      "column": 12,
+      "expression": "s.reshape([B_, H_ * L, 1, S])",
+      "kind": "engine",
+      "reasoning": "Flatten H*L and insert query extent 1; B*H*L*S unchanged.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/functional.py",
+      "line": 226,
+      "column": 23,
+      "expression": "tt.reshape(shape)",
+      "kind": "engine",
+      "reasoning": "Einsum permutation preserves all operand axes; insert only missing singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 304,
+      "column": 15,
+      "expression": "x.reshape([B, L, self.num_heads, self.head_dim])",
+      "kind": "engine",
+      "reasoning": "B*L*heads*head_dim = B*L*embed_dim; constructor defines head_dim=embed_dim//heads.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 315,
+      "column": 14,
+      "expression": "out.transpose(1, 2).reshape([B, L, self.embed_dim])",
+      "kind": "engine",
+      "reasoning": "Transpose copies preserve B*L*embed_dim; merge heads back to embed_dim.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 363,
+      "column": 13,
+      "expression": "self.weight.reshape([self.out_ch, K])",
+      "kind": "engine",
+      "reasoning": "K=in_ch*kh*kw; weight has out_ch*K elements.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 367,
+      "column": 14,
+      "expression": "out.transpose(1, 2).reshape([N, self.out_ch, OH, OW])",
+      "kind": "engine",
+      "reasoning": "L=OH*OW from im2col; output has N*L*out_ch elements.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 369,
+      "column": 24,
+      "expression": "self.bias.reshape([1, self.out_ch, 1, 1])",
+      "kind": "engine",
+      "reasoning": "Bias vector length out_ch; singleton axes add no elements.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 389,
+      "column": 15,
+      "expression": "cols.reshape([N, C, self.kh * self.kw, L])",
+      "kind": "engine",
+      "reasoning": "im2col gives N*(C*kh*kw)*L, split its channel/kernel axis.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 390,
+      "column": 12,
+      "expression": "self.weight.reshape([1, C, self.kh * self.kw, 1])",
+      "kind": "engine",
+      "reasoning": "Depthwise weight has C*kh*kw elements; add singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 394,
+      "column": 14,
+      "expression": "out.reshape([N, C, OH, OW])",
+      "kind": "engine",
+      "reasoning": "Sum removed the kernel axis, leaving N*C*(OH*OW).",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 396,
+      "column": 24,
+      "expression": "self.bias.reshape([1, C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "Bias length C; add singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 424,
+      "column": 13,
+      "expression": "self.weight.reshape([self.in_ch, self.out_ch * self.kh * self.kw])",
+      "kind": "engine",
+      "reasoning": "Transposed-conv weight in_ch*out_ch*kh*kw; merge last three axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 425,
+      "column": 13,
+      "expression": "x.reshape([N, Cin, H * W])",
+      "kind": "engine",
+      "reasoning": "Flatten H*W; element count N*Cin*H*W unchanged.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 432,
+      "column": 24,
+      "expression": "self.bias.reshape([1, self.out_ch, 1, 1])",
+      "kind": "engine",
+      "reasoning": "Bias length out_ch; add singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 470,
+      "column": 12,
+      "expression": "self.weight.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "BN2D weight length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 471,
+      "column": 12,
+      "expression": "self.bias.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "BN2D bias length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 480,
+      "column": 19,
+      "expression": "self.running_mean.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "BN2D running_mean length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 481,
+      "column": 18,
+      "expression": "self.running_var.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "BN2D running_var length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 498,
+      "column": 12,
+      "expression": "self.weight.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "BN1D parameter length C; wshape=[1,C] or [1,C,1].",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 498,
+      "column": 45,
+      "expression": "self.bias.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "BN1D parameter length C; wshape=[1,C] or [1,C,1].",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 505,
+      "column": 19,
+      "expression": "self.running_mean.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "BN1D running_mean length C; wshape adds only singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 506,
+      "column": 18,
+      "expression": "self.running_var.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "BN1D running_var length C; wshape adds only singleton axes.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 576,
+      "column": 12,
+      "expression": "x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+      "kind": "engine",
+      "reasoning": "GroupNorm validates C%G=0; product is N*C*prod(spatial), also when N/spatial is zero.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 581,
+      "column": 12,
+      "expression": "g.reshape([N, C] + spatial)",
+      "kind": "engine",
+      "reasoning": "Inverse of grouped layout; product N*C*prod(spatial).",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 585,
+      "column": 23,
+      "expression": "self.weight.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "Each GroupNorm parameter length C; wshape=[1,C]+[1]*len(spatial).",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 585,
+      "column": 53,
+      "expression": "self.bias.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "Each GroupNorm parameter length C; wshape=[1,C]+[1]*len(spatial).",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 588,
+      "column": 21,
+      "expression": "weight.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "Float32-cast parameters retain length C; broadcast singleton shape.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 588,
+      "column": 46,
+      "expression": "bias.reshape(wshape)",
+      "kind": "engine",
+      "reasoning": "Float32-cast parameters retain length C; broadcast singleton shape.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 602,
+      "column": 20,
+      "expression": "self.weight.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "InstanceNorm parameter length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 602,
+      "column": 61,
+      "expression": "self.bias.reshape([1, self.C, 1, 1])",
+      "kind": "engine",
+      "reasoning": "InstanceNorm parameter length C; singleton axes only.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 613,
+      "column": 24,
+      "expression": "x.reshape([N, C, 1, L])",
+      "kind": "engine",
+      "reasoning": "Conv1D inserts height 1; N*C*L preserved.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 614,
+      "column": 15,
+      "expression": "out.reshape([N, out.shape[1], out.shape[3]])",
+      "kind": "engine",
+      "reasoning": "Height-one Conv2D output; removing its singleton height preserves count.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 696,
+      "column": 17,
+      "expression": "x.slice(1, t, 1).reshape([B, x.shape[2]])",
+      "kind": "engine",
+      "reasoning": "RNN time slice length 1; remove singleton time axis, keep B*input_dim.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/nn.py",
+      "line": 799,
+      "column": 19,
+      "expression": "self.pe.slice(0, 0, L).reshape([1, L, self.d_model])",
+      "kind": "engine",
+      "reasoning": "Position table slice L*d_model; prepend singleton batch axis.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quant.py",
+      "line": 124,
+      "column": 9,
+      "expression": "R.float().reshape([1, H, D, D])",
+      "kind": "engine",
+      "reasoning": "R has H*D*D elements; prepend singleton B before expand.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quant.py",
+      "line": 186,
+      "column": 11,
+      "expression": "main.reshape(list(x.shape[:-1]) + [nb, _ROW_SUM_BLOCK])",
+      "kind": "engine",
+      "reasoning": "main contains nb*4096 keys per row (tail removed); split last axis into nb and 4096.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 156,
+      "column": 14,
+      "expression": "w.reshape(out_features, groups, int(group_size))",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 167,
+      "column": 25,
+      "expression": "codes.reshape(out_features, in_features)",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 195,
+      "column": 8,
+      "expression": "q.reshape(rows, groups, int(group_size))",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 198,
+      "column": 11,
+      "expression": "w.reshape(rows, int(in_features))",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 216,
+      "column": 8,
+      "expression": "q.reshape(rows, groups, int(group_size))",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    },
+    {
+      "file": "tensor_cuda/tensor_cuda/quantization/affine.py",
+      "line": 218,
+      "column": 11,
+      "expression": "w.reshape(rows, int(in_features))",
+      "kind": "numpy",
+      "reasoning": "NumPy array operation; NDArray::reshape is never invoked.",
+      "compatibility": "All extents nonnegative on previously valid input; same final numel check and storage alias. Existing invalid caller states remain refused."
+    }
+  ],
+  "engine_reshape_calls": 37,
+  "numpy_reshape_calls": 9,
+  "engine_reshape_text_lines": 32,
+  "scope": {
+    "changed_tracked": [
+      "tensor_cuda/src/conv.cu",
+      "tensor_cuda/src/kernels.cu",
+      "tensor_cuda/src/ops.cpp",
+      "tensor_cuda/tests/test_terrain_render.py"
+    ],
+    "changed_count": 4,
+    "map_count": 10573,
+    "live_vs_frozen_after_mismatches": [],
+    "source_diff_matches": true
+  },
+  "mutants": [
+    {
+      "id": "M01",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "e5edca96a3c5363cb6916db492ca939f997de1e46ea33e4234d4732eccb633cd",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M02",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "2b6e65561349deb7fe245f7afdafd7c5105dcc26e3305250c98cd5c12733b184",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M03",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "a9ecebcb196c5020646e1637402481d7901b07eea80cccfee99fcf6d8d9a5608",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M04",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "b4b9ebe5695ff669c6e728dbb1c44ba1f305e11b4797249de95d6847f889a8c4",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M05",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "fbdc747f659681bd9b89843c262dd4512a27880e0af027dcd3259bb4f151479a",
+      "mutated_sha256": "f71971996b89b2c665e43c885b8b65dfd23fd01f63bbe7528bf2f3d5cbe2ffa2",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M06",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "fbdc747f659681bd9b89843c262dd4512a27880e0af027dcd3259bb4f151479a",
+      "mutated_sha256": "2cee5291378cd98de80436f954ec8f89b711152eeccbde6fa2a221968f08e3a1",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M07",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "fbdc747f659681bd9b89843c262dd4512a27880e0af027dcd3259bb4f151479a",
+      "mutated_sha256": "cd9d79e0d5ffba09d38ab387ca28ce91b68ea04764fa1a73895bd561746c4253",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M08",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "e5170bab6978ff04947aa7bcfa41919fc7c5cf413017f29d1fab3307e3563f8f",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M09",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "fc05cd282be605e0f8d1c5308f3636abcd887d9b0cba173d031aa28caa984215",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M10",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+      "mutated_sha256": "962703be05d370ac4250374dd63b622f0680e5b1e89e58b7094686da329719a9",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M11",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "0b8529938bfad478ed4cfaf41098ac95687a7a50b22da2f589b0a2685e3d0d81",
+      "mutated_sha256": "a642905de6a49bc77b24c6fe992b5fcc56a4c635bbe626ec74c8de1f75ce4a4b",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M12",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "0b8529938bfad478ed4cfaf41098ac95687a7a50b22da2f589b0a2685e3d0d81",
+      "mutated_sha256": "604efe68a49350fbf2b46c369209acac024fc5d692df726158de2dcb556b428d",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M13",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "0b8529938bfad478ed4cfaf41098ac95687a7a50b22da2f589b0a2685e3d0d81",
+      "mutated_sha256": "143b4c0887e9256eabb900f57b16e694164861218dad9b4540bca0e3c1e25422",
+      "receipt_hashes_match": true,
+      "module_matches_receipt": true
+    },
+    {
+      "id": "M14",
+      "old_occurrences": 1,
+      "replacement_count": 1,
+      "changed": true,
+      "pristine_sha256": "93ebf6cd6852e60abe253b41deffea20f8fff623360b3828e1737acf3e61767d",
+      "mutated_sha256": "b8aff3f37cc9ab9a80b4a8e852a2b689a069547ca51d874b8456dd3665d8b2a6",
+      "python_arm_matches_replacement": true
+    }
+  ],
+  "tool_hunks": [
+    {
+      "number": 1,
+      "file": "evidence.py",
+      "header": "@@ -1,29 +1,32 @@"
+    },
+    {
+      "number": 2,
+      "file": "evidence.py",
+      "header": "@@ -37,7 +40,7 @@"
+    },
+    {
+      "number": 3,
+      "file": "evidence.py",
+      "header": "@@ -45,37 +48,34 @@"
+    },
+    {
+      "number": 4,
+      "file": "evidence.py",
+      "header": "@@ -86,13 +86,19 @@"
+    },
+    {
+      "number": 5,
+      "file": "evidence.py",
+      "header": "@@ -129,9 +135,7 @@"
+    },
+    {
+      "number": 6,
+      "file": "evidence.py",
+      "header": "@@ -140,9 +144,6 @@"
+    },
+    {
+      "number": 7,
+      "file": "evidence.py",
+      "header": "@@ -153,14 +154,9 @@"
+    },
+    {
+      "number": 8,
+      "file": "evidence.py",
+      "header": "@@ -186,8 +182,6 @@"
+    },
+    {
+      "number": 9,
+      "file": "evidence.py",
+      "header": "@@ -208,36 +202,29 @@"
+    },
+    {
+      "number": 10,
+      "file": "evidence.py",
+      "header": "@@ -247,58 +234,47 @@"
+    },
+    {
+      "number": 11,
+      "file": "evidence.py",
+      "header": "@@ -315,32 +291,8 @@"
+    },
+    {
+      "number": 12,
+      "file": "evidence.py",
+      "header": "@@ -353,30 +305,16 @@"
+    },
+    {
+      "number": 13,
+      "file": "evidence.py",
+      "header": "@@ -387,95 +325,54 @@"
+    },
+    {
+      "number": 14,
+      "file": "run_gpu_line.py",
+      "header": "@@ -1,7 +1,12 @@"
+    },
+    {
+      "number": 15,
+      "file": "run_gpu_line.py",
+      "header": "@@ -11,8 +16,8 @@"
+    },
+    {
+      "number": 16,
+      "file": "run_gpu_line.py",
+      "header": "@@ -29,21 +34,18 @@"
+    },
+    {
+      "number": 17,
+      "file": "run_gpu_line.py",
+      "header": "@@ -54,105 +56,81 @@"
+    },
+    {
+      "number": 18,
+      "file": "run_gpu_tests.py",
+      "header": "@@ -1,7 +1,11 @@"
+    },
+    {
+      "number": 19,
+      "file": "run_gpu_tests.py",
+      "header": "@@ -10,27 +14,22 @@"
+    },
+    {
+      "number": 20,
+      "file": "run_gpu_tests.py",
+      "header": "@@ -41,108 +40,74 @@"
+    },
+    {
+      "number": 21,
+      "file": "score_gpu.py",
+      "header": "@@ -1,45 +1,48 @@"
+    },
+    {
+      "number": 22,
+      "file": "start_gpu_run.py",
+      "header": "@@ -1,4 +1,4 @@"
+    },
+    {
+      "number": 23,
+      "file": "start_gpu_run.py",
+      "header": "@@ -11,12 +11,12 @@"
+    },
+    {
+      "number": 24,
+      "file": "forge_gpu_run_standin.py",
+      "header": "@@ -1,13 +1,13 @@"
+    },
+    {
+      "number": 25,
+      "file": "device_evidence.py",
+      "header": "@@ -1,4 +1,5 @@"
+    },
+    {
+      "number": 26,
+      "file": "device_evidence.py",
+      "header": "@@ -98,7 +99,7 @@"
+    },
+    {
+      "number": 27,
+      "file": "gpu_lines.json",
+      "header": "@@ -1,811 +1,338 @@"
+    }
+  ],
+  "diff_comparisons": [
+    {
+      "file": "evidence.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "run_gpu_line.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "run_gpu_tests.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "score_gpu.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "start_gpu_run.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "forge_gpu_run_standin.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "device_evidence.py",
+      "diff_reconstructs_live": true
+    },
+    {
+      "file": "gpu_lines.json",
+      "diff_reconstructs_live": true
+    }
+  ],
+  "originals": [
+    {
+      "file": "device_evidence.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "evidence.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "forge_gpu_run_standin.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "gpu_lines.json",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "run_gpu_line.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "run_gpu_tests.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "runtime_evidence.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "score_gpu.py",
+      "matches_gn1_a8": true
+    },
+    {
+      "file": "start_gpu_run.py",
+      "matches_gn1_a8": true
+    }
+  ],
+  "id_classes": {
+    "e1": 27,
+    "e2": 31,
+    "e3": 40,
+    "e4": 23,
+    "e5": 28,
+    "e6": 1
+  },
+  "arm_ids": {
+    "baseline": {
+      "count": 2133,
+      "exact_strings_match": true,
+      "tensor_modules_all_from_own_arm": true
+    },
+    "candidate": {
+      "count": 2133,
+      "exact_strings_match": true,
+      "tensor_modules_all_from_own_arm": true
+    }
+  }
+}

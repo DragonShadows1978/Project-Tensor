@@ -1,0 +1,94 @@
+{
+  "status": "complete",
+  "verdict": "REJECT",
+  "findings": [
+    {
+      "id": "R1-F01",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/tests/test_eng1.py",
+      "line": 283,
+      "title": "E3's longest-path n*u tolerance is not an honest-error bound",
+      "reproduction": "CPU numerics.py: on the registered RMSNorm/float16/near_eps operands, ordinary nearest-even half arithmetic gives max error 0.0156582687232443 against tolerance 0.00843157814512645 (1.8571x). LayerNorm/bfloat16/near_eps gives 0.204845083463340 against 0.119538721863669. No engine output supplies either reference.",
+      "argument": "n*u*max|output| omits cancellation sensitivity of x-mean, absolute rounding at subnormal square/variance intermediates, and accumulation counts; n*u is also only a first-order gamma_n approximation. Adding a single final subnormal half-spacing cannot cover amplified intermediate errors. The census may label honest half arithmetic outside tolerance.",
+      "suggested_fix": "Derive per-operand forward/backward absolute bounds including conditioning, every subnormal intermediate and actual reduction/gradient accumulation, before G5; or label the frozen numbers as accuracy targets rather than rounding-derived bounds. Keep census measurement only.",
+      "receipts": [
+        "numerics.py",
+        "numerics.json",
+        "numerics.stdout"
+      ]
+    },
+    {
+      "id": "R1-F02",
+      "severity": "MAJOR",
+      "file": "artifacts/eng1/tool/run_gpu_tests.py",
+      "line": 70,
+      "title": "D4's preload does not isolate regression subprocess imports",
+      "reproduction": "CPU d4_child_probe.py preloads the pinned baseline package exactly like the staged child, then starts the same plain python -c import used by test_dlpack.py:603 with cwd=tool and inherited environment. Parent loads baseline pin 73ededa0..., subprocess exits 1 with ModuleNotFoundError: No module named tensor_cuda.",
+      "argument": "sys.path/sys.modules preload is process-local. test_dlpack.py:588 only copies os.environ for its subprocesses. No arm-specific PYTHONPATH/bootstrap is installed. Depending on caller environment those tests import no engine or an unpinned candidate/installed engine; matching failures in both arms can still satisfy the no-new-regression rule. D4's statement that subprocesses see candidate in both arms is environment-dependent.",
+      "suggested_fix": "Bind fresh Python subprocesses to the selected arm (for example prepend its package parent to inherited PYTHONPATH), verify and receipt their module origins/pins, and keep tests that inspect candidate source files explicitly separate from numerical arm comparisons.",
+      "receipts": [
+        "d4_child_probe.py",
+        "d4_child.json",
+        "arm_baseline.json",
+        "arm_candidate.json"
+      ]
+    },
+    {
+      "id": "R1-F03",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tests/test_eng1.py",
+      "line": 195,
+      "title": "Power-of-two upstreams leave the bfloat16 final-cast decision unpinned",
+      "reproduction": "coverage_gaps.py: candidate and the M07 early-cast formula are bit equal on all five registered bfloat16 E2 cases. A bfloat16-only early-cast mutation would pass them. At stored x=0.0002994537353515625, g=0.30078125, p=3, early-cast error is 3.560529648893862e-10 > tolerance 3.161531656994043e-10; final-cast error is 1.0960832241835305e-10.",
+      "argument": "Multiplication by exact powers of two commutes with bfloat16 rounding over these normal exponent ranges. M07 is killed through float16 overflow, not through bfloat16 multiply-rounding behavior.",
+      "suggested_fix": "Add at least one non-power-of-two half/bfloat16 upstream witness and a bfloat16-only early-cast mutant, retaining a derived tolerance. The cited witness is a candidate.",
+      "receipts": [
+        "coverage_gaps.py",
+        "coverage_gaps.json"
+      ]
+    },
+    {
+      "id": "R1-F04",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tests/test_eng1.py",
+      "line": 491,
+      "title": "The OW=0 boundary is not isolated from OH refusal",
+      "reproduction": "coverage_gaps.py: hypothetical one-edit predicate (oh <= 0 || ow < 0) makes the same refusal on all five registered geometry classes. Input (0,1,6,2), kernel (3,3), stride (1,1), padding (0,0) gives OH=4, OW=0 and distinguishes it.",
+      "argument": "ow_only has OW=-2, while the only OW=0 witness trunc_gap also has OH=0. M11 changes both predicates and is killed by OH, and M12 removes OW entirely; neither pins the independent OW=0 decision.",
+      "suggested_fix": "Add OH>0, OW=0 refusals for all four public callers and a mutant that weakens only OW <= 0 to OW < 0.",
+      "receipts": [
+        "coverage_gaps.py",
+        "coverage_gaps.json"
+      ]
+    },
+    {
+      "id": "R1-F05",
+      "severity": "NIT",
+      "file": "artifacts/eng1/REPORT.md",
+      "line": 227,
+      "title": "The reported reshape caller count is incorrect",
+      "reproduction": "census_scope.py finds 37 engine reshape calls on 32 source lines, plus 9 NumPy calls; the report says 30 engine callers. CALLER_CENSUS.md names and reasons about all 46 calls.",
+      "argument": "Several lines contain two reshape calls, and quant.py has two additional engine calls. All 37 engine calls retain results for previously valid nonnegative explicit shapes.",
+      "suggested_fix": "Correct the count and retain an itemized call census, including quant.py:124 and :186 and multiple calls on the same line.",
+      "receipts": [
+        "census_scope.py",
+        "census_scope.json",
+        "CALLER_CENSUS.md"
+      ]
+    }
+  ],
+  "worktree_unchanged": false,
+  "scope_check": {
+    "passed": false,
+    "before_count": 11161,
+    "after_count": 11161,
+    "differences": [
+      "logs/eng1_rev1.log"
+    ],
+    "comparison": "sha256 of every regular file and symlink target in this worktree, excluding rev1",
+    "recorded": "2026-11-09T19:58:57.068085+00:00"
+  },
+  "scope_attribution": "No review script/command opens this path for writing; it contains the active run transcript. An enclosing session logger is inferred, not directly controlled or independently attested.",
+  "all_other_paths_unchanged": true,
+  "review_scope": "CPU-only source/test/tool review; GPU G5 not executed"
+}
