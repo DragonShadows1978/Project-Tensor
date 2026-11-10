@@ -531,9 +531,16 @@ def e3_emulation(cls, dtype, x, w, b, g):
     return y.value, leaf.grad
 
 
-def e3_distance(a, b):
-    """Maximum absolute distance with explicit nonfinite counts; never hide a matching infinity/NaN."""
-    if not np.all(np.isfinite(a)) or not np.all(np.isfinite(b)):
+def e3_distance(a, b, *, finite_only=False):
+    """Maximum absolute distance; optionally measure only jointly finite elements."""
+    # Prior art: NumPy isfinite/boolean masking/max; REV2 R2-F02 (2026).
+    # Taken: finite-mask distance; new here: the optional E3 census readout.
+    finite = np.isfinite(a) & np.isfinite(b)
+    if finite_only:
+        if not np.any(finite):
+            return None
+        return float(np.max(np.abs(a[finite] - b[finite])))
+    if not np.all(finite):
         return None
     return float(np.max(np.abs(a - b)))
 
@@ -582,6 +589,11 @@ def e3_measure(cls, dtype, case, direction):
                 engine_error_vs_float64=e3_distance(got, ref),
                 emulation_error_vs_float64=e3_distance(emu, ref),
                 engine_distance_from_emulation=e3_distance(got, emu),
+                # Prior art: REV2 R2-F02 (2026), NumPy array_equal(equal_nan=True).
+                # Taken verbatim: the prescribed pattern comparison; measurement only.
+                nonfinite_pattern_equal=bool(np.array_equal(
+                    np.where(np.isfinite(got), 0, got), np.where(np.isfinite(emu), 0, emu), equal_nan=True)),
+                engine_distance_from_emulation_finite=e3_distance(got, emu, finite_only=True),
                 engine_nonfinite=int(np.count_nonzero(~np.isfinite(got))),
                 emulation_nonfinite=int(np.count_nonzero(~np.isfinite(emu))),
                 emulation_rounding="IEEE 754 nearest-even per primitive; fp32 reductions/pow, dtype stores",
