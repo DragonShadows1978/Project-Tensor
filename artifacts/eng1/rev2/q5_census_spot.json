@@ -1,0 +1,90 @@
+{
+ "census_rows": 46,
+ "census_engine": 37,
+ "census_numpy": 9,
+ "census_engine_lines": 33,
+ "token_reshape_calls": 46,
+ "token_lines": 41,
+ "spot": [
+  {
+   "entry": "tensor_cuda/tensor_cuda/__init__.py:553:35",
+   "call": "faces.reshape(-1)",
+   "census_says_numpy": true,
+   "source_line": "sources = np.ascontiguousarray(faces.reshape(-1), dtype=np.int64)",
+   "call_text_found": true,
+   "col_points_at": "faces.reshape(-1), dtype=np.in"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/functional.py:189:53",
+   "call": "tc.causal_softmax(             s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S])",
+   "census_says_numpy": false,
+   "source_line": "weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(",
+   "call_text_found": true,
+   "col_points_at": "tc.causal_softmax("
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/functional.py:190:12",
+   "call": "s.reshape([B_, H_ * L, 1, S])",
+   "census_says_numpy": false,
+   "source_line": "s.reshape([B_, H_ * L, 1, S])).reshape([B_, H_, L, S]))",
+   "call_text_found": true,
+   "col_points_at": "s.reshape([B_, H_ * L, 1, S]))"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/nn.py:304:15",
+   "call": "x.reshape([B, L, self.num_heads, self.head_dim])",
+   "census_says_numpy": false,
+   "source_line": "return x.reshape([B, L, self.num_heads, self.head_dim]).transpose(1, 2)",
+   "call_text_found": true,
+   "col_points_at": "x.reshape([B, L, self.num_head"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/nn.py:498:12",
+   "call": "self.weight.reshape(wshape)",
+   "census_says_numpy": false,
+   "source_line": "w = self.weight.reshape(wshape); b = self.bias.reshape(wshape)",
+   "call_text_found": true,
+   "col_points_at": "self.weight.reshape(wshape); b"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/nn.py:498:45",
+   "call": "self.bias.reshape(wshape)",
+   "census_says_numpy": false,
+   "source_line": "w = self.weight.reshape(wshape); b = self.bias.reshape(wshape)",
+   "call_text_found": true,
+   "col_points_at": "self.bias.reshape(wshape)"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/nn.py:576:12",
+   "call": "x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+   "census_says_numpy": false,
+   "source_line": "g = x.reshape([N, self.G, (C // self.G) * math.prod(spatial)])",
+   "call_text_found": true,
+   "col_points_at": "x.reshape([N, self.G, (C // se"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/quant.py:124:9",
+   "call": "R.float().reshape([1, H, D, D])",
+   "census_says_numpy": false,
+   "source_line": "Rb = R.float().reshape([1, H, D, D]).expand([B, H, D, D])",
+   "call_text_found": true,
+   "col_points_at": "R.float().reshape([1, H, D, D]"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/quant.py:186:11",
+   "call": "main.reshape(list(x.shape[:-1]) + [nb, _ROW_SUM_BLOCK])",
+   "census_says_numpy": false,
+   "source_line": "part = main.reshape(list(x.shape[:-1]) + [nb, _ROW_SUM_BLOCK]).sum([-1], False)",
+   "call_text_found": true,
+   "col_points_at": "main.reshape(list(x.shape[:-1]"
+  },
+  {
+   "entry": "tensor_cuda/tensor_cuda/quantization/affine.py:156:14",
+   "call": "w.reshape(out_features, groups, int(group_size))",
+   "census_says_numpy": true,
+   "source_line": "grouped = w.reshape(out_features, groups, int(group_size))",
+   "call_text_found": true,
+   "col_points_at": "w.reshape(out_features, groups"
+  }
+ ]
+}

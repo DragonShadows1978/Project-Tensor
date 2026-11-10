@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="33" skipped="0" tests="47" time="9.625" timestamp="2026-11-10T01:28:13.023250-05:00" hostname="MilleniumFalcon"><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_reference_hand_values_cpu" time="0.001" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_infer_empty_cpu[from0_r2_p0]" time="0.004"><failure message="RuntimeError: reshape: element count mismatch">case = 'from0_r2_p0'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_VALID), ids=list(E1_EMPTY_VALID))
+    def test_e1_infer_empty_cpu(case):
+        src, target = E1_EMPTY_VALID[case]
+        ref = np.zeros(src).reshape(target)
+&gt;       y = _cpu_empty(src).reshape(target)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: reshape: element count mismatch
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:145: RuntimeError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_infer_empty_cpu[from0_r2_p1]" time="0.001"><failure message="RuntimeError: reshape: element count mismatch">case = 'from0_r2_p1'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_VALID), ids=list(E1_EMPTY_VALID))
+    def test_e1_infer_empty_cpu(case):
+        src, target = E1_EMPTY_VALID[case]
+        ref = np.zeros(src).reshape(target)
+&gt;       y = _cpu_empty(src).reshape(target)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: reshape: element count mismatch
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:145: RuntimeError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_infer_empty_cpu[from2x0_r1_p0]" time="0.001"><failure message="RuntimeError: reshape: element count mismatch">case = 'from2x0_r1_p0'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_VALID), ids=list(E1_EMPTY_VALID))
+    def test_e1_infer_empty_cpu(case):
+        src, target = E1_EMPTY_VALID[case]
+        ref = np.zeros(src).reshape(target)
+&gt;       y = _cpu_empty(src).reshape(target)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: reshape: element count mismatch
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:145: RuntimeError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_infer_empty_cpu[from0x3_r3_p1]" time="0.001"><failure message="RuntimeError: reshape: element count mismatch">case = 'from0x3_r3_p1'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_VALID), ids=list(E1_EMPTY_VALID))
+    def test_e1_infer_empty_cpu(case):
+        src, target = E1_EMPTY_VALID[case]
+        ref = np.zeros(src).reshape(target)
+&gt;       y = _cpu_empty(src).reshape(target)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: reshape: element count mismatch
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:145: RuntimeError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_refuse_empty_cpu[two_neg1]" time="0.001"><failure message="AssertionError: assert 'reshape: ele...ount mismatch' == 'reshape: onl...inferred (-1)'&#10;  &#10;  - reshape: only one dimension can be inferred (-1)&#10;  + reshape: element count mismatch">case = 'two_neg1'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_REFUSALS), ids=list(E1_EMPTY_REFUSALS))
+    def test_e1_refuse_empty_cpu(case):
+        src, target, message = E1_EMPTY_REFUSALS[case]
+        with pytest.raises(RuntimeError) as info:
+            _cpu_empty(src).reshape(target)
+&gt;       assert str(info.value) == message
+E       AssertionError: assert 'reshape: ele...ount mismatch' == 'reshape: onl...inferred (-1)'
+E         
+E         - reshape: only one dimension can be inferred (-1)
+E         + reshape: element count mismatch
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:163: AssertionError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_refuse_empty_cpu[other_negative]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">case = 'other_negative'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_REFUSALS), ids=list(E1_EMPTY_REFUSALS))
+    def test_e1_refuse_empty_cpu(case):
+        src, target, message = E1_EMPTY_REFUSALS[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:161: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_refuse_empty_cpu[zero_product]" time="0.004"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">case = 'zero_product'
+
+    @pytest.mark.parametrize("case", list(E1_EMPTY_REFUSALS), ids=list(E1_EMPTY_REFUSALS))
+    def test_e1_refuse_empty_cpu(case):
+        src, target, message = E1_EMPTY_REFUSALS[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:161: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e1_refuse_empty_cpu[count_mismatch]" time="0.001" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e2_reference_hand_values_cpu" time="0.018" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[rms_norm-last0-cpu]" time="0.540" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[rms_norm-last0-f16-cpu]" time="0.362" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[causal_softmax-last0-cpu]" time="0.372" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[causal_softmax-rows0-cpu]" time="0.293" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[apa_blend_softmax-last0-cpu]" time="0.792" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[apa_blend_softmax-rows0-cpu]" time="0.405" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[topk-last0-k0-cpu]" time="0.470" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_empty[topk-rows0-cpu]" time="0.777" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_refuse[causal_softmax-S_lt_L-kept-cpu]" time="0.808" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_refuse[topk-k1-last0-cpu]" time="0.804"><failure message="AssertionError: E4-NOREFUSAL&#10;  &#10;assert 0 == 1&#10; +  where 0 = len([])">case = 'topk-k1-last0-cpu'
+
+    @pytest.mark.parametrize("case", E4_REFUSE_IDS)
+    def test_e4_refuse(case):
+        name, dev = case.rsplit("-", 1)
+        _, code, message = E4_REFUSE[name]
+        p = _child("try:\n    " + code.format(d=dev) + "\n    print('E4-NOREFUSAL')\n"
+                   "except RuntimeError as e:\n    print('E4-REFUSED ' + json.dumps(str(e)))\n")
+        assert p.returncode == 0, f"rc={p.returncode} stderr={p.stderr[-800:]}"
+        line = [s for s in p.stdout.splitlines() if s.startswith("E4-REFUSED ")]
+&gt;       assert len(line) == 1, p.stdout
+E       AssertionError: E4-NOREFUSAL
+E         
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:671: AssertionError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e4_refuse[topk-kneg-last0-cpu]" time="0.759"><failure message="AssertionError: E4-NOREFUSAL&#10;  &#10;assert 0 == 1&#10; +  where 0 = len([])">case = 'topk-kneg-last0-cpu'
+
+    @pytest.mark.parametrize("case", E4_REFUSE_IDS)
+    def test_e4_refuse(case):
+        name, dev = case.rsplit("-", 1)
+        _, code, message = E4_REFUSE[name]
+        p = _child("try:\n    " + code.format(d=dev) + "\n    print('E4-NOREFUSAL')\n"
+                   "except RuntimeError as e:\n    print('E4-REFUSED ' + json.dumps(str(e)))\n")
+        assert p.returncode == 0, f"rc={p.returncode} stderr={p.stderr[-800:]}"
+        line = [s for s in p.stdout.splitlines() if s.startswith("E4-REFUSED ")]
+&gt;       assert len(line) == 1, p.stdout
+E       AssertionError: E4-NOREFUSAL
+E         
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:671: AssertionError</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_reference_hand_values_cpu" time="0.000" /><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-both_negative]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'both_negative'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-oh_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'oh_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-ow_only]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'ow_only'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-ow_zero]" time="0.003"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'ow_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-trunc_gap]" time="0.002"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'trunc_gap'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[im2col-padded]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'im2col', case = 'padded'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-both_negative]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'both_negative'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-oh_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'oh_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-ow_only]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'ow_only'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-ow_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'ow_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-trunc_gap]" time="0.004"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'trunc_gap'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[col2im-padded]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'col2im', case = 'padded'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-both_negative]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'both_negative'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-oh_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'oh_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-ow_only]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'ow_only'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-ow_zero]" time="0.010"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'ow_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-trunc_gap]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'trunc_gap'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[avg_pool2d-padded]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'avg_pool2d', case = 'padded'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-both_negative]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'both_negative'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-oh_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'oh_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-ow_only]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'ow_only'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-ow_zero]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'ow_zero'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-trunc_gap]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'trunc_gap'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_refuse_cpu[max_pool2d-padded]" time="0.001"><failure message="Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;">caller = 'max_pool2d', case = 'padded'
+
+    @pytest.mark.parametrize("case", list(E5_REFUSE))
+    @pytest.mark.parametrize("caller", E5_CALLERS)
+    def test_e5_refuse_cpu(caller, case):
+        x, kh, kw, sh, sw, ph, pw, oh, ow = E5_REFUSE[case]
+&gt;       with pytest.raises(RuntimeError) as info:
+E       Failed: DID NOT RAISE &lt;class 'RuntimeError'&gt;
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng1/artifacts/eng1/tool/arms/baseline/tensor_cuda/tests/test_eng1.py:722: Failed</failure></testcase><testcase classname="artifacts.eng1.tool.arms.baseline.tensor_cuda.tests.test_eng1" name="test_e5_reference_hand_values_cpu_pool" time="0.007" /></testsuite></testsuites>
