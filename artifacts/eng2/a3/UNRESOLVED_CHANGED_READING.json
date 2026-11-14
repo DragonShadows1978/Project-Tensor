@@ -1,0 +1,643 @@
+{
+ "evidence_class": "reasoning (source reading by the seat), not a mechanical trace",
+ "notes": {
+  "causal": "the argument is <t>.dtype of a query/scores tensor on a tensor_cuda attention path (an SDPA argument, or the result of tc.matmul / tensor arithmetic); Tensor.dtype returns one of the six supported names (tensor_cuda/src/bindings.cpp:1806 via kernels.cu dtype_name), so ENG2 would not refuse it",
+  "voice": "t1_empty's dtype comes from engine/tensor_requests/p1t_tests/run_p1t.py (:605 `for dt in ('float32', 'float16')`; literals 'float16'/'float32' at :510/:545/:553/:568) and r4_cases.py:119 ('float32'); adapter_api.py:56 states 'float32' or 'float16': supported",
+  "trinity": "_compute_dtype() returns BlockTC.COMPUTE_DTYPE, assigned 'bfloat16' in the same file (:165, :951); the tracer does not follow function returns: supported",
+  "compute": "the value is BlockTC.COMPUTE_DTYPE (core/mistral7b_tc.py:558 class default 'float16'; model loaders set 'bfloat16', e.g. core/gpt_oss20b_tc.py:1342, core/deepseek_v2_lite_tc.py:829, core/gemma4_tc.py:1086, core/minicpm3_tc.py:437); every literal COMPUTE_DTYPE assignment in GraftRepository is 'bfloat16', 'float16' or 'float32'. Dynamic setters exist only in scripts/glc_p0_audit.py:161/166 (its dtype parameter, under a CPU stand-in), scripts/trinity_nope_graft_width_sweep.py:573/575 and scripts/trinity_t1_floor_reverb.py:619/623 (str compute_dtype, default 'float32'): supported unless a caller of those scripts passes something else; not proven"
+ },
+ "sites": [
+  {
+   "site": "Project-Voice engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py:205",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "tc.zeros",
+   "arg": "dtype",
+   "tracer": [
+    "u:parameter dtype of t1_empty (no in-file call site)"
+   ],
+   "reading": "voice",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/answer_span_shift/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/distance_off_by_one/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/fresh_index/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/quarter_boundary/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/repeat_count/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/resume_identity_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/separator_omission/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/source_swap_noop/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/spillover_omission/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5/mutation/weight_cap_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/adam_reset/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/source_index_shift/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/spillover_drop/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/mutation/update_bound/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/fresh_index/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/repeat_count/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/separator_omission/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/spillover_omission/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/attention.py:82",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM grapa/attention.py:82",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM orders/seeds/attn_probe_cc9_lead.py:53",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "q.dtype",
+   "tracer": [
+    "u:attribute q.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM scripts/cc10_ablation.py:2048",
+   "role": "script",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "scores.dtype",
+   "tracer": [
+    "u:attribute scores.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM scripts/cc58_bind_anatomy.py:363",
+   "role": "script",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "query.dtype",
+   "tracer": [
+    "u:attribute query.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM scripts/cc69_write_time.py:511",
+   "role": "script",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "query.dtype",
+   "tracer": [
+    "u:attribute query.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GRAPA-Native-LLM scripts/cc72_query_side.py:381",
+   "role": "script",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "query.dtype",
+   "tracer": [
+    "u:attribute query.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository artifacts/grm_xm3/evidence/trinity_nano_tc.py:316",
+   "role": "receipt",
+   "live": false,
+   "group": "import",
+   "entry": "tc.tensor",
+   "arg": "_compute_dtype()",
+   "tracer": [
+    "u:call _compute_dtype"
+   ],
+   "reading": "trinity",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository core/deepseek_v2_lite_tc.py:115",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "tc.zeros",
+   "arg": "dt",
+   "tracer": [
+    "s:uint8",
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository core/gemma4_tc.py:139",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "tc.zeros",
+   "arg": "cdt",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository core/gemma4_tc.py:740",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "functional._causal_mask",
+   "arg": "sc.dtype",
+   "tracer": [
+    "u:attribute sc.dtype"
+   ],
+   "reading": "causal",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository core/minicpm3_tc.py:292",
+   "role": "product",
+   "live": true,
+   "group": "import",
+   "entry": "tc.zeros",
+   "arg": "BlockTC.COMPUTE_DTYPE",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_e1_diag.py:2525",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_e1_diag.py:2526",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4030",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4031",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4218",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4219",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4382",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4383",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4497",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  },
+  {
+   "site": "GraftRepository scripts/gpt_oss20b_expert_e1.py:4498",
+   "role": "script",
+   "live": true,
+   "group": "supplementary",
+   "entry": "tc.tensor",
+   "arg": "compute_dtype",
+   "tracer": [
+    "u:expr Attribute"
+   ],
+   "reading": "compute",
+   "reading_says_refused": false
+  }
+ ],
+ "counts": {
+  "causal": 33,
+  "voice": 1,
+  "trinity": 1,
+  "compute": 13
+ },
+ "total": 48
+}

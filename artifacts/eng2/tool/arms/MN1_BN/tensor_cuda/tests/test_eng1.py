@@ -177,14 +177,14 @@ def test_e1_view_shares_storage():
 
 # ======================================================================================== E2: pow backward
 E2_P = [-1.5, -0.5, 0.5, 2.0, 3.0]
-E2_DTYPES = ["float16", "bfloat16", "float32", "float64"]
+E2_DTYPES = ["float16", "bfloat16", "float32"]
 E2_X = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 1e-2, 0.1, 0.5, 1.0, 1.5, 2.0, 3.0, 7.0]
 # L55 witness (float32): x = 1.3671875 (exact, 8 significant bits, so x^2 is exact), g = 0.7 rounded to float32,
 # p = 3. Reordering g * (p * x^2) as (g * p) * x^2 changes the float32 result's bits (seat CPU check, report).
 E2_WITNESS_X = 1.3671875
 E2_WITNESS_G = float(np.float32(0.7))
-E2_ENGINE_DTYPE = {"float16": "float16", "bfloat16": "bfloat16", "float32": "float32",
-                   "float64": "float32"}  # F2: the engine has no float64; tc.tensor builds float32
+E2_ENGINE_DTYPE = {"float16": "float16", "bfloat16": "bfloat16", "float32": "float32"}
+# ENG2-A3: the engine has no float64, so no float64 rows here; test_eng2.py tests the refusal of a float64 request.
 
 
 def e2_reference_grad(x64, w64, p):
@@ -263,7 +263,7 @@ def test_e2_pow_grad_nonpow2(dtype):
 
 
 @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
-@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("dtype", ["float32"])
 def test_e2_pow_grad_bits(dtype, p):
     """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
     for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared

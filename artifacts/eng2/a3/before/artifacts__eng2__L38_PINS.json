@@ -1,0 +1,2922 @@
+{
+ "order": "orders/ENG2_DTYPE_REFUSAL_AND_HALF_NORMS.md",
+ "line_c_files": [
+  "tensor_cuda/tests/test_eng1.py",
+  "tensor_cuda/tests/test_groupnorm_gn1.py",
+  "tensor_cuda/tests/test_attention_phase5.py",
+  "tensor_cuda/tests/test_nn_phase3.py",
+  "tensor_cuda/tests/test_ext_phase7.py",
+  "tensor_cuda/tests/test_apa_int4_sdpa_noncausal.py",
+  "tensor_cuda/tests/test_apa_mf1_quant.py",
+  "tensor_cuda/tests/test_apa_mf2_1_definition.py",
+  "tensor_cuda/tests/test_apa_mf2_1_gaps.py",
+  "tensor_cuda/tests/test_apa_mf2_1_sentinel.py",
+  "tensor_cuda/tests/test_apa_mf2_1_short.py",
+  "tensor_cuda/tests/test_apa_mf2_2_n1.py",
+  "tensor_cuda/tests/test_apa_mf2_2_n2.py",
+  "tensor_cuda/tests/test_apa_mf2_2a_blocked.py",
+  "tensor_cuda/tests/test_apa_mf2_2b_blocked.py",
+  "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py",
+  "tensor_cuda/tests/test_apa_mf2_mask.py",
+  "tensor_cuda/tests/test_apa_mf2_rule.py",
+  "tensor_cuda/tests/test_apa_selective_int4.py",
+  "tensor_cuda/tests/test_apa_selective_splitk.py",
+  "tensor_cuda/tests/test_apamq_sb1.py",
+  "tensor_cuda/tests/test_argmax_last_axis.py",
+  "tensor_cuda/tests/test_dda_raycast.py",
+  "tensor_cuda/tests/test_dlpack.py",
+  "tensor_cuda/tests/test_export_rows.py",
+  "tensor_cuda/tests/test_hy3d_engine_ops.py",
+  "tensor_cuda/tests/test_int4_linear.py",
+  "tensor_cuda/tests/test_int4_symmetric.py",
+  "tensor_cuda/tests/test_integration.py",
+  "tensor_cuda/tests/test_intn_linear.py",
+  "tensor_cuda/tests/test_mxfp4_linear.py",
+  "tensor_cuda/tests/test_paint_bake.py",
+  "tensor_cuda/tests/test_paint_inpaint.py",
+  "tensor_cuda/tests/test_paint_raster.py",
+  "tensor_cuda/tests/test_qtile_attention.py",
+  "tensor_cuda/tests/test_splice_rows.py",
+  "tensor_cuda/tests/test_terrain_render.py",
+  "tensor_cuda/tests/test_w8a16_matmul.py",
+  "tensor_cuda/tests/test_write_rows.py"
+ ],
+ "norm_output_reads": [
+  {
+   "site": "tensor_cuda/tests/test_attention_phase5.py:51-54",
+   "cls": "RMSNorm",
+   "input_dtype": "float32",
+   "read": "np.isfinite(out) on the output",
+   "expectation": "unchanged: float32 path, same op sequence (P302)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_attention_phase5.py:44-47",
+   "cls": "LayerNorm (inside nn.TransformerEncoderLayer)",
+   "input_dtype": "float32",
+   "read": "output shape",
+   "expectation": "unchanged: float32 path"
+  },
+  {
+   "site": "tensor_cuda/tests/test_nn_phase3.py:17-22",
+   "cls": "LayerNorm",
+   "input_dtype": "float32",
+   "read": "row mean ~0 (atol 1e-3) and std ~1 (atol 1e-2)",
+   "expectation": "unchanged: float32 path"
+  },
+  {
+   "site": "tensor_cuda/tests/test_ext_phase7.py:35-40",
+   "cls": "BatchNorm1D, GroupNorm, InstanceNorm2D",
+   "input_dtype": "float32",
+   "read": "output shapes",
+   "expectation": "unchanged: float32 path; GroupNorm untouched"
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py (all)",
+   "cls": "GroupNorm",
+   "input_dtype": "float32/float16/bfloat16 and int64/bool/uint8 refusals",
+   "read": "values vs float64 references, refusal messages",
+   "expectation": "unchanged: GroupNorm is not edited; tc.tensor dtypes are all supported"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng1.py::test_e3_census (40 IDs)",
+   "cls": "all five",
+   "input_dtype": "float16/bfloat16",
+   "read": "census row values written to ENG1_CENSUS_DIR; the test asserts only shape, dtype, finite reference (measurement only)",
+   "expectation": "outcome unchanged (passes on both arms); ROW VALUES expected to change for LayerNorm, RMSNorm, BatchNorm1D and InstanceNorm2D (float32 statistics; N1_EMULATION.json predicts every row within E3's tolerance on the candidate); GroupNorm rows unchanged"
+  }
+ ],
+ "dtype_string_sites": [
+  {
+   "site": "tensor_cuda/tests/test_apa_int4_sdpa_noncausal.py:132",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:121)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_int4_sdpa_noncausal.py:132",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:121)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_int4_sdpa_noncausal.py:132",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:121)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf1_quant.py:83",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "CASES (:44)",
+   "values": [
+    "float32",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:155",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:152)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:156",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:152)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:85",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:35) via CELLS",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:109",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:146",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_definition.py:170",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "count_witness default 'float32' / parametrize ['float32','float16'] (:173)",
+   "values": [
+    "float32",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_gaps.py:39",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_f4_operands default 'float16' (:35)",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_sentinel.py:97",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "parametrize float32/bfloat16 (:95)",
+   "values": [
+    "float32",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_sentinel.py:137",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "parametrize (:132)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_sentinel.py:37",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "parametrize float32/bfloat16 (:52,:95)",
+   "values": [
+    "float32",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_short.py:50",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:27)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2_n1.py:50",
+   "call": "tc.tensor",
+   "dtype_expr": "dt",
+   "source": "_t(a, dt): dt from parametrize ['float32','float16'] / (:58)",
+   "values": [
+    "float32",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2_n1.py:121",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2_n2.py:150",
+   "call": "tc.tensor",
+   "dtype_expr": "dt",
+   "source": "parametrize (:141)",
+   "values": [
+    "float32",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2a_blocked.py:71",
+   "call": "tc.tensor",
+   "dtype_expr": "dt",
+   "source": "parametrize (:59)",
+   "values": [
+    "float32",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2b_blocked.py:33",
+   "call": "tc.tensor",
+   "dtype_expr": "dt",
+   "source": "DTS (:28)",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:136",
+   "call": "tc.tensor",
+   "dtype_expr": "dt",
+   "source": "parametrize (:128)",
+   "values": [
+    "float32",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_mask.py:93",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:43)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_mask.py:159",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:43)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_mask.py:182",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:43)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:149",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "parametrize (:146)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:150",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "parametrize (:146)",
+   "values": [
+    "float32",
+    "bfloat16",
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:101",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:118",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:162",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:176",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_rule.py:121",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:168",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:169",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:170",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:126",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_run callers pass 'float32' (:151,:203,:213,:214)",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:127",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "same",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:128",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "same",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_int4.py:178",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:45",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:46",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:47",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:48",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:68",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:69",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:70",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:71",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_selective_splitk.py:72",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:96)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:245",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:245",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:275",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:289",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:305",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_apamq_sb1.py:314",
+   "call": "tc.tensor",
+   "dtype_expr": "'bfloat16'",
+   "source": "literal",
+   "values": [
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_argmax_last_axis.py:29",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES (:11)",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_argmax_last_axis.py:26",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dda_raycast.py:33",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dda_raycast.py:34",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dda_raycast.py:35",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:214",
+   "call": "tc.empty",
+   "dtype_expr": "dt",
+   "source": "tc.empty (C++ dtype_from_string; unchanged by ENG2)",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:538",
+   "call": "tc.zeros",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:559",
+   "call": "tc.empty",
+   "dtype_expr": "dt",
+   "source": "tc.empty",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:958",
+   "call": "tc.empty",
+   "dtype_expr": "dtype",
+   "source": "tc.empty",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:578",
+   "call": "tc.empty",
+   "dtype_expr": "'float99'",
+   "source": "tc.empty 'float99' (refusal test, C++)",
+   "values": [
+    "float99"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:670",
+   "call": "tc.empty",
+   "dtype_expr": "dtype",
+   "source": "tc.empty",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:952",
+   "call": "tc.empty",
+   "dtype_expr": "dtype",
+   "source": "tc.empty",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:2218",
+   "call": "tc.empty",
+   "dtype_expr": "dt",
+   "source": "tc.empty",
+   "values": [
+    "n/a: C++ path"
+   ],
+   "path": "C++ dtype_from_string (unchanged)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_dlpack.py:550",
+   "call": "tc.zeros",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng1.py:70",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_leaf(values, dtype): E2_DTYPES incl. 'float64' (test_e2_pow_grad_bits :266), E2_ENGINE_DTYPE values, E3_DTYPES, 'float32' (E5)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": true,
+   "unsupported_values": [
+    "float64"
+   ]
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng1.py:76",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_const(values, dtype): E2_DTYPES incl. 'float64' (test_e2_pow_grad :204 probe; bits :275), E3_DTYPES, 'float32'",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": true,
+   "unsupported_values": [
+    "float64"
+   ]
+  },
+  {
+   "site": "tensor_cuda/tests/test_export_rows.py:38",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_ext_phase7.py:26",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:387",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype if operand == 'input' else 'float32'",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:187",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:199",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:219",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:283",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:303",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:452",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:113",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:389",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "DTYPES = tuple(TOLERANCES) (:30); :382 ('int64','bool','uint8')",
+   "values": [
+    "float32",
+    "float16",
+    "bfloat16",
+    "int64",
+    "bool",
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:377",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_groupnorm_gn1.py:453",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_hy3d_engine_ops.py:200",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16' if dtype is np.float16 else 'float32'",
+   "source": "'float16' if dtype is np.float16 else 'float32'",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_hy3d_engine_ops.py:69",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "dtype = 'float16' if q.dtype == np.float16 else 'float32' (:63)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_hy3d_engine_ops.py:69",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "dtype = 'float16' if q.dtype == np.float16 else 'float32' (:63)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_hy3d_engine_ops.py:70",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "same",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:57",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:58",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:59",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:80",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:81",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:82",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_linear.py:83",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_symmetric.py:30",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_symmetric.py:31",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_symmetric.py:32",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_int4_symmetric.py:66",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_integration.py:39",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:91",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:96",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:112",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:84",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:85",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:86",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:36",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:37",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:38",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:115",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:116",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:61",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:62",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:63",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_intn_linear.py:64",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:53",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:54",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:118",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:119",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:74",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:57",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:58",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:96",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:97",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:98",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:102",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:103",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:104",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:78",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_mxfp4_linear.py:79",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_nn_phase3.py:27",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:150",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:151",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:152",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:153",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:154",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:155",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:156",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:164",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:165",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:166",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:167",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_bake.py:168",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:197",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:198",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:199",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:200",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:201",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:202",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:203",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:401",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:402",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:403",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:404",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:405",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:406",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_inpaint.py:407",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:371",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:372",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:373",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:392",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:393",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:490",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:491",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:227",
+   "call": "tc.tensor",
+   "dtype_expr": "'float32'",
+   "source": "literal",
+   "values": [
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:228",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:452",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:453",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_paint_raster.py:454",
+   "call": "tc.tensor",
+   "dtype_expr": "'int64'",
+   "source": "literal",
+   "values": [
+    "int64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:55",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:55",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:56",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:79",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:79",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_qtile_attention.py:80",
+   "call": "tc.tensor",
+   "dtype_expr": "dts",
+   "source": "dts = 'float16' if q.dtype == np.float16 else 'float32' (:50,:68)",
+   "values": [
+    "float16",
+    "float32"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_splice_rows.py:47",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_splice_rows.py:48",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:1866",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:1867",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2545",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2546",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2647",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2648",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2676",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2677",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2678",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:2679",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:3305",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:3306",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:3317",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:3536",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:3537",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:4058",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:4059",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:75",
+   "call": "tc.zeros",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:1872",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:1874",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:4064",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_terrain_render.py:4066",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:229",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:319",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:320",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:321",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:344",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:345",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:346",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:350",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:351",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:352",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:69",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:70",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:71",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:103",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:278",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:336",
+   "call": "tc.tensor",
+   "dtype_expr": "'float16'",
+   "source": "literal",
+   "values": [
+    "float16"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_write_rows.py:36",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  },
+  {
+   "site": "tensor_cuda/tests/test_write_rows.py:37",
+   "call": "tc.tensor",
+   "dtype_expr": "'uint8'",
+   "source": "literal",
+   "values": [
+    "uint8"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": false,
+   "unsupported_values": []
+  }
+ ],
+ "sites_that_change": [
+  {
+   "site": "tensor_cuda/tests/test_eng1.py:70",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_leaf(values, dtype): E2_DTYPES incl. 'float64' (test_e2_pow_grad_bits :266), E2_ENGINE_DTYPE values, E3_DTYPES, 'float32' (E5)",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": true,
+   "unsupported_values": [
+    "float64"
+   ]
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng1.py:76",
+   "call": "tc.tensor",
+   "dtype_expr": "dtype",
+   "source": "_const(values, dtype): E2_DTYPES incl. 'float64' (test_e2_pow_grad :204 probe; bits :275), E3_DTYPES, 'float32'",
+   "values": [
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64"
+   ],
+   "path": "Python _np_dtype (ENG2 F1)",
+   "changes": true,
+   "unsupported_values": [
+    "float64"
+   ]
+  }
+ ],
+ "expected_changes": {
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p-1.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p-0.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+0.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+2]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+3]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad_bits[float64-p-1.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad_bits[float64-p-0.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad_bits[float64-p+0.5]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad_bits[float64-p+2]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad_bits[float64-p+3]": {
+   "baseline": "passed",
+   "candidate": "failed",
+   "detail_contains": "TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16",
+   "why": "test_eng1.py builds its 'float64' rows with tc.tensor(..., dtype='float64') (:70/:76 via E2_DTYPES), which relied on the silent float32 fallback that F1 removes; inherited tests are not edited (L38)",
+   "receipts": [
+    "artifacts/eng2/g2/l38_float64_cpu.txt (candidate: 10 TypeError failures on CPU)",
+    "ENG1 G5 candidate_eng1 passed these IDs on the engine that is ENG2's baseline"
+   ]
+  }
+ },
+ "note": "A pin listed in expected_changes is not a regression: tool/evidence.py regression_reasons skips it and instead requires the registered baseline and candidate outcomes and the failure text."
+}
