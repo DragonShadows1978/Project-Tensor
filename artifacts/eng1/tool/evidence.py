@@ -20,8 +20,8 @@ from arm_origin import validate_origin
 
 TOOL = Path(__file__).resolve().parent
 ROOT = TOOL.parents[2]
-ORDER = "orders/ENG1_A1_REV1_FIXES.md"
-SEAL_NAME = "staging_seal_a1.json"
+ORDER = "orders/ENG1_A3_DEVICE_SEAL_ROUTING.md"  # A3 route (a): re-pointed from ENG1_A1_REV1_FIXES.md
+SEAL_NAME = "staging_seal_a3.json"  # A3 route (a): was staging_seal_a1.json; prior art: none known to me (a constant re-point)
 DEVICE_PATTERNS = (
     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
     "initialization error", "invalid device ordinal", "CUDA error at",
