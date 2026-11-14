@@ -1,0 +1,125 @@
+tensor_cuda/bench/geometries.py:82:# (tc.apa_blend_softmax_sink / tc.apa_selective_attention_sink), MXFP4 expert
+tensor_cuda/bench/harness.py:128:def bench_causal_softmax(shape, dtype, reps, warmup):
+tensor_cuda/bench/harness.py:130:    (tc.causal_softmax on (B, H*L, 1, S) folded scores) — see functional.py."""
+tensor_cuda/bench/harness.py:138:            tc.causal_softmax(scores_t)
+tensor_cuda/bench/harness.py:144:def bench_apa_blend_softmax(shape, dtype, reps, warmup, sink):
+tensor_cuda/bench/harness.py:145:    """tc.apa_blend_softmax / apa_blend_softmax_sink — the fused
+tensor_cuda/bench/harness.py:160:                tc.apa_blend_softmax_sink(bulk_t, rank_t, sinks, zthr)
+tensor_cuda/bench/harness.py:163:                tc.apa_blend_softmax(bulk_t, rank_t, zthr)
+tensor_cuda/bench/harness.py:310:def bench_rms_norm(shape, dtype, reps, warmup):
+tensor_cuda/bench/harness.py:311:    """tc.rms_norm — fused single-kernel RMSNorm."""
+tensor_cuda/bench/harness.py:319:            tc.rms_norm(x, w, 1e-6)
+tensor_cuda/bench/harness.py:359:                    "causal_softmax", f"{mname}/{ak}/decode_S{S}",
+tensor_cuda/bench/harness.py:363:                    "apa_blend_softmax", f"{mname}/{ak}/decode_S{S}",
+tensor_cuda/bench/harness.py:373:                    "causal_softmax", f"{mname}/{ak}/prefill_L{L}",
+tensor_cuda/bench/harness.py:377:                    "apa_blend_softmax", f"{mname}/{ak}/prefill_L{L}",
+tensor_cuda/bench/harness.py:398:                "rms_norm", f"{mname}/{label}",
+tensor_cuda/bench/harness.py:455:    "causal_softmax": lambda shape, dtype, reps, warmup, extra: bench_causal_softmax(shape, dtype, reps, warmup),
+tensor_cuda/bench/harness.py:456:    "apa_blend_softmax": lambda shape, dtype, reps, warmup, extra: bench_apa_blend_softmax(shape, dtype, reps, warmup, extra["sink"]),
+tensor_cuda/bench/harness.py:465:    "rms_norm": lambda shape, dtype, reps, warmup, extra: bench_rms_norm(shape, dtype, reps, warmup),
+external/kimi-swarm/core/mistral7b_tc.py:143:        if self.USE_FUSED and hasattr(tc, "rms_norm") and not tc.is_grad_enabled():
+external/kimi-swarm/core/mistral7b_tc.py:144:            return tc.rms_norm(x, self.weight, self.eps)
+external/kimi-swarm/core/mistral7b_tc.py:192:    if hasattr(tc, "apa_blend_softmax"):
+external/kimi-swarm/core/mistral7b_tc.py:196:        weights = tc.apa_blend_softmax(b_flat, r_flat, zthr)
+core/trinity_nano_tc.py:71:def _sigmoid_topk_route(
+core/trinity_nano_tc.py:81:        _, selected = (scores + bias).topk(int(top_k), True)
+core/trinity_nano_tc.py:84:        top_scores, selected = scores.topk(int(top_k), True)
+core/trinity_nano_tc.py:276:    multiply. The TensorCUDA fused rms_norm kernel multiplies weight in fp32
+core/trinity_nano_tc.py:291:        if self.USE_FUSED and hasattr(tc, "rms_norm") and not tc.is_grad_enabled():
+core/trinity_nano_tc.py:292:            return tc.rms_norm(x, self.weight, self.eps)
+core/trinity_nano_tc.py:381:    rms_norm_eps: float = 1e-5
+core/trinity_nano_tc.py:419:            rms_norm_eps=float(data["rms_norm_eps"]),
+core/trinity_nano_tc.py:514:        return _sigmoid_topk_route(
+core/trinity_nano_tc.py:595:        self.q_norm = RMSNormTC(cfg.head_dim, cfg.rms_norm_eps)
+core/trinity_nano_tc.py:596:        self.k_norm = RMSNormTC(cfg.head_dim, cfg.rms_norm_eps)
+core/trinity_nano_tc.py:710:        e = cfg.rms_norm_eps
+core/trinity_nano_tc.py:823:        self.norm = RMSNormTC(self.config.hidden_size, self.config.rms_norm_eps)
+scripts/apa_spd1_common.py:57:                         entry="tensor_cuda.matmul -> causal_softmax / Tensor.softmax -> matmul",
+scripts/apa_spd1_common.py:135:                                ['matmul', 'causal_softmax', 'apa_selective_attention',
+scripts/apa_spd1_common.py:176:    weights = tc.causal_softmax(scores) if shape['causal'] else scores.softmax(-1)
+external/kimi-swarm/core/gemma4_runner.py:50:    rms_norm_eps = 1e-6
+external/kimi-swarm/core/gemma4_runner.py:236:    if hasattr(tc, "rms_norm") and not tc.is_grad_enabled():
+external/kimi-swarm/core/gemma4_runner.py:238:        return tc.rms_norm(x.reshape([B, L * H, D]), wt,
+external/kimi-swarm/core/gemma4_runner.py:267:        # Use numpy for topk (tensor_cuda may not have topk yet)
+external/kimi-swarm/core/gemma4_runner.py:398:        q = _head_rmsnorm(q_lin, self.q_norm_w, cfg.rms_norm_eps, B, L, H, D)
+external/kimi-swarm/core/gemma4_runner.py:400:        k = _head_rmsnorm(kraw, self.k_norm_w, cfg.rms_norm_eps, B, L, KV, D)
+external/kimi-swarm/core/gemma4_runner.py:402:        v = _head_rmsnorm(vsrc, None, cfg.rms_norm_eps, B, L, KV, D)
+external/kimi-swarm/core/gemma4_runner.py:462:                if hasattr(tc, "causal_softmax"):
+external/kimi-swarm/core/gemma4_runner.py:463:                    p = tc.causal_softmax(
+external/kimi-swarm/core/gemma4_runner.py:499:                if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
+external/kimi-swarm/core/gemma4_runner.py:500:                    p_ = tc.causal_softmax(sc)
+external/kimi-swarm/core/gemma4_runner.py:534:        e = cfg.rms_norm_eps
+external/kimi-swarm/core/gemma4_runner.py:571:        self.norm = RMSNormTC(cfg.hidden_dim, cfg.rms_norm_eps)
+scripts/apa_sp3_make_diag.py:25:    blend = extract(s, 'apa_blend_softmax_kernel2')
+scripts/apa_sp3_make_diag.py:85: #define GO(T) if(Lq>0) apa_blend_softmax_kernel2<T,true><<<rows,256>>>((T*)b.data_ptr(),(T*)r.data_ptr(),(T*)o.data_ptr(),S,z,L,Lq,row0,0,(uint8_t*)m.data_ptr()); else apa_blend_softmax_kernel2<T,false><<<rows,256>>>((T*)b.data_ptr(),(T*)r.data_ptr(),(T*)o.data_ptr(),S,z,L,0,row0,0,(uint8_t*)m.data_ptr());
+tensor_cuda/tensor_cuda/functional.py:25:    before any matmul, like the engine's CUDA kernels (kernels.cu causal_softmax:
+tensor_cuda/tensor_cuda/functional.py:51:        # kernels.cu causal_softmax; both start their max at -inf since APA-MF2.1 --
+tensor_cuda/tensor_cuda/functional.py:95:    causal_softmax kernel path); they count as blocked. NaN entries compare false, so a row with
+tensor_cuda/tensor_cuda/functional.py:170:        return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,
+tensor_cuda/tensor_cuda/functional.py:181:    # path), so causal_softmax with L=1 rows == plain softmax(-1) in
+tensor_cuda/tensor_cuda/functional.py:187:    if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
+tensor_cuda/tensor_cuda/functional.py:189:        weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(
+scripts/apa_mf2_2_probe/gpu_probe.py:431:                put(key+'/causal_softmax',TC.causal_softmax(TC.matmul(*[tensor(x,dt) for x in raw[:2]],alpha=D**-.5,trans_b=True)))
+scripts/apa_mf2_1_reviewer/gpu_probe.py:203:                w=host(tc.causal_softmax(a))
+tensor_cuda/tensor_cuda/__init__.py:317:def causal_softmax(scores):
+tensor_cuda/tensor_cuda/__init__.py:321:    return _C.causal_softmax(scores)
+tensor_cuda/tensor_cuda/__init__.py:995:def rms_norm(x, w, eps=1e-6):
+tensor_cuda/tensor_cuda/__init__.py:999:    return _C.rms_norm(x, w, eps)
+tensor_cuda/tensor_cuda/__init__.py:1314:def apa_blend_softmax(bulk, rank, zthr, Lq=0, row0=0, window=0):
+tensor_cuda/tensor_cuda/__init__.py:1331:    return _C.apa_blend_softmax(bulk, rank, zthr, Lq, row0, window)
+tensor_cuda/tensor_cuda/__init__.py:1334:def apa_blend_softmax_sink(bulk, rank, sinks, zthr, Lq=0, row0=0, window=0):
+tensor_cuda/tensor_cuda/__init__.py:1342:    Bounds conventions identical to `apa_blend_softmax` above: `Lq=0` is the
+tensor_cuda/tensor_cuda/__init__.py:1347:    return _C.apa_blend_softmax_sink(bulk, rank, sinks, zthr, Lq, row0, window)
+tensor_cuda/tensor_cuda/__init__.py:1494:    "terrain_render", "rms_norm", "rope_apply", "write_rows", "export_rows",
+tensor_cuda/tensor_cuda/__init__.py:1497:    "arena_row_pair_transaction", "causal_softmax", "fused_sdpa_noncausal", "apa_int4_sdpa_noncausal", "apa_refine_stats", "mse_loss", "cross_entropy", "where", "cat", "stack", "embedding",
+tensor_cuda/tensor_cuda/__init__.py:1512:    "apa_blend_softmax_sink", "argmax_last_axis",
+scripts/apa_sp4g_a3_model.py:29:    original_mm, original_sm = tc.matmul, tc.causal_softmax
+scripts/apa_sp4g_a3_model.py:62:    tc.matmul, tc.causal_softmax = mm, sm
+scripts/apa_sp4g_a3_model.py:68:        tc.matmul, tc.causal_softmax = original_mm, original_sm
+scripts/apa_mf2_2c_probe/gpu_probe.py:492:        # Direct GRM absorbed/fast paths apply primitive causal_softmax.
+scripts/apa_mf2_2c_probe/gpu_probe.py:495:        with tc.no_grad():o=tc.causal_softmax(s)
+scripts/apa_mf2_2c_v4_recount.py:10:          "apa_quant_p0.15_causalTrue", "causal_softmax")
+scripts/apa_sp3_a6_decode.py:64:        base.RMSNormTC.USE_FUSED=self.cfg['fused_rms_norm']
+scripts/apa_sp3_gpu.py:214:                native=tc.apa_blend_softmax(bulk,rank,1.2815515655446004,L,0,0)
+scripts/apa_mf2_1_identity.py:16:          sdpa_infer, sdpa_grad (out, dq, dk, dv), causal_softmax on the call's scores,
+scripts/apa_mf2_1_identity.py:93:                    put(base + "/causal_softmax", tc.causal_softmax(sc))
+scripts/apa_mf2_1_identity.py:146:        put("design/causal_softmax_-3.3e38", tc.causal_softmax(tc.tensor(w)))
+scripts/apa_mf2_2b_mutation.py:11:    "B1": (FN, """        weights = _guarded_softmax(scores, lambda s: tc.causal_softmax(
+scripts/apa_mf2_2b_mutation.py:13:           """        weights = tc.causal_softmax(
+scripts/apa_mf2_2b_mutation.py:16:    "B3": (FN, """        return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,
+scripts/apa_mf2_2b_mutation.py:18:                         value)""", "        return tc.matmul(tc.causal_softmax(scores), value)"),
+scripts/apa_mf2_2b_compare.py:15:PRIM = ("eager_softmax", "causal_softmax")
+scripts/apa_mf2_2b_compare.py:17:          "apa_quant_p0.15_causalTrue", "causal_softmax")
+scripts/apa_sp3_a6_register.py:12:               interposer=False, fused_decode=True, fused_rms_norm=True,
+scripts/apa_sp3_a6_register.py:26:                ('int4_eager','fused_decode',False), ('norm_eager','fused_rms_norm',False),
+scripts/apa_sp3_a6_register.py:34:                  fused_rms_norm=False, absorbed_decode=False, fused_softmax=False)
+scripts/apa_mf2_2b_probe/gpu_probe.py:431:                put(key+'/causal_softmax',TC.causal_softmax(TC.matmul(*[tensor(x,dt) for x in raw[:2]],alpha=D**-.5,trans_b=True)))
+scripts/trinity_nano_first_divergence.py:41:    _sigmoid_topk_route,
+scripts/trinity_nano_first_divergence.py:192:            _, sel2 = torch.topk(scores_sig + expert_bias.float(), k=moe.router.top_k, dim=1)
+scripts/trinity_nano_first_divergence.py:195:            gathered, sel2 = torch.topk(scores_sig, k=moe.router.top_k, dim=1)
+scripts/trinity_nano_first_divergence.py:336:            topw, topi = _sigmoid_topk_route(
+scripts/apa_mf2_additive_consumer.py:3:GRM core/gemma4_tc.py:740 (grad-enabled / no causal_softmax branch) and GRAPA
+scripts/apa_mf2_2a_census.py:150:                                    put("causal_softmax/" + base, lambda: {"out": tc.causal_softmax(mk(sc, dt))})
+scripts/apa_mf2_1_mutation.py:89:    "M7_sentinel_causal_softmax": [('''  float mx = -INFINITY;''', '''  float mx = -3.0e38f;''')],
+scripts/apamq_e1_sweep.py:254:    weights = tc.causal_softmax(scores)
+scripts/apamq_e1_sweep.py:380:    if not hasattr(tc, "causal_softmax"):
+scripts/apamq_e1_sweep.py:381:        raise RuntimeError("missing required engine entry point: tensor_cuda.causal_softmax")
+scripts/apamq_e1_sweep.py:536:                "tensor_cuda.causal_softmax(scores)",
+scripts/apamq_e1_sweep.py:613:            "- STANDARD is configured to invoke `tensor_cuda.matmul(q_grouped, k, trans_b=True)`, `tensor_cuda.causal_softmax(scores)`, then `tensor_cuda.matmul(weights_grouped, v)`. Q and weights are grouped as `(B, kv_heads, (q_heads/kv_heads)*L, ...)`; K/V are not expanded.",
+scripts/trinity_nano_tc_parity.py:140:        self.norm = RMSNormTC(cfg.hidden_size, cfg.rms_norm_eps)
+scripts/apa_mf2_item2_gate.py:6:(causal_softmax), SDPA grad-on (composed softmax), apa_quant_attention refine 1.0 and
+scripts/apa_sp4g_a2_model.py:36:    p=tc.causal_softmax(sc)
+external/kimi-swarm/gemma4_tc.py:52:    rms_norm_eps = 1e-6
+external/kimi-swarm/gemma4_tc.py:87:    if hasattr(tc, "rms_norm") and not tc.is_grad_enabled():
+external/kimi-swarm/gemma4_tc.py:89:        return tc.rms_norm(x.reshape([B, L * H, D]), wt, eps).reshape([B, L, H * D])
+external/kimi-swarm/gemma4_tc.py:391:        q = _head_rmsnorm(q_lin, self.q_norm_w, cfg.rms_norm_eps, B, L, H, D)
+external/kimi-swarm/gemma4_tc.py:393:        k = _head_rmsnorm(kraw, self.k_norm_w, cfg.rms_norm_eps, B, L, KV, D)
+external/kimi-swarm/gemma4_tc.py:413:            v = _head_rmsnorm(vsrc, None, cfg.rms_norm_eps, B, L, KV, D)
+external/kimi-swarm/gemma4_tc.py:484:                if hasattr(tc, "causal_softmax"):
+external/kimi-swarm/gemma4_tc.py:485:                    p = tc.causal_softmax(
+external/kimi-swarm/gemma4_tc.py:523:                if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
+external/kimi-swarm/gemma4_tc.py:524:                    p_ = tc.causal_softmax(sc)
+external/kimi-swarm/gemma4_tc.py:564:    Flow: RMSNorm(x) * scale -> matmul(gate) -> softmax -> topk -> renorm
+external/kimi-swarm/gemma4_tc.py:584:        # Top-k via numpy (TensorCUDA may not have topk)
+external/kimi-swarm/gemma4_tc.py:746:        e = cfg.rms_norm_eps
+external/kimi-swarm/gemma4_tc.py:793:        self.norm = RMSNormTC(cfg.hidden_dim, cfg.rms_norm_eps)

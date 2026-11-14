@@ -1,0 +1,489 @@
+{
+ "e2_central_difference": [
+  {
+   "p": -1.5,
+   "max_rel": 1.5445068596251097e-10,
+   "passed": true
+  },
+  {
+   "p": -0.5,
+   "max_rel": 8.779258415864075e-11,
+   "passed": true
+  },
+  {
+   "p": 0.5,
+   "max_rel": 2.875554609242196e-11,
+   "passed": true
+  },
+  {
+   "p": 2.0,
+   "max_rel": 7.689450927846527e-12,
+   "passed": true
+  },
+  {
+   "p": 3.0,
+   "max_rel": 3.962933684912665e-11,
+   "passed": true
+  }
+ ],
+ "e3_vjp_central_difference": [
+  {
+   "cls": "LayerNorm",
+   "case": "regular",
+   "max_rel_to_scale": 3.805077172489423e-10,
+   "passed": true,
+   "y_ptp": 6.444343921048681,
+   "dx_ptp": 3.4057866681706694
+  },
+  {
+   "cls": "LayerNorm",
+   "case": "near_eps",
+   "max_rel_to_scale": 1.8082586706113092e-09,
+   "passed": true,
+   "y_ptp": 4.527573102682478,
+   "dx_ptp": 855.2895230047461
+  },
+  {
+   "cls": "RMSNorm",
+   "case": "regular",
+   "max_rel_to_scale": 3.664690620215592e-10,
+   "passed": true,
+   "y_ptp": 6.54601664309147,
+   "dx_ptp": 3.457770654885066
+  },
+  {
+   "cls": "RMSNorm",
+   "case": "near_eps",
+   "max_rel_to_scale": 4.366086392854599e-10,
+   "passed": true,
+   "y_ptp": 4.628735072455781,
+   "dx_ptp": 2704.908930514529
+  },
+  {
+   "cls": "BatchNorm1D",
+   "case": "regular",
+   "max_rel_to_scale": 5.300219410514123e-10,
+   "passed": true,
+   "y_ptp": 4.013392791204546,
+   "dx_ptp": 1.9301735550917276
+  },
+  {
+   "cls": "BatchNorm1D",
+   "case": "near_eps",
+   "max_rel_to_scale": 4.209078128998183e-09,
+   "passed": true,
+   "y_ptp": 2.823266963512328,
+   "dx_ptp": 476.0325357417562
+  },
+  {
+   "cls": "InstanceNorm2D",
+   "case": "regular",
+   "max_rel_to_scale": 8.290199778118467e-10,
+   "passed": true,
+   "y_ptp": 3.469957414403944,
+   "dx_ptp": 1.7381854340482006
+  },
+  {
+   "cls": "InstanceNorm2D",
+   "case": "near_eps",
+   "max_rel_to_scale": 2.354844360471047e-09,
+   "passed": true,
+   "y_ptp": 2.4536426862749945,
+   "dx_ptp": 433.3726423036777
+  },
+  {
+   "cls": "GroupNorm",
+   "case": "regular",
+   "max_rel_to_scale": 7.37282703930872e-10,
+   "passed": true,
+   "y_ptp": 3.6339687536684613,
+   "dx_ptp": 1.8608627078835163
+  },
+  {
+   "cls": "GroupNorm",
+   "case": "near_eps",
+   "max_rel_to_scale": 1.4151895559153886e-09,
+   "passed": true,
+   "y_ptp": 2.5696167963266014,
+   "dx_ptp": 449.3409234629274
+  }
+ ],
+ "e3_hand_value": {
+  "value": [
+   [
+    -0.9999950000374997,
+    0.9999950000374997
+   ]
+  ],
+  "passed": true
+ },
+ "e2_emulated_predictions": {
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float16-p-1.5]": {
+   "baseline": {
+    "predicted": "fail",
+    "knife_edge": false,
+    "finite": false,
+    "worst_slack_over_tol": null
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.39363085699148775
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float16-p-0.5]": {
+   "baseline": {
+    "predicted": "fail",
+    "knife_edge": false,
+    "finite": false,
+    "worst_slack_over_tol": null
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.41841216047074437
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float16-p+0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.28560090396529747
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.28560090396529747
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float16-p+2]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float16-p+3]": {
+   "baseline": {
+    "predicted": "fail",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": -1.9315087830673037
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.007456038007329556
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[bfloat16-p-1.5]": {
+   "baseline": {
+    "predicted": "fail",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": -0.42426990901701583
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.22615414615213617
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[bfloat16-p-0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.3594620664777425
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.3594620664777425
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[bfloat16-p+0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.3622785204553222
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.3622785204553222
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[bfloat16-p+2]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[bfloat16-p+3]": {
+   "baseline": {
+    "predicted": "fail",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": -0.01410053105242879
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.24202042218265563
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float32-p-1.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9270533275742973
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9270533275742973
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float32-p-0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9618404663614287
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9618404663614287
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float32-p+0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9562568187073042
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9562568187073042
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float32-p+2]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float32-p+3]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.891385390164768
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.891385390164768
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p-1.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9270533275742973
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9270533275742973
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p-0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9618404663614287
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9618404663614287
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+0.5]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9562568187073042
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.9562568187073042
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+2]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 1.0
+   }
+  },
+  "tensor_cuda/tests/test_eng1.py::test_e2_pow_grad[float64-p+3]": {
+   "baseline": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.891385390164768
+   },
+   "candidate": {
+    "predicted": "pass",
+    "knife_edge": false,
+    "finite": true,
+    "worst_slack_over_tol": 0.891385390164768
+   }
+  }
+ },
+ "l55_witness": {
+  "x": 1.3671875,
+  "g": 0.699999988079071,
+  "p": 3.0,
+  "x_squared_exact": true,
+  "ordered_bits": "0x407b3880",
+  "reordered_bits": "0x407b387f",
+  "differ": true
+ },
+ "tolerances": {
+  "E2_RTOL": {
+   "float16": 0.0004892349243164062,
+   "bfloat16": 0.003907203674316406,
+   "float32": 9.5367431640625e-07
+  },
+  "E2_ATOL": {
+   "float16": 2.9802322387695312e-08,
+   "bfloat16": 4.591774807899561e-41,
+   "float32": 7.006492321624085e-46
+  },
+  "E2_RTOL_F32": 9.5367431640625e-07,
+  "E5_RTOL": 9.5367431640625e-07,
+  "U": {
+   "float16": 0.00048828125,
+   "bfloat16": 0.00390625,
+   "float32": 5.960464477539063e-08
+  },
+  "SUB_HALF": {
+   "float16": 2.9802322387695312e-08,
+   "bfloat16": 4.591774807899561e-41,
+   "float32": 7.006492321624085e-46
+  },
+  "POWF_REL": 4.76837158203125e-07,
+  "E3_ROUNDINGS": {
+   "LayerNorm": {
+    "forward": [
+     11,
+     0
+    ],
+    "backward": [
+     22,
+     0
+    ]
+   },
+   "RMSNorm": {
+    "forward": [
+     7,
+     0
+    ],
+    "backward": [
+     14,
+     0
+    ]
+   },
+   "BatchNorm1D": {
+    "forward": [
+     11,
+     0
+    ],
+    "backward": [
+     22,
+     0
+    ]
+   },
+   "InstanceNorm2D": {
+    "forward": [
+     11,
+     0
+    ],
+    "backward": [
+     22,
+     0
+    ]
+   },
+   "GroupNorm": {
+    "forward": [
+     1,
+     11
+    ],
+    "backward": [
+     1,
+     22
+    ]
+   }
+  }
+ },
+ "passed": true
+}

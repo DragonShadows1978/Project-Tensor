@@ -1,0 +1,24 @@
+[
+  {
+    "id": "M15",
+    "kind": "module",
+    "file": "tensor_cuda/src/ops.cpp",
+    "decision": "bfloat16-only early cast before upstream multiplication",
+    "old": "a.v->accumulate_grad(nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt));",
+    "new": "a.v->accumulate_grad(dt == DType::BFloat16 ? nmul(g, nmuls(ew_pow(x32, p - 1.0), p).astype(dt)) : nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt)); // Prior art: DeMillo et al. 1978 mutation; REV1 F03 witness.",
+    "killers": [
+      "test_e2_pow_grad_nonpow2[bfloat16]"
+    ]
+  },
+  {
+    "id": "M16",
+    "kind": "module",
+    "file": "tensor_cuda/src/conv.cu",
+    "decision": "OW<=0 weakened only to OW<0",
+    "old": "if (oh <= 0 || ow <= 0)",
+    "new": "if (oh <= 0 || ow < 0) // Prior art: DeMillo et al. 1978 boundary mutation; REV1 F04.",
+    "killers": [
+      "test_e5_refuse_cpu[*-ow_zero]"
+    ]
+  }
+]

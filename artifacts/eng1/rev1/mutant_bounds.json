@@ -1,0 +1,310 @@
+[
+  {
+    "id": "M01",
+    "trace": "test_e1_refuse_empty_cpu[two_neg1]: _cpu_empty((0,)).reshape([-1,-1]) -> binding:1879 -> ops::reshape:827 -> NDArray::reshape loop:767-772.",
+    "registered_killers": [
+      "test_e1_refuse[two_neg1]",
+      "test_e1_refuse[three_neg1]",
+      "test_e1_refuse_empty_cpu[two_neg1]"
+    ],
+    "one_edit": true,
+    "error_bound": "Return instead of MSG_TWO; invalid shape [-1,0] returned for the zero-element witness.",
+    "comparison": "exact refusal message; zero slack"
+  },
+  {
+    "id": "M02",
+    "trace": "test_e1_infer_empty_cpu[from0_r2_p0]: reshape([-1,4]) -> binding -> ops::reshape -> resolved[infer_at]:787; inferred 1 not 0, final count refusal.",
+    "registered_killers": [
+      "test_e1_infer[*]",
+      "test_e1_infer_empty_cpu[*]",
+      "test_e1_view_shares_storage"
+    ],
+    "one_edit": true,
+    "error_bound": "For n=0,target[-1,4], inferred extent error is 1; count becomes 4 instead of 0, so a required successful reshape raises.",
+    "comparison": "exact success/shape/value; zero slack"
+  },
+  {
+    "id": "M03",
+    "trace": "test_e1_refuse_empty_cpu[zero_product]: reshape([0,-1]) -> loop -> known:779; mutation converts 0 to 1, n=0, resolved=[0,0], accepted.",
+    "registered_killers": [
+      "test_e1_refuse[zero_product]",
+      "test_e1_refuse_empty_cpu[zero_product]"
+    ],
+    "one_edit": true,
+    "error_bound": "Required zero-product refusal absent on empty input; [0,0] returned. With n=24 it raises a wrong count-mismatch message.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M04",
+    "trace": "test_e1_refuse_empty_cpu[other_negative]: reshape([-2,0]) -> loop:773-775; removed check permits product 0 and returns [-2,0].",
+    "registered_killers": [
+      "test_e1_refuse[other_negative]",
+      "test_e1_refuse[negative_with_neg1]",
+      "test_e1_refuse_empty_cpu[other_negative]"
+    ],
+    "one_edit": true,
+    "error_bound": "Required invalid-extent refusal absent; [-2,0] returned.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M05",
+    "trace": "test_e2_pow_grad[float16-p-1.5/-0.5]: _leaf.detach.requires_grad -> pow -> weighted sum backward -> pow_scalar lambda -> mutated if:866 false -> old half formula:872.",
+    "registered_killers": [
+      "test_e2_pow_grad[float16-p-1.5]",
+      "test_e2_pow_grad[float16-p-0.5]"
+    ],
+    "one_edit": true,
+    "numeric_witnesses": [
+      {
+        "p": -1.5,
+        "x": 0.00010001659393310547,
+        "weight": 5.960464477539063e-08,
+        "reference": -893.6988760040205,
+        "got": "-inf",
+        "abs_error": "inf",
+        "tolerance": 0.4372287317658067,
+        "ratio": "inf",
+        "fail": true,
+        "robust_lower_bound": "infinite: pre-weight half value exceeds 65504 by orders of magnitude even with 4-ulp powf error"
+      },
+      {
+        "p": -0.5,
+        "x": 1.0013580322265625e-05,
+        "weight": 6.103515625e-05,
+        "reference": -963.0880326776805,
+        "got": "-inf",
+        "abs_error": "inf",
+        "tolerance": 0.471176330579424,
+        "ratio": "inf",
+        "fail": true,
+        "robust_lower_bound": "infinite: pre-weight half value exceeds 65504 by orders of magnitude even with 4-ulp powf error"
+      }
+    ],
+    "comparison": "non-finite mutant versus finite float64 reference and finite registered tolerance"
+  },
+  {
+    "id": "M06",
+    "trace": "Each half test_e2_pow_grad reaches branch:866 true and mutated ew_pow exponent at ops.cpp:869; same lambda for all five p.",
+    "registered_killers": [
+      "test_e2_pow_grad[float16-*]",
+      "test_e2_pow_grad[bfloat16-*]"
+    ],
+    "one_edit": true,
+    "numeric_witnesses": [
+      {
+        "dtype": "float16",
+        "p": -1.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": -0.011570341010486547,
+        "error_lower_bound": 0.06938242089779482,
+        "tolerance": 5.690417230968092e-06,
+        "min_ratio": 12192.853016155903
+      },
+      {
+        "dtype": "float16",
+        "p": -0.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": -0.026997462357801944,
+        "error_lower_bound": 0.16189235516461778,
+        "tolerance": 1.3237903775741956e-05,
+        "min_ratio": 12229.455501956469
+      },
+      {
+        "dtype": "float16",
+        "p": 0.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 0.18898223650461363,
+        "error_lower_bound": 1.1332466649662587,
+        "tolerance": 9.248651249586753e-05,
+        "min_ratio": 12253.10193220762
+      },
+      {
+        "dtype": "float16",
+        "p": 2.0,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 14.0,
+        "error_lower_bound": 83.95208996661813,
+        "tolerance": 0.006849318742752075,
+        "min_ratio": 12256.99855995984
+      },
+      {
+        "dtype": "float16",
+        "p": 3.0,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 147.0,
+        "error_lower_bound": 881.4969449326123,
+        "tolerance": 0.0719175636768341,
+        "min_ratio": 12257.046816736894
+      },
+      {
+        "dtype": "bfloat16",
+        "p": -1.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": -0.011570341010486547,
+        "error_lower_bound": 0.06910562108710917,
+        "tolerance": 4.520767890926684e-05,
+        "min_ratio": 1528.6257280716893
+      },
+      {
+        "dtype": "bfloat16",
+        "p": -0.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": -0.026997462357801944,
+        "error_lower_bound": 0.16124644920325473,
+        "tolerance": 0.00010548458412162262,
+        "min_ratio": 1528.6257280716893
+      },
+      {
+        "dtype": "bfloat16",
+        "p": 0.5,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 0.18898223650461363,
+        "error_lower_bound": 1.1287251444227833,
+        "tolerance": 0.0007383920888513584,
+        "min_ratio": 1528.6257280716893
+      },
+      {
+        "dtype": "bfloat16",
+        "p": 2.0,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 14.0,
+        "error_lower_bound": 83.61712885926815,
+        "tolerance": 0.05470085144042969,
+        "min_ratio": 1528.6257280716893
+      },
+      {
+        "dtype": "bfloat16",
+        "p": 3.0,
+        "x": 7.0,
+        "upstream": 1.0,
+        "reference": 147.0,
+        "error_lower_bound": 877.9798530223155,
+        "tolerance": 0.5743589401245117,
+        "min_ratio": 1528.6257280716893
+      }
+    ],
+    "comparison": "each lower bound exceeds tolerance; min ratio 1528.6257280716893"
+  },
+  {
+    "id": "M07",
+    "trace": "test_e2_pow_grad[float16-p-1.5/-0.5] reaches same lambda:869, but casts unweighted p*x^(p-1) before upstream multiply.",
+    "registered_killers": [
+      "test_e2_pow_grad[float16-p-1.5]",
+      "test_e2_pow_grad[float16-p-0.5]"
+    ],
+    "one_edit": true,
+    "numeric_witnesses": [
+      {
+        "p": -1.5,
+        "x": 0.00010001659393310547,
+        "weight": 5.960464477539063e-08,
+        "reference": -893.6988760040205,
+        "got": "-inf",
+        "abs_error": "inf",
+        "tolerance": 0.4372287317658067,
+        "ratio": "inf",
+        "fail": true,
+        "robust_lower_bound": "infinite: pre-weight half value exceeds 65504 by orders of magnitude even with 4-ulp powf error"
+      },
+      {
+        "p": -0.5,
+        "x": 1.0013580322265625e-05,
+        "weight": 6.103515625e-05,
+        "reference": -963.0880326776805,
+        "got": "-inf",
+        "abs_error": "inf",
+        "tolerance": 0.471176330579424,
+        "ratio": "inf",
+        "fail": true,
+        "robust_lower_bound": "infinite: pre-weight half value exceeds 65504 by orders of magnitude even with 4-ulp powf error"
+      }
+    ],
+    "comparison": "non-finite mutant versus finite float64 reference and finite registered tolerance"
+  },
+  {
+    "id": "M08",
+    "trace": "test_e4_empty[rms_norm-last0-cpu]: child tc._C.rms_norm -> ops:460 -> tc::rms_norm -> empty guard at kernels.cu:7796.",
+    "registered_killers": [
+      "test_e4_empty[rms_norm-last0-cpu]",
+      "test_e4_empty[rms_norm-last0-f16-cpu]",
+      "test_e4_empty[rms_norm-last0-cuda]",
+      "test_e4_empty[rms_norm-rows0-cuda]"
+    ],
+    "one_edit": true,
+    "error_bound": "Rank drops 2 to 1: actual (0,), expected (2,0). Half witness likewise rank 3 to 1 and dtype remains float16.",
+    "comparison": "exact shape/dtype; zero slack"
+  },
+  {
+    "id": "M09",
+    "trace": "test_e4_empty[apa_blend_softmax-last0-cpu]: child binding:2538 -> tc::apa_blend_softmax -> moved division at 3861 before guard; S=0; matching C_UBSAN executes guarded code.",
+    "registered_killers": [
+      "test_e4_empty[apa_blend_softmax-last0-cpu]",
+      "test_e4_empty[apa_blend_softmax-last0-cuda]"
+    ],
+    "one_edit": true,
+    "error_bound": "UBSan child exits 1 with integer division by zero; expected child 0.",
+    "comparison": "exit exactly 0; zero slack"
+  },
+  {
+    "id": "M10",
+    "trace": "test_e4_refuse[topk-k1-last0-cpu]: Tensor.topk -> ops.cpp:975 -> topk_nd -> modified range condition at kernels.cu:5380; S=0,k=1.",
+    "registered_killers": [
+      "test_e4_refuse[topk-k1-last0-cpu]",
+      "test_e4_refuse[topk-k1-last0-cuda]",
+      "test_e4_refuse[topk-k4-last3-cuda]"
+    ],
+    "one_edit": true,
+    "error_bound": "No topk range refusal for S=0,k=1; mutated empty guard returns (2,1) arrays (nonempty allocation), instead of throwing.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M11",
+    "trace": "Each test_e5_refuse_cpu[*-oh_zero]: binding op -> corresponding ops wrapper -> tc::{im2col,col2im,avgpool2d,maxpool2d} -> make_dims:144; OH=0,OW=2 accepted by mutated comparison.",
+    "registered_killers": [
+      "test_e5_refuse_cpu[*-oh_zero]",
+      "test_e5_refuse_cpu[*-trunc_gap]"
+    ],
+    "one_edit": true,
+    "error_bound": "At OH=0,OW=2, zero output accepted instead of the positive-extent refusal; eight registered IDs including trunc_gap.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M12",
+    "trace": "Each test_e5_refuse_cpu[*-ow_only] follows same four paths -> make_dims:144 with OH=4,OW=-2; deleted OW predicate.",
+    "registered_killers": [
+      "test_e5_refuse_cpu[*-ow_only]"
+    ],
+    "one_edit": true,
+    "error_bound": "At OH=4,OW=-2, invalid width accepted with zero batch; four registered IDs.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M13",
+    "trace": "Each test_e5_refuse_cpu[*-trunc_gap] -> make_dims floor_div lambda:138; a=-1,b=2, remainder!=0, removed decrement changes 0 to 1 output.",
+    "registered_killers": [
+      "test_e5_refuse_cpu[*-trunc_gap]"
+    ],
+    "one_edit": true,
+    "error_bound": "(-1)/2 truncates to 0 instead of floor -1: OH/OW become 1 instead of 0; four required refusals disappear.",
+    "comparison": "exact refusal/message; zero slack"
+  },
+  {
+    "id": "M14",
+    "trace": "test_e6_terrain_writes_nothing lists wo8a_ppm_pair in E6_WRITERS:627 -> nested pytest runs that unguarded CPU writer -> terrain.py:3960 registered write. Own exact copied-arm run executes it and fails at test_eng1.py:683.",
+    "registered_killers": [
+      "test_e6_terrain_writes_nothing"
+    ],
+    "one_edit": true,
+    "error_bound": "One extra source-tree .ppm, 921,615 bytes in own exact copied-arm CPU run; uall and stat maps change.",
+    "comparison": "exact maps; zero slack"
+  }
+]

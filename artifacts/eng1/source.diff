@@ -1,0 +1,280 @@
+diff --git a/tensor_cuda/src/conv.cu b/tensor_cuda/src/conv.cu
+index 7e2a79c2..b4e55aea 100644
+--- a/tensor_cuda/src/conv.cu
++++ b/tensor_cuda/src/conv.cu
+@@ -127,8 +127,29 @@ ConvDims make_dims(const Shape& xs, int kh, int kw, int sh, int sw, int ph, int
+   ConvDims d;
+   d.N = (int)xs[0]; d.C = (int)xs[1]; d.H = (int)xs[2]; d.W = (int)xs[3];
+   d.kh = kh; d.kw = kw; d.sh = sh; d.sw = sw; d.ph = ph; d.pw = pw;
+-  d.OH = (d.H + 2 * ph - kh) / sh + 1;
+-  d.OW = (d.W + 2 * pw - kw) / sw + 1;
++  // ENG1 E5 (POOL-OHW1): refuse OH <= 0 or OW <= 0 (a kernel larger than the padded input) before any caller
++  // allocates or launches; this covers every caller (im2col, col2im, avgpool2d, avgpool2d_bwd, maxpool2d). The
++  // quotient rounds toward negative infinity: C++ '/' truncates toward zero, which gave OH = 1 when the kernel
++  // exceeded the padded input by less than the stride (H = 3, kh = 4, sh = 2). For every non-negative numerator, i.e.
++  // every geometry that passes, floor and truncation agree, so accepted outputs are unchanged.
++  // Prior art: PyTorch's pooling_output_shape (div_rtn, round toward negative infinity) and its "Output size is too
++  // small" refusal (unverified -- lead to check: "ATen Pool.h pooling_output_shape div_rtn"). Taken: the floor
++  // quotient and the positive-output rule. Ours: the message.
++  auto floor_div = [](int64_t a, int64_t b) {
++    int64_t q = a / b;
++    if (a % b != 0 && ((a < 0) != (b < 0))) --q;
++    return q;
++  };
++  const int64_t oh = floor_div((int64_t)d.H + 2 * (int64_t)ph - kh, sh) + 1;
++  const int64_t ow = floor_div((int64_t)d.W + 2 * (int64_t)pw - kw, sw) + 1;
++  if (oh <= 0 || ow <= 0)
++    throw std::runtime_error(
++        "conv/pool: input extents (H, W) = (" + std::to_string(d.H) + ", " + std::to_string(d.W) +
++        "), kernel (" + std::to_string(kh) + ", " + std::to_string(kw) + "), stride (" + std::to_string(sh) + ", " +
++        std::to_string(sw) + ") and padding (" + std::to_string(ph) + ", " + std::to_string(pw) +
++        ") give output extents (" + std::to_string(oh) + ", " + std::to_string(ow) + "); both must be positive");
++  d.OH = (int)oh;
++  d.OW = (int)ow;
+   return d;
+ }
+ }  // namespace
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 2aefbb8e..92435ef3 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -755,11 +755,42 @@ NDArray NDArray::astype(DType dt) const {
+   return out;
+ }
+ NDArray NDArray::reshape(const Shape& new_shape) const {
+-  if (numel_of(new_shape) != numel()) {
++  // ENG1 E1 (RESHAPE-NEG1): at most one -1, inferred as numel / product(other extents). Refused, each with its own
++  // message: two or more -1; any other negative extent; a -1 when the other extents' product is 0 (ambiguous); a
++  // non-integer inferred extent. A shape without -1 keeps the old check and message; storage sharing is unchanged.
++  // Prior art: PyTorch's reshape/view -1 inference (at::infer_size, ATen InferSize.h) and NumPy's reshape -1 rule
++  // (unverified -- lead to check: "ATen InferSize.h infer_size_impl", "numpy reshape unknown dimension"). Taken: the
++  // one -1 rule and the refusal set. Ours: the messages and their order (negative extents, then the -1 count).
++  Shape resolved = new_shape;
++  int infer_at = -1;
++  for (size_t d = 0; d < new_shape.size(); ++d) {
++    const int64_t e = new_shape[d];
++    if (e == -1) {
++      if (infer_at >= 0)
++        throw std::runtime_error("reshape: only one dimension can be inferred (-1)");
++      infer_at = static_cast<int>(d);
++    } else if (e < 0) {
++      throw std::runtime_error("reshape: invalid shape dimension " + std::to_string(e));
++    }
++  }
++  if (infer_at >= 0) {
++    Shape others = new_shape;
++    others[infer_at] = 1;
++    const int64_t known = numel_of(others);  // >= 0 here: no other extent is negative
++    if (known == 0)
++      throw std::runtime_error("reshape: cannot infer -1 when the other extents' product is 0");
++    const int64_t n = numel();
++    if (n % known != 0)
++      throw std::runtime_error("reshape: cannot infer -1: " + std::to_string(n) +
++                               " elements are not divisible by the other extents' product " +
++                               std::to_string(known));
++    resolved[infer_at] = n / known;
++  }
++  if (numel_of(resolved) != numel()) {
+     throw std::runtime_error("reshape: element count mismatch");
+   }
+   NDArray out = *this;  // shares storage
+-  out.shape = new_shape;
++  out.shape = resolved;
+   return out;
+ }
+ 
+@@ -3823,8 +3854,12 @@ NDArray apa_blend_softmax(const NDArray& bulk, const NDArray& rank,
+   // itself for the (rare, non-4D) case nd<2 so BOUNDED still degrades
+   // safely rather than dividing by zero.
+   int64_t Lchunk = (nd >= 2) ? bulk.shape[nd-2] : (bulk.numel() / (S > 0 ? S : 1));
+-  int64_t rows = bulk.numel() / S;
+   NDArray out(bulk.shape, bulk.dtype, bulk.device);
++  // ENG1 E4 (DIV0-LAST1): a zero last extent or zero rows returns the empty result before the division below and
++  // with no launch (it was a host division by zero, undefined behaviour). Prior art: PyTorch softmax on an empty
++  // dimension returns an empty tensor of the input's shape (unverified -- lead to check: "torch.softmax empty").
++  if (S == 0 || bulk.numel() == 0) return out;
++  int64_t rows = bulk.numel() / S;
+   if (rows > 0) {
+     // Compile-time dispatch (A5 WCOOP pattern): the legacy Lq<=0 sentinel
+     // path runs the BOUNDED=false instantiation, codegen-identical to the
+@@ -5337,10 +5372,18 @@ __global__ void topk_kernel(const T* a, T* vals, int64_t* idxs,
+ std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest) {
+   int nd = a.ndim();
+   int64_t S = a.shape[nd - 1];
+-  int64_t outer = a.numel() / S;
++  // ENG1 E4 (DIV0-LAST1): k outside [0, S] is refused (this branch had no refusal: k > S returned sentinel values and
++  // index -1); a zero last extent, zero rows or k = 0 returns empty values and indices of shape (..., k) before the
++  // division below and with no launch. Prior art: PyTorch topk's "selected index k out of range" check
++  // (k >= 0 && k <= size) and its empty results for k = 0 (unverified -- lead to check: "torch.topk k out of range").
++  if (k < 0 || (int64_t)k > S)
++    throw std::runtime_error("topk: selected index k=" + std::to_string(k) +
++                             " out of range for last extent " + std::to_string(S));
+   Shape os = a.shape; os[nd - 1] = k;
+   NDArray vals(os, a.dtype, a.device);
+   NDArray idxs(os, DType::Int64, a.device);
++  if (S == 0 || k == 0 || a.numel() == 0) return {vals, idxs};
++  int64_t outer = a.numel() / S;
+   if (outer > 0) {
+     DISPATCH_FLOAT(a.dtype, T, {
+       topk_kernel<T><<<nblk(outer), kT>>>(static_cast<T*>(a.data_ptr()),
+@@ -7726,9 +7769,12 @@ NDArray causal_softmax(const NDArray& scores) {
+   int64_t L = scores.shape[scores.ndim() - 2];
+   int64_t S = scores.shape[scores.ndim() - 1];
+   if (S < L) throw std::runtime_error("causal_softmax: S < L (queries outnumber keys)");
+-  int64_t rows = scores.numel() / S;
+   NDArray out(scores.shape, scores.dtype, scores.device);
+-  if (rows == 0 || S == 0) return out;
++  // ENG1 E4 (DIV0-LAST1): the empty-result guard now runs before the division (S = 0 was a host division by zero,
++  // undefined behaviour); the S < L refusal above still runs first, so S = 0 is empty only when L = 0. Prior art:
++  // PyTorch softmax on an empty dimension (unverified -- lead to check: "torch.softmax empty").
++  if (S == 0 || scores.numel() == 0) return out;
++  int64_t rows = scores.numel() / S;
+   DISPATCH_FLOAT(scores.dtype, T, {
+     causal_softmax_kernel<T><<<(int)rows, kT>>>(
+         static_cast<T*>(scores.data_ptr()), static_cast<T*>(out.data_ptr()), L, S);
+@@ -7743,9 +7789,12 @@ NDArray rms_norm(const NDArray& x, const NDArray& w, double eps, DType out_dtype
+     throw std::runtime_error("rms_norm expects fp32 weight (chain stores fp32)");
+   int64_t D = x.shape[x.ndim() - 1];
+   if (w.numel() != D) throw std::runtime_error("rms_norm weight/dim mismatch");
+-  int64_t rows = x.numel() / D;
+   NDArray out(x.shape, out_dtype, x.device);
+-  if (rows == 0 || D == 0) return out;
++  // ENG1 E4 (DIV0-LAST1): the empty-result guard now runs before the division (D = 0 was a host division by zero,
++  // undefined behaviour). Prior art: PyTorch's RMSNorm/layer norms return an empty tensor of the input's shape for
++  // empty input (unverified -- lead to check: "torch.nn.functional.rms_norm empty").
++  if (D == 0 || x.numel() == 0) return out;
++  int64_t rows = x.numel() / D;
+   DISPATCH_FLOAT(x.dtype, XT, {
+     DISPATCH_FLOAT(out_dtype, OT, {
+       rms_norm_kernel<XT, OT><<<(int)rows, kT>>>(
+diff --git a/tensor_cuda/src/ops.cpp b/tensor_cuda/src/ops.cpp
+index 86ec3218..3d18a4a3 100644
+--- a/tensor_cuda/src/ops.cpp
++++ b/tensor_cuda/src/ops.cpp
+@@ -855,6 +855,20 @@ Tensor pow_scalar(const Tensor& a, double p) {
+   NDArray out = ew_pow(a.data(), p);
+   return Tensor::from_op(out, {a}, "pow", [a, p](const NDArray& g) {
+     // d/dx x^p = p * x^(p-1)
++    // ENG1 E2 (FP16-POW1): for float16/bfloat16 inputs, x^(p-1) overflowed in the input dtype (p = -0.5, x = 1e-5:
++    // 3.2e7 > 65504). Those inputs now compute g * p * x^(p-1) in float32 per element, with the same operations in
++    // the same order as below, and cast the product to the input dtype once. float32 runs the unchanged line below.
++    // Prior art: mixed-precision training's float32 math for half-precision tensors (Micikevicius et al., 2018,
++    // "Mixed Precision Training", ICLR; unverified -- lead to check) and PyTorch's opmath_type upcast in its pow
++    // backward kernels (unverified -- lead to check: "pow_tensor_scalar_backward opmath"). Taken: compute wide, round
++    // once. Ours: the choice of the engine's existing astype/ew_pow/nmuls/nmul ops for it.
++    const DType dt = a.data().dtype;
++    if (dt == DType::Float16 || dt == DType::BFloat16) {
++      NDArray x32 = a.data().astype(DType::Float32);
++      NDArray g32 = g.astype(DType::Float32);
++      a.v->accumulate_grad(nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt));
++      return;
++    }
+     a.v->accumulate_grad(nmul(g, nmuls(ew_pow(a.data(), p - 1.0), p)));
+   });
+ }
+diff --git a/tensor_cuda/tests/test_terrain_render.py b/tensor_cuda/tests/test_terrain_render.py
+index c6b33fad..fe24a879 100644
+--- a/tensor_cuda/tests/test_terrain_render.py
++++ b/tensor_cuda/tests/test_terrain_render.py
+@@ -2855,7 +2855,7 @@ def test_terrain_render_wo12g_existing_object_reference_regression():
+         )
+ 
+ 
+-def test_terrain_render_wo12g_cpu_repro_and_receipts():
++def test_terrain_render_wo12g_cpu_repro_and_receipts(tmp_path):
+     """G-LEAK CPU receipt: historical leak table and corrected zero-leak sweep."""
+     after_counts = {}
+     receipts = {}
+@@ -2882,8 +2882,8 @@ def test_terrain_render_wo12g_cpu_repro_and_receipts():
+             receipts["after"] = after_rgb
+ 
+     repo_root = Path(__file__).resolve().parents[2]
+-    _write_ppm(repo_root / "artifacts" / "wo12g_before.ppm", receipts["before"])
+-    _write_ppm(repo_root / "artifacts" / "wo12g_after.ppm", receipts["after"])
++    _write_ppm(tmp_path / "wo12g_before.ppm", receipts["before"])
++    _write_ppm(tmp_path / "wo12g_after.ppm", receipts["after"])
+     print(
+         "WO-12G CPU G-LEAK "
+         f"cases={len(_WO12G_CASES)} worst_pre_fix="
+@@ -3838,7 +3838,7 @@ def test_terrain_render_grounding_plane_semantics():
+             assert actual_depth[0, 0] == np.float32(-1.0)
+ 
+ 
+-def test_terrain_render_wo9br2_ppm_ladder():
++def test_terrain_render_wo9br2_ppm_ladder(tmp_path):
+     """WO-9B-r2: front-lit real-mountain smooth-detail receipt ladder."""
+     _require_cuda()
+     # Keep this on the committed WO-8A mountain-fixture generation path rather
+@@ -3863,7 +3863,7 @@ def test_terrain_render_wo9br2_ppm_ladder():
+             detail=1,
+         )
+         assert np.unique(rgb.reshape(-1, 3), axis=0).shape[0] >= 128
+-        _write_ppm(repo_root / "artifacts" / f"wo9br2_{label}.ppm", rgb)
++        _write_ppm(tmp_path / f"wo9br2_{label}.ppm", rgb)
+ 
+ 
+ def _write_ppm(path, rgb):
+@@ -3876,7 +3876,7 @@ def _write_ppm(path, rgb):
+         handle.write(np.ascontiguousarray(rgb, dtype=np.uint8).tobytes())
+ 
+ 
+-def test_terrain_render_wo9e_ppm_receipts():
++def test_terrain_render_wo9e_ppm_receipts(tmp_path):
+     """WO-9E G6: below, edge-on, and unchanged-overhead P6 receipts."""
+     repo_root = Path(__file__).resolve().parents[2]
+     counts = {}
+@@ -3909,7 +3909,7 @@ def test_terrain_render_wo9e_ppm_receipts():
+             assert plane_count == 0
+             np.testing.assert_array_equal(rgb, baseline_rgb)
+             np.testing.assert_array_equal(depth, baseline_depth)
+-        _write_ppm(repo_root / "artifacts" / f"wo9e_{label}.ppm", rgb)
++        _write_ppm(tmp_path / f"wo9e_{label}.ppm", rgb)
+     print(
+         "WO-9E G6 pixels "
+         + " ".join(
+@@ -3919,7 +3919,7 @@ def test_terrain_render_wo9e_ppm_receipts():
+     )
+ 
+ 
+-def test_terrain_render_wo9ae_ppm_receipts():
++def test_terrain_render_wo9ae_ppm_receipts(tmp_path):
+     """G6: tank-ish front, half-ridge, and 200-voxel engine receipts."""
+     repo_root = Path(__file__).resolve().parents[2]
+     for label in ("front", "ridge", "far"):
+@@ -3938,10 +3938,10 @@ def test_terrain_render_wo9ae_ppm_receipts():
+             candidate = info["object_hit"][0]
+             assert np.count_nonzero(candidate & object_winner) > 0
+             assert np.count_nonzero(candidate & ~object_winner) > 0
+-        _write_ppm(repo_root / "artifacts" / f"wo9ae_{label}.ppm", rgb)
++        _write_ppm(tmp_path / f"wo9ae_{label}.ppm", rgb)
+ 
+ 
+-def test_terrain_render_wo8a_ppm_pair():
++def test_terrain_render_wo8a_ppm_pair(tmp_path):
+     """G5: operator-facing same-camera noise-terrain blocky/smooth PPM pair.
+ 
+     The independent references deliberately generate this receipt so it is
+@@ -3957,11 +3957,11 @@ def test_terrain_render_wo8a_ppm_pair():
+         grid, camera, LIGHT_DIRECTION, PALETTE
+     )
+     repo_root = Path(__file__).resolve().parents[2]
+-    _write_ppm(repo_root / "artifacts" / "wo8a_blocky.ppm", blocky_rgb)
+-    _write_ppm(repo_root / "artifacts" / "wo8a_smooth.ppm", smooth_rgb)
++    _write_ppm(tmp_path / "wo8a_blocky.ppm", blocky_rgb)
++    _write_ppm(tmp_path / "wo8a_smooth.ppm", smooth_rgb)
+ 
+ 
+-def test_terrain_render_wo8c_ppm_triplet():
++def test_terrain_render_wo8c_ppm_triplet(tmp_path):
+     """WO-8C G5: same mountain-like terrain and camera at filter 0/1/2."""
+     grid = _noise_terrain((256, 256, 96))
+     camera = _camera_for_grid(grid.shape)
+@@ -3975,7 +3975,7 @@ def test_terrain_render_wo8c_ppm_triplet():
+             density_filter=density_filter,
+         )
+         _write_ppm(
+-            repo_root / "artifacts" / f"wo8c_filter{density_filter}.ppm",
++            tmp_path / f"wo8c_filter{density_filter}.ppm",
+             rgb,
+         )
+ 

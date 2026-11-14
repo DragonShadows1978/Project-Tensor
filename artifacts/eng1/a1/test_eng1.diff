@@ -1,0 +1,275 @@
+diff --git a/tensor_cuda/tests/test_eng1.py b/tensor_cuda/tests/test_eng1.py
+index 986a4866..7b07dc68 100644
+--- a/tensor_cuda/tests/test_eng1.py
++++ b/tensor_cuda/tests/test_eng1.py
+@@ -11,7 +11,7 @@ Prior art (unverified -- lead to check the exact citations):
+ - PyTorch's reshape/view -1 inference and its refusals (ATen InferSize.h, "only one dimension can be inferred");
+ - mixed-precision arithmetic: float32 math for half-precision tensors (Micikevicius et al., 2018, "Mixed Precision
+   Training", ICLR);
+-- rounding-error bounds of the form n*u (Higham, "Accuracy and Stability of Numerical Algorithms", 2nd ed. 2002,
++- accuracy targets (not error bounds) of the form n*u (Higham, "Accuracy and Stability of Numerical Algorithms", 2nd ed. 2002,
+   section 3.1, gamma_n); IEEE 754 unit roundoff u = 2^-p for a p-bit significand;
+ - the normalization VJP (Ioffe and Szegedy, 2015, batch norm; Ba, Kiros and Hinton, 2016, layer norm; Zhang and
+   Sennrich, 2019, RMSNorm; Wu and He, 2018, group norm), re-derived here;
+@@ -239,6 +239,29 @@ def test_e2_pow_grad(dtype, p):
+     np.testing.assert_allclose(got, ref, rtol=E2_RTOL[edt], atol=E2_ATOL[edt])
+ 
+ 
++# Prior art: IEEE 754 nearest-even, mixed precision (Micikevicius et al., 2018); REV1 coverage_gaps.py
++# supplies the bfloat16 witness. Ours: explicit non-power-of-two upstream IDs using the unchanged E2 derivation.
++E2_NONPOW2 = {
++    "float16": (0.1492919921875, 0.30078125, 3.0),
++    "bfloat16": (0.0002994537353515625, 0.30078125, 3.0),
++}
++
++
++@pytest.mark.parametrize("dtype", list(E2_NONPOW2))
++def test_e2_pow_grad_nonpow2(dtype):
++    xs, gs, p = E2_NONPOW2[dtype]
++    x, g = _leaf([xs], dtype), _const([gs], dtype)
++    x64, g64 = _np(x), _np(g)
++    np.testing.assert_array_equal(x64, [xs])
++    np.testing.assert_array_equal(g64, [gs])
++    assert math.frexp(gs)[0] != 0.5
++    (x.pow(p) * g).sum().backward()
++    assert x.grad.dtype == dtype
++    ref = e2_reference_grad(x64, g64, p)
++    # Same registered derivation: fp32 powf/products, then ONE dtype rounding, plus final subnormal allowance.
++    np.testing.assert_allclose(_np(x.grad), ref, rtol=E2_RTOL[dtype], atol=E2_ATOL[dtype])
++
++
+ @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+ @pytest.mark.parametrize("dtype", ["float32", "float64"])
+ def test_e2_pow_grad_bits(dtype, p):
+@@ -259,7 +282,7 @@ def test_e2_pow_grad_bits(dtype, p):
+ 
+ 
+ # ======================================================================================== E3: half census
+-# Measurement only (orders/ENG1 E3): each census test records its errors against a derived tolerance and passes
++# Measurement only (orders/ENG1 E3): frozen n*u numbers are accuracy targets (not error bounds); each test passes
+ # whenever the engine ran and the reference is valid; the census verdict is reported by the lead, not gated here.
+ E3_DTYPES = ["float16", "bfloat16"]
+ E3_CLASSES = ["LayerNorm", "RMSNorm", "BatchNorm1D", "InstanceNorm2D", "GroupNorm"]
+@@ -281,8 +304,8 @@ E3_ROUNDINGS = {
+ 
+ 
+ def e3_tolerance(cls, direction, dtype, scale):
+-    """Absolute tolerance n_d * u_d * scale + n_32 * u_32 * scale (gamma_n first order, Higham 2002 3.1), with scale =
+-    max |reference|; plus the dtype's subnormal half-spacing."""
++    """Frozen accuracy targets (not error bounds): n_d*u_d*scale + n_32*u_32*scale + subnormal half-spacing.
++    Longest-path n*u (Higham 2002) omits conditioning, cancellation and intermediate subnormal amplification."""
+     n_d, n_32 = E3_ROUNDINGS[cls][direction]
+     return (n_d * U[dtype] + n_32 * U["float32"]) * scale + SUB_HALF[dtype]
+ 
+@@ -351,6 +374,170 @@ def e3_reference(cls, x, w, b, g):
+     return y, dx.reshape(shape)
+ 
+ 
++
++# Prior art: IEEE 754-2019 roundTiesToEven; NumPy float16; bfloat16 high-word tie-to-even rounding.
++# Reverse-mode tape: Wengert (1964); operation order/accumulation from this engine's ops.cpp/autograd.cpp.
++# REV1 numerics.py supplies the forward emulation comparison. Ours: all five forward/VJP graphs, explicit
++# engine reduction ordering, and three-way census distances. External citations unverified -- lead to check.
++def e3_round(values, dtype):
++    """Load/compute in fp32, then store nearest-even in dtype; returned float64 represents stored bits exactly."""
++    a = np.asarray(values, dtype=np.float32)
++    if dtype == "float16":
++        return a.astype(np.float16).astype(np.float64)
++    if dtype == "float32":
++        return a.astype(np.float64)
++    assert dtype == "bfloat16"
++    bits = a.view(np.uint32).astype(np.uint64)
++    rounded = ((bits + 0x7fff + ((bits >> 16) & 1)) & 0xffff0000).astype(np.uint32)
++    # Preserve NaNs (including small payloads that would otherwise round to infinity).
++    rounded = np.where(np.isnan(a), np.uint32(0x7fc00000), rounded).astype(np.uint32)
++    return rounded.view(np.float32).astype(np.float64)
++
++
++def _e3_sum(values, axes, dtype):
++    """kernels.cu reduce_impl: fp32 256-lane trailing tree, otherwise serial reduced-coordinate order."""
++    a = np.asarray(values, dtype=np.float32)
++    axes = tuple(sorted(d % a.ndim for d in axes))
++    kept = tuple(d for d in range(a.ndim) if d not in axes)
++    rows = a.transpose(kept + axes).reshape(math.prod(a.shape[d] for d in kept), -1)
++    if axes == tuple(range(min(axes), a.ndim)) and rows.shape[1] > 1:
++        lanes = np.zeros((rows.shape[0], 256), dtype=np.float32)
++        for j in range(0, rows.shape[1], 256):
++            chunk = rows[:, j:j + 256]
++            lanes[:, :chunk.shape[1]] += chunk
++        for off in (128, 64, 32, 16, 8, 4, 2, 1):
++            lanes[:, :off] += lanes[:, off:2 * off]
++        total = lanes[:, 0]
++    else:
++        total = np.zeros(rows.shape[0], dtype=np.float32)
++        for j in range(rows.shape[1]):
++            total += rows[:, j]
++    shape = tuple(1 if d in axes else a.shape[d] for d in range(a.ndim))
++    return e3_round(total.reshape(shape), dtype)
++
++
++class _E3Arithmetic:
++    """Small CPU-only tape of exactly the primitive operations used by the registered norm graphs."""
++    def __init__(self, value, dtype, parents=(), vjp=None, requires_grad=True):
++        self.value, self.dtype = e3_round(value, dtype), dtype
++        self.parents, self.vjp, self.grad = parents, vjp, None
++        self.requires_grad = requires_grad
++
++    def accumulate(self, grad):
++        if not self.requires_grad:
++            return
++        shape = (1,) * (grad.ndim - self.value.ndim) + self.value.shape
++        axes = tuple(d for d, (n, m) in enumerate(zip(grad.shape, shape)) if m == 1 and n > 1)
++        if axes:
++            grad = _e3_sum(grad, axes, self.dtype)
++        grad = grad.reshape(self.value.shape)
++        self.grad = grad if self.grad is None else e3_round(self.grad + grad, self.dtype)
++
++    def binary(self, other, op):
++        assert self.dtype == other.dtype
++        a, b, dt = self.value, other.value, self.dtype
++        def vjp(g):
++            if op == "mul":
++                self.accumulate(e3_round(g * b, dt))
++                other.accumulate(e3_round(g * a, dt))
++            else:
++                self.accumulate(g)
++                other.accumulate(g if op == "add" else e3_round(-g, dt))
++        value = a * b if op == "mul" else a + b if op == "add" else a - b
++        return _E3Arithmetic(value, dt, (self, other), vjp)
++
++    def __mul__(self, other): return self.binary(other, "mul")
++    def __sub__(self, other): return self.binary(other, "sub")
++    def __add__(self, other): return self.binary(other, "add")
++
++    def scalar(self, scalar, multiply=False):
++        scalar = float(np.float32(scalar))  # ew_scalar's float parameter, not a half scalar
++        vjp = lambda g: self.accumulate(e3_round(g * scalar, self.dtype) if multiply else g)
++        value = self.value * scalar if multiply else self.value + scalar
++        return _E3Arithmetic(value, self.dtype, (self,), vjp)
++
++    def sum(self, axes):
++        def vjp(g):
++            self.accumulate(e3_round(np.zeros_like(self.value) + g, self.dtype))
++        return _E3Arithmetic(_e3_sum(self.value, axes, self.dtype), self.dtype, (self,), vjp)
++
++    def mean(self, axes):
++        return self.sum(axes).scalar(1.0 / math.prod(self.value.shape[d] for d in axes), multiply=True)
++
++    def reshape(self, shape):
++        return _E3Arithmetic(self.value.reshape(shape), self.dtype, (self,),
++                             lambda g: self.accumulate(g.reshape(self.value.shape)))
++
++    def cast(self, dtype):
++        return _E3Arithmetic(self.value, dtype, (self,), lambda g: self.accumulate(e3_round(g, self.dtype)))
++
++    def pow(self, p):
++        def vjp(g):
++            # E2: widened power, scalar multiply, upstream multiply, then one final half cast.
++            power = e3_round(np.power(self.value, np.float32(p - 1)), "float32")
++            scaled = e3_round(power * float(np.float32(p)), "float32")
++            self.accumulate(e3_round(e3_round(g * scaled, "float32"), self.dtype))
++        # Correctly rounded fp32 power models honest arithmetic, not CUDA powf's implementation error.
++        value = e3_round(np.power(self.value, np.float32(p)), "float32")
++        return _E3Arithmetic(value, self.dtype, (self,), vjp)
++
++    def backward(self):
++        order, visited = [], set()
++        def visit(node):
++            if node in visited or not node.requires_grad:
++                return
++            visited.add(node)
++            for parent in node.parents:
++                visit(parent)
++            order.append(node)
++        visit(self)
++        self.accumulate(np.ones_like(self.value))
++        for node in reversed(order):
++            if node.vjp is not None and node.grad is not None:
++                node.vjp(node.grad)
++
++
++def e3_emulation(cls, dtype, x, w, b, g):
++    """Same nn.py sequence and ops.cpp VJPs, rounded at every primitive/storage/gradient accumulation.
++
++    CPU IEEE model only: no CUDA context and no claim of bit identity to CUDA powf. Reductions follow kernels.cu.
++    Batch/Instance/GroupNorm compute separate means for var(), as their source does; LayerNorm reuses xc.
++    """
++    leaf = _E3Arithmetic(x, dtype)
++    work = leaf.cast("float32") if cls == "GroupNorm" else leaf
++    shape = work.value.shape
++    if cls == "GroupNorm":
++        work = work.reshape((shape[0], 2, -1))
++    axes = (-1,) if cls in ("RMSNorm", "LayerNorm", "GroupNorm") else _e3_axes(cls, shape)
++    if cls == "RMSNorm":
++        centered, stat = work, (work * work).mean(axes)
++    else:
++        mean = work.mean(axes)
++        centered = work - mean
++        variance_input = centered if cls == "LayerNorm" else work - work.mean(axes)
++        stat = (variance_input * variance_input).mean(axes)
++    normalized = centered * stat.scalar(E3_EPS[cls]).pow(-0.5)
++    if cls == "GroupNorm":
++        normalized = normalized.reshape(shape)
++    _, bshape = _affine_shape(cls, shape)
++    weight = _E3Arithmetic(w.reshape(bshape), work.dtype, requires_grad=False)
++    y = normalized * weight
++    if b is not None:
++        y = y + _E3Arithmetic(b.reshape(bshape), work.dtype, requires_grad=False)
++    if cls == "GroupNorm":
++        y = y.cast(dtype)
++    upstream = _E3Arithmetic(g, dtype, requires_grad=False)
++    (y * upstream).sum(tuple(range(len(shape)))).backward()
++    return y.value, leaf.grad
++
++
++def e3_distance(a, b):
++    """Maximum absolute distance with explicit nonfinite counts; never hide a matching infinity/NaN."""
++    if not np.all(np.isfinite(a)) or not np.all(np.isfinite(b)):
++        return None
++    return float(np.max(np.abs(a - b)))
++
++
+ def _e3_layer(cls, dtype):
+     shape = E3_SHAPE[cls]
+     C, _ = _affine_shape(cls, shape)
+@@ -374,12 +561,14 @@ def e3_measure(cls, dtype, case, direction):
+     y = layer(x)
+     assert tuple(y.shape) == E3_SHAPE[cls] and y.dtype == dtype
+     ref_y, ref_dx = e3_reference(cls, x64, w64, b64, g64)
++    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
++        emu_y, emu_dx = e3_emulation(cls, dtype, x64, w64, b64, g64)
+     if direction == "forward":
+-        got, ref = _np(y), ref_y
++        got, ref, emu = _np(y), ref_y, emu_y
+     else:
+         (y * g).sum().backward()
+         assert x.grad.dtype == dtype
+-        got, ref = _np(x.grad), ref_dx
++        got, ref, emu = _np(x.grad), ref_dx, emu_dx
+     assert np.all(np.isfinite(ref)) and np.ptp(ref) > 0  # L19
+     scale = float(np.max(np.abs(ref)))
+     tol = e3_tolerance(cls, direction, dtype, scale)
+@@ -389,7 +578,14 @@ def e3_measure(cls, dtype, case, direction):
+     xr = x64.reshape(x64.shape[0], 2, -1, *x64.shape[2:]) if cls == "GroupNorm" else x64
+     stat = (xr * xr).mean(axis=axes) if cls == "RMSNorm" else xr.var(axis=axes)
+     return dict(cls=cls, dtype=dtype, case=case, direction=direction, finite=finite, max_abs_err=err,
+-                tolerance=tol, scale=scale, within=bool(finite and err <= tol),
++                tolerance=tol, target_label="accuracy targets (not error bounds)",
++                engine_error_vs_float64=e3_distance(got, ref),
++                emulation_error_vs_float64=e3_distance(emu, ref),
++                engine_distance_from_emulation=e3_distance(got, emu),
++                engine_nonfinite=int(np.count_nonzero(~np.isfinite(got))),
++                emulation_nonfinite=int(np.count_nonzero(~np.isfinite(emu))),
++                emulation_rounding="IEEE 754 nearest-even per primitive; fp32 reductions/pow, dtype stores",
++                scale=scale, within=bool(finite and err <= tol),
+                 ratio=(err / tol if math.isfinite(err) else None), eps=E3_EPS[cls],
+                 stored_stat_min=float(np.min(stat)), stored_stat_max=float(np.max(stat)))
+ 
+@@ -492,6 +688,7 @@ E5_REFUSE = {  # x shape (N = 0: zero bytes), kh, kw, sh, sw, ph, pw, expected O
+     "both_negative": ((0, 1, 2, 2), 5, 5, 1, 1, 0, 0, -2, -2),
+     "oh_zero": ((0, 1, 2, 2), 3, 1, 1, 1, 0, 0, 0, 2),
+     "ow_only": ((0, 1, 6, 2), 3, 5, 1, 1, 0, 0, 4, -2),
++    "ow_zero": ((0, 1, 6, 2), 3, 3, 1, 1, 0, 0, 4, 0),  # isolate OW<=0 with OH>0 (REV1 F04)
+     "trunc_gap": ((0, 1, 3, 3), 4, 4, 2, 2, 0, 0, 0, 0),
+     "padded": ((0, 2, 2, 2), 6, 6, 1, 1, 1, 1, -1, -1),
+ }

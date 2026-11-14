@@ -1,0 +1,11 @@
+--- tensor_cuda/src/ops.cpp
++++ M15/tensor_cuda/src/ops.cpp
+@@ -866,7 +866,7 @@
+     if (dt == DType::Float16 || dt == DType::BFloat16) {
+       NDArray x32 = a.data().astype(DType::Float32);
+       NDArray g32 = g.astype(DType::Float32);
+-      a.v->accumulate_grad(nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt));
++      a.v->accumulate_grad(dt == DType::BFloat16 ? nmul(g, nmuls(ew_pow(x32, p - 1.0), p).astype(dt)) : nmul(g32, nmuls(ew_pow(x32, p - 1.0), p)).astype(dt)); // Prior art: DeMillo et al. 1978 mutation; REV1 F03 witness.
+       return;
+     }
+     a.v->accumulate_grad(nmul(g, nmuls(ew_pow(a.data(), p - 1.0), p)));

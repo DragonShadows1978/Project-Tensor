@@ -1,0 +1,20 @@
+# Registered mutant errors and witness reachability
+
+Numeric bounds are CPU reasoning/emulation, not GPU kills. Non-numeric checks have exact equality (zero slack).
+
+| Mutant | Error versus frozen witness tolerance | Executed path |
+|---|---|---|
+| M01 | Return instead of MSG_TWO; invalid shape [-1,0] returned for the zero-element witness. exact refusal message; zero slack. | test_e1_refuse_empty_cpu[two_neg1]: _cpu_empty((0,)).reshape([-1,-1]) -> binding:1879 -> ops::reshape:827 -> NDArray::reshape loop:767-772. |
+| M02 | For n=0,target[-1,4], inferred extent error is 1; count becomes 4 instead of 0, so a required successful reshape raises. exact success/shape/value; zero slack. | test_e1_infer_empty_cpu[from0_r2_p0]: reshape([-1,4]) -> binding -> ops::reshape -> resolved[infer_at]:787; inferred 1 not 0, final count refusal. |
+| M03 | Required zero-product refusal absent on empty input; [0,0] returned. With n=24 it raises a wrong count-mismatch message. exact refusal/message; zero slack. | test_e1_refuse_empty_cpu[zero_product]: reshape([0,-1]) -> loop -> known:779; mutation converts 0 to 1, n=0, resolved=[0,0], accepted. |
+| M04 | Required invalid-extent refusal absent; [-2,0] returned. exact refusal/message; zero slack. | test_e1_refuse_empty_cpu[other_negative]: reshape([-2,0]) -> loop:773-775; removed check permits product 0 and returns [-2,0]. |
+| M05 | Infinity versus finite tolerance on both registered float16 negative-p witnesses. | test_e2_pow_grad[float16-p-1.5/-0.5]: _leaf.detach.requires_grad -> pow -> weighted sum backward -> pow_scalar lambda -> mutated if:866 false -> old half formula:872. |
+| M06 | x=7: error >= 0.0691056211, tolerance 4.52076789e-05, minimum 1528.6x over all 10 half IDs. | Each half test_e2_pow_grad reaches branch:866 true and mutated ew_pow exponent at ops.cpp:869; same lambda for all five p. |
+| M07 | Infinity versus finite tolerance on both registered float16 negative-p witnesses. | test_e2_pow_grad[float16-p-1.5/-0.5] reaches same lambda:869, but casts unweighted p*x^(p-1) before upstream multiply. |
+| M08 | Rank drops 2 to 1: actual (0,), expected (2,0). Half witness likewise rank 3 to 1 and dtype remains float16. exact shape/dtype; zero slack. | test_e4_empty[rms_norm-last0-cpu]: child tc._C.rms_norm -> ops:460 -> tc::rms_norm -> empty guard at kernels.cu:7796. |
+| M09 | UBSan child exits 1 with integer division by zero; expected child 0. exit exactly 0; zero slack. | test_e4_empty[apa_blend_softmax-last0-cpu]: child binding:2538 -> tc::apa_blend_softmax -> moved division at 3861 before guard; S=0; matching C_UBSAN executes guarded code. |
+| M10 | No topk range refusal for S=0,k=1; mutated empty guard returns (2,1) arrays (nonempty allocation), instead of throwing. exact refusal/message; zero slack. | test_e4_refuse[topk-k1-last0-cpu]: Tensor.topk -> ops.cpp:975 -> topk_nd -> modified range condition at kernels.cu:5380; S=0,k=1. |
+| M11 | At OH=0,OW=2, zero output accepted instead of the positive-extent refusal; eight registered IDs including trunc_gap. exact refusal/message; zero slack. | Each test_e5_refuse_cpu[*-oh_zero]: binding op -> corresponding ops wrapper -> tc::{im2col,col2im,avgpool2d,maxpool2d} -> make_dims:144; OH=0,OW=2 accepted by mutated comparison. |
+| M12 | At OH=4,OW=-2, invalid width accepted with zero batch; four registered IDs. exact refusal/message; zero slack. | Each test_e5_refuse_cpu[*-ow_only] follows same four paths -> make_dims:144 with OH=4,OW=-2; deleted OW predicate. |
+| M13 | (-1)/2 truncates to 0 instead of floor -1: OH/OW become 1 instead of 0; four required refusals disappear. exact refusal/message; zero slack. | Each test_e5_refuse_cpu[*-trunc_gap] -> make_dims floor_div lambda:138; a=-1,b=2, remainder!=0, removed decrement changes 0 to 1 output. |
+| M14 | One extra source-tree .ppm, 921,615 bytes in own exact copied-arm CPU run; uall and stat maps change. exact maps; zero slack. | test_e6_terrain_writes_nothing lists wo8a_ppm_pair in E6_WRITERS:627 -> nested pytest runs that unguarded CPU writer -> terrain.py:3960 registered write. Own exact copied-arm run executes it and fails at test_eng1.py:683. |

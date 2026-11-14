@@ -127,8 +127,29 @@ ConvDims make_dims(const Shape& xs, int kh, int kw, int sh, int sw, int ph, int 
   ConvDims d;
   d.N = (int)xs[0]; d.C = (int)xs[1]; d.H = (int)xs[2]; d.W = (int)xs[3];
   d.kh = kh; d.kw = kw; d.sh = sh; d.sw = sw; d.ph = ph; d.pw = pw;
-  d.OH = (d.H + 2 * ph - kh) / sh + 1;
-  d.OW = (d.W + 2 * pw - kw) / sw + 1;
+  // ENG1 E5 (POOL-OHW1): refuse OH <= 0 or OW <= 0 (a kernel larger than the padded input) before any caller
+  // allocates or launches; this covers every caller (im2col, col2im, avgpool2d, avgpool2d_bwd, maxpool2d). The
+  // quotient rounds toward negative infinity: C++ '/' truncates toward zero, which gave OH = 1 when the kernel
+  // exceeded the padded input by less than the stride (H = 3, kh = 4, sh = 2). For every non-negative numerator, i.e.
+  // every geometry that passes, floor and truncation agree, so accepted outputs are unchanged.
+  // Prior art: PyTorch's pooling_output_shape (div_rtn, round toward negative infinity) and its "Output size is too
+  // small" refusal (unverified -- lead to check: "ATen Pool.h pooling_output_shape div_rtn"). Taken: the floor
+  // quotient and the positive-output rule. Ours: the message.
+  auto floor_div = [](int64_t a, int64_t b) {
+    int64_t q = a / b;
+    if (a % b != 0 && ((a < 0) != (b < 0))) --q;
+    return q;
+  };
+  const int64_t oh = floor_div((int64_t)d.H + 2 * (int64_t)ph - kh, sh) + 1;
+  const int64_t ow = floor_div((int64_t)d.W + 2 * (int64_t)pw - kw, sw) + 1;
+  if (oh <= 0 || ow <= 0)
+    throw std::runtime_error(
+        "conv/pool: input extents (H, W) = (" + std::to_string(d.H) + ", " + std::to_string(d.W) +
+        "), kernel (" + std::to_string(kh) + ", " + std::to_string(kw) + "), stride (" + std::to_string(sh) + ", " +
+        std::to_string(sw) + ") and padding (" + std::to_string(ph) + ", " + std::to_string(pw) +
+        ") give output extents (" + std::to_string(oh) + ", " + std::to_string(ow) + "); both must be positive");
+  d.OH = (int)oh;
+  d.OW = (int)ow;
   return d;
 }
 }  // namespace
