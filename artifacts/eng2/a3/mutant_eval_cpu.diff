@@ -1,0 +1,34 @@
+--- ../a2/mutant_eval_cpu.py	2026-11-14 11:53:02.992346343 -0500
++++ mutant_eval_cpu.py	2026-11-14 15:33:10.946154469 -0500
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+-"""ENG2-A2 A2-G2 / L41 (copied from a1/mutant_eval_cpu.py, diff a2/mutant_eval_cpu.diff; root audit_3/cpu_mutants,
+-scratch /tmp/eng2_a2_mut; A1's stand-in and pre-A1 matcher are read from a1/, unchanged). Original docstring:
++"""ENG2-A3 R3 / L41 (copied from a2/mutant_eval_cpu.py, diff a3/mutant_eval_cpu.diff; root audit_4/cpu_mutants,
++scratch /tmp/eng2_a3_mut; label prefix eng2a3-; writes a3/MUTANT_EVAL_CPU.json; A1's stand-in and pre-A1 matcher are read from a1/, unchanged). Original docstring:
+ ENG2-A1 A-G2 / L41 / L16: real CPU MF1 and MF2 receipts scored by the FIXED evidence.evaluate() (REV1 E2R-F03).
+ 
+ The staged child (tool/run_gpu_tests.py, sealed, unchanged) runs each arm with CUDA hidden, as a NON-audit line (so
+@@ -36,11 +36,11 @@
+ sys.path.insert(0, str(TOOL))
+ import evidence  # noqa: E402
+ 
+-RUNS = TOOL / "gpu_runs" / "audit_3" / "cpu_mutants"
++RUNS = TOOL / "gpu_runs" / "audit_4" / "cpu_mutants"
+ assert not RUNS.exists(), "fresh root required"
+ ARMS = {"candidate_eng2": ("candidate", "eng2"), "MF1": ("MF1", "mutation"), "MF2": ("MF2", "mutation")}
+ env = {k: v for k, v in os.environ.items() if k not in ("ENG2_AUDIT", "PYTHONOPTIMIZE")}
+-env.update(RUNS=str(RUNS), CUDA_VISIBLE_DEVICES="", TMPDIR="/tmp/eng2_a2_mut", PYTEST_ADDOPTS="-k cpu",
++env.update(RUNS=str(RUNS), CUDA_VISIBLE_DEVICES="", TMPDIR="/tmp/eng2_a3_mut", PYTEST_ADDOPTS="-k cpu",
+            PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
+            NUMEXPR_NUM_THREADS="1")
+ Path(env["TMPDIR"]).mkdir(exist_ok=True)
+@@ -58,7 +58,7 @@
+     attempt.mkdir(parents=True)
+     e = dict(env, ENG2_LINE=label, ENG2_ATTEMPT=str(attempt), FORGE_GPU_RUN_LOG=str(attempt / "forge.log"))
+     with (attempt / "stdout.log").open("x") as log:
+-        rc = subprocess.run([sys.executable, "-B", str(A1.parent / "a1" / "cpu_runner_standin.py"), "--label", "eng2a2-" + label,
++        rc = subprocess.run([sys.executable, "-B", str(A1.parent / "a1" / "cpu_runner_standin.py"), "--label", "eng2a3-" + label,
+                              "--", "timeout", "--kill-after=10s", "500s", sys.executable, "-B", "run_gpu_tests.py",
+                              arm, suite], cwd=TOOL, env=e, stdout=log, stderr=subprocess.STDOUT, timeout=560).returncode
+     attempt_of[label] = (attempt, rc)

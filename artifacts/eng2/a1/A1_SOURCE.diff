@@ -1,0 +1,410 @@
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -40,24 +40,24 @@
+ _DEVICE_CAST_DTYPE = {"bfloat16"}
+ 
+ 
+-def _np_dtype(dtype):
+-    """ENG2 F1: the host NumPy dtype for a supported dtype string. Any other dtype (an unsupported string such as
+-    "float64", "double" or "int32", a typo, or a non-string) raises TypeError naming the supported dtypes, instead
+-    of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`). The engine has no float64 (core.h).
+-    Prior art: NumPy's `np.dtype("float99")` refusal (TypeError: data type not understood) and PyTorch's refusal of
+-    unknown dtypes (both unverified -- lead to check: "numpy dtype not understood TypeError"); TX3-F1's strict
+-    lookup (this repo, 2026-10; ValueError, C++ aliases accepted), which this order does not adopt. Ours: TypeError,
+-    the message, and the supported list (exactly the keys of _NP_DTYPE and _DEVICE_CAST_DTYPE)."""
+-    try:
+-        return _NP_DTYPE[dtype]
+-    except (KeyError, TypeError):
+-        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+-        raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}") from None
++def _np_dtype(dtype, name=False):
++    """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
++    only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
++    instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
++    ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
++    BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
++    passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
++    to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
++    if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
++        return dtype if name else _NP_DTYPE[dtype]
++    # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
++    supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
++    raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+ 
+ 
+ def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+     """Create a Tensor from array-like data."""
+-    if dtype in _DEVICE_CAST_DTYPE:
++    if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): a non-string is refused first
+         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+         return _C.tensor(arr, device, requires_grad).astype(dtype)
+     arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+@@ -69,7 +69,7 @@
+     def make(*shape, device="cuda", dtype="float32", requires_grad=False):
+         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+             shape = tuple(shape[0])
+-        if dtype in _DEVICE_CAST_DTYPE:
++        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): refused before np_fn runs
+             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
+             return _C.tensor(arr, device, requires_grad).astype(dtype)
+         np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)
+--- a/tensor_cuda/tensor_cuda/functional.py
++++ b/tensor_cuda/tensor_cuda/functional.py
+@@ -34,6 +34,13 @@
+ 
+ def _causal_mask(L, S, device, dtype):
+     _check_causal_lengths(L, S)
++    # ENG2-A1 (REV1 E2R-F05): refuse a non-string or unsupported dtype with F1's TypeError before the cache lookup
++    # and before any tensor is built (it used to fall back silently to a float32 mask). The str check comes first
++    # (tc._np_dtype), then the name must be one of the engine's six; a supported name keeps today's mask: float16 /
++    # bfloat16 get the cast below, every other supported name the float32 bias. Callers pass Tensor.dtype, always
++    # supported. Prior art: as F1 (__init__.py _np_dtype); no other prior art known to me for this guard.
++    if tc._np_dtype(dtype, name=True) not in tc._DEVICE_CAST_DTYPE:
++        tc._np_dtype(dtype)
+     key = (L, S, device, dtype)
+     m = _causal_cache.get(key)
+     if m is None:
+--- a/tensor_cuda/tests/test_eng2.py
++++ b/tensor_cuda/tests/test_eng2.py
+@@ -384,3 +384,88 @@
+     assert E3.e3_distance(np.array([1.0, 2.5]), np.array([1.0, 2.0])) == 0.5
+     inputs = E3.e3_inputs("RMSNorm", "near_eps")
+     np.testing.assert_allclose((inputs * inputs).mean(axis=-1), 1e-6, rtol=1e-12)
++
++
++# ============================== ENG2-A1 (REV1 E2R-F01): non-string dtypes are refused before any membership test
++# orders/ENG2_A1_REV1_FIXES.md. Set and dict membership compare hash and ==, so a non-string equal to a supported name
++# (collections.UserString("float32")) used to pass `dtype in _DEVICE_CAST_DTYPE` / `_NP_DTYPE[dtype]` and be converted
++# (tc.tensor) or drawn (randn/rand). Every non-string now gets F1's TypeError first, before any conversion, allocation,
++# random draw, cache lookup or tensor, and without calling the object's __eq__ or __hash__ (the spy records them).
++# The same objects are refused by functional._causal_mask (REV1 E2R-F05). Prior art: Python's isinstance-before-lookup
++# validation idiom (no specific source known to me); the operands reuse F1's _Unconvertible and F1_TOO_BIG.
++from collections import UserString  # noqa: E402
++
++from tensor_cuda import functional as _A1_F  # noqa: E402
++
++
++class _A1StrEqualUnhashable:
++    """Equal to "float32" but unhashable: a membership test raises Python's own TypeError, not F1's."""
++
++    __hash__ = None
++
++    def __eq__(self, other):
++        return other == "float32"
++
++    def __repr__(self):
++        return "_A1StrEqualUnhashable()"
++
++
++class _A1Spy:
++    """Hashes and compares like "float32" (as UserString does) and records every __hash__/__eq__ call."""
++
++    def __init__(self):
++        self.calls = []
++
++    def __hash__(self):
++        self.calls.append("__hash__")
++        return hash("float32")
++
++    def __eq__(self, other):
++        self.calls.append("__eq__")
++        return other == "float32"
++
++    def __repr__(self):
++        return "_A1Spy()"
++
++
++A1_NONSTRINGS = {"UserString-float32": lambda: UserString("float32"),
++                 "UserString-bfloat16": lambda: UserString("bfloat16"),
++                 "unhashable": _A1StrEqualUnhashable, "None": lambda: None,
++                 "numpy-dtype-float32": lambda: np.dtype("float32"), "spy": _A1Spy}
++
++
++@pytest.mark.parametrize("kind", list(A1_NONSTRINGS))
++@pytest.mark.parametrize("entry", F1_ENTRIES)
++def test_a1_nonstring_refused_cpu(entry, kind):
++    """tc.tensor and every factory refuse a non-string dtype with F1's TypeError before converting (the
++    _Unconvertible operand), allocating (a shape NumPy refuses) or drawing (the global random state)."""
++    obj = A1_NONSTRINGS[kind]()
++    before = np.random.get_state()
++    with pytest.raises(TypeError) as info:
++        if entry == "tensor":
++            tc.tensor(_Unconvertible(), device="cpu", dtype=obj)
++        else:
++            F1_FACTORIES[entry](*F1_TOO_BIG, device="cpu", dtype=obj)
++    assert str(info.value) == F1_MESSAGE.format(obj)
++    after = np.random.get_state()
++    assert before[0] == after[0] and np.array_equal(before[1], after[1]) and before[2:] == after[2:]
++    if kind == "spy":
++        assert obj.calls == [], obj.calls
++
++
++@pytest.mark.parametrize("kind", list(A1_NONSTRINGS))
++def test_a1_causal_mask_nonstring_refused_cpu(kind, monkeypatch):
++    """functional._causal_mask refuses a non-string dtype before its cache lookup and before building a tensor."""
++    obj = A1_NONSTRINGS[kind]()
++
++    def no_tensor(*args, **kwargs):
++        raise AssertionError("_causal_mask built a tensor before checking the dtype")
++
++    monkeypatch.setattr(tc, "tensor", no_tensor)
++    monkeypatch.setattr(_A1_F, "_causal_cache", {})
++    with pytest.raises(TypeError) as info:
++        _A1_F._causal_mask(0, 0, "cpu", obj)
++    assert str(info.value) == F1_MESSAGE.format(obj)
++    assert _A1_F._causal_cache == {}
++    if kind == "spy":
++        assert obj.calls == [], obj.calls
+--- a/artifacts/eng2/tool/evidence.py
++++ b/artifacts/eng2/tool/evidence.py
+@@ -221,13 +221,18 @@
+ 
+ 
+ def literal_brackets(pattern):
+-    """Registered killer patterns use '*' as the only wildcard; '[' and ']' are literal (pytest parameter IDs)."""
+-    return pattern.replace("[", "\x00").replace("]", "[]]").replace("\x00", "[[]")
++    """Registered killer patterns use '*' as the only wildcard; '[' and ']' are literal (pytest parameter IDs).
++    ENG2-A1: '?' is literal too (fnmatch would read it as a one-character wildcard)."""
++    return pattern.replace("[", "\x00").replace("]", "[]]").replace("\x00", "[[]").replace("?", "[?]")
+ 
+ 
+ def matches(nid, patterns):
+-    short = nid.split("::", 1)[1] if "::" in nid else nid
+-    return any(fnmatch.fnmatchcase(short, literal_brackets(p)) for p in patterns)
++    """ENG2-A1 (REV1 E2R-F03): the observed ID and every registered pattern are normalised the SAME way (norm_id: the
++    arm prefix stripped, the test-file path and the literal parameter brackets kept) and compared whole. The old code
++    stripped the file prefix from the observed ID only, so no registered killer (which keeps the prefix) matched itself.
++    Prior art: fnmatch (Python stdlib; POSIX fnmatch(3)) with escaped metacharacters; no other prior art known to me."""
++    observed = norm_id(nid)
++    return any(fnmatch.fnmatchcase(observed, literal_brackets(norm_id(p))) for p in patterns)
+ 
+ 
+ def evaluate(runs, attempt, line, rc, audit, seal):
+@@ -325,18 +330,53 @@
+     pins = {k: v for k, v in read(TOOL.parent / "L38_PINS.json")["expected_changes"].items() if k in before or k in after}
+     lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed" and i not in pins)
+     reasons = ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
+-    details = {}
+-    for r in new["reports"]:
+-        if r["outcome"] == "failed":
+-            details.setdefault(norm_id(r["id"]), []).append(r["detail"])
+     for i, pin in sorted(pins.items()):
+         if before.get(i) != pin["baseline"] or after.get(i) != pin["candidate"]:
+             reasons.append("L38 expected change not as registered: %s (baseline %s, candidate %s)" % (i, before.get(i), after.get(i)))
+-        elif pin["candidate"] == "failed" and not any(pin["detail_contains"] in d for d in details.get(i, [])):
+-            reasons.append("L38 expected change has another failure text: " + i)
++        elif pin["candidate"] == "failed":
++            reasons += pin_failure_reasons(new, i, pin["detail_contains"])
+     return reasons
+ 
+ 
++PIN_EXCEPTION = "TypeError"  # ENG2-A1: the order's registered terminal exception class for every L38 pin
++
++
++def pin_failure_reasons(new, nid, registered):
++    """ENG2-A1 (REV1 E2R-F02): a pinned ID's candidate failure counts only from STRUCTURED exception data, never from a
++    substring of the longrepr (the old test: quoted text inside another failure passed):
++      - exactly one failed phase for the ID, the call (setup and teardown passed: no extra failure);
++      - the child report's exception_class (pytest's call.excinfo.type.__name__, run_gpu_tests.py) is TypeError;
++      - the attempt's JUnit testcase for the ID is unique and has exactly one failure/error element, a <failure>, whose
++        message attribute (pytest's reprcrash: the TERMINAL exception's "Class: message") equals the registered text
++        exactly, and that text is "TypeError: <message>".
++    Prior art: JUnit XML <failure message=...> as written by pytest's junitxml plugin (Krekel et al.; year
++    unverified -- lead to check "pytest junitxml reprcrash message"); exact-match oracles. Ours: the conjunction."""
++    head = "L38 pinned failure refused (%s): " % nid
++    if not registered.startswith(PIN_EXCEPTION + ": "):
++        return [head + "registered text is not a %s message" % PIN_EXCEPTION]
++    rows = [r for r in new["reports"] if norm_id(r["id"]) == nid]
++    failed = [r for r in rows if r["outcome"] != "passed"]
++    if len(failed) != 1 or failed[0]["when"] != "call" or failed[0]["outcome"] != "failed":
++        return [head + "phases %r, expected one failed call" % [(r["when"], r["outcome"]) for r in rows]]
++    if failed[0].get("exception_class") != PIN_EXCEPTION:
++        return [head + "terminal exception class %r, expected %s" % (failed[0].get("exception_class"), PIN_EXCEPTION)]
++    if not new.get("attempt_dir") or not (Path(new["attempt_dir"]) / "junit.xml").is_file():
++        return [head + "no structured exception data (the attempt's junit.xml)"]
++    raw = [i for i in new["collected_ids"] if norm_id(i) == nid]
++    if len(raw) != 1:
++        return [head + "%d collected IDs normalise to it" % len(raw)]
++    cases = [c for c in ET.parse(Path(new["attempt_dir"]) / "junit.xml").getroot().iter("testcase")
++             if (c.get("classname", ""), c.get("name", "")) == xml_key(raw[0])]
++    if len(cases) != 1:
++        return [head + "%d JUnit testcases" % len(cases)]
++    marks = [e for e in cases[0] if e.tag in ("failure", "error")]
++    if len(marks) != 1 or marks[0].tag != "failure":
++        return [head + "JUnit elements %r, expected one failure" % [e.tag for e in marks]]
++    if marks[0].get("message") != registered:
++        return [head + "JUnit terminal exception %r differs from the registered text" % (marks[0].get("message") or "")[:300]]
++    return []
++
++
+ def recompute_line(runs, label, seal, start, stack=()):
+     assert label not in stack, "dependency cycle"
+     line = lines()[label]
+--- a/artifacts/eng2/tool/score_gpu.py
++++ b/artifacts/eng2/tool/score_gpu.py
+@@ -17,6 +17,37 @@
+ from evidence import TOOL, guard, verify_start, lines, recompute_line, summary_outcomes, norm_id
+ 
+ 
++# ENG2-A1 (REV1 E2R-F04): the registered row census, per kind: the test functions that write the rows (test_eng2.py
++# _record calls) and the order's expected row counts (orders/ENG2_A1_REV1_FIXES.md, operand census: 35 and 20).
++CROSS_ROWS = {"f1bytes": (("test_f1_tensor_supported", "test_f1_factory_supported", "test_f1_default_float64_data",
++                           "test_f1_factory_default"), 35),
++              "p302bits": (("test_n1_float32_bits",), 20)}
++
++
++def keyed_rows(kind, rows):
++    """{norm_id(test_id): sha256} for one arm's rows of `kind`, with census errors: a row of another kind, a duplicate
++    normalised ID, or an ID set different from the registered census (ids_eng2.txt filtered by CROSS_ROWS[kind]).
++    Prior art: keyed equi-join on a normalised key with a uniqueness check (relational practice; no specific source
++    known to me)."""
++    functions, count = CROSS_ROWS[kind]
++    expected = {i for i in (TOOL / "ids_eng2.txt").read_text().split()
++                if i.split("::", 1)[1].split("[", 1)[0] in functions}
++    keyed, errors = {}, []
++    if len(expected) != count:
++        errors.append("%s: registered census has %d IDs, the order registers %d" % (kind, len(expected), count))
++    for r in rows:
++        nid = norm_id(r["test_id"])
++        if r.get("kind") != kind:
++            errors.append("%s: row of kind %r (%s)" % (kind, r.get("kind"), nid))
++        if nid in keyed:
++            errors.append("%s: duplicate normalised ID %s" % (kind, nid))
++        keyed[nid] = r["sha256"]
++    if rows and set(keyed) != expected:
++        errors.append("%s: row IDs differ from the census: missing %r, extra %r" % (
++            kind, sorted(expected - set(keyed))[:5], sorted(set(keyed) - expected)[:5]))
++    return keyed, errors
++
++
+ def main():
+     runs = guard(os.environ["RUNS"])
+     summary, errors = {}, []
+@@ -43,14 +74,18 @@
+                   e3_candidate_regnorm=rows("candidate_regnorm", "census_*.json"))
+     cross = {}
+     for kind in ("f1bytes", "p302bits"):
+-        base = {r["test_id"]: r["sha256"] for r in rows("baseline_eng2", kind + "_*.json")}
+-        cand_rows = {r["test_id"]: r["sha256"] for r in rows("candidate_eng2", kind + "_*.json")}
++        # ENG2-A1 (REV1 E2R-F04): rows are keyed by evidence.norm_id on BOTH arms (test_eng2.py's _record stores
++        # request.node.nodeid, which carries artifacts/eng2/tool/arms/<arm>/), duplicates refused, and each arm's ID set
++        # must equal the registered census exactly (35 f1bytes, 20 p302bits rows). Hashes are compared unchanged.
++        base, base_errors = keyed_rows(kind, rows("baseline_eng2", kind + "_*.json"))
++        cand_rows, cand_errors = keyed_rows(kind, rows("candidate_eng2", kind + "_*.json"))
+         differ = sorted(i for i in base if cand_rows.get(i) != base[i])
+         cross[kind] = dict(baseline=len(base), candidate=len(cand_rows), differing=differ,
+-                           ids_equal=sorted(base) == sorted(cand_rows))
+-        if summary and (not base or sorted(base) != sorted(cand_rows) or differ):
+-            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r" % (
+-                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10]))
++                           ids_equal=sorted(base) == sorted(cand_rows), census_errors=base_errors + cand_errors)
++        if summary and (not base or sorted(base) != sorted(cand_rows) or differ or base_errors or cand_errors):
++            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r, census %r" % (
++                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10],
++                (base_errors + cand_errors)[:4]))
+     source_outcomes = {}
+     for label in ("candidate_regnorm", "candidate_regdtype"):  # ENG2: two regression suites (was candidate_regression)
+         regression = summary.get(label, {}).get("selected_attempt")
+--- a/artifacts/eng2/dtype_census.py
++++ b/artifacts/eng2/dtype_census.py
+@@ -76,6 +76,100 @@
+ for name, fn in OUT_DTYPE_ENTRIES.items():
+     for s in ORDER_STRINGS:
+         rows.append(dict(entry=name, site="bindings.cpp -> dtype_from_string", requested=s, kind="order", **probe(fn, s)))
++# ---------------------------------------------------------------------------------- ENG2-A1 (REV1 E2R-F01, E2R-F05)
++# Appended after the original 201 rows (which keep their order and content), so the earlier receipts remain a prefix:
++#  1. E2R-F01's non-strings on every ENTRIES entry: a str-equal UserString, an unhashable str-equal object and None;
++#  2. functional._causal_mask (private; callers pass Tensor.dtype): zero-size mask on "cpu", every string and
++#     non-string above. Its rule for a supported name: float16/bfloat16 -> that dtype, every other supported name -> the
++#     float32 additive bias. "handled" = that rule; a tensor for any other request is "mis-served" (silent float32);
++#  3. the three quantization.affine NumPy-dtype parameters (scale_dtype, out_dtype x2). They take NumPy dtypes by
++#     design (np.float16/np.float32 defaults) and are unchanged: "handled-numpy" = the result dtype equals
++#     np.dtype(requested) (NumPy's own parse, e.g. "u8" -> uint64, None -> float64); "refused" = NumPy refused.
++# Prior art: none known to me (a probe table), as above.
++from collections import UserString  # noqa: E402
++
++from tensor_cuda import functional as F  # noqa: E402
++from tensor_cuda.quantization import affine as Q  # noqa: E402
++
++
++class StrEqualUnhashable:
++    __hash__ = None
++
++    def __eq__(self, other):
++        return other == "float32"
++
++    def __repr__(self):
++        return "StrEqualUnhashable()"
++
++
++A1_NON_STRINGS = {"UserString('float32')": UserString("float32"), "UserString('bfloat16')": UserString("bfloat16"),
++                  "StrEqualUnhashable()": StrEqualUnhashable(), "None": None}
++ALL_NON_STRINGS = {**NON_STRINGS, **A1_NON_STRINGS}
++
++
++def kind_of(s):
++    return "order" if s in ORDER_STRINGS else "alias" if s in ALIASES else "supported"
++
++
++for name, (site, fn) in ENTRIES.items():
++    for label, obj in A1_NON_STRINGS.items():
++        rows.append(dict(entry=name, site=site, requested=label, kind="non-string", **probe(fn, obj)))
++
++
++def mask_probe(requested):
++    F._causal_cache.clear()
++    try:
++        r = F._causal_mask(0, 0, "cpu", requested)
++    except Exception as exc:  # noqa: BLE001
++        return dict(outcome="refused", exception=type(exc).__name__, message=str(exc)[:300])
++    rule = None
++    if isinstance(requested, str) and requested in SUPPORTED:
++        rule = requested if requested in ("float16", "bfloat16") else "float32"
++    return dict(outcome="handled" if r.dtype == rule else "mis-served", result_dtype=r.dtype,
++                result_shape=list(r.shape), rule_dtype=rule)
++
++
++MASK_SITE = "functional.py _causal_mask (:35; private, callers pass Tensor.dtype)"
++for s in ORDER_STRINGS + list(ALIASES) + SUPPORTED:
++    rows.append(dict(entry="functional._causal_mask", site=MASK_SITE, requested=s, kind=kind_of(s), **mask_probe(s)))
++for label, obj in ALL_NON_STRINGS.items():
++    rows.append(dict(entry="functional._causal_mask", site=MASK_SITE, requested=label, kind="non-string",
++                     **mask_probe(obj)))
++
++AFFINE = {
++    "quantization.affine.quantize_affine_per_group(scale_dtype)": (
++        "quantization/affine.py:142 (scales/zeros .astype(scale_dtype))",
++        lambda d: Q.quantize_affine_per_group(np.arange(32).reshape(2, 16), 4, 16, scale_dtype=d).scales),
++    "quantization.affine.dequantize_affine_per_group(out_dtype)": (
++        "quantization/affine.py:178 (.astype(out_dtype))",
++        lambda d: Q.dequantize_affine_per_group(np.arange(16, dtype=np.uint8).reshape(2, 8), np.ones((2, 1)),
++                                                np.zeros((2, 1)), 4, 16, 16, out_dtype=d)),
++    "quantization.affine.dequantize_symmetric_per_group(out_dtype)": (
++        "quantization/affine.py:201 (.astype(out_dtype))",
++        lambda d: Q.dequantize_symmetric_per_group(np.arange(16, dtype=np.uint8).reshape(2, 8), np.ones((2, 1)), 4,
++                                                   16, 16, out_dtype=d)),
++}
++
++
++def affine_probe(fn, requested):
++    try:
++        numpy_dtype = str(np.dtype(requested))
++    except Exception as exc:  # noqa: BLE001
++        numpy_dtype = "NumPy refuses: " + type(exc).__name__
++    try:
++        r = fn(requested)
++    except Exception as exc:  # noqa: BLE001
++        return dict(outcome="refused", exception=type(exc).__name__, message=str(exc)[:300], numpy_dtype=numpy_dtype)
++    return dict(outcome="handled-numpy" if str(r.dtype) == numpy_dtype else "other", result_dtype=str(r.dtype),
++                result_shape=list(r.shape), numpy_dtype=numpy_dtype)
++
++
++for name, (site, fn) in AFFINE.items():
++    for s in ORDER_STRINGS + list(ALIASES) + SUPPORTED:
++        rows.append(dict(entry=name, site=site, requested=s, kind=kind_of(s), **affine_probe(fn, s)))
++    for label, obj in ALL_NON_STRINGS.items():
++        rows.append(dict(entry=name, site=site, requested=label, kind="non-string", **affine_probe(fn, obj)))
++
+ summary = {}
+ for r in rows:
+     summary.setdefault(r["entry"], {}).setdefault(r["kind"], {}).setdefault(r["outcome"], 0)

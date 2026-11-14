@@ -1,0 +1,33 @@
+--- ../a2/audit_check.py	2026-11-14 11:52:47.910500472 -0500
++++ audit_check.py	2026-11-14 15:33:02.751194009 -0500
+@@ -1,12 +1,12 @@
+ #!/usr/bin/env python3
+-"""ENG2-A2 A2-G3 audit-route receipt check for tool/gpu_runs/audit_3 (copied from a1/audit_check.py, diff a2/audit_check.diff) (the ten steps of g4/G4_AUDIT_RECEIPT.json, re-derived
+-from the files), plus the dry-run receipt's seal binding. Writes a2/A2G3_AUDIT_RECEIPT.json.
++"""ENG2-A3 A3-G3 audit-route receipt check for tool/gpu_runs/audit_4 (copied from a2/audit_check.py, diff a3/audit_check.diff) (the ten steps of g4/G4_AUDIT_RECEIPT.json, re-derived
++from the files), plus the dry-run receipt's seal binding. Writes a3/A3G3_AUDIT_RECEIPT.json.
+ Prior art: GN1/ENG1 audit receipts (2026); no new algorithm."""
+ import datetime, hashlib, json, sys
+ from pathlib import Path
+ A1 = Path(__file__).resolve().parent
+ TOOL = A1.parent / "tool"
+-R = TOOL / "gpu_runs" / "audit_3"
++R = TOOL / "gpu_runs" / "audit_4"
+ A = R / "candidate_eng2" / "attempt-0001"
+ r = lambda p: json.loads(Path(p).read_text())
+ sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+@@ -30,11 +30,11 @@
+          ("score_gpu.py exit 1 with the designed audit error",
+           (A1 / "audit_score.exit").read_text().strip() == "score rc=1"
+           and "audit run cannot establish GPU acceptance" in summary["errors"])]
+-dry = r(A1 / "G4_DRY_dry_3.json")
+-steps.append(("dry run dry_3: all 21 labels ok, every start record bound to the new seal",
++dry = r(A1 / "G4_DRY_dry_4.json")
++steps.append(("dry run dry_4: all 21 labels ok, every start record bound to the new seal",
+               dry["all_ok"] and len(dry["rows"]) == 21 and all(x["start_record"]["seal_sha256"] == seal for x in dry["rows"])))
+ out = dict(root=str(R.relative_to(A1.parents[2])), seal_sha256=seal, steps=[dict(step=s, ok=bool(ok)) for s, ok in steps],
+            all_ok=all(ok for _, ok in steps))
+-(A1 / "A2G3_AUDIT_RECEIPT.json").write_text(json.dumps(out, indent=1) + "\n")
++(A1 / "A3G3_AUDIT_RECEIPT.json").write_text(json.dumps(out, indent=1) + "\n")
+ print(json.dumps(out, indent=1))
+ sys.exit(0 if out["all_ok"] else 1)

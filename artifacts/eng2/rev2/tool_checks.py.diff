@@ -1,0 +1,47 @@
+--- 
++++ 
+@@ -37,32 +37,15 @@
+ import evidence  # noqa: E402
+ import score_gpu  # noqa: E402
+ 
+-SCRATCH = Path("/tmp/eng2_a1_tc")
++SCRATCH = Path("/tmp/eng2_rev2_review/tool_checks")
+ SCRATCH.mkdir(exist_ok=True)
+ out = {}
+ 
+ # ------------------------------------------------------------------------------------------------------------ PIN
++# REV2: replay A1's real candidate pin receipt read-only; no new device/staged run.
+ RUNS = TOOL / "gpu_runs" / "audit_2" / "cpu_pins"
+-assert not RUNS.exists(), "fresh root required"
+-env = {k: v for k, v in os.environ.items() if k not in ("ENG2_AUDIT", "PYTHONOPTIMIZE")}
+-env.update(RUNS=str(RUNS), CUDA_VISIBLE_DEVICES="", TMPDIR="/tmp/eng2_a1_pins", PYTEST_ADDOPTS="-k cpu",
+-           PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
+-           NUMEXPR_NUM_THREADS="1")
+-Path(env["TMPDIR"]).mkdir(exist_ok=True)
+-start = subprocess.run([sys.executable, "-B", "start_gpu_run.py"], cwd=TOOL, env=env, capture_output=True, text=True,
+-                       timeout=120)
+-assert start.returncode == 0, start.stderr
+ attempt = RUNS / "candidate_regnorm" / "attempt-0001"
+-attempt.mkdir(parents=True)
+-# The stand-in itself requires PYTEST_ADDOPTS == "-k cpu"; the child's own selection (the 10 pins) is set by env(1)
+-# inside the stand-in's command, so neither the stand-in nor the child is edited.
+-child = ["env", "PYTEST_ADDOPTS=-k 'test_e2_pow_grad and float64'", "timeout", "--kill-after=10s", "500s",
+-         sys.executable, "-B", "run_gpu_tests.py", "candidate", "regnorm"]
+-e = dict(env, ENG2_LINE="candidate_regnorm", ENG2_ATTEMPT=str(attempt), FORGE_GPU_RUN_LOG=str(attempt / "forge.log"))
+-with (attempt / "stdout.log").open("x") as log:
+-    rc = subprocess.run([sys.executable, "-B", str(A1 / "cpu_runner_standin.py"), "--label", "eng2a1-pins", "--",
+-                         "timeout", "--kill-after=10s", "540s", *child], cwd=TOOL, env=e, stdout=log,
+-                        stderr=subprocess.STDOUT, timeout=570).returncode
++rc = evidence.read(attempt / "child_result.json")["pytest_exit"]
+ new = evidence.read(attempt / "child_result.json")
+ pins = evidence.read(A1.parent / "L38_PINS.json")["expected_changes"]
+ ids = new["collected_ids"]
+@@ -153,7 +136,7 @@
+ out["M3"] = dict(id=other, matched=evidence.matches(other, [k]), ok=not evidence.matches(other, [k]))
+ 
+ # ---------------------------------------------------------------------------------------------------------- CROSS
+-REC = A1 / "rev1_out"
++REC = A1
+ 
+ 
+ def load(arm, kind):

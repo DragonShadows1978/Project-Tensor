@@ -1,0 +1,10 @@
+--- 
++++ 
+@@ -63,6 +63,7 @@
+         out, xml = G2 / f"{arm}_cpu.json", G2 / f"{arm}_cpu.xml"
+         p = subprocess.run([sys.executable, "-B", "-c", CHILD, str(package), arm, str(out), str(xml), str(TOOL)],
+                            env=env, cwd=os.environ["TMPDIR"], capture_output=True, text=True, timeout=500)
++        (G2 / f"{arm}_pytest.log").write_text(p.stdout + p.stderr)
+         data = json.loads(out.read_text())
+         failed = sorted(k for k, v in data["outcomes"].items() if v != "passed")
+         print(json.dumps(dict(arm=arm, child_exit=p.returncode, pytest_rc=data["rc"], collected=data["n"],

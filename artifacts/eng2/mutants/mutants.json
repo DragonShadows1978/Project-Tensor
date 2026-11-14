@@ -1,0 +1,435 @@
+[
+ {
+  "id": "MF1",
+  "decision": "F1: the silent fallback restored at __init__.py:48 (tc.tensor)",
+  "file": "tensor_cuda/tensor_cuda/__init__.py",
+  "scope": null,
+  "old": "    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation",
+  "new": "    arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-float64-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-float64-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-double-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-double-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-int32-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-int32-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-not_a_dtype-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[tensor-not_a_dtype-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_tensor_refuses_before_conversion_cpu[float64]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_tensor_refuses_before_conversion_cpu[double]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_tensor_refuses_before_conversion_cpu[int32]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_tensor_refuses_before_conversion_cpu[not_a_dtype]"
+  ],
+  "predicted_by": "code reading; shown on CPU (artifacts/eng2/cpu_mutant_kills.json)",
+  "kind": "python",
+  "hunk_lines": [
+   63,
+   63
+  ]
+ },
+ {
+  "id": "MF2",
+  "decision": "F1: the silent fallback restored at __init__.py:60 (_factory)",
+  "file": "tensor_cuda/tensor_cuda/__init__.py",
+  "scope": null,
+  "old": "        np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)",
+  "new": "        np_dtype = _NP_DTYPE.get(dtype, np.float32)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-float64-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-float64-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-double-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-double-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-int32-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-int32-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-not_a_dtype-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[zeros-not_a_dtype-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-float64-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-float64-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-double-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-double-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-int32-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-int32-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-not_a_dtype-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[ones-not_a_dtype-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-float64-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-float64-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-double-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-double-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-int32-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-int32-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-not_a_dtype-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[randn-not_a_dtype-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-float64-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-float64-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-double-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-double-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-int32-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-int32-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-not_a_dtype-cpu]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_refuse_cpu[rand-not_a_dtype-cuda]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[zeros-float64]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[zeros-double]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[zeros-int32]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[zeros-not_a_dtype]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[ones-float64]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[ones-double]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[ones-int32]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[ones-not_a_dtype]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[randn-float64]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[randn-double]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[randn-int32]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[randn-not_a_dtype]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[rand-float64]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[rand-double]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[rand-int32]",
+   "tensor_cuda/tests/test_eng2.py::test_f1_factory_refuses_before_allocation_cpu[rand-not_a_dtype]"
+  ],
+  "predicted_by": "code reading; shown on CPU (artifacts/eng2/cpu_mutant_kills.json)",
+  "kind": "python",
+  "hunk_lines": [
+   75,
+   75
+  ]
+ },
+ {
+  "id": "MN1_LN",
+  "decision": "N1 LayerNorm: the cast back omitted (output float32)",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "LayerNorm",
+  "old": "        return (xc * inv * weight + bias).astype(dtype)",
+  "new": "        return xc * inv * weight + bias",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   151,
+   151
+  ]
+ },
+ {
+  "id": "MN1_RMS",
+  "decision": "N1 RMSNorm: the cast back omitted (output float32)",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "RMSNorm",
+  "old": "        return out.astype(dtype) if half else out",
+  "new": "        return out",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-float16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   311,
+   311
+  ]
+ },
+ {
+  "id": "MN1_BN",
+  "decision": "N1 BatchNorm1D: the cast back omitted (output float32)",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "BatchNorm1D",
+  "old": "        return out.astype(dtype) if half else out",
+  "new": "        return out",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   541,
+   541
+  ]
+ },
+ {
+  "id": "MN1_IN",
+  "decision": "N1 InstanceNorm2D: the cast back omitted (output float32)",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "InstanceNorm2D",
+  "old": "        return (xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])).astype(dtype)",
+  "new": "        return xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   648,
+   648
+  ]
+ },
+ {
+  "id": "MN2_LN",
+  "decision": "N1 LayerNorm: the upcast only for float16, not bfloat16",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "LayerNorm",
+  "old": "        half = dtype in (\"float16\", \"bfloat16\")",
+  "new": "        half = dtype in (\"float16\",)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-near_eps-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   140,
+   140
+  ]
+ },
+ {
+  "id": "MN2_RMS",
+  "decision": "N1 RMSNorm: the upcast only for float16, not bfloat16",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "RMSNorm",
+  "old": "        half = dtype in (\"float16\", \"bfloat16\")",
+  "new": "        half = dtype in (\"float16\",)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   305,
+   305
+  ]
+ },
+ {
+  "id": "MN2_BN",
+  "decision": "N1 BatchNorm1D: the upcast only for float16, not bfloat16",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "BatchNorm1D",
+  "old": "        half = dtype in (\"float16\", \"bfloat16\")",
+  "new": "        half = dtype in (\"float16\",)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[bfloat16-near_eps]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[bfloat16-regular]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   523,
+   523
+  ]
+ },
+ {
+  "id": "MN2_IN",
+  "decision": "N1 InstanceNorm2D: the upcast only for float16, not bfloat16",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "InstanceNorm2D",
+  "old": "        half = dtype in (\"float16\", \"bfloat16\")",
+  "new": "        half = dtype in (\"float16\",)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-near_eps-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   639,
+   639
+  ]
+ },
+ {
+  "id": "MN3_LN",
+  "decision": "N1 LayerNorm: the statistics still in the input dtype",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "LayerNorm",
+  "old": "        if half:\n            x = x.astype(\"float32\")\n        mean = x.mean([-1], True)\n        xc = x - mean\n        var = (xc * xc).mean([-1], True)\n        inv = (var + self.eps).pow(-0.5)",
+  "new": "        mean = x.mean([-1], True)\n        xc = x - mean\n        var = (xc * xc).mean([-1], True)\n        if half:\n            xc, var = xc.astype(\"float32\"), var.astype(\"float32\")\n        inv = (var + self.eps).pow(-0.5)",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[LayerNorm-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[LayerNorm-float16-near_eps-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   141,
+   146
+  ]
+ },
+ {
+  "id": "MN3_RMS",
+  "decision": "N1 RMSNorm: the statistics still in the input dtype",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "RMSNorm",
+  "old": "        if half:\n            x = x.astype(\"float32\")\n        ms = (x * x).mean([-1], True)",
+  "new": "        ms = (x * x).mean([-1], True)\n        if half:\n            x, ms = x.astype(\"float32\"), ms.astype(\"float32\")",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[RMSNorm-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[RMSNorm-float16-near_eps-backward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   306,
+   308
+  ]
+ },
+ {
+  "id": "MN3_BN",
+  "decision": "N1 BatchNorm1D: the statistics still in the input dtype",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "BatchNorm1D",
+  "old": "            mean = x.mean(axes, True); var = x.var(axes, True)",
+  "new": "            mean = x.astype(dtype).mean(axes, True).astype(\"float32\"); var = x.astype(dtype).var(axes, True).astype(\"float32\")",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[bfloat16-near_eps]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[bfloat16-regular]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[float16-near_eps]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_batchnorm_running_stats[float16-regular]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[BatchNorm1D-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[BatchNorm1D-float16-near_eps-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   533,
+   533
+  ]
+ },
+ {
+  "id": "MN3_IN",
+  "decision": "N1 InstanceNorm2D: the statistics still in the input dtype",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "InstanceNorm2D",
+  "old": "        if half:\n            x = x.astype(\"float32\")\n        mean = x.mean([2, 3], True); var = x.var([2, 3], True)",
+  "new": "        mean = x.mean([2, 3], True); var = x.var([2, 3], True)\n        if half:\n            x, mean, var = x.astype(\"float32\"), mean.astype(\"float32\"), var.astype(\"float32\")",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-bfloat16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_rule_bits[InstanceNorm2D-float16-regular-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-bfloat16-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_half_vs_reference[InstanceNorm2D-float16-near_eps-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   640,
+   642
+  ]
+ },
+ {
+  "id": "MN4_LN",
+  "decision": "N1 LayerNorm: the float32 path given an extra cast (a float16 round trip)",
+  "file": "tensor_cuda/tensor_cuda/nn.py",
+  "scope": "LayerNorm",
+  "old": "            return xc * inv * self.weight + self.bias",
+  "new": "            return (xc * inv).astype(\"float16\").astype(\"float32\") * self.weight + self.bias",
+  "killers": [
+   "tensor_cuda/tests/test_eng2.py::test_n1_float32_bits[LayerNorm-near_eps-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_float32_bits[LayerNorm-near_eps-forward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_float32_bits[LayerNorm-regular-backward]",
+   "tensor_cuda/tests/test_eng2.py::test_n1_float32_bits[LayerNorm-regular-forward]"
+  ],
+  "predicted_by": "artifacts/eng2/N1_EMULATION.json (CPU emulation)",
+  "kind": "python",
+  "hunk_lines": [
+   148,
+   148
+  ]
+ }
+]

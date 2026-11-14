@@ -1,0 +1,24 @@
+[
+  {
+    "argv": [
+      "git",
+      "show",
+      "10738fe3:tensor_cuda/src/kernels.cu"
+    ],
+    "sha256": "7d52c1a568bfd2551dad587f73ed33513f3c877c3386621d79055b9b0c8f7c3a",
+    "excerpts": [
+      "38: }\n39: const char* dtype_name(DType dt) {\n40:   switch (dt) {\n41:     case DType::Float32: return \"float32\";\n42:     case DType::Float16: return \"float16\";\n43:     case DType::Int64: return \"int64\";\n44:     case DType::Bool: return \"bool\";\n45:     case DType::Uint8: return \"uint8\";\n46:     case DType::BFloat16: return \"bfloat16\";\n47:   }\n48:   return \"float32\";\n49: }\n50: DType dtype_from_string(const std::string& s) {\n51:   if (s == \"float32\" || s == \"float\" || s == \"f32\") return DType::Float32;\n52:   if (s == \"float16\" || s == \"half\" || s == \"f16\") return DType::Float16;"
+    ]
+  },
+  {
+    "argv": [
+      "git",
+      "show",
+      "10738fe3:tensor_cuda/src/bindings.cpp"
+    ],
+    "sha256": "1d04c8478401a955ed149be0189308b5c5021edf6b22e380aa7da51c23e3d149",
+    "excerpts": [
+      "1805:       .def_property_readonly(\"ndim\", [](Tensor& t) { return t.ndim(); })\n1806:       .def_property_readonly(\"dtype\", [](Tensor& t) { return std::string(dtype_name(t.dtype())); })\n1807:       .def_property_readonly(\"device\", [](Tensor& t) { return t.device().str(); })\n1808:       .def_property(\"requires_grad\",\n1809:                     [](Tensor& t) { return t.requires_grad(); },\n1810:                     [](Tensor& t, bool r) { t.set_requires_grad(r); })\n1811:       .def_property_readonly(\"grad\", &grad_of)\n1812:       .def(\"numpy\", &tensor_to_numpy)\n1813:       // P1T-M1: DLPack interop (see the DLPack section above for prior art).\n1814:       // P1T-FIX6 (V6-02, sweep (g)): every P1-T method takes (*args, **kwargs) and converts with CoreCallArgs (C-level\n1815:       // only; design above), so no Python method of an argument runs in the dispatcher or here.\n1816:       .def(\"__dlpack__\",\n1817:            [](py::args a, py::kwargs k) {\n1818:              const CoreCallArgs c(\"__dlpack__\", a, k,\n1819:                                   {{\"self\"}, {\"stream\", false}, {\"max_version\", false}, {\"dl_device\", false},"
+    ]
+  }
+]

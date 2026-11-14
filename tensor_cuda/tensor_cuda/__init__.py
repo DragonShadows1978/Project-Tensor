@@ -40,24 +40,43 @@ _NP_DTYPE = {
 _DEVICE_CAST_DTYPE = {"bfloat16"}
 
 
+def _np_dtype(dtype, name=False):
+    """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+    only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+    instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+    ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+    BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+    passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+    to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+    if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+        return dtype if name else _NP_DTYPE[dtype]
+    # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+    supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+    raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+
+
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
     """Create a Tensor from array-like data."""
-    if dtype in _DEVICE_CAST_DTYPE:
+    if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): a non-string is refused first
         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
         return _C.tensor(arr, device, requires_grad).astype(dtype)
-    arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
     arr = np.ascontiguousarray(arr)
     return _C.tensor(arr, device, requires_grad)
 
 
 def _factory(np_fn):
     def make(*shape, device="cuda", dtype="float32", requires_grad=False):
-        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = tuple(shape[0])
-        if dtype in _DEVICE_CAST_DTYPE:
+        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A2 (REV2 E2R2-F01): before any shape handling
+            shape = tuple(shape[0]) if len(shape) == 1 and isinstance(shape[0], (tuple, list)) else shape
             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
             return _C.tensor(arr, device, requires_grad).astype(dtype)
-        arr = np_fn(shape).astype(_NP_DTYPE.get(dtype, np.float32))
+        # ENG2-A2: every other dtype gets F1's check on the next line, also before the shape (a caller's list) is read.
+        np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)
+        # ENG2-A2 (E2R2-F01) prior art: validate-arguments-before-side-effects (no specific source known to me).
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        arr = np_fn(shape).astype(np_dtype)
         return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
     return make
 

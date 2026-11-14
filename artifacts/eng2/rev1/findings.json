@@ -1,0 +1,89 @@
+{
+  "status": "complete",
+  "findings": [
+    {
+      "id": "E2R-F01",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": 52,
+      "title": "Non-string dtype objects equal to supported names bypass refusal",
+      "reproduction": "probe_edges.py accepts collections.UserString(\"float32\") in all five entries. nonstring_random_review.py reaches data conversion in tensor and advances the real NumPy RNG in randn/rand; the C++ boundary is intercepted, so no device call occurs.",
+      "argument": "Set/dict membership tests equality and hash, not isinstance(dtype, str). The _np_dtype docstring and review require every non-string to be refused before conversion/allocation/random draws.",
+      "suggested_fix": "Validate isinstance(dtype, str) before the _DEVICE_CAST_DTYPE membership test in both tensor and make, with the registered TypeError; add non-string tests including UserString and unhashable objects.",
+      "receipts": [
+        "edge_probes.log",
+        "nonstring.json",
+        "nonstring_random_review.log",
+        "nonstring_random_review.json"
+      ],
+      "status": "open; fix outside review write scope"
+    },
+    {
+      "id": "E2R-F02",
+      "severity": "MAJOR",
+      "file": "artifacts/eng2/tool/evidence.py",
+      "line": 338,
+      "title": "L38 accepts an unrelated failure containing the registered TypeError text",
+      "reproduction": "python3 artifacts/eng2/rev1/probe_edges.py: wrapped_other_reason and wrong_type_exact_text return reasons=[] for a pinned ID with exception_class=AssertionError. A plain unrelated AssertionError is correctly refused.",
+      "argument": "The pin branch checks a substring in the complete pytest longrepr, without checking the terminal exception class/message. Quoted text in another failure is sufficient.",
+      "suggested_fix": "Require the call-phase terminal exception to be TypeError with the registered exact message, using structured exception data; reject other exception classes and extra failures. Add the constructed negative cases.",
+      "receipts": [
+        "edge_probes.log",
+        "pin_cases.json"
+      ],
+      "status": "open; fix outside review write scope"
+    },
+    {
+      "id": "E2R-F03",
+      "severity": "BLOCKER",
+      "file": "artifacts/eng2/tool/evidence.py",
+      "line": 229,
+      "title": "All registered mutant killer IDs fail the matcher",
+      "reproduction": "python3 artifacts/eng2/rev1/probe_edges.py: all 15 mutants have self_matching=0 across all registered killers.",
+      "argument": "matches() strips tensor_cuda/tests/test_eng2.py:: from the observed ID but compares it to registry patterns retaining that prefix. evaluate() therefore reports no registered killer ID failed even when a real registered killer fails and executes the mutation.",
+      "suggested_fix": "Normalize both observed IDs and registered patterns consistently, preserving literal parameter brackets; verify every registered killer self-matches and exercise a real CPU MF1/MF2 receipt through evaluate().",
+      "receipts": [
+        "edge_probes.log",
+        "killer_matching.json"
+      ],
+      "status": "open; fix outside review write scope"
+    },
+    {
+      "id": "E2R-F04",
+      "severity": "BLOCKER",
+      "file": "artifacts/eng2/tool/score_gpu.py",
+      "line": 46,
+      "title": "Cross-arm byte scoring compares unnormalized arm-specific test IDs",
+      "reproduction": "python3 artifacts/eng2/rev1/cross_arm_review.py: collect 262 real IDs per arm, call the actual _record with identical constructed hashes, then execute the unchanged scoring loop. Both f1bytes (35/35 rows) and p302bits (20/20 rows) report IDs equal False and every baseline row differing.",
+      "argument": "test_eng2.py:57 stores request.node.nodeid, including artifacts/eng2/tool/arms/baseline or candidate. score_gpu.py:46-47 keys by that raw string, so no corresponding row can match.",
+      "suggested_fix": "Normalize row test_id with evidence.norm_id on both sides before comparing, reject duplicate normalized IDs, and verify the expected 35/20 row census. Keep hashes unchanged.",
+      "receipts": [
+        "cross_arm_review.log",
+        "cross_arm_review.json",
+        "baseline_collection.log",
+        "candidate_collection.log"
+      ],
+      "status": "open; fix outside review write scope"
+    },
+    {
+      "id": "E2R-F05",
+      "severity": "MINOR",
+      "file": "artifacts/eng2/dtype_census.py",
+      "line": 45,
+      "title": "The all-entry dtype census omits Python entries and a residual private fallback",
+      "reproduction": "python3 artifacts/eng2/rev1/census_review.py: functional._causal_mask(0,0,\"cpu\",dtype) returns float32 for float64, double, int32, not_a_dtype and None. Three quantization.affine scale_dtype/out_dtype entries are also absent from L60 JSON; they use NumPy conversion semantics.",
+      "argument": "The existing 201 rows reproduce, but are not an exhaustive census of tensor_cuda/tensor_cuda. The ledger mentions the private mask assumption without emitting its required per-input rows. Its callers currently pass Tensor.dtype, so unsupported-name reachability is limited to direct private calls.",
+      "suggested_fix": "Complete the census with the omitted Python entries and their baseline outcomes. Guard the private mask against unsupported/non-string dtype arguments before constructing a tensor, or obtain an explicit scope exception for that internal-only contract; preserve valid NumPy dtype support in affine helpers.",
+      "receipts": [
+        "census_review_r1.log",
+        "census_review.json"
+      ],
+      "status": "open; fix outside review write scope"
+    }
+  ],
+  "verdict": "RED",
+  "baseline": "bc02d3a1",
+  "candidate": "2237299b",
+  "review_head": "c309e53ce2747f6acc9d40223cd53e0c3b9835e7",
+  "scope": "CPU/source review only; no registered gate, GPU execution or promotion"
+}

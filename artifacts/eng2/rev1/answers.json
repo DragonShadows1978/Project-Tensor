@@ -1,0 +1,32 @@
+[
+  {
+    "question": 1,
+    "title": "F1 refusal",
+    "answer": "Unsupported ordinary strings are refused before conversion/allocation/draws; the claim for every non-string is false (E2R-F01). The six supported dtypes and float64-data default preserve their source paths. Ran cpu_review.py (candidate 121 passed, baseline 60 failed/61 passed) and census_review.py (201 rows per arm reproduced, 35 supported/default host-path pairs, 17 nonconstant byte comparisons). Spot-checked tensor, randn, nn.parameter, empty and Tensor.astype. A private silent fallback remains in functional._causal_mask; the census is incomplete (E2R-F05). Device bytes remain for G5."
+  },
+  {
+    "question": 2,
+    "title": "N1 forwards",
+    "answer": "Checked: half/bfloat16 statistics use float32, half affine parameters upcast, and output casts back once. final_checks.py traced 20 input/parameter-dtype combinations. norm_review.py executed the actual forward source: six float32 class/mode operation-sequence diffs are empty, including BatchNorm train/eval. Its float32 running update remains (1-m)*running + m*batch. Ten emulated input/parameter-gradient rows retain their leaf dtype, consistent with ops.cpp:1072-1078 casting each VJP to src. No GPU gradient claim."
+  },
+  {
+    "question": 3,
+    "title": "Tests",
+    "answer": "Checked: E3 is imported unchanged; byte comparison to bc02d3a1 passed. Both added groups are sound for their registered cases. completion_checks.py independently bounded all six running-statistics cases within the registered tolerances (maximum bound/tolerance: mean 0.861680, variance 0.678618). Actual-source emulation reproduces 46 baseline N1 failures and zero candidate failures; union with the 60 real CPU F1 failures equals all 106 registered IDs exactly. cross_arm_review.py collected 262 IDs per arm."
+  },
+  {
+    "question": 4,
+    "title": "Mutants",
+    "answer": "Checked: static_tool_review.py validated all 15 as exactly one registered edit, with matching hunk lines and otherwise identical arm files; final_checks.py matched every killer set to its prediction. Four traced spot checks: MF1 has 12 real CPU failures/12 hunk hits; MF2 has 48/48; MN2_RMS executes line 305 and differs in 15/64 forward elements; MN3_BN executes line 533 and differs in 28/64. The latter two execute actual source/test code with CPU arithmetic emulation. GPU kills remain for G5; the matcher currently blocks scoring (E2R-F03)."
+  },
+  {
+    "question": 5,
+    "title": "Tool changes",
+    "answer": "Parent-after-child receipts, device-mode seal verification and dependency checks are preserved: read run_gpu_line.py:34-44,68-107; verified the live seal, all 17 arms, all 12 COPY_DEPS records and the existing parent timestamps; recomputed unsatisfied device-mode prerequisites. Exactly ten IDs are pinned. edge_probes.py constructs an unrelated AssertionError that is refused, but another AssertionError containing the expected text is accepted (E2R-F02). All 15 killer sets fail matching (E2R-F03). Real collection/_record plus the exact scorer loop rejects identical constructed hashes for 35 F1 and 20 float32 rows (E2R-F04)."
+  },
+  {
+    "question": 6,
+    "title": "G3 SASS",
+    "answer": "Confirmed by sass_review.py using CUDA 12.6 cuobjdump -sass on both pinned modules: 1,005,817 lines per module, 28 module-ID substitutions each, every other byte unchanged, identical normalized SHA-256 7b2980117ad34db3cac8145412f8ea08b78aa888f8eecc0921b5cb8da1163fd8. This confirms the device-code comparison, not binary identity or GPU execution."
+  }
+]

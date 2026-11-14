@@ -130,11 +130,25 @@ class LayerNorm(Module):
         self.eps = eps
 
     def forward(self, x):
+        # ENG2 N1: float16/bfloat16 inputs are normalized in float32 and the output is cast back to the input dtype
+        # once, following GroupNorm (GN1 A1, GroupNorm.forward below); half weights and biases are converted to
+        # float32 for the affine step. Every other input dtype runs the unchanged op sequence (the `not half` return).
+        # Prior art: PyTorch's half/bfloat16 normalization accumulates in float32 (acc_type); Micikevicius et al.
+        # (2018), "Mixed Precision Training" (both unverified -- lead to check: "PyTorch layer_norm acc_type half").
+        # Taken: float32 statistics for half tensors. Ours: this engine's op sequence and the single final cast.
+        dtype = x.dtype
+        half = dtype in ("float16", "bfloat16")
+        if half:
+            x = x.astype("float32")
         mean = x.mean([-1], True)
         xc = x - mean
         var = (xc * xc).mean([-1], True)
         inv = (var + self.eps).pow(-0.5)
-        return xc * inv * self.weight + self.bias
+        if not half:
+            return xc * inv * self.weight + self.bias
+        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+        return (xc * inv * weight + bias).astype(dtype)
 
 
 class Dropout(Module):
@@ -284,9 +298,17 @@ class RMSNorm(Module):
         self.eps = eps
 
     def forward(self, x):
+        # ENG2 N1: half inputs are normalized in float32 and cast back once (GroupNorm's pattern); after the upcast
+        # the existing weight line converts half weights to float32. Prior art as in LayerNorm.forward above
+        # (PyTorch float32 accumulation; Micikevicius et al. 2018; unverified -- lead to check).
+        dtype = x.dtype
+        half = dtype in ("float16", "bfloat16")
+        if half:
+            x = x.astype("float32")
         ms = (x * x).mean([-1], True)
         w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
-        return x * (ms + self.eps).pow(-0.5) * w
+        out = x * (ms + self.eps).pow(-0.5) * w
+        return out.astype(dtype) if half else out
 
 
 class MultiheadAttention(Module):
@@ -493,9 +515,20 @@ class BatchNorm1D(Module):
 
     def forward(self, x):
         # x: (N, C) or (N, C, L) -> normalize over N (and L)
+        # ENG2 N1: half inputs are normalized in float32 and cast back once (GroupNorm's pattern); half weights and
+        # biases are converted to float32. The running statistics stay float32 tensors with the same update rule;
+        # for half inputs they now receive the float32 batch statistics. Prior art as in LayerNorm.forward above
+        # (PyTorch float32 accumulation; Micikevicius et al. 2018; unverified -- lead to check).
+        dtype = x.dtype
+        half = dtype in ("float16", "bfloat16")
+        if half:
+            x = x.astype("float32")
         axes = [0] if x.ndim == 2 else [0, 2]
         wshape = [1, self.C] if x.ndim == 2 else [1, self.C, 1]
         w = self.weight.reshape(wshape); b = self.bias.reshape(wshape)
+        if half:
+            w = w if w.dtype == "float32" else w.astype("float32")
+            b = b if b.dtype == "float32" else b.astype("float32")
         if self.training:
             mean = x.mean(axes, True); var = x.var(axes, True)
             mn = mean.numpy().ravel(); vr = var.numpy().ravel()
@@ -504,7 +537,8 @@ class BatchNorm1D(Module):
         else:
             mean = self.running_mean.reshape(wshape).detach()
             var = self.running_var.reshape(wshape).detach()
-        return (x - mean) * (var + self.eps).pow(-0.5) * w + b
+        out = (x - mean) * (var + self.eps).pow(-0.5) * w + b
+        return out.astype(dtype) if half else out
 
 
 class GroupNorm(Module):
@@ -597,9 +631,21 @@ class InstanceNorm2D(Module):
         self.bias = parameter(np.zeros(num_features))
 
     def forward(self, x):
+        # ENG2 N1: half inputs are normalized in float32 and cast back once (GroupNorm's pattern); half weights and
+        # biases are converted to float32 for the affine step. Every other input dtype runs the unchanged op
+        # sequence (the `not half` return). Prior art as in LayerNorm.forward above (PyTorch float32 accumulation;
+        # Micikevicius et al. 2018; unverified -- lead to check).
+        dtype = x.dtype
+        half = dtype in ("float16", "bfloat16")
+        if half:
+            x = x.astype("float32")
         mean = x.mean([2, 3], True); var = x.var([2, 3], True)
         xn = (x - mean) * (var + self.eps).pow(-0.5)
-        return xn * self.weight.reshape([1, self.C, 1, 1]) + self.bias.reshape([1, self.C, 1, 1])
+        if not half:
+            return xn * self.weight.reshape([1, self.C, 1, 1]) + self.bias.reshape([1, self.C, 1, 1])
+        weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+        bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+        return (xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])).astype(dtype)
 
 
 class Conv1D(Module):

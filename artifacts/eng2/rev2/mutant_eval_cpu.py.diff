@@ -1,0 +1,50 @@
+--- 
++++ 
+@@ -35,31 +35,15 @@
+ import evidence  # noqa: E402
+ 
+ RUNS = TOOL / "gpu_runs" / "audit_2" / "cpu_mutants"
+-assert not RUNS.exists(), "fresh root required"
+-ARMS = {"candidate_eng2": ("candidate", "eng2"), "MF1": ("MF1", "mutation"), "MF2": ("MF2", "mutation")}
+-env = {k: v for k, v in os.environ.items() if k not in ("ENG2_AUDIT", "PYTHONOPTIMIZE")}
+-env.update(RUNS=str(RUNS), CUDA_VISIBLE_DEVICES="", TMPDIR="/tmp/eng2_a1_mut", PYTEST_ADDOPTS="-k cpu",
+-           PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
+-           NUMEXPR_NUM_THREADS="1")
+-Path(env["TMPDIR"]).mkdir(exist_ok=True)
+-start = subprocess.run([sys.executable, "-B", "start_gpu_run.py"], cwd=TOOL, env=env, capture_output=True, text=True,
+-                       timeout=120)
+-assert start.returncode == 0, start.stderr
++# REV2: replay real A1 receipts without executing or writing under the tool.
+ seal = evidence.verify_seal()
+ cpu_census = (TOOL / "ids_audit.txt").read_text().splitlines()
+-evidence.census = lambda line, audit=False: cpu_census  # the one declared substitution
+-out = dict(root=str(RUNS.relative_to(A1.parents[2])), start=json.loads(start.stdout.strip().splitlines()[-1]),
+-           substitution="evidence.census -> tool/ids_audit.txt (%d CPU IDs)" % len(cpu_census), lines={})
++evidence.census = lambda line, audit=False: cpu_census
++out = dict(root=str(RUNS), substitution="CPU census only", lines={})
+ attempt_of = {}
+-for label, (arm, suite) in ARMS.items():
++for label in ["candidate_eng2", "MF1", "MF2"]:
+     attempt = RUNS / label / "attempt-0001"
+-    attempt.mkdir(parents=True)
+-    e = dict(env, ENG2_LINE=label, ENG2_ATTEMPT=str(attempt), FORGE_GPU_RUN_LOG=str(attempt / "forge.log"))
+-    with (attempt / "stdout.log").open("x") as log:
+-        rc = subprocess.run([sys.executable, "-B", str(A1 / "cpu_runner_standin.py"), "--label", "eng2a1-" + label,
+-                             "--", "timeout", "--kill-after=10s", "500s", sys.executable, "-B", "run_gpu_tests.py",
+-                             arm, suite], cwd=TOOL, env=e, stdout=log, stderr=subprocess.STDOUT, timeout=560).returncode
+-    attempt_of[label] = (attempt, rc)
++    attempt_of[label] = (attempt, evidence.read(attempt / "child_result.json")["pytest_exit"])
+ lines = evidence.lines()
+ for label, (attempt, rc) in attempt_of.items():
+     line = lines[label]
+@@ -75,8 +59,8 @@
+         row.update(registered_killers=len(killers), actual_killers=len(result["actual_killers"]),
+                    actual_equals_registered=sorted(result["actual_killers"]) == killers,
+                    failed_equals_registered=failed == killers,
+-                   killers_traced=sum(bool(trace.get(k)) for k in killers), hunk=data["mutant_hunk"])
+-        spec = importlib.util.spec_from_file_location("evidence_before_a1", A1 / "before" / "artifacts__eng2__tool__evidence.py")
++                   killers_traced=sum(bool(set(trace.get(k, [])) & set(data["mutant_hunk"]["lines"])) for k in killers), hunk=data["mutant_hunk"])
++        spec = importlib.util.spec_from_file_location("evidence_before_a1", A1.parent / "a1" / "before" / "artifacts__eng2__tool__evidence.py")
+         old = importlib.util.module_from_spec(spec)
+         spec.loader.exec_module(old)
+         row["prefix_matcher_matches"] = sum(bool(old.matches(i, evidence.killers_for(label))) for i in failed)

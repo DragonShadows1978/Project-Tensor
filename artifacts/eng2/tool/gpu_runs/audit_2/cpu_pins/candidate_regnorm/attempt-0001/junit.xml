@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="10" time="1.955" timestamp="2026-11-14T11:13:51.494855-05:00" hostname="MilleniumFalcon"><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p-1.5]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = -1.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+../../../tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p-0.5]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = -0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+../../../tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+0.5]" time="0.002"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+../../../tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+2]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 2.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+../../../tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+3]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 3.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+../../../tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p-1.5]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = -1.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p-0.5]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = -0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+0.5]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+2]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 2.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+3]" time="0.001"><failure message="TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16">dtype = 'float64', p = 3.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+../../../tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:63: in tensor
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
+                                 ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = 'float64', name = False
+
+    def _np_dtype(dtype, name=False):
+        """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+        only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+        instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+        ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+        BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+        passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+        to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+        if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+            return dtype if name else _NP_DTYPE[dtype]
+        # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+&gt;       raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
+E       TypeError: unsupported dtype 'float64'; supported dtypes: float32, float16, int64, bool, uint8, bfloat16
+
+arms/candidate/tensor_cuda/tensor_cuda/__init__.py:55: TypeError</failure></testcase></testsuite></testsuites>

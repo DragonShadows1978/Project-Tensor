@@ -1,0 +1,13 @@
+# ENG2-REV2 registration (immutable)
+Order: orders/ENG2_REV2_REVIEW.md; mechanism: orders/ENG2_A1_REV1_FIXES.md.
+Scope: five fixes only; exclude N1 review, C++, GPU and promotion. Baseline bc02d3a1; A1 1a4beed1; scope comparison 9452ef61..1a4beed1.
+CPU only, CUDA_VISIBLE_DEVICES empty, nice 19, OMP/OPENBLAS/MKL/NUMEXPR threads 1, PYTHONDONTWRITEBYTECODE=1; TMPDIR=/tmp/eng2_rev2_review; commands timeout <= 590 seconds. No git writes, deletion, subagents or background work. Output only rev2 and named scratch. pytest cache disabled.
+Q1: inspect ordering and exercise nonstrings plus all six names, compare baseline/candidate intercepts in one process. Guards must precede membership, conversion, allocation, RNG and mask cache. Examine name=True and str subclasses against the contract.
+Q2: copy REV1 probes with only output/import adaptations; rerun all negative pin scenarios and A1 real P0. Exact call TypeError plus exact registered message required; other failures must refuse.
+Q3: all 15 registered killer sets must equal matched IDs over the 298-ID census, including self-match. Replay MF1/MF2 evaluation with 12/48 killers and traces; survivors must refuse.
+Q4: rerun copied cross_arm_review.py. Exactly 35 f1bytes and 20 p302bits rows with normalized IDs and rederived identical hashes; changed hash, duplicates and missing rows must refuse. Timing/logs excluded; fixtures exercise scorer, not GPU parity.
+Q5: inspect every dtype-bearing Python signature and mapping in tensor_cuda/tensor_cuda; rerun census with baseline and candidate; private mask six supported names retain behavior. C++ unchanged and out of review scope.
+Q6: compare AG3_SCOPE.json to read-only git diff; source tests additions only and N1 unchanged. Candidate CPU subset must pass 157 IDs. Reconstruct baseline, candidate, MF1 from make_arm recipe without writing outside rev2/scratch and compare all contents; MF2 additionally checked if useful.
+L19 arrays must be nonzero/nonconstant for comparisons; L25 both emulated sides same process/thread; L41 receipt traces must contain mutant hunk for every counted killer.
+Every finding gets ID E2R2-Fnn, severity, file/line, reproduction/argument/fix. Unrun is not pass. Stop on scope mismatch; own script exceptions at most three repairs, each ledgered, never alter registered acceptance. Amendments separate.
+Prior art: differential comparison and mutation testing are established techniques; DeMillo, Lipton and Sayward (1978), Hints on Test Data Selection, unverified — lead to check. Reused REV1/A1 probes and Python/pytest structured exception and fnmatch behavior. No novel algorithm claimed.

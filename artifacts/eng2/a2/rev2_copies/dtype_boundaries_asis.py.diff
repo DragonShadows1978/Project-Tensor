@@ -1,0 +1,15 @@
+--- ../../rev2/dtype_boundaries.py	2026-11-14 11:32:17.366405359 -0500
++++ dtype_boundaries_asis.py	2026-11-14 11:56:41.051187571 -0500
+@@ -8,8 +8,10 @@
+ from collections import UserString
+ import ast, hashlib, json, math, subprocess, sys
+ import numpy as np
+-ROOT=Path.cwd();OUT=ROOT/"artifacts/eng2/rev2"
+-def source(rev,path):return subprocess.check_output(["git","--no-optional-locks","show",rev+":"+path],text=True)
++ROOT=Path.cwd();OUT=ROOT/"artifacts/eng2/a2/rev2_out/asis"  # A2: output rebound
++def source(rev,path):  # A2: no git; bc02d3a1 = base_pkg, else the A2 worktree
++ assert path.startswith("tensor_cuda/tensor_cuda/")
++ return ((ROOT/"artifacts/eng2/base_pkg"/path[len("tensor_cuda/"):]) if rev=="bc02d3a1" else (ROOT/path)).read_text()
+ def sha(b):return hashlib.sha256(b).hexdigest()
+ def save(name,data):(OUT/name).write_text(json.dumps(data,indent=2)+"\n")
+ class Captured:

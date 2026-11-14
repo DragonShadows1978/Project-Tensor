@@ -1,0 +1,20 @@
+--- g4/g4_dry.py	2026-11-14 10:18:40.662812255 -0500
++++ a1/g4_dry.py	2026-11-14 11:14:29.448270246 -0500
+@@ -31,7 +31,7 @@
+ for line in lines:
+     label = line["label"]
+     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONOPTIMIZE", "ENG2_AUDIT")}
+-    env.update(RUNS=str(runs), CUDA_VISIBLE_DEVICES="0", TMPDIR="/tmp/eng2_dry", FORGE_GPU_DRY_RUN="1")
++    env.update(RUNS=str(runs), CUDA_VISIBLE_DEVICES="0", TMPDIR="/tmp/eng2_a1_dry", FORGE_GPU_DRY_RUN="1")
+     cmd = ["timeout", "1190s", "bash", "artifacts/eng2/tool/STAGED_GPU_COMMANDS.sh", label]
+     p = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL)
+     start_line = next((l for l in p.stdout.splitlines() if l.startswith("{") and '"seal_sha256"' in l), None)
+@@ -53,7 +53,7 @@
+     i = next(j for j, l in enumerate(script) if l.startswith("  %s) #" % label))
+     words = shlex.split(script[i + 1])
+     argv = words[words.index("$GPU_RUN") + 1:]
+-    log = Path("/tmp/eng2_dry_s1") / (name + "_" + label + ".forge.log")
++    log = Path("/tmp/eng2_a1_dry_s1") / (name + "_" + label + ".forge.log")
+     log.parent.mkdir(exist_ok=True)
+     assert not log.exists()
+     s1 = subprocess.run(["forge-gpu-run", *argv], cwd=TOOL, env=dict(env, FORGE_GPU_RUN_LOG=str(log)),

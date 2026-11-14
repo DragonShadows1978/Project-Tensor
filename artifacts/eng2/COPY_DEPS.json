@@ -1,0 +1,376 @@
+{
+ "note": "L40: the copy's default writes are its RUNS root (tool/gpu_runs/<root>, guard() keeps it under artifacts/eng2/tool and outside arms) and TMPDIR (/tmp/eng2_*, scratch_guard); the build writes tensor_cuda/build-eng2/. No earlier run executed the copy.",
+ "files": [
+  {
+   "file": "arm_origin.py",
+   "sha256_before": "06ae3b76ae971ef98d00120f6ae9f62a5112d9650216d7c1b1db7cf3f726a148",
+   "sha256_after": "06ae3b76ae971ef98d00120f6ae9f62a5112d9650216d7c1b1db7cf3f726a148",
+   "status": "unchanged",
+   "eng1_bound_code_lines_before": []
+  },
+  {
+   "file": "device_evidence.py",
+   "sha256_before": "e9c9724dc36a6f3f66315f418ab5712b6ce856527543db412609885d337c499c",
+   "sha256_after": "e9c9724dc36a6f3f66315f418ab5712b6ce856527543db412609885d337c499c",
+   "status": "unchanged",
+   "eng1_bound_code_lines_before": []
+  },
+  {
+   "file": "evidence.py",
+   "sha256_before": "c7201f7d06e2dd7094b4775333ccb44df06abe8d9ff5764dcb864379e9a3cc11",
+   "sha256_after": "1cc4b618d1de6f59e570f88183073383edd744e250ee239c43c8c0af7177d619",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "5: ENG1 changes (ledgered): per-arm engine pins (the arms differ in C++); ENG1 suites (eng1, mutation, regression);",
+    "23: ORDER = \"orders/ENG1_A3_DEVICE_SEAL_ROUTING.md\"  # A3 route (a): re-pointed from ENG1_A1_REV1_FIXES.md",
+    "24: SEAL_NAME = \"staging_seal_a3.json\"  # A3 route (a): was staging_seal_a1.json; prior art: none known to me (a constant re-point)",
+    "45: raise ValueError(\"RUNS must be under artifacts/eng1/tool and outside arms\")",
+    "98: m = re.match(r\"artifacts/eng1/tool/arms/[^/]+/(tensor_cuda/.*)$\", id_)",
+    "104: return (TOOL / (\"ids_a1_\" + name + \".txt\")).read_text().splitlines()",
+    "161: assert resolved.parent == Path(\"/tmp\") and resolved.name.startswith(\"eng1_\"), \"TMPDIR must resolve to /tmp/eng1_*\"",
+    "214: m = {r[\"id\"]: r for r in read(TOOL.parent / \"mutants\" / \"mutants.json\") + read(TOOL.parent / \"a1/MUTANTS.json\")}[label]",
+    "274: registered = sorted(read(TOOL / \"baseline_expected_failures_a1.json\"))",
+    "364: dependency = recompute_line(runs, \"candidate_eng1\", seal, start, (*stack, label))",
+    "366: result[\"reasons\"].append(\"mutations require a passing candidate_eng1 on the killer IDs\")"
+   ]
+  },
+  {
+   "file": "forge_gpu_run_standin.py",
+   "sha256_before": "dfabdb2343cf515b0586a9ddf60b259ec1d913d5ec91d8a694da090a02e0da59",
+   "sha256_after": "8bb233a23b37d7029ae3fa5174bf85b3916570b9a533909b25ff3bd337f75bf0",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "10: assert os.environ.get(\"ENG1_AUDIT\") == \"1\""
+   ]
+  },
+  {
+   "file": "run_gpu_line.py",
+   "sha256_before": "a8ae4340fe607ca7ebf98310f9c6b6e19885a9bd8ec6229a7178b180f2bb42af",
+   "sha256_after": "35aadb8025acc42c72defee12b96659e827b78b60591ca83121d02e812fb747f",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "6: ENG1 changes (ledgered): ENG1_* environment names; /tmp/eng1_* scratch; mutant lines depend on a passing",
+    "7: candidate_eng1 line; GN1's control-mode and program-binding conjunctions dropped (their program_binding.py is not in",
+    "37: audit = os.environ.get(\"ENG1_AUDIT\") == \"1\"",
+    "40: assert recompute_line(runs, \"candidate_eng1\", seal, start_record)[\"passed\"], \"mutations require a passing candidate_eng1\"",
+    "59: env = dict(os.environ, RUNS=str(runs), ENG1_LINE=label, ENG1_ATTEMPT=str(output),",
+    "83: dependency = recompute_line(runs, \"candidate_eng1\", seal, start_record)",
+    "85: result[\"reasons\"].append(\"mutations require a passing candidate_eng1\")"
+   ]
+  },
+  {
+   "file": "run_gpu_tests.py",
+   "sha256_before": "8833e0a39186b705b8f890a68005bcdbc7587d3e03da00c0d67ebcad5ca9eeb6",
+   "sha256_after": "1f07f15c240d8f5662f8c56664aa07af3ace33cf83f2833a617530b798f981d0",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "4: ENG1 changes (ledgered): ENG1_* environment names; the arm is a package copy plus copies of test_eng1.py and",
+    "5: test_terrain_render.py under arms/<arm>/tensor_cuda/ (each arm pins its own engine); suites eng1 / mutation /",
+    "8: ENG1_CENSUS_DIR points the E3 census rows at the attempt directory; GN1's GroupNorm-specific report fields dropped.",
+    "20: atomic_json(Path(os.environ[\"ENG1_ATTEMPT\"]) / \"child_started.json\",",
+    "21: dict(pid=os.getpid(), label=os.environ[\"ENG1_LINE\"]))",
+    "69: label = os.environ[\"ENG1_LINE\"]",
+    "70: audit = os.environ.get(\"ENG1_AUDIT\") == \"1\"",
+    "71: output = Path(os.environ[\"ENG1_ATTEMPT\"]).resolve()",
+    "101: files = [str(package / \"tests\" / \"test_eng1.py\")]",
+    "109: os.environ[\"ENG1_CENSUS_DIR\"] = str(output)"
+   ]
+  },
+  {
+   "file": "runtime_evidence.py",
+   "sha256_before": "a2b2d61d787e568158d223fe0ac06342cc5199a2f41c514d361f7e7953c7d3d7",
+   "sha256_after": "a2b2d61d787e568158d223fe0ac06342cc5199a2f41c514d361f7e7953c7d3d7",
+   "status": "unchanged",
+   "eng1_bound_code_lines_before": []
+  },
+  {
+   "file": "score_gpu.py",
+   "sha256_before": "ec0cfc3324a000c845597118fb1eb3900636ca78fbcbac2e97870eb2741a2711",
+   "sha256_after": "52873fe448344daf68e538a543c04c3812b7fefafcf8412bac0a73870a87db3d",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "4: ENG1 changes (ledgered): M09 counts only with a passing C_UBSAN control; the E3 census rows are collected from",
+    "5: candidate_eng1 and reported (not gated); the per-mutant killer IDs are listed.",
+    "35: cand = summary.get(\"candidate_eng1\", {}).get(\"selected_attempt\")"
+   ]
+  },
+  {
+   "file": "start_gpu_run.py",
+   "sha256_before": "00faa6a18fc205295c92d038e25e31cd8fbea6ed83a88f040f214ce8bc0ffb64",
+   "sha256_after": "a5c2ee20518b81b13c162f9faaee392838376d9c4fd3299cc7ecb206c9b597ba",
+   "status": "edited",
+   "eng1_bound_code_lines_before": [
+    "14: audit=os.environ.get(\"ENG1_AUDIT\") == \"1\", run_root=str(runs),"
+   ]
+  },
+  {
+   "file": "stage.py",
+   "sha256_before": "fc11bcf83bd4952e32466ec3a5cbf211f465b7d9a66d748cc0ea1d31af8e808b",
+   "sha256_after": "26b67bcfbb0f8067b1e2353895f3c605b3813d37aa2812c79e1f6cf3a6dbcdd3",
+   "status": "rewritten for ENG2 (same steps)",
+   "eng1_bound_code_lines_before": [
+    "3: arms      build arms/<arm>/tensor_cuda/{tensor_cuda/<package + pinned module>, tests/<test_eng1.py,",
+    "7: seal      write staging_seal.json (order, tools, registration files, arm maps, engine pins)",
+    "20: ENG1 = TOOL.parent",
+    "23: ORDER_COMMIT = \"3b6a5a867f75a399a563ddf9d693133ec938552b\"",
+    "24: SEAL_NAME = \"staging_seal_a1.json\"",
+    "26: MUTANTS = json.loads((ENG1 / \"mutants\" / \"mutants.json\").read_text()) + json.loads((ENG1 / \"a1/MUTANTS.json\").read_text())",
+    "49: shutil.copy2(ROOT / \"tensor_cuda/tests/test_eng1.py\", dest / \"tests/test_eng1.py\")",
+    "59: shutil.copy2(ROOT / \"tensor_cuda/tests/test_eng1.py\", tests / \"test_eng1.py\")",
+    "71: make_arm(\"baseline\", ROOT / \"tensor_cuda/build-eng1-base/module\" / MODULE, base=True)",
+    "72: make_arm(\"candidate\", ROOT / \"tensor_cuda/build-eng1/module\" / MODULE)",
+    "77: make_arm(m[\"id\"], ROOT / \"tensor_cuda/build-eng1/module\" / MODULE,",
+    "79: elif (ENG1 / \"mutants\" / m[\"id\"] / MODULE).exists():",
+    "80: make_arm(m[\"id\"], ENG1 / \"mutants\" / m[\"id\"] / MODULE)",
+    "83: if (ENG1 / \"mutants\" / \"C_UBSAN\" / MODULE).exists():",
+    "84: make_arm(\"C_UBSAN\", ENG1 / \"mutants\" / \"C_UBSAN\" / MODULE)",
+    "85: if (ENG1 / \"mutants\" / \"_unmutated_copy\" / MODULE).exists():",
+    "88: make_arm(\"C_COPY\", ENG1 / \"mutants\" / \"_unmutated_copy\" / MODULE)",
+    "97: selectors={r[\"test_id\"] for r in json.loads(Path(os.environ[\"ENG1_SOURCE_CLASS\"]).read_text())}",
+    "98: arm=os.environ[\"ENG1_COLLECT_ARM\"]",
+    "110: extra = os.environ.get(\"ENG1_COLLECT_K\")",
+    "111: args = [\"-q\", \"-p\", \"no:cacheprovider\", os.environ[\"ENG1_IMPORT_MODE\"], \"--collect-only\", \"--rootdir=\" + os.environ[\"ENG1_ROOT\"]]",
+    "120: m = re.match(r\"artifacts/eng1/tool/arms/[^/]+/(tensor_cuda/.*)$\", i)",
+    "131: files = [str(pkg / \"tests/test_eng1.py\")]",
+    "133: out = Path(os.environ[\"TMPDIR\"]) / f\"collect_a1_{arm}_{suite}{tag}.json\"",
+    "134: env = dict(os.environ, ENG1_ROOT=str(ROOT), PYTHONDONTWRITEBYTECODE=\"1\", CUDA_VISIBLE_DEVICES=\"\", ENG1_COLLECT_ARM=arm,",
+    "135: ENG1_SOURCE_CLASS=str(TOOL / \"source_reading_tests.json\"),",
+    "136: ENG1_IMPORT_MODE=\"--import-mode=prepend\" if suite in (\"regression\", \"terrain\") else \"--import-mode=importlib\")",
+    "140: env[\"ENG1_COLLECT_K\"] = k",
+    "144: (TOOL / f\"collect_a1_{arm}_{suite}{tag}.json\").write_text(json.dumps(",
+    "151: for arm, suite, k, name in ((\"baseline\", \"eng1\", None, \"eng1\"), (\"candidate\", \"eng1\", None, \"eng1_candidate\"),",
+    "152: (\"candidate\", \"eng1\", \"cpu\", \"audit\"),",
+    "153: (\"candidate\", \"eng1\", \"not test_e6_terrain_writes_nothing\", \"eng1_noe6\"),",
+    "160: (TOOL / f\"ids_a1_{name}.txt\").write_text(\"\".join(i + \"\\n\" for i in ids))",
+    "161: assert (TOOL / \"ids_a1_eng1.txt\").read_text() == (TOOL / \"ids_a1_eng1_candidate.txt\").read_text(), \"eng1 IDs differ by arm\"",
+    "163: baseline = (TOOL / \"ids_a1_regression.txt\").read_text().splitlines()",
+    "164: candidate = (TOOL / \"ids_a1_regression_candidate.txt\").read_text().splitlines()",
+    "167: assert (TOOL / \"ids_a1_terrain.txt\").read_text() == (TOOL / \"ids_a1_terrain_candidate.txt\").read_text(), \"terrain IDs differ by arm\"",
+    "176: rows = [dict(label=\"baseline_eng1\", arm=\"baseline\", suite=\"eng1\", role=\"baseline\", census=\"eng1\",",
+    "177: expected_child_exits=[1], expected_parent_exit=0, **bounds(ENG1_INNER)),",
+    "178: dict(label=\"candidate_eng1\", arm=\"candidate\", suite=\"eng1\", role=\"candidate\", census=\"eng1\",",
+    "179: expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG1_INNER)),",
+    "188: dict(label=\"C_COPY\", arm=\"C_COPY\", suite=\"control\", role=\"control\", census=\"eng1_noe6\",",
+    "190: dict(label=\"C_UBSAN\", arm=\"C_UBSAN\", suite=\"control\", role=\"control\", census=\"eng1_noe6\", control_of=\"M09\",",
+    "191: expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG1_INNER))]",
+    "195: census=\"eng1\" if py else \"eng1_noe6\", expected_child_exits=[1], expected_parent_exit=0,",
+    "196: **bounds(ENG1_INNER if py else MUT_INNER)))",
+    "199: ids = (TOOL / \"ids_a1_eng1.txt\").read_text().split()",
+    "200: pred = json.loads((ENG1 / \"cpu_checks.json\").read_text())[\"e2_emulated_predictions\"]",
+    "212: predictions = json.loads((ENG1 / \"a1/e2_witnesses.json\").read_text())",
+    "219: (TOOL / \"baseline_expected_failures_a1.json\").write_text(json.dumps(sorted(fail), indent=1) + \"\\n\")",
+    "226: seal = dict(order_commit=ORDER_COMMIT, order_sha256=sha(ROOT / \"orders/ENG1_A1_REV1_FIXES.md\"),",
+    "229: if p.is_file() and not p.name.startswith((\"staging_seal\", \"collect_\"))},",
+    "231: [ROOT / \"tensor_cuda/tests/test_eng1.py\", ENG1 / \"mutants/mutants.json\", ENG1 / \"a1/MUTANTS.json\", ENG1 / \"a1/REGISTRATION.md\"] +",
+    "235: for a in arms:  # every arm runs the worktree's current test_eng1.py",
+    "236: assert sha(TOOL / \"arms\" / a / \"tensor_cuda/tests/test_eng1.py\") == sha(ROOT / \"tensor_cuda/tests/test_eng1.py\"), a",
+    "247: '# ENG1 staged GPU lines (adapted from GN1 A8; the lead runs them; the seat never did on a device).',",
+    "251: '# Usage: RUNS=/abs/path/under/artifacts/eng1/tool/gpu_runs/<root> TMPDIR=/tmp/eng1_g5 \\\\',",
+    "253: '# Run the labels in gpu_lines.json order with the SAME RUNS (mutants need a passing candidate_eng1;',",
+    "257: '# CPU plumbing audit: RUNS=/abs/audit/root TMPDIR=/tmp/eng1_audit timeout 1190s bash STAGED_GPU_COMMANDS.sh --audit',",
+    "264: 'export TMPDIR=\"${TMPDIR:?TMPDIR must be /tmp/eng1_*}\"',",
+    "269: '    export ENG1_AUDIT=1 CUDA_VISIBLE_DEVICES=',",
+    "271: '    label=candidate_eng1',",
+    "273: '    unset ENG1_AUDIT',",
+    "282: f'--min {r[\"minimum\"]} --max {r[\"maximum\"]} --label eng1-{r[\"label\"]} -- timeout --kill-after=10s '",
+    "285: out += ['  *) echo \"unknown ENG1 label: $label\" >&2; exit 64 ;;', 'esac', '']",
+    "291: ENG1_INNER = int(os.environ.get(\"ENG1_INNER\", \"900\"))",
+    "292: REG_INNER = int(os.environ.get(\"ENG1_REG_INNER\", \"1050\"))",
+    "293: MUT_INNER = int(os.environ.get(\"ENG1_MUT_INNER\", \"420\"))",
+    "294: TER_INNER = int(os.environ.get(\"ENG1_TER_INNER\", \"1050\"))"
+   ]
+  },
+  {
+   "file": "STAGED_GPU_COMMANDS.sh",
+   "sha256_before": "0d0a4635ee830cb9b8ceabfdc9e279b116a0a386d58577f2d01ac7d1bf9d9fd9",
+   "sha256_after": "367abf660e12d9bff78701bd1b770a408d1a8a064f86495a1507ac577c0d2d4b",
+   "status": "regenerated by stage.py script",
+   "eng1_bound_code_lines_before": [
+    "19: export TMPDIR=\"${TMPDIR:?TMPDIR must be /tmp/eng1_*}\"",
+    "24: export ENG1_AUDIT=1 CUDA_VISIBLE_DEVICES=",
+    "26: label=candidate_eng1",
+    "28: unset ENG1_AUDIT",
+    "33: baseline_eng1) # expected child 1, parent 0; inner 900s, --max 960s, outer 990s",
+    "34: timeout 1010s python3 run_gpu_line.py baseline_eng1 1 990 \"$GPU_RUN\" --min 910 --max 960 --label eng1-baseline_eng1 -- timeout --kill-after=",
+    "36: candidate_eng1) # expected child 0, parent 0; inner 900s, --max 960s, outer 990s",
+    "37: timeout 1010s python3 run_gpu_line.py candidate_eng1 0 990 \"$GPU_RUN\" --min 910 --max 960 --label eng1-candidate_eng1 -- timeout --kill-afte",
+    "40: timeout 1160s python3 run_gpu_line.py baseline_regression 0,1 1140 \"$GPU_RUN\" --min 1060 --max 1110 --label eng1-baseline_regression -- time",
+    "43: timeout 1160s python3 run_gpu_line.py candidate_regression 0,1 1140 \"$GPU_RUN\" --min 1060 --max 1110 --label eng1-candidate_regression -- ti",
+    "46: timeout 1160s python3 run_gpu_line.py baseline_terrain 0,1 1140 \"$GPU_RUN\" --min 1060 --max 1110 --label eng1-baseline_terrain -- timeout --",
+    "49: timeout 1160s python3 run_gpu_line.py candidate_terrain 0,1 1140 \"$GPU_RUN\" --min 1060 --max 1110 --label eng1-candidate_terrain -- timeout ",
+    "52: timeout 530s python3 run_gpu_line.py C_COPY 0 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-C_COPY -- timeout --kill-after=10s 420s python",
+    "55: timeout 1010s python3 run_gpu_line.py C_UBSAN 0 990 \"$GPU_RUN\" --min 910 --max 960 --label eng1-C_UBSAN -- timeout --kill-after=10s 900s pyt",
+    "58: timeout 530s python3 run_gpu_line.py M01 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M01 -- timeout --kill-after=10s 420s python3 run_",
+    "61: timeout 530s python3 run_gpu_line.py M02 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M02 -- timeout --kill-after=10s 420s python3 run_",
+    "64: timeout 530s python3 run_gpu_line.py M03 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M03 -- timeout --kill-after=10s 420s python3 run_",
+    "67: timeout 530s python3 run_gpu_line.py M04 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M04 -- timeout --kill-after=10s 420s python3 run_",
+    "70: timeout 530s python3 run_gpu_line.py M05 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M05 -- timeout --kill-after=10s 420s python3 run_",
+    "73: timeout 530s python3 run_gpu_line.py M06 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M06 -- timeout --kill-after=10s 420s python3 run_",
+    "76: timeout 530s python3 run_gpu_line.py M07 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M07 -- timeout --kill-after=10s 420s python3 run_",
+    "79: timeout 530s python3 run_gpu_line.py M08 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M08 -- timeout --kill-after=10s 420s python3 run_",
+    "82: timeout 530s python3 run_gpu_line.py M09 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M09 -- timeout --kill-after=10s 420s python3 run_",
+    "85: timeout 530s python3 run_gpu_line.py M10 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M10 -- timeout --kill-after=10s 420s python3 run_",
+    "88: timeout 530s python3 run_gpu_line.py M11 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M11 -- timeout --kill-after=10s 420s python3 run_",
+    "91: timeout 530s python3 run_gpu_line.py M12 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M12 -- timeout --kill-after=10s 420s python3 run_",
+    "94: timeout 530s python3 run_gpu_line.py M13 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M13 -- timeout --kill-after=10s 420s python3 run_",
+    "97: timeout 1010s python3 run_gpu_line.py M14 1 990 \"$GPU_RUN\" --min 910 --max 960 --label eng1-M14 -- timeout --kill-after=10s 900s python3 run",
+    "100: timeout 530s python3 run_gpu_line.py M15 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M15 -- timeout --kill-after=10s 420s python3 run_",
+    "103: timeout 530s python3 run_gpu_line.py M16 1 510 \"$GPU_RUN\" --min 430 --max 480 --label eng1-M16 -- timeout --kill-after=10s 420s python3 run_",
+    "105: *) echo \"unknown ENG1 label: $label\" >&2; exit 64 ;;"
+   ]
+  },
+  {
+   "file": "e6_record.py",
+   "sha256_before": "4740e9618991d2bdd889d702d6485fa8e90801fd838ffc276da65fc1567399f0",
+   "sha256_after": null,
+   "status": "binned (delete-me id 20261114-101104_ENG2-seat_e6_record.py): ENG2 has no terrain suite",
+   "eng1_bound_code_lines_before": [
+    "2: test_eng1.py's E6 test).",
+    "7: ENG1's own ignored receipts, which the run writes, so it is not compared);",
+    "37: dirnames[:] = [d for d in dirnames if d != \"eng1\"]",
+    "45: exclude = [\":(exclude)artifacts/eng1\"] if rel == \"artifacts\" else []"
+   ]
+  }
+ ],
+ "rebinds": [
+  {
+   "file": "evidence.py",
+   "what": "ORDER",
+   "old": "orders/ENG1_A3_DEVICE_SEAL_ROUTING.md",
+   "new": "orders/ENG2_DTYPE_REFUSAL_AND_HALF_NORMS.md"
+  },
+  {
+   "file": "evidence.py",
+   "what": "SEAL_NAME",
+   "old": "staging_seal_a3.json",
+   "new": "staging_seal.json"
+  },
+  {
+   "file": "evidence.py",
+   "what": "guard() message",
+   "old": "artifacts/eng1/tool",
+   "new": "artifacts/eng2/tool (TOOL-relative logic unchanged)"
+  },
+  {
+   "file": "evidence.py",
+   "what": "norm_id arm prefix",
+   "old": "artifacts/eng1/tool/arms/",
+   "new": "artifacts/eng2/tool/arms/"
+  },
+  {
+   "file": "evidence.py",
+   "what": "census file",
+   "old": "ids_a1_<name>.txt",
+   "new": "ids_<name>.txt"
+  },
+  {
+   "file": "evidence.py",
+   "what": "scratch_guard root",
+   "old": "/tmp/eng1_*",
+   "new": "/tmp/eng2_*"
+  },
+  {
+   "file": "evidence.py",
+   "what": "mutant registry",
+   "old": "eng1/mutants/mutants.json + eng1/a1/MUTANTS.json",
+   "new": "eng2/mutants/mutants.json"
+  },
+  {
+   "file": "evidence.py",
+   "what": "baseline registration",
+   "old": "baseline_expected_failures_a1.json",
+   "new": "baseline_expected_failures.json"
+  },
+  {
+   "file": "evidence.py",
+   "what": "mutant dependency label",
+   "old": "candidate_eng1",
+   "new": "candidate_eng2"
+  },
+  {
+   "file": "evidence.py",
+   "what": "e6_record import + terrain branch",
+   "old": "from e6_record import compare; suite terrain check",
+   "new": "removed"
+  },
+  {
+   "file": "evidence.py",
+   "what": "regression_reasons",
+   "old": "baseline-passing IDs must pass",
+   "new": "plus L38_PINS.json expected changes (registered outcome and text)"
+  },
+  {
+   "file": "evidence.py",
+   "what": "evaluate mutant branch",
+   "old": "a registered killer failed",
+   "new": "plus L41: a failing killer executed the hunk (mutant_trace)"
+  },
+  {
+   "file": "run_gpu_line.py",
+   "what": "env names",
+   "old": "ENG1_AUDIT, ENG1_LINE, ENG1_ATTEMPT",
+   "new": "ENG2_AUDIT, ENG2_LINE, ENG2_ATTEMPT"
+  },
+  {
+   "file": "run_gpu_line.py",
+   "what": "mutant dependency label",
+   "old": "candidate_eng1",
+   "new": "candidate_eng2"
+  },
+  {
+   "file": "run_gpu_tests.py",
+   "what": "env names",
+   "old": "ENG1_ATTEMPT, ENG1_LINE, ENG1_AUDIT",
+   "new": "ENG2_ATTEMPT, ENG2_LINE, ENG2_AUDIT"
+  },
+  {
+   "file": "run_gpu_tests.py",
+   "what": "record dirs",
+   "old": "ENG1_CENSUS_DIR",
+   "new": "ENG2_RECORD_DIR and ENG1_CENSUS_DIR (both = attempt dir)"
+  },
+  {
+   "file": "run_gpu_tests.py",
+   "what": "suites",
+   "old": "eng1/mutation/control/regression/terrain (+e6 snapshot)",
+   "new": "eng2/mutation/regnorm/regdtype"
+  },
+  {
+   "file": "run_gpu_tests.py",
+   "what": "mutant trace",
+   "old": "none",
+   "new": "MutantTrace (sys.settrace on the mutated file) -> mutant_trace"
+  },
+  {
+   "file": "start_gpu_run.py",
+   "what": "env name",
+   "old": "ENG1_AUDIT",
+   "new": "ENG2_AUDIT"
+  },
+  {
+   "file": "forge_gpu_run_standin.py",
+   "what": "env name",
+   "old": "ENG1_AUDIT",
+   "new": "ENG2_AUDIT"
+  },
+  {
+   "file": "score_gpu.py",
+   "what": "labels/rows",
+   "old": "M09/C_UBSAN, candidate_eng1 census_*.json, candidate_regression",
+   "new": "none; n1census/E3 rows reported; cross-arm f1bytes/p302bits gated; candidate_regnorm/regdtype"
+  },
+  {
+   "file": "stage.py",
+   "what": "paths and roots",
+   "old": "artifacts/eng1, tensor_cuda/build-eng1*, git show 1680764d, staging_seal_a1.json, /tmp/eng1_*",
+   "new": "artifacts/eng2, tensor_cuda/build-eng2/{base,cand}, base_pkg/ (no git), staging_seal.json, TMPDIR from env (/tmp/eng2_*)"
+  },
+  {
+   "file": "STAGED_GPU_COMMANDS.sh",
+   "what": "usage lines, env, labels",
+   "old": "eng1 roots, /tmp/eng1_g5, ENG1_AUDIT, 24 labels",
+   "new": "eng2 roots, /tmp/eng2_g5, ENG2_AUDIT, 21 labels"
+  }
+ ],
+ "diff": "artifacts/eng2/tool_changes.diff"
+}

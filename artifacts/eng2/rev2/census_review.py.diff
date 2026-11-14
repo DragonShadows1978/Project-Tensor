@@ -1,0 +1,26 @@
+--- artifacts/eng2/rev1/census_review.py
++++ artifacts/eng2/rev2/census_review.py
+@@ -3,12 +3,12 @@
+ from types import SimpleNamespace
+ import ast,hashlib,json,subprocess,sys,re
+ import numpy as np
+-ROOT=Path.cwd();OUT=ROOT/"artifacts/eng2/rev1";TOOL=ROOT/"artifacts/eng2/tool"
++ROOT=Path.cwd();OUT=ROOT/"artifacts/eng2/rev2";TOOL=ROOT/"artifacts/eng2/tool"
+ rows={}
+ for arm in ["baseline","candidate"]:
+     r=subprocess.run([sys.executable,str(TOOL.parent/"dtype_census.py"),str(TOOL/"arms"/arm/"tensor_cuda"),arm,str(OUT/("census_"+arm+".json"))],capture_output=True,text=True,timeout=90)
+     (OUT/("census_"+arm+".log")).write_text(r.stdout+r.stderr);assert r.returncode==0,r.stderr
+-    data=json.loads((OUT/("census_"+arm+".json")).read_text());prior=json.loads((TOOL.parent/("L60_dtype_census_"+arm+".json")).read_text())
++    data=json.loads((OUT/("census_"+arm+".json")).read_text());prior=json.loads((TOOL.parent/"a1"/("L60_dtype_census_"+arm+".json")).read_text())
+     normalize=lambda v:re.sub(r"object at 0x[0-9a-f]+", "object at ADDRESS",json.dumps(v,sort_keys=True))
+     assert normalize(data["rows"])==normalize(prior["rows"])
+     rows[arm]=dict(count=len(data["rows"]),all_rows_match=True,spot_checks=[r for r in data["rows"] if r["entry"] in ["tc.tensor","tc.randn","tc.nn.parameter","tc.empty","Tensor.astype"] and r["kind"] in ["order","non-string"]])
+@@ -27,7 +27,7 @@
+         if isinstance(n,ast.FunctionDef) and n.name in ["_np_dtype","tensor","_factory"]:nodes.append(n)
+         if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id in ["_NP_DTYPE","_DEVICE_CAST_DTYPE","zeros","ones","rand","randn"] for t in n.targets):nodes.append(n)
+     ns=dict(np=np,_C=SimpleNamespace(tensor=lambda a,*args:Captured(a)));exec(compile(ast.Module(body=nodes,type_ignores=[]),rev,"exec"),ns);return ns
+-ns={a:factory_namespace(r) for a,r in [("baseline","bc02d3a1"),("candidate","2237299b")]}
++ns={a:factory_namespace(r) for a,r in [("baseline","bc02d3a1"),("candidate","1a4beed1")]}
+ values=np.array([[0.,1.,2.5,3.],[7.,100.,255.,.3]])
+ paired=[]
+ for entry in ["tensor","zeros","ones","randn","rand"]:
