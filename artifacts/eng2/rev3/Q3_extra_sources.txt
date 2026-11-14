@@ -1,0 +1,591 @@
+
+Project-Voice/engine/kokoro_tc/model.py
+385:             raise ValueError(f'kokoro_cuda build {so} is not the shipped variant')
+386:         cap = capture_so or (WT / 'artifacts/p1v2/build/LATEST_capture.txt').read_text().strip()
+387:         from engine.kokoro_tc.capture_tap import CaptureTap
+388:         self.cap = CaptureTap(cap)
+389:         self._w = {}
+390:         self._consts = {}
+391:         self.keep_div2 = False
+392:         self.keep_text_encoder = False      # KV-D6P: opt-in tap of the text-encoder output t_en (default path unchanged)
+393:         self.residency = self.g.residency
+394:         self.g.device_cache = self._w       # census() reads resident dtypes from these TensorCUDA tensors
+395:         t0 = time.perf_counter()
+396:         with tc.no_grad():
+397:             self._build()
+398:         self.build_seconds = time.perf_counter() - t0
+399: 
+400:     # ---------------------------------------------------------------- parameters (consumed exactly once each)
+401:     def P(self, node_name, i):
+402:         """GPU tensor of the initializer feeding input i of node_name (uploaded once, cached by initializer name)."""
+403:         name = self.g.resolve(self.g.node(node_name).input[i])
+404:         self.g.refs.setdefault(name, set()).add((node_name, i))
+405:         if name not in self._w:
+406:             a = self.g.stored[name]
+407:             if a.dtype != np.float32 or tuple(a.shape) != self.g.stored_shape[name]:
+408:                 raise ValueError(f'{name}: stored {a.dtype} {a.shape} vs {self.g.stored_shape[name]}')
+409:             if self.g.planned_dtype[name] == 'float16':
+410:                 # KV-D6P: the fp16-exact host copy (checked at plan time) uploads once as a float16 device tensor; no
+411:                 # fp32 device copy of this weight is ever made at load.
+412:                 self._w[name] = self.tc.tensor(self.g.half[name], dtype='float16')
+413:             else:
+414:                 self._w[name] = self.tc.tensor(np.ascontiguousarray(a), dtype='float32')
+415:             self.g.uploads[name] = self.g.uploads.get(name, 0) + 1
+416:         t = self._w[name]
+417:         return Fp16Weight(name, t) if self.g.planned_dtype[name] == 'float16' else t
+418: 
+419:     @staticmethod
+420:     def f32(w):
+421:         """The fp32 operand of one use: a resident fp16 weight is converted on the device now (TensorCUDA astype,
+490:             rep['values_checked'] = len(self._w)
+491:             ok = ok and not bad
+492:         rep['verdict'] = 'PASS' if ok else 'FAIL'
+493:         return rep
+494: 
+495:     def bias(self, add_node):
+496:         """The initializer input of a bias Add node."""
+497:         ins = self.g.init_inputs(add_node)
+498:         if len(ins) != 1:
+499:             raise ValueError(f'{add_node}: expected one initializer input, got {ins}')
+500:         return self.P(add_node, ins[0][0])
+501: 
+502:     def C(self, value):
+503:         """A [1] fp32 device constant (for tensor/tensor Div)."""
+504:         v = np.float32(value)
+505:         key = v.tobytes()
+506:         if key not in self._consts:
+507:             self._consts[key] = self.tc.tensor(np.array([v], dtype=np.float32), dtype='float32')
+508:         return self._consts[key]
+509: 
+510:     def cval(self, node_name, i=None):
+511:         a = self.g.const_input(node_name, i)
+
+Project-Voice/engine/kokoro_tc/unit_dose.py
+1: """KV-UG1: k2_P_F0 control; default level zero.
+2: 
+3: Prior art: KU1/PG1 (Project-Voice, 2026), signed sigma-scaled pre-LeakyReLU
+4: interventions; StyleTTS2 (Li et al., 2023), predictor AdaIN residual blocks.
+5: Taken: exact KU1 float32 dose and existing port operations. Ours: named site
+6: routing and optional port adapter. Unverified — lead to check those terms.
+7: """
+8: from __future__ import annotations
+9: 
+10: import json
+11: from pathlib import Path
+12: 
+13: import numpy as np
+14: 
+15: DATA = Path(__file__).with_name('pitch_group_k2_P_F0.json')
+16: # tensor -> (channels, port variable); only this order's three sites are supported.
+17: SITE_MAP = {
+18:     '/F0.1/norm1/Add_2_output_0': (512, 'f0_1_norm1_source'),
+19:     '/F0.1/norm2/Add_2_output_0': (256, 'f0_1_norm2_source'),
+20:     '/F0.2/norm1/Add_2_output_0': (256, 'f0_2_norm1_source'),
+21: }
+22: 
+23: 
+24: def pitch_group(level=0):
+25:     """Return (tensor name, channel, np.float32 delta), in PG1 member order.
+26: 
+27:     KU1 doses.metric_case (2026): multiply in Python float, round ONCE to
+28:     float32; do not first round sigma. The render default remains None.
+29:     """
+30:     level = float(level)
+31:     if not np.isfinite(level):
+32:         raise ValueError('unit-dose level must be finite')
+33:     return [(r['site_tensor_name'], r['channel'],
+34:              np.float32(level * r['sigma'] * (1 if r['sign'] == 'positive' else -1)))
+35:             for r in json.loads(DATA.read_text())['members']]
+36: 
+37: 
+38: def prepare_doses(unit_doses):
+39:     """Validate all entries before device access, build KU1 (1,C,1) arrays.
+40: 
+41:     Prior art: KU1 delta tensor layout (2026), NumPy broadcasting (Harris
+42:     et al., 2020). Ours: strict API refusal and omission of zero additions.
+43:     Duplicate (site, channel) entries are refused rather than accumulated.
+44:     """
+45:     out, seen = {}, set()
+46:     for site, channel, delta in unit_doses:
+47:         if site not in SITE_MAP:
+48:             raise ValueError(f'unknown unit-dose site: {site!r}')
+49:         channels = SITE_MAP[site][0]
+50:         if isinstance(channel, (bool, np.bool_)) or not isinstance(channel, (int, np.integer)) \
+51:                 or not 0 <= channel < channels:
+52:             raise ValueError(f'unit-dose channel outside {site}: {channel!r}')
+53:         if (site, channel) in seen:
+54:             raise ValueError(f'duplicate unit-dose channel: {site}:{channel}')
+55:         seen.add((site, channel))
+
+Project-Voice/engine/kokoro_tc/tests/test_gpu.py
+1: """GPU tests for the KV-P1V2 port (run under engine/kokoro_tc/tools/gpu_run.sh with the research venv Python).
+2: 
+3: Covers: loader census (every initializer consumed exactly once, every graph weight reference lowered), the capture
+4: entry's conv_post is the shipped tail's own (bitwise, real cases), this worktree's kokoro_cuda build equals P1V1's
+5: canonical build bitwise on real operands, the exactness claims the lowering relies on (Div, LeakyReLU, Pow), render
+6: determinism, no ONNX Runtime / PyTorch in the port process, and the D7 identity (plain path == hook path, equal
+7: overrides == no override) on short real cases.
+8: Prior art: golden-master and differential tests (Feathers, 2004; McKeeman, 1998). Ours: the cases.
+9: """
+10: import json
+11: import sys
+12: import unittest
+13: from pathlib import Path
+14: 
+15: import numpy as np
+16: 
+17: from engine.kokoro_tc.model import KokoroTC, GraphWeights, MODEL
+18: 
+19: WT = Path(__file__).resolve().parents[3]
+20: ART = Path('/mnt/ForgeRealm/Project-Voice/artifacts')
+21: CORPUS = {r['case_id']: r for r in map(json.loads, (WT / 'parity/corpus.jsonl').read_text().splitlines())}
+22: CANON_SO = ART / 'p1v1/build/shipped-fa742d4a12d00a4f/libkokoro_cuda.so'
+23: 
+24: 
+25: def astar(cid):
+26:     return np.load(ART / 'p0c/goldens/Astar' / f'{cid}.npz')
+27: 
+28: 
+29: class Port(unittest.TestCase):
+30:     m = None
+31: 
+32:     @classmethod
+33:     def setUpClass(cls):
+34:         cls.m = KokoroTC(weights=GraphWeights(path=MODEL))
+35:         cls.tc = cls.m.tc
+36: 
+37:     def forced(self, cid, **kw):
+38:         z, c = astar(cid), CORPUS[cid]
+39:         return self.m.render(c['token_ids'], z['forced_style'], c['speed'], durations=z['forced_round_output'],
+40:                              f0=z['forced_f0_output'], n=z['forced_n_output'], noise=z['noise_in'], **kw)
+41: 
+42:     def test_01_loader_census(self):
+43:         c = self.m.g.census()
+44:         self.assertEqual(c['verdict'], 'PASS', {k: v for k, v in c.items() if k != 'rows'})
+45:         self.assertEqual(c['initializers'], 443)
+46:         self.assertEqual(c['consumed_exactly_once'], 443)
+47:         p = WT / 'artifacts/b16d/gpu/loader_census.json'
+48:         p.parent.mkdir(parents=True, exist_ok=True)
+
+Project-Voice/engine/kokoro_tc/tests/test_gpu_residency.py
+1: """GPU tests for the KV-D6P weight residency (run under forge-gpu-run with engine/kokoro_tc/tools/gpu_env.sh, research
+2: venv). One process holds the B16 port at both residencies (two KokoroTC instances share the CUDA context).
+3: 
+4: Covers: TensorCUDA's device fp16 -> fp32 conversion is bitwise exact on all 65,536 binary16 bit patterns (the
+5: residency's only fp16 op); the fp16 load's device-read dtypes and byte totals; one short real case through both
+6: residencies, bitwise on every tap and the waveform; one D7 hook override (durations, f0 and n callables) through both
+7: residencies, bitwise; no fp32 copy of a resident weight retained after renders; no ONNX Runtime / PyTorch in process.
+8: Operands: the B16 values (env KV_D6P_VALUES, default artifacts/d6p/ref_B16.onnx; missing = failure, never a skip), the
+9: voices pack and parity/corpus.jsonl.
+10: Prior art: golden-master and differential tests (Feathers, 2004; McKeeman, 1998); exhaustive testing of a 16-bit
+11: domain. Ours: the cases.
+12: """
+13: import json
+14: import os
+15: import sys
+16: import unittest
+17: from pathlib import Path
+18: 
+19: import numpy as np
+20: 
+21: from engine.kokoro_tc.model import GraphWeights, KokoroTC
+22: 
+23: WT = Path(__file__).resolve().parents[3]
+24: B16 = Path(os.environ.get('KV_D6P_VALUES', str(WT / 'artifacts/d6p/ref_B16.onnx')))
+25: PACK = Path('/mnt/ForgeRealm/Project-Voice/OnscreenReader/voices/kokoro/voices-v1.0.bin')
+26: CORPUS = {r['case_id']: r for r in map(json.loads, (WT / 'parity/corpus.jsonl').read_text().splitlines())}
+27: FP16_BYTES, FP32_BYTES = 149_959_156, 24_676_056
+28: TAPS = ('/Round_output_0', 'duration', '/F0_proj/Conv_output_0', '/N_proj/Conv_output_0', '/MatMul_1_output_0',
+29:         '/MatMul_output_0', '/Div_output_0', 'text_encoder_output', 'har', 'conv_post', 'mag', 'phase')
+30: 
+31: 
+32: class Residency(unittest.TestCase):
+33:     @classmethod
+34:     def setUpClass(cls):
+35:         if not B16.exists():
+36:             raise FileNotFoundError(f'B16 values {B16} missing')
+37:         cls.m32 = KokoroTC(weights=GraphWeights(values_source=B16, residency='fp32'))
+38:         cls.m16 = KokoroTC(weights=GraphWeights(values_source=B16, residency='fp16'))
+39:         for m in (cls.m32, cls.m16):
+40:             m.keep_text_encoder = True
+41:         cls.tc = cls.m16.tc
+42:         cls.pack = np.load(PACK)
+43: 
+44:     def inputs(self, cid):
+45:         c = CORPUS[cid]
+46:         style = np.asarray(self.pack[c['voice']][c['style_row_index']], np.float32).reshape(256)
+47:         seed = int(c['noise_seed'])
+48:         return c, style, (lambda frames: np.random.default_rng(seed).standard_normal((1, 600 * frames, 9))
+49:                           .astype(np.float32))
+50: 
+51:     def assert_same(self, a, b, msg):
+52:         wa, ta = a
+53:         wb, tb = b
+54:         self.assertEqual(wa.shape, wb.shape, msg)
+55:         self.assertEqual(wa.tobytes(), wb.tobytes(), msg)
+56:         for k in TAPS:
+57:             self.assertEqual(np.asarray(ta[k]).shape, np.asarray(tb[k]).shape, (msg, k))
+58:             self.assertEqual(np.asarray(ta[k]).tobytes(), np.asarray(tb[k]).tobytes(), (msg, k))
+59: 
+60:     def test_01_cast_exact_on_all_binary16_patterns(self):
+61:         h = np.arange(65536, dtype=np.uint32).astype(np.uint16).view(np.float16)
+62:         d = self.tc.tensor(h, dtype='float16')
+63:         self.assertEqual(d.dtype, 'float16')
+64:         self.assertEqual(d.numpy().view(np.uint16).tobytes(), h.view(np.uint16).tobytes())
+65:         got = d.astype('float32').numpy()
+66:         ref = h.astype(np.float32)
+67:         nan = np.isnan(ref)
+68:         self.assertEqual(int(nan.sum()), 2046)
+69:         self.assertTrue(np.array_equal(np.isnan(got), nan))
+70:         self.assertEqual(got[~nan].tobytes(), ref[~nan].tobytes())     # subnormals, +-0, +-inf included
+
+GRAPA-Native-LLM/grapa/tripwire.py
+540:         return [jsonable(v) for v in obj]
+541:     return obj
+542: 
+543: 
+544: def json_bytes(obj, indent=2):
+545:     return json.dumps(jsonable(obj), indent=indent, sort_keys=True, allow_nan=False, default=str).encode() + b'\n'
+546: 
+547: 
+548: def existing_ancestor(path):
+549:     path = Path(path)
+550:     while not path.exists() and path != path.parent:
+551:         path = path.parent
+552:     return path
+553: 
+554: 
+555: def now_iso():
+556:     return time.strftime('%Y-%m-%dT%H:%M:%S%z')
+557: 
+558: 
+559: class _HashingFile:
+560:     """File wrapper: sha256 and byte count of everything written through it."""
+561: 
+562:     def __init__(self, fh):
+563:         self.fh, self.h, self.n = fh, hashlib.sha256(), 0
+564: 
+565:     def write(self, b):
+566:         self.h.update(b)
+567:         self.n += memoryview(b).nbytes
+568:         return self.fh.write(b)
+569: 
+570: 
+571: # ------------------------------------------------------------------ the device ring (CC47-B)
+572: def module_state_tensors(module, base_state_dict, prefix=''):
+573:     """(name, tensor) for every entry of module.state_dict(), in its order, WITHOUT the device->host copy:
+574:     tensor_cuda/nn.py Module.state_dict walks its own _params, then its _buffers, then each of _modules
+575:     (recursively, prefix + name + '.'). Every module on the way must use that very state_dict (an override
+576:     could store something else): refused otherwise (ValueError)."""
+577:     if base_state_dict is None or getattr(type(module), 'state_dict', None) is not base_state_dict:
+578:         raise ValueError(f'{type(module).__name__} does not use the engine Module.state_dict; the device ring '
+579:                          f'cannot mirror it')
+580:     for n, p in module._params.items():
+581:         yield prefix + n, p
+582:     for n, b in module._buffers.items():
+583:         yield prefix + n, b
+584:     for n, m in module._modules.items():
+585:         yield from module_state_tensors(m, base_state_dict, prefix + n + '.')
+586: 
+587: 
+588: def device_mem_info():
+589:     """(free bytes, total bytes, source) of the CUDA device, or None. cudaMemGetInfo through the libcudart the
+590:     process has ALREADY loaded (the engine links it dynamically; RTLD_NOLOAD never loads CUDA and never makes a
+591:     context), else NVML device 0 (read-only, as nvidia-smi)."""
+592:     import ctypes
+593:     for name in ('libcudart.so.12', 'libcudart.so'):
+594:         try:
+595:             lib = ctypes.CDLL(name, mode=os.RTLD_NOLOAD | os.RTLD_LAZY)
+596:         except OSError:
+597:             continue
+598:         free, total = ctypes.c_size_t(0), ctypes.c_size_t(0)
+599:         if lib.cudaMemGetInfo(ctypes.byref(free), ctypes.byref(total)) == 0:
+600:             return int(free.value), int(total.value), f'cudaMemGetInfo (the loaded {name})'
+601:     try:
+602:         nv = ctypes.CDLL('libnvidia-ml.so.1')
+603:     except OSError:
+604:         return None
+605: 
+606:     class _Mem(ctypes.Structure):
+607:         _fields_ = [('total', ctypes.c_ulonglong), ('free', ctypes.c_ulonglong), ('used', ctypes.c_ulonglong)]
+608:     if nv.nvmlInit_v2() != 0:
+609:         return None
+610:     try:
+611:         handle, mem = ctypes.c_void_p(), _Mem()
+612:         if (nv.nvmlDeviceGetHandleByIndex_v2(0, ctypes.byref(handle)) != 0
+613:                 or nv.nvmlDeviceGetMemoryInfo(handle, ctypes.byref(mem)) != 0):
+614:             return None
+615:         return int(mem.free), int(mem.total), 'NVML device 0'
+616:     finally:
+617:         nv.nvmlShutdown()
+618: 
+619: 
+620: class EngineDevice:
+621:     """The tensor_cuda operations the device ring uses. API gap: the engine binds no clone()/copy_()
+622:     (NDArray::clone is C++ only; ops::cast returns the tensor itself for its own dtype), so the in-place copy
+623:     is tensor_cuda.write_rows(dst, src, 0) -- the KV-ring row writer: a raw element copy (bitwise), >= 2-D,
+624:     float32/float16/bfloat16/uint8 only, raises under grad, one launch per tensor on the legacy stream."""
+625: 
+626:     COPYABLE = ('float32', 'float16', 'bfloat16', 'uint8')      # kernels.cu write_rows: DISPATCH_FLOAT + uint8
+627:     ITEMSIZE = dict(float32=4, float16=2, bfloat16=2, uint8=1, int64=8, bool=1)
+628: 
+629:     def __init__(self, tc, *, mem_info=None, pooling_after=True):
+630:         self.tc = tc
+631:         self._mem_info = mem_info
+632:         self.pooling_after = pooling_after
+633: 
+634:     def base_state_dict(self):
+635:         nn = getattr(self.tc, 'nn', None)
+636:         return getattr(getattr(nn, 'Module', None), 'state_dict', None)
+637: 
+638:     def mem_info(self):
+639:         return (self._mem_info or device_mem_info)()
+640: 
+641:     @staticmethod
+642:     def dtype(t):
+643:         return str(t.dtype)
+644: 
+645:     def nbytes(self, t):
+646:         return int(np.prod(tuple(t.shape), dtype=np.int64)) * self.ITEMSIZE.get(self.dtype(t), 4)
+647: 
+648:     def alloc(self, like):
+649:         """Device tensors shaped and typed as `like`, allocated raw: tensor_cuda.set_alloc_pooling says
+650:         persistents must not come from the transients pool (live pooled blocks pin pool chunks)."""
+651:         setp = getattr(self.tc, 'set_alloc_pooling', None)
+652:         if setp is not None:
+653:             setp(False)
+654:         try:
+655:             return [self.tc.zeros(tuple(t.shape), dtype=self.dtype(t)) for t in like]
+656:         finally:
+657:             if setp is not None:
+658:                 setp(self.pooling_after)
+659: 
+660:     @staticmethod
+661:     def matrix(t, ndim):
+662:         """write_rows needs >= 2-D: a 0-/1-D tensor as a (1, n) view (reshape shares the storage)."""
+663:         return t if ndim >= 2 else t.reshape([1, int(np.prod(tuple(t.shape), dtype=np.int64))])
+664: 
+665:     def no_grad(self):
+
+GraftRepository/scripts/gpt_oss20b_e1_diag.py
+2485: def aggregate_from_logits(logits: np.ndarray, targets: np.ndarray) -> dict[str, Any]:
+2486:     nlls = stable_nlls(logits, targets)
+2487:     return {
+2488:         "token_count": int(nlls.size),
+2489:         "nll_sum": float(nlls.sum()),
+2490:         "mean_nll": float(nlls.mean()),
+2491:         "ppl": float(math.exp(nlls.mean())),
+2492:         "target_ids_sha256": sha256_array(targets),
+2493:     }
+2494: 
+2495: 
+2496: def logits_from_hidden(lm_head, hidden) -> np.ndarray:
+2497:     logits = lm_head(hidden)
+2498:     host = logits.float().numpy().astype(np.float32, copy=True).reshape(
+2499:         -1, logits.shape[-1]
+2500:     )
+2501:     del logits
+2502:     return host
+2503: 
+2504: 
+2505: def run_e1_multi_arm(
+2506:     *,
+2507:     args: argparse.Namespace,
+2508:     data: dict[str, Any],
+2509:     receipt: dict[str, Any],
+2510:     path: Path,
+2511:     tokenizer,
+2512: ) -> dict[str, Any]:
+2513:     runtime = e1.load_runtime()
+2514:     tc = runtime["tc"]
+2515:     cfg = runtime["GptOss20BConfig"].from_model_dir(args.model_dir.resolve())
+2516:     e1.validate_model_contract(cfg)
+2517:     where = runtime["build_safetensors_map"](args.model_dir.resolve())
+2518:     pack, key, A, B = e1.load_expert_arrays(E1_OUTPUT, e1.ADDRESS_RULE_E11)
+2519:     install_layer = int(pack["layer"])
+2520:     compute_dtype = runtime["BlockTC"].COMPUTE_DTYPE
+2521:     base_ids = data["window"][:-1][None, :]
+2522:     targets = data["targets"]
+2523:     fire_info: dict[str, Any] | None = None
+2524:     with tc.no_grad():
+2525:         A_device = tc.tensor(A.astype(np.float32), dtype=compute_dtype)
+2526:         B_device = tc.tensor(B.astype(np.float32), dtype=compute_dtype)
+2527:         embed = runtime["GptOssRowEmbedding"](where)
+2528:         h_teacher = embed(data["inputs"])
+2529:         h_base = embed(base_ids)
+2530:         h_expert = embed(base_ids)
+2531:         cos, sin = runtime["gpt_oss_yarn_rope_tables"](
+2532:             cfg, int(data["inputs"].shape[1])
+2533:         )
+2534:         receipt["layers"] = []
+2535:         for layer in range(e1.N_LAYERS):
+
+GraftRepository/scripts/gpt_oss20b_expert_e1.py
+3990:         {
+3991:             "source_window": manifest["windows"]["behavioral_heldout"][index],
+3992:             "teacher_prefix_source": prefix_source,
+3993:             "teacher_prefix_tokens": int(prefix.size),
+3994:             "winning_construction": (
+3995:                 None if selection is None else selection["winning_construction"]
+3996:             ),
+3997:             "teacher_selection": (
+3998:                 None
+3999:                 if selection is None
+4000:                 else {
+4001:                     "path": str(
+4002:                         E14_SELECTION_PATH
+4003:                         if args.teacher_rule == TEACHER_RULE_E14
+4004:                         else E13_SELECTION_PATH
+4005:                     ),
+4006:                     "sha256": sha256_file(
+4007:                         E14_SELECTION_PATH
+4008:                         if args.teacher_rule == TEACHER_RULE_E14
+4009:                         else E13_SELECTION_PATH
+4010:                     ),
+4011:                     "winning_mean_gap": selection["winning_mean_gap"],
+4012:                 }
+4013:             ),
+4014:             "base_input_ids_sha256": sha256_array(base_ids),
+4015:             "teacher_input_ids_sha256": sha256_array(teacher_ids),
+4016:             "target_ids_sha256": sha256_array(targets),
+4017:             "teacher_scores_prefix_tokens": False,
+4018:         }
+4019:     )
+4020:     write_json(path, receipt)
+4021:     try:
+4022:         runtime = load_runtime()
+4023:         tc = runtime["tc"]
+4024:         cfg = runtime["GptOss20BConfig"].from_model_dir(args.model_dir.resolve())
+4025:         validate_model_contract(cfg)
+4026:         where = runtime["build_safetensors_map"](args.model_dir.resolve())
+4027:         install_layer = int(pack["layer"])
+4028:         compute_dtype = runtime["BlockTC"].COMPUTE_DTYPE
+4029:         with tc.no_grad():
+4030:             A_device = tc.tensor(A.astype(np.float32), dtype=compute_dtype)
+4031:             B_device = tc.tensor(B.astype(np.float32), dtype=compute_dtype)
+4032:             embed = runtime["GptOssRowEmbedding"](where)
+4033:             h_teacher = embed(teacher_ids)
+4034:             h_base = embed(base_ids)
+4035:             h_expert = embed(base_ids)
+4036:             fire_info: dict[str, Any] | None = None
+4037:             if args.eval_fix == EVAL_FIX_E12:
+4038:                 receipt["execution_schedule"] = (
+4039:                     "e12_isolated_arms_one_call_per_block_synchronize_each_call"
+4040:                 )
+
+GraftRepository/scripts/grm_rs2_mount_read_gpu.py
+285:         return self._inner.__exit__(exc_type, exc, tb)
+286: 
+287:     # -- the sliding score ----------------------------------------------
+288:     def _sliding_mass(self, query, key, sinks, *, scale: float,
+289:                       sliding_window: int, num_heads_per_kv: int,
+290:                       allowed_mask) -> dict[str, Any]:
+291:         """The registered four-band partition on ONE sliding layer's last row.
+292: 
+293:         Deliberately built out of the SAME operations
+294:         ``DemandObserver._full_mass`` uses (``gpt._repeat_kv``, ``tc.matmul``
+295:         with ``trans_b``, ``tc.cat`` of the sink logit, ``softmax(-1)``), so
+296:         the only intended difference from the full-layer computation is the key
+297:         SLICE and the window MASK the sliding kernel itself applies.
+298:         """
+299:         gpt = self._gpt
+300:         L = int(query.shape[2])
+301:         S = int(key.shape[2])
+302:         window = max(1, int(sliding_window))
+303:         q_abs = S - 1                       # the LAST query row, absolute
+304:         k0 = max(0, q_abs - window + 1)
+305:         k1 = min(S, q_abs + 1)
+306: 
+307:         q_last = query.slice(2, L - 1, 1)
+308:         key_slice = key.slice(2, k0, k1 - k0)
+309:         key_h = gpt._repeat_kv(key_slice, int(num_heads_per_kv))
+310:         scores = gpt.tc.matmul(q_last, key_h, alpha=float(scale), trans_b=True)
+311: 
+312:         if allowed_mask is None:
+313:             k_abs = np.arange(k0, k1, dtype=np.int64)
+314:             allowed = (k_abs <= q_abs) & (k_abs > (q_abs - window))
+315:         else:
+316:             full_allowed = np.asarray(allowed_mask, dtype=np.uint8)
+317:             if full_allowed.shape != (1, 1, L, S):
+318:                 raise RS2Error(
+319:                     "sliding allowed-mask shape mismatch: "
+320:                     f"expected={(1, 1, L, S)} observed={full_allowed.shape}")
+321:             allowed = full_allowed[0, 0, L - 1, k0:k1].astype(bool, copy=False)
+322:         mask = np.where(allowed, 0.0, -1.0e4).astype(np.float32)
+323:         mask_t = gpt.tc.tensor(
+324:             mask.reshape(1, 1, 1, k1 - k0), dtype="float32").astype(query.dtype)
+325:         scores = scores + mask_t
+326: 
+327:         batch, heads, _one, _source = (int(scores.shape[i]) for i in range(4))
+328:         sink_logits = sinks.reshape([1, heads, 1, 1]).expand([batch, heads, 1, 1])
+329:         probs = gpt.tc.cat([scores, sink_logits], dim=-1).softmax(-1)
+330:         values = np.asarray(probs.float().numpy(), dtype=np.float32)[0, :, 0, :]
+
+GraftRepository/artifacts/grm_xm3/evidence/tensor_functional.py
+1: """Functional ops composed from the C++ engine (attention, etc.).
+2: 
+3: Most heavy compute (matmul, softmax) runs in C++ kernels; this module is the
+4: thin orchestration layer. HY3D-sized unmasked non-causal inference can opt into
+5: the native streaming SDPA primitive when it is safe to do so.
+6: """
+7: 
+8: from __future__ import annotations
+9: 
+10: import math
+11: import os
+12: 
+13: import numpy as np
+14: 
+15: import tensor_cuda as tc
+16: 
+17: _causal_cache = {}
+18: 
+19: 
+20: def _causal_mask(L, S, device, dtype):
+21:     key = (L, S, device, dtype)
+22:     m = _causal_cache.get(key)
+23:     if m is None:
+24:         # cap the cache: chunked long prefill creates one (L, S) entry
+25:         # per chunk x context-length pair — at 24K context that is
+26:         # ~500MB of cached masks that empty_cache() cannot reach
+27:         if len(_causal_cache) >= 16:
+28:             _causal_cache.clear()
+29:         # bf16 has no numpy dtype — build fp32 then cast on device. -1e4 (not
+30:         # -1e9) so it stays representable in fp16/bf16 without becoming -inf.
+31:         # BOTTOM-RIGHT aligned (k = 1 + S - L): when S > L the L queries are the
+32:         # LAST L positions of S keys (KV-cache decode, grafted/injected prefix),
+33:         # so row i attends cols 0..(S-L)+i — prefix fully visible, causal among
+34:         # the queries. Square (S == L) reduces to the standard k=1 mask. A plain
+35:         # triu(k=1) on a rectangle is TOP-LEFT aligned and silently blinds the
+36:         # queries to most of the prefix AND to each other (measured: predicted
+37:         # ' briefing' from the first visible graft tokens instead of recall).
+38:         bias = np.triu(np.full((L, S), -1e4, dtype=np.float32), k=1 + (S - L))
+39:         m = tc.tensor(bias, device=device)
+40:         if dtype in ("float16", "bfloat16"):
+41:             m = m.astype(dtype)
+42:         _causal_cache[key] = m
+43:     return m
+44: 
+45: 
+72:     if (not is_causal and attn_mask is None and not tc.is_grad_enabled()
+73:             and _fused_noncausal_sdpa_enabled()
+74:             and hasattr(tc, "fused_sdpa_noncausal")
+75:             and query.dtype in ("float16", "float32")
+76:             and key.dtype == query.dtype and value.dtype == query.dtype
+77:             and 0 < D <= 128 and L >= 0 and S > 0):
+78:         return tc.fused_sdpa_noncausal(query, key, value, scale)
+79:     # OP_T GEMM: no materialized K^T copy; scale folded into the fp32
+80:     # accumulator (one fewer 16-bit rounding + one fewer full pass over scores).
+81:     scores = tc.matmul(query, key, alpha=scale, trans_b=True)
+82:     if (USE_FUSED_SOFTMAX and is_causal and attn_mask is None and S >= L
+83:             and not tc.is_grad_enabled()):
+84:         # single-kernel bottom-right causal softmax: no mask tensor, masked
+85:         # columns never read (inference-only; backward raises).
+86:         return tc.matmul(tc.causal_softmax(scores), value)
+87:     if is_causal:
+88:         scores = scores + _causal_mask(L, S, query.device.split(":")[0], query.dtype)
+89:     if attn_mask is not None:
+90:         scores = scores + attn_mask
+91:     # fused row softmax at inference: masks are already FOLDED INTO the
+92:     # scores above (-1e4 entries exp to ~0 exactly as in the composed
+93:     # path), so causal_softmax with L=1 rows == plain softmax(-1) in

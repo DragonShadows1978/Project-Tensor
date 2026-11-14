@@ -1,0 +1,358 @@
+[
+  {
+    "repo": "Project-Voice",
+    "file": "engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py",
+    "line": 205,
+    "seat_reading": "holds for recorded harness callers; dtype is an unguarded external parameter, so retained unresolved",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py",
+        "line": 205,
+        "sha256": "d0c5a596916333bce007773a92e5d8d896285707412492cfaf573ccd0819fc0b",
+        "excerpt": "203:         raise NotImplementedError('T1: Tensor.__dlpack__ / __dlpack_device__ are missing (census: Tensor = _C.Tensor, '\n204:                                   '__init__.py:22; no DLPack in the Python layer)')\n205:     return tc.zeros(tuple(shape), dtype=dtype)                           # zeros = _factory(np.zeros), __init__.py:63\n206: \n207: \n208: def t1_fill(t, value):"
+      },
+      {
+        "file": "engine/tensor_requests/p1t_tests/run_p1t.py",
+        "line": 605,
+        "sha256": "7e7aafd30e1679ffe89e57ac3d8217de3e88576d966ea45e9b453ec6dd5e3de7",
+        "excerpt": "603:                 'sleep_cycles': cycles}\n604: \n605:     for dt in ('float32', 'float16'):\n606:         case(f'device/{dt}', lambda dt=dt: device(dt))\n607:         case(f'export_alias/{dt}', lambda dt=dt: export_alias(dt))\n608:         case(f'import_alias/{dt}', lambda dt=dt: import_alias(dt))"
+      },
+      {
+        "file": "engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py",
+        "line": 201,
+        "sha256": "d0c5a596916333bce007773a92e5d8d896285707412492cfaf573ccd0819fc0b",
+        "excerpt": "199: \n200: \n201: def t1_empty(shape, dtype):\n202:     if not hasattr(tc.Tensor, '__dlpack__') or not hasattr(tc.Tensor, '__dlpack_device__'):\n203:         raise NotImplementedError('T1: Tensor.__dlpack__ / __dlpack_device__ are missing (census: Tensor = _C.Tensor, '\n204:                                   '__init__.py:22; no DLPack in the Python layer)')"
+      }
+    ]
+  },
+  {
+    "repo": "GRAPA-Native-LLM",
+    "file": "grapa/attention.py",
+    "line": 82,
+    "seat_reading": "holds for tensor_cuda q: q.dtype is an engine dtype string; call uses q.device and tensor_cuda matmul",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "grapa/attention.py",
+        "line": 82,
+        "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+        "excerpt": "80:     dev = q.device.split(\":\")[0]\n81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)\n82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None\n83:     if is_causal:\n84:         ranking = ranking + cm\n85: "
+      },
+      {
+        "file": "grapa/attention.py",
+        "line": 80,
+        "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+        "excerpt": "78:     B, H, L, D = q.shape\n79:     S = k.shape[-2]\n80:     dev = q.device.split(\":\")[0]\n81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)\n82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None\n83:     if is_causal:"
+      },
+      {
+        "file": "grapa/attention.py",
+        "line": 81,
+        "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+        "excerpt": "79:     S = k.shape[-2]\n80:     dev = q.device.split(\":\")[0]\n81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)\n82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None\n83:     if is_causal:\n84:         ranking = ranking + cm"
+      }
+    ]
+  },
+  {
+    "repo": "GRAPA-Native-LLM",
+    "file": "artifacts/cc5/mutation/answer_span_shift/grapa/attention.py",
+    "line": 82,
+    "seat_reading": "holds on the same tensor_cuda query path in the tracked mutant receipt copy",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "artifacts/cc5/mutation/answer_span_shift/grapa/attention.py",
+        "line": 82,
+        "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+        "excerpt": "80:     dev = q.device.split(\":\")[0]\n81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)\n82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None\n83:     if is_causal:\n84:         ranking = ranking + cm\n85: "
+      },
+      {
+        "file": "artifacts/cc5/mutation/answer_span_shift/grapa/attention.py",
+        "line": 80,
+        "sha256": "c704f9d4636dccb90ac3532b5410cb1827f6b36ebec0ca7fd62a607a69e2b791",
+        "excerpt": "78:     B, H, L, D = q.shape\n79:     S = k.shape[-2]\n80:     dev = q.device.split(\":\")[0]\n81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)\n82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None\n83:     if is_causal:"
+      }
+    ]
+  },
+  {
+    "repo": "GRAPA-Native-LLM",
+    "file": "scripts/cc10_ablation.py",
+    "line": 2048,
+    "seat_reading": "holds: scores is produced by tensor_cuda matmul and tensor arithmetic, so scores.dtype is an engine string",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "scripts/cc10_ablation.py",
+        "line": 2048,
+        "sha256": "53af93341fda2b6695af8c6a4a95ee8270a5f81deaa2f90885353ba61c312475",
+        "excerpt": "2046:             scores = scores * scale\n2047:             device = scores.device.split(':')[0]\n2048:             scores = scores + F._causal_mask(L, L, device, scores.dtype)\n2049:             out = tc.matmul(scores.softmax(-1), v)\n2050:             return self.o_proj(out.transpose(1, 2).reshape([B, L, H * vdim]))\n2051: "
+      },
+      {
+        "file": "scripts/cc10_ablation.py",
+        "line": 2042,
+        "sha256": "53af93341fda2b6695af8c6a4a95ee8270a5f81deaa2f90885353ba61c312475",
+        "excerpt": "2040:             q_h = tc.cat([q_nope.transpose(1, 2), q_pe], dim=3)\n2041:             k_h = tc.cat([k_nope, k_pe], dim=3)\n2042:             scores = tc.matmul(q_h, k_h, alpha=self.scale, trans_b=True)\n2043:             scale = self.head_logit_scale\n2044:             if scale.dtype != scores.dtype:\n2045:                 scale = scale.astype(scores.dtype)"
+      },
+      {
+        "file": "scripts/cc10_ablation.py",
+        "line": 2046,
+        "sha256": "53af93341fda2b6695af8c6a4a95ee8270a5f81deaa2f90885353ba61c312475",
+        "excerpt": "2044:             if scale.dtype != scores.dtype:\n2045:                 scale = scale.astype(scores.dtype)\n2046:             scores = scores * scale\n2047:             device = scores.device.split(':')[0]\n2048:             scores = scores + F._causal_mask(L, L, device, scores.dtype)\n2049:             out = tc.matmul(scores.softmax(-1), v)"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "artifacts/grm_xm3/evidence/trinity_nano_tc.py",
+    "line": 316,
+    "seat_reading": "holds: _compute_dtype returns BlockTC.COMPUTE_DTYPE, with in-file bfloat16 default and loader assignment",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "artifacts/grm_xm3/evidence/trinity_nano_tc.py",
+        "line": 316,
+        "sha256": "9d991c53b1c1438c0c517df6101eb94d47eed6e226ecb78595318b008f94055e",
+        "excerpt": "314:             raise RuntimeError(\"HostEmbedding weight is not loaded\")\n315:         rows = self.weight[np.asarray(input_ids_np, dtype=np.int64)]\n316:         return tc.tensor(np.ascontiguousarray(rows), dtype=_compute_dtype())\n317: \n318:     @property\n319:     def shape(self):"
+      },
+      {
+        "file": "artifacts/grm_xm3/evidence/trinity_nano_tc.py",
+        "line": 42,
+        "sha256": "9d991c53b1c1438c0c517df6101eb94d47eed6e226ecb78595318b008f94055e",
+        "excerpt": "40: \n41: \n42: def _compute_dtype() -> str:\n43:     return BlockTC.COMPUTE_DTYPE\n44: \n45: "
+      },
+      {
+        "file": "artifacts/grm_xm3/evidence/trinity_nano_tc.py",
+        "line": 165,
+        "sha256": "9d991c53b1c1438c0c517df6101eb94d47eed6e226ecb78595318b008f94055e",
+        "excerpt": "163:     \"\"\"Global compute dtype knob used by the Trinity adapter.\"\"\"\n164: \n165:     COMPUTE_DTYPE = \"bfloat16\"\n166: \n167: \n168: class LinearTC:"
+      },
+      {
+        "file": "artifacts/grm_xm3/evidence/trinity_nano_tc.py",
+        "line": 951,
+        "sha256": "9d991c53b1c1438c0c517df6101eb94d47eed6e226ecb78595318b008f94055e",
+        "excerpt": "949:         if weight_mode not in {\"int4\", \"int8\", \"bf16\"}:\n950:             raise ValueError(\"weight_mode must be 'int4', 'int8', or 'bf16'\")\n951:         BlockTC.COMPUTE_DTYPE = \"bfloat16\"\n952:         LinearTC.DTYPE = \"bfloat16\"\n953:         QuantLinearTC.FUSED_DECODE = True\n954:         RMSNormTC.USE_FUSED = False  # Afmoe cast-before-weight order"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "core/deepseek_v2_lite_tc.py",
+    "line": 115,
+    "seat_reading": "qualified reading holds: dtype or BlockTC.COMPUTE_DTYPE; registered callers use supported values; external override remains unresolved",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "core/deepseek_v2_lite_tc.py",
+        "line": 115,
+        "sha256": "96e371754496eb2ca467ad199bebed07c354cf5eae4b0a08daf571c6f04f0d07",
+        "excerpt": "113:         tc.empty_cache()\n114:         return out\n115:     return tc.zeros(*shape, dtype=dt)\n116: \n117: \n118: class DeepSeekMLACache:"
+      },
+      {
+        "file": "core/deepseek_v2_lite_tc.py",
+        "line": 105,
+        "sha256": "96e371754496eb2ca467ad199bebed07c354cf5eae4b0a08daf571c6f04f0d07",
+        "excerpt": "103: \n104: \n105: def _cache_zeros(*shape, dtype=None):\n106:     if dtype == \"uint8\":\n107:         return tc.zeros(*shape, dtype=\"uint8\")\n108:     dt = dtype or BlockTC.COMPUTE_DTYPE"
+      },
+      {
+        "file": "core/deepseek_v2_lite_tc.py",
+        "line": 108,
+        "sha256": "96e371754496eb2ca467ad199bebed07c354cf5eae4b0a08daf571c6f04f0d07",
+        "excerpt": "106:     if dtype == \"uint8\":\n107:         return tc.zeros(*shape, dtype=\"uint8\")\n108:     dt = dtype or BlockTC.COMPUTE_DTYPE\n109:     if dt == \"bfloat16\":\n110:         z = tc.zeros(*shape, dtype=\"float16\")\n111:         out = z.astype(\"bfloat16\")"
+      },
+      {
+        "file": "core/deepseek_v2_lite_tc.py",
+        "line": 829,
+        "sha256": "96e371754496eb2ca467ad199bebed07c354cf5eae4b0a08daf571c6f04f0d07",
+        "excerpt": "827:                         max_layers=None, load_lm_head=True, progress=True,\n828:                         latent_cache_bits=16, latent_cache_group=32):\n829:         BlockTC.COMPUTE_DTYPE = \"bfloat16\"\n830:         QuantLinearTC.FUSED_DECODE = True\n831:         RMSNormTC.USE_FUSED = True\n832:         with tc.no_grad():"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "core/gemma4_tc.py",
+    "line": 139,
+    "seat_reading": "qualified reading holds: cdt is shared compute dtype, assigned bfloat16 by loader; mutable global remains unresolved",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 139,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "137:     which OOMed kqb allocation at 8K on a near-full card).\"\"\"\n138:     cdt = BlockTC.COMPUTE_DTYPE\n139:     return tc.zeros(*shape, dtype=cdt)\n140: \n141: \n142: _RING_BLOCK = 2048"
+      },
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 138,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "136:     np.zeros(fp32))) pattern transiently needs 2x the final bf16 size,\n137:     which OOMed kqb allocation at 8K on a near-full card).\"\"\"\n138:     cdt = BlockTC.COMPUTE_DTYPE\n139:     return tc.zeros(*shape, dtype=cdt)\n140: \n141: "
+      },
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 1086,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "1084:     @classmethod\n1085:     def from_pretrained(cls, model_dir=None, qat=True):\n1086:         BlockTC.COMPUTE_DTYPE = \"bfloat16\"\n1087:         LinearTC.DTYPE = \"bfloat16\"\n1088:         # decode-speed defaults proven on the Qwen3.5 ladder: int4 GEMV at\n1089:         # M<=8 and the fused rms_norm kernel (plain-w weights, op unchanged)"
+      },
+      {
+        "file": "core/mistral7b_tc.py",
+        "line": 558,
+        "sha256": "49430e5920508d740a2f8be7b6ba0caadd0442c7798454cf6fa2a808204bf1c4",
+        "excerpt": "556:     # models; \"bfloat16\" for models whose activations exceed fp16's ~65504 range\n557:     # by mid-network (Qwen2.5 etc.) \u2014 bf16 has fp32's exponent range.\n558:     COMPUTE_DTYPE = \"float16\"\n559: \n560:     def __init__(self, config: MistralConfig, attention_mode=\"standard\"):\n561:         self.input_layernorm = RMSNormTC(config.hidden_dim, config.rms_norm_eps)"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "core/gemma4_tc.py",
+    "line": 740,
+    "seat_reading": "holds: sc is tensor_cuda matmul result reshaped without changing dtype; sc.dtype is an engine string",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 740,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "738:                 else:\n739:                     dev = q.device.split(\":\")[0]\n740:                     p_ = (sc + F._causal_mask(L, S_all, dev,\n741:                                               sc.dtype)).softmax(-1)\n742:                 attn = tc.matmul(p_.reshape([B, 1, H * L, S_all]),\n743:                                  v).reshape([B, H, L, D])"
+      },
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 730,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "728:                 # path allocates nothing but scores.\n729:                 qf = q.reshape([B, 1, H * L, D])\n730:                 sc = tc.matmul(qf, k, alpha=1.0, trans_b=True)\n731:                 sc = sc.reshape([B, H, L, S_all])\n732:                 if hasattr(tc, \"causal_softmax\") and not tc.is_grad_enabled():\n733:                     # bottom-right causal is built into the kernel \u2014"
+      },
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 731,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "729:                 qf = q.reshape([B, 1, H * L, D])\n730:                 sc = tc.matmul(qf, k, alpha=1.0, trans_b=True)\n731:                 sc = sc.reshape([B, H, L, S_all])\n732:                 if hasattr(tc, \"causal_softmax\") and not tc.is_grad_enabled():\n733:                     # bottom-right causal is built into the kernel \u2014\n734:                     # NO mask tensors. Adaptive chunking gives every"
+      },
+      {
+        "file": "core/gemma4_tc.py",
+        "line": 741,
+        "sha256": "c9a8cc1d01c30bb2b20e9c2e477d4bedf21072d0b1b6b157f3ba75c78a271d8b",
+        "excerpt": "739:                     dev = q.device.split(\":\")[0]\n740:                     p_ = (sc + F._causal_mask(L, S_all, dev,\n741:                                               sc.dtype)).softmax(-1)\n742:                 attn = tc.matmul(p_.reshape([B, 1, H * L, S_all]),\n743:                                  v).reshape([B, H, L, D])\n744:         else:"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "core/minicpm3_tc.py",
+    "line": 292,
+    "seat_reading": "qualified reading holds: shared compute dtype is float16 by default and bfloat16 in loader; mutable global retained unresolved",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "core/minicpm3_tc.py",
+        "line": 292,
+        "sha256": "3d19734f51d28eb48dc20a62658f2bfc250fdac4fce2cb906116d034b1371a69",
+        "excerpt": "290:                 # fused kernel assumes one D for keys AND values: zero-pad V to\n291:                 # 96, slice the output back to 64.\n292:                 pad = tc.zeros(B, H, S, cfg.q_head_dim - V,\n293:                                dtype=BlockTC.COMPUTE_DTYPE)\n294:                 vpad = tc.cat([v, pad], dim=3)\n295:                 attn = tc.apa_selective_attention(q_full, k_full, kq, vpad,"
+      },
+      {
+        "file": "core/minicpm3_tc.py",
+        "line": 293,
+        "sha256": "3d19734f51d28eb48dc20a62658f2bfc250fdac4fce2cb906116d034b1371a69",
+        "excerpt": "291:                 # 96, slice the output back to 64.\n292:                 pad = tc.zeros(B, H, S, cfg.q_head_dim - V,\n293:                                dtype=BlockTC.COMPUTE_DTYPE)\n294:                 vpad = tc.cat([v, pad], dim=3)\n295:                 attn = tc.apa_selective_attention(q_full, k_full, kq, vpad,\n296:                                                   scale, float(z), causal)"
+      },
+      {
+        "file": "core/minicpm3_tc.py",
+        "line": 437,
+        "sha256": "3d19734f51d28eb48dc20a62658f2bfc250fdac4fce2cb906116d034b1371a69",
+        "excerpt": "435:         cfg = MiniCPM3Config()\n436:         from core.mistral7b_tc import LinearTC\n437:         BlockTC.COMPUTE_DTYPE = \"bfloat16\"\n438:         LinearTC.DTYPE = \"bfloat16\"\n439:         with tc.no_grad():\n440:             m = cls(cfg)"
+      },
+      {
+        "file": "core/mistral7b_tc.py",
+        "line": 558,
+        "sha256": "49430e5920508d740a2f8be7b6ba0caadd0442c7798454cf6fa2a808204bf1c4",
+        "excerpt": "556:     # models; \"bfloat16\" for models whose activations exceed fp16's ~65504 range\n557:     # by mid-network (Qwen2.5 etc.) \u2014 bf16 has fp32's exponent range.\n558:     COMPUTE_DTYPE = \"float16\"\n559: \n560:     def __init__(self, config: MistralConfig, attention_mode=\"standard\"):\n561:         self.input_layernorm = RMSNormTC(config.hidden_dim, config.rms_norm_eps)"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "scripts/gpt_oss20b_e1_diag.py",
+    "line": 2525,
+    "seat_reading": "qualified reading holds: runtime BlockTC.COMPUTE_DTYPE feeds compute_dtype; runtime loader imports tensor_cuda; mutable setting retained unresolved",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "scripts/gpt_oss20b_e1_diag.py",
+        "line": 2525,
+        "sha256": "f0d8192dd95962dc5bae38145d8d262de1fa00283ed0f2a2750d8e2088c35d46",
+        "excerpt": "2523:     fire_info: dict[str, Any] | None = None\n2524:     with tc.no_grad():\n2525:         A_device = tc.tensor(A.astype(np.float32), dtype=compute_dtype)\n2526:         B_device = tc.tensor(B.astype(np.float32), dtype=compute_dtype)\n2527:         embed = runtime[\"GptOssRowEmbedding\"](where)\n2528:         h_teacher = embed(data[\"inputs\"])"
+      },
+      {
+        "file": "scripts/gpt_oss20b_e1_diag.py",
+        "line": 2513,
+        "sha256": "f0d8192dd95962dc5bae38145d8d262de1fa00283ed0f2a2750d8e2088c35d46",
+        "excerpt": "2511:     tokenizer,\n2512: ) -> dict[str, Any]:\n2513:     runtime = e1.load_runtime()\n2514:     tc = runtime[\"tc\"]\n2515:     cfg = runtime[\"GptOss20BConfig\"].from_model_dir(args.model_dir.resolve())\n2516:     e1.validate_model_contract(cfg)"
+      },
+      {
+        "file": "scripts/gpt_oss20b_e1_diag.py",
+        "line": 2514,
+        "sha256": "f0d8192dd95962dc5bae38145d8d262de1fa00283ed0f2a2750d8e2088c35d46",
+        "excerpt": "2512: ) -> dict[str, Any]:\n2513:     runtime = e1.load_runtime()\n2514:     tc = runtime[\"tc\"]\n2515:     cfg = runtime[\"GptOss20BConfig\"].from_model_dir(args.model_dir.resolve())\n2516:     e1.validate_model_contract(cfg)\n2517:     where = runtime[\"build_safetensors_map\"](args.model_dir.resolve())"
+      },
+      {
+        "file": "scripts/gpt_oss20b_e1_diag.py",
+        "line": 2520,
+        "sha256": "f0d8192dd95962dc5bae38145d8d262de1fa00283ed0f2a2750d8e2088c35d46",
+        "excerpt": "2518:     pack, key, A, B = e1.load_expert_arrays(E1_OUTPUT, e1.ADDRESS_RULE_E11)\n2519:     install_layer = int(pack[\"layer\"])\n2520:     compute_dtype = runtime[\"BlockTC\"].COMPUTE_DTYPE\n2521:     base_ids = data[\"window\"][:-1][None, :]\n2522:     targets = data[\"targets\"]\n2523:     fire_info: dict[str, Any] | None = None"
+      },
+      {
+        "file": "scripts/gpt_oss20b_router_telemetry.py",
+        "line": 330,
+        "sha256": "e1c35332e1e6bd0911c0402af5eeb3e9309107138a3c78ed445dff4490bfb64e",
+        "excerpt": "328:     sys.path.insert(0, str(PROJECT_TENSOR))\n329:     sys.path.insert(0, str(REPO_ROOT))\n330:     import tensor_cuda as tc\n331:     from core.gpt_oss20b_tc import (\n332:         GptOss20BConfig,\n333:         GptOssDiagnosticBlockTC,"
+      }
+    ]
+  },
+  {
+    "repo": "GraftRepository",
+    "file": "scripts/gpt_oss20b_expert_e1.py",
+    "line": 4030,
+    "seat_reading": "qualified reading holds: runtime dictionary supplies tc and shared BlockTC dtype; no claim about arbitrary setters",
+    "reading_supported": true,
+    "evidence_class": "reasoning from source",
+    "snippets": [
+      {
+        "file": "scripts/gpt_oss20b_expert_e1.py",
+        "line": 4030,
+        "sha256": "976d703295f2c383e21f6da8dadc9d3b139dd333f41146d2eb976edf8b3f79f4",
+        "excerpt": "4028:         compute_dtype = runtime[\"BlockTC\"].COMPUTE_DTYPE\n4029:         with tc.no_grad():\n4030:             A_device = tc.tensor(A.astype(np.float32), dtype=compute_dtype)\n4031:             B_device = tc.tensor(B.astype(np.float32), dtype=compute_dtype)\n4032:             embed = runtime[\"GptOssRowEmbedding\"](where)\n4033:             h_teacher = embed(teacher_ids)"
+      },
+      {
+        "file": "scripts/gpt_oss20b_expert_e1.py",
+        "line": 4022,
+        "sha256": "976d703295f2c383e21f6da8dadc9d3b139dd333f41146d2eb976edf8b3f79f4",
+        "excerpt": "4020:     write_json(path, receipt)\n4021:     try:\n4022:         runtime = load_runtime()\n4023:         tc = runtime[\"tc\"]\n4024:         cfg = runtime[\"GptOss20BConfig\"].from_model_dir(args.model_dir.resolve())\n4025:         validate_model_contract(cfg)"
+      },
+      {
+        "file": "scripts/gpt_oss20b_expert_e1.py",
+        "line": 4023,
+        "sha256": "976d703295f2c383e21f6da8dadc9d3b139dd333f41146d2eb976edf8b3f79f4",
+        "excerpt": "4021:     try:\n4022:         runtime = load_runtime()\n4023:         tc = runtime[\"tc\"]\n4024:         cfg = runtime[\"GptOss20BConfig\"].from_model_dir(args.model_dir.resolve())\n4025:         validate_model_contract(cfg)\n4026:         where = runtime[\"build_safetensors_map\"](args.model_dir.resolve())"
+      },
+      {
+        "file": "scripts/gpt_oss20b_expert_e1.py",
+        "line": 4028,
+        "sha256": "976d703295f2c383e21f6da8dadc9d3b139dd333f41146d2eb976edf8b3f79f4",
+        "excerpt": "4026:         where = runtime[\"build_safetensors_map\"](args.model_dir.resolve())\n4027:         install_layer = int(pack[\"layer\"])\n4028:         compute_dtype = runtime[\"BlockTC\"].COMPUTE_DTYPE\n4029:         with tc.no_grad():\n4030:             A_device = tc.tensor(A.astype(np.float32), dtype=compute_dtype)\n4031:             B_device = tc.tensor(B.astype(np.float32), dtype=compute_dtype)"
+      },
+      {
+        "file": "scripts/gpt_oss20b_expert_e1.py",
+        "line": 585,
+        "sha256": "976d703295f2c383e21f6da8dadc9d3b139dd333f41146d2eb976edf8b3f79f4",
+        "excerpt": "583: \n584: \n585: def load_runtime():\n586:     # Import the committed RT1 helper only in GPU modes.  This keeps prepare,\n587:     # fit, train, and analyze CPU-only and avoids repository bytecode writes.\n588:     import gpt_oss20b_router_telemetry as rt1"
+      }
+    ]
+  }
+]

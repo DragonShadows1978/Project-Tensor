@@ -1,0 +1,314 @@
+
+GraftRepository/scripts/gpt_oss20b_expert_e1.py
+585: def load_runtime():
+586:     # Import the committed RT1 helper only in GPU modes.  This keeps prepare,
+587:     # fit, train, and analyze CPU-only and avoids repository bytecode writes.
+588:     import gpt_oss20b_router_telemetry as rt1
+589: 
+590:     runtime = rt1.load_runtime()
+591:     runtime["rt1"] = rt1
+592:     return runtime
+593: 
+594: 
+595: def validate_model_contract(cfg) -> None:
+596:     observed = (
+597:         int(cfg.num_layers),
+598:         int(cfg.hidden_dim),
+599:         int(cfg.num_local_experts),
+600:         int(cfg.num_experts_per_tok),
+601:     )
+602:     expected = (N_LAYERS, HIDDEN_DIM, N_EXPERTS, EXPERTS_PER_TOKEN)
+603:     if observed != expected:
+604:         raise RuntimeError(f"model contract {observed} != registered {expected}")
+605: 
+606: 
+607: def corpus_relative(path: Path) -> str:
+608:     resolved = path.resolve()
+609:     for root in CORPUS_ROOTS:
+610:         try:
+611:             relative = resolved.relative_to(root.resolve())
+612:             return f"{root.name}/{relative.as_posix()}"
+613:         except ValueError:
+614:             continue
+615:     raise ValueError(f"corpus path escapes the three authorized roots: {resolved}")
+616: 
+617: 
+618: def discover_corpus_files() -> list[Path]:
+619:     files: list[Path] = []
+620:     for root in CORPUS_ROOTS:
+621:         resolved_root = root.resolve()
+622:         forbidden = [
+623:             part
+624:             for part in resolved_root.parts
+625:             if any(term in part.casefold() for term in FORBIDDEN_DIRECTORY_TERMS)
+
+GraftRepository/core/deepseek_v2_lite_tc.py
+95:     dt = BlockTC.COMPUTE_DTYPE
+96:     return t.half() if dt == "float16" else t.astype(dt)
+97: 
+98: 
+99: def _deepseek_rope_prep(x):
+100:     """Match HF DeepSeek's pre-RoPE pair permutation before rotate_half."""
+101:     *prefix, d = x.shape
+102:     return x.reshape(list(prefix) + [d // 2, 2]).transpose(-1, -2).reshape(list(prefix) + [d])
+103: 
+104: 
+105: def _cache_zeros(*shape, dtype=None):
+106:     if dtype == "uint8":
+107:         return tc.zeros(*shape, dtype="uint8")
+108:     dt = dtype or BlockTC.COMPUTE_DTYPE
+109:     if dt == "bfloat16":
+110:         z = tc.zeros(*shape, dtype="float16")
+111:         out = z.astype("bfloat16")
+112:         del z
+113:         tc.empty_cache()
+114:         return out
+115:     return tc.zeros(*shape, dtype=dt)
+116: 
+117: 
+118: class DeepSeekMLACache:
+119:     """Mutable MLA latent cache: post-norm latent + roped shared key.
+120: 
+815:             "quantized_bytes": quant_bytes,
+816:             "quantized_linear_bytes": quant_bytes,
+817:             "unquantized_weight_bytes": unquantized_weight_bytes,
+818:             "estimated_resident_weight_bytes": resident_weight_bytes,
+819:             "estimated_resident_weight_gib": resident_weight_bytes / (1024 ** 3),
+820:             "compression_ratio": (orig_bytes / quant_bytes) if quant_bytes else 0.0,
+821:             "layers_loaded": len(self.layers),
+822:             "lm_head_loaded": bool(load_lm_head),
+823:         }
+824: 
+825:     @classmethod
+826:     def from_pretrained(cls, model_dir=None, attention_mode="standard",
+827:                         max_layers=None, load_lm_head=True, progress=True,
+828:                         latent_cache_bits=16, latent_cache_group=32):
+829:         BlockTC.COMPUTE_DTYPE = "bfloat16"
+830:         QuantLinearTC.FUSED_DECODE = True
+831:         RMSNormTC.USE_FUSED = True
+832:         with tc.no_grad():
+833:             model = cls(attention_mode=attention_mode, max_layers=max_layers,
+834:                         latent_cache_bits=latent_cache_bits,
+835:                         latent_cache_group=latent_cache_group)
+
+GraftRepository/core/gemma4_tc.py
+125:         # path's whole-weight transient (113MB per MLP matmul) does not
+126:         # fit next to the ~6.8GB QAT-exact body — prefill OOMs (longctx
+127:         # gate). Cold-prefill speed regression vs cuBLAS is accepted;
+128:         # registered as a speed-pass lever (column-blocked two-stage).
+129:         return tc.int4_linear_fused(x, self.packed, self.scales,
+130:                                     self.zeros, self.group_size)
+131: 
+132: 
+133: def _zeros(*shape):
+134:     """Allocate zeros directly in the compute dtype — no fp32 numpy
+135:     intermediate and no fp32 device transient (the _cast(tc.tensor(
+136:     np.zeros(fp32))) pattern transiently needs 2x the final bf16 size,
+137:     which OOMed kqb allocation at 8K on a near-full card)."""
+138:     cdt = BlockTC.COMPUTE_DTYPE
+139:     return tc.zeros(*shape, dtype=cdt)
+140: 
+141: 
+142: _RING_BLOCK = 2048
+143: 
+730:                 sc = tc.matmul(qf, k, alpha=1.0, trans_b=True)
+731:                 sc = sc.reshape([B, H, L, S_all])
+732:                 if hasattr(tc, "causal_softmax") and not tc.is_grad_enabled():
+733:                     # bottom-right causal is built into the kernel —
+734:                     # NO mask tensors. Adaptive chunking gives every
+735:                     # chunk a unique (L,S), so materialized masks
+736:                     # churned ~200MB of cache at 12K (OOM-proven).
+737:                     p_ = tc.causal_softmax(sc)
+738:                 else:
+739:                     dev = q.device.split(":")[0]
+740:                     p_ = (sc + F._causal_mask(L, S_all, dev,
+741:                                               sc.dtype)).softmax(-1)
+742:                 attn = tc.matmul(p_.reshape([B, 1, H * L, S_all]),
+743:                                  v).reshape([B, H, L, D])
+
+GraftRepository/artifacts/grm_xm3/evidence/trinity_nano_tc.py
+155:         -128,
+156:         127,
+157:     )
+158:     codes = (q + 128.0).astype(np.uint8).reshape(out_features, in_features)
+159:     return codes, scales_f32.astype(np.float16)
+160: 
+161: 
+162: class BlockTC:
+163:     """Global compute dtype knob used by the Trinity adapter."""
+164: 
+165:     COMPUTE_DTYPE = "bfloat16"
+166: 
+167: 
+168: class LinearTC:
+169:     """Plain bf16/fp16 linear. Weight is stored transposed for direct matmul."""
+170: 
+171:     DTYPE = "bfloat16"
+172: 
+173:     def __init__(self, weight_fp32: np.ndarray):
+174:         if weight_fp32.ndim != 2:
+175:             raise ValueError(f"linear weight must be rank-2, got {weight_fp32.shape}")
+176:         self.out_features, self.in_features = weight_fp32.shape
+177:         self.wT = tc.tensor(
+178:             np.ascontiguousarray(weight_fp32.T.astype(np.float32)), dtype="float32"
+179:         ).astype(self.DTYPE)
+180:         self._vram = int(self.out_features * self.in_features * 2)
+306: class HostEmbedding:
+307:     """Host-resident embedding table, copied to the GPU only for requested rows."""
+308: 
+309:     def __init__(self):
+310:         self.weight: np.ndarray | None = None
+311: 
+312:     def __call__(self, input_ids_np):
+313:         if self.weight is None:
+314:             raise RuntimeError("HostEmbedding weight is not loaded")
+315:         rows = self.weight[np.asarray(input_ids_np, dtype=np.int64)]
+316:         return tc.tensor(np.ascontiguousarray(rows), dtype=_compute_dtype())
+317: 
+318:     @property
+319:     def shape(self):
+945:         max_layers: int | None = None,
+946:         load_lm_head: bool = True,
+947:         progress: bool = True,
+948:     ) -> tuple["TrinityNano_TC", dict[str, Any]]:
+949:         if weight_mode not in {"int4", "int8", "bf16"}:
+950:             raise ValueError("weight_mode must be 'int4', 'int8', or 'bf16'")
+951:         BlockTC.COMPUTE_DTYPE = "bfloat16"
+952:         LinearTC.DTYPE = "bfloat16"
+953:         QuantLinearTC.FUSED_DECODE = True
+954:         RMSNormTC.USE_FUSED = False  # Afmoe cast-before-weight order
+955:         cfg = TrinityNanoConfig.from_model_dir(model_dir)
+
+GRAPA-Native-LLM/grapa/attention.py
+35:     B, KVH, S, D = x.shape
+36:     return (x.unsqueeze(2).expand([B, KVH, rep, S, D])
+37:             .reshape([B, KVH * rep, S, D]))
+38: 
+39: 
+40: _vis_cache = {}
+41: 
+42: 
+43: def _visible_counts(L, device):
+44:     """(L, 1) fp32 tensor of per-row visible key counts (causal)."""
+45:     key = (L, device)
+46:     t = _vis_cache.get(key)
+47:     if t is None:
+48:         t = tc.tensor(np.arange(1, L + 1, dtype=np.float32)[:, None],
+49:                       device=device)
+50:         _vis_cache[key] = t
+51:     return t
+52: 
+53: 
+54: def apa_selective(q, k, v, kq, refine_percentile, scale, is_causal=True):
+55:     """The trainable selective path. q/k/v/kq: (B, H, L, D), kq detached.
+56: 
+57:     Stop-gradient router (POC §2.1): the quantized bulk is a constant;
+58:     the selection mask is a constant; gradients flow through the refined
+59:     full-precision dots and the softmax only.
+60: 
+61:     When grad is enabled and a real selective threshold is in play
+62:     (refine < 1.0), routes to the FUSED O(L)-memory kernel
+63:     (tc.apa_selective_train) — it never materializes the L x L score matrix,
+64:     which is what lets a large training window fit. Its backward is gradchecked
+65:     bit-tight vs this composed reference. refine >= 1.0 stays on the composed
+66:     chain (the G0 identity / full-attention twin).
+67:     """
+68:     if (refine_percentile < 1.0 and kq is not None
+69:             and tc.is_grad_enabled() and is_causal):
+70:         zthr = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
+71:         return tc.apa_selective_train(q, k, kq, v, float(scale), float(zthr),
+72:                                       True)
+73:     if (refine_percentile < 1.0 and kq is not None
+74:             and not tc.is_grad_enabled() and is_causal):
+75:         zthr = _norm_ppf(1.0 - max(0.0, min(1.0, refine_percentile)))
+76:         return tc.apa_selective_attention(q, k, kq, v, float(scale),
+77:                                           float(zthr), True)
+78:     B, H, L, D = q.shape
+79:     S = k.shape[-2]
+80:     dev = q.device.split(":")[0]
+81:     ranking = tc.matmul(q, k, alpha=scale, trans_b=True)
+82:     cm = F._causal_mask(L, S, dev, q.dtype) if is_causal else None
+83:     if is_causal:
+84:         ranking = ranking + cm
+85: 
+
+GRAPA-Native-LLM/scripts/cc10_ablation.py
+2033:             kv_up = self.kv_b(c_kv).reshape([B, L, H, nope + vdim])
+2034:             k_nope = kv_up.slice(3, 0, nope).transpose(1, 2)
+2035:             v = kv_up.slice(3, nope, vdim).transpose(1, 2)
+2036:             q_pe = F.apply_rotary(q_pe.transpose(1, 2), cos, sin)
+2037:             k_pe = F.apply_rotary(
+2038:                 k_pe.reshape([B, L, 1, rope]).transpose(1, 2), cos, sin)
+2039:             k_pe = k_pe.expand([B, H, L, rope])
+2040:             q_h = tc.cat([q_nope.transpose(1, 2), q_pe], dim=3)
+2041:             k_h = tc.cat([k_nope, k_pe], dim=3)
+2042:             scores = tc.matmul(q_h, k_h, alpha=self.scale, trans_b=True)
+2043:             scale = self.head_logit_scale
+2044:             if scale.dtype != scores.dtype:
+2045:                 scale = scale.astype(scores.dtype)
+2046:             scores = scores * scale
+2047:             device = scores.device.split(':')[0]
+2048:             scores = scores + F._causal_mask(L, L, device, scores.dtype)
+2049:             out = tc.matmul(scores.softmax(-1), v)
+2050:             return self.o_proj(out.transpose(1, 2).reshape([B, L, H * vdim]))
+2051: 
+
+Project-Voice/engine/tensor_requests/p1t_tests/run_p1t.py
+592:             torch.cuda.synchronize()
+593:             with torch.cuda.stream(S):
+594:                 torch.cuda._sleep(cycles)
+595:                 p.fill_(v)                                    # the producer's pending write, on S
+596:                 t = F['t1_from_dlpack'](p)                       # adapter must ask p.__dlpack__(stream=<its stream>)
+597:             h = F['t1_read'](t)                                  # adapter's stream only
+598:             if not np.all(h == v):
+599:                 fails.append(k)
+600:             torch.cuda.synchronize()
+601:             del t, p
+602:         return {'ok': not fails, 'trials': K, 'failed_trials': len(fails), 'detection_rate': len(fails) / K,
+603:                 'sleep_cycles': cycles}
+604: 
+605:     for dt in ('float32', 'float16'):
+606:         case(f'device/{dt}', lambda dt=dt: device(dt))
+607:         case(f'export_alias/{dt}', lambda dt=dt: export_alias(dt))
+608:         case(f'import_alias/{dt}', lambda dt=dt: import_alias(dt))
+609:     case('roundtrip_shapes', roundtrip_shapes)
+610:     case('import_lifetime', import_lifetime)
+611:     case('export_lifetime', export_lifetime)
+612:     case('export_stream', export_stream)
+
+Project-Voice/engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py
+196:         raise NotImplementedError('T1: tensor_cuda.from_dlpack is missing (census: no from_dlpack in __init__.py '
+197:                                   '__all__, __init__.py:1239-1288)')
+198:     return fn(obj)
+199: 
+200: 
+201: def t1_empty(shape, dtype):
+202:     if not hasattr(tc.Tensor, '__dlpack__') or not hasattr(tc.Tensor, '__dlpack_device__'):
+203:         raise NotImplementedError('T1: Tensor.__dlpack__ / __dlpack_device__ are missing (census: Tensor = _C.Tensor, '
+204:                                   '__init__.py:22; no DLPack in the Python layer)')
+205:     return tc.zeros(tuple(shape), dtype=dtype)                           # zeros = _factory(np.zeros), __init__.py:63
+206: 
+207: 
+208: def t1_fill(t, value):
+
+GRAPA-Native-LLM/grapa/train.py
+1182:     last_lr = None
+1183:     tw = None
+1184:     if args.gnorm_tripwire_record is not None:
+1185:         # CC47: the gradient-norm tripwire (grapa/tripwire.py): a host ring of
+1186:         # the exact states, dumped on a norm spike; never changes the update.
+1187:         tw_ring = args.gnorm_tripwire_record["ring"]
+1188:         tw = tripwire.Tripwire(
+1189:             k=args.gnorm_tripwire, ring_gb=args.gnorm_tripwire_record["ring_gb"],
+1190:             ring=tw_ring,
+1191:             post_next_steps=args.gnorm_tripwire_record["post_next_steps"],
+1192:             reserve_gb=args.gnorm_tripwire_record["disk_floor_gb"],
+1193:             state_bytes_hint=tw_hint,
+1194:             device=(None if tw_ring == tripwire.RING_HOST
+1195:                     else tripwire.EngineDevice(tc, pooling_after=True)),
+1196:             root=tw_root,
+1197:             emit=lambda msg: emit(f"{timestamp()} | {msg}"),
+1198:             history=tripwire_history,
+1199:             identity=lambda: tripwire.trainer_identity(tc, args, HERE))
+1200:         tw_names = tripwire.param_names(model, opt.params)
+1201: 

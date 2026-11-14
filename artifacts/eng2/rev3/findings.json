@@ -1,0 +1,31 @@
+{
+  "review": "ENG2-REV3",
+  "status": "complete",
+  "scope": "A3 only; promotion and GPU reruns excluded",
+  "verdict": "one_minor_census_completeness_finding",
+  "findings": [
+    {
+      "id": "E2R3-F01",
+      "severity": "MINOR",
+      "file": "artifacts/eng2/a3/consumer_census.py",
+      "line": 556,
+      "title": "Consumer file selection omits 16 changed-entry sites, including one unresolved dtype",
+      "argument": "The import/cross-file/bare-tc file listing does not include files that receive tensor_cuda via object/module fields or a namespace-returning helper. The independent all-tracked-Python scan finds 498 explicit-dtype changed-entry calls versus A3's 482: 2 extra in Project-Voice, 13 in GRAPA-Native-LLM, 1 in GraftRepository. grapa/tripwire.py:655 calls self.tc.zeros(..., dtype=self.dtype(t)); __init__ stores tc at :630, grapa/train.py:758 imports tensor_cuda and :1195 passes it into EngineDevice. This increases unresolved changed-entry sites from 48 to 49. The other 15 omitted sites have supported literal dtype strings. The two Voice files are byte-identical at A3's recorded HEAD, so this is not checkout drift. No newly refused call site was confirmed.",
+      "reproduction": "Run consumer_scan.py then finish_consumer.py under the recorded CPU-only environment; Q3_consumer_final.json lists omitted_by_a3, all 498 sites, all 49 unresolved sites and the source bindings. Compare (repo,file,line) to changed_by_eng2 rows in artifacts/eng2/a3/CONSUMER_CENSUS.json.",
+      "suggested_fix": "Census all tracked Python files before resolving callees, or extend operand listing to field/namespace receivers; add the 16 sites, retain tripwire:655 as unresolved with its source reading, and update repository/role counts and the final census claim.",
+      "evidence": [
+        "artifacts/eng2/rev3/Q3_consumer_final.json",
+        "artifacts/eng2/rev3/Q3_extra_sources.txt",
+        "artifacts/eng2/rev3/Q3_spot_sources.txt"
+      ],
+      "status": "open",
+      "verbatim": "E2R3-F01 — MINOR — artifacts/eng2/a3/consumer_census.py:556: File selection omits 16 changed-entry call sites, including GRAPA grapa/tripwire.py:655 with unresolved self.dtype(t). The independent census finds 498 sites and 49 unresolved, versus A3’s 482 and 48. Reproduction: run consumer_scan.py and finish_consumer.py; omitted_by_a3 in Q3_consumer_final.json lists all 16. Suggested fix: census every tracked Python file, resolve field/namespace receivers, and update the site lists and counts. No newly refused call site was confirmed."
+    }
+  ],
+  "questions": {
+    "Q1": "checked_sound",
+    "Q2": "checked_sound",
+    "Q3": "zero_confirmed_newly_refused_but_census_incomplete",
+    "Q4": "checked_sound"
+  }
+}
