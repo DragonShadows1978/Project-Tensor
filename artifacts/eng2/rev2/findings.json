@@ -1,0 +1,120 @@
+{
+  "status": "complete",
+  "verdict": "RED",
+  "findings": [
+    {
+      "id": "E2R2-F01",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": 70,
+      "title": "Factory shape conversion still precedes the non-string dtype guard",
+      "reproduction": "python3 -B artifacts/eng2/rev2/dtype_boundaries.py: for zeros, ones, randn and rand, pass Shape([2,3]) with dtype=None, where Shape is a list subclass whose __iter__ records a call and draws once from NumPy. All four execute shape.__iter__ and advance RNG before raising the registered TypeError; zero device calls occur.",
+      "argument": "Lines 70-71 normalize a tuple/list shape before line 72 validates dtype. Even a plain list allocates its tuple before refusal. Ordinary integer-shape calls are fixed, but the stated before-any-conversion/allocation/random-draw guarantee is incomplete. The shape conversion is pre-existing, not a newly introduced regression; MINOR because this residual requires the shape-normalization path, and the observed RNG draw is in the supplied iterator.",
+      "suggested_fix": "Move the non-string dtype check ahead of shape normalization in make, retaining the registered TypeError and existing supported-dtype behavior; add a shape-iterator sentinel check.",
+      "receipts": [
+        "dtype_boundaries.py",
+        "dtype_boundaries.json",
+        "dtype_boundaries.log"
+      ],
+      "status": "open; product source is read-only"
+    },
+    {
+      "id": "E2R2-F02",
+      "severity": "MINOR",
+      "file": "artifacts/eng2/dtype_census.py",
+      "line": 43,
+      "title": "The all-entry census still omits RegisteredMargins.lookup",
+      "reproduction": "python3 -B artifacts/eng2/rev2/dtype_boundaries.py and dtype_signature_inventory.json: tensor_cuda/tensor_cuda/apa_sp2.py:53 defines RegisteredMargins.lookup(..., dtype, ...), but neither 337-row census contains it. The exact baseline and candidate method bodies both raise ValueError(\"apa_sp2: table covers fp32 at scale=1/sqrt(D) only\") for float64, double, int32 and not_a_dtype before reading the table.",
+      "argument": "A1 adds all four omissions named by REV1, but the order requires every dtype-string entry under tensor_cuda/tensor_cuda. This additional public metadata-validation entry accepts a dtype string and is absent. It is a census completeness gap, not a tensor fallback or a newly introduced product defect. The refusal probe uses a table-read sentinel; it does not validate calibration data or attention execution.",
+      "suggested_fix": "Add RegisteredMargins.lookup to the census with its baseline and candidate refusal rows, identifying its metadata-validation role and float32-only contract; leave its product behavior unchanged.",
+      "receipts": [
+        "dtype_signature_inventory.json",
+        "dtype_boundaries.py",
+        "dtype_boundaries.json",
+        "census_baseline.json",
+        "census_candidate.json"
+      ],
+      "status": "open; census source is read-only"
+    }
+  ],
+  "scope": "Narrow five-fix review; CPU/source only; no GPU or promotion",
+  "baseline": "bc02d3a1",
+  "candidate": "1a4beed1",
+  "review_head": "4ee41ad4b3036bbb901206b0eb4ce1b15aca5608",
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 0,
+    "MINOR": 2,
+    "NIT": 0
+  },
+  "questions": [
+    {
+      "question": 1,
+      "answer": "PARTIAL. The original dtype-membership bypass is fixed: probe_edges.py and dtype_boundaries.py refused all 36 ordinary-shape non-string cases before dtype hashing/equality, data conversion, allocation, RNG draws or mask cache lookup. Factory shape normalization still precedes refusal (E2R2-F01). census_review.py checked 35 supported/default source pairs; dtype_boundaries.py checked 90 plain-str/NumPy-str/plain-subclass pairs and six nonconstant mask pairs. All six supported names retain their host paths and casts. name=True is safe at its three internal call sites: it checks string type, then each caller validates membership before data work. It is not a standalone supported-name validator. str subclasses, including numpy.str_, are acceptable under the explicitly requested isinstance(dtype, str) contract; arbitrary overridden subclass methods are not a promise of builtin-str behavior.",
+      "receipts": [
+        "edge_probes.log",
+        "dtype_boundaries.json",
+        "census_review.json"
+      ]
+    },
+    {
+      "question": 2,
+      "answer": "PASS. Re-ran copied probe_edges.py, which is the command recorded by REV1 edge_probes.command.json; no separate edge_probes.py exists. Every negative was refused, and the old unstructured positive was correctly refused for missing JUnit data. Replayed A1 P0 through copied tool_checks.py: all 10 real candidate pin failures were accepted. P1-P7 were refused. The trusted receipt must contain exactly one failed call, exception_class == TypeError, and the exact registered JUnit message; another class, altered message, or extra failure cannot pass these checks. This claim assumes the sealed producer and authentic receipts, not forged class names or forged XML.",
+      "receipts": [
+        "pin_cases.json",
+        "TOOL_CHECKS.json",
+        "tool_checks.log"
+      ]
+    },
+    {
+      "question": 3,
+      "answer": "PASS. probe_edges.py and tool_checks.py confirmed all 15 killer sets self-match and match exactly their registered IDs, with no outsiders over all 298 census IDs in normalized and arm-prefixed forms. Fresh cpu_runs.py runs produced MF1 12/12 and MF2 48/48 registered failures; all 60 killers traced lines 63/75 respectively. mutant_eval_cpu.py replayed A1 receipts through unchanged evaluate() with the declared 157-ID CPU-census substitution: both killed; S1 and S2 refused with \"no registered killer ID failed\".",
+      "receipts": [
+        "killer_matching.json",
+        "TOOL_CHECKS.json",
+        "arms_review.json",
+        "MUTANT_EVAL_CPU.json"
+      ]
+    },
+    {
+      "question": 4,
+      "answer": "PASS. Copied cross_arm_review.py freshly collected 298 IDs per arm and emitted 35 f1bytes and 20 p302bits rows through the real _record function. The exact scorer loop reported IDs equal True, zero differing hashes and no census errors. tool_checks.py rejected a changed hash, duplicate and missing row, plus extra-ID and wrong-kind controls. final_bindings.py confirmed normalized ID/hash maps equal REV1 and A1. These are freshly reproduced constructed hash payloads, not GPU-output byte-equality evidence.",
+      "receipts": [
+        "cross_arm_review.json",
+        "TOOL_CHECKS.json",
+        "final_bindings.json"
+      ]
+    },
+    {
+      "question": 5,
+      "answer": "PARTIAL. census_review.py reproduced all 337 rows per arm, including the four entries named by REV1; the original 201 rows remain a prefix. The all-entry claim is still incomplete because RegisteredMargins.lookup is absent (E2R2-F02). dtype_boundaries.py verified all six _causal_mask names against baseline on a nonconstant 2x3 mask: float16/bfloat16 request casts; float32/int64/bool/uint8 retain the existing float32 bias. Unsupported names and non-strings refuse before cache lookup. The three affine helpers retain NumPy dtype semantics and their baseline outcomes.",
+      "receipts": [
+        "census_review.json",
+        "dtype_signature_inventory.json",
+        "dtype_boundaries.json",
+        "supplemental_checks.json"
+      ]
+    },
+    {
+      "question": 6,
+      "answer": "PASS within this CPU/source scope, subject to the two residual gaps above. scope_and_arms.py compared git diff 9452ef61 1a4beed1 with AG3_SCOPE.json: all 63 modified paths match; 217 additions are authorized receipts plus the dispatch order. Product hunks are confined to the named functions, test_eng2.py is additions-only, and N1 bytes are unchanged. Copied cpu_runs.py passed 157/157 candidate CPU tests with CUDA hidden. Re-executing the exact make_arm recipe in scratch for baseline, candidate, MF1 and MF2 matched all 11 files per arm, including module hashes and mutant edits; A1 deviation 2 was faithful. No GPU acceptance or promotion is claimed.",
+      "receipts": [
+        "scope_review.json",
+        "scope_full.diff",
+        "arms_review.json",
+        "candidate_pytest.log"
+      ]
+    }
+  ],
+  "deviations": [
+    {
+      "id": "D01",
+      "description": "One functions.wait used 1000 ms while a 300000-ms process wait was pending; the following wait used 300000. No status message or extra process poll intervened; results unaffected."
+    },
+    {
+      "id": "D02",
+      "description": "scope_and_arms.py repair 1 of 3: positional AST keys mislabeled an unchanged main guard after insertion. Replaced them with AST-content keys and re-ran successfully. Initial failure retained in scope_and_arms.log; success in scope_and_arms_r1.log."
+    }
+  ],
+  "prior_art": "Reused REV1/A1 probes; differential testing (McKeeman, 1998), mutation testing (DeMillo, Lipton and Sayward, 1978), pytest/JUnit and CPython tracing, Python/POSIX fnmatch, SHA-256 (NIST FIPS 180-4). Literature unverified \u2014 lead to check. New contribution: scoped boundary cases, exhaustive ID comparisons and receipt binding; no novel algorithm. For validation-before-side-effects and complete signature census, no specific prior art known to me."
+}
