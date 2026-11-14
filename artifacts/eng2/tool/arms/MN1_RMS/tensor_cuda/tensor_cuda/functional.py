@@ -34,6 +34,13 @@ def _check_causal_lengths(L, S):
 
 def _causal_mask(L, S, device, dtype):
     _check_causal_lengths(L, S)
+    # ENG2-A1 (REV1 E2R-F05): refuse a non-string or unsupported dtype with F1's TypeError before the cache lookup
+    # and before any tensor is built (it used to fall back silently to a float32 mask). The str check comes first
+    # (tc._np_dtype), then the name must be one of the engine's six; a supported name keeps today's mask: float16 /
+    # bfloat16 get the cast below, every other supported name the float32 bias. Callers pass Tensor.dtype, always
+    # supported. Prior art: as F1 (__init__.py _np_dtype); no other prior art known to me for this guard.
+    if tc._np_dtype(dtype, name=True) not in tc._DEVICE_CAST_DTYPE:
+        tc._np_dtype(dtype)
     key = (L, S, device, dtype)
     m = _causal_cache.get(key)
     if m is None:

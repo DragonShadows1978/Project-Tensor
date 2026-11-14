@@ -384,3 +384,88 @@ def test_g2_references_hand_values_cpu():
     assert E3.e3_distance(np.array([1.0, 2.5]), np.array([1.0, 2.0])) == 0.5
     inputs = E3.e3_inputs("RMSNorm", "near_eps")
     np.testing.assert_allclose((inputs * inputs).mean(axis=-1), 1e-6, rtol=1e-12)
+
+
+# ============================== ENG2-A1 (REV1 E2R-F01): non-string dtypes are refused before any membership test
+# orders/ENG2_A1_REV1_FIXES.md. Set and dict membership compare hash and ==, so a non-string equal to a supported name
+# (collections.UserString("float32")) used to pass `dtype in _DEVICE_CAST_DTYPE` / `_NP_DTYPE[dtype]` and be converted
+# (tc.tensor) or drawn (randn/rand). Every non-string now gets F1's TypeError first, before any conversion, allocation,
+# random draw, cache lookup or tensor, and without calling the object's __eq__ or __hash__ (the spy records them).
+# The same objects are refused by functional._causal_mask (REV1 E2R-F05). Prior art: Python's isinstance-before-lookup
+# validation idiom (no specific source known to me); the operands reuse F1's _Unconvertible and F1_TOO_BIG.
+from collections import UserString  # noqa: E402
+
+from tensor_cuda import functional as _A1_F  # noqa: E402
+
+
+class _A1StrEqualUnhashable:
+    """Equal to "float32" but unhashable: a membership test raises Python's own TypeError, not F1's."""
+
+    __hash__ = None
+
+    def __eq__(self, other):
+        return other == "float32"
+
+    def __repr__(self):
+        return "_A1StrEqualUnhashable()"
+
+
+class _A1Spy:
+    """Hashes and compares like "float32" (as UserString does) and records every __hash__/__eq__ call."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __hash__(self):
+        self.calls.append("__hash__")
+        return hash("float32")
+
+    def __eq__(self, other):
+        self.calls.append("__eq__")
+        return other == "float32"
+
+    def __repr__(self):
+        return "_A1Spy()"
+
+
+A1_NONSTRINGS = {"UserString-float32": lambda: UserString("float32"),
+                 "UserString-bfloat16": lambda: UserString("bfloat16"),
+                 "unhashable": _A1StrEqualUnhashable, "None": lambda: None,
+                 "numpy-dtype-float32": lambda: np.dtype("float32"), "spy": _A1Spy}
+
+
+@pytest.mark.parametrize("kind", list(A1_NONSTRINGS))
+@pytest.mark.parametrize("entry", F1_ENTRIES)
+def test_a1_nonstring_refused_cpu(entry, kind):
+    """tc.tensor and every factory refuse a non-string dtype with F1's TypeError before converting (the
+    _Unconvertible operand), allocating (a shape NumPy refuses) or drawing (the global random state)."""
+    obj = A1_NONSTRINGS[kind]()
+    before = np.random.get_state()
+    with pytest.raises(TypeError) as info:
+        if entry == "tensor":
+            tc.tensor(_Unconvertible(), device="cpu", dtype=obj)
+        else:
+            F1_FACTORIES[entry](*F1_TOO_BIG, device="cpu", dtype=obj)
+    assert str(info.value) == F1_MESSAGE.format(obj)
+    after = np.random.get_state()
+    assert before[0] == after[0] and np.array_equal(before[1], after[1]) and before[2:] == after[2:]
+    if kind == "spy":
+        assert obj.calls == [], obj.calls
+
+
+@pytest.mark.parametrize("kind", list(A1_NONSTRINGS))
+def test_a1_causal_mask_nonstring_refused_cpu(kind, monkeypatch):
+    """functional._causal_mask refuses a non-string dtype before its cache lookup and before building a tensor."""
+    obj = A1_NONSTRINGS[kind]()
+
+    def no_tensor(*args, **kwargs):
+        raise AssertionError("_causal_mask built a tensor before checking the dtype")
+
+    monkeypatch.setattr(tc, "tensor", no_tensor)
+    monkeypatch.setattr(_A1_F, "_causal_cache", {})
+    with pytest.raises(TypeError) as info:
+        _A1_F._causal_mask(0, 0, "cpu", obj)
+    assert str(info.value) == F1_MESSAGE.format(obj)
+    assert _A1_F._causal_cache == {}
+    if kind == "spy":
+        assert obj.calls == [], obj.calls

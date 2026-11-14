@@ -17,6 +17,37 @@ from pathlib import Path
 from evidence import TOOL, guard, verify_start, lines, recompute_line, summary_outcomes, norm_id
 
 
+# ENG2-A1 (REV1 E2R-F04): the registered row census, per kind: the test functions that write the rows (test_eng2.py
+# _record calls) and the order's expected row counts (orders/ENG2_A1_REV1_FIXES.md, operand census: 35 and 20).
+CROSS_ROWS = {"f1bytes": (("test_f1_tensor_supported", "test_f1_factory_supported", "test_f1_default_float64_data",
+                           "test_f1_factory_default"), 35),
+              "p302bits": (("test_n1_float32_bits",), 20)}
+
+
+def keyed_rows(kind, rows):
+    """{norm_id(test_id): sha256} for one arm's rows of `kind`, with census errors: a row of another kind, a duplicate
+    normalised ID, or an ID set different from the registered census (ids_eng2.txt filtered by CROSS_ROWS[kind]).
+    Prior art: keyed equi-join on a normalised key with a uniqueness check (relational practice; no specific source
+    known to me)."""
+    functions, count = CROSS_ROWS[kind]
+    expected = {i for i in (TOOL / "ids_eng2.txt").read_text().split()
+                if i.split("::", 1)[1].split("[", 1)[0] in functions}
+    keyed, errors = {}, []
+    if len(expected) != count:
+        errors.append("%s: registered census has %d IDs, the order registers %d" % (kind, len(expected), count))
+    for r in rows:
+        nid = norm_id(r["test_id"])
+        if r.get("kind") != kind:
+            errors.append("%s: row of kind %r (%s)" % (kind, r.get("kind"), nid))
+        if nid in keyed:
+            errors.append("%s: duplicate normalised ID %s" % (kind, nid))
+        keyed[nid] = r["sha256"]
+    if rows and set(keyed) != expected:
+        errors.append("%s: row IDs differ from the census: missing %r, extra %r" % (
+            kind, sorted(expected - set(keyed))[:5], sorted(set(keyed) - expected)[:5]))
+    return keyed, errors
+
+
 def main():
     runs = guard(os.environ["RUNS"])
     summary, errors = {}, []
@@ -43,14 +74,18 @@ def main():
                   e3_candidate_regnorm=rows("candidate_regnorm", "census_*.json"))
     cross = {}
     for kind in ("f1bytes", "p302bits"):
-        base = {r["test_id"]: r["sha256"] for r in rows("baseline_eng2", kind + "_*.json")}
-        cand_rows = {r["test_id"]: r["sha256"] for r in rows("candidate_eng2", kind + "_*.json")}
+        # ENG2-A1 (REV1 E2R-F04): rows are keyed by evidence.norm_id on BOTH arms (test_eng2.py's _record stores
+        # request.node.nodeid, which carries artifacts/eng2/tool/arms/<arm>/), duplicates refused, and each arm's ID set
+        # must equal the registered census exactly (35 f1bytes, 20 p302bits rows). Hashes are compared unchanged.
+        base, base_errors = keyed_rows(kind, rows("baseline_eng2", kind + "_*.json"))
+        cand_rows, cand_errors = keyed_rows(kind, rows("candidate_eng2", kind + "_*.json"))
         differ = sorted(i for i in base if cand_rows.get(i) != base[i])
         cross[kind] = dict(baseline=len(base), candidate=len(cand_rows), differing=differ,
-                           ids_equal=sorted(base) == sorted(cand_rows))
-        if summary and (not base or sorted(base) != sorted(cand_rows) or differ):
-            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r" % (
-                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10]))
+                           ids_equal=sorted(base) == sorted(cand_rows), census_errors=base_errors + cand_errors)
+        if summary and (not base or sorted(base) != sorted(cand_rows) or differ or base_errors or cand_errors):
+            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r, census %r" % (
+                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10],
+                (base_errors + cand_errors)[:4]))
     source_outcomes = {}
     for label in ("candidate_regnorm", "candidate_regdtype"):  # ENG2: two regression suites (was candidate_regression)
         regression = summary.get(label, {}).get("selected_attempt")

@@ -40,24 +40,24 @@ _NP_DTYPE = {
 _DEVICE_CAST_DTYPE = {"bfloat16"}
 
 
-def _np_dtype(dtype):
-    """ENG2 F1: the host NumPy dtype for a supported dtype string. Any other dtype (an unsupported string such as
-    "float64", "double" or "int32", a typo, or a non-string) raises TypeError naming the supported dtypes, instead
-    of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`). The engine has no float64 (core.h).
-    Prior art: NumPy's `np.dtype("float99")` refusal (TypeError: data type not understood) and PyTorch's refusal of
-    unknown dtypes (both unverified -- lead to check: "numpy dtype not understood TypeError"); TX3-F1's strict
-    lookup (this repo, 2026-10; ValueError, C++ aliases accepted), which this order does not adopt. Ours: TypeError,
-    the message, and the supported list (exactly the keys of _NP_DTYPE and _DEVICE_CAST_DTYPE)."""
-    try:
-        return _NP_DTYPE[dtype]
-    except (KeyError, TypeError):
-        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
-        raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}") from None
+def _np_dtype(dtype, name=False):
+    """ENG2 F1: the host NumPy dtype for a supported dtype string (name=True: the string itself, after the str check
+    only, for the callers' _DEVICE_CAST_DTYPE test). Anything else raises TypeError naming the supported dtypes,
+    instead of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`): an unsupported string
+    ("float64", "double", "int32", a typo) or any non-string -- ENG2-A1 (REV1 E2R-F01): checked with isinstance
+    BEFORE any set/dict membership test, since membership compares hash and ==, so collections.UserString("float32")
+    passed it. Prior art: NumPy's np.dtype("float99") TypeError, PyTorch's unknown-dtype refusal (unverified -- lead
+    to check); TX3-F1's strict lookup (this repo), not adopted. Ours: the message, the list, the str-first order."""
+    if isinstance(dtype, str) and (name or dtype in _NP_DTYPE):
+        return dtype if name else _NP_DTYPE[dtype]
+    # A non-string never reaches `in`/`[]` above (short-circuit), so no __eq__/__hash__ of the caller's object runs.
+    supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+    raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
 
 
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
     """Create a Tensor from array-like data."""
-    if dtype in _DEVICE_CAST_DTYPE:
+    if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): a non-string is refused first
         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
         return _C.tensor(arr, device, requires_grad).astype(dtype)
     arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
@@ -69,7 +69,7 @@ def _factory(np_fn):
     def make(*shape, device="cuda", dtype="float32", requires_grad=False):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
             shape = tuple(shape[0])
-        if dtype in _DEVICE_CAST_DTYPE:
+        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): refused before np_fn runs
             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
             return _C.tensor(arr, device, requires_grad).astype(dtype)
         np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)

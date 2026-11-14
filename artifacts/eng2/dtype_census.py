@@ -76,6 +76,100 @@ for name, (site, fn) in ENTRIES.items():
 for name, fn in OUT_DTYPE_ENTRIES.items():
     for s in ORDER_STRINGS:
         rows.append(dict(entry=name, site="bindings.cpp -> dtype_from_string", requested=s, kind="order", **probe(fn, s)))
+# ---------------------------------------------------------------------------------- ENG2-A1 (REV1 E2R-F01, E2R-F05)
+# Appended after the original 201 rows (which keep their order and content), so the earlier receipts remain a prefix:
+#  1. E2R-F01's non-strings on every ENTRIES entry: a str-equal UserString, an unhashable str-equal object and None;
+#  2. functional._causal_mask (private; callers pass Tensor.dtype): zero-size mask on "cpu", every string and
+#     non-string above. Its rule for a supported name: float16/bfloat16 -> that dtype, every other supported name -> the
+#     float32 additive bias. "handled" = that rule; a tensor for any other request is "mis-served" (silent float32);
+#  3. the three quantization.affine NumPy-dtype parameters (scale_dtype, out_dtype x2). They take NumPy dtypes by
+#     design (np.float16/np.float32 defaults) and are unchanged: "handled-numpy" = the result dtype equals
+#     np.dtype(requested) (NumPy's own parse, e.g. "u8" -> uint64, None -> float64); "refused" = NumPy refused.
+# Prior art: none known to me (a probe table), as above.
+from collections import UserString  # noqa: E402
+
+from tensor_cuda import functional as F  # noqa: E402
+from tensor_cuda.quantization import affine as Q  # noqa: E402
+
+
+class StrEqualUnhashable:
+    __hash__ = None
+
+    def __eq__(self, other):
+        return other == "float32"
+
+    def __repr__(self):
+        return "StrEqualUnhashable()"
+
+
+A1_NON_STRINGS = {"UserString('float32')": UserString("float32"), "UserString('bfloat16')": UserString("bfloat16"),
+                  "StrEqualUnhashable()": StrEqualUnhashable(), "None": None}
+ALL_NON_STRINGS = {**NON_STRINGS, **A1_NON_STRINGS}
+
+
+def kind_of(s):
+    return "order" if s in ORDER_STRINGS else "alias" if s in ALIASES else "supported"
+
+
+for name, (site, fn) in ENTRIES.items():
+    for label, obj in A1_NON_STRINGS.items():
+        rows.append(dict(entry=name, site=site, requested=label, kind="non-string", **probe(fn, obj)))
+
+
+def mask_probe(requested):
+    F._causal_cache.clear()
+    try:
+        r = F._causal_mask(0, 0, "cpu", requested)
+    except Exception as exc:  # noqa: BLE001
+        return dict(outcome="refused", exception=type(exc).__name__, message=str(exc)[:300])
+    rule = None
+    if isinstance(requested, str) and requested in SUPPORTED:
+        rule = requested if requested in ("float16", "bfloat16") else "float32"
+    return dict(outcome="handled" if r.dtype == rule else "mis-served", result_dtype=r.dtype,
+                result_shape=list(r.shape), rule_dtype=rule)
+
+
+MASK_SITE = "functional.py _causal_mask (:35; private, callers pass Tensor.dtype)"
+for s in ORDER_STRINGS + list(ALIASES) + SUPPORTED:
+    rows.append(dict(entry="functional._causal_mask", site=MASK_SITE, requested=s, kind=kind_of(s), **mask_probe(s)))
+for label, obj in ALL_NON_STRINGS.items():
+    rows.append(dict(entry="functional._causal_mask", site=MASK_SITE, requested=label, kind="non-string",
+                     **mask_probe(obj)))
+
+AFFINE = {
+    "quantization.affine.quantize_affine_per_group(scale_dtype)": (
+        "quantization/affine.py:142 (scales/zeros .astype(scale_dtype))",
+        lambda d: Q.quantize_affine_per_group(np.arange(32).reshape(2, 16), 4, 16, scale_dtype=d).scales),
+    "quantization.affine.dequantize_affine_per_group(out_dtype)": (
+        "quantization/affine.py:178 (.astype(out_dtype))",
+        lambda d: Q.dequantize_affine_per_group(np.arange(16, dtype=np.uint8).reshape(2, 8), np.ones((2, 1)),
+                                                np.zeros((2, 1)), 4, 16, 16, out_dtype=d)),
+    "quantization.affine.dequantize_symmetric_per_group(out_dtype)": (
+        "quantization/affine.py:201 (.astype(out_dtype))",
+        lambda d: Q.dequantize_symmetric_per_group(np.arange(16, dtype=np.uint8).reshape(2, 8), np.ones((2, 1)), 4,
+                                                   16, 16, out_dtype=d)),
+}
+
+
+def affine_probe(fn, requested):
+    try:
+        numpy_dtype = str(np.dtype(requested))
+    except Exception as exc:  # noqa: BLE001
+        numpy_dtype = "NumPy refuses: " + type(exc).__name__
+    try:
+        r = fn(requested)
+    except Exception as exc:  # noqa: BLE001
+        return dict(outcome="refused", exception=type(exc).__name__, message=str(exc)[:300], numpy_dtype=numpy_dtype)
+    return dict(outcome="handled-numpy" if str(r.dtype) == numpy_dtype else "other", result_dtype=str(r.dtype),
+                result_shape=list(r.shape), numpy_dtype=numpy_dtype)
+
+
+for name, (site, fn) in AFFINE.items():
+    for s in ORDER_STRINGS + list(ALIASES) + SUPPORTED:
+        rows.append(dict(entry=name, site=site, requested=s, kind=kind_of(s), **affine_probe(fn, s)))
+    for label, obj in ALL_NON_STRINGS.items():
+        rows.append(dict(entry=name, site=site, requested=label, kind="non-string", **affine_probe(fn, obj)))
+
 summary = {}
 for r in rows:
     summary.setdefault(r["entry"], {}).setdefault(r["kind"], {}).setdefault(r["outcome"], 0)

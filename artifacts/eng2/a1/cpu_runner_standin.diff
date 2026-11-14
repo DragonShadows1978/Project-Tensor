@@ -1,0 +1,13 @@
+--- tool/forge_gpu_run_standin.py	2026-11-14 10:08:10.440040382 -0500
++++ a1/cpu_runner_standin.py	2026-11-14 11:11:33.644207854 -0500
+@@ -8,7 +8,9 @@
+ from pathlib import Path
+ import subprocess
+ import sys
+-assert os.environ.get("ENG2_AUDIT") == "1"
++# ENG2-A1 change (the only one): this copy drives a NON-audit child on CPU for the mutant-scoring check, so it
++# requires ENG2_AUDIT unset and the CPU test subset selected through PYTEST_ADDOPTS (pytest's own option variable).
++assert os.environ.get("ENG2_AUDIT") is None and os.environ.get("PYTEST_ADDOPTS") == "-k cpu"
+ assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+ args = sys.argv[1:]
+ command = args[args.index("--")+1:]

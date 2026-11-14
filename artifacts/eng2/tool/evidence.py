@@ -221,13 +221,18 @@ def killers_for(label):
 
 
 def literal_brackets(pattern):
-    """Registered killer patterns use '*' as the only wildcard; '[' and ']' are literal (pytest parameter IDs)."""
-    return pattern.replace("[", "\x00").replace("]", "[]]").replace("\x00", "[[]")
+    """Registered killer patterns use '*' as the only wildcard; '[' and ']' are literal (pytest parameter IDs).
+    ENG2-A1: '?' is literal too (fnmatch would read it as a one-character wildcard)."""
+    return pattern.replace("[", "\x00").replace("]", "[]]").replace("\x00", "[[]").replace("?", "[?]")
 
 
 def matches(nid, patterns):
-    short = nid.split("::", 1)[1] if "::" in nid else nid
-    return any(fnmatch.fnmatchcase(short, literal_brackets(p)) for p in patterns)
+    """ENG2-A1 (REV1 E2R-F03): the observed ID and every registered pattern are normalised the SAME way (norm_id: the
+    arm prefix stripped, the test-file path and the literal parameter brackets kept) and compared whole. The old code
+    stripped the file prefix from the observed ID only, so no registered killer (which keeps the prefix) matched itself.
+    Prior art: fnmatch (Python stdlib; POSIX fnmatch(3)) with escaped metacharacters; no other prior art known to me."""
+    observed = norm_id(nid)
+    return any(fnmatch.fnmatchcase(observed, literal_brackets(norm_id(p))) for p in patterns)
 
 
 def evaluate(runs, attempt, line, rc, audit, seal):
@@ -325,16 +330,51 @@ def regression_reasons(old, new):
     pins = {k: v for k, v in read(TOOL.parent / "L38_PINS.json")["expected_changes"].items() if k in before or k in after}
     lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed" and i not in pins)
     reasons = ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
-    details = {}
-    for r in new["reports"]:
-        if r["outcome"] == "failed":
-            details.setdefault(norm_id(r["id"]), []).append(r["detail"])
     for i, pin in sorted(pins.items()):
         if before.get(i) != pin["baseline"] or after.get(i) != pin["candidate"]:
             reasons.append("L38 expected change not as registered: %s (baseline %s, candidate %s)" % (i, before.get(i), after.get(i)))
-        elif pin["candidate"] == "failed" and not any(pin["detail_contains"] in d for d in details.get(i, [])):
-            reasons.append("L38 expected change has another failure text: " + i)
+        elif pin["candidate"] == "failed":
+            reasons += pin_failure_reasons(new, i, pin["detail_contains"])
     return reasons
+
+
+PIN_EXCEPTION = "TypeError"  # ENG2-A1: the order's registered terminal exception class for every L38 pin
+
+
+def pin_failure_reasons(new, nid, registered):
+    """ENG2-A1 (REV1 E2R-F02): a pinned ID's candidate failure counts only from STRUCTURED exception data, never from a
+    substring of the longrepr (the old test: quoted text inside another failure passed):
+      - exactly one failed phase for the ID, the call (setup and teardown passed: no extra failure);
+      - the child report's exception_class (pytest's call.excinfo.type.__name__, run_gpu_tests.py) is TypeError;
+      - the attempt's JUnit testcase for the ID is unique and has exactly one failure/error element, a <failure>, whose
+        message attribute (pytest's reprcrash: the TERMINAL exception's "Class: message") equals the registered text
+        exactly, and that text is "TypeError: <message>".
+    Prior art: JUnit XML <failure message=...> as written by pytest's junitxml plugin (Krekel et al.; year
+    unverified -- lead to check "pytest junitxml reprcrash message"); exact-match oracles. Ours: the conjunction."""
+    head = "L38 pinned failure refused (%s): " % nid
+    if not registered.startswith(PIN_EXCEPTION + ": "):
+        return [head + "registered text is not a %s message" % PIN_EXCEPTION]
+    rows = [r for r in new["reports"] if norm_id(r["id"]) == nid]
+    failed = [r for r in rows if r["outcome"] != "passed"]
+    if len(failed) != 1 or failed[0]["when"] != "call" or failed[0]["outcome"] != "failed":
+        return [head + "phases %r, expected one failed call" % [(r["when"], r["outcome"]) for r in rows]]
+    if failed[0].get("exception_class") != PIN_EXCEPTION:
+        return [head + "terminal exception class %r, expected %s" % (failed[0].get("exception_class"), PIN_EXCEPTION)]
+    if not new.get("attempt_dir") or not (Path(new["attempt_dir"]) / "junit.xml").is_file():
+        return [head + "no structured exception data (the attempt's junit.xml)"]
+    raw = [i for i in new["collected_ids"] if norm_id(i) == nid]
+    if len(raw) != 1:
+        return [head + "%d collected IDs normalise to it" % len(raw)]
+    cases = [c for c in ET.parse(Path(new["attempt_dir"]) / "junit.xml").getroot().iter("testcase")
+             if (c.get("classname", ""), c.get("name", "")) == xml_key(raw[0])]
+    if len(cases) != 1:
+        return [head + "%d JUnit testcases" % len(cases)]
+    marks = [e for e in cases[0] if e.tag in ("failure", "error")]
+    if len(marks) != 1 or marks[0].tag != "failure":
+        return [head + "JUnit elements %r, expected one failure" % [e.tag for e in marks]]
+    if marks[0].get("message") != registered:
+        return [head + "JUnit terminal exception %r differs from the registered text" % (marks[0].get("message") or "")[:300]]
+    return []
 
 
 def recompute_line(runs, label, seal, start, stack=()):
