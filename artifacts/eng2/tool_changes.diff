@@ -1,0 +1,1146 @@
+--- eng1/tool/evidence.py
++++ eng2/tool/evidence.py
+@@ -1,4 +1,11 @@
+-"""Shared, read-only evidence recomputation for the ENG1 parent and scorer (adapted from GN1 A8 evidence.py).
++"""Shared, read-only evidence recomputation for the ENG2 parent and scorer (copied from ENG1's tool as A3 left it,
++which was adapted from GN1 A8 evidence.py).
++ENG2 changes (ledgered in artifacts/eng2/LEDGER.md and COPY_DEPS.json): ORDER/SEAL_NAME bound to the ENG2 order and
++staging_seal.json; every artifacts/eng1 path and /tmp/eng1_* root rebound to eng2; the A1-suffixed census and
++expectation files renamed (ids_<census>.txt, baseline_expected_failures.json); the mutant registry is
++artifacts/eng2/mutants/mutants.json; the mutant dependency label is candidate_eng2; ENG1's terrain/E6 record dropped
++(ENG2 has no terrain suite, so e6_record.py and its git call are not imported); L41: a mutant line needs a failing
++registered killer whose child trace shows the mutated hunk executing (mutant_trace).
+ 
+ Prior art: SHA-256 (NIST 2001); pytest/JUnit (Krekel et al., 2004+); DeMillo/Lipton/Sayward (1978), valid mutation
+ kills; exact paired regression comparison from GN1 D6. Literature unverified -- lead to check named sources.
+@@ -15,13 +22,12 @@
+ from pathlib import Path
+ import xml.etree.ElementTree as ET
+ from device_evidence import classify
+-from e6_record import compare
+ from arm_origin import validate_origin
+ 
+ TOOL = Path(__file__).resolve().parent
+ ROOT = TOOL.parents[2]
+-ORDER = "orders/ENG1_A3_DEVICE_SEAL_ROUTING.md"  # A3 route (a): re-pointed from ENG1_A1_REV1_FIXES.md
+-SEAL_NAME = "staging_seal_a3.json"  # A3 route (a): was staging_seal_a1.json; prior art: none known to me (a constant re-point)
++ORDER = "orders/ENG2_DTYPE_REFUSAL_AND_HALF_NORMS.md"  # ENG2: was orders/ENG1_A3_DEVICE_SEAL_ROUTING.md
++SEAL_NAME = "staging_seal.json"  # ENG2: was staging_seal_a3.json (one seal, written by artifacts/eng2/tool/stage.py)
+ DEVICE_PATTERNS = (
+     "cudaMalloc", "no CUDA-capable device", "CUDA driver", "cudaError",
+     "initialization error", "invalid device ordinal", "CUDA error at",
+@@ -42,7 +48,7 @@
+ def guard(runs):
+     runs = Path(runs).resolve()
+     if not runs.is_relative_to(TOOL) or runs == TOOL or runs.is_relative_to(TOOL / "arms"):
+-        raise ValueError("RUNS must be under artifacts/eng1/tool and outside arms")
++        raise ValueError("RUNS must be under artifacts/eng2/tool and outside arms")
+     return runs
+ 
+ 
+@@ -52,8 +58,7 @@
+ 
+ def arm_files(arm):
+     base = TOOL / "arms" / arm
+-    # arms/<arm>/artifacts/ is the terrain file's write target (the baseline arm writes there by design; E6/L46),
+-    # so it is outside the sealed map.
++    # (ENG1 excluded arms/<arm>/artifacts/, its terrain write target; ENG2 keeps the same exclusion, unused.)
+     return {str(p.relative_to(base)): sha(p) for p in sorted(base.rglob("*"))
+             if p.is_file() and "__pycache__" not in p.parts and p.relative_to(base).parts[0] != "artifacts"}
+ 
+@@ -93,15 +98,15 @@
+ 
+ 
+ def norm_id(id_):
+-    """Strip the arm prefix so IDs compare across arms: artifacts/eng1/tool/arms/<arm>/tensor_cuda/... ->
++    """Strip the arm prefix so IDs compare across arms: artifacts/eng2/tool/arms/<arm>/tensor_cuda/... ->
+     tensor_cuda/..."""
+-    m = re.match(r"artifacts/eng1/tool/arms/[^/]+/(tensor_cuda/.*)$", id_)
++    m = re.match(r"artifacts/eng2/tool/arms/[^/]+/(tensor_cuda/.*)$", id_)
+     return m.group(1) if m else id_
+ 
+ 
+ def census(line, audit=False):
+     name = "audit" if audit else line["census"]
+-    return (TOOL / ("ids_a1_" + name + ".txt")).read_text().splitlines()
++    return (TOOL / ("ids_" + name + ".txt")).read_text().splitlines()
+ 
+ 
+ def summary_outcomes(data):
+@@ -158,7 +163,7 @@
+ 
+ def scratch_guard(value):
+     resolved = Path(value).resolve()
+-    assert resolved.parent == Path("/tmp") and resolved.name.startswith("eng1_"), "TMPDIR must resolve to /tmp/eng1_*"
++    assert resolved.parent == Path("/tmp") and resolved.name.startswith("eng2_"), "TMPDIR must resolve to /tmp/eng2_*"
+     return resolved
+ 
+ 
+@@ -211,7 +216,7 @@
+ 
+ 
+ def killers_for(label):
+-    m = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json") + read(TOOL.parent / "a1/MUTANTS.json")}[label]
++    m = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json")}[label]
+     return m["killers"]
+ 
+ 
+@@ -270,17 +275,15 @@
+             killers = [i for i in failed if matches(i, killers_for(line["label"]))]
+             if not killers:
+                 reasons.append("no registered killer ID failed")
++            # ENG2 L41: at least one failing registered killer executed the mutated hunk (child-recorded trace).
++            trace = {norm_id(k): v for k, v in (data.get("mutant_trace") or {}).items()}
++            if killers and not any(trace.get(i) for i in killers):
++                reasons.append("L41: no failing registered killer executed the mutated hunk")
+         elif line["role"] == "baseline":
+-            registered = sorted(read(TOOL / "baseline_expected_failures_a1.json"))
++            registered = sorted(read(TOOL / "baseline_expected_failures.json"))
+             if failed != registered:
+                 reasons.append("baseline failures differ from registration: unexpected %r, missing %r" % (
+                     sorted(set(failed) - set(registered))[:20], sorted(set(registered) - set(failed))[:20]))
+-        if line["suite"] == "terrain":
+-            rec = data.get("e6_record")
+-            assert isinstance(rec, dict), "missing E6 terrain write record"
+-            wrote = compare(rec["before"], rec["after"])
+-            if wrote != (line["arm"] == "baseline"):
+-                reasons.append("E6 record: terrain writes %s on the %s arm" % ("seen" if wrote else "not seen", line["arm"]))
+         any_failure = any(r["outcome"] == "failed" for r in data["reports"])
+         if rc == 0 and any_failure or rc == 1 and not any_failure:
+             reasons.append("pytest exit inconsistent with failures")
+@@ -317,8 +320,21 @@
+               if norm_id(k).split("[", 1)[0] not in excluded}
+     after = {norm_id(k): v for k, v in summary_outcomes(new).items()
+              if norm_id(k).split("[", 1)[0] not in excluded}
+-    lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed")
+-    return ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
++    # ENG2 L38: pins this order changes (artifacts/eng2/L38_PINS.json expected_changes) are not regressions; each must
++    # instead show its registered baseline and candidate outcomes and, on the candidate, its registered failure text.
++    pins = {k: v for k, v in read(TOOL.parent / "L38_PINS.json")["expected_changes"].items() if k in before or k in after}
++    lost = sorted(i for i, o in before.items() if o == "passed" and after.get(i) != "passed" and i not in pins)
++    reasons = ["baseline-passing IDs no longer pass: " + repr(lost)] if lost else []
++    details = {}
++    for r in new["reports"]:
++        if r["outcome"] == "failed":
++            details.setdefault(norm_id(r["id"]), []).append(r["detail"])
++    for i, pin in sorted(pins.items()):
++        if before.get(i) != pin["baseline"] or after.get(i) != pin["candidate"]:
++            reasons.append("L38 expected change not as registered: %s (baseline %s, candidate %s)" % (i, before.get(i), after.get(i)))
++        elif pin["candidate"] == "failed" and not any(pin["detail_contains"] in d for d in details.get(i, [])):
++            reasons.append("L38 expected change has another failure text: " + i)
++    return reasons
+ 
+ 
+ def recompute_line(runs, label, seal, start, stack=()):
+@@ -361,9 +377,9 @@
+         selected = attempt
+         result = evaluate(runs, attempt, line, receipt["exit"], start["audit"], seal)
+         if not start["audit"] and line["role"] == "mutant":
+-            dependency = recompute_line(runs, "candidate_eng1", seal, start, (*stack, label))
++            dependency = recompute_line(runs, "candidate_eng2", seal, start, (*stack, label))
+             if not dependency["passed"] or any(dependency["outcomes"].get(i) != "passed" for i in result["actual_killers"]):
+-                result["reasons"].append("mutations require a passing candidate_eng1 on the killer IDs")
++                result["reasons"].append("mutations require a passing candidate_eng2 on the killer IDs")
+         if not start["audit"] and line.get("control_of"):
+             pass  # the control's own pass is its evidence; the mutant line cites it (score_gpu.py)
+         if not start["audit"] and line["role"] == "regression" and line["arm"] == "candidate":
+--- eng1/tool/forge_gpu_run_standin.py
++++ eng2/tool/forge_gpu_run_standin.py
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env python3
+-"""CPU audit only (adapted from GN1 A8; ENG1_AUDIT). Prior art: subprocess/GNU timeout; installed forge log format.
++"""CPU audit only (copied from ENG1's tool; adapted from GN1 A8; ENG2 change: ENG2_AUDIT). Prior art: subprocess/GNU
++timeout; installed forge log format.
+ The stand-in never leases or calls the GPU. It writes the real nine-field outcome row after its child exits.
+ """
+ import datetime
+@@ -7,7 +8,7 @@
+ from pathlib import Path
+ import subprocess
+ import sys
+-assert os.environ.get("ENG1_AUDIT") == "1"
++assert os.environ.get("ENG2_AUDIT") == "1"
+ assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+ args = sys.argv[1:]
+ command = args[args.index("--")+1:]
+--- eng1/tool/run_gpu_line.py
++++ eng2/tool/run_gpu_line.py
+@@ -1,5 +1,7 @@
+ #!/usr/bin/env python3
+-"""Foreground ENG1 supervisor (adapted from GN1 A8 run_gpu_line.py): the parent receipt, with the child's exit and
++"""Foreground ENG2 supervisor (copied from ENG1's tool as A3 left it; adapted from GN1 A8 run_gpu_line.py). ENG2 changes
++(ledgered): ENG2_* environment names; /tmp/eng2_* scratch (evidence.scratch_guard); mutant lines depend on a passing
++candidate_eng2 line. Everything else is ENG1's: the parent receipt, with the child's exit and
+ timeout flag, is written only after the child exits (L45).
+ Prior art: GNU timeout / Python subprocess; DeMillo et al. (1978) valid kills; POSIX link(2) no-overwrite
+ publication (IEEE Std 1003.1; year unverified -- lead to check).
+@@ -34,10 +36,10 @@
+     expected = [int(v) for v in expected_s.split(",")]
+     assert expected == line["expected_child_exits"], "expected exits must match gpu_lines.json"
+     assert command[-3:] == ["run_gpu_tests.py", line["arm"], line["suite"]], "parent command arm/suite mismatch"
+-    audit = os.environ.get("ENG1_AUDIT") == "1"
++    audit = os.environ.get("ENG2_AUDIT") == "1"
+     assert audit == start_record["audit"], "START audit mismatch"
+     if not audit and line["role"] == "mutant":
+-        assert recompute_line(runs, "candidate_eng1", seal, start_record)["passed"], "mutations require a passing candidate_eng1"
++        assert recompute_line(runs, "candidate_eng2", seal, start_record)["passed"], "mutations require a passing candidate_eng2"
+     if not audit and line["role"] == "regression" and line["arm"] == "candidate":
+         assert recompute_line(runs, label.replace("candidate_", "baseline_", 1), seal, start_record)["passed"], "candidate regression requires a valid baseline"
+     if not audit:
+@@ -56,7 +58,7 @@
+             return 1
+     output = base / ("attempt-%04d" % (len(previous) + 1))
+     output.mkdir(parents=True, exist_ok=False)
+-    env = dict(os.environ, RUNS=str(runs), ENG1_LINE=label, ENG1_ATTEMPT=str(output),
++    env = dict(os.environ, RUNS=str(runs), ENG2_LINE=label, ENG2_ATTEMPT=str(output),
+                FORGE_GPU_RUN_LOG=str(output / "forge.log"), PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1",
+                OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", NUMEXPR_NUM_THREADS="1")
+     env["TMPDIR"] = str(scratch_guard(os.environ["TMPDIR"]))
+@@ -80,9 +82,9 @@
+                        forge_outcome=cause, timeout=False, timeout_cause=timeout_cause(output / "forge.log", rc))
+                   if refused else evaluate(runs, output, line, rc, audit, seal))
+         if not refused and not audit and line["role"] == "mutant":
+-            dependency = recompute_line(runs, "candidate_eng1", seal, start_record)
++            dependency = recompute_line(runs, "candidate_eng2", seal, start_record)
+             if not dependency["passed"]:
+-                result["reasons"].append("mutations require a passing candidate_eng1")
++                result["reasons"].append("mutations require a passing candidate_eng2")
+         if not refused and not audit and line["role"] == "regression" and line["arm"] == "candidate":
+             old = recompute_line(runs, label.replace("candidate_", "baseline_", 1), seal, start_record)
+             if not old["passed"]:
+--- eng1/tool/run_gpu_tests.py
++++ eng2/tool/run_gpu_tests.py
+@@ -1,5 +1,12 @@
+ #!/usr/bin/env python3
+-"""Pinned-arm pytest child, invoked only by the staged supervisor (adapted from GN1 A8 run_gpu_tests.py).
++"""Pinned-arm pytest child, invoked only by the staged supervisor (copied from ENG1's tool as A3 left it; adapted from
++GN1 A8 run_gpu_tests.py).
++ENG2 changes (ledgered): ENG2_* environment names; the arm is a package copy plus copies of test_eng2.py and its
++import dependency test_eng1.py under arms/<arm>/tensor_cuda/tests/; suites eng2 and mutation run the arm's
++test_eng2.py (whole file), regnorm and regdtype run the worktree files listed in regression_files.json[suite] with the
++arm package preloaded (GN1's method, prepend import mode); ENG2_RECORD_DIR (test_eng2's rows) and ENG1_CENSUS_DIR
++(test_eng1's E3 rows in line c) point at the attempt directory; ENG1's terrain suite and E6 snapshot dropped; L41: on a
++mutant line the child records which tests executed the registered mutated hunk (mutant_trace, sys.settrace).
+ Prior art: pytest (Krekel et al., 2004+, year unverified), report hooks; L45 parent-after-child receipts (GN1).
+ ENG1 changes (ledgered): ENG1_* environment names; the arm is a package copy plus copies of test_eng1.py and
+ test_terrain_render.py under arms/<arm>/tensor_cuda/ (each arm pins its own engine); suites eng1 / mutation /
+@@ -17,11 +24,10 @@
+ 
+ from runtime_evidence import atomic_json, module_census
+ if __name__ == "__main__":
+-    atomic_json(Path(os.environ["ENG1_ATTEMPT"]) / "child_started.json",
+-                dict(pid=os.getpid(), label=os.environ["ENG1_LINE"]))
++    atomic_json(Path(os.environ["ENG2_ATTEMPT"]) / "child_started.json",
++                dict(pid=os.getpid(), label=os.environ["ENG2_LINE"]))
+ 
+ from evidence import guard, verify_start, verify_arm, lines, read
+-from e6_record import snapshot
+ from arm_origin import bound_environment, preflight
+ from evidence import SEAL_NAME
+ 
+@@ -63,12 +69,50 @@
+                                  **self.exceptions.get((report.nodeid, report.when), dict(exception_class=None))))
+ 
+ 
++class MutantTrace:
++    """ENG2 L41: which tests executed the registered mutated hunk. Prior art: CPython sys.settrace (PSF; the hook coverage
++    tools build on); ours: the hunk-scoped, per-test recorder. Only frames of the one mutated file get a local tracer."""
++
++    def __init__(self, path, lines):
++        self.path, self.lines = str(Path(path).resolve()), set(lines)
++        self.current, self.hits = None, {}
++
++    def _global(self, frame, event, arg):
++        if event == "call" and frame.f_code.co_filename == self.path:
++            return self._local
++        return None
++
++    def _local(self, frame, event, arg):
++        if event == "line" and self.current is not None and frame.f_lineno in self.lines:
++            self.hits.setdefault(self.current, set()).add(frame.f_lineno)
++        return self._local
++
++    def pytest_runtest_logstart(self, nodeid, location):
++        self.current = nodeid
++        sys.settrace(self._global)
++
++    def pytest_runtest_logfinish(self, nodeid, location):
++        sys.settrace(None)
++        self.current = None
++
++
++def mutant_hunk(label, package):
++    """The registered hunk of mutant `label` in its arm copy: (file, line numbers), checked against the file's text."""
++    entry = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json")}[label]
++    path = package.parent / entry["file"]  # arms/<arm>/ + tensor_cuda/tensor_cuda/<file>
++    text = path.read_text().splitlines()
++    new = entry["new"].splitlines()
++    first, last = entry["hunk_lines"]
++    assert text[first - 1:last] == new, "registered hunk lines differ from the arm file"
++    return path, range(first, last + 1)
++
++
+ def main():
+     runs = guard(os.environ["RUNS"])
+     seal, start_record = verify_start(runs)
+-    label = os.environ["ENG1_LINE"]
+-    audit = os.environ.get("ENG1_AUDIT") == "1"
+-    output = Path(os.environ["ENG1_ATTEMPT"]).resolve()
++    label = os.environ["ENG2_LINE"]
++    audit = os.environ.get("ENG2_AUDIT") == "1"
++    output = Path(os.environ["ENG2_ATTEMPT"]).resolve()
+     assert output.parent == runs / label and output.name.startswith("attempt-"), "child attempt guard"
+     assert output.is_dir()
+     arm, suite = sys.argv[1:]
+@@ -92,13 +136,11 @@
+     assert Path(tc.__file__).resolve() == (package / "tensor_cuda" / "__init__.py").resolve(), "wrong package"
+     assert Path(tc._C.__file__).resolve() == module.resolve(), "wrong engine copy imported"
+     np.random.seed(571)
+-    terrain = package / "tests" / "test_terrain_render.py"
+-    if suite == "regression":
+-        files = [str(ROOT / f) for f in read(TOOL / "regression_files.json")]
+-    elif suite == "terrain":
+-        files = [str(terrain)]
++    if suite in ("regnorm", "regdtype"):
++        files = [str(ROOT / f) for f in read(TOOL / "regression_files.json")[suite]]
+     else:
+-        files = [str(package / "tests" / "test_eng1.py")]
++        assert suite in ("eng2", "mutation"), suite
++        files = [str(package / "tests" / "test_eng2.py")]
+     from device_evidence import capture
+     device_evidence = capture(__file__, None if audit else tc._C.__file__)
+     invocation = dict(device_evidence=device_evidence, arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
+@@ -106,27 +148,34 @@
+                       engine_sha256=sha(module), origin_check=origin, CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
+                       files=[os.path.relpath(f, ROOT) for f in files])
+     (output / "invocation.json").write_text(json.dumps(invocation, indent=2) + "\n")
+-    os.environ["ENG1_CENSUS_DIR"] = str(output)
+-    # ENG1: the regression files import sibling modules (apa_sp1_reference, test_apa_sp4g_a3), which needs pytest's
+-    # default prepend import mode; the eng1 suites keep GN1's importlib mode.
+-    mode = "--import-mode=prepend" if suite in ("regression", "terrain") else "--import-mode=importlib"
++    os.environ["ENG2_RECORD_DIR"] = str(output)
++    os.environ["ENG1_CENSUS_DIR"] = str(output)  # test_eng1.py's E3 census rows (line c), per arm
++    # ENG1: the regression files import sibling modules, which needs pytest's default prepend import mode; the eng2
++    # suites keep GN1's importlib mode.
++    mode = "--import-mode=prepend" if suite in ("regnorm", "regdtype") else "--import-mode=importlib"
+     args = ["-q", "-p", "no:cacheprovider", mode, "-rfE",
+             "--rootdir=" + str(ROOT), "--basetemp=" + str(Path(os.environ["TMPDIR"]) / (label + "_pytest")),
+             "--junitxml=" + str(output / "junit.xml")]
+     if audit:
+         assert os.environ.get("CUDA_VISIBLE_DEVICES") == "", "audit requires hidden CUDA"
+         args += ["-k", "cpu"]
+-    elif suite in ("mutation", "control"):
+-        # ENG1: C++ mutant and control lines deselect only the E6 test (it exercises no C++; its CPU reference
+-        # renders cost ~5 min per line); M14, the E6 mutant, runs the whole file as suite mutation_e6.
+-        args += ["-k", "not test_e6_terrain_writes_nothing"]
+     args += files
+-    e6_before = snapshot(terrain) if suite == "terrain" else None
+     plugin = Reports(arm)
+-    rc = int(pytest.main(args, plugins=[plugin]))
+-    e6 = dict(before=e6_before, after=snapshot(terrain)) if suite == "terrain" else None
++    plugins = [plugin]
++    tracer = None
++    if line["role"] == "mutant":
++        tracer = MutantTrace(*mutant_hunk(label, package))
++        plugins.append(tracer)
++    try:
++        rc = int(pytest.main(args, plugins=plugins))
++    finally:
++        sys.settrace(None)
++    trace = None if tracer is None else {k: sorted(v) for k, v in tracer.hits.items()}
+     result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids, collection_errors=plugin.collection_errors,
+-                  reports=plugin.reports, source_readers=plugin.source_readers, e6_record=e6, runtime_modules=module_census(ROOT))
++                  reports=plugin.reports, source_readers=plugin.source_readers, mutant_trace=trace,
++                  mutant_hunk=(None if tracer is None else dict(file=os.path.relpath(tracer.path, ROOT),
++                                                                lines=sorted(tracer.lines))),
++                  runtime_modules=module_census(ROOT))
+     atomic_json(output / "child_result.json", result)
+     return rc
+ 
+--- eng1/tool/score_gpu.py
++++ eng2/tool/score_gpu.py
+@@ -1,5 +1,11 @@
+ #!/usr/bin/env python3
+-"""Recompute every ENG1 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (adapted from
++"""Recompute every ENG2 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (copied from ENG1's
++tool as A3 left it). ENG2 changes (ledgered): ENG1's M09/C_UBSAN rule dropped (ENG2 has no controls); the N1 census
++rows are read from candidate_eng2 (n1census_*.json) and baseline_eng2, and test_eng1's E3 rows from the line-(c)
++regnorm lines, both reported (not gated); cross-arm identity is gated: every f1bytes_* and p302bits_* row of
++candidate_eng2 must equal baseline_eng2's row for the same test ID (P302 and the F1 supported-dtype bytes, compared as
++sha256 of the uint views the test wrote), with both sets non-empty and equal in IDs.
++(ENG1 text follows.) Recompute every ENG1 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (adapted from
+ GN1 A8 score_gpu.py). Prior art: DeMillo et al. (1978), mutation adequacy; paired regression (GN1 D6).
+ ENG1 changes (ledgered): M09 counts only with a passing C_UBSAN control; the E3 census rows are collected from
+ candidate_eng1 and reported (not gated); the per-mutant killer IDs are listed.
+@@ -28,24 +34,35 @@
+         errors.append("audit run cannot establish GPU acceptance")
+     if summary and any(row.get("mode") != "device" for row in summary.values()):
+         errors.append("not a device run: every line requires positive child device evidence")
+-    if "M09" in summary and not summary.get("C_UBSAN", {}).get("passed"):
+-        summary["M09"]["passed"] = False
+-        summary["M09"].setdefault("reasons", []).append("M09 needs a passing C_UBSAN control")
+-    census = []
+-    cand = summary.get("candidate_eng1", {}).get("selected_attempt")
+-    if cand:
+-        census = [json.loads(p.read_text()) for p in sorted(Path(cand).glob("census_*.json"))]
++    def rows(label, pattern):
++        attempt = summary.get(label, {}).get("selected_attempt")
++        return [json.loads(p.read_text()) for p in sorted(Path(attempt).glob(pattern))] if attempt else []
++    census = dict(candidate_eng2=rows("candidate_eng2", "n1census_*.json"),
++                  baseline_eng2=rows("baseline_eng2", "n1census_*.json"),
++                  e3_baseline_regnorm=rows("baseline_regnorm", "census_*.json"),
++                  e3_candidate_regnorm=rows("candidate_regnorm", "census_*.json"))
++    cross = {}
++    for kind in ("f1bytes", "p302bits"):
++        base = {r["test_id"]: r["sha256"] for r in rows("baseline_eng2", kind + "_*.json")}
++        cand_rows = {r["test_id"]: r["sha256"] for r in rows("candidate_eng2", kind + "_*.json")}
++        differ = sorted(i for i in base if cand_rows.get(i) != base[i])
++        cross[kind] = dict(baseline=len(base), candidate=len(cand_rows), differing=differ,
++                           ids_equal=sorted(base) == sorted(cand_rows))
++        if summary and (not base or sorted(base) != sorted(cand_rows) or differ):
++            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r" % (
++                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10]))
+     source_outcomes = {}
+-    regression = summary.get("candidate_regression", {}).get("selected_attempt")
+-    if regression:
+-        selectors = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
+-        source_outcomes = {norm_id(k): v for k, v in summary_outcomes(json.loads(
+-            (Path(regression) / "child_result.json").read_text())).items()
+-                           if norm_id(k).split("[", 1)[0] in selectors}
+-    passed = not errors and bool(summary) and all(row.get("passed") for row in summary.values())
+-    result = dict(passed=passed, errors=errors, lines=summary,
++    for label in ("candidate_regnorm", "candidate_regdtype"):  # ENG2: two regression suites (was candidate_regression)
++        regression = summary.get(label, {}).get("selected_attempt")
++        if regression:
++            selectors = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
++            source_outcomes.update({norm_id(k): v for k, v in summary_outcomes(json.loads(
++                (Path(regression) / "child_result.json").read_text())).items()
++                               if norm_id(k).split("[", 1)[0] in selectors})
++    passed = not errors and bool(summary) and all(row.get("passed") for row in summary.values())  # after cross
++    result = dict(passed=passed, errors=errors, lines=summary, cross_arm=cross,
+                   killers={k: v.get("actual_killers") for k, v in summary.items() if lines()[k]["role"] == "mutant"},
+-                  e3_census=census,
++                  n1_census=census,
+                   source_reading_tests=json.loads((TOOL / "source_reading_tests.json").read_text()),
+                   source_reader_outcomes=source_outcomes)
+     runs.mkdir(parents=True, exist_ok=True)
+--- eng1/tool/start_gpu_run.py
++++ eng2/tool/start_gpu_run.py
+@@ -1,4 +1,5 @@
+-"""Immutable START binding (adapted from GN1 A8; ENG1_AUDIT). Prior art: SHA-256 NIST (2001); GN1 L59/D3."""
++"""Immutable START binding (copied from ENG1's tool; adapted from GN1 A8; ENG2 change: ENG2_AUDIT). Prior art: SHA-256
++NIST (2001); GN1 L59/D3."""
+ import datetime
+ import json
+ import os
+@@ -11,7 +12,7 @@
+ runs.mkdir(parents=True, exist_ok=True)
+ record = dict(date=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+               order_commit=seal["order_commit"], order_sha256=seal["order_sha256"],
+-              audit=os.environ.get("ENG1_AUDIT") == "1", run_root=str(runs),
++              audit=os.environ.get("ENG2_AUDIT") == "1", run_root=str(runs),
+               seal_sha256=sha(TOOL / SEAL_NAME))
+ if (runs / "START.json").exists():
+     _, old = verify_start(runs)
+--- eng1/tool/stage.py
++++ eng2/tool/stage.py
+@@ -1,12 +1,19 @@
+ #!/usr/bin/env python3
+-"""ENG1 staging generator (CPU only). Steps (each a separate command, each under 20 minutes):
+-  arms      build arms/<arm>/tensor_cuda/{tensor_cuda/<package + pinned module>, tests/<test_eng1.py,
+-            test_terrain_render.py>} for baseline, candidate, every built mutant and C_UBSAN (copies, never links)
++"""ENG2 staging generator (CPU only), copied from ENG1's tool/stage.py and re-targeted. ENG1's step structure is kept
++(arms, census, lines, seal, script); the bodies change as ledgered (artifacts/eng2/LEDGER.md, COPY_DEPS.json):
++  registry  write artifacts/eng2/mutants/mutants.json once (open 'x'): the 15 registered mutants, each one edit (one
++            contiguous replacement inside one class's forward or one F1 line), its hunk lines in the mutated file, and
++            its predicted killer IDs (F1: from the code; N1: artifacts/eng2/N1_EMULATION.json)
++  arms      arms/<arm>/tensor_cuda/{tensor_cuda/<package + pinned module>, tests/<test_eng2.py, test_eng1.py>}:
++            baseline = artifacts/eng2/base_pkg (bc02d3a1's package, checked against worktree_before.json) + the
++            build-eng2/base module; candidate = the worktree package + the build-eng2/cand module; each mutant = the
++            candidate with its one edit (copies, never links). ENG1 took the baseline from `git show`; ENG2 runs no git.
+   census    collect each suite's test IDs on CPU with the arm package preloaded (ids_<census>.txt)
+   lines     write gpu_lines.json, regression_files.json, baseline_expected_failures.json
+   seal      write staging_seal.json (order, tools, registration files, arm maps, engine pins)
+   script    write STAGED_GPU_COMMANDS.sh
+-Prior art: GN1 A8 staging (regenerate_arms.py, seal_staging.py) re-implemented for per-arm engines; SHA-256 pins.
++Prior art: GN1 A8 staging and ENG1's stage.py (2026), re-targeted; SHA-256 pins (NIST FIPS 180-4); DeMillo, Lipton
++and Sayward (1978) for the mutant registry. No new algorithm.
+ """
+ import hashlib
+ import json
+@@ -17,98 +24,162 @@
+ import sys
+ 
+ TOOL = Path(__file__).resolve().parent
+-ENG1 = TOOL.parent
++ENG2 = TOOL.parent
+ ROOT = TOOL.parents[2]
+-BASE_COMMIT = "1680764dbeea6d4215eba06b1a450cf345e7db11"
+-ORDER_COMMIT = "3b6a5a867f75a399a563ddf9d693133ec938552b"
+-SEAL_NAME = "staging_seal_a1.json"
++ORDER = "orders/ENG2_DTYPE_REFUSAL_AND_HALF_NORMS.md"
++ORDER_COMMIT = "dfdbc974429e942281a55f2ece64e69fa1235e16"  # read from the ref file refs/heads/eng2 (no git command)
++BASE_COMMIT = "bc02d3a1b150572af5521725d60b1d0d54305681"
++SEAL_NAME = "staging_seal.json"
+ MODULE = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
+-MUTANTS = json.loads((ENG1 / "mutants" / "mutants.json").read_text()) + json.loads((ENG1 / "a1/MUTANTS.json").read_text())
++BASE_MODULE = ROOT / "tensor_cuda/build-eng2/base/module" / MODULE
++CAND_MODULE = ROOT / "tensor_cuda/build-eng2/cand/module" / MODULE
++P = "tensor_cuda/tests/test_eng2.py::"
+ 
+ 
+ def sha(p):
+     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+ 
+ 
+-def git_show(path):
+-    return subprocess.run(["git", "-C", str(ROOT), "show", f"{BASE_COMMIT}:{path}"], capture_output=True,
+-                          check=True).stdout
++# ------------------------------------------------------------------------------------------------ the mutant list
++INIT, NN = "tensor_cuda/tensor_cuda/__init__.py", "tensor_cuda/tensor_cuda/nn.py"
++SCOPES = {"LN": "LayerNorm", "RMS": "RMSNorm", "BN": "BatchNorm1D", "IN": "InstanceNorm2D"}
++MN1 = {"LN": ("        return (xc * inv * weight + bias).astype(dtype)", "        return xc * inv * weight + bias"),
++       "RMS": ("        return out.astype(dtype) if half else out", "        return out"),
++       "BN": ("        return out.astype(dtype) if half else out", "        return out"),
++       "IN": ("        return (xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])).astype(dtype)",
++              "        return xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])")}
++MN2 = ('        half = dtype in ("float16", "bfloat16")', '        half = dtype in ("float16",)')
++MN3 = {"LN": ('        if half:\n            x = x.astype("float32")\n        mean = x.mean([-1], True)\n'
++              '        xc = x - mean\n        var = (xc * xc).mean([-1], True)\n        inv = (var + self.eps).pow(-0.5)',
++              '        mean = x.mean([-1], True)\n        xc = x - mean\n        var = (xc * xc).mean([-1], True)\n'
++              '        if half:\n            xc, var = xc.astype("float32"), var.astype("float32")\n'
++              '        inv = (var + self.eps).pow(-0.5)'),
++       "RMS": ('        if half:\n            x = x.astype("float32")\n        ms = (x * x).mean([-1], True)',
++               '        ms = (x * x).mean([-1], True)\n        if half:\n'
++               '            x, ms = x.astype("float32"), ms.astype("float32")'),
++       "BN": ('            mean = x.mean(axes, True); var = x.var(axes, True)',
++              '            mean = x.astype(dtype).mean(axes, True).astype("float32"); '
++              'var = x.astype(dtype).var(axes, True).astype("float32")'),
++       "IN": ('        if half:\n            x = x.astype("float32")\n        mean = x.mean([2, 3], True); var = x.var([2, 3], True)',
++              '        mean = x.mean([2, 3], True); var = x.var([2, 3], True)\n        if half:\n'
++              '            x, mean, var = x.astype("float32"), mean.astype("float32"), var.astype("float32")')}
++MN4 = ("            return xc * inv * self.weight + self.bias",
++       '            return (xc * inv).astype("float16").astype("float32") * self.weight + self.bias')
++F1_ENTRIES, F1_REFUSED, DEVICES = ["tensor", "zeros", "ones", "randn", "rand"], ["float64", "double", "int32", "not_a_dtype"], ["cpu", "cuda"]
++
++
++def mutant_defs():
++    defs = [dict(id="MF1", decision="F1: the silent fallback restored at __init__.py:48 (tc.tensor)", file=INIT, scope=None,
++                 old="    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation",
++                 new="    arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))",
++                 killers=[P + f"test_f1_refuse_cpu[tensor-{d}-{v}]" for d in F1_REFUSED for v in DEVICES]
++                 + [P + f"test_f1_tensor_refuses_before_conversion_cpu[{d}]" for d in F1_REFUSED],
++                 predicted_by="code reading; shown on CPU (artifacts/eng2/cpu_mutant_kills.json)"),
++            dict(id="MF2", decision="F1: the silent fallback restored at __init__.py:60 (_factory)", file=INIT, scope=None,
++                 old="        np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)",
++                 new="        np_dtype = _NP_DTYPE.get(dtype, np.float32)",
++                 killers=[P + f"test_f1_refuse_cpu[{e}-{d}-{v}]" for e in F1_ENTRIES[1:] for d in F1_REFUSED for v in DEVICES]
++                 + [P + f"test_f1_factory_refuses_before_allocation_cpu[{e}-{d}]" for e in F1_ENTRIES[1:] for d in F1_REFUSED],
++                 predicted_by="code reading; shown on CPU (artifacts/eng2/cpu_mutant_kills.json)")]
++    emu = json.loads((ENG2 / "N1_EMULATION.json").read_text())["predicted_failures"]
++    for k, (old, new, what) in [*((f"MN1_{s}", (*MN1[s], "the cast back omitted (output float32)")) for s in SCOPES),
++                               *((f"MN2_{s}", (*MN2, "the upcast only for float16, not bfloat16")) for s in SCOPES),
++                               *((f"MN3_{s}", (*MN3[s], "the statistics still in the input dtype")) for s in SCOPES),
++                               ("MN4_LN", (*MN4, "the float32 path given an extra cast (a float16 round trip)"))]:
++        short = k.split("_")[1]
++        defs.append(dict(id=k, decision=f"N1 {SCOPES[short]}: {what}", file=NN, scope=SCOPES[short], old=old, new=new,
++                         killers=emu[k], predicted_by="artifacts/eng2/N1_EMULATION.json (CPU emulation)"))
++    return defs
++
++
++def scope_span(text, scope):
++    """(start, end) character span of `class <scope>(Module):` up to the next top-level class (or the file end)."""
++    if scope is None:
++        return 0, len(text)
++    start = text.index(f"\nclass {scope}(Module):") + 1
++    nxt = text.find("\nclass ", start)
++    return start, (len(text) if nxt < 0 else nxt + 1)
++
++
++def apply_mutant(text, m):
++    a, b = scope_span(text, m["scope"])
++    region = text[a:b]
++    assert region.count(m["old"]) == 1, (m["id"], region.count(m["old"]))
++    assert text.count(m["old"]) == 1 or m["scope"] is not None, m["id"]
++    pos = a + region.index(m["old"])
++    mutated = text[:pos] + m["new"] + text[pos + len(m["old"]):]
++    first = mutated[:pos].count("\n") + 1
++    return mutated, [first, first + m["new"].count("\n")]
++
++
++def step_registry():
++    out = ENG2 / "mutants" / "mutants.json"
++    out.parent.mkdir(exist_ok=True)
++    rows = []
++    for m in mutant_defs():
++        _, hunk = apply_mutant((ROOT / m["file"]).read_text(), m)
++        rows.append(dict(m, kind="python", hunk_lines=hunk))
++    with out.open("x") as f:
++        f.write(json.dumps(rows, indent=1) + "\n")
++    print("registry", len(rows), "mutants", sha(out))
+ 
+ 
+-def package_files(commit_tree=False):
+-    out = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "-r", "--name-only", BASE_COMMIT, "tensor_cuda/tensor_cuda"],
+-                         capture_output=True, text=True, check=True).stdout.split()
+-    return [p for p in out if p.endswith(".py")]
++def registry():
++    return json.loads((ENG2 / "mutants" / "mutants.json").read_text())
+ 
+ 
+-def make_arm(arm, module_src, base=False, terrain_text=None):
++# ---------------------------------------------------------------------------------------------------------- arms
++def make_arm(arm, package_src, module_src, edit=None):
+     dest = TOOL / "arms" / arm / "tensor_cuda"
+-    if dest.exists():
+-        # A1 refreshes only the authorized ENG1 test copy; all engine/package pins stay unchanged.
+-        assert sha(dest / "tensor_cuda" / MODULE) == sha(module_src), arm
+-        shutil.copy2(ROOT / "tensor_cuda/tests/test_eng1.py", dest / "tests/test_eng1.py")
+-        print("refreshed test", arm)
+-        return
++    assert not dest.exists(), "arms are written once: " + arm
+     pkg, tests = dest / "tensor_cuda", dest / "tests"
+-    for rel in package_files():
+-        target = dest / Path(rel).relative_to("tensor_cuda")
++    for src in sorted(Path(package_src).rglob("*.py")):
++        if "__pycache__" in src.parts:
++            continue
++        target = pkg / src.relative_to(package_src)
+         target.parent.mkdir(parents=True, exist_ok=True)
+-        target.write_bytes(git_show(rel) if base else (ROOT / rel).read_bytes())
+-    shutil.copy2(module_src, pkg / MODULE)
++        target.write_bytes(src.read_bytes())
++    shutil.copyfile(module_src, pkg / MODULE)
++    os.chmod(pkg / MODULE, 0o755)
+     tests.mkdir(parents=True)
+-    shutil.copy2(ROOT / "tensor_cuda/tests/test_eng1.py", tests / "test_eng1.py")
+-    if terrain_text is not None:
+-        (tests / "test_terrain_render.py").write_text(terrain_text)
+-    elif base:
+-        (tests / "test_terrain_render.py").write_bytes(git_show("tensor_cuda/tests/test_terrain_render.py"))
+-    else:
+-        shutil.copy2(ROOT / "tensor_cuda/tests/test_terrain_render.py", tests / "test_terrain_render.py")
++    for name in ("test_eng2.py", "test_eng1.py"):
++        shutil.copyfile(ROOT / "tensor_cuda/tests" / name, tests / name)
++    if edit is not None:
++        path = dest.parent / edit["file"]
++        mutated, hunk = apply_mutant(path.read_text(), edit)
++        assert hunk == edit["hunk_lines"], (arm, hunk)
++        path.write_text(mutated)
+     print("built", arm, sha(pkg / MODULE))
+ 
+ 
+ def step_arms():
+-    # The package Python sources are unchanged between the arms (G1); the baseline's are taken from the base commit.
+-    make_arm("baseline", ROOT / "tensor_cuda/build-eng1-base/module" / MODULE, base=True)
+-    make_arm("candidate", ROOT / "tensor_cuda/build-eng1/module" / MODULE)
+-    cand_terrain = (ROOT / "tensor_cuda/tests/test_terrain_render.py").read_text()
+-    for m in MUTANTS:
+-        if m["kind"] == "python":
+-            assert cand_terrain.count(m["old"]) == 1
+-            make_arm(m["id"], ROOT / "tensor_cuda/build-eng1/module" / MODULE,
+-                     terrain_text=cand_terrain.replace(m["old"], m["new"], 1))
+-        elif (ENG1 / "mutants" / m["id"] / MODULE).exists():
+-            make_arm(m["id"], ENG1 / "mutants" / m["id"] / MODULE)
+-        else:
+-            print("pending (module not built)", m["id"])
+-    if (ENG1 / "mutants" / "C_UBSAN" / MODULE).exists():
+-        make_arm("C_UBSAN", ENG1 / "mutants" / "C_UBSAN" / MODULE)
+-    if (ENG1 / "mutants" / "_unmutated_copy" / MODULE).exists():
+-        # C_COPY: the unmutated candidate sources built by the mutant route (scratch tree, incremental); its bytes
+-        # differ from the worktree candidate's (embedded source path), so it is a control that must pass.
+-        make_arm("C_COPY", ENG1 / "mutants" / "_unmutated_copy" / MODULE)
++    before = json.loads((ENG2 / "worktree_before.json").read_text())["files"]
++    base_pkg = ENG2 / "base_pkg" / "tensor_cuda"
++    for src in base_pkg.rglob("*.py"):  # the baseline package is bc02d3a1's (pre-edit map)
++        assert sha(src) == before["tensor_cuda/tensor_cuda/" + str(src.relative_to(base_pkg))], src
++    for name in ("test_eng1.py",):
++        assert sha(ROOT / "tensor_cuda/tests" / name) == before["tensor_cuda/tests/" + name], name
++    make_arm("baseline", base_pkg, BASE_MODULE)
++    make_arm("candidate", ROOT / "tensor_cuda/tensor_cuda", CAND_MODULE)
++    for m in registry():
++        make_arm(m["id"], ROOT / "tensor_cuda/tensor_cuda", CAND_MODULE, edit=m)
+ 
+ 
++# -------------------------------------------------------------------------------------------------------- census
+ COLLECT = r'''
+ import json, os, sys
+ from pathlib import Path
+ package, out, *files = sys.argv[1:]
+ sys.path.insert(0, package)
+ import tensor_cuda, pytest
+-selectors={r["test_id"] for r in json.loads(Path(os.environ["ENG1_SOURCE_CLASS"]).read_text())}
+-arm=os.environ["ENG1_COLLECT_ARM"]
+ assert Path(tensor_cuda.__file__).resolve().parent.parent == Path(package).resolve()
+ class P:
+     ids, errors = [], []
+-    def pytest_collection_modifyitems(self, session, config, items):
+-        if arm == "baseline":
+-            omitted=[i for i in items if i.nodeid.split("[",1)[0] in selectors]
+-            items[:]=[i for i in items if i not in omitted]
+-            if omitted: config.hook.pytest_deselected(items=omitted)
+     def pytest_collection_finish(self, session): P.ids = [i.nodeid for i in session.items]
+     def pytest_collectreport(self, report):
+         if report.failed: P.errors.append(str(report.longrepr)[-3000:])
+-extra = os.environ.get("ENG1_COLLECT_K")
+-args = ["-q", "-p", "no:cacheprovider", os.environ["ENG1_IMPORT_MODE"], "--collect-only", "--rootdir=" + os.environ["ENG1_ROOT"]]
++extra = os.environ.get("ENG2_COLLECT_K")
++args = ["-q", "-p", "no:cacheprovider", os.environ["ENG2_IMPORT_MODE"], "--collect-only", "--rootdir=" + os.environ["ENG2_ROOT"]]
+ if extra: args += ["-k", extra]
+ rc = pytest.main(args + files, plugins=[P()])
+ Path(out).write_text(json.dumps(dict(rc=int(rc), ids=P.ids, errors=P.errors), indent=1) + "\n")
+@@ -117,160 +188,179 @@
+ 
+ def norm(i):
+     import re
+-    m = re.match(r"artifacts/eng1/tool/arms/[^/]+/(tensor_cuda/.*)$", i)
++    m = re.match(r"artifacts/eng2/tool/arms/[^/]+/(tensor_cuda/.*)$", i)
+     return m.group(1) if m else i
+ 
+ 
+ def collect(arm, suite, k=None):
+     pkg = TOOL / "arms" / arm / "tensor_cuda"
+-    if suite == "regression":
+-        files = [str(ROOT / f) for f in json.loads((TOOL / "regression_files.json").read_text())]
+-    elif suite == "terrain":
+-        files = [str(pkg / "tests/test_terrain_render.py")]
++    if suite in ("regnorm", "regdtype"):
++        files = [str(ROOT / f) for f in json.loads((TOOL / "regression_files.json").read_text())[suite]]
+     else:
+-        files = [str(pkg / "tests/test_eng1.py")]
+-    tag = "" if not k else "_cpu" if k == "cpu" else "_noe6"
+-    out = Path(os.environ["TMPDIR"]) / f"collect_a1_{arm}_{suite}{tag}.json"
+-    env = dict(os.environ, ENG1_ROOT=str(ROOT), PYTHONDONTWRITEBYTECODE="1", CUDA_VISIBLE_DEVICES="", ENG1_COLLECT_ARM=arm,
+-               ENG1_SOURCE_CLASS=str(TOOL / "source_reading_tests.json"),
+-               ENG1_IMPORT_MODE="--import-mode=prepend" if suite in ("regression", "terrain") else "--import-mode=importlib")
++        files = [str(pkg / "tests/test_eng2.py")]
++    tag = "_cpu" if k == "cpu" else ""
++    out = Path(os.environ["TMPDIR"]) / f"collect_{arm}_{suite}{tag}.json"
++    env = dict(os.environ, ENG2_ROOT=str(ROOT), PYTHONDONTWRITEBYTECODE="1", CUDA_VISIBLE_DEVICES="",
++               ENG2_IMPORT_MODE="--import-mode=prepend" if suite in ("regnorm", "regdtype") else "--import-mode=importlib")
+     from arm_origin import bound_environment
+     env = bound_environment(pkg, env)
+     if k:
+-        env["ENG1_COLLECT_K"] = k
++        env["ENG2_COLLECT_K"] = k
+     p = subprocess.run([sys.executable, "-B", "-c", COLLECT, str(pkg), str(out), *files], env=env, cwd=os.environ["TMPDIR"],
+-                       capture_output=True, text=True, timeout=1100)
++                       capture_output=True, text=True, timeout=500)
+     data = json.loads(out.read_text())
+-    (TOOL / f"collect_a1_{arm}_{suite}{tag}.json").write_text(json.dumps(
++    (TOOL / f"collect_{arm}_{suite}{tag}.json").write_text(json.dumps(
+         dict(rc=data["rc"], n=len(data["ids"]), errors=data["errors"], stderr_tail=p.stderr[-2000:]), indent=1) + "\n")
+     return data
+ 
+ 
+ def step_census():
++    # regression_files.json first: the regnorm/regdtype collections read it (ENG1 wrote its list by hand).
++    (TOOL / "regression_files.json").write_text(json.dumps(regression_files(), indent=1) + "\n")
+     results = {}
+-    for arm, suite, k, name in (("baseline", "eng1", None, "eng1"), ("candidate", "eng1", None, "eng1_candidate"),
+-                                ("candidate", "eng1", "cpu", "audit"),
+-                                ("candidate", "eng1", "not test_e6_terrain_writes_nothing", "eng1_noe6"),
+-                                ("baseline", "regression", None, "regression"),
+-                                ("candidate", "regression", None, "regression_candidate"),
+-                                ("baseline", "terrain", None, "terrain"), ("candidate", "terrain", None, "terrain_candidate")):
++    for arm, suite, k, name in (("baseline", "eng2", None, "eng2"), ("candidate", "eng2", None, "eng2_candidate"),
++                                ("candidate", "eng2", "cpu", "audit"),
++                                ("baseline", "regnorm", None, "regnorm"), ("candidate", "regnorm", None, "regnorm_candidate"),
++                                ("baseline", "regdtype", None, "regdtype"),
++                                ("candidate", "regdtype", None, "regdtype_candidate")):
+         data = collect(arm, suite, k)
+         ids = sorted(norm(i) for i in data["ids"])
+         results[name] = (data["rc"], len(ids), len(data["errors"]))
+-        (TOOL / f"ids_a1_{name}.txt").write_text("".join(i + "\n" for i in ids))
+-    assert (TOOL / "ids_a1_eng1.txt").read_text() == (TOOL / "ids_a1_eng1_candidate.txt").read_text(), "eng1 IDs differ by arm"
+-    excluded = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
+-    baseline = (TOOL / "ids_a1_regression.txt").read_text().splitlines()
+-    candidate = (TOOL / "ids_a1_regression_candidate.txt").read_text().splitlines()
+-    assert baseline == [i for i in candidate if i.split("[", 1)[0] not in excluded], "comparison IDs differ"
+-    assert excluded <= {i.split("[", 1)[0] for i in candidate}, "unknown source-reader test ID"
+-    assert (TOOL / "ids_a1_terrain.txt").read_text() == (TOOL / "ids_a1_terrain_candidate.txt").read_text(), "terrain IDs differ by arm"
++        (TOOL / f"ids_{name}.txt").write_text("".join(i + "\n" for i in ids))
++    for a, b in (("eng2", "eng2_candidate"), ("regnorm", "regnorm_candidate"), ("regdtype", "regdtype_candidate")):
++        assert (TOOL / f"ids_{a}.txt").read_text() == (TOOL / f"ids_{b}.txt").read_text(), a + " IDs differ by arm"
+     print(json.dumps(results))
+ 
+ 
++# --------------------------------------------------------------------------------------------------------- lines
++REGRESSION = {
++    # line (c): files that build one of the five norm classes ...
++    "regnorm": ["tensor_cuda/tests/test_eng1.py", "tensor_cuda/tests/test_groupnorm_gn1.py",
++                "tensor_cuda/tests/test_attention_phase5.py", "tensor_cuda/tests/test_nn_phase3.py",
++                "tensor_cuda/tests/test_ext_phase7.py"],
++    # ... and every other existing test file that calls tc.tensor or a factory with a non-default dtype
++    # (artifacts/eng2/P303_caller_census.json, the test files with a dtype other than the literal "float32").
++    "regdtype": None,
++}
++
++
++def regression_files():
++    census = json.loads((ENG2 / "P303_caller_census.json").read_text())
++    root = str(ROOT) + "/"
++    files = set()
++    for r in census["rows"]:
++        f = r["file"]
++        if not f.startswith(root):
++            continue
++        rel = f[len(root):]
++        base = os.path.basename(rel)
++        if not (base.startswith("test_") and rel.endswith(".py")) or r["call"].split(".")[0] not in ("tc", "TC", "tensor_cuda"):
++            continue
++        if r["call"].split(".")[-1] == "parameter" or r["dtype"] in ("'float32'", '"float32"'):
++            continue
++        files.add(rel)
++    out = dict(regnorm=list(REGRESSION["regnorm"]),
++               regdtype=sorted(files - set(REGRESSION["regnorm"])))
++    return out
++
++
+ def bounds(inner):
+     return dict(inner=inner, minimum=inner + 10, maximum=inner + 60, outer=inner + 90)
+ 
+ 
+ def step_lines():
+-    rows = [dict(label="baseline_eng1", arm="baseline", suite="eng1", role="baseline", census="eng1",
+-                 expected_child_exits=[1], expected_parent_exit=0, **bounds(ENG1_INNER)),
+-            dict(label="candidate_eng1", arm="candidate", suite="eng1", role="candidate", census="eng1",
+-                 expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG1_INNER)),
+-            dict(label="baseline_regression", arm="baseline", suite="regression", role="regression", census="regression",
+-                 expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(REG_INNER)),
+-            dict(label="candidate_regression", arm="candidate", suite="regression", role="regression",
+-                 census="regression_candidate", expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(REG_INNER)),
+-            dict(label="baseline_terrain", arm="baseline", suite="terrain", role="regression", census="terrain",
+-                 expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(TER_INNER)),
+-            dict(label="candidate_terrain", arm="candidate", suite="terrain", role="regression", census="terrain",
+-                 expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(TER_INNER)),
+-            dict(label="C_COPY", arm="C_COPY", suite="control", role="control", census="eng1_noe6",
+-                 control_of="M01-M08,M10-M13,M15-M16", expected_child_exits=[0], expected_parent_exit=0, **bounds(MUT_INNER)),
+-            dict(label="C_UBSAN", arm="C_UBSAN", suite="control", role="control", census="eng1_noe6", control_of="M09",
+-                 expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG1_INNER))]
+-    for m in MUTANTS:
+-        py = m["kind"] == "python"
+-        rows.append(dict(label=m["id"], arm=m["id"], suite="mutation_e6" if py else "mutation", role="mutant",
+-                         census="eng1" if py else "eng1_noe6", expected_child_exits=[1], expected_parent_exit=0,
+-                         **bounds(ENG1_INNER if py else MUT_INNER)))
++    assert json.loads((TOOL / "regression_files.json").read_text()) == regression_files()
++    (TOOL / "source_reading_tests.json").write_text("[]\n")  # L38 trace: no line-(c) test reads nn.py/__init__.py
++    rows = [dict(label="baseline_eng2", arm="baseline", suite="eng2", role="baseline", census="eng2",
++                 expected_child_exits=[1], expected_parent_exit=0, **bounds(ENG2_INNER)),
++            dict(label="candidate_eng2", arm="candidate", suite="eng2", role="candidate", census="eng2",
++                 expected_child_exits=[0], expected_parent_exit=0, **bounds(ENG2_INNER))]
++    for suite, inner in (("regnorm", REGNORM_INNER), ("regdtype", REGDTYPE_INNER)):
++        rows.append(dict(label="baseline_" + suite, arm="baseline", suite=suite, role="regression", census=suite,
++                         expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(inner)))
++        rows.append(dict(label="candidate_" + suite, arm="candidate", suite=suite, role="regression",
++                         census=suite + "_candidate", expected_child_exits=[0, 1], expected_parent_exit=0, **bounds(inner)))
++    for m in registry():
++        rows.append(dict(label=m["id"], arm=m["id"], suite="mutation", role="mutant", census="eng2",
++                         expected_child_exits=[1], expected_parent_exit=0, **bounds(ENG2_INNER)))
+     (TOOL / "gpu_lines.json").write_text(json.dumps(rows, indent=2) + "\n")
+-    # Registered before any GPU run: the baseline's expected failures, per ID (report: derivation per class).
+-    ids = (TOOL / "ids_a1_eng1.txt").read_text().split()
+-    pred = json.loads((ENG1 / "cpu_checks.json").read_text())["e2_emulated_predictions"]
++    # Registered before any GPU run: the baseline arm's expected failures, per ID. CPU IDs: the baseline arm's CPU run
++    # (artifacts/eng2/g2/baseline_cpu.json); N1 IDs: the emulation; every other ID (F1 device tests) passes.
++    ids = (TOOL / "ids_eng2.txt").read_text().split()
++    cpu = json.loads((ENG2 / "g2" / "baseline_cpu.json").read_text())
++    emu = set(json.loads((ENG2 / "N1_EMULATION.json").read_text())["predicted_failures"]["baseline"])
+     fail = []
+     for i in ids:
+         name = i.split("::", 1)[1]
+-        if name.startswith(("test_e1_infer[", "test_e1_infer_empty_cpu[")) or name == "test_e1_view_shares_storage":
+-            fail.append(i)
+-        elif name.startswith(("test_e1_refuse[", "test_e1_refuse_empty_cpu[")) and "count_mismatch" not in name:
+-            fail.append(i)
+-        elif name.startswith("test_e2_pow_grad[") and pred[i]["baseline"]["predicted"] == "fail":
+-            fail.append(i)
+-        elif name.startswith("test_e2_pow_grad_nonpow2["):
+-            # Pre-GPU IEEE arithmetic prediction, same E2 targets. Baseline's small bfloat16 intermediates round early.
+-            predictions = json.loads((ENG1 / "a1/e2_witnesses.json").read_text())
+-            dtype = name.split("[", 1)[1][:-1]
+-            if predictions[dtype]["baseline_fails"]: fail.append(i)
+-        elif name.startswith("test_e4_refuse[topk-"):
+-            fail.append(i)
+-        elif name.startswith("test_e5_refuse_cpu[") or name == "test_e6_terrain_writes_nothing":
++        if "cpu" in name.split("[")[0]:
++            assert i in cpu["outcomes"], i
++            if cpu["outcomes"][i] != "passed":
++                fail.append(i)
++        elif i in emu:
+             fail.append(i)
+-    (TOOL / "baseline_expected_failures_a1.json").write_text(json.dumps(sorted(fail), indent=1) + "\n")
++    (TOOL / "baseline_expected_failures.json").write_text(json.dumps(sorted(fail), indent=1) + "\n")
+     print(len(rows), "lines;", len(fail), "registered baseline failures of", len(ids))
+ 
+ 
++# ---------------------------------------------------------------------------------------------------------- seal
+ def step_seal():
+     arms = sorted(p.name for p in (TOOL / "arms").iterdir())
+     from evidence import arm_files
+-    seal = dict(order_commit=ORDER_COMMIT, order_sha256=sha(ROOT / "orders/ENG1_A1_REV1_FIXES.md"),
+-                base_commit="5031c765", round1_base_commit=BASE_COMMIT, module_name=MODULE,
++    reg = json.loads((TOOL / "regression_files.json").read_text())
++    seal = dict(order=ORDER, order_commit=ORDER_COMMIT, order_sha256=sha(ROOT / ORDER), base_commit=BASE_COMMIT,
++                module_name=MODULE,
+                 tool_files={p.name: sha(p) for p in sorted(TOOL.iterdir())
+                             if p.is_file() and not p.name.startswith(("staging_seal", "collect_"))},
+                 registration_files={str(p.relative_to(ROOT)): sha(p) for p in
+-                                    [ROOT / "tensor_cuda/tests/test_eng1.py", ENG1 / "mutants/mutants.json", ENG1 / "a1/MUTANTS.json", ENG1 / "a1/REGISTRATION.md"] +
+-                                    [ROOT / f for f in json.loads((TOOL / "regression_files.json").read_text())]},
++                                    [ROOT / "tensor_cuda/tests/test_eng2.py", ROOT / "tensor_cuda/tests/test_eng1.py",
++                                     ENG2 / "mutants/mutants.json", ENG2 / "N1_EMULATION.json",
++                                     ENG2 / "g2/baseline_cpu.json", ENG2 / "L38_PINS.json"] +
++                                    [ROOT / f for suite in sorted(reg) for f in reg[suite]]},
+                 arms={a: arm_files(a) for a in arms},
+                 engine_sha256={a: sha(TOOL / "arms" / a / "tensor_cuda/tensor_cuda" / MODULE) for a in arms})
+-    for a in arms:  # every arm runs the worktree's current test_eng1.py
+-        assert sha(TOOL / "arms" / a / "tensor_cuda/tests/test_eng1.py") == sha(ROOT / "tensor_cuda/tests/test_eng1.py"), a
++    for a in arms:  # every arm runs the worktree's current test_eng2.py and its test_eng1.py dependency
++        for name in ("test_eng2.py", "test_eng1.py"):
++            assert sha(TOOL / "arms" / a / "tensor_cuda/tests" / name) == sha(ROOT / "tensor_cuda/tests" / name), (a, name)
+     labels = {r["arm"] for r in json.loads((TOOL / "gpu_lines.json").read_text())}
+     missing = sorted(labels - set(arms))
++    assert not missing, missing
+     seal["arms_pending"] = missing
+-    (TOOL / SEAL_NAME).write_text(json.dumps(seal, indent=1, sort_keys=True) + "\n")
+-    print("sealed arms:", arms, "pending:", missing, "seal", sha(TOOL / SEAL_NAME))
++    with (TOOL / SEAL_NAME).open("x") as f:
++        f.write(json.dumps(seal, indent=1, sort_keys=True) + "\n")
++    print("sealed arms:", arms, "seal", sha(TOOL / SEAL_NAME))
+ 
+ 
++# -------------------------------------------------------------------------------------------------------- script
+ def step_script():
+     rows = json.loads((TOOL / "gpu_lines.json").read_text())
+     out = ['#!/usr/bin/env bash',
+-           '# ENG1 staged GPU lines (adapted from GN1 A8; the lead runs them; the seat never did on a device).',
++           '# ENG2 staged GPU lines (copied from ENG1 A3 / GN1 A8 tooling; the lead runs them; the seat never did on a device).',
+            '# Prior art: GNU timeout, POSIX shell; GN1 L45 completed-child supervision (parent receipt after child exit).',
+            '# Expected parent exit for EVERY line is 0 (the parent passes when the child exit matches the registration',
+            '# and the receipts check out). Child exits and bounds are listed per label below and in gpu_lines.json.',
+-           '# Usage: RUNS=/abs/path/under/artifacts/eng1/tool/gpu_runs/<root> TMPDIR=/tmp/eng1_g5 \\',
++           '# Usage: RUNS=/abs/path/under/artifacts/eng2/tool/gpu_runs/<root> TMPDIR=/tmp/eng2_g5 \\',
+            '#        CUDA_VISIBLE_DEVICES=0 timeout 1190s bash STAGED_GPU_COMMANDS.sh LABEL',
+-           '# Run the labels in gpu_lines.json order with the SAME RUNS (mutants need a passing candidate_eng1;',
+-           '# candidate_regression needs baseline_regression, candidate_terrain needs baseline_terrain).',
++           '# Run the labels in gpu_lines.json order with the SAME RUNS (mutants need a passing candidate_eng2;',
++           '# candidate_regnorm needs baseline_regnorm, candidate_regdtype needs baseline_regdtype).',
+            '# Afterwards: RUNS=<same> CUDA_VISIBLE_DEVICES= \\',
+            '#        timeout 300s python3 score_gpu.py   (expected exit 0).',
+-           '# CPU plumbing audit: RUNS=/abs/audit/root TMPDIR=/tmp/eng1_audit timeout 1190s bash STAGED_GPU_COMMANDS.sh --audit',
++           '# CPU plumbing audit: RUNS=/abs/audit/root TMPDIR=/tmp/eng2_audit timeout 1190s bash STAGED_GPU_COMMANDS.sh --audit',
+            'set -euo pipefail',
+            ': "${RUNS:?RUNS is required; use a fresh run root and reuse it across the labels}"',
+            '[[ "$RUNS" == /* ]] || { echo "RUNS must be absolute" >&2; exit 64; }',
+            'TOOL="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"',
+            'cd -- "$TOOL"',
+            'export RUNS PYTHONDONTWRITEBYTECODE=1',
+-           'export TMPDIR="${TMPDIR:?TMPDIR must be /tmp/eng1_*}"',
++           'export TMPDIR="${TMPDIR:?TMPDIR must be /tmp/eng2_*}"',
+            'export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1',
+            'GPU_RUN=forge-gpu-run',
+            'label="${1:?select one registered label, or --audit}"',
+            'if [[ "$label" == --audit ]]; then',
+-           '    export ENG1_AUDIT=1 CUDA_VISIBLE_DEVICES=',
++           '    export ENG2_AUDIT=1 CUDA_VISIBLE_DEVICES=',
+            '    GPU_RUN="$TOOL/forge_gpu_run_standin.py"',
+-           '    label=candidate_eng1',
++           '    label=candidate_eng2',
+            'else',
+-           '    unset ENG1_AUDIT',
++           '    unset ENG2_AUDIT',
+            'fi',
+            'mkdir -p -- "$TMPDIR"',
+            'timeout 60s python3 start_gpu_run.py',
+@@ -279,22 +369,22 @@
+         exp = ",".join(str(v) for v in r["expected_child_exits"])
+         out.append(f'  {r["label"]}) # expected child {exp}, parent 0; inner {r["inner"]}s, --max {r["maximum"]}s, outer {r["outer"]}s')
+         out.append(f'    timeout {r["outer"] + 20}s python3 run_gpu_line.py {r["label"]} {exp} {r["outer"]} "$GPU_RUN" '
+-                   f'--min {r["minimum"]} --max {r["maximum"]} --label eng1-{r["label"]} -- timeout --kill-after=10s '
++                   f'--min {r["minimum"]} --max {r["maximum"]} --label eng2-{r["label"]} -- timeout --kill-after=10s '
+                    f'{r["inner"]}s python3 run_gpu_tests.py {r["arm"]} {r["suite"]}')
+         out.append('    ;;')
+-    out += ['  *) echo "unknown ENG1 label: $label" >&2; exit 64 ;;', 'esac', '']
++    out += ['  *) echo "unknown ENG2 label: $label" >&2; exit 64 ;;', 'esac', '']
+     (TOOL / "STAGED_GPU_COMMANDS.sh").write_text("\n".join(out))
+     os.chmod(TOOL / "STAGED_GPU_COMMANDS.sh", 0o755)
+     print("script", sha(TOOL / "STAGED_GPU_COMMANDS.sh"))
+ 
+ 
+-ENG1_INNER = int(os.environ.get("ENG1_INNER", "900"))
+-REG_INNER = int(os.environ.get("ENG1_REG_INNER", "1050"))
+-MUT_INNER = int(os.environ.get("ENG1_MUT_INNER", "420"))
+-TER_INNER = int(os.environ.get("ENG1_TER_INNER", "1050"))
++ENG2_INNER = int(os.environ.get("ENG2_INNER", "600"))
++REGNORM_INNER = int(os.environ.get("ENG2_REGNORM_INNER", "600"))
++REGDTYPE_INNER = int(os.environ.get("ENG2_REGDTYPE_INNER", "1050"))
+ 
+ if __name__ == "__main__":
+     assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+     sys.path.insert(0, str(TOOL))
+     for step in sys.argv[1:]:
+-        dict(arms=step_arms, census=step_census, lines=step_lines, seal=step_seal, script=step_script)[step]()
++        dict(registry=step_registry, arms=step_arms, census=step_census, lines=step_lines, seal=step_seal,
++             script=step_script)[step]()
+--- eng1/tool/STAGED_GPU_COMMANDS.sh
++++ eng2/tool/STAGED_GPU_COMMANDS.sh
+@@ -1,106 +1,97 @@
+ #!/usr/bin/env bash
+-# ENG1 staged GPU lines (adapted from GN1 A8; the lead runs them; the seat never did on a device).
++# ENG2 staged GPU lines (copied from ENG1 A3 / GN1 A8 tooling; the lead runs them; the seat never did on a device).
+ # Prior art: GNU timeout, POSIX shell; GN1 L45 completed-child supervision (parent receipt after child exit).
+ # Expected parent exit for EVERY line is 0 (the parent passes when the child exit matches the registration
+ # and the receipts check out). Child exits and bounds are listed per label below and in gpu_lines.json.
+-# Usage: RUNS=/abs/path/under/artifacts/eng1/tool/gpu_runs/<root> TMPDIR=/tmp/eng1_g5 \
++# Usage: RUNS=/abs/path/under/artifacts/eng2/tool/gpu_runs/<root> TMPDIR=/tmp/eng2_g5 \
+ #        CUDA_VISIBLE_DEVICES=0 timeout 1190s bash STAGED_GPU_COMMANDS.sh LABEL
+-# Run the labels in gpu_lines.json order with the SAME RUNS (mutants need a passing candidate_eng1;
+-# candidate_regression needs baseline_regression, candidate_terrain needs baseline_terrain).
++# Run the labels in gpu_lines.json order with the SAME RUNS (mutants need a passing candidate_eng2;
++# candidate_regnorm needs baseline_regnorm, candidate_regdtype needs baseline_regdtype).
+ # Afterwards: RUNS=<same> CUDA_VISIBLE_DEVICES= \
+ #        timeout 300s python3 score_gpu.py   (expected exit 0).
+-# CPU plumbing audit: RUNS=/abs/audit/root TMPDIR=/tmp/eng1_audit timeout 1190s bash STAGED_GPU_COMMANDS.sh --audit
++# CPU plumbing audit: RUNS=/abs/audit/root TMPDIR=/tmp/eng2_audit timeout 1190s bash STAGED_GPU_COMMANDS.sh --audit
+ set -euo pipefail
+ : "${RUNS:?RUNS is required; use a fresh run root and reuse it across the labels}"
+ [[ "$RUNS" == /* ]] || { echo "RUNS must be absolute" >&2; exit 64; }
+ TOOL="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ cd -- "$TOOL"
+ export RUNS PYTHONDONTWRITEBYTECODE=1
+-export TMPDIR="${TMPDIR:?TMPDIR must be /tmp/eng1_*}"
++export TMPDIR="${TMPDIR:?TMPDIR must be /tmp/eng2_*}"
+ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+ GPU_RUN=forge-gpu-run
+ label="${1:?select one registered label, or --audit}"
+ if [[ "$label" == --audit ]]; then
+-    export ENG1_AUDIT=1 CUDA_VISIBLE_DEVICES=
++    export ENG2_AUDIT=1 CUDA_VISIBLE_DEVICES=
+     GPU_RUN="$TOOL/forge_gpu_run_standin.py"
+-    label=candidate_eng1
++    label=candidate_eng2
+ else
+-    unset ENG1_AUDIT
++    unset ENG2_AUDIT
+ fi
+ mkdir -p -- "$TMPDIR"
+ timeout 60s python3 start_gpu_run.py
+ case "$label" in
+-  baseline_eng1) # expected child 1, parent 0; inner 900s, --max 960s, outer 990s
+-    timeout 1010s python3 run_gpu_line.py baseline_eng1 1 990 "$GPU_RUN" --min 910 --max 960 --label eng1-baseline_eng1 -- timeout --kill-after=10s 900s python3 run_gpu_tests.py baseline eng1
++  baseline_eng2) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py baseline_eng2 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-baseline_eng2 -- timeout --kill-after=10s 600s python3 run_gpu_tests.py baseline eng2
+     ;;
+-  candidate_eng1) # expected child 0, parent 0; inner 900s, --max 960s, outer 990s
+-    timeout 1010s python3 run_gpu_line.py candidate_eng1 0 990 "$GPU_RUN" --min 910 --max 960 --label eng1-candidate_eng1 -- timeout --kill-after=10s 900s python3 run_gpu_tests.py candidate eng1
++  candidate_eng2) # expected child 0, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py candidate_eng2 0 690 "$GPU_RUN" --min 610 --max 660 --label eng2-candidate_eng2 -- timeout --kill-after=10s 600s python3 run_gpu_tests.py candidate eng2
+     ;;
+-  baseline_regression) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
+-    timeout 1160s python3 run_gpu_line.py baseline_regression 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng1-baseline_regression -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py baseline regression
++  baseline_regnorm) # expected child 0,1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py baseline_regnorm 0,1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-baseline_regnorm -- timeout --kill-after=10s 600s python3 run_gpu_tests.py baseline regnorm
+     ;;
+-  candidate_regression) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
+-    timeout 1160s python3 run_gpu_line.py candidate_regression 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng1-candidate_regression -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py candidate regression
++  candidate_regnorm) # expected child 0,1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py candidate_regnorm 0,1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-candidate_regnorm -- timeout --kill-after=10s 600s python3 run_gpu_tests.py candidate regnorm
+     ;;
+-  baseline_terrain) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
+-    timeout 1160s python3 run_gpu_line.py baseline_terrain 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng1-baseline_terrain -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py baseline terrain
++  baseline_regdtype) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
++    timeout 1160s python3 run_gpu_line.py baseline_regdtype 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng2-baseline_regdtype -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py baseline regdtype
+     ;;
+-  candidate_terrain) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
+-    timeout 1160s python3 run_gpu_line.py candidate_terrain 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng1-candidate_terrain -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py candidate terrain
++  candidate_regdtype) # expected child 0,1, parent 0; inner 1050s, --max 1110s, outer 1140s
++    timeout 1160s python3 run_gpu_line.py candidate_regdtype 0,1 1140 "$GPU_RUN" --min 1060 --max 1110 --label eng2-candidate_regdtype -- timeout --kill-after=10s 1050s python3 run_gpu_tests.py candidate regdtype
+     ;;
+-  C_COPY) # expected child 0, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py C_COPY 0 510 "$GPU_RUN" --min 430 --max 480 --label eng1-C_COPY -- timeout --kill-after=10s 420s python3 run_gpu_tests.py C_COPY control
++  MF1) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MF1 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MF1 -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MF1 mutation
+     ;;
+-  C_UBSAN) # expected child 0, parent 0; inner 900s, --max 960s, outer 990s
+-    timeout 1010s python3 run_gpu_line.py C_UBSAN 0 990 "$GPU_RUN" --min 910 --max 960 --label eng1-C_UBSAN -- timeout --kill-after=10s 900s python3 run_gpu_tests.py C_UBSAN control
++  MF2) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MF2 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MF2 -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MF2 mutation
+     ;;
+-  M01) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M01 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M01 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M01 mutation
++  MN1_LN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN1_LN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN1_LN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN1_LN mutation
+     ;;
+-  M02) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M02 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M02 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M02 mutation
++  MN1_RMS) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN1_RMS 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN1_RMS -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN1_RMS mutation
+     ;;
+-  M03) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M03 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M03 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M03 mutation
++  MN1_BN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN1_BN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN1_BN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN1_BN mutation
+     ;;
+-  M04) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M04 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M04 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M04 mutation
++  MN1_IN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN1_IN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN1_IN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN1_IN mutation
+     ;;
+-  M05) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M05 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M05 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M05 mutation
++  MN2_LN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN2_LN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN2_LN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN2_LN mutation
+     ;;
+-  M06) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M06 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M06 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M06 mutation
++  MN2_RMS) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN2_RMS 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN2_RMS -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN2_RMS mutation
+     ;;
+-  M07) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M07 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M07 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M07 mutation
++  MN2_BN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN2_BN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN2_BN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN2_BN mutation
+     ;;
+-  M08) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M08 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M08 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M08 mutation
++  MN2_IN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN2_IN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN2_IN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN2_IN mutation
+     ;;
+-  M09) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M09 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M09 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M09 mutation
++  MN3_LN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN3_LN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN3_LN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN3_LN mutation
+     ;;
+-  M10) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M10 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M10 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M10 mutation
++  MN3_RMS) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN3_RMS 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN3_RMS -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN3_RMS mutation
+     ;;
+-  M11) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M11 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M11 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M11 mutation
++  MN3_BN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN3_BN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN3_BN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN3_BN mutation
+     ;;
+-  M12) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M12 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M12 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M12 mutation
++  MN3_IN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN3_IN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN3_IN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN3_IN mutation
+     ;;
+-  M13) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M13 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M13 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M13 mutation
++  MN4_LN) # expected child 1, parent 0; inner 600s, --max 660s, outer 690s
++    timeout 710s python3 run_gpu_line.py MN4_LN 1 690 "$GPU_RUN" --min 610 --max 660 --label eng2-MN4_LN -- timeout --kill-after=10s 600s python3 run_gpu_tests.py MN4_LN mutation
+     ;;
+-  M14) # expected child 1, parent 0; inner 900s, --max 960s, outer 990s
+-    timeout 1010s python3 run_gpu_line.py M14 1 990 "$GPU_RUN" --min 910 --max 960 --label eng1-M14 -- timeout --kill-after=10s 900s python3 run_gpu_tests.py M14 mutation_e6
+-    ;;
+-  M15) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M15 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M15 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M15 mutation
+-    ;;
+-  M16) # expected child 1, parent 0; inner 420s, --max 480s, outer 510s
+-    timeout 530s python3 run_gpu_line.py M16 1 510 "$GPU_RUN" --min 430 --max 480 --label eng1-M16 -- timeout --kill-after=10s 420s python3 run_gpu_tests.py M16 mutation
+-    ;;
+-  *) echo "unknown ENG1 label: $label" >&2; exit 64 ;;
++  *) echo "unknown ENG2 label: $label" >&2; exit 64 ;;
+ esac

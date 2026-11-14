@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Pinned-arm pytest child, invoked only by the staged supervisor (copied from ENG1's tool as A3 left it; adapted from
+GN1 A8 run_gpu_tests.py).
+ENG2 changes (ledgered): ENG2_* environment names; the arm is a package copy plus copies of test_eng2.py and its
+import dependency test_eng1.py under arms/<arm>/tensor_cuda/tests/; suites eng2 and mutation run the arm's
+test_eng2.py (whole file), regnorm and regdtype run the worktree files listed in regression_files.json[suite] with the
+arm package preloaded (GN1's method, prepend import mode); ENG2_RECORD_DIR (test_eng2's rows) and ENG1_CENSUS_DIR
+(test_eng1's E3 rows in line c) point at the attempt directory; ENG1's terrain suite and E6 snapshot dropped; L41: on a
+mutant line the child records which tests executed the registered mutated hunk (mutant_trace, sys.settrace).
+Prior art: pytest (Krekel et al., 2004+, year unverified), report hooks; L45 parent-after-child receipts (GN1).
+ENG1 changes (ledgered): ENG1_* environment names; the arm is a package copy plus copies of test_eng1.py and
+test_terrain_render.py under arms/<arm>/tensor_cuda/ (each arm pins its own engine); suites eng1 / mutation /
+control / regression; the regression suite runs the worktree's existing test files with the arm package preloaded
+(GN1's method) plus the arm's own terrain file, and records the E6 write-detection snapshot around the run (L46);
+ENG1_CENSUS_DIR points the E3 census rows at the attempt directory; GN1's GroupNorm-specific report fields dropped.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import subprocess
+import traceback
+
+from runtime_evidence import atomic_json, module_census
+if __name__ == "__main__":
+    atomic_json(Path(os.environ["ENG2_ATTEMPT"]) / "child_started.json",
+                dict(pid=os.getpid(), label=os.environ["ENG2_LINE"]))
+
+from evidence import guard, verify_start, verify_arm, lines, read
+from arm_origin import bound_environment, preflight
+from evidence import SEAL_NAME
+
+TOOL = Path(__file__).resolve().parent
+ROOT = TOOL.parents[2]
+sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+class Reports:
+    def __init__(self, arm):
+        self.arm = arm
+        self.ids, self.reports, self.collection_errors, self.exceptions = [], [], [], {}
+        self.source_selectors = {r["test_id"] for r in read(TOOL / "source_reading_tests.json")}
+        self.source_readers = []
+
+    def pytest_collection_modifyitems(self, session, config, items):
+        # Prior art: pytest deselection hooks; REV1 F02 source inspection is candidate-only evidence.
+        from evidence import norm_id
+        source = [i for i in items if norm_id(i.nodeid).split("[", 1)[0] in self.source_selectors]
+        self.source_readers = [i.nodeid for i in source]
+        if self.arm == "baseline" and source:
+            items[:] = [i for i in items if i not in source]
+            config.hook.pytest_deselected(items=source)
+
+    def pytest_collection_finish(self, session):
+        self.ids = [item.nodeid for item in session.items]
+
+    def pytest_collectreport(self, report):
+        if report.failed:
+            self.collection_errors.append(str(report.longrepr))
+
+    def pytest_runtest_makereport(self, item, call):
+        if call.excinfo is not None:
+            self.exceptions[(item.nodeid, call.when)] = dict(exception_class=call.excinfo.type.__name__)
+
+    def pytest_runtest_logreport(self, report):
+        self.reports.append(dict(id=report.nodeid, when=report.when, outcome=report.outcome,
+                                 detail=str(report.longrepr)[-4000:] if report.failed else "",
+                                 **self.exceptions.get((report.nodeid, report.when), dict(exception_class=None))))
+
+
+class MutantTrace:
+    """ENG2 L41: which tests executed the registered mutated hunk. Prior art: CPython sys.settrace (PSF; the hook coverage
+    tools build on); ours: the hunk-scoped, per-test recorder. Only frames of the one mutated file get a local tracer."""
+
+    def __init__(self, path, lines):
+        self.path, self.lines = str(Path(path).resolve()), set(lines)
+        self.current, self.hits = None, {}
+
+    def _global(self, frame, event, arg):
+        if event == "call" and frame.f_code.co_filename == self.path:
+            return self._local
+        return None
+
+    def _local(self, frame, event, arg):
+        if event == "line" and self.current is not None and frame.f_lineno in self.lines:
+            self.hits.setdefault(self.current, set()).add(frame.f_lineno)
+        return self._local
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self.current = nodeid
+        sys.settrace(self._global)
+
+    def pytest_runtest_logfinish(self, nodeid, location):
+        sys.settrace(None)
+        self.current = None
+
+
+def mutant_hunk(label, package):
+    """The registered hunk of mutant `label` in its arm copy: (file, line numbers), checked against the file's text."""
+    entry = {r["id"]: r for r in read(TOOL.parent / "mutants" / "mutants.json")}[label]
+    path = package.parent / entry["file"]  # arms/<arm>/ + tensor_cuda/tensor_cuda/<file>
+    text = path.read_text().splitlines()
+    new = entry["new"].splitlines()
+    first, last = entry["hunk_lines"]
+    assert text[first - 1:last] == new, "registered hunk lines differ from the arm file"
+    return path, range(first, last + 1)
+
+
+def main():
+    runs = guard(os.environ["RUNS"])
+    seal, start_record = verify_start(runs)
+    label = os.environ["ENG2_LINE"]
+    audit = os.environ.get("ENG2_AUDIT") == "1"
+    output = Path(os.environ["ENG2_ATTEMPT"]).resolve()
+    assert output.parent == runs / label and output.name.startswith("attempt-"), "child attempt guard"
+    assert output.is_dir()
+    arm, suite = sys.argv[1:]
+    line = lines()[label]
+    assert (arm, suite) == (line["arm"], line["suite"]), "child line binding"
+    assert audit == start_record["audit"]
+    package = verify_arm(arm, seal)  # arms/<arm>/tensor_cuda
+    for file, expected in seal["registration_files"].items():
+        assert sha(ROOT / file) == expected, "changed registered file " + file
+    module = package / "tensor_cuda" / seal["module_name"]
+    assert sha(module) == seal["engine_sha256"][arm], "changed pinned engine"
+    # Process-local preloading is insufficient for test_dlpack's fresh Python subprocesses (REV1 F02).
+    os.environ.update(bound_environment(package))
+    origin = preflight(package, seal["module_name"], seal["engine_sha256"][arm], os.getcwd(),
+                       output / "origin_check.json")
+    sys.path.insert(0, str(package))
+    sys.path.insert(1, str(ROOT))
+    import tensor_cuda as tc
+    import numpy as np
+    import pytest
+    assert Path(tc.__file__).resolve() == (package / "tensor_cuda" / "__init__.py").resolve(), "wrong package"
+    assert Path(tc._C.__file__).resolve() == module.resolve(), "wrong engine copy imported"
+    np.random.seed(571)
+    if suite in ("regnorm", "regdtype"):
+        files = [str(ROOT / f) for f in read(TOOL / "regression_files.json")[suite]]
+    else:
+        assert suite in ("eng2", "mutation"), suite
+        files = [str(package / "tests" / "test_eng2.py")]
+    from device_evidence import capture
+    device_evidence = capture(__file__, None if audit else tc._C.__file__)
+    invocation = dict(device_evidence=device_evidence, arm=arm, suite=suite, audit=audit, cwd=os.getcwd(),
+                      run_root=str(runs), attempt_dir=str(output), seal_sha256=sha(TOOL / SEAL_NAME),
+                      engine_sha256=sha(module), origin_check=origin, CUDA_VISIBLE_DEVICES=os.environ.get("CUDA_VISIBLE_DEVICES"),
+                      files=[os.path.relpath(f, ROOT) for f in files])
+    (output / "invocation.json").write_text(json.dumps(invocation, indent=2) + "\n")
+    os.environ["ENG2_RECORD_DIR"] = str(output)
+    os.environ["ENG1_CENSUS_DIR"] = str(output)  # test_eng1.py's E3 census rows (line c), per arm
+    # ENG1: the regression files import sibling modules, which needs pytest's default prepend import mode; the eng2
+    # suites keep GN1's importlib mode.
+    mode = "--import-mode=prepend" if suite in ("regnorm", "regdtype") else "--import-mode=importlib"
+    args = ["-q", "-p", "no:cacheprovider", mode, "-rfE",
+            "--rootdir=" + str(ROOT), "--basetemp=" + str(Path(os.environ["TMPDIR"]) / (label + "_pytest")),
+            "--junitxml=" + str(output / "junit.xml")]
+    if audit:
+        assert os.environ.get("CUDA_VISIBLE_DEVICES") == "", "audit requires hidden CUDA"
+        args += ["-k", "cpu"]
+    args += files
+    plugin = Reports(arm)
+    plugins = [plugin]
+    tracer = None
+    if line["role"] == "mutant":
+        tracer = MutantTrace(*mutant_hunk(label, package))
+        plugins.append(tracer)
+    try:
+        rc = int(pytest.main(args, plugins=plugins))
+    finally:
+        sys.settrace(None)
+    trace = None if tracer is None else {k: sorted(v) for k, v in tracer.hits.items()}
+    result = dict(invocation, pytest_exit=rc, collected_ids=plugin.ids, collection_errors=plugin.collection_errors,
+                  reports=plugin.reports, source_readers=plugin.source_readers, mutant_trace=trace,
+                  mutant_hunk=(None if tracer is None else dict(file=os.path.relpath(tracer.path, ROOT),
+                                                                lines=sorted(tracer.lines))),
+                  runtime_modules=module_census(ROOT))
+    atomic_json(output / "child_result.json", result)
+    return rc
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:
+        traceback.print_exc()
+        sys.exit(2)

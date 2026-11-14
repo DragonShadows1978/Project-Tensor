@@ -40,12 +40,27 @@ _NP_DTYPE = {
 _DEVICE_CAST_DTYPE = {"bfloat16"}
 
 
+def _np_dtype(dtype):
+    """ENG2 F1: the host NumPy dtype for a supported dtype string. Any other dtype (an unsupported string such as
+    "float64", "double" or "int32", a typo, or a non-string) raises TypeError naming the supported dtypes, instead
+    of the old silent float32 fallback (`_NP_DTYPE.get(dtype, np.float32)`). The engine has no float64 (core.h).
+    Prior art: NumPy's `np.dtype("float99")` refusal (TypeError: data type not understood) and PyTorch's refusal of
+    unknown dtypes (both unverified -- lead to check: "numpy dtype not understood TypeError"); TX3-F1's strict
+    lookup (this repo, 2026-10; ValueError, C++ aliases accepted), which this order does not adopt. Ours: TypeError,
+    the message, and the supported list (exactly the keys of _NP_DTYPE and _DEVICE_CAST_DTYPE)."""
+    try:
+        return _NP_DTYPE[dtype]
+    except (KeyError, TypeError):
+        supported = ", ".join([*_NP_DTYPE, *sorted(_DEVICE_CAST_DTYPE)])
+        raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}") from None
+
+
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
     """Create a Tensor from array-like data."""
     if dtype in _DEVICE_CAST_DTYPE:
         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
         return _C.tensor(arr, device, requires_grad).astype(dtype)
-    arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
     arr = np.ascontiguousarray(arr)
     return _C.tensor(arr, device, requires_grad)
 
@@ -57,7 +72,8 @@ def _factory(np_fn):
         if dtype in _DEVICE_CAST_DTYPE:
             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
             return _C.tensor(arr, device, requires_grad).astype(dtype)
-        arr = np_fn(shape).astype(_NP_DTYPE.get(dtype, np.float32))
+        np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)
+        arr = np_fn(shape).astype(np_dtype)
         return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
     return make
 

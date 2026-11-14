@@ -1,0 +1,206 @@
+### MF1
+diff -r -u --label candidate --label MF1 -x '*.so' candidate MF1
+--- candidate
++++ MF1
+@@ -60,7 +60,7 @@
+     if dtype in _DEVICE_CAST_DTYPE:
+         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+         return _C.tensor(arr, device, requires_grad).astype(dtype)
+-    arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
++    arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+     arr = np.ascontiguousarray(arr)
+     return _C.tensor(arr, device, requires_grad)
+ 
+### MF2
+diff -r -u --label candidate --label MF2 -x '*.so' candidate MF2
+--- candidate
++++ MF2
+@@ -72,7 +72,7 @@
+         if dtype in _DEVICE_CAST_DTYPE:
+             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
+             return _C.tensor(arr, device, requires_grad).astype(dtype)
+-        np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)
++        np_dtype = _NP_DTYPE.get(dtype, np.float32)
+         arr = np_fn(shape).astype(np_dtype)
+         return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
+     return make
+### MN1_LN
+diff -r -u --label candidate --label MN1_LN -x '*.so' candidate MN1_LN
+--- candidate
++++ MN1_LN
+@@ -148,7 +148,7 @@
+             return xc * inv * self.weight + self.bias
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+-        return (xc * inv * weight + bias).astype(dtype)
++        return xc * inv * weight + bias
+ 
+ 
+ class Dropout(Module):
+### MN1_RMS
+diff -r -u --label candidate --label MN1_RMS -x '*.so' candidate MN1_RMS
+--- candidate
++++ MN1_RMS
+@@ -308,7 +308,7 @@
+         ms = (x * x).mean([-1], True)
+         w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
+         out = x * (ms + self.eps).pow(-0.5) * w
+-        return out.astype(dtype) if half else out
++        return out
+ 
+ 
+ class MultiheadAttention(Module):
+### MN1_BN
+diff -r -u --label candidate --label MN1_BN -x '*.so' candidate MN1_BN
+--- candidate
++++ MN1_BN
+@@ -538,7 +538,7 @@
+             mean = self.running_mean.reshape(wshape).detach()
+             var = self.running_var.reshape(wshape).detach()
+         out = (x - mean) * (var + self.eps).pow(-0.5) * w + b
+-        return out.astype(dtype) if half else out
++        return out
+ 
+ 
+ class GroupNorm(Module):
+### MN1_IN
+diff -r -u --label candidate --label MN1_IN -x '*.so' candidate MN1_IN
+--- candidate
++++ MN1_IN
+@@ -645,7 +645,7 @@
+             return xn * self.weight.reshape([1, self.C, 1, 1]) + self.bias.reshape([1, self.C, 1, 1])
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+-        return (xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])).astype(dtype)
++        return xn * weight.reshape([1, self.C, 1, 1]) + bias.reshape([1, self.C, 1, 1])
+ 
+ 
+ class Conv1D(Module):
+### MN2_LN
+diff -r -u --label candidate --label MN2_LN -x '*.so' candidate MN2_LN
+--- candidate
++++ MN2_LN
+@@ -137,7 +137,7 @@
+         # (2018), "Mixed Precision Training" (both unverified -- lead to check: "PyTorch layer_norm acc_type half").
+         # Taken: float32 statistics for half tensors. Ours: this engine's op sequence and the single final cast.
+         dtype = x.dtype
+-        half = dtype in ("float16", "bfloat16")
++        half = dtype in ("float16",)
+         if half:
+             x = x.astype("float32")
+         mean = x.mean([-1], True)
+### MN2_RMS
+diff -r -u --label candidate --label MN2_RMS -x '*.so' candidate MN2_RMS
+--- candidate
++++ MN2_RMS
+@@ -302,7 +302,7 @@
+         # the existing weight line converts half weights to float32. Prior art as in LayerNorm.forward above
+         # (PyTorch float32 accumulation; Micikevicius et al. 2018; unverified -- lead to check).
+         dtype = x.dtype
+-        half = dtype in ("float16", "bfloat16")
++        half = dtype in ("float16",)
+         if half:
+             x = x.astype("float32")
+         ms = (x * x).mean([-1], True)
+### MN2_BN
+diff -r -u --label candidate --label MN2_BN -x '*.so' candidate MN2_BN
+--- candidate
++++ MN2_BN
+@@ -520,7 +520,7 @@
+         # for half inputs they now receive the float32 batch statistics. Prior art as in LayerNorm.forward above
+         # (PyTorch float32 accumulation; Micikevicius et al. 2018; unverified -- lead to check).
+         dtype = x.dtype
+-        half = dtype in ("float16", "bfloat16")
++        half = dtype in ("float16",)
+         if half:
+             x = x.astype("float32")
+         axes = [0] if x.ndim == 2 else [0, 2]
+### MN2_IN
+diff -r -u --label candidate --label MN2_IN -x '*.so' candidate MN2_IN
+--- candidate
++++ MN2_IN
+@@ -636,7 +636,7 @@
+         # sequence (the `not half` return). Prior art as in LayerNorm.forward above (PyTorch float32 accumulation;
+         # Micikevicius et al. 2018; unverified -- lead to check).
+         dtype = x.dtype
+-        half = dtype in ("float16", "bfloat16")
++        half = dtype in ("float16",)
+         if half:
+             x = x.astype("float32")
+         mean = x.mean([2, 3], True); var = x.var([2, 3], True)
+### MN3_LN
+diff -r -u --label candidate --label MN3_LN -x '*.so' candidate MN3_LN
+--- candidate
++++ MN3_LN
+@@ -138,11 +138,11 @@
+         # Taken: float32 statistics for half tensors. Ours: this engine's op sequence and the single final cast.
+         dtype = x.dtype
+         half = dtype in ("float16", "bfloat16")
+-        if half:
+-            x = x.astype("float32")
+         mean = x.mean([-1], True)
+         xc = x - mean
+         var = (xc * xc).mean([-1], True)
++        if half:
++            xc, var = xc.astype("float32"), var.astype("float32")
+         inv = (var + self.eps).pow(-0.5)
+         if not half:
+             return xc * inv * self.weight + self.bias
+### MN3_RMS
+diff -r -u --label candidate --label MN3_RMS -x '*.so' candidate MN3_RMS
+--- candidate
++++ MN3_RMS
+@@ -303,9 +303,9 @@
+         # (PyTorch float32 accumulation; Micikevicius et al. 2018; unverified -- lead to check).
+         dtype = x.dtype
+         half = dtype in ("float16", "bfloat16")
+-        if half:
+-            x = x.astype("float32")
+         ms = (x * x).mean([-1], True)
++        if half:
++            x, ms = x.astype("float32"), ms.astype("float32")
+         w = self.weight if self.weight.dtype == x.dtype else self.weight.astype(x.dtype)
+         out = x * (ms + self.eps).pow(-0.5) * w
+         return out.astype(dtype) if half else out
+### MN3_BN
+diff -r -u --label candidate --label MN3_BN -x '*.so' candidate MN3_BN
+--- candidate
++++ MN3_BN
+@@ -530,7 +530,7 @@
+             w = w if w.dtype == "float32" else w.astype("float32")
+             b = b if b.dtype == "float32" else b.astype("float32")
+         if self.training:
+-            mean = x.mean(axes, True); var = x.var(axes, True)
++            mean = x.astype(dtype).mean(axes, True).astype("float32"); var = x.astype(dtype).var(axes, True).astype("float32")
+             mn = mean.numpy().ravel(); vr = var.numpy().ravel()
+             self.running_mean = tc.tensor((1 - self.momentum) * self.running_mean.numpy() + self.momentum * mn)
+             self.running_var = tc.tensor((1 - self.momentum) * self.running_var.numpy() + self.momentum * vr)
+### MN3_IN
+diff -r -u --label candidate --label MN3_IN -x '*.so' candidate MN3_IN
+--- candidate
++++ MN3_IN
+@@ -637,9 +637,9 @@
+         # Micikevicius et al. 2018; unverified -- lead to check).
+         dtype = x.dtype
+         half = dtype in ("float16", "bfloat16")
+-        if half:
+-            x = x.astype("float32")
+         mean = x.mean([2, 3], True); var = x.var([2, 3], True)
++        if half:
++            x, mean, var = x.astype("float32"), mean.astype("float32"), var.astype("float32")
+         xn = (x - mean) * (var + self.eps).pow(-0.5)
+         if not half:
+             return xn * self.weight.reshape([1, self.C, 1, 1]) + self.bias.reshape([1, self.C, 1, 1])
+### MN4_LN
+diff -r -u --label candidate --label MN4_LN -x '*.so' candidate MN4_LN
+--- candidate
++++ MN4_LN
+@@ -145,7 +145,7 @@
+         var = (xc * xc).mean([-1], True)
+         inv = (var + self.eps).pow(-0.5)
+         if not half:
+-            return xc * inv * self.weight + self.bias
++            return (xc * inv).astype("float16").astype("float32") * self.weight + self.bias
+         weight = self.weight if self.weight.dtype == "float32" else self.weight.astype("float32")
+         bias = self.bias if self.bias.dtype == "float32" else self.bias.astype("float32")
+         return (xc * inv * weight + bias).astype(dtype)

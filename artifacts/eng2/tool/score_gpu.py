@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Recompute every ENG2 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (copied from ENG1's
+tool as A3 left it). ENG2 changes (ledgered): ENG1's M09/C_UBSAN rule dropped (ENG2 has no controls); the N1 census
+rows are read from candidate_eng2 (n1census_*.json) and baseline_eng2, and test_eng1's E3 rows from the line-(c)
+regnorm lines, both reported (not gated); cross-arm identity is gated: every f1bytes_* and p302bits_* row of
+candidate_eng2 must equal baseline_eng2's row for the same test ID (P302 and the F1 supported-dtype bytes, compared as
+sha256 of the uint views the test wrote), with both sets non-empty and equal in IDs.
+(ENG1 text follows.) Recompute every ENG1 verdict from START, seal, parent, child and JUnit receipts; no GPU calls (adapted from
+GN1 A8 score_gpu.py). Prior art: DeMillo et al. (1978), mutation adequacy; paired regression (GN1 D6).
+ENG1 changes (ledgered): M09 counts only with a passing C_UBSAN control; the E3 census rows are collected from
+candidate_eng1 and reported (not gated); the per-mutant killer IDs are listed.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+from evidence import TOOL, guard, verify_start, lines, recompute_line, summary_outcomes, norm_id
+
+
+def main():
+    runs = guard(os.environ["RUNS"])
+    summary, errors = {}, []
+    start = {}
+    try:
+        seal, start = verify_start(runs)
+        for label in lines():
+            try:
+                summary[label] = recompute_line(runs, label, seal, start)
+            except Exception as exc:
+                summary[label] = dict(passed=False, reasons=[str(exc) or type(exc).__name__])
+    except Exception as exc:
+        errors.append(str(exc) or type(exc).__name__)
+    if start.get("audit"):
+        errors.append("audit run cannot establish GPU acceptance")
+    if summary and any(row.get("mode") != "device" for row in summary.values()):
+        errors.append("not a device run: every line requires positive child device evidence")
+    def rows(label, pattern):
+        attempt = summary.get(label, {}).get("selected_attempt")
+        return [json.loads(p.read_text()) for p in sorted(Path(attempt).glob(pattern))] if attempt else []
+    census = dict(candidate_eng2=rows("candidate_eng2", "n1census_*.json"),
+                  baseline_eng2=rows("baseline_eng2", "n1census_*.json"),
+                  e3_baseline_regnorm=rows("baseline_regnorm", "census_*.json"),
+                  e3_candidate_regnorm=rows("candidate_regnorm", "census_*.json"))
+    cross = {}
+    for kind in ("f1bytes", "p302bits"):
+        base = {r["test_id"]: r["sha256"] for r in rows("baseline_eng2", kind + "_*.json")}
+        cand_rows = {r["test_id"]: r["sha256"] for r in rows("candidate_eng2", kind + "_*.json")}
+        differ = sorted(i for i in base if cand_rows.get(i) != base[i])
+        cross[kind] = dict(baseline=len(base), candidate=len(cand_rows), differing=differ,
+                           ids_equal=sorted(base) == sorted(cand_rows))
+        if summary and (not base or sorted(base) != sorted(cand_rows) or differ):
+            errors.append("cross-arm %s: %d baseline rows, %d candidate rows, IDs equal %s, differing %r" % (
+                kind, len(base), len(cand_rows), sorted(base) == sorted(cand_rows), differ[:10]))
+    source_outcomes = {}
+    for label in ("candidate_regnorm", "candidate_regdtype"):  # ENG2: two regression suites (was candidate_regression)
+        regression = summary.get(label, {}).get("selected_attempt")
+        if regression:
+            selectors = {r["test_id"] for r in json.loads((TOOL / "source_reading_tests.json").read_text())}
+            source_outcomes.update({norm_id(k): v for k, v in summary_outcomes(json.loads(
+                (Path(regression) / "child_result.json").read_text())).items()
+                               if norm_id(k).split("[", 1)[0] in selectors})
+    passed = not errors and bool(summary) and all(row.get("passed") for row in summary.values())  # after cross
+    result = dict(passed=passed, errors=errors, lines=summary, cross_arm=cross,
+                  killers={k: v.get("actual_killers") for k, v in summary.items() if lines()[k]["role"] == "mutant"},
+                  n1_census=census,
+                  source_reading_tests=json.loads((TOOL / "source_reading_tests.json").read_text()),
+                  source_reader_outcomes=source_outcomes)
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "G5_SUMMARY.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps(dict(passed=passed, errors=errors,
+                          lines={k: (v.get("passed"), v.get("mode"), v.get("reasons", [])[:3]) for k, v in summary.items()})))
+    return 0 if passed else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

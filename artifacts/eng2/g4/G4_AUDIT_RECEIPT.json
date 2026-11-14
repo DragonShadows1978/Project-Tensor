@@ -1,0 +1,52 @@
+{
+ "root": "tool/gpu_runs/audit_1",
+ "steps": [
+  {
+   "step": "START bound to the seal",
+   "ok": true
+  },
+  {
+   "step": "child start marker",
+   "ok": true
+  },
+  {
+   "step": "origin check (arm package + candidate engine pin in a fresh subprocess)",
+   "ok": true
+  },
+  {
+   "step": "invocation record",
+   "ok": true
+  },
+  {
+   "step": "junit.xml",
+   "ok": true
+  },
+  {
+   "step": "child result: pytest exit 0, 121 IDs (-k cpu), 0 collection errors",
+   "ok": true
+  },
+  {
+   "step": "runner log row 'ran 0' (stand-in)",
+   "ok": true
+  },
+  {
+   "step": "parent receipt passed, recorded after the child exited",
+   "ok": true
+  },
+  {
+   "step": "re-scoring (score_gpu.py) recomputes candidate_eng2 as passed",
+   "ok": true
+  },
+  {
+   "step": "score_gpu.py exit 1 with the designed audit error",
+   "ok": true
+  }
+ ],
+ "all_ok": true,
+ "not_exercised_by_the_audit": [
+  "mutant evaluate() branch incl. L41 trace (a mutant line needs a non-audit passing candidate_eng2)",
+  "regression evaluate() with L38 pins (unit-checked: g4/l38_regression_check.stdout)",
+  "cross-arm f1bytes/p302bits comparison (needs both device lines)",
+  "device evidence classification on a device"
+ ]
+}

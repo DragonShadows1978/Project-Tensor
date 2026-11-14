@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="10" time="1.591" timestamp="2026-11-14T10:16:21.239219-05:00" hostname="MilleniumFalcon"><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p-1.5]" time="0.062"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = -1.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0e-05, 3.0e-05, 1.0e-04, 3.0e-04, 1.0e-03, 1.0e-02, 1.0e-01,
+       5.0e-01, 1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 7.0e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p-0.5]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = -0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0e-05, 3.0e-05, 1.0e-04, 3.0e-04, 1.0e-03, 1.0e-02, 1.0e-01,
+       5.0e-01, 1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 7.0e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+0.5]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0e-05, 3.0e-05, 1.0e-04, 3.0e-04, 1.0e-03, 1.0e-02, 1.0e-01,
+       5.0e-01, 1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 7.0e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+2]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 2.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0e-05, 3.0e-05, 1.0e-04, 3.0e-04, 1.0e-03, 1.0e-02, 1.0e-01,
+       5.0e-01, 1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 7.0e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad[float64-p+3]" time="0.002"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 3.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", E2_DTYPES)
+    def test_e2_pow_grad(dtype, p):
+        """Gradient of sum(w * x^p) against the float64 reference, small x included; finite where the true value is."""
+&gt;       x64, w64 = _e2_inputs(dtype, p)
+                   ^^^^^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:204: in _e2_inputs
+    probe = _const(E2_X, dtype)
+            ^^^^^^^^^^^^^^^^^^^
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:76: in _const
+    return tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0e-05, 3.0e-05, 1.0e-04, 3.0e-04, 1.0e-03, 1.0e-02, 1.0e-01,
+       5.0e-01, 1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 7.0e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p-1.5]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = -1.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0000000e-05, 3.0000000e-05, 1.0000000e-04, 3.0000000e-04,
+       1.0000000e-03, 1.0000000e-02, 1.0000000e-01, 5.0000000e-01,
+       1.0000000e+00, 1.5000000e+00, 2.0000000e+00, 3.0000000e+00,
+       7.0000000e+00, 1.3671875e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p-0.5]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = -0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0000000e-05, 3.0000000e-05, 1.0000000e-04, 3.0000000e-04,
+       1.0000000e-03, 1.0000000e-02, 1.0000000e-01, 5.0000000e-01,
+       1.0000000e+00, 1.5000000e+00, 2.0000000e+00, 3.0000000e+00,
+       7.0000000e+00, 1.3671875e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+0.5]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 0.5
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0000000e-05, 3.0000000e-05, 1.0000000e-04, 3.0000000e-04,
+       1.0000000e-03, 1.0000000e-02, 1.0000000e-01, 5.0000000e-01,
+       1.0000000e+00, 1.5000000e+00, 2.0000000e+00, 3.0000000e+00,
+       7.0000000e+00, 1.3671875e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+2]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 2.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0000000e-05, 3.0000000e-05, 1.0000000e-04, 3.0000000e-04,
+       1.0000000e-03, 1.0000000e-02, 1.0000000e-01, 5.0000000e-01,
+       1.0000000e+00, 1.5000000e+00, 2.0000000e+00, 3.0000000e+00,
+       7.0000000e+00, 1.3671875e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase><testcase classname="tensor_cuda.tests.test_eng1" name="test_e2_pow_grad_bits[float64-p+3]" time="0.001"><failure message="RuntimeError: cudaMalloc failed: no CUDA-capable device is detected">dtype = 'float64', p = 3.0
+
+    @pytest.mark.parametrize("p", E2_P, ids=[f"p{p:+g}" for p in E2_P])
+    @pytest.mark.parametrize("dtype", ["float32", "float64"])
+    def test_e2_pow_grad_bits(dtype, p):
+        """float32 (and the float64 request, which the engine builds as float32) keeps the baseline arm's arithmetic bit
+        for bit: the backward equals nmul(g, nmuls(ew_pow(x, p - 1), p)) recomposed from the same engine ops, compared
+        as uint32. Non-power-of-two upstream values (and the L55 witness) make a reordering visible."""
+        xs = np.array(E2_X + [E2_WITNESS_X])
+        gs = np.array([0.7 + 0.013 * i for i in range(len(E2_X))] + [E2_WITNESS_G])
+&gt;       x = _leaf(xs, dtype)
+            ^^^^^^^^^^^^^^^^
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/tensor_cuda/tests/test_eng1.py:70: in _leaf
+    t = tc.tensor(np.asarray(values, dtype=np.float64), dtype=dtype, device=device).detach()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = array([1.0000000e-05, 3.0000000e-05, 1.0000000e-04, 3.0000000e-04,
+       1.0000000e-03, 1.0000000e-02, 1.0000000e-01, 5.0000000e-01,
+       1.0000000e+00, 1.5000000e+00, 2.0000000e+00, 3.0000000e+00,
+       7.0000000e+00, 1.3671875e+00])
+
+    def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
+        """Create a Tensor from array-like data."""
+        if dtype in _DEVICE_CAST_DTYPE:
+            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
+            return _C.tensor(arr, device, requires_grad).astype(dtype)
+        arr = np.asarray(data, dtype=_NP_DTYPE.get(dtype, np.float32))
+        arr = np.ascontiguousarray(arr)
+&gt;       return _C.tensor(arr, device, requires_grad)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: cudaMalloc failed: no CUDA-capable device is detected
+
+/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng2/artifacts/eng2/tool/arms/baseline/tensor_cuda/tensor_cuda/__init__.py:50: RuntimeError</failure></testcase></testsuite></testsuites>
