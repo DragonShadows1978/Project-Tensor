@@ -170,6 +170,43 @@ for name, (site, fn) in AFFINE.items():
     for label, obj in ALL_NON_STRINGS.items():
         rows.append(dict(entry=name, site=site, requested=label, kind="non-string", **affine_probe(fn, obj)))
 
+# ---------------------------------------------------------------------------------------------- ENG2-A2 (REV2 E2R2-F02)
+# Appended after the 337 earlier rows (which stay a prefix): apa_sp2.RegisteredMargins.lookup (apa_sp2.py:53), a public
+# METADATA-VALIDATION entry, not a tensor factory: it returns the registered fp32 error margin for (bulk_bits, D) and
+# its contract is float32 only (`dtype != "float32"` -> ValueError "table covers fp32 at scale=1/sqrt(D) only",
+# raised before the table is read). Its production caller (apa_selective_attention_sp) passes q.dtype. Unchanged by
+# ENG2 (product behaviour not edited). Probed with the registered geometry (bulk_bits=2, D=64, scale=1/sqrt(64)) on a
+# table of sentinel values built with the class's own constructor, so the row shows whether the table was read; this
+# is a control-flow census, not a calibration-data or attention check. Outcomes: "refused" (exception), "handled"
+# (returned the fp32 entry for the request "float32"), "accepted-equal" (returned the fp32 entry for another request
+# that compares equal to "float32"; recorded as found, e.g. UserString("float32")). Every string and non-string above.
+# Prior art: REV2's dtype_boundaries.py lookup probe (sentinel table; this repo, 2026-11); otherwise none known to me.
+from types import MappingProxyType  # noqa: E402
+
+from tensor_cuda import apa_sp2 as SP2  # noqa: E402
+
+LOOKUP_SITE = "apa_sp2.py:53 RegisteredMargins.lookup (metadata validation; float32-only contract)"
+LOOKUP_SENTINEL = {f"{bits}:{dim}": f"TABLE_READ_SENTINEL {bits}:{dim}" for bits in (2, 4) for dim in (64, 128)}
+
+
+def lookup_probe(requested):
+    margins = SP2.RegisteredMargins("dtype-census-sentinel-table", MappingProxyType(dict(LOOKUP_SENTINEL)))
+    try:
+        value = margins.lookup(2, 64, requested, 1 / (64 ** 0.5))
+    except Exception as exc:  # noqa: BLE001
+        return dict(outcome="refused", exception=type(exc).__name__, message=str(exc)[:300], table_read=False)
+    exact = type(requested) is str and requested == "float32"
+    return dict(outcome="handled" if exact else "accepted-equal", returned=value,
+                table_read=value == LOOKUP_SENTINEL["2:64"], contract_dtype="float32")
+
+
+for s in ORDER_STRINGS + list(ALIASES) + SUPPORTED:
+    rows.append(dict(entry="apa_sp2.RegisteredMargins.lookup", site=LOOKUP_SITE, requested=s, kind=kind_of(s),
+                     **lookup_probe(s)))
+for label, obj in ALL_NON_STRINGS.items():
+    rows.append(dict(entry="apa_sp2.RegisteredMargins.lookup", site=LOOKUP_SITE, requested=label, kind="non-string",
+                     **lookup_probe(obj)))
+
 summary = {}
 for r in rows:
     summary.setdefault(r["entry"], {}).setdefault(r["kind"], {}).setdefault(r["outcome"], 0)

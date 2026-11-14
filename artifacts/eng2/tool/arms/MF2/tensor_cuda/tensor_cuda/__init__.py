@@ -67,12 +67,15 @@ def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
 
 def _factory(np_fn):
     def make(*shape, device="cuda", dtype="float32", requires_grad=False):
-        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = tuple(shape[0])
-        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): refused before np_fn runs
+        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A2 (REV2 E2R2-F01): before any shape handling
+            shape = tuple(shape[0]) if len(shape) == 1 and isinstance(shape[0], (tuple, list)) else shape
             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
             return _C.tensor(arr, device, requires_grad).astype(dtype)
+        # ENG2-A2: every other dtype gets F1's check on the next line, also before the shape (a caller's list) is read.
         np_dtype = _NP_DTYPE.get(dtype, np.float32)
+        # ENG2-A2 (E2R2-F01) prior art: validate-arguments-before-side-effects (no specific source known to me).
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
         arr = np_fn(shape).astype(np_dtype)
         return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)
     return make

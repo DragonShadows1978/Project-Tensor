@@ -469,3 +469,60 @@ def test_a1_causal_mask_nonstring_refused_cpu(kind, monkeypatch):
     assert _A1_F._causal_cache == {}
     if kind == "spy":
         assert obj.calls == [], obj.calls
+
+
+# ======================================================================= ENG2-A2: the dtype is checked before the shape
+# orders/ENG2_A2_REV2_FIXES.md (REV2 E2R2-F01). A factory given ONE list/tuple shape used to convert it
+# (`tuple(shape[0])`) before checking the dtype, so a list subclass's own __iter__ ran -- and could draw from NumPy's
+# global random state -- before the registered TypeError. REV2's sentinel: a list subclass whose __iter__ records the
+# call and draws once. Every non-string dtype (A1's objects, REV2's None among them) must now be refused with F1's
+# TypeError before the sentinel runs, with the random state untouched; the sentinel holds F1_TOO_BIG, so a factory that
+# still reached np_fn would surface NumPy's ValueError, never allocate. (F1's refused STRINGS are also checked before
+# the shape now, but are not parametrized here: any such test would fail under MF2 and so be an MF2 killer outside the
+# read-only registration in mutants.json; the A2 gate probes them instead.) Supported dtypes keep the list/tuple shape
+# form (zero-byte shapes on "cpu"; the sentinel runs exactly once there). Prior art: REV2's dtype_boundaries.py probe
+# (this repo, 2026-11) and A1's operands above; validate-arguments-before-side-effects (no specific source known to me).
+class _A2ShapeSentinel(list):
+    """REV2's shape sentinel: records each __iter__ call and draws one number from NumPy's global random state."""
+
+    def __init__(self, dims):
+        super().__init__(dims)
+        self.calls = []
+
+    def __iter__(self):
+        self.calls.append("__iter__")
+        np.random.rand()
+        return super().__iter__()
+
+
+@pytest.mark.parametrize("kind", list(A1_NONSTRINGS))
+@pytest.mark.parametrize("entry", list(F1_FACTORIES))
+def test_a2_shape_sentinel_refused_cpu(entry, kind):
+    """A non-string dtype is refused before the factory touches a list shape: no __iter__, no draw, F1's message."""
+    obj = A1_NONSTRINGS[kind]()
+    shape = _A2ShapeSentinel(F1_TOO_BIG)
+    before = np.random.get_state()
+    with pytest.raises(TypeError) as info:
+        F1_FACTORIES[entry](shape, device="cpu", dtype=obj)
+    assert str(info.value) == F1_MESSAGE.format(obj)
+    assert shape.calls == [], shape.calls
+    after = np.random.get_state()
+    assert before[0] == after[0] and np.array_equal(before[1], after[1]) and before[2:] == after[2:]
+    if kind == "spy":
+        assert obj.calls == [], obj.calls
+
+
+A2_SHAPE_FORMS = {"list": list, "tuple": tuple, "sentinel": _A2ShapeSentinel}
+
+
+@pytest.mark.parametrize("form", list(A2_SHAPE_FORMS))
+@pytest.mark.parametrize("dtype", F1_SUPPORTED)
+@pytest.mark.parametrize("entry", list(F1_FACTORIES))
+def test_a2_list_shape_supported_cpu(entry, dtype, form):
+    """A supported dtype still accepts one list/tuple shape (zero bytes on "cpu"; no device call); the sentinel's
+    __iter__ runs exactly once, after the dtype check."""
+    shape = A2_SHAPE_FORMS[form]([0, 2])
+    t = F1_FACTORIES[entry](shape, device="cpu", dtype=dtype)
+    assert t.dtype == dtype and tuple(t.shape) == (0, 2)
+    if form == "sentinel":
+        assert shape.calls == ["__iter__"], shape.calls

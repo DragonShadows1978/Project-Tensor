@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""ENG2-A2 A2-G2 scoring of the CPU receipts (a2/<arm>_cpu.json from a2/cpu_runs.py, the unchanged copy of g2/cpu_runs.py).
+Copied from a1/ag2_check.py (diff a2/ag2_check.diff); the registered numbers are those of a2/LEDGER.md R1-R4.
+  G2a candidate: every CPU ID of test_eng2.py passes (253 = 157 earlier + 96 new).
+  G2b baseline: the failing CPU IDs == A1's 96 registered CPU failures (artifacts/eng2/a1/baseline_cpu.json) + the
+      24 new test_a2_shape_sentinel_refused_cpu IDs, exactly (the 72 test_a2_list_shape_supported_cpu IDs pass); the
+      regenerated tool/baseline_expected_failures.json == A1's 142 + those 24.
+  G2c MF1 / MF2: failing IDs == the registered killers, each killer traced through the registered hunk (L41), and
+      stage.apply_mutant re-derives the registered hunk lines on the A2 __init__.py.
+  G2d test_eng2.py additions only: the pre-A2 file is a byte prefix of the new one; the census gains exactly the 96
+      test_a2_* IDs and loses none.
+Prior art: set-equality scoring of per-ID outcomes (GN1/ENG1 tooling); no new algorithm.
+"""
+import json
+from pathlib import Path
+import sys
+
+A1 = Path(__file__).resolve().parent  # artifacts/eng2/a2
+ENG2 = A1.parent
+ROOT = ENG2.parents[1]
+r = lambda p: json.loads(Path(p).read_text())
+out = {}
+cand, base = r(A1 / "candidate_cpu.json"), r(A1 / "baseline_cpu.json")
+new_ids = sorted(set((ENG2 / "tool/ids_eng2.txt").read_text().split()) - set((A1 / "before/artifacts__eng2__tool__ids_eng2.txt").read_text().split()))
+lost = sorted(set((A1 / "before/artifacts__eng2__tool__ids_eng2.txt").read_text().split()) - set((ENG2 / "tool/ids_eng2.txt").read_text().split()))
+a2_all = sorted(i for i in (ENG2 / "tool/ids_eng2.txt").read_text().split() if "::test_a2_" in i)
+a1_ids = sorted(i for i in a2_all if "::test_a2_shape_sentinel_refused_cpu[" in i)  # the IDs the baseline must fail
+supported_ids = sorted(i for i in a2_all if "::test_a2_list_shape_supported_cpu[" in i)
+out["G2a"] = dict(collected=cand["n"], failed=sorted(k for k, v in cand["outcomes"].items() if v != "passed"),
+                  ok=cand["n"] == 253 and cand["rc"] == 0 and all(v == "passed" for v in cand["outcomes"].values())
+                  and len(cand["outcomes"]) == 253)
+old_f1 = sorted(k for k, v in r(ENG2 / "a1/baseline_cpu.json")["outcomes"].items() if v != "passed")
+base_failed = sorted(k for k, v in base["outcomes"].items() if v != "passed")
+reg_new = r(ENG2 / "tool/baseline_expected_failures.json")
+reg_old = r(A1 / "before/artifacts__eng2__tool__baseline_expected_failures.json")
+out["G2b"] = dict(collected=base["n"], failed=len(base_failed), registered_f1_cpu=len(old_f1), new_nonstring=len(a1_ids),
+                  equal=base_failed == sorted(old_f1 + a1_ids),
+                  registration=dict(before=len(reg_old), after=len(reg_new), after_equals_before_plus_new=sorted(reg_new) == sorted(reg_old + a1_ids)),
+                  supported_passed_on_baseline=all(base["outcomes"].get(i) == "passed" for i in supported_ids),
+                  ok=base_failed == sorted(old_f1 + a1_ids) and len(old_f1) == 96 and len(a1_ids) == 24
+                  and len(reg_old) == 142 and sorted(reg_new) == sorted(reg_old + a1_ids)
+                  and all(base["outcomes"].get(i) == "passed" for i in supported_ids))
+mutants = {m["id"]: m for m in r(ENG2 / "mutants/mutants.json")}
+sys.path.insert(0, str(ENG2 / "tool"))
+import stage  # noqa: E402  (sealed generator; only apply_mutant is called)
+rederived = {m: stage.apply_mutant((ROOT / mutants[m]["file"]).read_text(), mutants[m])[1] for m in ("MF1", "MF2")}
+for arm in ("MF1", "MF2"):
+    d = r(A1 / f"{arm}_cpu.json")
+    failed = sorted(k for k, v in d["outcomes"].items() if v != "passed")
+    killers = sorted(mutants[arm]["killers"])
+    out["G2c_" + arm] = dict(failed=len(failed), killers=len(killers), equal=failed == killers,
+                             traced=sum(bool(d["mutant_trace"].get(k)) for k in killers), hunk_lines=mutants[arm]["hunk_lines"],
+                             hunk_rederived_on_a2=rederived[arm],
+                             ok=failed == killers and all(d["mutant_trace"].get(k) for k in killers)
+                             and rederived[arm] == mutants[arm]["hunk_lines"])
+before_t = (A1 / "before/tensor_cuda__tests__test_eng2.py").read_bytes()
+now_t = (ROOT / "tensor_cuda/tests/test_eng2.py").read_bytes()
+out["G2d"] = dict(prefix=now_t.startswith(before_t), bytes_before=len(before_t), bytes_after=len(now_t),
+                  ids_added=len(new_ids), ids_lost=lost, added_are_a2=new_ids == a2_all,
+                  sentinel_ids=len(a1_ids), supported_ids=len(supported_ids),
+                  ok=now_t.startswith(before_t) and not lost and new_ids == a2_all and len(new_ids) == 96
+                  and len(a1_ids) == 24 and len(supported_ids) == 72)
+out["new_ids"] = new_ids
+out["all_ok"] = all(v["ok"] for k, v in out.items() if isinstance(v, dict) and "ok" in v)
+(A1 / "A2G2_CPU.json").write_text(json.dumps(out, indent=1) + "\n")
+print(json.dumps({k: {q: w for q, w in v.items() if q not in ("failed",) or isinstance(w, int)} for k, v in out.items() if isinstance(v, dict)}, indent=1))
+print("all_ok", out["all_ok"])
+sys.exit(0 if out["all_ok"] else 1)
