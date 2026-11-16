@@ -104,6 +104,13 @@ py::array tensor_to_numpy(Tensor& t) {
   if (a.dtype == DType::Float16) out = py::array(py::dtype("float16"), shape);
   else if (a.dtype == DType::Int64) out = py::array(py::dtype("int64"), shape);
   else if (a.dtype == DType::Uint8) out = py::array(py::dtype("uint8"), shape);
+  // ENG3 A2.1 (BOOL-NUMPY1): a bool tensor is stored one byte per element (dtype_size(Bool) == 1; tc.tensor copies a
+  // NumPy bool_ buffer byte for byte through from_host), so it is returned as a NumPy bool array of the same bytes.
+  // Before: no Bool branch, so a float32 array was allocated and only its first numel bytes were written (garbage).
+  // Prior art: NumPy's bool_ is one byte per element (NumPy docs, "Data types"). In this repo, TX3-F1B (fork worktree
+  // tensor_fork_apa_wt_tx3f1, tc/numpy_export.h, 2026-10-28, not merged) found and fixed the same defect with a dtype
+  // table and an itemsize check; this is the minimal one-branch form A2.1 allows, not a copy of that code.
+  else if (a.dtype == DType::Bool) out = py::array(py::dtype("bool"), shape);
   else out = py::array(py::dtype("float32"), shape);
   NDArray host = a.device.is_cuda() ? a : a;  // to_host handles D2H
   host.to_host(out.request().ptr);
@@ -2642,6 +2649,38 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         },
         "empty(shape, dtype='float32', device='cuda')\n\n"
         "Uninitialized tensor (tensor_cuda.empty wraps it). P1T-FIX6: shape must be a tuple or list of ints.");
+  // ENG3 A1.1 (orders/ENG3_R2_RESUME.md): PRIVATE TEST HOOKS, not public API (underscore names; tensor_cuda/__init__.py
+  // does not export them). Each calls one NDArray core member directly, so ENG3's G1/G3 tests reach full, zeros, clone
+  // and to, which no public entry exposes. The result never requires grad. Prior art: test-only private entry points
+  // (e.g. CPython's _testcapi module, PyTorch's torch._C._* test helpers; unverified -- lead to check); no specific
+  // prior art for these four.
+  m.def("_core_full",
+        [](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {
+          for (int64_t s : shape)
+            if (s < 0) throw py::value_error("_core_full: negative extent");
+          return Tensor::make(NDArray::full(Shape(shape.begin(), shape.end()), value, dtype_from_string(dtype),
+                                            Device::from_string(device)),
+                              false);
+        },
+        py::arg("shape"), py::arg("value"), py::arg("dtype"), py::arg("device"),
+        "ENG3 test hook (private): NDArray::full(shape, value, dtype, device).");
+  m.def("_core_zeros",
+        [](std::vector<int64_t> shape, const std::string& dtype, const std::string& device) {
+          for (int64_t s : shape)
+            if (s < 0) throw py::value_error("_core_zeros: negative extent");
+          return Tensor::make(
+              NDArray::zeros(Shape(shape.begin(), shape.end()), dtype_from_string(dtype), Device::from_string(device)),
+              false);
+        },
+        py::arg("shape"), py::arg("dtype"), py::arg("device"),
+        "ENG3 test hook (private): NDArray::zeros(shape, dtype, device).");
+  m.def("_core_clone", [](Tensor& t) { return Tensor::make(t.data().clone(), false); }, py::arg("tensor"),
+        "ENG3 test hook (private): NDArray::clone() of the tensor's data.");
+  m.def("_core_to",
+        [](Tensor& t, const std::string& device) {
+          return Tensor::make(t.data().to(Device::from_string(device)), false);
+        },
+        py::arg("tensor"), py::arg("device"), "ENG3 test hook (private): NDArray::to(device) of the tensor's data.");
   // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).
   m.def("_dlpack_release_stats", [](py::args a, py::kwargs k) {
     const CoreCallArgs c("_dlpack_release_stats", a, k, {});

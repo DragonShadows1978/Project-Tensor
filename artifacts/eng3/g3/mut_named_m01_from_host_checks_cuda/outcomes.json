@@ -1,0 +1,46 @@
+{
+ "label": "mut_named_m01_from_host_checks_cuda",
+ "start": "2026-11-16T13:28:19.107327+00:00",
+ "end": "2026-11-16T13:28:23.117265+00:00",
+ "module": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+ "module_sha256": "1cbc36ae16400b7f047381b191636fb4e2b4bc13a19932351daa93ae01d43566",
+ "CUDA_VISIBLE_DEVICES": "",
+ "pytest_args": [
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "-rfE",
+  "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3",
+  "--basetemp=/tmp/eng3_tmp/pt/mut_named_m01_from_host_checks_cuda",
+  "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3/g3/mut_named_m01_from_host_checks_cuda/junit.xml",
+  "-o",
+  "junit_logging=all",
+  "--continue-on-collection-errors",
+  "-k",
+  "test_g1_cpu_tensor_numpy and float32",
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "pytest_exit": 1,
+ "counts": {
+  "failed": 1
+ },
+ "n_ids": 1,
+ "collection_errors": {},
+ "outcomes": {
+  "tensor_cuda/tests/test_eng3_host.py::test_g1_cpu_tensor_numpy[float32]": "failed"
+ },
+ "failures": {
+  "tensor_cuda/tests/test_eng3_host.py::test_g1_cpu_tensor_numpy[float32]": "shape=(10064,), dtype=float32)\n\n    def tensor(data, *, device=\"cuda\", dtype=\"float32\", requires_grad=False):\n        \"\"\"Create a Tensor from array-like data.\"\"\"\n        if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): a non-string is refused first\n            arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))\n            return _C.tensor(arr, device, requires_grad).astype(dtype)\n        arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation\n        arr = np.ascontiguousarray(arr)\n>       return _C.tensor(arr, device, requires_grad)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       RuntimeError: CUDA error at from_host: no CUDA-capable device is detected\n\ntensor_cuda/tensor_cuda/__init__.py:65: RuntimeError"
+ },
+ "git_status_before": [
+  " M tensor_cuda/src/bindings.cpp",
+  " M tensor_cuda/src/kernels.cu",
+  "?? tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "git_status_after": [
+  " M tensor_cuda/src/bindings.cpp",
+  " M tensor_cuda/src/kernels.cu",
+  "?? tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "worktree_writes_by_tests": []
+}

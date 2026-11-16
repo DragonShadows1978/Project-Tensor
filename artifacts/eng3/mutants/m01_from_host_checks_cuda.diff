@@ -1,0 +1,10 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/src/kernels.cu	2026-11-16 07:50:47.374071277 -0500
++++ /tmp/eng3_src_m01_from_host_checks_cuda/src/kernels.cu	2026-11-16 08:01:14.236494791 -0500
+@@ -859,6 +859,7 @@
+     cuda_check_last("from_host");
+   } else {
+     std::memcpy(a.data_ptr(), src, bytes);
++    { static bool eng3_m = (std::fprintf(stderr, "ENG3-MUTANT m01_from_host_checks_cuda executed\n"), true); (void)eng3_m; } cuda_check_last("from_host");
+   }
+   return a;
+ }

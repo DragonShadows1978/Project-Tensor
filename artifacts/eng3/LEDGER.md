@@ -65,3 +65,70 @@ Times EST (UTC-5), 2026-11-16, unless marked UTC. No git writes; read-only git o
 - The planned E3 work (not started) rests on IEEE 754-2008 conversions and round-to-nearest-even; the bfloat16 format
   (Google Brain); CUDA Math API `__float2half_rn` / `__float2bfloat16_rn`; mutation testing (DeMillo, Lipton and
   Sayward, 1978). All unverified in this sandbox -- lead to check.
+
+# r2 (resume under Amendment 1, then Amendment 2) -- 2026-11-16
+
+## Setup and probe
+- 07:18 read orders/ENG3_R2_RESUME.md (cba230b1). 07:20 L01 r2 (`preflight_L01_r2.txt`): cmake 3.28.3, nvcc 12.6.85,
+  pytest 9.0.2, Python 3.12.3 + numpy 2.4.2, forge-gpu-run --status rc 0. torch 2.11 present (used by G2 for bfloat16
+  NaN-payload inputs via DLPack).
+- 07:21 probe line `probe_B` (exploration, not a gate) launched; its wrapper sat in the 76-retry sleep with no forge
+  output; stopped by me (my own process) at 07:34 to allow Build E, since the wrapper checked the module only once
+  (receipts moved to gpu/probe_B_attempt1_stopped). Wrapper fixed: module sha256 re-checked before EVERY attempt
+  (L103), ATTEMPTS.json written progressively. 07:41 probe_B ran: forge exit 0, inner 0
+  (gpu/probe_B/RESULT.json). Device NaN outputs: every half NaN -> float 0x7FFFFFFF; every float NaN -> half 0x7FFF,
+  bfloat16 0x7FFF; half -> float non-NaN equals NumPy's widening on all 65,536 patterns; uint8 -> float exact.
+## Product edits (diff: artifacts/eng3/before vs artifacts/eng3/E_src)
+- kernels.cu: ENG3 host block (host_f32_to_f16, host_f16_to_f32, host_f32_to_bf16, host_bf16_to_f32, host_ld/st,
+  host_rintf, host_to_u8, host_astype_into); zeros/full/from_host/to_host/clone/astype host branches. Device branches
+  unchanged statement for statement. Prior art in the code comment (IEEE 754-2008 RNE; bfloat16; CUDA Math API / PTX
+  cvt; c10::BFloat16 RNE formulation, unverified).
+- bindings.cpp: A1.1 private hooks _core_full, _core_zeros, _core_clone, _core_to (no public name; __init__.py
+  untouched); A2.1 Bool branch in tensor_to_numpy. An edit hook flagged TX3-F1B's earlier, unmerged fix of the same
+  defect (fork worktree tensor_fork_apa_wt_tx3f1, tc/numpy_export.h); cited as in-repo prior art in the comment.
+- core.h: unchanged (no new declarations needed).
+## Builds (build/build_receipts.json, MODULES.txt)
+- E 9f070b6f... (first E build had no Bool branch; rebuilt after A2.1; a comment-only edit after the probe rebuilt to
+  the same sha256). Bh 17f305eb... = B's kernels.cu/core.h + the A1.1 hook block only (device-path reference for
+  zeros/full/clone/to, which Build B cannot reach). Mutants from /tmp/eng3_src_<id> trees: m01 1cbc36ae, m02 5521073d,
+  m03 9c3530d7, m04 72a72c1a, m05 4e7d9fc9. First mutant trees (before the comment edit) moved to /tmp/eng3_old and
+  artifacts/eng3/mutants_superseded_v1 (never built).
+## Instruments
+- artifacts/eng3/tools/cudart_count.c (.so): LD_PRELOAD counter of the 32 libcudart functions the module imports.
+  Repair 1 of 3 (L56(b)): dlsym(RTLD_NEXT) cannot see libcudart (a dependency of an RTLD_LOCAL extension) -> segfault;
+  fixed with dlopen(RTLD_NOLOAD). Verified on Build B: import 0 calls, empty host tensor 0, nonempty host tensor 2.
+  (A /proc/self/maps libcuda check was tried first and rejected: libcuda is mapped at import.)
+- scripts/eng3_suite.py repair (L56(b) 2 of 3): collection errors interrupted the session -> --continue-on-collection-
+  errors (both builds); try 1 kept as g3/cpu_B_try1_interrupted.
+## Registrations (before the runs they govern)
+- MUTANTS.json 12:49:16 UTC (sha cd41f97d...), A14_PAIRS.json, G3_INTENDED.json 13:05:45 UTC (sha 0f8224e0...),
+  g3/SPLIT.json (GPU halves).
+## Deviation: first CPU before-run read E sources
+- g3/cpu_B (07:51-08:01) ran Build B's module with E's kernels.cu/bindings.cpp in the worktree, so the suite's
+  source-pin tests read E bytes. Kept as g3/cpu_B_srcE; G3 uses reruns with each build's own sources
+  (scripts/eng3_srcswap.py B|E).
+## Gate runs (times EST)
+- 08:25 G1 CPU on E (CUDA hidden): g3/G1_cpu_E 76/76 passed (incl. 8 G1b cpu rows; no-CUDA counter host_calls 0,
+  control_calls 4).
+- 08:27-08:28 mutants on the CPU rows (all five) + named-only runs for m01/m03/m05 (markers in junit).
+- 08:29-08:39 CPU suite E (E sources) g3/cpu_E; 08:40-08:51 CPU suite B (B sources) g3/cpu_B; compare
+  g3/G3_cpu_compare.json: 3368 IDs, 0 differences.
+- GPU lines (each: L103 sha check before every attempt, dry run 78, forge exit, inner exit, log sha256 in
+  gpu/<line>/RESULT.json): G3_B1, G3_B2 (+devpath B_public), devpath_Bh (attempt 0 exit 76, retried after 300 s),
+  G3_E (own tests G1/G1b/G2 on GPU 121/121, suite halves, devpath E_hooks/E_public), mut_m02, mut_m04, mut_m05.
+  Lease waits behind another seat's line (p1qr) are inside the first attempts of G3_B1/G3_B2.
+- G3 GPU compare g3/G3_gpu_compare.json: 3368 IDs, 0 differences. Devpath: B vs Bh public 24/24 identical (Bh is a
+  faithful B reference); B vs E public 24/24; Bh vs E hooks 91/93 identical, the 2 others are the A2.2 waived bool
+  .numpy() rows (Bh: 60-byte float32 array whose first 15 bytes are the data; E: the 15-byte bool array); every raw
+  bool byte row (from_host_raw, clone, to_*) identical.
+- Tool label slip (L56(a)): v1 of eng3_g3_compare.py waived only key bool_numpy_waived/bool, while hooks mode also
+  records the same bool .numpy() under from_host+numpy/bool; v1 output kept as devpath/CMP_Bh_vs_E_hooks_v1_keylabel.json
+  (that key "bytes differ"); v2 waives exactly the two keys that read bool through .numpy(), as A2.2 states.
+- G4: MUTANT_RESULTS.json, 5/5 killed on their named assertions, marker in each named run's junit; m03 counter
+  {'cudaMemcpy': 13}.
+- L60: BOUNDARY.json (fill_ refusal measured on B and E with CUDA hidden; the 14 checked compute entries listed).
+## G5 event (scope)
+- scripts/eng3_build_arms.sh and scripts/eng3_line_steps.sh were written in scripts/, but the writable set there is
+  "new scripts/eng3_*.py". Found at 10:04 by the scope check; moved (not deleted) to artifacts/eng3/tools/
+  (sha256 7ea42ee8... and 26975818...). GPU line argv in gpu/*/START.json name the old path. G5 reported FAIL (2
+  events), corrected.

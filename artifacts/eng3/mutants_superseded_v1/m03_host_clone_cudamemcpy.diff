@@ -1,0 +1,11 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/src/kernels.cu	2026-11-16 07:33:48.375033001 -0500
++++ /tmp/eng3_src_m03_host_clone_cudamemcpy/src/kernels.cu	2026-11-16 07:50:26.947851453 -0500
+@@ -877,7 +877,7 @@
+   size_t bytes = numel() * dtype_size(dtype);
+   if (bytes) {
+     if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+-    else std::memcpy(out.data_ptr(), data_ptr(), bytes);  // ENG3 E2: host clone, no CUDA call
++    else { { static bool eng3_m = (std::fprintf(stderr, "ENG3-MUTANT m03_host_clone_cudamemcpy executed\n"), true); (void)eng3_m; } cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice); }
+   }
+   return out;
+ }

@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/src/kernels.cu	2026-11-16 07:50:47.374071277 -0500
++++ /tmp/eng3_src_m02_host_astype_truncates/src/kernels.cu	2026-11-16 08:01:14.418488661 -0500
+@@ -661,8 +661,7 @@
+ uint16_t host_f32_to_bf16(float f) {
+   const uint32_t u = host_f32_bits(f);
+   if ((u & 0x7FFFFFFFu) > 0x7F800000u) return kHostF32NaNToBF16;
+-  const uint32_t lsb = (u >> 16) & 1u;
+-  return static_cast<uint16_t>((u + 0x7FFFu + lsb) >> 16);
++  { static bool eng3_m = (std::fprintf(stderr, "ENG3-MUTANT m02_host_astype_truncates executed\n"), true); (void)eng3_m; } return static_cast<uint16_t>(u >> 16);
+ }
+ 
+ // ld<__nv_bfloat16> below sm_90: mov.b32 {0,h}.

@@ -1,0 +1,144 @@
+{
+ "E4_scope": "A1.2: NDArray core members only. The census (HOST_CENSUS.json) finds one core member beyond the E2 set that a host tensor reaches, fill_, which already refuses; ENG3 adds no refusal.",
+ "refusals": [
+  {
+   "member": "fill_ (kernels.cu, 'if (!a.device.is_cuda()) throw ... \"fill_: CUDA arrays only\"', unchanged)",
+   "call": "tc.tensor(..., device='cpu').fill_(5.0) via Tensor.fill_",
+   "refusal": "RuntimeError: fill_: CUDA arrays only (values unchanged)",
+   "build_B": {
+    "module_sha256": "9d8be988977d7a197805d7daa9c347008e34e487f30c140687cb5fbbe10d0af6",
+    "CUDA_VISIBLE_DEVICES": "",
+    "empty host tensor": "fill_ raised RuntimeError: fill_: CUDA arrays only; values after: []",
+    "3-element host tensor": "tensor creation raised RuntimeError: CUDA error at from_host: no CUDA-capable device is detected"
+   },
+   "build_E": {
+    "module_sha256": "9f070b6f4427f2b704f09ec96ef2097791a61e0c02b65e0f384169eac1d4986d",
+    "CUDA_VISIBLE_DEVICES": "",
+    "empty host tensor": "fill_ raised RuntimeError: fill_: CUDA arrays only; values after: []",
+    "3-element host tensor": "fill_ raised RuntimeError: fill_: CUDA arrays only; values after: [1.0, 2.0, 3.0]"
+   }
+  }
+ ],
+ "successor_HOST_COMPUTE_HMM": {
+  "count": 172,
+  "with_device_check_one_level_down": [
+   {
+    "name": "export_rows",
+    "kind": "module",
+    "binding_line": 2009,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:7931"
+    ]
+   },
+   {
+    "name": "export_rope_rows",
+    "kind": "module",
+    "binding_line": 2011,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:8093"
+    ]
+   },
+   {
+    "name": "splice_rows",
+    "kind": "module",
+    "binding_line": 2040,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:7962"
+    ]
+   },
+   {
+    "name": "evict_rows",
+    "kind": "module",
+    "binding_line": 2043,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:7995"
+    ]
+   },
+   {
+    "name": "dda_raycast",
+    "kind": "module",
+    "binding_line": 2045,
+    "device_checks": [
+     "tensor_cuda/src/dda.cu:229",
+     "tensor_cuda/src/dda.cu:230"
+    ]
+   },
+   {
+    "name": "raster_winner_scatter_min",
+    "kind": "module",
+    "binding_line": 2054,
+    "device_checks": [
+     "tensor_cuda/src/paint_raster.cu:370",
+     "tensor_cuda/src/paint_raster.cu:371"
+    ]
+   },
+   {
+    "name": "raster_winner_resolve",
+    "kind": "module",
+    "binding_line": 2074,
+    "device_checks": [
+     "tensor_cuda/src/paint_raster.cu:451"
+    ]
+   },
+   {
+    "name": "bake_back_project",
+    "kind": "module",
+    "binding_line": 2095,
+    "device_checks": [
+     "tensor_cuda/src/paint_bake.cu:304"
+    ]
+   },
+   {
+    "name": "bake_cosine_blend",
+    "kind": "module",
+    "binding_line": 2112,
+    "device_checks": [
+     "tensor_cuda/src/paint_bake.cu:398"
+    ]
+   },
+   {
+    "name": "inpaint_island_passes",
+    "kind": "module",
+    "binding_line": 2124,
+    "device_checks": [
+     "tensor_cuda/src/paint_inpaint.cu:136"
+    ]
+   },
+   {
+    "name": "w8a16_matmul",
+    "kind": "module",
+    "binding_line": 2261,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:4439"
+    ]
+   },
+   {
+    "name": "apa_selective_attention_sp",
+    "kind": "module",
+    "binding_line": 2334,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:8480",
+     "tensor_cuda/src/kernels.cu:8497"
+    ]
+   },
+   {
+    "name": "apa_selective_bwd_variant",
+    "kind": "module",
+    "binding_line": 2518,
+    "device_checks": [
+     "tensor_cuda/src/ops.cpp:1167"
+    ]
+   },
+   {
+    "name": "bp_kernel_4_diagnostic",
+    "kind": "module",
+    "binding_line": 2591,
+    "device_checks": [
+     "tensor_cuda/src/kernels.cu:8683"
+    ]
+   }
+  ],
+  "unchecked": 158,
+  "note": "A1.2: out of scope this round; registered by the lead as HOST-COMPUTE-HMM"
+ }
+}

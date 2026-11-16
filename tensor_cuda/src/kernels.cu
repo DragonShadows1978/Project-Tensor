@@ -572,15 +572,188 @@ __global__ void cast_kernel(const SrcT* s, DstT* d, int64_t n) {
     else throw std::runtime_error("op supports float32/float16/bfloat16 only"); \
   } while (0)
 
+// ------------------------------------------------------------ ENG3: host data path
+// ENG3 E2/E3 (orders/ENG3_HOST_TENSOR_CORE.md + ENG3_R2_RESUME.md). A host (device="cpu") tensor's core members
+// (zeros, full, from_host, to_host, clone, to host->host, astype) run on the CPU and call no CUDA API: std::memcpy,
+// std::memset or a CPU loop. Before ENG3 they called cudaMemset / fill_kernel / cudaMemcpy(DeviceToDevice) /
+// cast kernels on malloc'd memory (working only where the driver enables HMM) and cuda_check_last after a host memcpy
+// (failing with no visible GPU). Device tensors keep their path unchanged.
+//
+// E3: the host casts reproduce the device kernels bit for bit. Each rule below is derived from the device code this TU
+// compiles (sm_89, no fast-math, no -ftz), not from a library cast:
+//  * ld<float> / st<float>: identity.
+//  * ld<__half> = __half2float = PTX cvt.f32.f16 (cuda_fp16.hpp:709): exact widening; half subnormals become float
+//    normals. NaN output: see kHostF16NaNToF32 below (measured on the device, ENG3 probe).
+//  * st<__half> = __float2half = PTX cvt.rn.f16.f32 (cuda_fp16.hpp:550): IEEE 754 round-to-nearest-even, overflow to
+//    +-Inf (|x| >= 65520), float subnormals (< 2^-126) round to a signed zero, half subnormals rounded RNE.
+//  * ld<__nv_bfloat16> = __bfloat162float = `mov.b32 {0,h}` below sm_90 (cuda_bf16.hpp:588): the 16 bits shifted left
+//    by 16, NaN payloads included.
+//  * st<__nv_bfloat16> = __float2bfloat16 = PTX cvt.rn.bf16.f32 on sm_80+ (cuda_bf16.hpp:475): RNE on the top 16 bits
+//    (subnormals kept, overflow to Inf). NaN output: see kHostF32NaNToBF16.
+//  * cast_to_u8_kernel: v = fminf(255, fmaxf(0, rintf(ld(v)))); (uint8_t)v. rintf = cvt.rni (ties to even);
+//    fmaxf(0, NaN) = 0.  cast_from_u8_kernel: st<T>((float)u), exact before st.
+// Prior art: IEEE 754-2008 (binary16, binary32, conversion with roundTiesToEven); the bfloat16 format (Google Brain,
+// 2018-2019; its RNE-by-adding-0x7FFF+lsb formulation is the common one, e.g. TensorFlow's and PyTorch's c10::BFloat16
+// round_to_nearest_even -- unverified, lead to check: "c10 BFloat16 round_to_nearest_even"); the CUDA Math API
+// __float2half_rn / __float2bfloat16_rn semantics and the PTX ISA cvt instruction. Taken: the formats and the rounding
+// rule. Ours: the integer formulation of each rule here and the choice to mirror the engine's ld -> float -> st
+// structure step for step, so a two-step cast (half -> float -> bfloat16) rounds exactly where the device does.
+namespace {
+inline uint32_t host_f32_bits(float f) { uint32_t u; std::memcpy(&u, &f, sizeof u); return u; }
+inline float host_bits_f32(uint32_t u) { float f; std::memcpy(&f, &u, sizeof f); return f; }
+
+// NaN outputs of the device conversions: the cvt instructions return one canonical NaN whatever the input's sign and
+// payload. Measured by the ENG3 device probe on Build B (artifacts/eng3/probe/device_probe.npz: every half NaN ->
+// 0x7FFFFFFF, every float NaN -> half 0x7FFF and bfloat16 0x7FFF); G2 holds every NaN input of its census to it.
+constexpr uint32_t kHostF16NaNToF32 = 0x7FFFFFFFu;  // cvt.f32.f16 of any half NaN
+constexpr uint16_t kHostF32NaNToF16 = 0x7FFFu;      // cvt.rn.f16.f32 of any float NaN
+constexpr uint16_t kHostF32NaNToBF16 = 0x7FFFu;     // cvt.rn.bf16.f32 of any float NaN
+
+// Right shift of an integer significand with round-to-nearest-even (shift >= 1). For shift >= 32 the significand
+// (< 2^24 at every call site) is below half of the result's unit, so the result is 0.
+inline uint32_t host_rne_shift(uint32_t m, int shift) {
+  if (shift >= 32) return 0;
+  const uint32_t q = m >> shift;
+  const uint32_t rem = m & ((1u << shift) - 1u);
+  const uint32_t half = 1u << (shift - 1);
+  return (rem > half || (rem == half && (q & 1u))) ? q + 1u : q;
+}
+
+// st<__half>: cvt.rn.f16.f32.
+uint16_t host_f32_to_f16(float f) {
+  const uint32_t u = host_f32_bits(f);
+  const uint16_t sign = static_cast<uint16_t>((u >> 16) & 0x8000u);
+  const uint32_t exp = (u >> 23) & 0xFFu, man = u & 0x7FFFFFu;
+  if (exp == 0xFFu) return man ? kHostF32NaNToF16 : static_cast<uint16_t>(sign | 0x7C00u);
+  if (exp == 0) return sign;  // float zero or subnormal (< 2^-126): below half of the smallest half subnormal
+  const int e = static_cast<int>(exp) - 127;
+  if (e > 15) return static_cast<uint16_t>(sign | 0x7C00u);  // >= 2^16: overflow to Inf
+  if (e >= -14) {
+    // Normal half: keep 10 of the 23 fraction bits, round the 13 dropped bits to nearest even. A carry out of the
+    // fraction moves into the exponent (and from the largest finite half into 0x7C00, Inf), as in IEEE 754.
+    uint32_t h = (static_cast<uint32_t>(e + 15) << 10) | (man >> 13);
+    const uint32_t rem = man & 0x1FFFu;
+    if (rem > 0x1000u || (rem == 0x1000u && (h & 1u))) ++h;
+    return static_cast<uint16_t>(sign | h);
+  }
+  // Half subnormal: the value is m * 2^(e-23), i.e. m * 2^(e+1) units of 2^-24; a round up to 1024 is the smallest
+  // normal (0x0400), which is the correct encoding.
+  return static_cast<uint16_t>(sign | host_rne_shift(man | 0x800000u, -(e + 1)));
+}
+
+// ld<__half>: cvt.f32.f16 (exact).
+float host_f16_to_f32(uint16_t h) {
+  const uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16;
+  const uint32_t exp = (h >> 10) & 0x1Fu;
+  uint32_t man = h & 0x3FFu;
+  if (exp == 0x1Fu) return host_bits_f32(man ? kHostF16NaNToF32 : (sign | 0x7F800000u));
+  if (exp == 0) {
+    if (man == 0) return host_bits_f32(sign);
+    int e = -14;  // subnormal: normalize into a float normal
+    while (!(man & 0x400u)) { man <<= 1; --e; }
+    return host_bits_f32(sign | (static_cast<uint32_t>(e + 127) << 23) | ((man & 0x3FFu) << 13));
+  }
+  return host_bits_f32(sign | ((exp - 15u + 127u) << 23) | (man << 13));
+}
+
+// st<__nv_bfloat16>: cvt.rn.bf16.f32 (sm_80+): RNE on the dropped 16 bits; no 32-bit overflow for any non-NaN input
+// (the largest, 0xFF800000, plus 0x7FFF stays below 2^32).
+uint16_t host_f32_to_bf16(float f) {
+  const uint32_t u = host_f32_bits(f);
+  if ((u & 0x7FFFFFFFu) > 0x7F800000u) return kHostF32NaNToBF16;
+  const uint32_t lsb = (u >> 16) & 1u;
+  return static_cast<uint16_t>((u + 0x7FFFu + lsb) >> 16);
+}
+
+// ld<__nv_bfloat16> below sm_90: mov.b32 {0,h}.
+inline float host_bf16_to_f32(uint16_t b) { return host_bits_f32(static_cast<uint32_t>(b) << 16); }
+
+[[noreturn]] void host_float_only() { throw std::runtime_error("op supports float32/float16/bfloat16 only"); }
+inline bool host_is_float(DType dt) {
+  return dt == DType::Float32 || dt == DType::Float16 || dt == DType::BFloat16;
+}
+
+// The engine's ld<T>: element i of a float32/float16/bfloat16 buffer, as float.
+float host_ld(DType dt, const void* p, int64_t i) {
+  switch (dt) {
+    case DType::Float32: { float v; std::memcpy(&v, static_cast<const char*>(p) + 4 * i, 4); return v; }
+    case DType::Float16: return host_f16_to_f32(static_cast<const uint16_t*>(p)[i]);
+    case DType::BFloat16: return host_bf16_to_f32(static_cast<const uint16_t*>(p)[i]);
+    default: host_float_only();
+  }
+}
+// The engine's st<T>.
+void host_st(DType dt, void* p, int64_t i, float v) {
+  switch (dt) {
+    case DType::Float32: std::memcpy(static_cast<char*>(p) + 4 * i, &v, 4); return;
+    case DType::Float16: static_cast<uint16_t*>(p)[i] = host_f32_to_f16(v); return;
+    case DType::BFloat16: static_cast<uint16_t*>(p)[i] = host_f32_to_bf16(v); return;
+    default: host_float_only();
+  }
+}
+
+// rintf = cvt.rni.f32.f32: nearest integer, ties to even, sign of a zero result kept. Exact for every float: |v| >=
+// 2^23 (and Inf/NaN) is returned as is; below that, floor(v) and v - floor(v) are exact, so the rounding mode of the
+// host FPU never enters.
+float host_rintf(float v) {
+  if (!(std::fabs(v) < 8388608.0f)) return v;
+  const float fl = std::floor(v);
+  const float d = v - fl;
+  float r = fl;
+  if (d > 0.5f || (d == 0.5f && std::fmod(fl, 2.0f) != 0.0f)) r = fl + 1.0f;
+  return std::copysign(r, v);
+}
+// cast_to_u8_kernel's element rule: fminf(255, fmaxf(0, rintf(v))), then (uint8_t). fmaxf returns the non-NaN operand,
+// so NaN -> 0; +-0 -> 0; +Inf -> 255; -Inf -> 0.
+uint8_t host_to_u8(float v) {
+  v = host_rintf(v);
+  v = (v > 0.0f) ? v : 0.0f;
+  v = (v < 255.0f) ? v : 255.0f;
+  return static_cast<uint8_t>(v);
+}
+
+// NDArray::astype's host branch: the same branch order and refusals as the device branch (to-u8, from-u8, float pair).
+void host_astype_into(const NDArray& src, NDArray& out) {
+  const int64_t n = src.numel();
+  const void* s = src.data_ptr();
+  void* d = out.data_ptr();
+  if (out.dtype == DType::Uint8 && src.dtype != DType::Uint8) {
+    if (!host_is_float(src.dtype)) host_float_only();
+    uint8_t* o = static_cast<uint8_t*>(d);
+    for (int64_t i = 0; i < n; ++i) o[i] = host_to_u8(host_ld(src.dtype, s, i));
+    return;
+  }
+  if (src.dtype == DType::Uint8 && out.dtype != DType::Uint8) {
+    if (!host_is_float(out.dtype)) host_float_only();
+    const uint8_t* in = static_cast<const uint8_t*>(s);
+    for (int64_t i = 0; i < n; ++i) host_st(out.dtype, d, i, static_cast<float>(in[i]));
+    return;
+  }
+  if (!host_is_float(src.dtype) || !host_is_float(out.dtype)) host_float_only();
+  for (int64_t i = 0; i < n; ++i) host_st(out.dtype, d, i, host_ld(src.dtype, s, i));
+}
+}  // namespace
+
 NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
   NDArray a(shape, dtype, device);
-  if (a.numel() > 0) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
+  if (a.numel() > 0) {
+    if (device.is_cuda()) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
+    else std::memset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));  // ENG3 E2: host path, no CUDA call
+  }
   return a;
 }
 NDArray NDArray::full(const Shape& shape, double value, DType dtype, Device device) {
   NDArray a(shape, dtype, device);
   int64_t n = a.numel();
   if (n == 0) return a;
+  if (!device.is_cuda()) {
+    // ENG3 E2/E3: fill_kernel's element rule st<T>(p, i, (float)value) on the CPU; the (float) narrowing is host code
+    // on both paths. Non-float dtypes refuse with DISPATCH_FLOAT's message, as the device path does.
+    if (!host_is_float(dtype)) host_float_only();
+    const float v = static_cast<float>(value);
+    for (int64_t i = 0; i < n; ++i) host_st(dtype, a.data_ptr(), i, v);
+    return a;
+  }
   DISPATCH_FLOAT(dtype, T, {
     fill_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
   });
@@ -680,22 +853,33 @@ NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Dev
   NDArray a(shape, dtype, device);
   size_t bytes = a.numel() * dtype_size(dtype);
   if (bytes == 0) return a;
-  if (device.is_cuda()) cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
-  else std::memcpy(a.data_ptr(), src, bytes);
-  cuda_check_last("from_host");
+  // ENG3 E2 (HOST-TENSOR-NEEDS-DEVICE): the error check belongs to the device copy only; a host copy calls no CUDA API.
+  if (device.is_cuda()) {
+    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
+    cuda_check_last("from_host");
+  } else {
+    std::memcpy(a.data_ptr(), src, bytes);
+  }
   return a;
 }
 void NDArray::to_host(void* dst) const {
   size_t bytes = numel() * dtype_size(dtype);
   if (bytes == 0) return;
-  if (device.is_cuda()) cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
-  else std::memcpy(dst, data_ptr(), bytes);
-  cuda_check_last("to_host");
+  // ENG3 E2: as from_host.
+  if (device.is_cuda()) {
+    cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
+    cuda_check_last("to_host");
+  } else {
+    std::memcpy(dst, data_ptr(), bytes);
+  }
 }
 NDArray NDArray::clone() const {
   NDArray out(shape, dtype, device);
   size_t bytes = numel() * dtype_size(dtype);
-  if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+  if (bytes) {
+    if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+    else std::memcpy(out.data_ptr(), data_ptr(), bytes);  // ENG3 E2: host clone, no CUDA call
+  }
   return out;
 }
 NDArray NDArray::to(Device dev) const {
@@ -729,6 +913,10 @@ NDArray NDArray::astype(DType dt) const {
   NDArray out(shape, dt, device);
   int64_t n = numel();
   if (n == 0) return out;
+  if (!device.is_cuda()) {  // ENG3 E2/E3 (HOST-ASTYPE-HMM): host cast on the CPU, bit-exact to the kernels below
+    host_astype_into(*this, out);
+    return out;
+  }
   if (dt == DType::Uint8 && dtype != DType::Uint8) {
     DISPATCH_FLOAT(dtype, ST, {
       cast_to_u8_kernel<ST><<<nblk(n), kT>>>(static_cast<ST*>(data_ptr()),

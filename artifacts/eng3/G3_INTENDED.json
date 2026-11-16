@@ -1,0 +1,47 @@
+{
+ "registered": "2026-11-16T13:05:45.854739+00:00",
+ "applies_to": "G3 per-ID comparison, Build B (B sources in the worktree) vs Build E (E sources), CPU run and GPU lines alike, same pytest options",
+ "default": "every test ID has the identical outcome (passed/failed/skipped/error/xfailed/xpassed) on both builds; collection errors identical by file; any other difference is a regression",
+ "intended": [
+  {
+   "class": "S_source_pin",
+   "files": [
+    "tensor_cuda/tests/test_apa_mf2_1_sentinel.py",
+    "tensor_cuda/tests/test_apa_phase6.py",
+    "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py",
+    "tensor_cuda/tests/test_apa_mf2_1_short.py",
+    "tensor_cuda/tests/test_apa_sp4g.py",
+    "tensor_cuda/tests/test_eng1.py",
+    "tensor_cuda/tests/test_apa_sp3.py",
+    "tensor_cuda/tests/test_eng2.py",
+    "tensor_cuda/tests/test_dlpack.py",
+    "tests/test_bp_kernel_3.py",
+    "tensor_cuda/tests/test_apa_mf1_quant.py",
+    "tests/test_bp_kernel_4.py",
+    "tensor_cuda/tests/test_apa_sp1_1.py",
+    "tensor_cuda/tests/test_apa_selective_splitk.py",
+    "tensor_cuda/tests/test_apa_pidv.py",
+    "tests/test_bp_kernel_2.py",
+    "tests/test_bp_kernel_1.py"
+   ],
+   "allowed": "passed -> failed (or error), only when the Build E failure text names tensor_cuda/src/kernels.cu or tensor_cuda/src/bindings.cpp",
+   "ruling": "a byte/sha pin of a source file this round edits (kernels.cu core section, bindings.cpp A1.1 hooks and A2.1 Bool branch) moved because of that edit; L38 forbids changing the existing test, so the moved pin is listed, not re-pinned. Files: the suite files that read kernels.cu/bindings.cpp/core.h (grep), core.h is unchanged."
+  },
+  {
+   "class": "H_host_path",
+   "files": "any",
+   "allowed": "failed -> passed, only when the Build B failure text is a host-path CUDA failure of an E2 member ('CUDA error at from_host' / 'CUDA error at to_host' / 'CUDA error at astype' on a host tensor, or an HMM fault)",
+   "ruling": "E2: the host paths no longer need a device (HOST-TENSOR-NEEDS-DEVICE, HOST-ASTYPE-HMM). Build B CPU run cpu_B_srcE showed no such failure text, so none is expected."
+  },
+  {
+   "class": "BOOL_numpy (A2.5)",
+   "ids_reading_bool_numpy": "test_eng2.py rows with dtype bool that call _host_bytes (it slices the first numel bytes of the old float32 buffer); test_eng3's own G1b rows are not in the suite",
+   "allowed": "failed -> passed; passed -> passed (predicted: test_eng2's _host_bytes reads the first numel bytes, which are the same bytes under both outputs)",
+   "ruling": "A2.2: bool .numpy() changes from a float32 garbage array to the correct bool array; any test that relied on the old output is listed here"
+  }
+ ],
+ "excluded_from_suite": {
+  "tensor_cuda/tests/test_terrain_render.py": "L40, writes tracked artifacts/wo*.ppm",
+  "tensor_cuda/tests/test_eng3_host.py": "this round's tests (G1/G1b/G2), run separately"
+ }
+}
