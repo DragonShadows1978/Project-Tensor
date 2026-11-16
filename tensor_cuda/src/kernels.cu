@@ -547,8 +547,18 @@ NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
     if (s < 0) throw std::invalid_argument("NDArray: negative extent");
     empty = empty || s == 0;
     const size_t extent = static_cast<size_t>(s == 0 ? 1 : s);
-    if (extent > limit / bytes)
-      throw std::overflow_error("NDArray: byte size overflows int64 (nonzero extents count next to zero)");
+    if (extent > limit / bytes) {
+      // ENG3-F2 F01. Prior art: P1T contextual shape/dtype diagnostics (2026).
+      // Taken: operand context in errors; ours: this byte-bound refusal site.
+      std::string shape_text = "[";
+      for (size_t i = 0; i < shape_.size(); ++i) {
+        if (i) shape_text += ", ";
+        shape_text += std::to_string(shape_[i]);
+      }
+      shape_text += "]";
+      throw std::overflow_error("NDArray: byte size overflows int64 for shape " + shape_text +
+                                " and dtype " + dtype_name(dtype_) + " (nonzero extents count next to zero)");
+    }
     bytes *= extent;
   }
   storage = std::make_shared<Storage>(empty ? 0 : bytes, device_);

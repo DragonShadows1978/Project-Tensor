@@ -2659,7 +2659,21 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // Taken: rank/index refusal. Ours: strict syntax before CUDA or allocation.
   const auto core_device = [](const std::string& text, const char* who) {
     const auto refuse = [&]() {
-      return py::value_error(std::string(who) + ": invalid device '" + text +
+      // ENG3-F2 F02. Prior art: Python repr and C++17 (2017) hex escapes;
+      // unverified -- lead to check: Python repr nonprintable byte escapes.
+      // Taken: printable diagnostic encoding; ours: escape every input byte
+      // outside ASCII 0x20..0x7e before pybind11 translates the exception.
+      std::string escaped;
+      const char* hex = "0123456789abcdef";
+      for (unsigned char c : text) {
+        if (c >= 0x20 && c <= 0x7e) escaped += static_cast<char>(c);
+        else {
+          escaped += "\\x";
+          escaped += hex[c >> 4];
+          escaped += hex[c & 0x0f];
+        }
+      }
+      return py::value_error(std::string(who) + ": invalid device '" + escaped +
                              "'; expected cpu, cuda, or cuda:N naming the current device");
     };
     if (text == "cpu") return Device{DeviceType::CPU, 0};

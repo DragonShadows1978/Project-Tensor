@@ -631,3 +631,60 @@ def test_g1_cpu_runtime_unavailable():
     row = json.loads(p.stdout.strip().splitlines()[-1])
     record("runtime_unavailable", row)
     print("ENG3F1 runtime unavailable:", row)
+
+
+# ENG3-F2 diagnostic census. Prior art: REV2 boundary cases (2026), pytest
+# parametrization (2004+), Python repr/C++17 hex escapes (2017; unverified --
+# lead to check). Taken: boundary and escaped-string checks; ours: this census.
+@pytest.mark.parametrize("dtype,itemsize", [("float32", 4), ("float16", 2),
+                                            ("bfloat16", 2), ("uint8", 1),
+                                            ("int64", 8), ("bool", 1)])
+@pytest.mark.parametrize("hook", ["_core_zeros", "_core_full"])
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("empty", [False, True], ids=["nonempty", "zero_extent"])
+def test_f2_cpu_overflow_message(dtype, itemsize, hook, device, empty):
+    """Execute the allocating constructor's byte-bound throw, before allocation.
+    Both CPU and bare CUDA descriptors reach the same check without CUDA calls.
+    """
+    shape = [2, 2**62] if itemsize == 1 else [(2**63 - 1) // itemsize + 1]
+    if empty:
+        shape = [0] + shape
+    args = (shape, 1.0, dtype, device) if hook == "_core_full" else (shape, dtype, device)
+    with pytest.raises(OverflowError) as caught:
+        getattr(_C, hook)(*args)
+    message = str(caught.value)
+    assert "byte size overflows" in message, message
+    assert str(shape) in message, message
+    assert "dtype " + dtype in message, message
+    record("f2_overflow", {"hook": hook, "shape": shape, "dtype": dtype,
+                           "device": device, "message": message})
+
+
+_F2_BAD_DEVICES = ["cpu\x00suffix", "cuda\x00suffix", "cuda:0\x00suffix",
+                   "\x00cpu\x00tail", "cpuBAD", "cpu:garbage", "cuda:2147483647",
+                   "cpu\\literal", "cpu'é", "cuda:é\x00tail"] + [
+                       "cpu" + chr(byte) + "tail" for byte in list(range(32)) + [127]]
+
+
+@pytest.mark.parametrize("hook", ["_core_zeros", "_core_full", "_core_to"])
+@pytest.mark.parametrize("device", _F2_BAD_DEVICES)
+def test_f2_cpu_device_message(hook, device):
+    """All device-taking hooks must name the complete escaped offending string.
+    _core_clone has no device-string operand. Reference is independently built
+    from UTF-8 bytes; the census includes every ASCII control byte and DEL.
+    """
+    if hook == "_core_to":
+        args = (_C._core_zeros([1], "float32", "cpu"), device)
+    elif hook == "_core_full":
+        args = ([1], 1.0, "float32", device)
+    else:
+        args = ([1], "float32", device)
+    expected = "".join(chr(byte) if 32 <= byte < 127 else "\\x%02x" % byte
+                       for byte in device.encode("utf-8"))
+    with pytest.raises(ValueError) as caught:
+        getattr(_C, hook)(*args)
+    message = str(caught.value)
+    assert message == (hook + ": invalid device '" + expected +
+                       "'; expected cpu, cuda, or cuda:N naming the current device"), message
+    assert all(32 <= ord(char) < 127 for char in message), message
+    record("f2_device", {"hook": hook, "device": device, "message": message})
