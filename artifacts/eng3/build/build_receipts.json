@@ -1,0 +1,77 @@
+[
+  {
+    "name": "configure_B",
+    "command": [
+      "systemd-run",
+      "--user",
+      "--scope",
+      "-q",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "OOMPolicy=continue",
+      "-p",
+      "CPUWeight=50",
+      "--setenv=TMPDIR=/tmp/eng3_tmp",
+      "nice",
+      "-n",
+      "19",
+      "cmake",
+      "-S",
+      "tensor_cuda",
+      "-B",
+      "tensor_cuda/build-eng3/B",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_CUDA_ARCHITECTURES=89",
+      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
+      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    ],
+    "bound_seconds": 380,
+    "start": "2026-11-16T12:10:08.558325+00:00",
+    "end": "2026-11-16T12:10:13.738273+00:00",
+    "exit": 0,
+    "timeout": false,
+    "log": "artifacts/eng3/build/build_receipts_configure_B.log",
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "TMPDIR": "/tmp/eng3_tmp",
+      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
+    },
+    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
+  },
+  {
+    "name": "build_B",
+    "command": [
+      "systemd-run",
+      "--user",
+      "--scope",
+      "-q",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "OOMPolicy=continue",
+      "-p",
+      "CPUWeight=50",
+      "--setenv=TMPDIR=/tmp/eng3_tmp",
+      "nice",
+      "-n",
+      "19",
+      "cmake",
+      "--build",
+      "tensor_cuda/build-eng3/B",
+      "-j6"
+    ],
+    "bound_seconds": 3300,
+    "start": "2026-11-16T12:10:19.275463+00:00",
+    "end": "2026-11-16T12:12:08.900865+00:00",
+    "exit": 0,
+    "timeout": false,
+    "log": "artifacts/eng3/build/build_receipts_build_B.log",
+    "env": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "TMPDIR": "/tmp/eng3_tmp",
+      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
+    },
+    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
+  }
+]
