@@ -2654,31 +2654,69 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   // and to, which no public entry exposes. The result never requires grad. Prior art: test-only private entry points
   // (e.g. CPython's _testcapi module, PyTorch's torch._C._* test helpers; unverified -- lead to check); no specific
   // prior art for these four.
+  // ENG3-F1 R2: strict parsing is private to these entries. Prior art:
+  // tensor_empty's current-device rule (P1T-FIX4, 2026), TC_MAX_DIMS (8).
+  // Taken: rank/index refusal. Ours: strict syntax before CUDA or allocation.
+  const auto core_device = [](const std::string& text, const char* who) {
+    const auto refuse = [&]() {
+      return py::value_error(std::string(who) + ": invalid device '" + text +
+                             "'; expected cpu, cuda, or cuda:N naming the current device");
+    };
+    if (text == "cpu") return Device{DeviceType::CPU, 0};
+    if (text == "cuda") return Device{DeviceType::CUDA, 0};
+    if (text.compare(0, 5, "cuda:") != 0) throw refuse();
+    const std::string idx = text.substr(5);
+    // As in public empty: an index longer than 9 digits cannot name a device.
+    if (idx.empty() || idx.size() > 9 || idx.find_first_not_of("0123456789") != std::string::npos)
+      throw refuse();
+    const int requested = std::stoi(idx);
+    int current = -1;
+    const cudaError_t e = cudaGetDevice(&current);
+    if (e != cudaSuccess) {
+      cudaGetLastError();
+      throw refuse();
+    }
+    if (requested != current) throw refuse();
+    return Device{DeviceType::CUDA, current};
+  };
   m.def("_core_full",
-        [](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {
+        [core_device](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {
+          const Device dev = core_device(device, "_core_full");
+          if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
+            throw py::value_error("_core_full: rank exceeds TC_MAX_DIMS=8");
           for (int64_t s : shape)
             if (s < 0) throw py::value_error("_core_full: negative extent");
-          return Tensor::make(NDArray::full(Shape(shape.begin(), shape.end()), value, dtype_from_string(dtype),
-                                            Device::from_string(device)),
+          return Tensor::make(NDArray::full(Shape(shape.begin(), shape.end()), value, dtype_from_string(dtype), dev),
                               false);
         },
         py::arg("shape"), py::arg("value"), py::arg("dtype"), py::arg("device"),
         "ENG3 test hook (private): NDArray::full(shape, value, dtype, device).");
   m.def("_core_zeros",
-        [](std::vector<int64_t> shape, const std::string& dtype, const std::string& device) {
+        [core_device](std::vector<int64_t> shape, const std::string& dtype, const std::string& device) {
+          const Device dev = core_device(device, "_core_zeros");
+          if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
+            throw py::value_error("_core_zeros: rank exceeds TC_MAX_DIMS=8");
           for (int64_t s : shape)
             if (s < 0) throw py::value_error("_core_zeros: negative extent");
-          return Tensor::make(
-              NDArray::zeros(Shape(shape.begin(), shape.end()), dtype_from_string(dtype), Device::from_string(device)),
-              false);
+          return Tensor::make(NDArray::zeros(Shape(shape.begin(), shape.end()), dtype_from_string(dtype), dev), false);
         },
         py::arg("shape"), py::arg("dtype"), py::arg("device"),
         "ENG3 test hook (private): NDArray::zeros(shape, dtype, device).");
-  m.def("_core_clone", [](Tensor& t) { return Tensor::make(t.data().clone(), false); }, py::arg("tensor"),
-        "ENG3 test hook (private): NDArray::clone() of the tensor's data.");
+  m.def("_core_clone", [](Tensor& t) {
+          if (t.data().shape.size() > static_cast<size_t>(TC_MAX_DIMS))
+            throw py::value_error("_core_clone: rank exceeds TC_MAX_DIMS=8");
+          for (int64_t s : t.data().shape)
+            if (s < 0) throw py::value_error("_core_clone: negative extent");
+          return Tensor::make(t.data().clone(), false);
+        }, py::arg("tensor"), "ENG3 test hook (private): NDArray::clone() of the tensor's data.");
   m.def("_core_to",
-        [](Tensor& t, const std::string& device) {
-          return Tensor::make(t.data().to(Device::from_string(device)), false);
+        [core_device](Tensor& t, const std::string& device) {
+          const Device dev = core_device(device, "_core_to");
+          if (t.data().shape.size() > static_cast<size_t>(TC_MAX_DIMS))
+            throw py::value_error("_core_to: rank exceeds TC_MAX_DIMS=8");
+          for (int64_t s : t.data().shape)
+            if (s < 0) throw py::value_error("_core_to: negative extent");
+          return Tensor::make(t.data().to(dev), false);
         },
         py::arg("tensor"), py::arg("device"), "ENG3 test hook (private): NDArray::to(device) of the tensor's data.");
   // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).

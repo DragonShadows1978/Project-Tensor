@@ -1,0 +1,30 @@
+--- F/src/kernels.cu
++++ f1m01_bytes_unchecked/src/kernels.cu
+@@ -533,25 +533,8 @@
+ // --------------------------------------------------------------------- NDArray
+ NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
+     : shape(shape_), dtype(dtype_), device(device_) {
+-  // ENG3-F1 R1: check the byte bound before forming a product or allocating.
+-  // Count zeros as 1 for the bound (the existing checked_nbytes rule); the
+-  // actual allocation is zero if any extent is zero. All bytes fit int64,
+-  // the engine's count/offset arithmetic, and size_t on this 64-bit engine.
+-  // Prior art: ISO C++17 [expr]/4 (2017), CWE-190 integer overflow (MITRE,
+-  // year unverified -- lead to check); division-before-multiplication.
+-  // Taken: overflow precondition. Ours: constructor placement and byte bound.
+-  size_t bytes = dtype_size(dtype_);
+-  const size_t limit = static_cast<size_t>(std::numeric_limits<int64_t>::max());
+-  bool empty = false;
+-  for (int64_t s : shape_) {
+-    if (s < 0) throw std::invalid_argument("NDArray: negative extent");
+-    empty = empty || s == 0;
+-    const size_t extent = static_cast<size_t>(s == 0 ? 1 : s);
+-    if (extent > limit / bytes)
+-      throw std::overflow_error("NDArray: byte size overflows int64 (nonzero extents count next to zero)");
+-    bytes *= extent;
+-  }
+-  storage = std::make_shared<Storage>(empty ? 0 : bytes, device_);
++  std::fprintf(stderr, "ENG3F1_EXEC f1m01_bytes_unchecked\n");
++  storage = std::make_shared<Storage>(numel_of(shape_) * dtype_size(dtype_), device_);
+ }
+ NDArray NDArray::empty(const Shape& shape, DType dtype, Device device) {
+   return NDArray(shape, dtype, device);

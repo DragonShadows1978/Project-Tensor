@@ -4,9 +4,11 @@ Amendment 2).
 G1 (tests named *cpu*; they call no CUDA API and pass with CUDA_VISIBLE_DEVICES empty): every E2 member of a host
 tensor works on every supported dtype and equals a NumPy reference built by E3's rules -- from_host through tc.tensor,
 to_host through .numpy(), astype through .astype, and zeros / full / clone / to (host to host) through the private
-test hooks _C._core_zeros / _core_full / _core_clone / _core_to (A1.1). test_g1_cpu_no_cuda_calls proves "no CUDA API"
-with an LD_PRELOAD counter of every libcudart entry point the module imports (artifacts/eng3/tools/cudart_count.c),
-with a positive control. E4 (A1.2: core members only): fill_ still refuses a host tensor.
+test hooks _C._core_zeros / _core_full / _core_clone / _core_to (A1.1). test_g1_cpu_no_cuda_calls counts calls
+through the module's global libcudart imports after import (artifacts/eng3/tools/cudart_count.c), with a positive
+control. It cannot see direct-handle, driver-API or other-library calls. An independent child runs the host paths
+while CUDA runtime initialization fails with CUDA_VISIBLE_DEVICES empty; host errors fail and last-error is checked
+where queryable. E4 (A1.2: core members only): fill_ still refuses a host tensor.
 G1b (Amendment 2): bool .numpy() returns exactly the input values, on host tensors (CPU) and device tensors (GPU).
 G2 (tests named *g2*, GPU): for every dtype pair NDArray::astype dispatches (A1.4), the host cast's bits equal the
 device cast's bits on the same input bits, over the order's value census plus 10,000 seeded random finite values per
@@ -15,14 +17,15 @@ check of each side.
 
 E3's NumPy reference below re-implements the device rules (derived in kernels.cu's ENG3 block from cvt.rn.f16.f32,
 cvt.f32.f16, cvt.rn.bf16.f32, mov.b32 {0,h}, rintf/fmaxf/fminf); its NaN outputs are the ones the ENG3 device probe
-measured on Build B (artifacts/eng3/probe/). half -> float uses NumPy's own exact widening, a second implementation.
+measured on sm_89 Build B over all 2,046 half NaNs and 1,099 distinct float NaN words (artifacts/eng3/probe/).
+Host/device bits agree on that census and architecture; no claim for other architectures (default CMake includes sm_90). half -> float uses NumPy's own exact widening, a second implementation.
 
 Rows are written to ENG3_RECORD_DIR (JSON) when it is set.
 
 Prior art (unverified in this sandbox -- lead to check): IEEE 754-2008 binary16/binary32 and roundTiesToEven; the
 bfloat16 format (Google Brain); CUDA Math API __float2half_rn / __float2bfloat16_rn and the PTX ISA cvt instruction;
 LD_PRELOAD + dlsym interposition (ltrace-style call counting); DeMillo, Lipton and Sayward (1978), mutation testing
-(the tests are written to kill m01-m05). Ours: the value census, the counter-based no-CUDA proof, the host/device
+(the tests are written to kill m01-m05). Ours: the value census, the scoped interposition measurement, the host/device
 same-bits harness.
 """
 import json
@@ -34,7 +37,8 @@ import numpy as np
 import pytest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(HERE))
+PKG_PARENT = os.environ.get("ENG3F1_PACKAGE_PARENT", os.path.dirname(HERE))
+sys.path.insert(0, PKG_PARENT)
 import tensor_cuda as tc  # noqa: E402
 
 _C = tc._C
@@ -192,6 +196,31 @@ def l19(bits, label):
     """L19: each side of a bitwise comparison is nonzero and non-constant, at full width."""
     assert bits.size > 1 and bits.any(), f"{label}: all-zero operand"
     assert (bits != bits.flat[0]).any(), f"{label}: constant operand"
+    assert bits.dtype.kind == "u", f"{label}: must use full-width unsigned view"
+    record("l19", {"label": label, "dtype": str(bits.dtype), "n": int(bits.size)})
+
+
+def identity(got, want, label):
+    """ENG3-F1 R5: guarded identity at the actual unsigned element width.
+
+    Prior art: review's mixed-corpus protocol (2026); NumPy unsigned views.
+    Taken: guard both operands before comparing. Ours: shared assertion site.
+    """
+    assert got.dtype == want.dtype and got.shape == want.shape, label
+    l19(got, label + " got")
+    l19(want, label + " reference")
+    assert np.array_equal(got, want), label
+
+
+def constant_identity(got, want, expected, label):
+    """R5's full exception: an independently built NumPy constant is the reference.
+    Verify its full-width bits before comparing; a nonconstant guard cannot apply to a constant fill.
+    """
+    assert got.dtype == want.dtype and got.shape == want.shape
+    assert got.dtype.kind == "u" and want.dtype.kind == "u"
+    assert np.all(want == expected), (label, "NumPy constant reference bits")
+    assert np.array_equal(got, want), label
+    record("constant_reference", {"label": label, "dtype": str(want.dtype), "bits": hex(int(expected))})
 
 
 # ------------------------------------------------------------------------------------------------ value census
@@ -275,8 +304,7 @@ def test_g1_cpu_tensor_numpy(dt):
         want = bits.astype(UINT[dt])
     assert t.device == "cpu" and t.dtype == dt and t.shape == want.shape
     got = bits_of(t)
-    l19(got, f"tensor/numpy {dt}")
-    assert np.array_equal(got, want)
+    identity(got, want, f"tensor/numpy {dt}")
     record("g1", {"test": "tensor_numpy", "dtype": dt, "n": int(got.size), "mismatches": int((got != want).sum())})
 
 
@@ -301,7 +329,12 @@ def test_g1b_bool_numpy(device, case):
     a = t.numpy()
     assert a.dtype == np.bool_, a.dtype
     assert a.shape == x.shape
-    assert np.array_equal(a.view(np.uint8), x.view(np.uint8))
+    # Include a separately constructed real tensor with both bool values so even
+    # the scalar/all-False/all-True cases form informative full-width operands.
+    companion = tc.tensor(np.array([False, True], np.bool_), device=device, dtype="bool").numpy()
+    assert companion.dtype == np.bool_ and companion.shape == (2,)
+    identity(np.concatenate([a.view(np.uint8), companion.view(np.uint8)]),
+             np.concatenate([x.view(np.uint8), np.array([0, 1], np.uint8)]), "bool " + case)
     record("g1b", {"device": device, "case": case, "n": n, "ok": True})
 
 
@@ -334,10 +367,11 @@ def test_g1_cpu_full(dt):
         t = _C._core_full([2, 3], v, dt, "cpu")
         got = bits_of(t).ravel()
         with np.errstate(over="ignore"):
-            want = ref_st(dt, np.full(6, np.float64(v)).astype(np.float32).view(np.uint32))
-        assert np.array_equal(got, want), (dt, v, got[:2], want[:2])
+            expected = ref_st(dt, np.array([v], np.float64).astype(np.float32).view(np.uint32))[0]
+        want = np.full(6, expected, dtype=UINT[dt])  # independent NumPy constant, no engine fill
+        constant_identity(got, want, expected, f"full {dt} {v}")
         seen.append(int(got[0]))
-    l19(np.array(seen, np.uint64), f"full {dt} over values")
+    l19(np.array(seen, UINT[dt]), f"full {dt} over values")
 
 
 def _host_source(dt):
@@ -353,9 +387,8 @@ def test_g1_cpu_clone(dt):
     assert c.device == "cpu" and c.dtype == dt and c.shape == t.shape
     assert c.data_ptr() != t.data_ptr()
     got = bits_of(c)
-    l19(got, f"clone {dt}")
-    assert np.array_equal(got, before)
-    assert np.array_equal(bits_of(t), before)
+    identity(got, before, f"clone {dt}")
+    identity(bits_of(t), before, f"clone source unchanged {dt}")
 
 
 @pytest.mark.parametrize("dt", ALL)
@@ -365,8 +398,7 @@ def test_g1_cpu_to_cpu(dt):
     c = _C._core_to(t, "cpu")
     assert c.device == "cpu" and c.dtype == dt and c.data_ptr() != t.data_ptr()
     got = bits_of(c)
-    l19(got, f"to {dt}")
-    assert np.array_equal(got, bits_of(t))
+    identity(got, bits_of(t), f"to {dt}")
 
 
 @pytest.mark.parametrize("src,dst", PAIRS_CAST, ids=[f"{s}-{d}" for s, d in PAIRS_CAST])
@@ -375,12 +407,12 @@ def test_g1_cpu_astype(src, dst):
     bits = census_simple(src)
     t = make(src, bits, "cpu")
     inb = bits_of(t)
-    assert np.array_equal(inb, bits.astype(UINT[src]))
+    identity(inb, bits.astype(UINT[src]), f"astype input {src}")
     out = t.astype(dst)
     assert out.device == "cpu" and out.dtype == dst and out.shape == t.shape
     got = bits_of(out)
     want = ref_astype(src, dst, inb)
-    l19(got, f"astype {src}->{dst}")
+    identity(got, want, f"astype {src}->{dst}")
     bad = np.nonzero(got != want)[0]
     record("g1", {"test": "astype", "pair": f"{src}->{dst}", "n": int(got.size), "mismatches": int(bad.size)})
     assert bad.size == 0, [(hex(int(inb[i])), hex(int(got[i])), hex(int(want[i]))) for i in bad[:8]]
@@ -402,7 +434,12 @@ def test_g1_cpu_backward_full_clone():
         x.backward()
         g = x.grad
         assert g.device == "cpu" and g.dtype == dt
-        assert np.array_equal(bits_of(g).ravel(), ref_st(dt, np.ones(6, np.float32).view(np.uint32)))
+        # The gradient seed is constant; combine with the real source tensor to
+        # guard both full-width operands before identity (review mixed corpus).
+        identity(np.concatenate([bits_of(g).ravel(), bits_of(x).ravel()]),
+                 np.concatenate([ref_st(dt, np.ones(6, np.float32).view(np.uint32)),
+                                 ref_st(dt, np.arange(6, dtype=np.float32).view(np.uint32))]),
+                 f"backward seed and source {dt}")
 
 
 def test_g1_cpu_e4_fill_refuses():
@@ -410,7 +447,7 @@ def test_g1_cpu_e4_fill_refuses():
     t = tc.tensor([1.0, 2.0], device="cpu")
     with pytest.raises(RuntimeError, match="fill_: CUDA arrays only"):
         t.fill_(3.0)
-    assert np.array_equal(t.numpy(), np.array([1.0, 2.0], np.float32))
+    identity(bits_of(t), np.array([1.0, 2.0], np.float32).view(np.uint32), "fill refusal preserves source")
 
 
 _NO_CUDA_CHILD = r"""
@@ -457,10 +494,12 @@ print({"host_calls": host_calls, "host_counts": host_counts, "control_calls": L.
 
 
 def test_g1_cpu_no_cuda_calls():
-    """E2's "calls no CUDA API", measured: in a child with CUDA hidden and the libcudart call counter preloaded,
-    every E2 member on every dtype makes zero CUDA runtime calls; the positive control (a device tensor) is counted."""
+    """Counts calls through the module's global libcudart imports after import.
+    Cannot see direct-handle, driver-API or other-library calls. Every E2 host
+    member is exercised; a device attempt is a positive control for this scope.
+    """
     assert os.path.exists(SHIM), SHIM
-    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", LD_PRELOAD=SHIM, ENG3_PKG_PARENT=os.path.dirname(HERE))
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", LD_PRELOAD=SHIM, ENG3_PKG_PARENT=PKG_PARENT)
     p = subprocess.run([sys.executable, "-B", "-P", "-c", _NO_CUDA_CHILD], env=env, capture_output=True, text=True,
                        timeout=300)
     sys.stderr.write(p.stderr)
@@ -496,8 +535,8 @@ def test_g2_host_equals_device(src, dst):
     hin, din = bits_of(h), bits_of(d)
     assert h.device == "cpu" and d.device.startswith("cuda")
     assert hin.dtype == din.dtype and hin.shape == din.shape
-    assert np.array_equal(hin, din), "the two sides must start from the same bits"
-    assert np.array_equal(hin, bits.astype(UINT[src]))
+    identity(hin, din, "same input host/device " + src)
+    identity(hin, bits.astype(UINT[src]), "input matches census " + src)
     ho, do = h.astype(dst), d.astype(dst)
     assert ho.dtype == do.dtype == dst and ho.shape == do.shape
     hb, db = bits_of(ho), bits_of(do)
@@ -505,7 +544,10 @@ def test_g2_host_equals_device(src, dst):
     l19(hb, f"host {src}->{dst}")
     l19(db, f"device {src}->{dst}")
     bad = np.nonzero(hb != db)[0]
-    ref_bad = int((hb != ref_astype(src, dst, hin)).sum())
+    ref = ref_astype(src, dst, hin)
+    assert ref.dtype == hb.dtype and ref.shape == hb.shape
+    l19(ref, f"reference {src}->{dst}")
+    ref_bad = int((hb != ref).sum())
     record("g2", {"pair": f"{src}->{dst}", "n": int(hb.size), "mismatches": int(bad.size),
                   "ref_mismatches": ref_bad, "first": [(hex(int(hin[i])), hex(int(hb[i])), hex(int(db[i])))
                                                         for i in bad[:8]]})
@@ -537,11 +579,55 @@ def test_g2_l55_constructed_values():
              ("float32", "uint8", _f32(254.5), "uint8 .5 tie: rintf(254.5) = 254"),
              ("float32", "uint8", _f32(255.5), "uint8: rintf(255.5) = 256, clamp -> 255")]
     for src, dst, b, rule in cases:
-        arr = np.array([b, b], UINT[src])
+        # Keep the attributed case at offset 0 inside an informative mixed corpus.
+        controls = [0, 0x3C00, 0x4000] if src == "float16" else [0, 0x3F800000, 0x40000000]
+        arr = np.array([b] + controls, UINT[src])
         h, d = make(src, arr, "cpu"), make(src, arr, "cuda")
-        hb, db = bits_of(h.astype(dst))[0], bits_of(d.astype(dst))[0]
-        rows.append({"rule": rule, "pair": f"{src}->{dst}", "input": hex(int(b)), "host": hex(int(hb)),
-                     "device": hex(int(db)), "reference": hex(int(ref_astype(src, dst, arr)[0]))})
+        identity(bits_of(h), arr, "L55 host input " + rule)
+        identity(bits_of(d), arr, "L55 device input " + rule)
+        hb, db = bits_of(h.astype(dst)), bits_of(d.astype(dst))
+        ref = ref_astype(src, dst, arr)
+        identity(hb, db, "L55 host/device " + rule)
+        identity(hb, ref, "L55 independent reference " + rule)
+        rows.append({"rule": rule, "pair": f"{src}->{dst}", "input": hex(int(b)), "offset": 0,
+                     "host": hex(int(hb[0])), "device": hex(int(db[0])), "reference": hex(int(ref[0]))})
         record("l55", rows[-1])
     print(json.dumps(rows, indent=1))
-    assert all(r["host"] == r["device"] == r["reference"] for r in rows), rows
+
+
+_RUNTIME_UNAVAILABLE_CHILD = r"""
+import ctypes, json, os, sys
+sys.path.insert(0, os.environ["ENG3_PKG_PARENT"])
+import numpy as np
+import tensor_cuda as tc
+rt = ctypes.CDLL("/usr/local/cuda-12.6/lib64/libcudart.so")
+rt.cudaGetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
+n = ctypes.c_int(-1)
+init_error = rt.cudaGetDeviceCount(ctypes.byref(n))
+assert init_error != 0, ("CUDA unexpectedly initializes", n.value)
+# On runtimes where GetLastError itself needs initialization, it may return
+# the initialization error. Record that as unqueryable, never call it clean.
+before = rt.cudaGetLastError()
+""" + 'C = tc._C\nfor dt in ("float32", "float16", "bfloat16", "uint8", "int64", "bool"):\n    src = {"bool": np.array([True, False, True]), "uint8": np.array([0, 7, 255], np.uint8),\n           "int64": np.array([1, -2, 3])}.get(dt, np.array([0.5, -1.5, 65520.0, 300.0]))\n    t = tc.tensor(src, device="cpu", dtype=dt)                     # from_host (+ host astype for bfloat16)\n    t.numpy()                                                      # to_host (+ host astype for bfloat16)\n    C._core_zeros([5], dt, "cpu").numpy()                          # zeros\n    if dt in ("float32", "float16", "bfloat16"):\n        C._core_full([5], 2.5, dt, "cpu").numpy()                  # full\n    C._core_clone(t).numpy()                                       # clone\n    C._core_to(t, "cpu").numpy()                                   # to (host to host)\n    for d2 in ("float32", "float16", "bfloat16", "uint8"):\n        if dt in ("int64", "bool") and d2 != dt:\n            continue\n        t.astype(d2).numpy()                                       # astype (every castable pair)\nx = tc.tensor([1.0, 2.0], device="cpu", requires_grad=True)\nx.backward()\nx.grad.numpy()\n' + r"""
+after = rt.cudaGetLastError()
+if before == 0:
+    assert after == 0, ("CUDA error after host paths", after)
+else:
+    assert after in (0, before), ("new CUDA error after host paths", before, after)
+print(json.dumps({"init_error": init_error, "before": before, "after": after,
+                  "last_error_clean": after == 0, "queryable": before == 0}))
+"""
+
+
+def test_g1_cpu_runtime_unavailable():
+    """Independent R4 check: real runtime cannot initialize; every host path must pass.
+    Any host exception fails; cudaGetLastError must be clean where queryable.
+    """
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", ENG3_PKG_PARENT=PKG_PARENT)
+    env.pop("LD_PRELOAD", None)
+    p = subprocess.run([sys.executable, "-B", "-P", "-c", _RUNTIME_UNAVAILABLE_CHILD],
+                       env=env, capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stdout + p.stderr
+    row = json.loads(p.stdout.strip().splitlines()[-1])
+    record("runtime_unavailable", row)
+    print("ENG3F1 runtime unavailable:", row)

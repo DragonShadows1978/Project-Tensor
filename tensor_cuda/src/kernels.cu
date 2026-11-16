@@ -192,6 +192,9 @@ Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(devic
                                cudaGetErrorString(e));
   } else {
     ptr = std::malloc(nbytes);
+    // ENG3-F1 R1. Prior art: ISO C++17 bad_alloc (2017), CWE-252 unchecked
+    // return value (MITRE, year unverified -- lead to check). Ours: this site.
+    if (ptr == nullptr) throw std::bad_alloc();  // pybind11 -> MemoryError
   }
 }
 // P1T-M1 (DLPack import): wrap a producer's memory. No allocation, no pool.
@@ -530,7 +533,25 @@ Storage::~Storage() {
 // --------------------------------------------------------------------- NDArray
 NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
     : shape(shape_), dtype(dtype_), device(device_) {
-  storage = std::make_shared<Storage>(numel_of(shape_) * dtype_size(dtype_), device_);
+  // ENG3-F1 R1: check the byte bound before forming a product or allocating.
+  // Count zeros as 1 for the bound (the existing checked_nbytes rule); the
+  // actual allocation is zero if any extent is zero. All bytes fit int64,
+  // the engine's count/offset arithmetic, and size_t on this 64-bit engine.
+  // Prior art: ISO C++17 [expr]/4 (2017), CWE-190 integer overflow (MITRE,
+  // year unverified -- lead to check); division-before-multiplication.
+  // Taken: overflow precondition. Ours: constructor placement and byte bound.
+  size_t bytes = dtype_size(dtype_);
+  const size_t limit = static_cast<size_t>(std::numeric_limits<int64_t>::max());
+  bool empty = false;
+  for (int64_t s : shape_) {
+    if (s < 0) throw std::invalid_argument("NDArray: negative extent");
+    empty = empty || s == 0;
+    const size_t extent = static_cast<size_t>(s == 0 ? 1 : s);
+    if (extent > limit / bytes)
+      throw std::overflow_error("NDArray: byte size overflows int64 (nonzero extents count next to zero)");
+    bytes *= extent;
+  }
+  storage = std::make_shared<Storage>(empty ? 0 : bytes, device_);
 }
 NDArray NDArray::empty(const Shape& shape, DType dtype, Device device) {
   return NDArray(shape, dtype, device);
@@ -602,12 +623,14 @@ namespace {
 inline uint32_t host_f32_bits(float f) { uint32_t u; std::memcpy(&u, &f, sizeof u); return u; }
 inline float host_bits_f32(uint32_t u) { float f; std::memcpy(&f, &u, sizeof f); return f; }
 
-// NaN outputs of the device conversions: the cvt instructions return one canonical NaN whatever the input's sign and
-// payload. Measured by the ENG3 device probe on Build B (artifacts/eng3/probe/device_probe.npz: every half NaN ->
-// 0x7FFFFFFF, every float NaN -> half 0x7FFF and bfloat16 0x7FFF); G2 holds every NaN input of its census to it.
-constexpr uint32_t kHostF16NaNToF32 = 0x7FFFFFFFu;  // cvt.f32.f16 of any half NaN
-constexpr uint16_t kHostF32NaNToF16 = 0x7FFFu;      // cvt.rn.f16.f32 of any float NaN
-constexpr uint16_t kHostF32NaNToBF16 = 0x7FFFu;     // cvt.rn.bf16.f32 of any float NaN
+// ENG3-F1 R3: NaN bits below were measured on sm_89 builds, over the ENG3
+// probe census (artifacts/eng3/probe/device_probe.npz): all 2,046 half NaNs
+// and 1,099 distinct float NaN words. Host/device NaN bits agree on that
+// census and architecture. No claim is made for other architectures; default
+// CMake also builds sm_90. These constants encode those measured conventions.
+constexpr uint32_t kHostF16NaNToF32 = 0x7FFFFFFFu;  // measured half -> float
+constexpr uint16_t kHostF32NaNToF16 = 0x7FFFu;      // measured float -> half
+constexpr uint16_t kHostF32NaNToBF16 = 0x7FFFu;     // measured float -> bfloat16
 
 // Right shift of an integer significand with round-to-nearest-even (shift >= 1). For shift >= 32 the significand
 // (< 2^24 at every call site) is below half of the result's unit, so the result is 0.
