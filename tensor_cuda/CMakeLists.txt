@@ -67,3 +67,16 @@ set_target_properties(_tensor_cuda PROPERTIES
   # Drop the built module straight into the Python package directory.
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tensor_cuda
 )
+
+# APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+# Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026), unchanged numerics.
+# AB-1 main feature definitions are applied consistently to host bindings and
+# CUDA. Production's initializer is retained. APA-P1-D (R-G): the packed build
+# ships ON, since packed SP keys are the default representation; S3's test
+# hooks (TC_APA_P1_TEST_HOOKS) stay off in the default build.
+option(TC_APA_PACKED "Build packed APA SP/SP-tk8 decode entries (default ON)" ON)
+if(TC_APA_PACKED)
+  target_compile_definitions(_tensor_cuda PRIVATE
+    TC_APA_PACKED=1 TC_APA_EB2B=1 TC_APA_EB3=1 TC_APA_EB4=1
+    APA_EB2B_MUTANT=0 APA_FXTC1_VARIANT_DEFAULT=2)
+endif()

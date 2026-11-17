@@ -2735,3 +2735,116 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("empty_cache", &empty_cache);
   m.def("set_alloc_pooling", &set_alloc_pooling);
 }
+
+// APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+// Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026), unchanged numerics.
+#ifdef TC_APA_PACKED
+// APA_SPO2_D1_BEGIN binding
+// APA_SPO5_BEGIN keyword_binding
+// Prior art: pybind11 keyword defaults (Jakob 2015), taken.
+// Prior art: pybind11 (Jakob 2015); companion initializer preserves file prefix.
+PYBIND11_MODULE(_tensor_cuda_spo2,m) {
+#if defined(TC_APA_P1_TEST_HOOKS) && TC_APA_P1_TEST_HOOKS
+  // Test-only entry for survey S3's two-CTA handshake. pybind11 (Jakob 2015)
+  // scoped GIL release is taken so tests can also exercise native host threads.
+  // No default-build binding or public Python API change.
+  m.def("_p1_test_run",[](bool mixed,Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,
+      py::tuple packed,double scale,double delta,double fraction,bool force,int variant){
+    if(packed.size()!=4)throw std::runtime_error("P1 test: packed tuple size");
+    auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();
+    auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+    std::vector<NDArray> result;
+    {
+      py::gil_scoped_release release;
+      if(mixed)result=tc::apa_eb4_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,fraction,nullptr,"row",force,nullptr,true,true);
+      else result=tc::apa_eb3_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,nullptr,"row",variant==0,true,false,variant);
+    }
+    py::tuple out(result.size());
+    for(size_t i=0;i<result.size();++i)out[i]=result[i].defined()?py::cast(Tensor::make(result[i],false)):py::none();
+    return out;
+  });
+  // APA-P1-F1 LF5 (hooks build only): read the first n merge-ticket slots of
+  // the current device. Declared at block scope; defined in eb3.cuh.
+  std::vector<unsigned> apa_p1f1_merge_tickets(int);
+  m.def("_p1_test_merge_tickets",[](int n){return apa_p1f1_merge_tickets(n);});
+#endif
+
+  auto call=[](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double delta,bool causal,py::object sink,bool diag,bool baseline,bool dump,const std::string& carry,const std::string& dots)->py::object {
+    const NDArray* s=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+    auto r=tc::apa_spo2_run(q.data(),k.data(),kq.data(),v.data(),scale,delta,causal,s,diag||dump,baseline,carry,dots);
+    if(dump)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false),Tensor::make(std::get<3>(r),false));
+    if(diag)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false));
+    return py::cast(Tensor::make(std::get<0>(r),false));
+  };
+  m.def("run",call,py::arg("q"),py::arg("k"),py::arg("kq"),py::arg("v"),py::arg("scale"),py::arg("delta"),py::arg("is_causal")=false,py::arg("sinks")=py::none(),py::arg("diagnostics")=false,py::arg("baseline")=false,py::arg("dump")=false,py::kw_only(),py::arg("carry")="partition",py::arg("dots")="ordered");
+// APA_SPQ1_BEGIN bindings
+// Prior art: pybind11 (Jakob 2015), existing D1 diagnostic tuple convention.
+ m.def("packed_prepare",[](Tensor& k,Tensor& r,int start){auto p=tc::apa_spq1_prepare(k.data(),r.data(),start);return py::make_tuple(Tensor::make(p.first,false),Tensor::make(p.second,false));});
+ m.def("packed_rotate",[](Tensor& q,Tensor& r,int kvh,bool tq){return Tensor::make(tc::apa_spq1_rotate(q.data(),r.data(),kvh,tq),false);});
+ m.def("packed_append",[](Tensor& k,Tensor& codes,Tensor& sc,Tensor& rot,Tensor& norms,Tensor& bnd,int start,bool tq){tc::apa_spq1_pack(k.data(),codes.data(),sc.data(),rot.data(),norms.data(),bnd.data(),start,tq);});
+ m.def("packed_run",[](Tensor& q,Tensor& k,Tensor& v,py::tuple packed,double scale,double delta,bool causal,py::object sink,bool diag,const std::string& fmt,const std::string& carry,bool dump,const std::string& gqa_path)->py::object { // APA_SPQ4: gqa_path keyword, default "r2"
+   if(packed.size()!=4)throw std::runtime_error("packed tuple must be codes,scales,rotation,codebook");
+   auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+   const NDArray* sn=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+   auto r=tc::apa_spq4_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,causal,sn,diag||dump,fmt,carry,gqa_path);
+   if(dump)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false),Tensor::make(std::get<3>(r),false));
+   if(diag)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false));
+   return py::cast(Tensor::make(std::get<0>(r),false));
+ },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("packed"),py::arg("scale"),py::arg("delta"),py::arg("is_causal")=false,py::arg("sinks")=py::none(),py::arg("diagnostics")=false,py::kw_only(),py::arg("fmt"),py::arg("carry")="partition",py::arg("dump")=false,py::arg("gqa_path")="r2");
+m.def("int4_stats",[](Tensor& q,Tensor& codes,Tensor& scales,int S,double scale,double zthr){auto r=tc::apa_spq1_int4_stats(q.data(),codes.data(),scales.data(),S,scale,zthr);return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));});
+// APA_SPQ1_END bindings
+
+#ifdef TC_APA_EB2B
+// Prior art: pybind11/Jakob (2015) and existing packed_run tuple ABI;
+// KIVI (2024) value quantization, ThriftAttention (2026) block precision.
+// Taken: wrapper convention; ours: explicit opt-in EB2b entry points.
+ m.def("eb2b_quantize",[](Tensor& v){auto r=tc::apa_eb2b_quantize(v.data());return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));});
+ m.def("eb2b_values",[](Tensor& v,Tensor& vi,Tensor& vs,Tensor& flags){return Tensor::make(tc::apa_eb2b_values(v.data(),vi.data(),vs.data(),flags.data()),false);});
+ // APA-P1-F1 R4 (P1R-F04): delta and carry are required keyword arguments,
+ // forwarded to the launcher (no launch-site literal). APA-P1-F2 R6
+ // (P1R2-F07): tc/ops.h now declares the current tc::apa_eb2b_run (with delta
+ // and carry), so the binding calls it directly; F1's global bridge is gone.
+ m.def("eb2b_run",[](Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,py::tuple packed,double scale,double fraction,double delta,const std::string& carry,bool force_bf16,bool diag,bool profile)->py::object{
+   if(packed.size()!=4)throw std::runtime_error("apa_eb2b: packed tuple must have four tensors");
+   auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+   auto r=tc::apa_eb2b_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)fraction,(float)delta,carry,force_bf16,diag,profile);
+   if(!diag && !profile)return py::cast(Tensor::make(r[0],false));
+   py::tuple out(r.size());for(size_t i=0;i<r.size();++i)out[i]=r[i].defined()?py::cast(Tensor::make(r[i],false)):py::none();return out;
+ },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("vi"),py::arg("vs"),py::arg("packed"),py::arg("scale"),py::arg("fraction"),py::kw_only(),py::arg("delta"),py::arg("carry"),py::arg("force_bf16")=false,py::arg("diagnostics")=false,py::arg("profile")=false);
+#endif
+#ifdef TC_APA_EB3
+// APA_EB3_BEGIN binding
+// Prior art: pybind11/Jakob (2015) and the existing packed_run tuple ABI.
+// Explicit opt-in entry; never selected by existing APIs.
+ m.def("eb3_run",[](Tensor& q,Tensor& k,Tensor& v,py::tuple packed,double scale,double delta,py::object sink,const std::string& carry,bool diag,bool poison,bool timeline,int variant)->py::object{
+   if(packed.size()!=4)throw std::runtime_error("apa_eb3: packed tuple must be codes,scales,rotation,codebook");
+   auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+   const NDArray* sn=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+   auto r=tc::apa_eb3_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)delta,sn,carry,diag,poison,timeline,variant);
+   if(!diag && !timeline)return py::cast(Tensor::make(r[0],false));
+   py::tuple out(r.size());for(size_t i=0;i<r.size();++i)out[i]=r[i].defined()?py::cast(Tensor::make(r[i],false)):py::none();return out;
+ },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("packed"),py::arg("scale"),py::arg("delta"),py::arg("sinks")=py::none(),py::arg("carry")="partition",py::arg("diagnostics")=false,py::arg("poison")=false,py::arg("timeline")=false,py::arg("variant")=0);   // APA-P1-F1 R3: carry defaults to partition (P1R-F03)
+ m.def("eb3_resources",[](){py::list l;for(auto& t:tc::apa_eb3_resources()){py::dict d;d["kernel"]=std::get<0>(t);d["registers"]=std::get<1>(t);d["static_shared_bytes"]=std::get<2>(t);d["local_bytes"]=std::get<3>(t);d["max_threads"]=std::get<4>(t);d["blocks_per_SM_at_128_threads"]=std::get<5>(t);l.append(d);}return l;});
+// APA_EB3_END binding
+#endif
+#ifdef TC_APA_EB4
+// APA_EB4_BEGIN binding
+// Prior art: pybind11/Jakob (2015) and the existing packed_run tuple ABI (EB3/EB2b entries).
+// Explicit opt-in entry; never selected by existing APIs.
+ m.def("eb4_run",[](Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,py::tuple packed,double scale,double delta,double fraction,py::object sink,const std::string& carry,bool force_bf16,py::object inject,bool diag,bool poison)->py::object{
+   if(packed.size()!=4)throw std::runtime_error("apa_eb4: packed tuple must be codes,scales,rotation,codebook");
+   auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+   const NDArray* sn=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+   const NDArray* inj=inject.is_none()?nullptr:&inject.cast<Tensor&>().data();
+   auto r=tc::apa_eb4_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)delta,(float)fraction,sn,carry,force_bf16,inj,diag,poison);
+   if(!diag)return py::cast(Tensor::make(r[0],false));
+   py::tuple out(r.size());for(size_t i=0;i<r.size();++i)out[i]=r[i].defined()?py::cast(Tensor::make(r[i],false)):py::none();return out;
+ },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("vi"),py::arg("vs"),py::arg("packed"),py::arg("scale"),py::arg("delta"),py::arg("fraction"),py::arg("sinks")=py::none(),py::arg("carry")="partition",py::arg("force_bf16")=false,py::arg("inject")=py::none(),py::arg("diagnostics")=false,py::arg("poison")=false);   // APA-P1-F1 R3: carry defaults to partition (P1R-F03)
+ m.def("eb4_resources",[](){py::list l;for(auto& t:tc::apa_eb4_resources()){py::dict d;d["kernel"]=std::get<0>(t);d["registers"]=std::get<1>(t);d["static_shared_bytes"]=std::get<2>(t);d["local_bytes"]=std::get<3>(t);d["max_threads"]=std::get<4>(t);d["blocks_per_SM_at_128_threads"]=std::get<5>(t);l.append(d);}return l;});
+// APA_EB4_END binding
+#endif
+
+}
+// APA_SPO2_D1_END binding
+
+#endif  // TC_APA_PACKED

@@ -50,7 +50,7 @@ def data(shape, index, seed, draw=0, sample=False):
 
 def quantized(tc, k, bits):
     kt = tc.tensor(k)
-    kqt = tc.quantize_sp2_keys(kt, bits)
+    kqt = tc.quantize_sp2_keys(kt, bits, storage="dense")
     return kt,kqt
 
 

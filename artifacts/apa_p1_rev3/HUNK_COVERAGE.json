@@ -1,0 +1,77 @@
+{
+  "files": 16,
+  "hunks": 38,
+  "coverage": {
+    "scripts/apa_p1f1_sass.py": [
+      "@@ -1,10 +1,24 @@",
+      "@@ -21,6 +35,7 @@ import apa_p1d_sass as p1d  # noqa: E402",
+      "@@ -32,32 +47,70 @@ def demangle(names):",
+      "@@ -70,9 +123,9 @@ def main():",
+      "@@ -89,20 +142,35 @@ def main():"
+    ],
+    "tensor_cuda/include/tc/ops.h": [
+      "@@ -325,7 +325,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_run(const NDArray&,const ND"
+    ],
+    "tensor_cuda/src/apa_spo/eb2b.cuh": [
+      "@@ -106,6 +106,11 @@ __global__ void values_dump(const bf16* v,const int8_t* vi,const float* vs,",
+      "@@ -118,6 +123,9 @@ NDArray apa_eb2b_values(const NDArray& v,const NDArray& vi,const NDArray& vs,con",
+      "@@ -210,19 +218,8 @@ std::vector<NDArray> apa_eb2b_run(const NDArray& q,const NDArray& k,const NDArra"
+    ],
+    "tensor_cuda/src/apa_spo/eb3.cuh": [
+      "@@ -782,9 +782,16 @@ __global__ void __launch_bounds__(128,MINB) select_pv(const bf16* q,const bf16*",
+      "@@ -924,6 +931,7 @@ std::vector<NDArray> apa_eb3_run(const NDArray& q,const NDArray& k,const NDArray",
+      "@@ -933,6 +941,15 @@ std::vector<NDArray> apa_eb3_run(const NDArray& q,const NDArray& k,const NDArray",
+      "@@ -1138,9 +1155,9 @@ std::vector<std::tuple<std::string,int,int,int,int,int>> apa_eb3_resources(){"
+    ],
+    "tensor_cuda/src/apa_spo/eb4.cuh": [
+      "@@ -645,8 +645,11 @@ __global__ void __launch_bounds__(128,eb3::tune::SEL_MINB) select_mixed(const bf"
+    ],
+    "tensor_cuda/src/apa_spo/launcher.cuh": [
+      "@@ -51,6 +51,58 @@ inline const char* apa_spo_knob(const char* name,const char* default_value){",
+      "@@ -88,6 +140,7 @@ inline void apa_spq1_core_check(const char* entry,"
+    ],
+    "tensor_cuda/src/apa_spo/merge.cuh": [
+      "@@ -23,10 +23,18 @@ template<class T> __global__ void merge_kernel(const float* pm,const float* pl,c"
+    ],
+    "tensor_cuda/src/apa_spo/packed.cuh": [
+      "@@ -81,18 +81,31 @@ template<class T> __global__ void pack_int4_rows("
+    ],
+    "tensor_cuda/src/apa_spo/packed_launcher.cuh": [
+      "@@ -10,8 +10,23 @@ void apa_spq1_buffer_check(const NDArray& k,const NDArray& codes,const NDArray&",
+      "@@ -23,16 +38,32 @@ NDArray apa_spq1_rotate(const NDArray& q,const NDArray& r,int KVH,bool tq){"
+    ],
+    "tensor_cuda/src/apa_spo/spq4.cuh": [
+      "@@ -377,6 +377,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_tc(const NDArray& q,const N"
+    ],
+    "tensor_cuda/src/apa_spo/spq6.cuh": [
+      "@@ -204,6 +204,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq6_tq4_tc(const NDArray& q,con"
+    ],
+    "tensor_cuda/src/bindings.cpp": [
+      "@@ -2801,16 +2801,13 @@ m.def(\"int4_stats\",[](Tensor& q,Tensor& codes,Tensor& scales,int S,double scale,"
+    ],
+    "tensor_cuda/tensor_cuda/__init__.py": [
+      "@@ -1632,6 +1632,13 @@ class ApaSpq1Workspace:",
+      "@@ -1665,6 +1672,8 @@ class ApaSpq1Workspace:"
+    ],
+    "tensor_cuda/tensor_cuda/apa_packed.py": [
+      "@@ -62,6 +62,17 @@ PACKED_MEASUREMENT_CLASSES = 32",
+      "@@ -146,6 +157,33 @@ def derive_delta(epsilon, e_q):",
+      "@@ -224,6 +262,9 @@ class PackedSpKeys:",
+      "@@ -309,6 +350,8 @@ class PackedSpKeys:",
+      "@@ -363,6 +406,11 @@ class PackedRegisteredMargins:",
+      "@@ -385,9 +433,12 @@ class PackedRegisteredMargins:",
+      "@@ -395,6 +446,33 @@ class PackedRegisteredMargins:",
+      "@@ -407,6 +485,7 @@ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,",
+      "@@ -415,7 +494,8 @@ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,"
+    ],
+    "tensor_cuda/tensor_cuda/apa_sp2.py": [
+      "@@ -58,7 +58,7 @@ class RegisteredMargins:",
+      "@@ -69,6 +69,15 @@ def quantize_sp2_keys(k, bulk_bits, *, storage=None):",
+      "@@ -82,12 +91,15 @@ def quantize_sp2_keys(k, bulk_bits, *, storage=None):"
+    ],
+    "tensor_cuda/tests/test_apa_p1f2_cpu.py": [
+      "@@ -0,0 +1,538 @@"
+    ]
+  },
+  "method": "all hunks read in receipts002/003/007/008/009; called code in005/006/007/015/022/023"
+}

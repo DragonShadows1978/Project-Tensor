@@ -1,0 +1,144 @@
+--- pre_A1/tensor_cuda/src/apa_spo/eb2b.cuh
++++ A1/tensor_cuda/src/apa_spo/eb2b.cuh
+@@ -139,10 +139,16 @@
+   int64_t RS=(int64_t)rows*S,RC=(int64_t)rows*NC,RB=(int64_t)rows*NB,BF=(int64_t)B*KVH*NB;
+   // Flash-Decoding 2023 split-K arena, inherited SPQ6 layout. Additional
+   // statistics/flags are ephemeral and never substitute reconstructed K.
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={RS,4*RS,diag?4*RS:0,4*RC,4*RC,4*RC,4*RC*128,4*RC,4*RB,BF,diag?4*BF:0,diag?4*rows:0,(diag||profile)?8LL*B*KVH*NC*6:0};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out(q.shape,q.dtype,q.device);int64_t cursor=0;
+-  auto view=[&](Shape shape,DType dtype){cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
++  auto view=[&](Shape shape,DType dtype){cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+   if(diag)prefix=view({B,H,1,S},DType::Float32);
+   NDArray cm=view({B,H,NC},DType::Float32),pm=view({RC},DType::Float32),pl=view({RC},DType::Float32),pa=view({RC*128},DType::Float32);
+--- pre_A1/tensor_cuda/src/apa_spo/eb3.cuh
++++ A1/tensor_cuda/src/apa_spo/eb3.cuh
+@@ -768,8 +768,14 @@
+   if(carry_mode=="row")pk=nc*spq4::C;
+   dim3 grid((unsigned)(B*KVH),std::min(nc,65535),(nc+65534)/65535);
+   int64_t RS=(int64_t)rows*S,RC=(int64_t)rows*nc,TLN=timeline?(int64_t)B*KVH*nc*5*8:0;
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={4*(int64_t)rows*D,RS,4*RS,diag?4*RS:0,4*RC,4*RC,4*RC,4*RC*VD,TLN,TLN};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out({B,H,1,VD},q.dtype,q.device);
+   if(poison){
+     if(cudaMemsetAsync(arena.data_ptr(),0xff,(size_t)total,0)!=cudaSuccess || cudaMemsetAsync(out.data_ptr(),0xff,(size_t)(B*H*VD*2),0)!=cudaSuccess)
+@@ -777,7 +783,7 @@
+   }
+   int64_t cursor=0;
+   auto view=[&](Shape shape,DType dtype)->NDArray{
+-    cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;
++    cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;
+     x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
+   NDArray pq=view({B,H,1,D},DType::Float32);
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+--- pre_A1/tensor_cuda/src/apa_spo/eb4.cuh
++++ A1/tensor_cuda/src/apa_spo/eb4.cuh
+@@ -694,8 +694,14 @@
+   if(carry_mode=="row")pk=nc*spq4::C;
+   dim3 grid((unsigned)(B*KVH),std::min(nc,65535),(nc+65534)/65535);
+   int64_t RS=(int64_t)rows*S,RC=(int64_t)rows*nc,RB=(int64_t)rows*NB,BF=(int64_t)B*KVH*NB;
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={4*(int64_t)rows*D,RS,4*RS,diag?4*RS:0,4*RC,4*RC,4*RC,4*RC*VD,4*RC,4*RB,BF,diag?BF:0,diag?4*BF:0,diag?4*(int64_t)rows:0};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out({B,H,1,VD},q.dtype,q.device);
+   if(poison){
+     if(cudaMemsetAsync(arena.data_ptr(),0xff,(size_t)total,0)!=cudaSuccess || cudaMemsetAsync(out.data_ptr(),0xff,(size_t)(B*H*VD*2),0)!=cudaSuccess)
+@@ -703,7 +709,7 @@
+   }
+   int64_t cursor=0;
+   auto view=[&](Shape shape,DType dtype)->NDArray{
+-    cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;
++    cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;
+     x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
+   NDArray pq=view({B,H,1,D},DType::Float32);
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+--- pre_A1/tensor_cuda/src/apa_spo/launcher.cuh
++++ A1/tensor_cuda/src/apa_spo/launcher.cuh
+@@ -57,12 +57,18 @@
+   // One stream-ordered allocation for all temporaries; output stays separate.
+   // Every slice is 8-byte aligned for the wider FP32-output accumulator.
+   int64_t RS=(int64_t)rows*S,RP=(int64_t)rows*parts,RC=(int64_t)rows*nc;
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={RS,4*RS,(diagnostics||baseline)?4*RS:0,4*RC,4*RS,4*RP,4*RP,4*RP*VD,4*RP*VD*(q.dtype==DType::Float32?2:1)};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out({B,H,1,VD},q.dtype,q.device);
+   int64_t cursor=0;
+   auto view=[&](Shape shape,DType dtype)->NDArray {
+-    cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;
++    cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;
+     x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;
+   };
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+--- pre_A1/tensor_cuda/src/apa_spo/spq4.cuh
++++ A1/tensor_cuda/src/apa_spo/spq4.cuh
+@@ -384,12 +384,18 @@
+   if(carry_mode=="row")pk=nc*spq4::C;
+   dim3 grid((unsigned)(B*KVH),std::min(nc,65535),(nc+65534)/65535);
+   int64_t RS=(int64_t)rows*S,RC=(int64_t)rows*nc;
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={RS,4*RS,diag?4*RS:0,4*RC,4*RC,4*RC,4*RC*VD};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out({B,H,1,VD},q.dtype,q.device);
+   int64_t cursor=0;
+   auto view=[&](Shape shape,DType dtype)->NDArray{
+-    cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;
++    cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;
+     x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+   if(diag)prefix=view({B,H,1,S},DType::Float32);
+--- pre_A1/tensor_cuda/src/apa_spo/spq6.cuh
++++ A1/tensor_cuda/src/apa_spo/spq6.cuh
+@@ -213,12 +213,18 @@
+   if(carry_mode=="row")pk=nc*spq4::C;
+   dim3 grid((unsigned)(B*KVH),std::min(nc,65535),(nc+65534)/65535);
+   int64_t RS=(int64_t)rows*S,RC=(int64_t)rows*nc;
++  // APA-DS1 amendment A2 (2026-11-03): align every arena view for 16B consumers.
++  // Prior art: aligned bump allocation (ISO C++17, 2017) and NVIDIA CUDA
++  // Programming Guide natural vector alignment (2024 version unverified;
++  // lead to check: CUDA float4 natural alignment). Taken: cursor round-up;
++  // ours: apply it to this arena. Device code and arithmetic are unchanged.
++  constexpr int64_t kArenaAlignment = 16;
+   std::vector<int64_t> sizes={RS,4*RS,diag?4*RS:0,4*RC,4*RC,4*RC,4*RC*VD};
+-  int64_t total=0;for(auto n:sizes){total=(total+7)&~int64_t(7);total+=n;}
++  int64_t total=0;for(auto n:sizes){if(n==0)continue;total=(total+kArenaAlignment-1)&~(kArenaAlignment-1);total+=n;} // A3: zero-byte slots; aligned bump allocation (ISO C++17, 2017).
+   NDArray arena({total},DType::Uint8,q.device),out({B,H,1,VD},q.dtype,q.device);
+   int64_t cursor=0;
+   auto view=[&](Shape shape,DType dtype)->NDArray{
+-    cursor=(cursor+7)&~int64_t(7);NDArray x=arena;x.shape=shape;x.dtype=dtype;
++    cursor=(cursor+kArenaAlignment-1)&~(kArenaAlignment-1);NDArray x=arena;x.shape=shape;x.dtype=dtype;
+     x.offset=cursor/dtype_size(dtype);cursor+=x.numel()*dtype_size(dtype);return x;};
+   NDArray mask=view({B,H,1,S},DType::Uint8),bulk=view({B,H,1,S},DType::Float32),prefix;
+   if(diag)prefix=view({B,H,1,S},DType::Float32);

@@ -1,0 +1,95 @@
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n -e counters -e l2_bytes tensor_cuda/src/apa_spo/eb3.cuh tensor_cuda/src/apa_spo/eb4.cuh tensor_cuda/src/apa_spo/eb4_tuning.cuh
+tensor_cuda/src/apa_spo/eb4.cuh:642:// ---- persistent choose tickets (as eb3::counters, separate buffer) ------------------------------------------
+tensor_cuda/src/apa_spo/eb4.cuh:645:inline unsigned* counters(int n,int64_t* bytes=nullptr){
+tensor_cuda/src/apa_spo/eb4.cuh:735:  const bool do_rpf=eb3::tune::REG_RPF>=1 && code_bytes+norm_bytes<=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb4.cuh:736:  const int64_t budget=(int64_t)(eb3::l2_bytes()*eb4::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb4.cuh:744:  unsigned* CTRC=eb4::tune::CHOOSE_SITE==0?eb4::counters((int)(B*KVH)):nullptr;
+tensor_cuda/src/apa_spo/eb4.cuh:756:  unsigned* CTR=eb3::counters((int)(B*KVH));
+tensor_cuda/src/apa_spo/eb4.cuh:779:  int64_t ctr_bytes=0,ctrc_bytes=0;eb3::counters(0,&ctr_bytes);if(CTRC)eb4::counters(0,&ctrc_bytes);
+tensor_cuda/src/apa_spo/eb3.cuh:468:  // counters need no reset launch. Reader: L2-only loads (__ldcg) after a
+tensor_cuda/src/apa_spo/eb3.cuh:688:inline unsigned* counters(int n,int64_t* bytes=nullptr){
+tensor_cuda/src/apa_spo/eb3.cuh:700:inline int64_t l2_bytes(){
+tensor_cuda/src/apa_spo/eb3.cuh:804:  const int64_t budget=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb3.cuh:848:  if(VA.sel==1 && VA.fuse)CTR=eb3::counters((int)(B*KVH));
+tensor_cuda/src/apa_spo/eb3.cuh:903:  int64_t ctr_bytes=0;if(CTR)eb3::counters(0,&ctr_bytes);
+exit=0
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n -e apa_spq1_(rotate|prepare|pack|core) -e <<< -e cuda.*Stream tensor_cuda/src/apa_spo/packed_launcher.cuh tensor_cuda/src/apa_spo/launcher.cuh
+tensor_cuda/src/apa_spo/launcher.cuh:5:std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq1_core(
+tensor_cuda/src/apa_spo/launcher.cuh:87:        apa_spo2_baseline_dump_kernel<T,CAP,W,true><<<dim3(rows,np),128>>>(Q,K,KQ,V,M,BS,PS,PM,PL,PA,H,S,D,VD,scale,delta,KVH,H/KVH,np,pk);
+tensor_cuda/src/apa_spo/launcher.cuh:98:              spq1::bulk_shared<DD,G,TQ><<<chunk_grid,128>>>((float*)pq->data_ptr(),(uint8_t*)packed->data_ptr(),(float*)pscale->data_ptr(),(float*)cb->data_ptr(),BS,(float*)cm.data_ptr(),H,KVH,S,nc,packed->shape[2],scale);
+tensor_cuda/src/apa_spo/launcher.cuh:105:          }else spq1::bulk<CAP,W><<<chunk_grid,128>>>((float*)pq->data_ptr(),(uint8_t*)packed->data_ptr(),(float*)pscale->data_ptr(),(float*)cb->data_ptr(),BS,(float*)cm.data_ptr(),H,KVH,S,D,nc,packed->shape[2],scale,tq);
+tensor_cuda/src/apa_spo/launcher.cuh:106:          cuda_check_last("apa_spq1_packed_bulk");
+tensor_cuda/src/apa_spo/launcher.cuh:117:              spo5::bulk_kernel<T,MG><<<tg,128>>>(Q,KQ,BS,(float*)cm.data_ptr(),H,KVH,S,D,nc,scale);
+tensor_cuda/src/apa_spo/launcher.cuh:119:              spo5::select_kernel<T,CAP,DIAG,MG><<<tg,128>>>(Q,APA_SPO5_MUTANT==5?KQ:K,V,BS,(float*)cm.data_ptr(),M,PS,PM,PL,PA,H,KVH,S,D,VD,nc,pk,scale,delta);
+tensor_cuda/src/apa_spo/launcher.cuh:133:          if(!packed) spo4::bulk_kernel<T,CAP,W><<<heads_grid,128>>>(Q,KQ,BS,(float*)cm.data_ptr(),H,KVH,S,D,nc,scale);
+tensor_cuda/src/apa_spo/launcher.cuh:135:          spo4::select_kernel<T,CAP,W,DIAG><<<heads_grid,128>>>(Q,K,V,BS,(float*)cm.data_ptr(),M,PS,PM,PL,PA,H,KVH,S,D,VD,nc,pk,scale,delta);
+tensor_cuda/src/apa_spo/launcher.cuh:137:        if(!packed) spo2::bulk_kernel<T,CAP,W><<<chunk_grid,128>>>(Q,KQ,BS,(float*)cm.data_ptr(),H,KVH,S,D,nc,scale);
+tensor_cuda/src/apa_spo/launcher.cuh:139:        spo2::select_kernel<T,CAP,W,DIAG><<<chunk_grid,128>>>(Q,K,V,BS,(float*)cm.data_ptr(),(float*)scores.data_ptr(),M,PS,PM,PL,PA,wide.data_ptr(),H,KVH,S,D,VD,nc,pk,scale,delta);
+tensor_cuda/src/apa_spo/launcher.cuh:147:      if(baseline)apa_selective_merge_kernel<T,CAP><<<rows,128>>>(PM,PL,PA,sinks?(T*)sinks->data_ptr():nullptr,(T*)out.data_ptr(),H,VD,parts,sinks?1:0);
+tensor_cuda/src/apa_spo/launcher.cuh:148:      else spo2::merge_kernel<T><<<rows,128>>>(PM,PL,PA,sinks?(T*)sinks->data_ptr():nullptr,(T*)out.data_ptr(),H,VD,parts);
+tensor_cuda/src/apa_spo/packed_launcher.cuh:6: return apa_spq1_core(q,k,kq,v,scale,delta,causal,sinks,diag,baseline,carry,dots);
+tensor_cuda/src/apa_spo/packed_launcher.cuh:14:NDArray apa_spq1_rotate(const NDArray& q,const NDArray& r,int KVH,bool tq){
+tensor_cuda/src/apa_spo/packed_launcher.cuh:19: DISPATCH_FLOAT(q.dtype,T,{spq1::rotate<T><<<q.shape[0]*q.shape[1],128>>>((T*)q.data_ptr(),(float*)r.data_ptr(),(float*)out.data_ptr(),q.shape[1],KVH,D,tq);});
+tensor_cuda/src/apa_spo/packed_launcher.cuh:20: cuda_check_last("apa_spq1_rotate");return out;
+tensor_cuda/src/apa_spo/packed_launcher.cuh:24:std::pair<NDArray,NDArray> apa_spq1_prepare(const NDArray& k,const NDArray& r,int start){
+tensor_cuda/src/apa_spo/packed_launcher.cuh:29: DISPATCH_FLOAT(k.dtype,T,{spq1::prepare<T><<<B*H*N,128>>>((T*)k.data_ptr(),(float*)r.data_ptr(),(float*)rot.data_ptr(),(float*)norm.data_ptr(),H,S,D,start);});
+tensor_cuda/src/apa_spo/packed_launcher.cuh:30: cuda_check_last("apa_spq1_prepare");return {rot,norm};
+tensor_cuda/src/apa_spo/packed_launcher.cuh:33:void apa_spq1_pack(const NDArray& k,NDArray& codes,NDArray& sc,const NDArray& rotated,const NDArray& norms,const NDArray& bnd,int start,bool tq){
+tensor_cuda/src/apa_spo/packed_launcher.cuh:39:   spq1::pack_tq<<<(int64_t(BH)*N*(D/2)+127)/128,128>>>((float*)rotated.data_ptr(),(float*)norms.data_ptr(),(float*)bnd.data_ptr(),(uint8_t*)codes.data_ptr(),(float*)sc.data_ptr(),BH,N,D,codes.shape[2],start);
+tensor_cuda/src/apa_spo/packed_launcher.cuh:41:   DISPATCH_FLOAT(k.dtype,T,{apa_int4_pack_rows_kernel<T><<<(int64_t(BH)*N+3)/4,128>>>((T*)k.data_ptr(),(uint8_t*)codes.data_ptr(),(float*)sc.data_ptr(),BH,S,codes.shape[2],start,N,D);});
+tensor_cuda/src/apa_spo/packed_launcher.cuh:43: cuda_check_last("apa_spq1_pack_rows");
+tensor_cuda/src/apa_spo/packed_launcher.cuh:49: NDArray pq=apa_spq1_rotate(q,r,k.shape[1],fmt=="tq4");
+tensor_cuda/src/apa_spo/packed_launcher.cuh:50: return apa_spq1_core(q,k,k,v,scale,delta,causal,sinks,diag,false,carry,"ordered",&codes,&sc,&pq,&cb,fmt=="tq4");
+tensor_cuda/src/apa_spo/packed_launcher.cuh:63:   apa_selective_int4_stats_kernel<T,CAP,W><<<B*H,128>>>((T*)q.data_ptr(),(uint8_t*)codes.data_ptr(),(float*)scales.data_ptr(),(float*)thr.data_ptr(),(float*)bulk.data_ptr(),B,H,1,S,D,scale,zthr,0,KVH,H/KVH,D/2,codes.shape[2]);};
+exit=0
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n -e apa_eb2b_quantize -e <<< tensor_cuda/src/apa_spo/eb2b.cuh
+103:  eb2b::values_dump<<<(total+127)/128,128>>>((eb2b::bf16*)v.data_ptr(),(int8_t*)vi.data_ptr(),(float*)vs.data_ptr(),(uint8_t*)flags.data_ptr(),(eb2b::bf16*)out.data_ptr(),v.shape[2],total);
+109:std::pair<NDArray,NDArray> apa_eb2b_quantize(const NDArray& v) {
+111:    throw std::runtime_error("apa_eb2b_quantize: CUDA bf16 [...,128] rank3/4 required");
+114:  eb2b::quantize<<<v.numel()/128,128>>>((eb2b::bf16*)v.data_ptr(),(int8_t*)vi.data_ptr(),(float*)scales.data_ptr(),v.numel()/128);
+115:  cuda_check_last("apa_eb2b_quantize");return {vi,scales};
+161:  spq6::bulk_mma_tq<128,2><<<grid,128>>>((float*)pq.data_ptr(),(uint8_t*)codes.data_ptr(),(float*)sc.data_ptr(),(float*)cb.data_ptr(),BS,CM,H,KVH,S,NC,codes.shape[2],scale);
+163:  eb2b::statistics<<<dim3(rows,NC),128>>>(BS,CM,CZ,BL,S,NC,NB);
+165:  eb2b::choose<<<B*KVH,256>>>(CM,CZ,BL,F,diag?(float*)scores.data_ptr():nullptr,diag?(float*)logz.data_ptr():nullptr,H,KVH,NC,NB,fraction,force_bf16);
+168:    spq4::select_pv<128,128,DG,true,PR><<<grid,128>>>(Q,K,V,BS,CM,(uint8_t*)mask.data_ptr(),diag?(float*)prefix.data_ptr():nullptr,(float*)pm.data_ptr(),(float*)pl.data_ptr(),(float*)pa.data_ptr(),H,KVH,S,NC,NC*256,scale,8.1f,(int8_t*)vi.data_ptr(),(float*)vs.data_ptr(),F,(diag||profile)?(unsigned long long*)ticks.data_ptr():nullptr);};
+173:  spo2::merge_kernel<spq4::bf16><<<rows,128>>>((float*)pm.data_ptr(),(float*)pl.data_ptr(),(float*)pa.data_ptr(),nullptr,(spq4::bf16*)out.data_ptr(),H,128,NC);
+exit=0
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n apa_spq1_(rotate|prepare|pack)|apa_eb2b_quantize|apa_eb[34]_run tensor_cuda/include/tc/ops.h tensor_cuda/src/bindings.cpp
+tensor_cuda/include/tc/ops.h:316:std::pair<NDArray,NDArray> apa_spq1_prepare(const NDArray&,const NDArray&,int);
+tensor_cuda/include/tc/ops.h:317:NDArray apa_spq1_rotate(const NDArray&,const NDArray&,int,bool);
+tensor_cuda/include/tc/ops.h:318:void apa_spq1_pack(const NDArray&,NDArray&,NDArray&,const NDArray&,const NDArray&,const NDArray&,int,bool);
+tensor_cuda/include/tc/ops.h:326:std::pair<NDArray,NDArray> apa_eb2b_quantize(const NDArray&);
+tensor_cuda/include/tc/ops.h:334:std::vector<NDArray> apa_eb3_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,const NDArray*,const std::string&,bool,bool,bool,int);
+tensor_cuda/include/tc/ops.h:342:std::vector<NDArray> apa_eb4_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,float,const NDArray*,const std::string&,bool,const NDArray*,bool,bool);
+tensor_cuda/src/bindings.cpp:2757: m.def("packed_prepare",[](Tensor& k,Tensor& r,int start){auto p=tc::apa_spq1_prepare(k.data(),r.data(),start);return py::make_tuple(Tensor::make(p.first,false),Tensor::make(p.second,false));});
+tensor_cuda/src/bindings.cpp:2758: m.def("packed_rotate",[](Tensor& q,Tensor& r,int kvh,bool tq){return Tensor::make(tc::apa_spq1_rotate(q.data(),r.data(),kvh,tq),false);});
+tensor_cuda/src/bindings.cpp:2759: m.def("packed_append",[](Tensor& k,Tensor& codes,Tensor& sc,Tensor& rot,Tensor& norms,Tensor& bnd,int start,bool tq){tc::apa_spq1_pack(k.data(),codes.data(),sc.data(),rot.data(),norms.data(),bnd.data(),start,tq);});
+tensor_cuda/src/bindings.cpp:2776: m.def("eb2b_quantize",[](Tensor& v){auto r=tc::apa_eb2b_quantize(v.data());return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));});
+tensor_cuda/src/bindings.cpp:2794:   auto r=tc::apa_eb3_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)delta,sn,carry,diag,poison,timeline,variant);
+tensor_cuda/src/bindings.cpp:2810:   auto r=tc::apa_eb4_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)delta,(float)fraction,sn,carry,force_bf16,inj,diag,poison);
+exit=0
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n packed_prepare|packed_append|eb2b_quantize|def apa_eb[34]|class ApaSpq1Workspace tensor_cuda/tensor_cuda/__init__.py
+1559:class ApaSpq1Workspace:
+1590:            rotated,norms=_spo2.packed_prepare(k,self.rotation,self.valid_rows)
+1593:        _spo2.packed_append(k,self.codes,self.scales,rotated,norms,self.boundaries,self.valid_rows,self.fmt=="tq4")
+1625:    def apa_eb2b_quantize(v):
+1626:        return _spo2.eb2b_quantize(v)
+1636:    __all__ += ["apa_eb2b_quantize", "apa_eb2b"]
+1643:    def apa_eb3(q, k, v, packed, scale, delta, *, sinks=None, carry="row",
+1652:    def apa_eb3_resources():
+1661:    def apa_eb4(q, k, v, vi, vs, packed, scale, delta, fraction, *, sinks=None, carry="row",
+1670:    def apa_eb4_resources():
+exit=0
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n <<<|cuda.*Stream tensor_cuda/src/apa_spo/parallel.cuh
+exit=1
+
+$ CUDA_VISIBLE_DEVICES= timeout 10s rg -n L82|stream threading|stop and list orders/APA_P1_S3_PROMOTION_ITEMS.md
+199:- **L82:** `rg -n -e counters -e l2_bytes tensor_cuda/src/apa_spo/eb3.cuh tensor_cuda/src/apa_spo/eb4.cuh
+204:  All are in the writable files. The stream threading may reach other `apa_spo/*.cuh` launch helpers
+205:  (`launcher.cuh`, `packed_launcher.cuh`, `parallel.cuh`). If it does, stop and list them; do not edit outside the
+exit=0

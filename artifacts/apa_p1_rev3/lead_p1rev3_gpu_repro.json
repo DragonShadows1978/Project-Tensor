@@ -1,0 +1,61 @@
+{
+ "what": "Lead GPU run of the P1-REV3 staged reproduction, once, via forge-gpu-run --min 30 --max 600 -- timeout 560s python3 <script>, from the p1rev3 worktree root",
+ "script": "artifacts/apa_p1_rev3/repro/r01_finite_norm_overflow.py",
+ "script_sha256": "afce010a8678490475d7571e01de6018a7a5507812039a26e242783a05801150",
+ "log": "logs/p1rev3_repro_01.log (held back)",
+ "log_sha256": "8a0c38249b47a980f3d94f9115390c08af001bcb85db3eca7cd5f0d42c780c3a",
+ "started_utc": "2026-11-16T11:16:34Z",
+ "forge_exit": 0,
+ "result": {
+  "finding": "P1R3-F02",
+  "module_sha256": "6f03b2cdd5d7f9bee4456ed34759c6c710cccfab9a50f9ac0fc6a678c076f579",
+  "tables_loaded": true,
+  "all_inputs_finite": true,
+  "shape": [
+   [
+    1,
+    1,
+    1,
+    64
+   ],
+   [
+    1,
+    1,
+    3,
+    64
+   ],
+   [
+    1,
+    1,
+    3,
+    64
+   ]
+  ],
+  "verdict": "CONFIRMED",
+  "cases": [
+   {
+    "case": "finite_control",
+    "packed_nonfinite_rows": [],
+    "dense_nonfinite_rows": [],
+    "norms": [
+     "0.0",
+     "1.0",
+     "0.0"
+    ]
+   },
+   {
+    "case": "finite_norm_overflow",
+    "packed_nonfinite_rows": [],
+    "dense_nonfinite_rows": [
+     0
+    ],
+    "norms": [
+     "0.0",
+     "inf",
+     "0.0"
+    ]
+   }
+  ]
+ },
+ "summary": "P1R3-F02 CONFIRMED on GPU (Build F2 6f03b2cd): all inputs finite; one key element 1e20 at D64 gives a stored norm of Inf; the packed default returns a finite row where dense SP returns a non-finite row; the finite control agrees on both routes."
+}

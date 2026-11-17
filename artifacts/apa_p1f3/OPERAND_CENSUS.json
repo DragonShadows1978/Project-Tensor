@@ -1,0 +1,80 @@
+{
+  "norm_store": {
+    "ruling": "R2' (P1R3-F02)",
+    "file": "tensor_cuda/src/apa_spo/packed.cuh",
+    "store_lines": [
+      123
+    ],
+    "text": [
+      "norm=__fsqrt_rn(ss);norms[row]=(nonfinite || !isfinite(norm))?__int_as_float(0x7fc00000):norm;}"
+    ],
+    "note": "the one TQ4 key-norm store of the packed route (F2 TQ4_CENSUS: prepare owns the norm; pack_tq copies norms[] verbatim)"
+  },
+  "margin_reads": {
+    "ruling": "R1' (P1R3-F01)",
+    "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+    "lines": [
+      {
+        "line": 402,
+        "text": "registration, quantizer identity and its two entries (4:64, 4:128)."
+      },
+      {
+        "line": 405,
+        "text": "entries: object"
+      },
+      {
+        "line": 426,
+        "text": "if set(table[\"entries\"]) != required:"
+      },
+      {
+        "line": 427,
+        "text": "raise ValueError(\"apa_sp2: packed margin table must contain entries 4:64 and 4:128\")"
+      },
+      {
+        "line": 428,
+        "text": "entries = {}"
+      },
+      {
+        "line": 429,
+        "text": "for key, entry in table[\"entries\"].items():"
+      },
+      {
+        "line": 435,
+        "text": "entries[key] = value"
+      },
+      {
+        "line": 436,
+        "text": "table = cls(digest, MappingProxyType(entries))"
+      },
+      {
+        "line": 466,
+        "text": "refused), the sha256 attribute against PACKED_TABLE_SHA256, and the entries"
+      },
+      {
+        "line": 469,
+        "text": "entries is refused too. Pure Python; no device work."
+      },
+      {
+        "line": 476,
+        "text": "entries = margins.entries"
+      },
+      {
+        "line": 478,
+        "text": "keys = set(entries)"
+      },
+      {
+        "line": 479,
+        "text": "values = {key: entries[key] for key in keys}"
+      },
+      {
+        "line": 481,
+        "text": "raise ValueError(\"apa_sp2: packed margin entries are not a mapping; only the pinned table is accepted\") from exc"
+      },
+      {
+        "line": 486,
+        "text": "raise ValueError(\"apa_sp2: packed margin entries differ from the pinned table's\")"
+      }
+    ],
+    "note": "`entries` is read in load() (building the loaded table), in the dataclass field, and in check_pinned_margins (validation reads); lookup returns PACKED_PINNED_ENTRIES and packed_attention reaches margin values only through lookup"
+  }
+}

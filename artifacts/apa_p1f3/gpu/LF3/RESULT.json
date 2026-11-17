@@ -1,0 +1,188 @@
+{
+  "line": "LF3",
+  "arm": "F3",
+  "module_sha256": "2e557a23eaf228512a2f1a2f0629401d91d02d05705087661be5c48849c0f3e9",
+  "status": "PASS",
+  "method_nothing_launched": "LD_PRELOAD counter of cudaLaunchKernel (F1 SHIM_SOURCE)",
+  "inputs": "large extents by DLPack re-import over small real buffers (F1 reimport)",
+  "checks": [
+    {
+      "id": "LF3 R3' row eb2b_BH_at_bound",
+      "expected": "RuntimeError ['apa_eb2b: geometry/GQA/range mismatch']",
+      "raised": "RuntimeError: apa_eb2b: geometry/GQA/range mismatch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row eb2b_BH_past_bound",
+      "expected": "ValueError ['apa_eb2b', 'B*H', '536870912']",
+      "raised": "ValueError: apa_eb2b: B*H (q batch * q heads; the int row count, times 4, must fit int) = 536870912 exceeds its bound 536870911 (computed in int64 before any narrowing); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row eb2b_BH_2p32",
+      "expected": "ValueError ['apa_eb2b', 'B*H', '4294967296']",
+      "raised": "ValueError: apa_eb2b: B*H (q batch * q heads; the int row count, times 4, must fit int) = 4294967296 exceeds its bound 536870911 (computed in int64 before any narrowing); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_packed_run_r2_fp32",
+      "expected": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_packed_run_tc_tq4",
+      "expected": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_packed_run_tc_int4",
+      "expected": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_q_B_2p31_packed_run_r2_fp32",
+      "expected": "ValueError ['apa_spq4_run (packed_run)', \"operand 'q' axis 0\", '2147483648']",
+      "raised": "ValueError: apa_spq4_run (packed_run): operand 'q' axis 0 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_eb2b",
+      "expected": "ValueError ['apa_eb2b: ', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_eb2b: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_eb3",
+      "expected": "ValueError ['apa_eb3: ', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_eb3: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row extent_k_S_2p31_eb4",
+      "expected": "ValueError ['apa_eb4: ', \"operand 'k' axis 2\", '2147483648']",
+      "raised": "ValueError: apa_eb4: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row zero_q_B0_packed_run_r2",
+      "expected": "RuntimeError ['dimensions must be positive']",
+      "raised": "RuntimeError: apa_sp: dimensions must be positive and fit int",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row zero_q_B0_eb2b",
+      "expected": "RuntimeError ['dimensions must be positive']",
+      "raised": "RuntimeError: apa_eb2b: dimensions must be positive and fit int",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row zero_q_B0_eb3",
+      "expected": "RuntimeError ['dimensions must be positive']",
+      "raised": "RuntimeError: apa_eb3: dimensions must be positive and fit int",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R3' row zero_q_B0_eb4",
+      "expected": "RuntimeError ['dimensions must be positive']",
+      "raised": "RuntimeError: apa_eb4: dimensions must be positive and fit int",
+      "ok": true,
+      "launches": 0,
+      "device_bytes_in_use_delta": 0
+    },
+    {
+      "id": "LF3 R1' stateful mapping (pinned to 4 reads, 0.0 after): runs with the pinned e_q, output bitwise equal to the loaded pinned table's",
+      "equal": true,
+      "informative": [
+        true,
+        true
+      ],
+      "dtype": "float32",
+      "shape": [
+        1,
+        8,
+        1,
+        128
+      ],
+      "e_q": 0.8716110587120056,
+      "mapping_reads": 4,
+      "launches": 4,
+      "ok": true
+    },
+    {
+      "id": "LF3 control after the refusals is bitwise equal: packed_rotate",
+      "ok": true,
+      "equal": true,
+      "informative": [
+        true,
+        true
+      ],
+      "dtype": "float32",
+      "shape": [
+        1,
+        8,
+        1,
+        128
+      ]
+    },
+    {
+      "id": "LF3 control after the refusals is bitwise equal: public default route",
+      "ok": true,
+      "equal": true,
+      "informative": [
+        true,
+        true
+      ],
+      "dtype": "float32",
+      "shape": [
+        1,
+        8,
+        1,
+        128
+      ]
+    },
+    {
+      "id": "LF3 controls launched both times",
+      "ok": true,
+      "before": 5,
+      "after": 5
+    }
+  ],
+  "failed": [],
+  "steps": [
+    {
+      "step": "lf3_f3_measured",
+      "t": 1794831034.7527683,
+      "checks": 18
+    }
+  ],
+  "terminal": "LF3_F3_DONE"
+}

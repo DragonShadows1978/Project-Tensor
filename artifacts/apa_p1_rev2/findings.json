@@ -1,0 +1,205 @@
+{
+  "review": "APA-P1-REV2",
+  "phase": "complete CPU review; GPU reproductions staged only",
+  "created_utc": "2026-11-16T07:16:43Z",
+  "claims_read": true,
+  "verdict": "RED - do not promote without disposition of the findings",
+  "findings": [
+    {
+      "id": "P1R2-F01",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 390,
+      "title": "Packed margin-table pin is not enforced at use",
+      "argument": "PackedRegisteredMargins is publicly constructible with any sha256 and entries. lookup never checks sha256, and packed_attention only checks isinstance. A constructed object with sha256=not-the-pin and e_q=0 is accepted and yields delta=0 at epsilon=1. load also permits overriding expected_sha256. The registered constant protects only the default load call, not every use.",
+      "suggested_fix": "Validate immutable registered provenance and exact authorized entries before lookup/dispatch; prevent unchecked construction or explicitly separate unregistered experimental margins.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "apa_packed.py:354-395,404-419"
+      ],
+      "prior_art": "SHA-256 (NIST FIPS 180-4, 2015) for pinning; no prior art known to me for this exact API repair.",
+      "independent_before_known_items": true,
+      "final_text": "P1R2-F01 \u2014 MAJOR \u2014 apa_packed.py:390. The packed margin pin is checked only by the default loader. Public construction and the expected_sha256 override allow unpinned entries to reach lookup/attention; an unpinned zero margin was accepted on CPU. Fix: enforce registered immutable provenance and entries at use, and separate unchecked experimental construction."
+    },
+    {
+      "id": "P1R2-F02",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/packed.cuh",
+      "line": 95,
+      "title": "Packed TQ4 can hide an infinite key that makes dense SP non-finite",
+      "argument": "D64 KV=1 rotation seed42, q=ones, good zero keys plus k[1,0]=+Inf: prepare produces norm=Inf, all normalized rotation coordinates NaN, pack_tq chooses codebook[0]. Packed rotated dot is negative (-1.6977533 before norm), hence bulk=-Inf and the key is skipped beside zero-score keys. Its softmax weight is zero and output is finite. Dense reconstruction contains 33 +Inf and 31 -Inf components, so q dot Kq is NaN and dense SP output is NaN. -Inf in K has the same normalized NaN case. den!=0 does not repair a score that is -Inf rather than NaN. This is a port interaction exposed by the new default.",
+      "suggested_fix": "Carry any non-finite TQ4 key row as a NaN norm/scale, including infinite norms caused by non-finite inputs; verify against the dense route. Preserve registered finite arithmetic.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "packed.cuh:14-23,89-99,148-151,178-188",
+        "quant.py:122-127"
+      ],
+      "prior_art": "IEEE 754-2008 NaN propagation; mirrors the F1 non-finite sentinel in its INT4 packer (Project-Tensor, 2026), no new algorithm.",
+      "independent_before_known_items": true,
+      "known_item": "P1F1-INF",
+      "lead_severity": "MINOR",
+      "severity_disagreement": "MAJOR: a default production route silently hides a dense non-finite row.",
+      "final_text": "P1R2-F02 \u2014 MAJOR \u2014 packed.cuh:95. With D64, q=ones and an infinite key coordinate, TQ4 can produce bulk=-Inf and skip the key, returning a finite row where dense SP returns NaN. The host construction has 33 positive and 31 negative infinite dense components. Fix: carry non-finite TQ4 keys as a NaN stored norm. Independently found; matches P1F1-INF. I disagree with its MINOR rating."
+    },
+    {
+      "id": "P1R2-F04",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 225,
+      "title": "Packed capacity is unbounded before native signed-int narrowing",
+      "argument": "PackedSpKeys accepts any Python int capacity >= visible rows. ApaSpq1Workspace and buffer_check do not cap it. Native packers and bulk launchers pass codes.shape[2] to signed int capacity/dst_s. Capacity 2**31 becomes -2147483648; with B*KV>=2 the second head addresses before the codes/scales allocation. D64 B*KV=2 requires 154618822656 owned bytes, feasible on sufficiently large supported devices; no smaller capacity contract is stated. The new default owner inherits this unsafe port boundary. This is an unguarded range precondition; on small devices allocation fails first. No allocation or device reproduction was attempted.",
+      "suggested_fix": "Reject every extent/capacity and required product that cannot fit the receiving native index type before allocation or launch; alternatively widen the complete indexing chain to int64.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "apa_packed.py:223-239",
+        "packed_launcher.cuh:8-12,34-43",
+        "launcher.cuh:184-191"
+      ],
+      "prior_art": "ISO C++ integer conversion/range rules (C++17, 2017); no prior art known to me for the exact boundary repair.",
+      "independent_before_known_items": true,
+      "final_text": "P1R2-F04 \u2014 MINOR \u2014 apa_packed.py:225. Capacity has no upper bound before native int narrowing. At capacity=2**31, a second KV head can index before codes/norms; the D64 two-head case requires 144 GiB, so smaller devices fail allocation first. Fix: reject unsupported capacities/products before allocation or widen the entire indexing chain."
+    },
+    {
+      "id": "P1R2-F05",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+      "line": 935,
+      "title": "Validation remains incomplete at raw helpers and EB3 timeline dispatch",
+      "argument": "variant=0,timeline=True,G in {3,5,6,7,8} passes all early checks, launches query rotation and bulk, then byG rejects because REG requires !timeline. Only G=2,4 timeline templates exist. The F1 claim that every refusal precedes the first launch is incomplete. Raw packed_rotate and packed_prepare also admit B=0 (and packed_append admits zero leading axes with nonzero N), then attempt a zero-grid CUDA launch. Their host validation lacks positive-extent checks, so the F1 every-entry claim misses these sites reached by the new default.",
+      "suggested_fix": "Validate positive extents and range products in raw rotate/prepare/append, and reject unsupported EB3 timeline/G combinations before any allocation poisoning or launch.",
+      "evidence": [
+        "eb3.cuh:931-935,1001-1032,1053-1069,1083",
+        "packed_launcher.cuh:14-30,33-45",
+        "BOUNDARY_CENSUS.md",
+        "repro/r03_empty_helpers.py"
+      ],
+      "prior_art": "Ordinary precondition validation; no prior art known to me.",
+      "independent_before_known_items": true,
+      "additional_sites_found_after_blind": true,
+      "final_text": "P1R2-F05 \u2014 MINOR \u2014 eb3.cuh:935 and packed_launcher.cuh:14-45. Registered EB3 timeline calls with G=3/5/6/7/8 refuse after rotation and bulk. Raw rotate/prepare/append also omit positive leading-extent checks and can attempt a zero-grid launch. Fix: validate these combinations and extents before device work."
+    },
+    {
+      "id": "P1R2-F06",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/apa_spo/merge.cuh",
+      "line": 27,
+      "title": "Merge parity claims omit finite overflow and non-finite sinks",
+      "argument": "The comment and F1 finite-input claim assume finite inputs imply a non-NaN denominator. They do not. With finite q=k=kq=ones at D128 and finite scale=FLT_MAX, bulk and exact scores overflow to +Inf; exp(Inf-Inf) gives NaN. Build B guard emits finite zeros; Build F emits NaNs. Thus the guard preserves every finite nonnegative-denominator result, but not every result from finite operands. The same reasoning applies to the EB3/EB4 guard changes. With finite key logits and a NaN or +Inf sink, dense SP rescales a finite numerator and then multiplies by inv=0, giving finite zeros; F now divides that numerator by NaN and returns NaNs. A -Inf sink remains finite and agrees. These are additional default-route behavior differences beyond q/k/v NaN repair. A separate constructed q=+Inf coordinate with all negative finite keys (or q=-Inf with positive keys) also returns finite zero in dense online SP but NaN in the packed chunk normalizer; this is a non-finite parity limit, not a finite-denominator result change.",
+      "suggested_fix": "Bound the finite identity claim to finite intermediate scores/denominators and record overflow and NaN/+Inf-sink behavior as explicit intended changes, or define and implement the desired dense parity. Do not restore NaN masking for q/k/v.",
+      "evidence": [
+        "receipts/039_numeric_boundaries.log",
+        "merge.cuh:14-30",
+        "kernels.cu:2172-2194",
+        "eb3.cuh:781-791",
+        "eb4.cuh:644-653",
+        "repro/r02_finite_overflow.py",
+        "receipts/050_nonfinite_extremes_script.log",
+        "repro/r01_inf_key_default.py"
+      ],
+      "prior_art": "IEEE 754-2008 overflow and NaN arithmetic; Higham (2002) finite-precision analysis. No new algorithm.",
+      "independent_before_known_items": false,
+      "final_text": "P1R2-F06 \u2014 MINOR \u2014 merge.cuh:27. Finite inputs can overflow scores to Inf and make den=NaN: B returns zeros while F returns NaNs. NaN/+Inf sinks also make F non-finite where dense returns zeros. Fix: explicitly define these behavior changes and narrow the finite-identity claim, or implement the required parity; retain q/k/v NaN propagation."
+    },
+    {
+      "id": "P1R2-F07",
+      "severity": "NIT",
+      "file": "tensor_cuda/include/tc/ops.h",
+      "line": 328,
+      "title": "Obsolete EB2b declaration has no definition",
+      "argument": "ops.h still declares the old 14-argument tc::apa_eb2b_run. The only definition now takes delta and carry as well. The Python build works through a distinct global bridge, but a native caller using the declared old overload cannot link.",
+      "suggested_fix": "Declare the current signature in the shared header, remove the obsolete declaration, and bind the tc function directly. Keep bridge declarations in a common header if any bridge remains.",
+      "evidence": [
+        "receipts/038_ops_cmake_tests.log",
+        "eb2b.cuh:138-141,221-228",
+        "bindings.cpp:2807-2816"
+      ],
+      "prior_art": "ISO C++17 (2017) external linkage and declarations; ordinary API plumbing, no new algorithm.",
+      "known_item": "F1-D3",
+      "independent_before_known_items": false,
+      "disposition": "Fix once and close; no further NIT review round requested.",
+      "final_text": "P1R2-F07 \u2014 NIT \u2014 ops.h:328. The old 14-argument EB2b overload remains declared without a definition; Python works through a global bridge. Fix: update the shared declaration and bind the current tc function directly. Known F1-D3; fix once and close."
+    },
+    {
+      "id": "P1R2-F08",
+      "severity": "NIT",
+      "file": "scripts/apa_p1f1_sass.py",
+      "line": 118,
+      "title": "SASS receipt pins the inactive expectation and miscounts suffix renames",
+      "argument": "The r2 comparison used EXPECTED_SASS_F_r2.json (sha256 30c58ef0bbbd96034f41d2f040bc43fa3ab0d036ec7356bb6a1c4c5433235802), but expected_json_sha256 names EXPECTED.json (8ee14b874eaf3cf156d7ba060b06ca450897131e5f17ac5a20460d16590af6a1). Those predicates differ on six removals. Its symbol_suffix_renames=17 counts three added functions as renames; there are 14 paired renamed functions. Substantive SASS counts are correct.",
+      "suggested_fix": "Record the active override path/hash alongside the immutable original registration and count paired suffix changes separately from added functions. Preserve original G7 FAIL.",
+      "evidence": [
+        "receipts/023_sass_audit.log",
+        "receipts/041_regression_recompute.log",
+        "scripts/apa_p1d_sass.py:60-71",
+        "scripts/apa_p1f1_sass.py:57-64,118"
+      ],
+      "prior_art": "SHA-256 (NIST FIPS 180-4, 2015); ordinary provenance bookkeeping, no new algorithm.",
+      "known_item": "F1-RCPT (pin); rename-count labeling additionally recomputed here",
+      "independent_before_known_items": false,
+      "disposition": "Review observation in evidence scripts outside product diff; fix once and close.",
+      "final_text": "P1R2-F08 \u2014 NIT \u2014 scripts/apa_p1f1_sass.py:118. The SASS receipt pins the original expectation rather than the active override. Its 17 suffix renames comprise 14 paired renames plus three additions. Fix: record both expectation hashes and separate those counts; preserve original G7 FAIL. The pin issue is known F1-RCPT."
+    },
+    {
+      "id": "P1R2-F09",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tensor_cuda/apa_sp2.py",
+      "line": 85,
+      "title": "Default factory result cannot append a decode token",
+      "argument": "The factory always calls PackedSpKeys(k) without a capacity argument. The constructor sets capacity=S, so append of any larger exact K is refused. Direct PackedSpKeys(k,capacity=N) works and is the current workaround; the default returned owned object cannot use its append interface to grow.",
+      "suggested_fix": "Forward an explicit capacity keyword through the public factory, with storage-specific validation, so callers can reserve packed capacity before decode.",
+      "evidence": [
+        "apa_sp2.py:61,85",
+        "apa_packed.py:223-225,305-307",
+        "receipts/045_public_route_census.log"
+      ],
+      "prior_art": "Capacity reservation in standard containers (std::vector::reserve, ISO C++ 1998) and inherited ApaSpq1Workspace (Project-Tensor 2026); no new algorithm.",
+      "known_item": "P1Q-API",
+      "independent_before_known_items": false,
+      "final_text": "P1R2-F09 \u2014 MINOR \u2014 apa_sp2.py:85. The default factory reserves capacity=S, so its result cannot append another token. Direct construction with capacity=N works. Fix: forward a validated capacity keyword. Known P1Q-API; not independently recorded before the known-item list."
+    }
+  ],
+  "withdrawn_findings": [
+    {
+      "id": "P1R2-F03",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "line": 26,
+      "title": "Non-finite V sentinel changes finite output columns into NaNs",
+      "argument": "A single NaN or either infinity at V[token,0] now sets one NaN scale for the entire token. eb2b::value8 multiplies all 128 int8 coordinates by that scale. Every low-precision V column becomes NaN, although dense SP remains finite in the other 127 columns with finite scores. Affects EB2b quantize/values and EB2b/EB4 whenever that token is fetched as int8; high-precision flag rows bypass the sentinel. The host constructed instance has 127 dense finite columns and zero sentinel-route finite columns.",
+      "suggested_fix": "Preserve coordinate-level non-finite behavior, for example force the block containing a non-finite V token to fetch original BF16 values, carrying the classification through choose, rather than poisoning every coordinate.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "eb2b.cuh:18-27",
+        "eb2b_values.cuh:12-24,39-48"
+      ],
+      "prior_art": "IEEE 754-2008 coordinate-wise propagation; ThriftAttention (Sharratt, 2026) block precision is inherited, exact remedy not literature-verified.",
+      "disposition": "WITHDRAWN after reading F1 R1: the registered non-finite contract compares row sets and explicitly prescribes a row scale carry. Coordinate spreading is reported as a behavior limit, not a separate failure of that contract."
+    }
+  ],
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 2,
+    "MINOR": 4,
+    "NIT": 2,
+    "withdrawn": 1
+  },
+  "scope": "Review of e2fb85a1..710cc0d4 tensor_cuda and called port code; CPU-only source/arithmetic/symbol/SASS/receipt checks. No builds, GPU execution or model-quality claims.",
+  "blind_snapshot_sha256": "39dbf435e8dc127d224d03e4973c746ad0784d6799a468ae250f3d2e414ce2c1",
+  "reproductions": [
+    {
+      "path": "repro/r01_inf_key_default.py",
+      "finding": "P1R2-F02",
+      "status": "STAGED; py_compile only"
+    },
+    {
+      "path": "repro/r02_finite_overflow.py",
+      "finding": "P1R2-F06",
+      "status": "STAGED; py_compile only"
+    },
+    {
+      "path": "repro/r03_empty_helpers.py",
+      "finding": "P1R2-F05",
+      "status": "STAGED; py_compile only"
+    }
+  ]
+}

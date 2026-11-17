@@ -1,0 +1,82 @@
+{
+  "review": "APA-P1-REV2",
+  "phase": "blind-first-version",
+  "created_utc": "2026-11-16T07:16:43Z",
+  "claims_read": false,
+  "verdict": "RED - findings require disposition before promotion",
+  "findings": [
+    {
+      "id": "P1R2-F01",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 390,
+      "title": "Packed margin-table pin is not enforced at use",
+      "argument": "PackedRegisteredMargins is publicly constructible with any sha256 and entries. lookup never checks sha256, and packed_attention only checks isinstance. A constructed object with sha256=not-the-pin and e_q=0 is accepted and yields delta=0 at epsilon=1. load also permits overriding expected_sha256. The registered constant protects only the default load call, not every use.",
+      "suggested_fix": "Validate immutable registered provenance and exact authorized entries before lookup/dispatch; prevent unchecked construction or explicitly separate unregistered experimental margins.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "apa_packed.py:354-395,404-419"
+      ],
+      "prior_art": "SHA-256 (NIST FIPS 180-4, 2015) for pinning; no prior art known to me for this exact API repair."
+    },
+    {
+      "id": "P1R2-F02",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/packed.cuh",
+      "line": 95,
+      "title": "Packed TQ4 can hide an infinite key that makes dense SP non-finite",
+      "argument": "D64 KV=1 rotation seed42, q=ones, good zero keys plus k[1,0]=+Inf: prepare produces norm=Inf, all normalized rotation coordinates NaN, pack_tq chooses codebook[0]. Packed rotated dot is negative (-1.6977533 before norm), hence bulk=-Inf and the key is skipped beside zero-score keys. Its softmax weight is zero and output is finite. Dense reconstruction contains 33 +Inf and 31 -Inf components, so q dot Kq is NaN and dense SP output is NaN. -Inf in K has the same normalized NaN case. den!=0 does not repair a score that is -Inf rather than NaN. This is a port interaction exposed by the new default.",
+      "suggested_fix": "Carry any non-finite TQ4 key row as a NaN norm/scale, including infinite norms caused by non-finite inputs; verify against the dense route. Preserve registered finite arithmetic.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "packed.cuh:14-23,89-99,148-151,178-188",
+        "quant.py:122-127"
+      ],
+      "prior_art": "IEEE 754-2008 NaN propagation; mirrors the F1 non-finite sentinel in its INT4 packer (Project-Tensor, 2026), no new algorithm."
+    },
+    {
+      "id": "P1R2-F03",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "line": 26,
+      "title": "Non-finite V sentinel changes finite output columns into NaNs",
+      "argument": "A single NaN or either infinity at V[token,0] now sets one NaN scale for the entire token. eb2b::value8 multiplies all 128 int8 coordinates by that scale. Every low-precision V column becomes NaN, although dense SP remains finite in the other 127 columns with finite scores. Affects EB2b quantize/values and EB2b/EB4 whenever that token is fetched as int8; high-precision flag rows bypass the sentinel. The host constructed instance has 127 dense finite columns and zero sentinel-route finite columns.",
+      "suggested_fix": "Preserve coordinate-level non-finite behavior, for example force the block containing a non-finite V token to fetch original BF16 values, carrying the classification through choose, rather than poisoning every coordinate.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "eb2b.cuh:18-27",
+        "eb2b_values.cuh:12-24,39-48"
+      ],
+      "prior_art": "IEEE 754-2008 coordinate-wise propagation; ThriftAttention (Sharratt, 2026) block precision is inherited, exact remedy not literature-verified."
+    },
+    {
+      "id": "P1R2-F04",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 225,
+      "title": "Packed capacity is unbounded before native signed-int narrowing",
+      "argument": "PackedSpKeys accepts any Python int capacity >= visible rows. ApaSpq1Workspace and buffer_check do not cap it. Native packers and bulk launchers pass codes.shape[2] to signed int capacity/dst_s. Capacity 2**31 becomes -2147483648; with B*KV>=2 the second head addresses before the codes/scales allocation. D64 B*KV=2 requires 154618822656 owned bytes, feasible on sufficiently large supported devices; no smaller capacity contract is stated. The new default owner inherits this unsafe port boundary.",
+      "suggested_fix": "Reject every extent/capacity and required product that cannot fit the receiving native index type before allocation or launch; alternatively widen the complete indexing chain to int64.",
+      "evidence": [
+        "receipts/016_blind_host.log",
+        "apa_packed.py:223-239",
+        "packed_launcher.cuh:8-12,34-43",
+        "launcher.cuh:184-191"
+      ],
+      "prior_art": "ISO C++ integer conversion/range rules (C++17, 2017); no prior art known to me for the exact boundary repair."
+    },
+    {
+      "id": "P1R2-F05",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+      "line": 935,
+      "title": "EB3 timeline still refuses supported GQA groups after launching kernels",
+      "argument": "variant=0,timeline=True,G in {3,5,6,7,8} passes all early checks, launches query rotation and bulk, then byG rejects because REG requires !timeline. Only G=2,4 timeline templates exist. The F1 claim that every refusal precedes the first launch is incomplete.",
+      "suggested_fix": "Reject unsupported timeline/G combinations in host validation before allocation, poisoning or query rotation, or instantiate the advertised combinations.",
+      "evidence": [
+        "eb3.cuh:931-935,1001-1032,1053-1069,1083"
+      ],
+      "prior_art": "Ordinary precondition validation; no prior art known to me."
+    }
+  ]
+}

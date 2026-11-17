@@ -1,0 +1,68 @@
+--- A3/apa_eb4_run
++++ A1/apa_eb4_run
+@@ -1,6 +1,6 @@
+ apa_eb4_run(const NDArray& q,const NDArray& k,const NDArray& v,const NDArray& vi,const NDArray& vs,
+   const NDArray& codes,const NDArray& sc,const NDArray& rot,const NDArray& cb,float scale,float delta,float fraction,
+-  const NDArray* sinks,const std::string& carry_mode,bool force_bf16,const NDArray* inject,bool diag,bool poison,int64_t visible,int64_t k_row_stride,int64_t v_row_stride,int64_t vi_row_stride,int64_t vs_row_stride){
++  const NDArray* sinks,const std::string& carry_mode,bool force_bf16,const NDArray* inject,bool diag,bool poison){
+   if(carry_mode!="partition" && carry_mode!="row")throw std::runtime_error("carry must be partition or row");
+   const char* flag=std::getenv("TC_APA_SP");
+   if(!flag || std::strcmp(flag,"1")!=0)throw std::runtime_error("apa_sp: experimental entry requires TC_APA_SP=1 (default OFF)");
+@@ -11,30 +11,20 @@
+   if(q.ndim()!=4 || k.ndim()!=4 || v.ndim()!=4)throw std::runtime_error("apa_eb4: q/k/v must be rank four");
+   if(q.dtype!=DType::BFloat16 || k.dtype!=DType::BFloat16 || v.dtype!=DType::BFloat16)throw std::runtime_error("apa_eb4: bfloat16 q/k/v required");
+   for(const NDArray* a:{&q,&k,&v,&vi,&vs,&codes,&sc,&rot,&cb})if(!a->device.is_cuda() || a->device.index!=q.device.index)throw std::runtime_error("apa_eb4: inputs must share one CUDA device");
+-  const int64_t B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3],KVH=k.shape[1],S=apa_ds1::visible(visible,k.shape[2]),VD=v.shape[3];
++  const int64_t B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3],KVH=k.shape[1],S=k.shape[2],VD=v.shape[3];
+   if(L!=1)throw std::runtime_error("apa_eb4: requires L=1");
+-  if(KVH<=0 || H%KVH!=0 || k.shape[0]!=B || k.shape[3]!=D || v.shape[0]!=B || v.shape[1]!=KVH)throw std::runtime_error("apa_eb4: shape/GQA mismatch");
++  if(KVH<=0 || H%KVH!=0 || k.shape[0]!=B || k.shape[3]!=D || v.shape[0]!=B || v.shape[1]!=KVH || v.shape[2]!=S)throw std::runtime_error("apa_eb4: shape/GQA mismatch");
+   if(D!=128 || VD!=128)throw std::runtime_error("apa_eb4: D=VD=128 only");
+-  if(vi.ndim()!=4 || vi.dtype!=DType::Uint8 || vi.shape[0]!=B || vi.shape[1]!=KVH || vi.shape[3]!=VD || vs.ndim()!=3 || vs.dtype!=DType::Float32 || vs.shape[0]!=B || vs.shape[1]!=KVH)throw std::runtime_error("apa_eb4: int8 V (uint8 bits, v's shape) and fp32 per-token scales [B,KVH,S] required");
++  if(vi.dtype!=DType::Uint8 || vi.shape!=v.shape || vs.dtype!=DType::Float32 || vs.shape!=Shape({B,KVH,S}))throw std::runtime_error("apa_eb4: int8 V (uint8 bits, v's shape) and fp32 per-token scales [B,KVH,S] required");
+   int G=(int)(H/KVH);
+   if(G!=2 && G!=4 && G!=8)throw std::runtime_error("apa_eb4: H/KVH must be 2, 4 or 8 (instantiated groups)");
+-  if(S<1 || S>(int64_t)eb4::BLK*eb4::tune::NSORT_MAX || apa_ds1::mul(B,H)>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_eb4: dimension range (S <= 65536)");
++  if(S<1 || S>(int64_t)eb4::BLK*eb4::tune::NSORT_MAX || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_eb4: dimension range (S <= 65536)");
+   if(rot.shape!=Shape({KVH,D,D}) || rot.dtype!=DType::Float32)throw std::runtime_error("apa_eb4: rotation shape/dtype");
+   if(cb.shape!=Shape({16}) || cb.dtype!=DType::Float32)throw std::runtime_error("apa_eb4: codebook shape/dtype");
+   if(sinks && (sinks->ndim()!=1 || sinks->shape[0]!=H || sinks->dtype!=q.dtype || !sinks->device.is_cuda() || sinks->device.index!=q.device.index))throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+   const int64_t NB=(S+eb4::BLK-1)/eb4::BLK;
+   if(inject && (inject->dtype!=DType::Uint8 || inject->shape!=Shape({B,KVH,NB}) || !inject->device.is_cuda() || inject->device.index!=q.device.index))throw std::runtime_error("apa_eb4: inject must be CUDA uint8 [B,KVH,ceil(S/64)]");
+-  // APA-DS1 prior art: BLAS leading dimensions (Dongarra 1988/1990; LAPACK 1992),
+-  // vLLM PagedAttention (Kwon 2023) logical/physical separation, SPQ1 capacity
+-  // codes (2026). Taken: visible length separate from pitch, append in place.
+-  // Ours: head-row ABI only. Unverified -- lead to check S4 search terms.
+-  k_row_stride=apa_ds1_row(k,S,k_row_stride,D,16,8);
+-  v_row_stride=apa_ds1_row(v,S,v_row_stride,VD,16,8);
+-  vi_row_stride=apa_ds1_row(vi,S,vi_row_stride,VD,8,8);
+-  vs_row_stride=apa_ds1_row(vs,S,vs_row_stride,1,4,1);
+-  apa_spq1_buffer_check(k,codes,sc,S);
+-  apa_ds1_row(codes,S,apa_ds1::mul(codes.shape[2],codes.shape[3]),codes.shape[3],16,16);
+-  apa_ds1_row(sc,S,sc.shape[2],1,4,1);
++  apa_spq1_buffer_check(k,codes,sc);
+   int np,pk;apa_int4_fixed_partition_layout((int)S,np,pk);
+   if(pk%spq4::C)throw std::runtime_error("apa_eb4: partition must align to chunk");
+   int nc=(int)((S+spq4::C-1)/spq4::C),rows=(int)(B*H);
+@@ -93,9 +83,9 @@
+     const int Hi=(int)H,KVi=(int)KVH,Si=(int)S;
+     constexpr bool BCH=eb4::tune::CHOOSE_SITE==0;
+     switch(xpf){
+-      case 1: eb4::bulk_stats<128,1,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,V,nullptr,nullptr,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16,v_row_stride,vi_row_stride,vs_row_stride);break;
+-      case 2: eb4::bulk_stats<128,2,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,VI,VS,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16,v_row_stride,vi_row_stride,vs_row_stride);break;
+-      default: eb4::bulk_stats<128,0,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,nullptr,nullptr,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16,v_row_stride,vi_row_stride,vs_row_stride);break;
++      case 1: eb4::bulk_stats<128,1,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,V,nullptr,nullptr,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16);break;
++      case 2: eb4::bulk_stats<128,2,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,VI,VS,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16);break;
++      default: eb4::bulk_stats<128,0,BCH><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,nullptr,nullptr,(int)VD,CZ,BL,(int)NB,CTRC,FL,SCO,LZ,fraction,force_bf16);break;
+     }
+     cuda_check_last("apa_eb4_bulk_stats");
+   }
+@@ -111,7 +101,7 @@
+     auto launch=[&](auto gt,auto dg){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value;
+       eb4::select_mixed<128,128,GT,DG,SCH><<<grid,128>>>(Q,K,V,VI,VS,FL,US,CZ,BL,SCH?FL:nullptr,SCH?SCO:nullptr,SCH?LZ:nullptr,INJ,fraction,force_bf16,svpf,
+-        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,k_row_stride,v_row_stride,vi_row_stride,vs_row_stride);};
++        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT);};
+     auto byG=[&](auto dg){
+       switch(G){
+         case 2: launch(std::integral_constant<int,2>{},dg);break;

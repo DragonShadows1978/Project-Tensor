@@ -1,0 +1,51 @@
+{
+  "status": "PARTIAL_READ_ONLY_PREFLIGHT_STOP_L82",
+  "evidence_class": "static source reading; no runtime observation",
+  "entries": [
+    {
+      "entry": "apa_eb3_run",
+      "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+      "line": 737,
+      "operand_device": "Inputs validated against q.device.index; optional sinks checked too.",
+      "current_device": "No enclosing device guard visible in this host function; NDArray allocation internals were not audited.",
+      "stream": "No parameter; launches implicit stream 0, poison memset explicit 0.",
+      "first_use": "Arena/output allocated on q.device; merge counters use process-static cudaMalloc/cudaMemset on ambient device; L2 cache process-static.",
+      "ticket_slot": "merge, shared with EB4"
+    },
+    {
+      "entry": "apa_eb4_run",
+      "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+      "line": 664,
+      "operand_device": "Inputs validated against q.device.index; optional sinks/inject checked too.",
+      "current_device": "No enclosing device guard visible in this host function; NDArray allocation internals were not audited.",
+      "stream": "No parameter; launches implicit stream 0, poison memset explicit 0.",
+      "first_use": "Arena/output allocated on q.device; merge uses eb3::counters; optional choose uses eb4::counters; both process-static.",
+      "ticket_slot": "merge plus distinct optional choose; registered CHOOSE_SITE=1 avoids choose allocation"
+    },
+    {
+      "entry": "apa_spq1_rotate / apa_spq1_prepare / apa_spq1_pack",
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "lines": [
+        14,
+        24,
+        33
+      ],
+      "operand_device": "CUDA/same-device checks at wrappers.",
+      "current_device": "No enclosing guard visible at the listed launch sites.",
+      "stream": "No parameter; implicit stream 0.",
+      "first_use": "Rotation/preparation allocate NDArrays on operand device; pack uses caller buffers.",
+      "scope": "READ_ONLY_BLOCKER"
+    },
+    {
+      "entry": "apa_eb2b_quantize",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "line": 109,
+      "operand_device": "v required CUDA bf16; outputs use v.device.",
+      "current_device": "No enclosing guard visible at this launch site.",
+      "stream": "No parameter; implicit stream 0.",
+      "first_use": "vi and scales NDArrays allocated before launch.",
+      "scope": "READ_ONLY_BLOCKER"
+    }
+  ],
+  "completeness": "Not the completed S1 census; implementation stopped before touching any launch entry."
+}

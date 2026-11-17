@@ -1,0 +1,329 @@
+{
+ "what": "Lead GPU runs of the P1-REV2 staged reproductions, once each, via forge-gpu-run --min 30 --max 600 -- timeout 560s python3 <script>, from the p1rev2 worktree root; module pins checked inside each script (F 5c171477..., B 8728e67e...).",
+ "device": "RTX 4070 SUPER (single local GPU)",
+ "runs": [
+  {
+   "label": "p1rev2-01",
+   "finding": "P1R2-F02",
+   "script": "artifacts/apa_p1_rev2/repro/r01_inf_key_default.py",
+   "script_sha256": "3e4b6e46dd403fc28195e7ffd2dffd547c78f69b003f1a867117a8ea9d345595",
+   "log": "logs/p1rev2_repro_01.log (held back)",
+   "log_sha256": "9350fc5bb4444bc96ce1b68149aa4784f68e9f97dac7b7dae367eeb9927995ef",
+   "started_utc": "2026-11-16T08:11:05Z",
+   "forge_exit": 1,
+   "inner_verdict": "ERROR",
+   "note": "seat script as staged",
+   "error": "TypeError(\"RegisteredMargins.load() missing 1 required keyword-only argument: 'expected_sha256'\")"
+  },
+  {
+   "label": "p1rev2-01a",
+   "finding": "P1R2-F02",
+   "script": "artifacts/apa_p1_rev2/lead_r01_inf_key_default_amended.py",
+   "script_sha256": "04b9c63ce4bb82b058ccd6738f3d60ae0e1b67647a4540ba8fb3784f0f1a3084",
+   "log": "logs/p1rev2_repro_01_lead_amended.log (held back)",
+   "log_sha256": "6c49d7dc9b9a2ab04b7d6a8c19925d2bd1c3a0e56ec08bf42e89c2aaf774ee36",
+   "started_utc": "2026-11-16T08:11:32Z",
+   "forge_exit": 0,
+   "inner_verdict": "CONFIRMED",
+   "note": "lead-amended copy: one change, forwards the dense table sha (expected_sha256 is a required keyword); the staged copy stopped with TypeError before any comparison",
+   "cases": [
+    {
+     "case": "k_posinf",
+     "packed_finite": true,
+     "dense_finite": false,
+     "packed_finite_columns": 64,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "k_neginf",
+     "packed_finite": true,
+     "dense_finite": false,
+     "packed_finite_columns": 64,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "k_nan",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "q_posinf",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "q_neginf",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "q_nan",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 0,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "v_nan",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 63,
+     "dense_finite_columns": 63,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "v_posinf",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 63,
+     "dense_finite_columns": 63,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "v_neginf",
+     "packed_finite": false,
+     "dense_finite": false,
+     "packed_finite_columns": 63,
+     "dense_finite_columns": 63,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "zero_keys",
+     "packed_finite": true,
+     "dense_finite": true,
+     "packed_finite_columns": 64,
+     "dense_finite_columns": 64,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "q_posinf_all_negative_logits",
+     "packed_finite": false,
+     "dense_finite": true,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 64,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    },
+    {
+     "case": "q_neginf_all_negative_logits",
+     "packed_finite": false,
+     "dense_finite": true,
+     "packed_finite_columns": 0,
+     "dense_finite_columns": 64,
+     "shape": [
+      1,
+      1,
+      1,
+      64
+     ]
+    }
+   ]
+  },
+  {
+   "label": "p1rev2-02",
+   "finding": "P1R2-F06",
+   "script": "artifacts/apa_p1_rev2/repro/r02_finite_overflow.py",
+   "script_sha256": "bc5b40085ef6427c53295a4ac2e9532a7bcb441fba80218bc3b1d757ab185910",
+   "log": "logs/p1rev2_repro_02.log (held back)",
+   "log_sha256": "d73b64925c66085269d965330906702908644a3b5d5b2c5938455bc3b4fb50ea",
+   "started_utc": "2026-11-16T08:11:06Z",
+   "forge_exit": 0,
+   "inner_verdict": "CONFIRMED",
+   "note": "seat script as staged",
+   "finite_overflow_counterexample": true,
+   "sink_parity_counterexamples": [
+    "sink_nan",
+    "sink_posinf"
+   ],
+   "classification": {
+    "B": {
+     "overflow": {
+      "d1": {
+       "finite": true,
+       "all_zero": true
+      },
+      "dense": {
+       "finite": false,
+       "all_zero": false
+      }
+     },
+     "sink_nan": {
+      "d1": {
+       "finite": true,
+       "all_zero": true
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": true
+      }
+     },
+     "sink_posinf": {
+      "d1": {
+       "finite": true,
+       "all_zero": true
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": true
+      }
+     },
+     "regular_control": {
+      "d1": {
+       "finite": true,
+       "all_zero": false
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": false
+      }
+     }
+    },
+    "F": {
+     "overflow": {
+      "d1": {
+       "finite": false,
+       "all_zero": false
+      },
+      "dense": {
+       "finite": false,
+       "all_zero": false
+      }
+     },
+     "sink_nan": {
+      "d1": {
+       "finite": false,
+       "all_zero": false
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": true
+      }
+     },
+     "sink_posinf": {
+      "d1": {
+       "finite": false,
+       "all_zero": false
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": true
+      }
+     },
+     "regular_control": {
+      "d1": {
+       "finite": true,
+       "all_zero": false
+      },
+      "dense": {
+       "finite": true,
+       "all_zero": false
+      }
+     }
+    }
+   }
+  },
+  {
+   "label": "p1rev2-03",
+   "finding": "P1R2-F05",
+   "script": "artifacts/apa_p1_rev2/repro/r03_empty_helpers.py",
+   "script_sha256": "8b9f52067eff058b310b41798ac9660cb737370327f2c4fea08cdad99eef9738",
+   "log": "logs/p1rev2_repro_03.log (held back)",
+   "log_sha256": "678c96f753d0351f6c27cdb72e2a4a22f6e9006921119dc07ed7921f11df47b1",
+   "started_utc": "2026-11-16T08:11:08Z",
+   "forge_exit": 0,
+   "inner_verdict": "CONFIRMED",
+   "note": "seat script as staged",
+   "cases": [
+    {
+     "entry": "packed_rotate",
+     "error_type": "RuntimeError",
+     "error": "CUDA error at apa_spq1_rotate: invalid configuration argument",
+     "cuda_launch_error": true,
+     "host_extent_refusal": false,
+     "control_after_finite_informative": true
+    },
+    {
+     "entry": "packed_prepare",
+     "error_type": "RuntimeError",
+     "error": "CUDA error at apa_spq1_prepare: invalid configuration argument",
+     "cuda_launch_error": true,
+     "host_extent_refusal": false,
+     "control_after_finite_informative": true
+    }
+   ],
+   "control_before": true,
+   "control_after": true
+  }
+ ],
+ "summary": {
+  "P1R2-F02": "CONFIRMED on GPU (lead-amended copy): +Inf and -Inf key give a finite packed row where dense SP is NaN",
+  "P1R2-F06": "CONFIRMED on GPU: FLT_MAX scale gives B zeros and F non-finite D1 (F matches dense, which is non-finite on both builds); NaN and +Inf sinks give F non-finite D1 where dense gives finite zeros",
+  "P1R2-F05": "CONFIRMED on GPU: B=0 packed_rotate and packed_prepare reach a CUDA invalid-configuration launch error; the valid control stays finite before and after"
+ }
+}

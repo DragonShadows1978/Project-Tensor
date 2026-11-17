@@ -1,0 +1,337 @@
+{
+  "order": "APA-P1-F3",
+  "rows": [
+    {
+      "ruling": "R3'",
+      "input": "eb2b_BH_at_bound",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "RuntimeError ['apa_eb2b: geometry/GQA/range mismatch']",
+      "F3": {
+        "raised": "RuntimeError: apa_eb2b: geometry/GQA/range mismatch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb2b: geometry/GQA/range mismatch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": false
+    },
+    {
+      "ruling": "R3'",
+      "input": "eb2b_BH_past_bound",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_eb2b', 'B*H', '536870912']",
+      "F3": {
+        "raised": "ValueError: apa_eb2b: B*H (q batch * q heads; the int row count, times 4, must fit int) = 536870912 exceeds its bound 536870911 (computed in int64 before any narrowing); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb2b: geometry/GQA/range mismatch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "eb2b_BH_2p32",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_eb2b', 'B*H', '4294967296']",
+      "F3": {
+        "raised": "ValueError: apa_eb2b: B*H (q batch * q heads; the int row count, times 4, must fit int) = 4294967296 exceeds its bound 536870911 (computed in int64 before any narrowing); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "ValueError: apa_spq1_rotate (packed_rotate): B*H (rotate grid rows) = 4294967296 does not fit the native int index that receives it (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_packed_run_r2_fp32",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "ValueError: apa_spq1 packed buffers: capacity (codes.shape[2]) = 2147483648 does not fit the native int index that receives it (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_packed_run_tc_tq4",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "ValueError: apa_spq1 packed buffers: capacity (codes.shape[2]) = 2147483648 does not fit the native int index that receives it (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_packed_run_tc_int4",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_spq4_run (packed_run)', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_spq4_run (packed_run): operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "ValueError: apa_spq1 packed buffers: capacity (codes.shape[2]) = 2147483648 does not fit the native int index that receives it (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_q_B_2p31_packed_run_r2_fp32",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_spq4_run (packed_run)', \"operand 'q' axis 0\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_spq4_run (packed_run): operand 'q' axis 0 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_sp: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_eb2b",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_eb2b: ', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_eb2b: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb2b: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_eb3",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_eb3: ', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_eb3: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb3: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "extent_k_S_2p31_eb4",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "ValueError ['apa_eb4: ', \"operand 'k' axis 2\", '2147483648']",
+      "F3": {
+        "raised": "ValueError: apa_eb4: operand 'k' axis 2 has extent 2147483648, which does not fit the native int index (max 2147483647); refused before any allocation or launch",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb4: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "zero_q_B0_packed_run_r2",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "RuntimeError ['dimensions must be positive']",
+      "F3": {
+        "raised": "RuntimeError: apa_sp: dimensions must be positive and fit int",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_sp: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": false
+    },
+    {
+      "ruling": "R3'",
+      "input": "zero_q_B0_eb2b",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "RuntimeError ['dimensions must be positive']",
+      "F3": {
+        "raised": "RuntimeError: apa_eb2b: dimensions must be positive and fit int",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb2b: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": false
+    },
+    {
+      "ruling": "R3'",
+      "input": "zero_q_B0_eb3",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "RuntimeError ['dimensions must be positive']",
+      "F3": {
+        "raised": "RuntimeError: apa_eb3: dimensions must be positive and fit int",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb3: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": false
+    },
+    {
+      "ruling": "R3'",
+      "input": "zero_q_B0_eb4",
+      "source": "LF3 (GPU, DLPack re-import with large extents)",
+      "registered": "RuntimeError ['dimensions must be positive']",
+      "F3": {
+        "raised": "RuntimeError: apa_eb4: dimensions must be positive and fit int",
+        "launches": 0,
+        "ok": true
+      },
+      "F2": {
+        "result": "RuntimeError: apa_eb4: dimensions must be positive and fit int",
+        "launches": 0,
+        "context_after": "usable",
+        "child_exit": 0
+      },
+      "changed": false
+    },
+    {
+      "ruling": "R1'",
+      "input": "public route, hand-built PackedRegisteredMargins with a dict-subclass mapping that returns the pinned values to the first 4 item reads and 0.0 after (LF3, GPU)",
+      "F3": {
+        "result": "launched with the pinned e_q",
+        "e_q": 0.8716110587120056,
+        "mapping_reads": 4,
+        "output_bitwise_equal_to_pinned": true,
+        "launches": 4
+      },
+      "F2": {
+        "result": "returned",
+        "e_q": 0.0,
+        "mapping_reads": 5,
+        "output_bitwise_equal_to_pinned": true,
+        "launches": 4
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R1'",
+      "input": "CPU recording fakes: stateful mapping pinned to 2 reads, at lookup (D64 lookup / D128 attention, epsilon 0.01)",
+      "F3": {
+        "result": "returned",
+        "e_q": 1.010646104812622,
+        "mapping_reads": 2
+      },
+      "F2": {
+        "result": "returned",
+        "e_q": 0.0,
+        "mapping_reads": 3
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R1'",
+      "input": "CPU recording fakes: stateful mapping pinned to 4 reads, at attention (D64 lookup / D128 attention, epsilon 0.01)",
+      "F3": {
+        "result": "launched (recording backend)",
+        "delta": 6.348392486572266,
+        "e_q": 0.8716110587120056,
+        "mapping_reads": 4
+      },
+      "F2": {
+        "result": "launched (recording backend)",
+        "delta": 4.605170249938965,
+        "e_q": 0.0,
+        "mapping_reads": 5
+      },
+      "changed": true
+    },
+    {
+      "ruling": "R3'",
+      "input": "S4 host-level fake (real guard and EB2b prologue text, g++ -O0 -fwrapv, stub NDArray): B*H at bound, one past, 65536^2; extents 2^31 on k axis 2 and q axis 0; q B = 0",
+      "F3": {
+        "tests": [
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_attention_extent_above_int_max_raises_value_error_naming_entry_and_operand[eb2b_k_S_2p31-operand 'k' axis 2]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_attention_extent_above_int_max_raises_value_error_naming_entry_and_operand[eb2b_q_B_2p31-operand 'q' axis 0]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_at_its_bound_is_not_refused_by_the_product_check",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_one_past_its_bound_raises_value_error_naming_it",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_that_wraps_a_signed_int_raises_value_error_naming_it",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_eb2b]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_eb3]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_eb4]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_spq1 packed r2 (packed_run)]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_spq4 tc int4]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_spq4_run (packed_run)]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_every_packed_attention_entry_checks_named_extents_first[apa_spq6 tc tq4]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_guard_refuses_only_above_int_max_and_products_form_in_int64",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_zero_extent_keeps_the_runtime_error"
+        ],
+        "outcomes": [
+          "passed"
+        ]
+      },
+      "F2": "the same inputs on the real Build F2 entries are the LF3 rows above (eb2b_BH_*, extent_*, zero_*)",
+      "changed": null
+    }
+  ],
+  "n_rows": 18,
+  "note": "Every R3' row refuses before any launch on Build F3 (launches 0). Build F2 also refused every large-extent input before any launch, but with RuntimeError or with another entry's ValueError (the capacity check, or packed_rotate's B*H after a wrapped EB2b product). Zero extents keep the RuntimeError on both builds. R1': Build F2 used the 0.0 read at use (e_q 0.0); Build F3 uses the pinned value."
+}

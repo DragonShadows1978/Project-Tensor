@@ -1,0 +1,432 @@
+[
+  {
+    "file": "tensor_cuda/src/apa_spo/d1.cuh",
+    "line": 26,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(!use || use[j]) reinterpret_cast<uint4*>(dst)[i]=reinterpret_cast<const uint4*>(src)[i];",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+    "line": 103,
+    "types": [
+      "uint4"
+    ],
+    "code": "*reinterpret_cast<uint4*>(out+(int64_t)i*8)=fetch_value8(v,vi,vs,flags,bh,j,dim,S,128);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb2b_values.cuh",
+    "line": 22,
+    "types": [
+      "uint2"
+    ],
+    "code": "uint2 x=*reinterpret_cast<const uint2*>(p);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb2b_values.cuh",
+    "line": 43,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(high_flag(flags,bh,token,S))return *reinterpret_cast<const uint4*>(v+offset);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 201,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* src=reinterpret_cast<const float4*>(r+((int64_t)kh*D+d0)*D);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 258,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* qp=reinterpret_cast<const float4*>(qr+(int64_t)qrow*D+tig*DPL);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 275,
+    "types": [
+      "uint4"
+    ],
+    "code": "if constexpr(NW==4){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;w[t][2]=u.z;w[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 276,
+    "types": [
+      "uint2"
+    ],
+    "code": "else{uint2 u=*reinterpret_cast<const uint2*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;}",
+    "classification": "D64 template branch not instantiated by EB3 D128 callers; guarded 16B base would cover 8B",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 354,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* qp=reinterpret_cast<const float4*>(qr+(int64_t)qrow*D+tig*DPL);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 370,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(j0<count){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j0*(D/2));w0[t][0]=u.x;w0[t][1]=u.y;w0[t][2]=u.z;w0[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 371,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(j1<count){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j1*(D/2));w1[t][0]=u.x;w1[t][1]=u.y;w1[t][2]=u.z;w1[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 440,
+    "types": [
+      "uint4"
+    ],
+    "code": "const uint4* vbase=reinterpret_cast<const uint4*>(v+((int64_t)bh*S+start)*VD);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 480,
+    "types": [
+      "uint2"
+    ],
+    "code": "const uint2* qp=reinterpret_cast<const uint2*>(q+((int64_t)b*H+h0+r)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 492,
+    "types": [
+      "uint4"
+    ],
+    "code": "const uint4* kp=reinterpret_cast<const uint4*>(k+((int64_t)bh*S+start+key)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 541,
+    "types": [
+      "uint4"
+    ],
+    "code": "for(int i=0;i<U/4;++i){int idx=tid+NT*i;*reinterpret_cast<uint4*>(&Vs[idx/U][(idx%U)*8])=nxt[i];}",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 565,
+    "types": [
+      "float2"
+    ],
+    "code": "*reinterpret_cast<float2*>(&pa[pr*VD+d])=make_float2(acc[nt][0],acc[nt][1]);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 624,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+(row0+(qd<G*Q4?g:0))*NC*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 667,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+(row0+g)*NC*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+    "line": 743,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+((row0+g)*NC+c0)*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 133,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* qp=reinterpret_cast<const float4*>(qr+(int64_t)qrow*D+tig*DPL);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 149,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(j0<count){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j0*(D/2));w0[t][0]=u.x;w0[t][1]=u.y;w0[t][2]=u.z;w0[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 150,
+    "types": [
+      "uint4"
+    ],
+    "code": "if(j1<count){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j1*(D/2));w1[t][0]=u.x;w1[t][1]=u.y;w1[t][2]=u.z;w1[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 407,
+    "types": [
+      "uint2"
+    ],
+    "code": "const uint2* qp=reinterpret_cast<const uint2*>(q+((int64_t)b*H+h0+r)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 419,
+    "types": [
+      "uint4"
+    ],
+    "code": "const uint4* kp=reinterpret_cast<const uint4*>(k+((int64_t)bh*S+start+key)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 470,
+    "types": [
+      "uint4"
+    ],
+    "code": "nxt[i]=high?*reinterpret_cast<const uint4*>(v+off):eb2b::value8(vi+off,1.f);           // Mutant 3: scale dropped",
+    "classification": "mutant only, same guarded V/vi operands",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 472,
+    "types": [
+      "uint4"
+    ],
+    "code": "nxt[i]=high?*reinterpret_cast<const uint4*>(v+off):eb2b::value8(vi+off,vs[min(tok+1,(int64_t)bh*S+S-1)]);   // Mutant 4: neighbour's scale",
+    "classification": "mutant only, same guarded V/vi operands",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 474,
+    "types": [
+      "uint4"
+    ],
+    "code": "nxt[i]=high?*reinterpret_cast<const uint4*>(v+off):eb2b::value8(vi+off,vs[tok]);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 482,
+    "types": [
+      "uint4"
+    ],
+    "code": "for(int i=0;i<U/4;++i){int idx=tid+NT*i;*reinterpret_cast<uint4*>(&Vs[idx/U][(idx%U)*8])=nxt[i];}",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 506,
+    "types": [
+      "float2"
+    ],
+    "code": "*reinterpret_cast<float2*>(&pa[pr*VD+d])=make_float2(acc[nt][0],acc[nt][1]);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 540,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+(row0+(qd<G*Q4?g:0))*NC*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 568,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+(row0+g)*NC*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+    "line": 619,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* a=reinterpret_cast<const float4*>(pa+((row0+g)*NC+c0)*VD+d0);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 86,
+    "types": [
+      "uint2"
+    ],
+    "code": "const uint2* qp=reinterpret_cast<const uint2*>(q+(int64_t)qrow*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 99,
+    "types": [
+      "uint4"
+    ],
+    "code": "if constexpr(NW==4){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;w[t][2]=u.z;w[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 100,
+    "types": [
+      "uint2"
+    ],
+    "code": "else{uint2 u=*reinterpret_cast<const uint2*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 168,
+    "types": [
+      "uint4"
+    ],
+    "code": "const uint4* vbase=reinterpret_cast<const uint4*>(v+((int64_t)bh*S+start)*VD);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 220,
+    "types": [
+      "uint2"
+    ],
+    "code": "const uint2* qp=reinterpret_cast<const uint2*>(q+((int64_t)b*H+h0+r)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 232,
+    "types": [
+      "uint4"
+    ],
+    "code": "const uint4* kp=reinterpret_cast<const uint4*>(k+((int64_t)bh*S+start+key)*D+tig*DPL);",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 302,
+    "types": [
+      "uint4"
+    ],
+    "code": "for(int i=0;i<U/4;++i){int idx=tid+NT*i;*reinterpret_cast<uint4*>(&Vs[idx/U][(idx%U)*8])=nxt[i];}",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+    "line": 355,
+    "types": [
+      "float2"
+    ],
+    "code": "*reinterpret_cast<float2*>(&pa[pr*VD+d])=make_float2(acc[nt][0],acc[nt][1]);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+    "line": 105,
+    "types": [
+      "float4"
+    ],
+    "code": "const float4* qp=reinterpret_cast<const float4*>(qr+(int64_t)qrow*D+tig*DPL);",
+    "classification": "internal aligned allocation/shared memory",
+    "proof": "16B aligned allocation/arena; row strides and subvector offsets multiples of width"
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+    "line": 130,
+    "types": [
+      "uint4"
+    ],
+    "code": "if constexpr(NW==4){uint4 u=*reinterpret_cast<const uint4*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;w[t][2]=u.z;w[t][3]=u.w;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  },
+  {
+    "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+    "line": 131,
+    "types": [
+      "uint2"
+    ],
+    "code": "else{uint2 u=*reinterpret_cast<const uint2*>(pk+(int64_t)j*(D/2));w[t][0]=u.x;w[t][1]=u.y;}",
+    "classification": "caller operand, host guarded",
+    "proof": "See BOUNDARY_CENSUS.md alignment mapping; all vector row offsets are multiples of their width."
+  }
+]

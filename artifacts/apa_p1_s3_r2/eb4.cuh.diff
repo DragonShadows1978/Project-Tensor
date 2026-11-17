@@ -1,0 +1,123 @@
+--- before/tensor_cuda/src/apa_spo/eb4.cuh
++++ after/tensor_cuda/src/apa_spo/eb4.cuh
+@@ -271,7 +271,11 @@
+  const int8_t* vi,const float* vs,const uint8_t* flags,uint8_t* used,
+  const float* cz,const float* blog,uint8_t* fl_out,float* sc_out,float* lz_out,const uint8_t* inject,float fraction,bool force,int vpf_mode,
+  const float* bulk,const float* cm,uint8_t* mask,float* prefix,float* pm,float* pl,float* pa,
+- int H,int KVH,int S,int NC,int PK,float scale,float delta,unsigned* ctr,const bf16* sinks,bf16* out){
++ int H,int KVH,int S,int NC,int PK,float scale,float delta,unsigned* ctr,const bf16* sinks,bf16* out
++#if TC_APA_P1_TEST_HOOKS
++ ,eb3::EarlyCounterHook test_hook
++#endif
++ ){
+   constexpr int G=GT,SG=GT;
+   constexpr int DPL=D/4,NS=DPL/4,NU4=DPL/8,NTW=VD/32,U=VD/8;
+   __shared__ float scs[SG][C];
+@@ -281,6 +285,10 @@
+   __shared__ float lsum[SG];
+   __shared__ uint8_t hf[BPC];
+   int bh=blockIdx.x,c=blockIdx.y+gridDim.y*blockIdx.z;if(c>=NC)return;
++#if TC_APA_P1_TEST_HOOKS
++  // Survey S3: hold chunk 1 before ALL partial stores, not after pm/pl.
++  if(!eb3::early_counter_wait(test_hook,c))return;
++#endif
+   int b=bh/KVH,h0=(bh%KVH)*G,tid=threadIdx.x,lane=tid&31,warp=tid>>5,r=lane>>2,tig=lane&3;
+   int start=c*C,count=min(C,S-start);
+   const int NB=(S+BLK-1)/BLK;
+@@ -508,7 +516,12 @@
+     last_s=prev==(unsigned)(NC-1);
+   }
+   __syncthreads();
+-  if(!last_s)return;
++  if(!last_s){
++#if TC_APA_P1_TEST_HOOKS
++    eb3::early_counter_done(test_hook,c);
++#endif
++    return;
++  }
+   __threadfence();
+   const int64_t row0=(int64_t)b*H+h0;
+   constexpr int Q4=VD/4,QPT=(G*Q4+NT-1)/NT,MB=eb3::tune::MERGE_BATCH/QPT;
+@@ -637,22 +650,19 @@
+       o[3]=__float2bfloat16_rn(den>0.f?__fdiv_rn(macc[qi].w,den):0.f);
+     }
+   }
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_done(test_hook,c);
++#endif
+ }
+ 
+-// ---- persistent choose tickets (as eb3::counters, separate buffer) ------------------------------------------
+-// One unsigned per (batch, KV head), zeroed once and returned to zero by every completed bulk launch (atomicInc
+-// wrap). Single-stream, single-device use (EB3's documented contract; LEAD_NOTES item 1 applies here too).
++// ---- persistent choose tickets, separate from merge on EACH CUDA device ---
++// Contract: one stream, CUDA legacy default stream; every other stream is out
++// of contract. Prior art: CUDA Samples threadFenceReduction, CUDA stream-ordered
++// lifetime APIs (NVIDIA 2021), ISO C++11 mutex/map (2011). Taken: existing
++// tickets/order; ours: per-device choose ownership via EB3's locked registry.
++// Unverified -- lead to check: CUDA 11.2 stream ordered memory allocator 2021.
+ inline unsigned* counters(int n,int64_t* bytes=nullptr){
+-  static unsigned* buf=nullptr;static int cap=0;
+-  if(n>cap){
+-    int want=std::max(n,tune::COUNTER_MIN_ENTRIES);unsigned* nb=nullptr;
+-    if(cudaMalloc(&nb,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb4: counter allocation");
+-    if(cudaMemset(nb,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb4: counter zero");
+-    if(buf){cudaDeviceSynchronize();cudaFree(buf);}
+-    buf=nb;cap=want;
+-  }
+-  if(bytes)*bytes=(int64_t)cap*(int64_t)sizeof(unsigned);
+-  return buf;
++  return eb3::ticket_buffer(true,n,tune::COUNTER_MIN_ENTRIES,bytes);
+ }
+ } // namespace eb4
+ 
+@@ -688,6 +698,10 @@
+   const int64_t NB=(S+eb4::BLK-1)/eb4::BLK;
+   if(inject && (inject->dtype!=DType::Uint8 || inject->shape!=Shape({B,KVH,NB}) || !inject->device.is_cuda() || inject->device.index!=q.device.index))throw std::runtime_error("apa_eb4: inject must be CUDA uint8 [B,KVH,ceil(S/64)]");
+   apa_spq1_buffer_check(k,codes,sc);
++  // Same locked enqueue interval as EB3, including choose and merge slots.
++  // Prior art: legacy-default-stream ordering and C++11 RAII (2011).
++  std::lock_guard<std::recursive_mutex> ticket_launch_lock(eb3::ticket_mutex());
++  eb3::TicketDeviceGuard operand_device(q.device.index,"apa_eb4");
+   int np,pk;apa_int4_fixed_partition_layout((int)S,np,pk);
+   if(pk%spq4::C)throw std::runtime_error("apa_eb4: partition must align to chunk");
+   int nc=(int)((S+spq4::C-1)/spq4::C),rows=(int)(B*H);
+@@ -728,6 +742,10 @@
+   auto SNK=sinks?(spq4::bf16*)sinks->data_ptr():nullptr;auto OUT=(spq4::bf16*)out.data_ptr();
+   int capacity=(int)codes.shape[2];
+   const uint8_t* CODES=(const uint8_t*)codes.data_ptr();const float* SC=(const float*)sc.data_ptr();const float* CB=(const float*)cb.data_ptr();
++#if TC_APA_P1_TEST_HOOKS
++  NDArray test_state;
++  auto test_hook=eb3::early_counter_setup(test_state,q.device,(int)(B*KVH),nc,true,PM,PL,PA,rows,(int)VD);
++#endif
+   // L2-capacity budgets: EB3's rotation prefetch (codes+norms, eb3::tune::L2_FRACTION) unchanged; the bulk's
+   // V-operand prefetch budgeted with eb4::tune::L2_FRACTION against the bytes it would prefetch.
+   const int64_t code_bytes=(int64_t)codes.numel(),norm_bytes=(int64_t)sc.numel()*4;
+@@ -763,8 +781,15 @@
+     constexpr bool SCH=eb4::tune::CHOOSE_SITE==1;
+     auto launch=[&](auto gt,auto dg){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value;
++#if TC_APA_P1_TEST_HOOKS
++      eb3::early_counter_check(test_hook,(const void*)eb4::select_mixed<128,128,GT,DG,SCH>);
++#endif
+       eb4::select_mixed<128,128,GT,DG,SCH><<<grid,128>>>(Q,K,V,VI,VS,FL,US,CZ,BL,SCH?FL:nullptr,SCH?SCO:nullptr,SCH?LZ:nullptr,INJ,fraction,force_bf16,svpf,
+-        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT);};
++        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT
++#if TC_APA_P1_TEST_HOOKS
++        ,test_hook
++#endif
++      );};
+     auto byG=[&](auto dg){
+       switch(G){
+         case 2: launch(std::integral_constant<int,2>{},dg);break;
+@@ -779,6 +804,10 @@
+   int64_t ctr_bytes=0,ctrc_bytes=0;eb3::counters(0,&ctr_bytes);if(CTRC)eb4::counters(0,&ctrc_bytes);
+   NDArray foot({7},DType::Int64,Device::from_string("cpu"));
+   {auto* f=(int64_t*)foot.data_ptr();f[0]=total;f[1]=B*H*VD*2;f[2]=ctr_bytes;f[3]=ctrc_bytes;f[4]=3;f[5]=do_rpf;f[6]=xpf*10+svpf;}
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_finish(test_hook);
++#endif
++  operand_device.restore();
+   return {out,flags,used,scores,logz,cm,cz,blog,mask,bulk,prefix,pq,foot};
+ }
+ 

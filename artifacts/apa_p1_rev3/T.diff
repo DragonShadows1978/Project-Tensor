@@ -1,0 +1,99 @@
+diff --git a/tensor_cuda/tests/test_apa_p1d_policy.py b/tensor_cuda/tests/test_apa_p1d_policy.py
+index 1dee055b..9df182e9 100644
+--- a/tensor_cuda/tests/test_apa_p1d_policy.py
++++ b/tensor_cuda/tests/test_apa_p1d_policy.py
+@@ -129,18 +129,11 @@ def calls(ns, kind):
+     return [c for c in ns.rec.calls if c[0] == kind]
+ 
+ 
+-def packed_table(ns, tmp_path, e64=0.25, e128=0.375, **override):
+-    P = ns.packed
+-    table = dict(registration_sha256=P.PACKED_REGISTRATION_SHA256, status="FROZEN",
+-                 quantizer=P.PACKED_QUANTIZER, statistic=P.PACKED_STATISTIC,
+-                 measurement_classes=P.PACKED_MEASUREMENT_CLASSES,
+-                 entries={"4:64": dict(e_q=e64, count=3, mean=e64 / 2, max=e64, p99_9=e64),
+-                          "4:128": dict(e_q=e128, count=3, mean=e128 / 2, max=e128, p99_9=e128)})
+-    table.update(override)
+-    path = tmp_path / f"synthetic_packed_UNIT_TEST_ONLY_{next(_COUNTER)}.json"
+-    path.write_text(json.dumps(table))
+-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+-    return P.PackedRegisteredMargins.load(path, expected_sha256=digest)
++def packed_table(ns, tmp_path):
++    # REV3 step T / F2 R1: exercise the public loader on its real pinned file.
++    # Prior art: SHA-256 pinning (NIST FIPS 180-4, 2015), inherited; recording
++    # fakes (Meszaros, 2007) remain unchanged. Ours: use the shipping fixture.
++    return ns.packed.PackedRegisteredMargins.load(ROOT / "artifacts/apa_p1d/packed_e_q_table.json")
+ 
+ 
+ def dense_table(ns, tmp_path):
+@@ -440,7 +433,8 @@ def test_packed_route_forwards_delta_causal_sinks_and_r2(env, tmp_path, D):
+                                              margins=m, is_causal=True, sinks=sinks, diagnostics=True)
+     assert out == ("packed_out", "packed_mask")
+     (_, args, kwargs), = calls(env, "packed_run")
+-    e_q = .25 if D == 64 else .375
++    # Expected margin comes from the pinned data, independently of lookup.
++    e_q = json.loads((ROOT / "artifacts/apa_p1d/packed_e_q_table.json").read_text())["entries"][f"4:{D}"]["e_q"]
+     want = env.packed.derive_delta(eps, e_q)
+     assert args[0] is q and args[1] is k and args[2] is v
+     assert args[3] == p._packed_tuple()
+@@ -514,29 +508,51 @@ def test_delta_helper_domain_refusals(env):
+ 
+ # ---------------------------------------------------------------- R-F loader
+ def test_packed_loader_checks_its_own_registration_quantizer_and_entries(env, tmp_path):
++    # REV3 step T: R1 refuses synthetic tables at the pin before inspecting
++    # their registration/entries. Keep the malformed cases and assert that
++    # earlier refusal, plus the pinned positive control and lookup domains.
++    # Prior art: SHA-256 pinning (NIST FIPS 180-4, 2015), inherited; test doubles
++    # (Meszaros, 2007). Ours: assertions for the revised public loader contract.
++    pinned_path = ROOT / "artifacts/apa_p1d/packed_e_q_table.json"
++    entries = json.loads(pinned_path.read_text())["entries"]
+     m = packed_table(env, tmp_path)
+-    assert m.lookup(4, 64, "float32", 1 / math.sqrt(64)) == .25
+-    assert m.lookup(4, 128, "float32", 1 / math.sqrt(128)) == .375
++    assert m.lookup(4, 64, "float32", 1 / math.sqrt(64)) == entries["4:64"]["e_q"]
++    assert m.lookup(4, 128, "float32", 1 / math.sqrt(128)) == entries["4:128"]["e_q"]
+     for args in [(2, 64, "float32", .125), (True, 64, "float32", .125), (4, 64, "float16", .125),
+                  (4, 32, "float32", 1 / math.sqrt(32)), (4, 64, "float32", .2)]:
+         with pytest.raises(ValueError):
+             m.lookup(*args)
++
++    def refuse_synthetic(**override):
++        table = json.loads(pinned_path.read_text())
++        table.update(override)
++        path = tmp_path / f"synthetic_packed_UNIT_TEST_ONLY_{next(_COUNTER)}.json"
++        path.write_text(json.dumps(table))
++        digest = hashlib.sha256(path.read_bytes()).hexdigest()
++        with pytest.raises(ValueError, match="cannot override the pin"):
++            env.packed.PackedRegisteredMargins.load(path, expected_sha256=digest)
++        with pytest.raises(ValueError, match="SHA256 mismatch"):
++            env.packed.PackedRegisteredMargins.load(path)
++        assert not env.rec.calls, "synthetic table refused before allocation or device work"
++
+     for override in [dict(quantizer=env.sp2.QUANTIZER), dict(registration_sha256=env.sp2.REGISTRATION_SHA256),
+                      dict(status="DRAFT"), dict(measurement_classes=64), dict(statistic="mean")]:
+-        with pytest.raises(ValueError, match="unregistered or incomplete"):
+-            packed_table(env, tmp_path, **override)
+-    with pytest.raises(ValueError, match="4:64 and 4:128"):
+-        packed_table(env, tmp_path, entries={"4:64": dict(e_q=.1, count=1, mean=.1, max=.1, p99_9=.1)})
+-    with pytest.raises(ValueError, match="invalid measured"):
+-        packed_table(env, tmp_path, e64=float("nan"))
++        refuse_synthetic(**override)
++    refuse_synthetic(entries={"4:64": dict(e_q=.1, count=1, mean=.1, max=.1, p99_9=.1)})
++    bad_entries = json.loads(pinned_path.read_text())["entries"]
++    bad_entries["4:64"]["e_q"] = float("nan")
++    refuse_synthetic(entries=bad_entries)
+     path = tmp_path / "x.json"
+     path.write_text("{}")
+-    with pytest.raises(ValueError, match="SHA256"):
++    with pytest.raises(ValueError, match="cannot override the pin"):
+         env.packed.PackedRegisteredMargins.load(path, expected_sha256="0" * 64)
++    with pytest.raises(ValueError, match="SHA256 mismatch"):
++        env.packed.PackedRegisteredMargins.load(path)
+     # The dense loader refuses a packed table and vice versa.
+     dense = dense_table(env, tmp_path)
+     assert not isinstance(dense, env.packed.PackedRegisteredMargins)
+     assert not isinstance(m, env.sp2.RegisteredMargins)
++    assert not env.rec.calls, "all loader checks precede allocation or device work"
+ 
+ 
+ # ---------------------------------------------------------------- R-H routes

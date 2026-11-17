@@ -1,0 +1,43 @@
+F..........F..F                                                          [100%]
+=================================== FAILURES ===================================
+___________ test_registration_and_every_existing_kernel_body_pinned ____________
+tensor_cuda/tests/test_apa_sp1_1.py:25: in test_registration_and_every_existing_kernel_body_pinned
+    assert digest(ROOT/pin['snapshot']) == pin['sha256']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tensor_cuda/tests/test_apa_sp1_1.py:20: in <lambda>
+    digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+                                      ^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1021: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp1/sp1_1_before/tensor_cuda__src__kernels.cu'
+___________ test_baseline_failure_specific_keys_and_output_magnitude ___________
+tensor_cuda/tests/test_apa_sp1_1.py:106: in test_baseline_failure_specific_keys_and_output_magnitude
+    receipt=next((ART/'gpu').glob(shape['id']+'.*.json'))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   StopIteration
+__ test_final_scoring_uses_complete_pinned_history_and_rejects_unmatched_hits __
+tensor_cuda/tests/test_apa_sp1_1.py:145: in test_final_scoring_uses_complete_pinned_history_and_rejects_unmatched_hits
+    rows=registered_receipts();scores=score(rows)
+         ^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp1_1_scoring.py:24: in registered_receipts
+    assert sha(ROOT/name)==digest,name
+           ^^^^^^^^^^^^^^
+scripts/apa_sp1_cpu.py:24: in sha
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1021: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp1/gpu/boundary.1788658221190445777.json'
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_sp1_1.py::test_registration_and_every_existing_kernel_body_pinned
+FAILED tensor_cuda/tests/test_apa_sp1_1.py::test_baseline_failure_specific_keys_and_output_magnitude
+FAILED tensor_cuda/tests/test_apa_sp1_1.py::test_final_scoring_uses_complete_pinned_history_and_rejects_unmatched_hits
+3 failed, 12 passed in 2.66s

@@ -1,0 +1,81 @@
+{
+  "review": "APA-P1-REV3",
+  "phase": "blind v1 sealed before F2 REPORT.md or lead ledger read",
+  "created_utc": "2026-11-16T10:53:53.015209+00:00",
+  "verdict": "RED: R1 and R3 incomplete; D12 violates non-finite containment",
+  "findings": [
+    {
+      "id": "P1R3-F01",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 446,
+      "title": "R1 validates a snapshot then rereads the caller-controlled mapping",
+      "argument": "The public frozen dataclass accepts entries of arbitrary type. check_pinned_margins copies two values and validates them, but lookup returns self.entries[key] again. A dict subclass returning pinned floats for the validation reads and 0.0 on the next read returns an unpinned zero margin. packed_attention repeats validation but also reaches its recording packed_run with e_q=0, delta=0 at epsilon=1 (five mapping reads). No product monkeypatch or dataclass mutation used. Ordinary loaded tables are immutable and safe; this gap is hand-built mapping provenance/TOCTOU.",
+      "suggested_fix": "Use the validated immutable snapshot (or canonical pinned value) for lookup; normalize public construction to a private immutable copy. Do not reread untrusted mapping values after checking them.",
+      "evidence": [
+        "BLIND_CHECKS.json:margin_pin_bypass",
+        "receipts/012_blind_checks_repair2.log",
+        "apa_packed.py:463-473,440-446,488-499"
+      ],
+      "prior_art": "TOCTOU / CWE-367, unverified -- lead to check: CWE-367 check use snapshot; SHA-256 NIST FIPS180-4 (2015). No new technique.",
+      "status": "confirmed CPU host bypass; no GPU required"
+    },
+    {
+      "id": "P1R3-F02",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/packed.cuh",
+      "line": 108,
+      "title": "D12 finite squared-norm overflow still hides a dense non-finite row",
+      "argument": "D64, seed42/KV1 tables, all finite k[bad,0]=float32(1e20), other coordinates zero, q=-ones. Sequential fp32 v*v makes ss=Inf, norm=Inf, unit=0, all codes=8. Packed coefficient=-0.0803470984, score=-Inf, so the key is skipped beside zero keys. Dense reconstruction (CB[8] @ R)*Inf has 31 +Inf and 33 -Inf coordinates; q dot it is NaN. F2 keeps Inf because all input elements are finite. This violates the ruling never hide dense non-finite rows. It is inherited behavior deliberately retained, not a new F-to-F2 finite-result change. Device confirmation staged after blind seal.",
+      "suggested_fix": "Carry a NaN stored norm for non-finite computed norm as well as non-finite input, keeping rotation arithmetic unchanged; lead must resolve the conflict with the blanket finite-operand LF1 requirement by explicitly classifying intermediate overflow.",
+      "evidence": [
+        "BLIND_CHECKS.json:arithmetic finite_squared_norm_overflow",
+        "receipts/012_blind_checks_repair2.log",
+        "packed.cuh:94-108,198-201",
+        "quant.py:122-127"
+      ],
+      "prior_art": "IEEE 754-2008 overflow/NaN propagation; TurboQuant (Zandieh et al. 2025) inherited norm/rotation. External literature unverified -- lead to check: TurboQuant normalized key norm overflow.",
+      "status": "source and constructed host arithmetic; GPU output not measured"
+    },
+    {
+      "id": "P1R3-F03",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "line": 159,
+      "title": "R3 census misses overflow in EB2b B*H guard and retains wrong extent exception contract",
+      "argument": "INDEX_CENSUS row apa_eb2b_run claims B*H is guarded, but B,H are signed int at line158 and B*H is evaluated in int in the guard. B=H=65536, KVH=8192, S=1 gives true product 2^32 (modular illustration 0), so comparison with INT_MAX/4 is not a valid range check; ISO C++ signed overflow is undefined. Subsequent int rows/grids inherit the overflow. Separately attention per-axis extent guards retained std::runtime_error generic dimensions text for out-of-int extents, while R3 requires ValueError naming the operand. These are incomplete R3 coverage, not newly introduced arithmetic.",
+      "suggested_fix": "Check B*H in int64 or with apa_spo_product before any int multiplication/allocation; use an operand-naming ValueError for out-of-range extents while preserving R4/F1 zero-extent contract as ruled.",
+      "evidence": [
+        "BLIND_CHECKS.json:unguarded_eb2b_product",
+        "receipts/007_index_entries.log",
+        "eb2b.cuh:157-159",
+        "launcher.cuh:30-34",
+        "artifacts/apa_p1f2/INDEX_CENSUS.json"
+      ],
+      "prior_art": "ISO C++17 (2017) signed integer range/overflow; ordinary checked multiplication, no prior art known to me for the exact repair.",
+      "status": "source and host integer arithmetic; huge allocation not attempted"
+    }
+  ],
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 1,
+    "MINOR": 2,
+    "NIT": 0
+  },
+  "checked": {
+    "premises": "all three match",
+    "diff": "all 16 files read including new 538-line CPU tests",
+    "R2": "one shared prepare/pack TQ4 quantizer; Inf-input row fixed; finite norm overflow retained",
+    "R4": "positive helper extents and EB3 timeline precheck present",
+    "R5": "comment-only narrow intermediate-finite claim",
+    "R6": "header/binding signatures match",
+    "R7": "active expectation and paired rename bookkeeping present",
+    "R8": "capacity forwarding and dense refusal present"
+  },
+  "pending": [
+    "independent streaming SASS recount",
+    "F2 author report/lead claims crosscheck",
+    "step T policy update and per-ID tests",
+    "staged D12 reproduction CPU-prefix receipt"
+  ]
+}

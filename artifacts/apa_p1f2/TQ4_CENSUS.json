@@ -1,0 +1,126 @@
+{
+  "census": "R2 TQ4 key quantizers owned by packed entries",
+  "start_grep": {
+    "command": "rg -n 'pack_tq|tq4' tensor_cuda/src/apa_spo",
+    "output": [
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:14: // int (spq1 bulk/bulk_shared/pack_tq `int capacity`, pack_int4_rows `int dst_s`,",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:65: apa_spo_require_int_range(\"apa_spq1_pack (packed_append)\",tq?\"pack_tq grid blocks (B*KV*N*D/2+127)/128\":\"pack_int4_rows grid blocks (B*KV*N+3)/4\",",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:70:   spq1::pack_tq<<<(int64_t(BH)*N*(D/2)+127)/128,128>>>((float*)rotated.data_ptr(),(float*)norms.data_ptr(),(float*)bnd.data_ptr(),(uint8_t*)codes.data_ptr(),(float*)sc.data",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:79: if(fmt!=\"tq4\" && fmt!=\"int4\")throw std::runtime_error(\"fmt must be tq4 or int4\");",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:85: NDArray pq=apa_spq1_rotate(q,r,k.shape[1],fmt==\"tq4\");",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:86: return apa_spq1_core(q,k,k,v,scale,delta,causal,sinks,diag,false,carry,\"ordered\",&codes,&sc,&pq,&cb,fmt==\"tq4\");",
+      "tensor_cuda/src/apa_spo/spq6.cuh:1:// APA_SPQ6_BEGIN tq4_tc",
+      "tensor_cuda/src/apa_spo/spq6.cuh:2:// APA-SPQ6: TurboQuant4 packed bulk tier on the SPQ4 tensor-core GQA path (gqa_path=\"tc\", fmt=\"tq4\").",
+      "tensor_cuda/src/apa_spo/spq6.cuh:189:std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq6_tq4_tc(const NDArray& q,const NDArray& k,const NDArray& v,",
+      "tensor_cuda/src/apa_spo/spq6.cuh:207:  apa_spo_require_key_range(\"apa_spq6 tc tq4\",S);   // APA-P1-F2 R3 (P1R2-F04)",
+      "tensor_cuda/src/apa_spo/spq6.cuh:216:  apa_spo_require_aligned(\"apa_spq6 tc tq4\",\"q\",q,8);",
+      "tensor_cuda/src/apa_spo/spq6.cuh:217:  apa_spo_require_aligned(\"apa_spq6 tc tq4\",\"codes\",codes,D==128?16:8);",
+      "tensor_cuda/src/apa_spo/spq6.cuh:218:  apa_spo_require_aligned(\"apa_spq6 tc tq4\",\"k\",k,16);",
+      "tensor_cuda/src/apa_spo/spq6.cuh:219:  apa_spo_require_aligned(\"apa_spq6 tc tq4\",\"v\",v,16);",
+      "tensor_cuda/src/apa_spo/spq6.cuh:292:// APA_SPQ6_END tq4_tc",
+      "tensor_cuda/src/apa_spo/eb3.cuh:908:// Validation and arena as apa_spq6_tq4_tc (SPQ6/FXTC1 2026), variant B only.",
+      "tensor_cuda/src/apa_spo/packed.cuh:15:__global__ void pack_tq(const float* rotated,const float* norms,const float* bnd,",
+      "tensor_cuda/src/apa_spo/packed.cuh:86:// every rotated coordinate is NaN and pack_tq (NaN > bnd is false) stores code",
+      "tensor_cuda/src/apa_spo/packed.cuh:97:// artifacts/apa_p1f2/TQ4_CENSUS.json); pack_tq stores norms[] unchanged.",
+      "tensor_cuda/src/apa_spo/spq4.cuh:454:// APA-SPQ6: fmt=\"tq4\" is now accepted under \"tc\" (spq6.cuh); fmt=\"int4\" path unchanged.",
+      "tensor_cuda/src/apa_spo/spq4.cuh:458:  if(fmt!=\"int4\" && fmt!=\"tq4\")throw std::runtime_error(\"gqa_path='tc' supports fmt='int4' or fmt='tq4'\");",
+      "tensor_cuda/src/apa_spo/spq4.cuh:462:  // R11 (P1R-F11): apa_spq6_tq4_tc validates everything (G range included)",
+      "tensor_cuda/src/apa_spo/spq4.cuh:464:  if(fmt==\"tq4\")return apa_spq6_tq4_tc(q,k,v,codes,sc,r,cb,scale,delta,causal,sinks,diag,carry);"
+    ]
+  },
+  "files_with_matches": [
+    "tensor_cuda/src/apa_spo/eb3.cuh",
+    "tensor_cuda/src/apa_spo/packed.cuh",
+    "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+    "tensor_cuda/src/apa_spo/spq4.cuh",
+    "tensor_cuda/src/apa_spo/spq6.cuh"
+  ],
+  "owners": [
+    "spq1::prepare<T> (norm)",
+    "spq1::pack_tq (codes; norm copied)"
+  ],
+  "conclusion": "One TQ4 key quantizer exists for every packed entry: prepare (norm, rotation) + pack_tq (codes). eb3.cuh, spq4.cuh, spq6.cuh (and eb4.cuh, eb2b.cuh) only read codes and norms made by it; packed_launcher.cuh only launches it. The census does not widen R2: the one fix in prepare covers the public route and every raw packed entry fed by ApaSpq1Workspace.",
+  "rows": [
+    {
+      "site": "tensor_cuda/src/apa_spo/packed.cuh:101",
+      "kernel": "spq1::prepare<T>",
+      "role": "OWNS the TQ4 key quantization of the packed route: per key row norm (sequential add/mul, sqrt_rn), unit = k/(norm+1e-12), rotated coordinates; writes norms[row]",
+      "reached_by": "ApaSpq1Workspace.append (tq4) -> _spo2.packed_prepare; PackedSpKeys (public default route) owns an ApaSpq1Workspace(fmt=\"tq4\"); raw _spo2.packed_prepare",
+      "r2_fix": "YES: a row with any non-finite element stores a quiet NaN norm; the shared norm used for the unit vector is unchanged, so rotated outputs are bit-identical; finite rows unchanged"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/packed.cuh:15",
+      "kernel": "spq1::pack_tq",
+      "role": "OWNS the code assignment (15 boundaries, NaN > bnd is false -> code 0) and copies the norm unchanged: scales[dst]=norms[key]; no norm of its own",
+      "reached_by": "ApaSpq1Workspace.append (tq4) -> _spo2.packed_append(tq=True); raw _spo2.packed_append",
+      "r2_fix": "NO CHANGE NEEDED: it stores prepare's norm verbatim, so the NaN carried by prepare reaches scales[]. A norm made non-finite elsewhere (caller-supplied norms on the raw helper) is stored as given (caller contract)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/packed.cuh:36",
+      "kernel": "spq1::pack_int4_rows<T>",
+      "role": "INT4 (not TQ4) key quantizer; F1 already stores a NaN scale for a row with any non-finite element",
+      "r2_fix": "out of R2 (INT4); unchanged"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/eb3.cuh:911",
+      "kernel": "EB3 (rotate_q, bulk_copy, bulk_swap, spq6::bulk_mma_tq)",
+      "role": "READS caller codes + norms (packed tuple from ApaSpq1Workspace); rotates only the query; owns no key quantizer",
+      "r2_fix": "none (reader)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/spq6.cuh:189",
+      "kernel": "SPQ6 tc tq4 (spq6::bulk_mma_tq)",
+      "role": "READS caller codes + norms; rotates the query via apa_spq1_rotate; owns no key quantizer",
+      "r2_fix": "none (reader)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/spq4.cuh:455",
+      "kernel": "SPQ4 dispatch (tq4 -> SPQ6 / r2)",
+      "role": "READS caller codes; dispatches; owns no key quantizer",
+      "r2_fix": "none (reader)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:39",
+      "kernel": "host apa_spq1_prepare / apa_spq1_pack / apa_spq1_run",
+      "role": "LAUNCH the two kernels above (prepare_launcher, pack); apa_spq1_run reads codes; no quantizer of their own",
+      "r2_fix": "none (launchers)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/eb4.cuh:680",
+      "kernel": "EB4 (eb4::bulk_stats)",
+      "role": "READS caller codes + norms (not in L99's five-file list; checked because it is a packed entry)",
+      "r2_fix": "none (reader)"
+    },
+    {
+      "site": "tensor_cuda/src/apa_spo/eb2b.cuh:146",
+      "kernel": "EB2b",
+      "role": "READS caller codes + norms; eb2b::quantize is the int8 V quantizer, not a key quantizer",
+      "r2_fix": "none (reader)"
+    },
+    {
+      "site": "tensor_cuda/tensor_cuda/quant.py (_quantize_keys)",
+      "kernel": "Python TurboQuant dense quantizer",
+      "role": "the DENSE route's quantizer (fp32 reconstruction); not owned by any packed entry; read-only here",
+      "r2_fix": "out of scope (dense comparator)"
+    }
+  ],
+  "written_by": "scripts/apa_p1f2_census.py",
+  "source_sha256": {
+    "tensor_cuda/src/apa_spo/baseline_dump.cuh": "9b7859de3e472624e63dcbca5e280f6ef6488bd6810970e4604252c52357ffea",
+    "tensor_cuda/src/apa_spo/d1.cuh": "e676bfdce86479abe9c213d87886a0c229659d28e8ab287bad0ec6f1713c8dc3",
+    "tensor_cuda/src/apa_spo/eb2b.cuh": "12f3381d455675bc16574f3f66e739481663d88a365427517703f17816e88f3a",
+    "tensor_cuda/src/apa_spo/eb2b_values.cuh": "93676e50290b02e6c4e5b21c9cf7646a4f56d7780fe6c0c52f08984a7be14afb",
+    "tensor_cuda/src/apa_spo/eb3.cuh": "886ef396b7b085e32d5915b661574f1d84c61b3ef03059a644366d1c1489df45",
+    "tensor_cuda/src/apa_spo/eb3_tuning.cuh": "87a24dccab5b928ccbb4a7b297af7965d8fd984e3630baac8e01a2bc7f45f64f",
+    "tensor_cuda/src/apa_spo/eb4.cuh": "461180210c66f388309e6508dae4ac19286552ffcfce94956dd2a2004695e898",
+    "tensor_cuda/src/apa_spo/eb4_tuning.cuh": "4f7d5554b04f5169fe6d5480c145c0aa0e2c4b843cb6f2bfb5a79b51278db766",
+    "tensor_cuda/src/apa_spo/launcher.cuh": "87754cd7ebe89ecb0a67d0035e3b0bdd465d8efd387a7e4c5b920698363aaed8",
+    "tensor_cuda/src/apa_spo/merge.cuh": "e940b1a71a37f30f22dd875e650962232502e307a2f85321bdb6c7b9a204471c",
+    "tensor_cuda/src/apa_spo/packed.cuh": "2628678a26666ae4b361a438041c491ea9d320dd5555bda9af799128f1913a53",
+    "tensor_cuda/src/apa_spo/packed_launcher.cuh": "3282e62f27e8071695877653d8441087b5d5f7c105d337b9d421752be194159b",
+    "tensor_cuda/src/apa_spo/parallel.cuh": "a42ee95b045b8dab6361a36d4672e3594c9e61b8de818dcffb920651b4324fa8",
+    "tensor_cuda/src/apa_spo/spq4.cuh": "686d007bf1d7cd2a7c34199ee08c67d31eee132c11b436c54656d4cda9e74d3e",
+    "tensor_cuda/src/apa_spo/spq6.cuh": "b9392252fbc42a7a4e697b63784a1ef056c2e2bd37df153b972e47147a97a800",
+    "tensor_cuda/src/apa_spo/tensor.cuh": "aa1f87c2d4b4cb0a8d86201cc765afe2c9b6c61bc22719b160ddb793005cbdbc"
+  }
+}

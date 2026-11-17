@@ -1,0 +1,52 @@
+{
+  "order": "APA-P1-D",
+  "ruling": "R-F packed margins; line L5; gate G5 and prediction G5b",
+  "registered_before_measurement": true,
+  "quantizer_identity": "turboquant_lloyd_max_rotated_fp32_packed_tq4_r2",
+  "quantizer_identity_meaning": "same TurboQuant tables as the dense quantizer (quant.py _tables, rotation seed kv_head*1337+42, 4-bit Lloyd-Max codebook), keys stored as packed 4-bit codes plus fp32 norms by ApaSpq1Workspace (fmt tq4), bulk scores from the ordered packed-r2 arithmetic (spq4 gqa_path r2 -> apa_spq1_run, partition carry)",
+  "procedure": {
+    "source": "scripts/apa_sp2_gpu.py (SP2 G2: measure() and freeze())",
+        "imported_unchanged": ["data(shape, index, seed, draw, sample)", "stats(values)"],
+    "sp2_registration": "/mnt/ForgeRealm/Project-Tensor/artifacts/apa_sp2/registration.json (read-only; absent from this worktree because *.json is git-ignored)",
+    "sp2_registration_sha256": "3b8df8bfdd6e3d351395f96ca654bfe9070a26bfaed390d73cc620546a7ff027",
+    "targets": "every SP2 G2 target with bits=4: eq_b4_<shape id> for the 32 registered shapes (16 per D), from apa_sp2_common.targets(reg)[0]",
+    "measurement_seed": 2026090602,
+    "draws_per_shape": 2,
+    "query_rows": "as SP2: decode uses its one row; prefill samples floor(linspace(0,L-1,min(32,L))) (data(..., sample=True))",
+    "keys": "tc.quantize_sp2_keys(tc.tensor(k), 4, storage='packed') -> PackedSpKeys (Build B, arm B)",
+    "bulk_scores": "each sampled query row i as one L=1 decode call: tc._spo2.packed_run(q[:,:,i:i+1,:], k, v, packed._packed_tuple(), float(float32(1/sqrt(D))), 0.0, False, None, False, fmt='tq4', carry='partition', dump=True, gqa_path='r2')[2] (the bulk-score buffer the selection reads; delta does not change it). The public wrapper is not used here because it needs the table being measured and does not return bulk scores.",
+    "exact_target": "as SP2: FP64 dot of the FP32 q and K rows times float(float32(1/sqrt(D)))",
+    "valid_scores": "as SP2: causal classes keep key j < S - L + i + 1 for sampled query index i; non-causal keep all S keys",
+    "statistic": "maximum_over_all_registered_G2_valid_scores (SP2's), pooled per D over the 16 shapes of that D",
+    "report": ["max", "p99_9", "mean", "count"],
+    "percentile": "numpy.quantile(method=linear), as SP2's stats()",
+    "rounding": "e_q = nextafter(float32(max), +inf), as SP2's freeze()",
+    "freeze": "create-only artifacts/apa_p1d/packed_e_q_table.json and packed_e_q_table.sha256 after all 32 targets PASS; the sha is then pinned in tensor_cuda/tensor_cuda/apa_packed.py (PACKED_TABLE_SHA256) and the table is loaded only through PackedRegisteredMargins.load",
+    "expected_count_per_entry": 13762608,
+    "expected_count_reason": "same queries, keys and validity rule as the dense table's 4-bit entries (production e_q_table.json count 13,762,608 per entry)",
+    "instrument_pin": "not the statistic: for the first two sampled queries of every head and the first/last 17 keys, the dumped bulk must equal an FP64 recomputation (q @ R[kh]^T) . codebook[codes] * norm * scale within 1e-4 + 1e-5*|value|; a miss is an instrument failure (repair at most 3 times, recorded)",
+    "no_reselection": "the table is a measurement; nothing is re-selected after any quality result"
+  },
+  "procedure_pins": {
+    "scripts/apa_sp2_gpu.py": "36eccc02748827e50be2f63bae09d80e6f731d20f7650c148418f7bc57abbc9d",
+    "scripts/apa_sp2_common.py": "04373972029e70f02ab516ff38d84f10c8a83104ea8e3e502f5777b3fd99eeec",
+    "note": "apa_sp2_gpu.py carries this round's one-line storage=\"dense\" edit at its quantizer call; data() and stats() are unchanged"
+  },
+  "build": {
+    "module": "artifacts/apa_p1d/build_B/lib/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+    "module_sha256": "8728e67e26027dbafe8a61592decb38e68171fa7b5634239ce0af7897c4e8c4e"
+  },
+  "dense_reference": {
+    "table": "/mnt/ForgeRealm/Project-Tensor/artifacts/apa_sp2/e_q_table.json",
+    "sha256": "5b6f8bfb405b40c03da21ad8d50eb40c11b85ed9559ee717d2a105c90c0e618d",
+    "e_q_4_64": 1.010645866394043,
+    "e_q_4_128": 0.8716114163398743
+  },
+  "prediction_G5b": {
+    "statement": "each packed e_q is within 1% (relative) of the dense table's entry for the same (4, D), because quantization error dominates both",
+    "test": "abs(e_q_packed / e_q_dense - 1) <= 0.01 for 4:64 and for 4:128",
+    "consequence": "reported HELD or NOT HELD; a miss changes no code and the lead rules before the next round"
+  },
+  "line": "forge-gpu-run --min 30 --max 1800 --label p1d-L5 -- timeout 1750s env APA_P1D_ARM_B=<staged arm B> python3 -B scripts/apa_p1d_gpu.py l5 --out artifacts/apa_p1d/gpu/L5 --max-seconds 1500 (resumable: targets with a PASS receipt are skipped; rerun unchanged until none remain), then CPU: python3 -B scripts/apa_p1d_gpu.py l5-freeze",
+  "scope_note": "kernel sweep; this establishes nothing about model quality"
+}

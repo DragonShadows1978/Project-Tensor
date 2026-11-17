@@ -1,0 +1,1347 @@
+diff --git a/scripts/apa_p1f1_sass.py b/scripts/apa_p1f1_sass.py
+index d242c163..07e04069 100644
+--- a/scripts/apa_p1f1_sass.py
++++ b/scripts/apa_p1f1_sass.py
+@@ -1,10 +1,24 @@
+ """APA-P1-F1 S3: per-kernel SASS, Build F vs Build B, against artifacts/apa_p1f1/EXPECTED.json.
+ 
+ P1-D's comparison (scripts/apa_p1d_sass.py) is imported: its dump() (cuobjdump
+--sass sm_89) and its read()/compare() (every Function block compared as exact
+-text; only the bijective _cu_<8 hex>_<n> suffix is mapped). Only its output
+-directory is pointed at artifacts/apa_p1f1. Kernel keys are demangled with
+-c++filt to match the expected list (names without the parameter list).
++-sass sm_89) and its compare() (every Function block compared as exact text).
++Only its output directory is pointed at artifacts/apa_p1f1. Kernel keys are
++demangled with c++filt to match the expected list (names without the parameter
++list).
++
++APA-P1-F2 R7 (P1R2-F08), NIT, fixed once:
++- the result records the expectation file it actually compared against
++  (`expected_active`: path and sha256) next to the original registration
++  (`expected_json_sha256`, unchanged meaning);
++- `symbol_suffix_renames` now counts only paired kernels present in both builds
++  whose symbol changed; kernels present in one build only are counted apart
++  (`symbol_only_in_base`, `symbol_only_in_new`), so an added function is no
++  longer counted as a rename;
++- symbol keys map nvcc's per-build `_cu_<8 hex>` suffix with an optional
++  `_<n>` (bijective; read_blocks below), the only normalization;
++- compare_builds() takes the base/new builds and the artifacts directory as
++  arguments, so APA-P1-F2 runs this same comparison for Build F2 against Build
++  F (scripts/apa_p1f2_sass.py). F1's filed receipts are not rewritten.
+ Prior art: NVIDIA cuobjdump; P1 A1 / P1-D SASS comparison (Project-Tensor 2026),
+ imported. No prior art known to me beyond that. CPU only.
+ """
+@@ -21,6 +35,7 @@ import apa_p1d_sass as p1d  # noqa: E402
+ 
+ ART = ROOT / 'artifacts/apa_p1f1'
+ BUILD_B_SHA = '8728e67e26027dbafe8a61592decb38e68171fa7b5634239ce0af7897c4e8c4e'
++SUFFIX = re.compile(r'_cu_[0-9a-f]{8}(?:_[0-9]+)?')
+ 
+ 
+ def sha(path):
+@@ -32,32 +47,70 @@ def demangle(names):
+     return [re.sub(r'\(.*$', '', line) for line in p.stdout.splitlines()]
+ 
+ 
+-def main():
+-    label = sys.argv[1] if len(sys.argv) > 1 else 'F'
+-    p1d.ART = ART   # dumps land in artifacts/apa_p1f1/sass
+-    b_module = ROOT / 'artifacts/apa_p1d/build_B/lib/_tensor_cuda.cpython-312-x86_64-linux-gnu.so'
+-    assert sha(b_module) == BUILD_B_SHA, 'Build B module sha mismatch'
+-    rec = json.loads((ART / f'build_{label}/BUILD.json').read_text())
+-    f_module = ROOT / rec['module']
+-    assert sha(f_module) == rec['module_sha256']
+-    expected = json.loads((ART / 'EXPECTED.json').read_text())['sass']
+-    override = ART / f'EXPECTED_SASS_{label}.json'
+-    if override.exists():
++def read_blocks(path):
++    """Function blocks keyed by symbol with `_cu_<8 hex>[_<n>]` mapped to `_cu_BUILD` (R7: optional `_<n>`)."""
++    blocks, names, key, lines = {}, {}, None, []
++    for line in Path(path).open():
++        m = re.search(r'Function : (\S+)', line)
++        if m:
++            name = m[1]
++            key = SUFFIX.sub('_cu_BUILD', name)
++            assert key not in blocks and key not in names, ('non-bijective symbol map', key)
++            names[key] = name
++            lines = []
++        elif key and line.strip() == '..........':
++            blocks[key] = ''.join(lines)
++            key = None
++        elif key:
++            lines.append(line)
++    return blocks, names
++
++
++def compare_dumps(x, y, xl, yl, root=ROOT):
++    """Exact text per Function block (P1-D's compare(), with read_blocks and R7's split counts)."""
++    a, an = read_blocks(Path(root) / x['dump'])
++    b, bn = read_blocks(Path(root) / y['dump'])
++    rows = []
++    for k in sorted(set(a) | set(b)):
++        rows.append({'kernel': k, f'{xl}_symbol': an.get(k), f'{yl}_symbol': bn.get(k),
++                     'exact_body_equal': a.get(k) == b.get(k),
++                     f'{xl}_sha256': hashlib.sha256(a[k].encode()).hexdigest() if k in a else None,
++                     f'{yl}_sha256': hashlib.sha256(b[k].encode()).hexdigest() if k in b else None})
++    paired = [r for r in rows if r[f'{xl}_symbol'] is not None and r[f'{yl}_symbol'] is not None]
++    return dict(kernels=len(rows), rows=rows,
++                symbol_suffix_renames=sum(r[f'{xl}_symbol'] != r[f'{yl}_symbol'] for r in paired),
++                symbol_only_in_base=sum(r[f'{yl}_symbol'] is None for r in rows),
++                symbol_only_in_new=sum(r[f'{xl}_symbol'] is None for r in rows))
++
++
++def compare_builds(base_label, base_module, base_sha, new_label, new_module, new_sha, art, expected_path,
++                   override_path=None, out_name=None, root=ROOT):
++    """Compare new against base per kernel and check every difference against the expected lists."""
++    art = Path(art)
++    assert sha(base_module) == base_sha, f'{base_label} module sha mismatch'
++    assert sha(new_module) == new_sha, f'{new_label} module sha mismatch'
++    registered = json.loads(Path(expected_path).read_text())['sass']
++    expected = registered
++    active = Path(expected_path)
++    if override_path is not None and Path(override_path).exists():
+         # Attempt-specific registration (written before that build): same changed
+         # and added lists, its own removed list.
+-        reg = json.loads(override.read_text())
++        reg = json.loads(Path(override_path).read_text())
+         assert isinstance(reg['expected_removed'], list)
+-        expected = dict(expected, expected_removed={'registered in ' + override.name: reg['expected_removed']})
+-    sass_dir = ART / 'sass'
++        expected = dict(registered, expected_removed={'registered in ' + Path(override_path).name:
++                                                      reg['expected_removed']})
++        active = Path(override_path)
++    p1d.ART = art   # dumps land in <art>/sass
++    sass_dir = art / 'sass'
+     dumps = {}
+-    for name, module in (('B', b_module), (label, f_module)):
++    for name, module in ((base_label, base_module), (new_label, new_module)):
+         if (sass_dir / f'{name}.sass').exists():
+             dumps[name] = dict(module=str(module), module_sha256=sha(module),
+-                               dump=str((sass_dir / f'{name}.sass').relative_to(ROOT)),
++                               dump=str((sass_dir / f'{name}.sass').relative_to(root)),
+                                dump_sha256=sha(sass_dir / f'{name}.sass'), reused=True)
+         else:
+             dumps[name] = p1d.dump(name, module)
+-    cmp = p1d.compare(dumps['B'], dumps[label], 'B', label)
++    cmp = compare_dumps(dumps[base_label], dumps[new_label], base_label, new_label, root)
+     keys = [r['kernel'] for r in cmp['rows']]
+     # Map each comparison key (mapped mangled name) to its demangled name.
+     dem = dict(zip(keys, demangle([k.replace('_cu_BUILD', '_cu_00000000_0') for k in keys])))
+@@ -70,9 +123,9 @@ def main():
+         d = dem[r['kernel']]
+         if r['exact_body_equal']:
+             kind = 'equal'
+-        elif r['B_sha256'] is None:
++        elif r[f'{base_label}_sha256'] is None:
+             kind = 'added'
+-        elif r[f'{label}_sha256'] is None:
++        elif r[f'{new_label}_sha256'] is None:
+             kind = 'removed'
+         else:
+             kind = 'changed'
+@@ -89,20 +142,35 @@ def main():
+                    removed=sorted(set(exp_removed) - seen['removed']),
+                    added=sorted(set(exp_added) - seen['added']))
+     status = 'PASS' if not unexpected and not any(missing.values()) else 'FAIL'
+-    result = dict(status=status, method=p1d.__doc__.strip().splitlines()[0] + ' (imported compare/read/dump)',
+-                  expected_json_sha256=sha(ART / 'EXPECTED.json'), dumps=dumps, kernels=len(rows),
++    result = dict(status=status, method=p1d.__doc__.strip().splitlines()[0] +
++                  ' (imported dump; exact Function-block text; _cu_<8 hex>[_<n>] mapped, bijective)',
++                  base=base_label, new=new_label,
++                  expected_json_sha256=sha(expected_path), expected_json=str(Path(expected_path).relative_to(root)),
++                  expected_active=dict(path=str(active.relative_to(root)), sha256=sha(active)),
++                  dumps=dumps, kernels=len(rows),
+                   counts={k: sum(r['kind'] == k for r in rows) for k in ('equal', 'changed', 'removed', 'added')},
+                   unexpected_differences=unexpected, expected_but_not_seen=missing,
+                   symbol_suffix_renames=cmp['symbol_suffix_renames'],
++                  symbol_only_in_base=cmp['symbol_only_in_base'], symbol_only_in_new=cmp['symbol_only_in_new'],
+                   differing=[dict(kernel=r['demangled'], kind=r['kind'], expected_as=r.get('expected_as'))
+                              for r in rows if r['kind'] != 'equal'],
+                   rows=rows)
+-    out = ART / f'SASS_COMPARISON_{label}.json'
++    out = art / (out_name or f'SASS_COMPARISON_{new_label}.json')
+     with out.open('x') as f:
+         json.dump(result, f, indent=2)
+         f.write('\n')
+-    print(status, result['counts'], 'unexpected', unexpected, 'missing', missing)
+-    sys.exit(0 if status == 'PASS' else 1)
++    print(status, result['counts'], 'renames', result['symbol_suffix_renames'], 'unexpected', unexpected,
++          'missing', missing)
++    return result
++
++
++def main():
++    label = sys.argv[1] if len(sys.argv) > 1 else 'F'
++    b_module = ROOT / 'artifacts/apa_p1d/build_B/lib/_tensor_cuda.cpython-312-x86_64-linux-gnu.so'
++    rec = json.loads((ART / f'build_{label}/BUILD.json').read_text())
++    result = compare_builds('B', b_module, BUILD_B_SHA, label, ROOT / rec['module'], rec['module_sha256'], ART,
++                            ART / 'EXPECTED.json', ART / f'EXPECTED_SASS_{label}.json')
++    sys.exit(0 if result['status'] == 'PASS' else 1)
+ 
+ 
+ if __name__ == '__main__':
+diff --git a/tensor_cuda/include/tc/ops.h b/tensor_cuda/include/tc/ops.h
+index 5526718e..0edc5906 100644
+--- a/tensor_cuda/include/tc/ops.h
++++ b/tensor_cuda/include/tc/ops.h
+@@ -325,7 +325,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_run(const NDArray&,const ND
+ // Flash-Decoding 2023 split-K; BLASST 2025 inherited SP criterion.
+ std::pair<NDArray,NDArray> apa_eb2b_quantize(const NDArray&);
+ NDArray apa_eb2b_values(const NDArray&,const NDArray&,const NDArray&,const NDArray&);
+-std::vector<NDArray> apa_eb2b_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,bool,bool);
++std::vector<NDArray> apa_eb2b_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,float,const std::string&,bool,bool,bool);
+ #endif
+ #ifdef TC_APA_EB3
+ // APA_EB3_BEGIN decl
+diff --git a/tensor_cuda/src/apa_spo/eb2b.cuh b/tensor_cuda/src/apa_spo/eb2b.cuh
+index 0bf0d144..56824479 100644
+--- a/tensor_cuda/src/apa_spo/eb2b.cuh
++++ b/tensor_cuda/src/apa_spo/eb2b.cuh
+@@ -106,6 +106,11 @@ __global__ void values_dump(const bf16* v,const int8_t* vi,const float* vs,
+ NDArray apa_eb2b_values(const NDArray& v,const NDArray& vi,const NDArray& vs,const NDArray& flags) {
+   if(v.ndim()!=4 || v.dtype!=DType::BFloat16 || v.shape[3]!=128 || vi.shape!=v.shape || vi.dtype!=DType::Uint8 || vs.dtype!=DType::Float32 || vs.shape!=Shape({v.shape[0],v.shape[1],v.shape[2]}) || flags.dtype!=DType::Uint8 || flags.shape!=Shape({v.shape[0],v.shape[1],(v.shape[2]+63)/64}))throw std::runtime_error("apa_eb2b_values: geometry/dtype");
+   for(const NDArray* a:{&v,&vi,&vs,&flags})if(!a->device.is_cuda() || a->device.index!=v.device.index)throw std::runtime_error("apa_eb2b_values: device");
++  // APA-P1-F2 R4 (P1R2-F05): positive extents as ValueError (raw helper);
++  // R3 (P1R2-F04): total = numel/8 and the kernel's int index
++  // i = blockIdx.x*128+threadIdx.x (up to total+127) must fit int.
++  apa_spo_require_positive_extents("apa_eb2b_values","v",v);
++  apa_spo_require_int_range("apa_eb2b_values","numel(v)/8+127 (int value-group index)",v.numel()/8+127);
+   apa_spo_require_extents("apa_eb2b_values",{&v});   // R11
+   // R2 (P1R-F02) census: v uint4 and vi uint2 (eb2b_values.cuh:43/:22).
+   apa_spo_require_aligned("apa_eb2b_values","v",v,16);
+@@ -118,6 +123,9 @@ NDArray apa_eb2b_values(const NDArray& v,const NDArray& vi,const NDArray& vs,con
+ // Standard native validation/buffer wrappers (Project-Tensor 2026) and
+ // pybind11/Jakob 2015. No new algorithm in the shape/device plumbing.
+ std::pair<NDArray,NDArray> apa_eb2b_quantize(const NDArray& v) {
++  // APA-P1-F2 R4 (P1R2-F05): positive extents as ValueError (raw helper); the
++  // numel()==0 refusal below stays as it was for any other rank.
++  if(v.ndim()==3 || v.ndim()==4)apa_spo_require_positive_extents("apa_eb2b_quantize","v",v);
+   if(!v.device.is_cuda() || v.dtype!=DType::BFloat16 || (v.ndim()!=3 && v.ndim()!=4) || v.shape.back()!=128 || v.numel()==0 || v.numel()/128>std::numeric_limits<int>::max())
+     throw std::runtime_error("apa_eb2b_quantize: CUDA bf16 [...,128] rank3/4 required");
+   NDArray vi(v.shape,DType::Uint8,v.device);Shape s=v.shape;s.pop_back();
+@@ -210,19 +218,8 @@ std::vector<NDArray> apa_eb2b_run(const NDArray& q,const NDArray& k,const NDArra
+   if(!diag && !profile)return {out};
+   return {out,mask,bulk,prefix,flags,scores,cm,cz,blog,logz,ticks};
+ }
+-// APA-P1-F1 R4 binding bridge. tc/ops.h (outside this round's writable set)
+-// still declares the old apa_eb2b_run signature without delta and carry, so
+-// the spo2 binding cannot see the new one. The binding declares this
+-// global-namespace entry at block scope (ISO C++ [basic.scope.block]: such a
+-// declaration names a member of the innermost enclosing namespace, here the
+-// global one), and it is defined here, outside namespace tc. eb2b.cuh is only
+-// included from spq4.cuh, inside the single `namespace tc {` that kernels.cu
+-// opens around the apa_spo headers. No prior art claimed; plain plumbing.
+-}  // namespace tc (closed for the bridge; reopened below)
+-std::vector<tc::NDArray> apa_p1f1_eb2b_run(const tc::NDArray& q,const tc::NDArray& k,const tc::NDArray& v,
+-  const tc::NDArray& vi,const tc::NDArray& vs,const tc::NDArray& codes,const tc::NDArray& sc,
+-  const tc::NDArray& rot,const tc::NDArray& cb,float scale,float fraction,float delta,const std::string& carry,
+-  bool force_bf16,bool diag,bool profile) {
+-  return tc::apa_eb2b_run(q,k,v,vi,vs,codes,sc,rot,cb,scale,fraction,delta,carry,force_bf16,diag,profile);
+-}
+-namespace tc {
++// APA-P1-F2 R6 (P1R2-F07): tc/ops.h now declares this exact signature (with
++// delta and carry), so a native caller that includes ops.h links to this one
++// tc::apa_eb2b_run, and the spo2 binding calls it directly. F1's global
++// bridge (apa_p1f1_eb2b_run), which existed only because ops.h was read-only
++// in F1, is removed. ISO C++17 declarations/linkage; no prior art claimed.
+diff --git a/tensor_cuda/src/apa_spo/eb3.cuh b/tensor_cuda/src/apa_spo/eb3.cuh
+index ce190590..30af103b 100644
+--- a/tensor_cuda/src/apa_spo/eb3.cuh
++++ b/tensor_cuda/src/apa_spo/eb3.cuh
+@@ -782,9 +782,16 @@ __global__ void __launch_bounds__(128,MINB) select_pv(const bf16* q,const bf16*
+     if(qd<G*Q4){
+       int g=qd/Q4,d0=(qd%Q4)*4;float den=dens[g];bf16* o=out+(row0+g)*VD+d0;
+       // APA-P1-F1 R1 (P1R-F01): guard only an exactly-zero denominator; a NaN
+-      // den now propagates (IEEE 754) instead of writing 0. den is an fma chain
+-      // of l_c*e_c with l_c, e_c >= 0 (+ e_sink), so on finite inputs den >= 0
+-      // and den>0 and den!=0 differ only on NaN. Milakov/Gimelshein 2018 merge.
++      // den now propagates (IEEE 754) instead of writing 0. APA-P1-F2 R5
++      // (P1R2-F06), the claim stated narrowly: den is an fma chain of l_c*e_c
++      // (+ e_sink). When every intermediate score and den are finite, den >= 0
++      // and den>0 and den!=0 select the same branch, so the guard change
++      // preserves every such result. It does not preserve results from finite
++      // operands that overflow (e.g. a FLT_MAX scale: score +Inf, exp(Inf-Inf)
++      // NaN), from a NaN or +Inf sink, or from a +-Inf query over all-negative
++      // logits: those follow IEEE propagation to NaN where the old guard wrote
++      // 0 (the loud direction; LF2 of APA-P1-F2 pins them). Milakov and
++      // Gimelshein 2018 / FlashAttention (Dao et al. 2022) merge, unchanged.
+       o[0]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].x,den):0.f);
+       o[1]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].y,den):0.f);
+       o[2]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].z,den):0.f);
+@@ -924,6 +931,7 @@ std::vector<NDArray> apa_eb3_run(const NDArray& q,const NDArray& k,const NDArray
+   int G=(int)(H/KVH);
+   if(G<2 || G>spq4::MAXG)throw std::runtime_error("apa_eb3: needs 2 <= H/KVH <= 8");
+   if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_eb3: dimension range");
++  apa_spo_require_key_range("apa_eb3",S);   // APA-P1-F2 R3 (P1R2-F04)
+   if(rot.shape!=Shape({KVH,D,D}) || rot.dtype!=DType::Float32)throw std::runtime_error("apa_eb3: rotation shape/dtype");
+   if(cb.shape!=Shape({16}) || cb.dtype!=DType::Float32)throw std::runtime_error("apa_eb3: codebook shape/dtype");
+   if(sinks && (sinks->ndim()!=1 || sinks->shape[0]!=H || sinks->dtype!=q.dtype || !sinks->device.is_cuda() || sinks->device.index!=q.device.index))throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+@@ -933,6 +941,15 @@ std::vector<NDArray> apa_eb3_run(const NDArray& q,const NDArray& k,const NDArray
+   if(variant!=eb3::tune::REGISTERED_VARIANT && G!=2 && G!=4)throw std::runtime_error("apa_eb3: ablation variants are built for G=2,4 only");
+   if(diag && variant!=eb3::tune::REGISTERED_VARIANT)throw std::runtime_error("apa_eb3: diagnostics only on the registered variant");
+   if(timeline && variant!=eb3::tune::REGISTERED_VARIANT && variant!=6 && variant!=1)throw std::runtime_error("apa_eb3: timeline only on variants 0, 1, 6");
++  // APA-P1-F2 R4 (P1R2-F05): a timeline select (ON=true) is never REG in byG
++  // below, so its templates exist for G=2 and G=4 only, for every variant that
++  // allows a timeline (0: registered select with ON; 1: occupancy-only; 6:
++  // baseline footprint). Other G used to pass every check here, launch the
++  // rotation and the bulk, and only then refuse inside byG. Refused now
++  // before the lock, the arena and any launch. Plain validation; no prior art.
++  if(timeline && G!=2 && G!=4)
++    throw std::invalid_argument("apa_eb3: timeline=True has select templates for G=H/KVH in {2,4} only (got G="+
++      std::to_string(G)+"); refused before any allocation or launch");
+   // R2 (P1R-F02) census for this launcher (every variant): q uint2 (eb3.cuh
+   // select_pv S2, spq4.cuh:220 for sel 0), k uint4 (S2), v uint4 (vbase), codes
+   // uint4 (every bulk kernel, D=128); rot float4 only in rotate_q (VA.rot==1).
+@@ -1138,9 +1155,9 @@ std::vector<std::tuple<std::string,int,int,int,int,int>> apa_eb3_resources(){
+   return out;
+ }
+ #if TC_APA_P1_TEST_HOOKS
+-// APA-P1-F1 hooks-build bridge for the LF5 ticket read (same block-scope
+-// declaration pattern as apa_p1f1_eb2b_run in eb2b.cuh; tc/ops.h is outside
+-// the writable set). No prior art claimed; plumbing.
++// APA-P1-F1 hooks-build bridge for the LF5 ticket read (block-scope
++// declaration in the binding; tc/ops.h was outside F1's writable set). No
++// prior art claimed; plumbing.
+ }  // namespace tc (closed for the bridge; reopened below)
+ std::vector<unsigned> apa_p1f1_merge_tickets(int n){return tc::eb3::early_counter_merge_slots(n);}
+ namespace tc {
+diff --git a/tensor_cuda/src/apa_spo/eb4.cuh b/tensor_cuda/src/apa_spo/eb4.cuh
+index e0c27593..9f953c59 100644
+--- a/tensor_cuda/src/apa_spo/eb4.cuh
++++ b/tensor_cuda/src/apa_spo/eb4.cuh
+@@ -645,8 +645,11 @@ __global__ void __launch_bounds__(128,eb3::tune::SEL_MINB) select_mixed(const bf
+     if(qd<G*Q4){
+       int g=qd/Q4,d0=(qd%Q4)*4;float den=dens[g];bf16* o=out+(row0+g)*VD+d0;
+       // APA-P1-F1 R1 (P1R-F01): only an exactly-zero den writes 0; NaN now
+-      // propagates (IEEE 754). den >= 0 on finite inputs (fma chain of
+-      // non-negative l_c*e_c), so only a NaN den changes. Merge as eb3.cuh.
++      // propagates (IEEE 754). APA-P1-F2 R5 (P1R2-F06), stated narrowly: the
++      // guard preserves every result whose intermediate scores and den are
++      // finite (then den >= 0 and >0 equals !=0). Finite operands that
++      // overflow, NaN/+Inf sinks and +-Inf queries over all-negative logits
++      // follow IEEE propagation to NaN (the loud direction). Merge as eb3.cuh.
+       o[0]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].x,den):0.f);
+       o[1]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].y,den):0.f);
+       o[2]=__float2bfloat16_rn(den!=0.f?__fdiv_rn(macc[qi].z,den):0.f);
+diff --git a/tensor_cuda/src/apa_spo/launcher.cuh b/tensor_cuda/src/apa_spo/launcher.cuh
+index 23dd0e34..741d258f 100644
+--- a/tensor_cuda/src/apa_spo/launcher.cuh
++++ b/tensor_cuda/src/apa_spo/launcher.cuh
+@@ -51,6 +51,58 @@ inline const char* apa_spo_knob(const char* name,const char* default_value){
+ #endif
+ }
+ // APA_P1F1_END guards
++// APA_P1F2_BEGIN guards
++// R3 (P1R2-F04) and R4 (P1R2-F05) of APA-P1-F2: host refusals raised before
++// any allocation or launch, as ValueError (std::invalid_argument) naming the
++// operand. R4: every axis of a raw helper's operand must be positive (a zero
++// extent reaches a zero-grid launch, a CUDA "invalid configuration" error).
++// R3: an extent, capacity or index product that a launcher hands to a native
++// int (an int kernel argument, an int row/grid index) must fit int; census in
++// artifacts/apa_p1f2/INDEX_CENSUS.json. Refusal only: nothing is clamped,
++// widened or rerouted, so no finite result changes (L55).
++// Prior art: ISO C++17 [conv.integral] (an out-of-range value converted to a
++// signed int is implementation-defined; modular on this toolchain) and the
++// CUDA Programming Guide grid-dimension limits; ordinary precondition
++// validation. No prior art known to me for this census; ours.
++constexpr int64_t kApaSpoIntMax=std::numeric_limits<int>::max();
++inline void apa_spo_require_positive_extents(const char* entry,const char* operand,const NDArray& a){
++  for(size_t i=0;i<a.shape.size();++i){
++    const int64_t n=a.shape[i];
++    if(n<=0)
++      throw std::invalid_argument(std::string(entry)+": operand '"+operand+"' axis "+std::to_string(i)+" has extent "+
++        std::to_string(n)+"; every extent must be positive (refused on the host before any launch)");
++    if(n>kApaSpoIntMax)
++      throw std::invalid_argument(std::string(entry)+": operand '"+operand+"' axis "+std::to_string(i)+" has extent "+
++        std::to_string(n)+", which does not fit the native int index (max "+std::to_string(kApaSpoIntMax)+")");
++  }
++}
++inline void apa_spo_require_int_range(const char* entry,const char* operand,int64_t value){
++  if(value<0 || value>kApaSpoIntMax)
++    throw std::invalid_argument(std::string(entry)+": "+operand+" = "+std::to_string(value)+
++      " does not fit the native int index that receives it (max "+std::to_string(kApaSpoIntMax)+
++      "); refused before any allocation or launch");
++}
++// Saturating int64 product of non-negative factors (INT64_MAX on overflow, -1
++// for a negative factor), so a range check never sees a wrapped product.
++inline int64_t apa_spo_product(std::initializer_list<int64_t> factors){
++  int64_t p=1;
++  for(int64_t x:factors){
++    if(x<0)return -1;
++    if(x!=0 && p>std::numeric_limits<int64_t>::max()/x)return std::numeric_limits<int64_t>::max();
++    p*=x;
++  }
++  return p;
++}
++// Ceiling division without overflow for a non-negative (possibly saturated) n.
++inline int64_t apa_spo_ceil_div(int64_t n,int64_t d){return n<0?n:n/d+(n%d!=0);}
++// R3: the attention launchers compute S+part_keys-1 (fixed partition layout,
++// int) and nc*256 (row-carry partition width, int) from the key count S; both
++// fit int iff S + TC_APA_SPLITK_PART_KEYS - 1 does (2048 >= the 256-key chunk).
++inline void apa_spo_require_key_range(const char* entry,int64_t S){
++  apa_spo_require_int_range(entry,"S + 2047 (int partition and 256-key chunk arithmetic over the key count)",
++    S+(int64_t)TC_APA_SPLITK_PART_KEYS-1);
++}
++// APA_P1F2_END guards
+ // Prior art: validation copied from SP1, split merge from SP1.1 (2026).
+ // APA-P1-F1 R11 (P1R-F11): every check of apa_spq1_core runs here, before any
+ // launch; apa_spq1_run calls it before its query rotation. R2: the staged G=1
+@@ -88,6 +140,7 @@ inline void apa_spq1_core_check(const char* entry,
+     throw std::runtime_error("apa_sp: shape/GQA mismatch");
+   if (is_causal && S < L)
+     throw std::runtime_error("apa_sp: bottom-right causal requires S >= L");
++  apa_spo_require_key_range(entry,S);   // APA-P1-F2 R3 (P1R2-F04)
+   const int cap = (int)(D > VD ? D : VD);
+   if (cap > TC_APA_MAXD || B > std::numeric_limits<int>::max() / H / L)
+     throw std::runtime_error("apa_sp: dimension cap or launch range exceeded");
+diff --git a/tensor_cuda/src/apa_spo/merge.cuh b/tensor_cuda/src/apa_spo/merge.cuh
+index fbe343d6..f986a535 100644
+--- a/tensor_cuda/src/apa_spo/merge.cuh
++++ b/tensor_cuda/src/apa_spo/merge.cuh
+@@ -23,10 +23,18 @@ template<class T> __global__ void merge_kernel(const float* pm,const float* pl,c
+     Acc acc=0;
+     for(int c=0;c<NC;++c)acc+=(Acc)pa[((int64_t)row*NC+c)*VD+d]*(Acc)__expf(m[c]-mx);
+     // APA-P1-F1 R1 (P1R-F01): only an exactly-zero denominator writes 0. denom
+-    // is a sum of l_c*exp(m_c-mx) terms (l_c >= 0 is itself a sum of exps), so
+-    // on finite inputs it is >= 0 and the old guard denom>0 differs from
+-    // denom!=0 only on a NaN denominator, which now propagates as on the dense
+-    // path (IEEE 754 NaN propagation; Milakov/Gimelshein 2018 merge unchanged).
++    // is a sum of l_c*exp(m_c-mx) terms (l_c >= 0 is itself a sum of exps).
++    // APA-P1-F2 R5 (P1R2-F06), the claim stated narrowly: when every
++    // intermediate score (m_c, the sink) and denom are finite, denom >= 0 and
++    // the old guard denom>0 selects the same branch as denom!=0, so every such
++    // result is unchanged. Finite inputs alone do not guarantee that: finite
++    // operands can overflow (a FLT_MAX scale makes the scores +Inf and
++    // exp(Inf-Inf) NaN), a NaN or +Inf sink makes denom NaN, and a +-Inf query
++    // over all-negative logits makes every m_c -Inf. Those cases now follow
++    // IEEE 754 propagation to NaN where the old guard wrote 0 (the loud
++    // direction, pinned by APA-P1-F2 LF2). NaN masking is not restored.
++    // Prior art: IEEE 754-2008; Milakov and Gimelshein (2018) / FlashAttention
++    // (Dao et al., 2022) online-softmax merge, unchanged.
+     st<T>(out,(int64_t)row*VD+d,denom!=0?(float)(acc/denom):0.f);
+   }
+ }
+diff --git a/tensor_cuda/src/apa_spo/packed.cuh b/tensor_cuda/src/apa_spo/packed.cuh
+index 2abd62db..865e6433 100644
+--- a/tensor_cuda/src/apa_spo/packed.cuh
++++ b/tensor_cuda/src/apa_spo/packed.cuh
+@@ -81,18 +81,31 @@ template<class T> __global__ void pack_int4_rows(
+ // Norm: separately rounded multiply then add, d=0..D-1, then sqrt_rn.
+ // Unit: div_rn(k[d], add_rn(norm,1e-12f)). Each rotated output coordinate:
+ // sequential fmaf_rn(unit[i],R[coordinate,i],acc), i=0..D-1. No GEMM.
+-// APA-P1-F1 R1 exception (no code change): a non-finite key element already
+-// reaches the stored norm here. ss accumulates v*v with IEEE add/mul, so a NaN
+-// gives ss=NaN and an Inf gives ss=Inf; norm=sqrt(ss) is then NaN or Inf and
+-// pack_tq stores it unchanged (scales[dst]=norms[key]); every score of that key
+-// is acc*norm, non-finite (Inf*0 is NaN). IEEE 754-2008 propagation, inherited.
++// APA-P1-F2 R2 (P1R2-F02), superseding F1's "no code change" note: an Inf
++// element gives ss=Inf and norm=Inf, and unit=k/(Inf+1e-12) is 0 or NaN, so
++// every rotated coordinate is NaN and pack_tq (NaN > bnd is false) stores code
++// 0 with the Inf norm. The bulk score acc*Inf then takes the sign of the
++// code-0 dot product, can be -Inf, and the key is skipped with weight 0, a
++// finite row where dense SP is NaN. Rule now: a key row with any non-finite
++// element stores a quiet NaN norm (as F1's INT4 carry stores a NaN scale), so
++// every score of that key is NaN, never -Inf. The shared `norm` that the unit
++// vector divides by is not changed, so the rotated output is bit-for-bit as
++// before; a row whose elements are all finite stores the same norm bit for bit
++// (L55: only rows with a non-finite element change). A finite row whose ss
++// overflows to Inf is not a non-finite input and keeps its Inf norm (LF1).
++// This kernel is the only TQ4 key quantizer of the packed route (census:
++// artifacts/apa_p1f2/TQ4_CENSUS.json); pack_tq stores norms[] unchanged.
++// Prior art: IEEE 754-2008 NaN/Inf propagation; TurboQuant (Zandieh et al.,
++// 2025) norm/rotation, unchanged; F1's INT4 non-finite sentinel (Project-Tensor
++// 2026). Ours: the NaN-norm carry for this quantizer.
+ template<class T> __global__ void prepare(const T* k,const float* r,float* rot,float* norms,
+  int H,int S,int D,int start) {
+  int row=blockIdx.x,N=S-start,h=(row/N)%H,j=start+row%N,d=threadIdx.x;
+  int64_t src=((int64_t)(row/N)*S+j)*D;
+  __shared__ float unit[128],norm;
+- if(d==0){float ss=0;for(int i=0;i<D;++i){float v=ld<T>(k,src+i);ss=__fadd_rn(ss,__fmul_rn(v,v));}
+-   norm=__fsqrt_rn(ss);norms[row]=norm;}
++ if(d==0){float ss=0;bool nonfinite=false;
++   for(int i=0;i<D;++i){float v=ld<T>(k,src+i);nonfinite|=!isfinite(v);ss=__fadd_rn(ss,__fmul_rn(v,v));}
++   norm=__fsqrt_rn(ss);norms[row]=nonfinite?__int_as_float(0x7fc00000):norm;}
+  __syncthreads();
+  if(d<D)unit[d]=__fdiv_rn(ld<T>(k,src+d),__fadd_rn(norm,1e-12f));
+  __syncthreads();
+diff --git a/tensor_cuda/src/apa_spo/packed_launcher.cuh b/tensor_cuda/src/apa_spo/packed_launcher.cuh
+index 3481fa07..0e8a9bc2 100644
+--- a/tensor_cuda/src/apa_spo/packed_launcher.cuh
++++ b/tensor_cuda/src/apa_spo/packed_launcher.cuh
+@@ -10,8 +10,23 @@ void apa_spq1_buffer_check(const NDArray& k,const NDArray& codes,const NDArray&
+  if(k.shape[3]!=64 && k.shape[3]!=128)throw std::runtime_error("packed D must be 64 or 128");
+  if(codes.ndim()!=4 || codes.dtype!=DType::Uint8 || sc.dtype!=DType::Float32 || sc.ndim()!=3 || codes.shape[0]!=k.shape[0] || codes.shape[1]!=k.shape[1] || codes.shape[2]<k.shape[2] || codes.shape[3]!=k.shape[3]/2 || sc.shape!=Shape({codes.shape[0],codes.shape[1],codes.shape[2]}))throw std::runtime_error("packed codes/scales shape or dtype mismatch");
+  for(const NDArray* a:{&codes,&sc})if(!a->device.is_cuda() || a->device.index!=k.device.index)throw std::runtime_error("packed device mismatch");
++ // APA-P1-F2 R3 (P1R2-F04): every packed kernel takes the capacity as a native
++ // int (spq1 bulk/bulk_shared/pack_tq `int capacity`, pack_int4_rows `int dst_s`,
++ // spq4 bulk_mma, spq6 bulk_mma_tq, eb3 bulk_copy/bulk_swap, eb4 bulk_stats
++ // `int capacity`); a capacity above INT_MAX would narrow (to a negative value at
++ // 2^31) and index before the buffers. Refused here, the one check every packed
++ // attention and append entry runs before its first allocation or launch.
++ // Prior art: std::vector::reserve's max_size() refusal (ISO C++ 1998) as the
++ // capacity analogue; ordinary range validation, ours.
++ apa_spo_require_int_range("apa_spq1 packed buffers","capacity (codes.shape[2])",codes.shape[2]);
+ }
+ NDArray apa_spq1_rotate(const NDArray& q,const NDArray& r,int KVH,bool tq){
++ // APA-P1-F2 R4 (P1R2-F05): positive extents before the launch (B=0 or H=0
++ // used to reach a zero-grid launch); R3: the grid B*H is a native int row.
++ if(q.ndim()==4){
++   apa_spo_require_positive_extents("apa_spq1_rotate (packed_rotate)","q",q);
++   apa_spo_require_int_range("apa_spq1_rotate (packed_rotate)","B*H (rotate grid rows)",apa_spo_product({q.shape[0],q.shape[1]}));
++ }
+  if(q.ndim()!=4 || q.shape[2]!=1 || !q.device.is_cuda() || (q.dtype!=DType::Float32 && q.dtype!=DType::BFloat16) || KVH<=0 || q.shape[1]%KVH || (q.shape[3]!=64 && q.shape[3]!=128))throw std::runtime_error("packed query shape/dtype");
+  int D=q.shape[3];
+  if(r.shape!=Shape({KVH,D,D}) || r.dtype!=DType::Float32 || !r.device.is_cuda() || r.device.index!=q.device.index)throw std::runtime_error("packed rotation shape/device/dtype");
+@@ -23,16 +38,32 @@ NDArray apa_spq1_rotate(const NDArray& q,const NDArray& r,int KVH,bool tq){
+ // Prior art: native tensor wrappers (D1 2026); fixed-row kernel documented above.
+ std::pair<NDArray,NDArray> apa_spq1_prepare(const NDArray& k,const NDArray& r,int start){
+  if(k.ndim()!=4 || !k.device.is_cuda() || (k.dtype!=DType::Float32 && k.dtype!=DType::BFloat16))throw std::runtime_error("prepare K shape/dtype/device");
++ // APA-P1-F2 R4 (P1R2-F05): positive extents before the int narrowing below
++ // and the launch (B=0 or KV=0 used to reach a zero-grid launch).
++ apa_spo_require_positive_extents("apa_spq1_prepare (packed_prepare)","k",k);
+  int B=k.shape[0],H=k.shape[1],S=k.shape[2],D=k.shape[3],N=S-start;
+  if((D!=64 && D!=128) || N<=0 || start<0 || r.shape!=Shape({H,D,D}) || r.dtype!=DType::Float32 || !r.device.is_cuda() || r.device.index!=k.device.index)throw std::runtime_error("prepare geometry/rotation");
++ // R3 (P1R2-F04): the prepare grid B*KV*N is an int (host grid and the
++ // kernel's int row = blockIdx.x).
++ apa_spo_require_int_range("apa_spq1_prepare (packed_prepare)","B*KV*N (prepare grid rows)",apa_spo_product({(int64_t)B,(int64_t)H,(int64_t)N}));
+  NDArray rot({B,H,N,D},DType::Float32,k.device),norm({B,H,N,1},DType::Float32,k.device);
+  DISPATCH_FLOAT(k.dtype,T,{spq1::prepare<T><<<B*H*N,128>>>((T*)k.data_ptr(),(float*)r.data_ptr(),(float*)rot.data_ptr(),(float*)norm.data_ptr(),H,S,D,start);});
+  cuda_check_last("apa_spq1_prepare");return {rot,norm};
+ }
+ // APA_SPQ1_END prepare_launcher
+ void apa_spq1_pack(const NDArray& k,NDArray& codes,NDArray& sc,const NDArray& rotated,const NDArray& norms,const NDArray& bnd,int start,bool tq){
+- apa_spq1_buffer_check(k,codes,sc);int S=k.shape[2],D=k.shape[3],BH=k.shape[0]*k.shape[1],N=S-start;
++ // APA-P1-F2 R4 (P1R2-F05): positive extents of k, codes and scales before
++ // anything else (zero leading axes with N > 0 used to reach a zero-grid
++ // launch); R3 (P1R2-F04): B*KV and the pack grid are native ints.
++ if(k.ndim()==4)apa_spo_require_positive_extents("apa_spq1_pack (packed_append)","k",k);
++ if(codes.ndim()==4)apa_spo_require_positive_extents("apa_spq1_pack (packed_append)","codes",codes);
++ if(sc.ndim()==3)apa_spo_require_positive_extents("apa_spq1_pack (packed_append)","scales",sc);
++ apa_spq1_buffer_check(k,codes,sc);
++ apa_spo_require_int_range("apa_spq1_pack (packed_append)","B*KV",apa_spo_product({k.shape[0],k.shape[1]}));
++ int S=k.shape[2],D=k.shape[3],BH=k.shape[0]*k.shape[1],N=S-start;
+  if(start<0 || start>S)throw std::runtime_error("packed append range");if(!N)return;
++ apa_spo_require_int_range("apa_spq1_pack (packed_append)",tq?"pack_tq grid blocks (B*KV*N*D/2+127)/128":"pack_int4_rows grid blocks (B*KV*N+3)/4",
++   tq?apa_spo_ceil_div(apa_spo_product({(int64_t)BH,(int64_t)N,(int64_t)(D/2)}),128):apa_spo_ceil_div(apa_spo_product({(int64_t)BH,(int64_t)N}),4));
+  if(tq){
+    if(rotated.shape!=Shape({k.shape[0],k.shape[1],N,D}) || norms.numel()!=int64_t(BH)*N || bnd.numel()!=15)throw std::runtime_error("packed TQ preparation shape");
+    for(const NDArray* a:{&rotated,&norms,&bnd})if(a->dtype!=DType::Float32 || !a->device.is_cuda() || a->device.index!=k.device.index)throw std::runtime_error("packed TQ preparation device/dtype");
+diff --git a/tensor_cuda/src/apa_spo/spq4.cuh b/tensor_cuda/src/apa_spo/spq4.cuh
+index 2fa2cae6..78356ad5 100644
+--- a/tensor_cuda/src/apa_spo/spq4.cuh
++++ b/tensor_cuda/src/apa_spo/spq4.cuh
+@@ -377,6 +377,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_tc(const NDArray& q,const N
+   int G=(int)(H/KVH);
+   if(G<2 || G>spq4::MAXG)throw std::runtime_error("apa_spq4: tc path needs 2 <= H/KVH <= 8");
+   if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_spq4: dimension range");
++  apa_spo_require_key_range("apa_spq4 tc int4",S);   // APA-P1-F2 R3 (P1R2-F04)
+   if(sinks && (sinks->ndim()!=1 || sinks->shape[0]!=H || sinks->dtype!=q.dtype || !sinks->device.is_cuda() || sinks->device.index!=q.device.index))throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+   apa_spq1_buffer_check(k,codes,sc);
+   // R2 (P1R-F02) census: q uint2 (spq4.cuh:86 bulk_mma, :220 select_pv), codes
+diff --git a/tensor_cuda/src/apa_spo/spq6.cuh b/tensor_cuda/src/apa_spo/spq6.cuh
+index b3c293ef..0d65fc98 100644
+--- a/tensor_cuda/src/apa_spo/spq6.cuh
++++ b/tensor_cuda/src/apa_spo/spq6.cuh
+@@ -204,6 +204,7 @@ std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq6_tq4_tc(const NDArray& q,con
+   int G=(int)(H/KVH);
+   if(G<2 || G>spq4::MAXG)throw std::runtime_error("apa_spq6: tc path needs 2 <= H/KVH <= 8");
+   if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_spq6: dimension range");
++  apa_spo_require_key_range("apa_spq6 tc tq4",S);   // APA-P1-F2 R3 (P1R2-F04)
+   if(cb.shape!=Shape({16}) || cb.dtype!=DType::Float32 || !cb.device.is_cuda() || cb.device.index!=q.device.index)throw std::runtime_error("apa_spq6: codebook shape/device/dtype");
+   if(sinks && (sinks->ndim()!=1 || sinks->shape[0]!=H || sinks->dtype!=q.dtype || !sinks->device.is_cuda() || sinks->device.index!=q.device.index))throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+   apa_spq1_buffer_check(k,codes,sc);
+diff --git a/tensor_cuda/src/bindings.cpp b/tensor_cuda/src/bindings.cpp
+index a5a49aa2..83ca39c1 100644
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -2801,16 +2801,13 @@ m.def("int4_stats",[](Tensor& q,Tensor& codes,Tensor& scales,int S,double scale,
+  m.def("eb2b_quantize",[](Tensor& v){auto r=tc::apa_eb2b_quantize(v.data());return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));});
+  m.def("eb2b_values",[](Tensor& v,Tensor& vi,Tensor& vs,Tensor& flags){return Tensor::make(tc::apa_eb2b_values(v.data(),vi.data(),vs.data(),flags.data()),false);});
+  // APA-P1-F1 R4 (P1R-F04): delta and carry are required keyword arguments,
+- // forwarded to the launcher (no launch-site literal). The entry is declared
+- // here at block scope because tc/ops.h (read-only this round) still carries
+- // the old signature; the definition is apa_p1f1_eb2b_run in eb2b.cuh.
+- std::vector<tc::NDArray> apa_p1f1_eb2b_run(const tc::NDArray&,const tc::NDArray&,const tc::NDArray&,
+-   const tc::NDArray&,const tc::NDArray&,const tc::NDArray&,const tc::NDArray&,const tc::NDArray&,const tc::NDArray&,
+-   float,float,float,const std::string&,bool,bool,bool);
++ // forwarded to the launcher (no launch-site literal). APA-P1-F2 R6
++ // (P1R2-F07): tc/ops.h now declares the current tc::apa_eb2b_run (with delta
++ // and carry), so the binding calls it directly; F1's global bridge is gone.
+  m.def("eb2b_run",[](Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,py::tuple packed,double scale,double fraction,double delta,const std::string& carry,bool force_bf16,bool diag,bool profile)->py::object{
+    if(packed.size()!=4)throw std::runtime_error("apa_eb2b: packed tuple must have four tensors");
+    auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+-   auto r=apa_p1f1_eb2b_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)fraction,(float)delta,carry,force_bf16,diag,profile);
++   auto r=tc::apa_eb2b_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)fraction,(float)delta,carry,force_bf16,diag,profile);
+    if(!diag && !profile)return py::cast(Tensor::make(r[0],false));
+    py::tuple out(r.size());for(size_t i=0;i<r.size();++i)out[i]=r[i].defined()?py::cast(Tensor::make(r[i],false)):py::none();return out;
+  },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("vi"),py::arg("vs"),py::arg("packed"),py::arg("scale"),py::arg("fraction"),py::kw_only(),py::arg("delta"),py::arg("carry"),py::arg("force_bf16")=false,py::arg("diagnostics")=false,py::arg("profile")=false);
+diff --git a/tensor_cuda/tensor_cuda/__init__.py b/tensor_cuda/tensor_cuda/__init__.py
+index 3c26312e..54d7d3ff 100644
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -1632,6 +1632,13 @@ class ApaSpq1Workspace:
+         B, H, S, D = k.shape
+         if D not in (64, 128) or capacity < S:
+             raise ValueError("packed workspace requires D64/D128 and capacity >= S")
++        # APA-P1-F2 R3 (P1R2-F04): the capacity and the index products must fit
++        # the native int that receives them, checked before anything is
++        # allocated (shared helper with PackedSpKeys; INDEX_CENSUS.json).
++        import numbers as _numbers
++        if isinstance(capacity, bool) or not isinstance(capacity, _numbers.Integral):
++            raise ValueError("packed workspace capacity must be an integer")
++        apa_packed.check_native_range(B, H, S, D, int(capacity), S, fmt)
+         from .quant import _tables
+         self.fmt, self.capacity, self.valid_rows = fmt, int(capacity), 0
+         self.geometry, self.dtype = (B,H,D), k.dtype
+@@ -1665,6 +1672,8 @@ class ApaSpq1Workspace:
+             # No new rows: only the bound exact K, unedited, is accepted (R8).
+             self.check_source(k)
+             return
++        # APA-P1-F2 R3: this append's prepare/pack grid fits the native int.
++        apa_packed.check_native_range(B, H, S, D, self.capacity, S-self.valid_rows, self.fmt)
+         if self.fmt=="tq4":
+             # IEEE754 fixed-row arithmetic; TurboQuant tables unchanged.
+             # Native norm/rotation schedule is independent of batch/append size.
+diff --git a/tensor_cuda/tensor_cuda/apa_packed.py b/tensor_cuda/tensor_cuda/apa_packed.py
+index 035dca12..7efb213b 100644
+--- a/tensor_cuda/tensor_cuda/apa_packed.py
++++ b/tensor_cuda/tensor_cuda/apa_packed.py
+@@ -62,6 +62,17 @@ PACKED_MEASUREMENT_CLASSES = 32
+ PACKED_REGISTRATION_SHA256 = "025b1a5116ceae3e0f272d5a8823970c31d0d65e709b785cd81e6a2cbbda1538"
+ # sha256 of the frozen packed table artifacts/apa_p1d/packed_e_q_table.json.
+ PACKED_TABLE_SHA256 = "1897fedd2a8d05945e34433c75a7afd3b33feb64e0a6b2ca410d611d18868e98"
++# APA-P1-F2 R1 (P1R2-F01): the entries of that pinned file (e_q, exactly as
++# json.loads parses them). Every use checks a table's sha256 AND its entries
++# against these, so neither a hand-built object nor a load() with another
++# expected digest reaches lookup or a launch. Prior art: SHA-256 pinning (NIST
++# FIPS 180-4, 2015); checking the pin at use rather than only at load is ours.
++PACKED_PINNED_ENTRIES = MappingProxyType({"4:64": 1.010646104812622, "4:128": 0.8716110587120056})
++# APA-P1-F2 R3 (P1R2-F04): the native int index bound. Every packed launcher
++# narrows the capacity, the extents and the prepare/pack grid products to int
++# (census: artifacts/apa_p1f2/INDEX_CENSUS.json); larger values are refused
++# here before any allocation, and again natively before any launch.
++NATIVE_INT_MAX = 2**31 - 1
+ 
+ _FLOAT32_MAX = float(np.finfo(np.float32).max)
+ 
+@@ -146,6 +157,33 @@ def derive_delta(epsilon, e_q):
+     return float(result)
+ 
+ 
++def check_native_range(batch, kv_heads, rows, dim, capacity, new_rows, fmt=PACKED_FORMAT):
++    """R3: raise ValueError, naming the operand, unless every extent, the capacity
++    and the index product of packing new_rows rows fit the native int index.
++
++    Used by PackedSpKeys and ApaSpq1Workspace before any allocation (new_rows =
++    the rows the constructor packs) and before any append launch (new_rows = the
++    appended rows). Zero batch or KV heads are refused only when rows would be
++    packed (they reached a zero-grid launch); an empty S with a reserved capacity
++    stays valid (nothing launches). Prior art: std::vector::reserve / max_size()
++    refusal (ISO C++ 1998); ISO C++17 [conv.integral] narrowing. Ours: the census.
++    """
++    for name, n in (("batch (k axis 0)", batch), ("KV heads (k axis 1)", kv_heads), ("rows (k axis 2)", rows),
++                    ("D (k axis 3)", dim), ("capacity", capacity), ("appended rows", new_rows)):
++        if n < 0 or n > NATIVE_INT_MAX:
++            raise ValueError(f"apa_sp2: {name}={n} does not fit the native int index (0..{NATIVE_INT_MAX})")
++    if new_rows > 0:
++        if batch < 1 or kv_heads < 1:
++            raise ValueError(f"apa_sp2: packing rows needs positive batch and KV heads (got {batch}, {kv_heads})")
++        if fmt == "tq4" and batch * kv_heads * new_rows > NATIVE_INT_MAX:
++            raise ValueError(f"apa_sp2: batch*KV*appended rows = {batch * kv_heads * new_rows} does not fit the native "
++                             f"int prepare grid (max {NATIVE_INT_MAX})")
++        if fmt == "int4" and (batch * kv_heads > NATIVE_INT_MAX or
++                              -(-batch * kv_heads * new_rows // 4) > NATIVE_INT_MAX):
++            raise ValueError(f"apa_sp2: batch*KV={batch * kv_heads} or the int4 pack grid does not fit the native "
++                             f"int index (max {NATIVE_INT_MAX})")
++
++
+ def _device_ordinal(device):
+     device = str(device)
+     if not device.startswith("cuda"):
+@@ -224,6 +262,9 @@ class PackedSpKeys:
+         capacity = S if capacity is None else capacity
+         if type(capacity) is not int or capacity < S or capacity < 1:
+             raise ValueError("apa_sp2: capacity must be an int >= visible rows")
++        # R3 (P1R2-F04): upper bound and index products, before the workspace
++        # allocates anything.
++        check_native_range(B, KV, S, D, capacity, S)
+         self.batch, self.kv_heads, self.dim = B, KV, D
+         self.capacity, self.dtype = capacity, k.dtype
+         self.device, self.device_ordinal = str(k.device), ordinal
+@@ -309,6 +350,8 @@ class PackedSpKeys:
+             if not (self._is_source(k) and k.revision == self._source_revision):
+                 raise ValueError("apa_sp2: append adds no rows; a different K needs a new PackedSpKeys")
+             return self
++        # R3: the append's prepare/pack grid, before the generation moves.
++        check_native_range(self.batch, self.kv_heads, S, self.dim, self.capacity, S - self.visible_rows)
+         self.generation += 1
+         self._ws.append(k)
+         self._bind(k)
+@@ -363,6 +406,11 @@ class PackedRegisteredMargins:
+ 
+     @classmethod
+     def load(cls, path, *, expected_sha256=PACKED_TABLE_SHA256):
++        # R1 (P1R2-F01): the pin cannot be overridden on the public path; the
++        # keyword stays only so callers that pass the pinned digest keep working.
++        if expected_sha256 != PACKED_TABLE_SHA256:
++            raise ValueError("apa_sp2: the packed margin table is pinned (PACKED_TABLE_SHA256); "
++                             "expected_sha256 cannot override the pin")
+         data = Path(path).read_bytes()
+         digest = hashlib.sha256(data).hexdigest()
+         if digest != expected_sha256:
+@@ -385,9 +433,12 @@ class PackedRegisteredMargins:
+                     not 0 <= entry["p99_9"] <= entry["max"]):
+                 raise ValueError("apa_sp2: invalid measured packed margin")
+             entries[key] = value
+-        return cls(digest, MappingProxyType(entries))
++        table = cls(digest, MappingProxyType(entries))
++        check_pinned_margins(table)
++        return table
+ 
+     def lookup(self, bulk_bits, dim, dtype, scale):
++        check_pinned_margins(self)   # R1: before the table is used for anything
+         if type(bulk_bits) is not int or bulk_bits != PACKED_BULK_BITS or dim not in PACKED_DIMS:
+             raise ValueError("apa_sp2: packed table covers 4-bit bulk at D64/D128 only")
+         if dtype != "float32" or not math.isfinite(scale) or np.float32(scale) != np.float32(1/math.sqrt(dim)):
+@@ -395,6 +446,33 @@ class PackedRegisteredMargins:
+         return self.entries[f"{bulk_bits}:{dim}"]
+ 
+ 
++def check_pinned_margins(margins):
++    """R1 (P1R2-F01): raise ValueError unless margins is exactly the pinned table.
++
++    Checks the exact type (a subclass, or any separate experimental type, is
++    refused), the sha256 attribute against PACKED_TABLE_SHA256, and the entries
++    against PACKED_PINNED_ENTRIES (same keys, each a float bit-equal to the
++    pinned e_q), so a hand-built instance carrying the pinned sha with other
++    entries is refused too. Pure Python; no device work.
++    Prior art: SHA-256 pinning (NIST FIPS 180-4, 2015); ours: check at use.
++    """
++    if type(margins) is not PackedRegisteredMargins:
++        raise ValueError("apa_sp2: margins must be the pinned PackedRegisteredMargins table")
++    if margins.sha256 != PACKED_TABLE_SHA256:
++        raise ValueError("apa_sp2: packed margin table sha256 differs from the pinned table (PACKED_TABLE_SHA256)")
++    entries = margins.entries
++    try:
++        keys = set(entries)
++        values = {key: entries[key] for key in keys}
++    except Exception as exc:
++        raise ValueError("apa_sp2: packed margin entries are not a mapping; only the pinned table is accepted") from exc
++    if keys != set(PACKED_PINNED_ENTRIES) or any(
++            type(values[key]) is not float or
++            np.float64(values[key]).view(np.uint64) != np.float64(PACKED_PINNED_ENTRIES[key]).view(np.uint64)
++            for key in keys):
++        raise ValueError("apa_sp2: packed margin entries differ from the pinned table's")
++
++
+ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,
+                      is_causal=False, sinks=None, diagnostics=False):
+     """R-D: the packed route of apa_selective_attention_sp. Every refusal is raised
+@@ -407,6 +485,7 @@ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,
+         raise ValueError("apa_sp2: dense margin table with packed keys; load the packed table")
+     if not isinstance(margins, PackedRegisteredMargins):
+         raise ValueError("apa_sp2: load a registered packed margin table before launching")
++    check_pinned_margins(margins)   # R1: exact pinned table, before any device work
+     if q.ndim != 4:
+         raise ValueError("apa_sp2: query must be rank four")
+     if type(bulk_bits) is not int or bulk_bits != kq.bulk_bits:
+@@ -415,7 +494,8 @@ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,
+     for name, tensor in (("q", q), ("v", v)) + ((("sinks", sinks),) if sinks is not None else ()):
+         if _device_ordinal(tensor.device) != kq.device_ordinal:
+             raise ValueError(f"apa_sp2: {name} is not on the packed keys' device")
+-    e_q = margins.lookup(bulk_bits, q.shape[-1], q.dtype, scale)
++    # R1: the class's own lookup (not an override on the instance's type).
++    e_q = PackedRegisteredMargins.lookup(margins, bulk_bits, q.shape[-1], q.dtype, scale)
+     delta = derive_delta(epsilon, e_q)
+     L = q.shape[2]
+     if L != 1:
+diff --git a/tensor_cuda/tensor_cuda/apa_sp2.py b/tensor_cuda/tensor_cuda/apa_sp2.py
+index 3a9b128f..f2cd0a35 100644
+--- a/tensor_cuda/tensor_cuda/apa_sp2.py
++++ b/tensor_cuda/tensor_cuda/apa_sp2.py
+@@ -58,7 +58,7 @@ class RegisteredMargins:
+         return self.entries[f"{bulk_bits}:{dim}"]
+ 
+ 
+-def quantize_sp2_keys(k, bulk_bits, *, storage=None):
++def quantize_sp2_keys(k, bulk_bits, *, storage=None, capacity=None):
+     """Existing TurboQuant implementation, one rotation per KV head, fp32 only.
+ 
+     APA-P1-D (R-A, R-B): storage chooses the representation. Precedence: the
+@@ -69,6 +69,15 @@ def quantize_sp2_keys(k, bulk_bits, *, storage=None):
+     dense representation and records the reason (apa_packed.last_route); an
+     explicit storage="packed" that cannot be honoured raises. Bits never change.
+     Prior art: TurboQuant (Zandieh et al., 2025) codes; see apa_packed.py.
++
++    APA-P1-F2 R8 (P1R2-F09): capacity reserves packed rows for later
++    PackedSpKeys.append (decode growth). When the result is packed, capacity is
++    forwarded to PackedSpKeys unchanged (its int >= S check and R3's native int
++    bound apply). A dense result cannot honour a reservation, so a capacity
++    other than None with dense storage (requested, or the default's recorded
++    fallback) raises ValueError before any device work; nothing is dropped
++    silently. capacity=None keeps every result as before. Prior art: capacity
++    reservation as in std::vector::reserve (ISO C++ 1998); keyword plumbing.
+     """
+     from . import quant
+     from .apa_packed import (PackedSpKeys, packed_ineligible_reason, resolve_storage,
+@@ -82,12 +91,15 @@ def quantize_sp2_keys(k, bulk_bits, *, storage=None):
+     if requested == "packed":
+         reason = packed_ineligible_reason(k, bulk_bits)
+         if reason is None:
+-            packed = PackedSpKeys(k)
++            packed = PackedSpKeys(k) if capacity is None else PackedSpKeys(k, capacity=capacity)
+             _record_route("quantize", storage="packed", backend=PACKED_BACKEND,
+                           source=source, fallback_reason=None, bulk_bits=bulk_bits)
+             return packed
+         if source == "argument":
+             raise ValueError(f"apa_sp2: storage='packed' cannot be honoured: {reason}")
++    if capacity is not None:
++        raise ValueError("apa_sp2: capacity reserves packed rows; it is not accepted with dense storage" +
++                         (f" (packed storage fell back to dense: {reason})" if reason else ""))
+     tables = quant._tables(k.shape[-1], bulk_bits, k.shape[1], True, k.device.split(":")[0])
+     _record_route("quantize", storage="dense", backend=DENSE_BACKEND, source=source,
+                   fallback_reason=reason, bulk_bits=bulk_bits)
+diff --git a/tensor_cuda/tests/test_apa_p1f2_cpu.py b/tensor_cuda/tests/test_apa_p1f2_cpu.py
+new file mode 100644
+index 00000000..e92ede82
+--- /dev/null
++++ b/tensor_cuda/tests/test_apa_p1f2_cpu.py
+@@ -0,0 +1,538 @@
++"""APA-P1-F2 S4: CPU tests of R1 (margin pin), R3 (capacity range), R4 (source order), R6 (ops.h
++declaration, compile probe), R7 (SASS script) and R8 (factory capacity).
++
++The engine cannot build a tensor without a visible GPU (HOST-TENSOR-NEEDS-DEVICE), so apa_sp2.py
++and apa_packed.py are loaded from source into a stub package whose _C, _spo2, quant and
++ApaSpq1Workspace are recording fakes (P1-D's method), and the packed region of __init__.py is
++executed with recording fakes for the real ApaSpq1Workspace (F1's method). A recorded call named
++"allocate"/"zeros" is an allocation; "packed_run"/"dense_epsilon" is a device call. The pinned
++margin table is the real file artifacts/apa_p1d/packed_e_q_table.json.
++APA_P1F2_SRC points the loader at a mutant copy of the package (S5); APA_P1F2_BASE_TREE is the
++committed tree (git archive d01118b4) for the R6 probe's "before" side.
++
++Prior art: test doubles / recording fakes (Meszaros, xUnit Test Patterns, 2007); SHA-256 pinning
++(NIST FIPS 180-4, 2015); mutation testing (DeMillo, Lipton and Sayward, 1978) for the S5 mutants
++these tests must kill. No new technique.
++"""
++import dataclasses
++import hashlib
++import importlib
++import inspect
++import itertools
++import json
++import math
++import os
++from pathlib import Path
++import subprocess
++import sys
++import types
++from types import MappingProxyType
++
++import numpy as np
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++SRC = Path(os.environ.get("APA_P1F2_SRC", ROOT / "tensor_cuda/tensor_cuda"))
++PINNED = ROOT / "artifacts/apa_p1d/packed_e_q_table.json"
++BASE_TREE = Path(os.environ.get("APA_P1F2_BASE_TREE", "/tmp/apap1f2_treeF0"))
++NVCC = Path("/usr/local/cuda-12.6/bin/nvcc")
++INT_MAX = 2**31 - 1
++_COUNTER = itertools.count()
++
++
++class FakeTensor:
++    def __init__(self, shape, dtype="float32", device="cuda:0", tag="tensor"):
++        self.shape, self.dtype, self.device, self.tag = tuple(shape), dtype, device, tag
++        self.revision = 0
++
++    @property
++    def ndim(self):
++        return len(self.shape)
++
++
++def make_package(monkeypatch):
++    calls = []
++    name = f"tcp1f2_{next(_COUNTER)}"
++    pkg = types.ModuleType(name)
++    pkg.__path__ = [str(SRC)]
++    quant = types.ModuleType(name + ".quant")
++
++    def _tables(D, bits, H, rot, device):
++        calls.append(("tables", D, bits, H))
++        return ("R", "CB", "BND")
++
++    def _quantize_keys(k, *tables):
++        calls.append(("quantize_dense", k.shape))
++        return FakeTensor(k.shape, k.dtype, k.device, tag="dense_kq")
++    quant._tables, quant._quantize_keys = _tables, _quantize_keys
++
++    class FakeWorkspace:
++        def __init__(self, k, capacity, *, fmt):
++            calls.append(("allocate", tuple(k.shape), capacity, fmt))
++            B, H, S, D = k.shape
++            self.fmt, self.capacity, self.valid_rows = fmt, capacity, 0
++            self.codes = FakeTensor((B, H, capacity, D // 2), "uint8", k.device, "codes")
++            self.scales = FakeTensor((B, H, capacity), "float32", k.device, "norms")
++            self.rotation = FakeTensor((H, D, D))
++            self.codebook = FakeTensor((16,))
++            self.boundaries = FakeTensor((15,))
++            self.append(k)
++
++        @property
++        def packed(self):
++            return (self.codes, self.scales, self.rotation, self.codebook)
++
++        def append(self, k):
++            calls.append(("append", self.valid_rows, k.shape[2]))
++            self.valid_rows = k.shape[2]
++
++    class FakeSpo2:
++        def packed_append(self, *args):
++            raise AssertionError("unused")
++
++        def packed_run(self, *args, **kwargs):
++            calls.append(("packed_run", args, kwargs))
++            return ("packed_out", "packed_mask") if args[8] else "packed_out"
++
++    class FakeC:
++        def apa_selective_attention_sp_epsilon(self, *args):
++            calls.append(("dense_epsilon", args))
++            return "dense_out"
++
++    cmod = FakeC()
++    pkg._C, pkg._spo2, pkg.quant, pkg.ApaSpq1Workspace = cmod, FakeSpo2(), quant, FakeWorkspace
++    monkeypatch.setitem(sys.modules, name, pkg)
++    monkeypatch.setitem(sys.modules, name + ".quant", quant)
++    monkeypatch.setitem(sys.modules, name + "._C", cmod)
++    sp2 = importlib.import_module(name + ".apa_sp2")
++    packed = importlib.import_module(name + ".apa_packed")
++    return types.SimpleNamespace(sp2=sp2, packed=packed, calls=calls)
++
++
++@pytest.fixture
++def env(monkeypatch):
++    monkeypatch.delenv("TC_APA_SP_STORAGE", raising=False)
++    monkeypatch.setenv("TC_APA_SP", "1")
++    return make_package(monkeypatch)
++
++
++def kinds(env, kind):
++    return [c for c in env.calls if c[0] == kind]
++
++
++def device_calls(env):
++    return [c for c in env.calls if c[0] in ("packed_run", "dense_epsilon")]
++
++
++def pinned(env):
++    return env.packed.PackedRegisteredMargins.load(PINNED)
++
++
++def decode(env, D=128, S=257, G=2, KV=2, B=1):
++    k = FakeTensor((B, KV, S, D))
++    p = env.sp2.quantize_sp2_keys(k, 4)
++    return FakeTensor((B, KV * G, 1, D)), k, p, FakeTensor((B, KV, S, D))
++
++
++def attend(env, margins, D=128, **kw):
++    q, k, p, v = decode(env, D=D)
++    return env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(D), .01, bulk_bits=4, margins=margins, **kw)
++
++
++# ------------------------------------------------------------------ R1 (P1R2-F01)
++def test_r1_pinned_table_loads_and_matches_the_pin(env):
++    P = env.packed
++    assert hashlib.sha256(PINNED.read_bytes()).hexdigest() == P.PACKED_TABLE_SHA256
++    table = json.loads(PINNED.read_text())
++    assert {k: float(v["e_q"]) for k, v in table["entries"].items()} == dict(P.PACKED_PINNED_ENTRIES)
++    m = pinned(env)
++    assert type(m) is P.PackedRegisteredMargins and m.sha256 == P.PACKED_TABLE_SHA256
++    assert m.lookup(4, 64, "float32", 1 / math.sqrt(64)) == P.PACKED_PINNED_ENTRIES["4:64"]
++    assert m.lookup(4, 128, "float32", 1 / math.sqrt(128)) == P.PACKED_PINNED_ENTRIES["4:128"]
++    assert attend(env, m) == "packed_out" and len(kinds(env, "packed_run")) == 1, "pinned table: positive control"
++
++
++def hand_built(env):
++    P = env.packed
++    pins = dict(P.PACKED_PINNED_ENTRIES)
++    other = dict(pins, **{"4:64": 0.0})
++    return {
++        "wrong_sha_pinned_entries": P.PackedRegisteredMargins("0" * 64, MappingProxyType(pins)),
++        "pinned_sha_zero_entries": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            {"4:64": 0.0, "4:128": 0.0})),
++        "pinned_sha_one_entry_changed": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(other)),
++        "pinned_sha_one_ulp_off": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            dict(pins, **{"4:128": float(np.nextafter(pins["4:128"], 0.0))}))),
++        "pinned_sha_extra_key": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            dict(pins, **{"2:64": 0.0}))),
++        "pinned_sha_missing_key": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            {"4:64": pins["4:64"]})),
++        "pinned_sha_float32_values": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            {k: np.float32(v) for k, v in pins.items()})),
++        "pinned_sha_string_values": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, MappingProxyType(
++            {k: repr(v) for k, v in pins.items()})),
++        "pinned_sha_not_a_mapping": P.PackedRegisteredMargins(P.PACKED_TABLE_SHA256, None),
++    }
++
++
++@pytest.mark.parametrize("case", ["wrong_sha_pinned_entries", "pinned_sha_zero_entries", "pinned_sha_one_entry_changed",
++                                  "pinned_sha_one_ulp_off", "pinned_sha_extra_key", "pinned_sha_missing_key",
++                                  "pinned_sha_float32_values", "pinned_sha_string_values", "pinned_sha_not_a_mapping"])
++def test_r1_hand_built_table_refused_at_lookup_and_at_attention_before_any_device_call(env, case):
++    m = hand_built(env)[case]
++    with pytest.raises(ValueError, match="pinned"):
++        m.lookup(4, 128, "float32", 1 / math.sqrt(128))
++    with pytest.raises(ValueError, match="pinned"):
++        attend(env, m)
++    assert not device_calls(env), "refused before any device call"
++
++
++def test_r1_subclass_and_entries_replaced_after_load_are_refused(env):
++    P = env.packed
++
++    class Experimental(P.PackedRegisteredMargins):
++        def lookup(self, *args):
++            return 0.0
++    sub = Experimental(P.PACKED_TABLE_SHA256, MappingProxyType(dict(P.PACKED_PINNED_ENTRIES)))
++    with pytest.raises(ValueError, match="pinned"):
++        attend(env, sub)
++    m = pinned(env)
++    object.__setattr__(m, "entries", MappingProxyType({"4:64": 0.0, "4:128": 0.0}))
++    with pytest.raises(ValueError, match="pinned"):
++        m.lookup(4, 64, "float32", .125)
++    with pytest.raises(ValueError, match="pinned"):
++        attend(env, m)
++    m2 = pinned(env)
++    object.__setattr__(m2, "sha256", "f" * 64)
++    with pytest.raises(ValueError, match="pinned"):
++        attend(env, m2)
++    assert not device_calls(env)
++
++
++def test_r1_load_cannot_override_the_pin(env, tmp_path):
++    P = env.packed
++    with pytest.raises(ValueError, match="cannot override the pin"):
++        P.PackedRegisteredMargins.load(PINNED, expected_sha256="0" * 64)
++    table = json.loads(PINNED.read_text())
++    table["entries"]["4:64"]["e_q"] = 2.0
++    table["entries"]["4:64"]["max"] = 1.5
++    path = tmp_path / "other_UNIT_TEST_ONLY.json"
++    path.write_text(json.dumps(table))
++    digest = hashlib.sha256(path.read_bytes()).hexdigest()
++    with pytest.raises(ValueError, match="cannot override the pin"):
++        P.PackedRegisteredMargins.load(path, expected_sha256=digest)
++    with pytest.raises(ValueError, match="SHA256 mismatch"):
++        P.PackedRegisteredMargins.load(path)
++    assert P.PackedRegisteredMargins.load(PINNED, expected_sha256=P.PACKED_TABLE_SHA256).sha256 == P.PACKED_TABLE_SHA256
++    assert not env.calls
++
++
++# Coverage of the P1-D policy tests whose synthetic tables R1 now refuses (EXPECTED.json cpu.intended_changes),
++# restated on the pinned table.
++@pytest.mark.parametrize("D", [64, 128])
++def test_r1_pinned_route_forwards_delta_causal_sinks_and_r2(env, D):
++    q, k, p, v = decode(env, D=D)
++    sinks = FakeTensor((q.shape[1],))
++    out = env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(D), .001, bulk_bits=4, margins=pinned(env),
++                                             is_causal=True, sinks=sinks, diagnostics=True)
++    assert out == ("packed_out", "packed_mask")
++    (_, args, kwargs), = kinds(env, "packed_run")
++    want = env.packed.derive_delta(.001, env.packed.PACKED_PINNED_ENTRIES[f"4:{D}"])
++    assert args[3] == p._packed_tuple() and args[5] == want and args[6] is True and args[7] is sinks
++    assert kwargs == dict(fmt="tq4", carry="partition", gqa_path="r2")
++    route = env.packed.last_route("attention")
++    assert route["storage"] == "packed" and route["e_q"] == env.packed.PACKED_PINNED_ENTRIES[f"4:{D}"]
++
++
++def test_r1_pinned_route_refusals_still_precede_any_device_call(env, monkeypatch):
++    q, k, p, v = decode(env)
++    m, s, call = pinned(env), 1 / math.sqrt(128), env.sp2.apa_selective_attention_sp
++    for kwargs, match in [(dict(bulk_bits=2), "bulk_bits does not match"), (dict(margins=None), "registered packed margin")]:
++        args = {**dict(bulk_bits=4, margins=m), **kwargs}
++        with pytest.raises(ValueError, match=match):
++            call(q, k, p, v, s, .01, **args)
++    with pytest.raises(ValueError, match="exact-K source"):
++        call(q, FakeTensor(k.shape), p, v, s, .01, bulk_bits=4, margins=m)
++    with pytest.raises(ValueError, match="scale=1/sqrt"):
++        call(q, k, p, v, .2, .01, bulk_bits=4, margins=m)
++    with pytest.raises(ValueError, match="epsilon must be"):
++        call(q, k, p, v, s, 0., bulk_bits=4, margins=m)
++    with pytest.raises(ValueError, match="storage='dense'"):
++        call(FakeTensor((1, 4, 8, 128)), k, p, v, s, .01, bulk_bits=4, margins=m, is_causal=True)
++    p.invalidate()
++    with pytest.raises(ValueError, match="stale packed keys"):
++        call(q, k, p, v, s, .01, bulk_bits=4, margins=m)
++    kd = env.sp2.quantize_sp2_keys(k, 4, storage="dense")
++    with pytest.raises(ValueError, match="packed margin table with dense Kq"):
++        call(q, k, kd, v, s, .01, bulk_bits=4, margins=m)
++    monkeypatch.delenv("TC_APA_SP")
++    with pytest.raises(RuntimeError, match="TC_APA_SP=1"):
++        call(q, k, p, v, s, .01, bulk_bits=4, margins=m)
++    assert not device_calls(env)
++
++
++# ------------------------------------------------------------------ R3 (P1R2-F04)
++def test_r3_packed_capacity_at_the_bound_is_accepted_one_past_is_refused_before_allocation(env):
++    k = FakeTensor((1, 1, 4, 64))
++    p = env.packed.PackedSpKeys(k, capacity=INT_MAX)
++    assert p.capacity == INT_MAX and kinds(env, "allocate") == [("allocate", (1, 1, 4, 64), INT_MAX, "tq4")]
++    before = len(env.calls)
++    with pytest.raises(ValueError, match="capacity"):
++        env.packed.PackedSpKeys(k, capacity=INT_MAX + 1)
++    with pytest.raises(ValueError, match="capacity"):
++        env.packed.PackedSpKeys(k, capacity=2**40)
++    assert len(env.calls) == before, "nothing allocated for a capacity past the native int bound"
++
++
++def test_r3_prepare_grid_product_at_and_past_the_bound(env):
++    # B*KV*S is the int prepare grid of the initial pack: 4 * (2**29 - 1) fits, 4 * 2**29 does not.
++    ok = FakeTensor((2, 2, 2**29 - 1, 64))
++    env.packed.PackedSpKeys(ok)
++    before = len(env.calls)
++    with pytest.raises(ValueError, match="prepare grid"):
++        env.packed.PackedSpKeys(FakeTensor((2, 2, 2**29, 64)))
++    assert len(env.calls) == before
++
++
++def test_r3_append_product_refused_before_the_generation_moves(env):
++    k = FakeTensor((2, 2, 1, 64))
++    p = env.packed.PackedSpKeys(k, capacity=INT_MAX)
++    gen, before = p.generation, len(env.calls)
++    with pytest.raises(ValueError, match="prepare grid"):
++        p.append(FakeTensor((2, 2, 2**29 + 1, 64)))
++    assert p.generation == gen and p.visible_rows == 1 and len(env.calls) == before
++    p.append(FakeTensor((2, 2, 2**29, 64)))   # 4 * (2**29 - 1) new rows: fits
++    assert p.visible_rows == 2**29
++
++
++def test_r3_factory_capacity_past_the_bound_refused_before_allocation(env):
++    with pytest.raises(ValueError, match="capacity"):
++        env.sp2.quantize_sp2_keys(FakeTensor((1, 2, 8, 128)), 4, capacity=INT_MAX + 1)
++    assert not kinds(env, "allocate") and not kinds(env, "tables")
++
++
++def region_source():
++    text = (SRC / "__init__.py").read_text()
++    return text[text.index("# APA_SPO2_D1_BEGIN binding"):text.index("# APA_SPO2_D1_END binding")]
++
++
++def exec_region(monkeypatch):
++    """The real ApaSpq1Workspace from __init__.py's packed region, with recording fakes (F1's method)."""
++    calls = []
++    name = f"tcf2_{next(_COUNTER)}"
++    pkg = types.ModuleType(name)
++    pkg.__path__ = [str(SRC)]
++    quant = types.ModuleType(name + ".quant")
++    quant._tables = lambda D, bits, H, rot, device: (FakeTensor((H, D, D)), FakeTensor((16,)), FakeTensor((15,)))
++    monkeypatch.setitem(sys.modules, name, pkg)
++    monkeypatch.setitem(sys.modules, name + ".quant", quant)
++
++    def zeros(shape, dtype="float32", device=None):
++        calls.append(("zeros", tuple(shape), dtype))
++        return FakeTensor(shape, dtype, device)
++
++    class Spo2:
++        def __getattr__(self, attr):
++            if attr.startswith("__"):
++                raise AttributeError(attr)
++            return lambda *a, **kw: calls.append((attr, a, kw)) or ("rot", "norms")
++    spec = importlib.util.spec_from_file_location(f"apa_packed_f2_{next(_COUNTER)}", SRC / "apa_packed.py")
++    ap = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(ap)
++    ns = {"__name__": name, "__package__": name, "_C": types.SimpleNamespace(__file__="unused"), "zeros": zeros,
++          "__all__": [], "apa_packed": ap, "__fake_spo2__": Spo2()}
++    src = region_source().replace("_spo2 = _spo2_load(_C.__file__)", "_spo2 = __fake_spo2__")
++    exec(compile(src, str(SRC / "__init__.py"), "exec"), ns)
++    return ns, calls
++
++
++@pytest.mark.parametrize("fmt", ["tq4", "int4"])
++def test_r3_workspace_capacity_at_the_bound_accepted_one_past_refused_before_allocation(monkeypatch, fmt):
++    ns, calls = exec_region(monkeypatch)
++    k = FakeTensor((1, 1, 4, 64))
++    w = ns["ApaSpq1Workspace"](k, INT_MAX, fmt=fmt)
++    assert w.capacity == INT_MAX and ("zeros", (1, 1, INT_MAX, 32), "uint8") in calls
++    before = len(calls)
++    for bad in (INT_MAX + 1, 2**40):
++        with pytest.raises(ValueError, match="capacity"):
++            ns["ApaSpq1Workspace"](k, bad, fmt=fmt)
++    with pytest.raises(ValueError, match="integer"):
++        ns["ApaSpq1Workspace"](k, 64.0, fmt=fmt)
++    assert len(calls) == before, "no allocation and no native call for a refused capacity"
++
++
++# ------------------------------------------------------------------ R8 (P1R2-F09)
++def test_r8_factory_signature():
++    spec = importlib.util.spec_from_file_location(f"apa_sp2_sig_{next(_COUNTER)}", SRC / "apa_sp2.py")
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    p = inspect.signature(mod.quantize_sp2_keys).parameters["capacity"]
++    assert p.kind is inspect.Parameter.KEYWORD_ONLY and p.default is None
++
++
++def test_r8_capacity_is_forwarded_to_packed_keys(env):
++    k = FakeTensor((1, 2, 100, 128))
++    p = env.sp2.quantize_sp2_keys(k, 4, capacity=164)
++    assert isinstance(p, env.packed.PackedSpKeys) and p.capacity == 164
++    assert kinds(env, "allocate") == [("allocate", (1, 2, 100, 128), 164, "tq4")], "capacity must reach the workspace"
++    p.append(FakeTensor((1, 2, 164, 128)))
++    assert p.visible_rows == 164
++    with pytest.raises(ValueError, match="within capacity"):
++        p.append(FakeTensor((1, 2, 165, 128)))
++    p2 = env.sp2.quantize_sp2_keys(k, 4, storage="packed", capacity=128)
++    assert p2.capacity == 128
++
++
++def test_r8_capacity_none_is_unchanged(env):
++    k = FakeTensor((1, 2, 100, 128))
++    p = env.sp2.quantize_sp2_keys(k, 4)
++    assert p.capacity == 100 and kinds(env, "allocate") == [("allocate", (1, 2, 100, 128), 100, "tq4")]
++    assert env.sp2.quantize_sp2_keys(k, 4, capacity=None).capacity == 100
++    d = env.sp2.quantize_sp2_keys(k, 4, storage="dense", capacity=None)
++    assert d.tag == "dense_kq"
++
++
++def test_r8_dense_storage_refuses_a_capacity_before_device_work(env, monkeypatch):
++    k = FakeTensor((1, 2, 100, 128))
++    with pytest.raises(ValueError, match="dense storage"):
++        env.sp2.quantize_sp2_keys(k, 4, storage="dense", capacity=128)
++    monkeypatch.setenv("TC_APA_SP_STORAGE", "dense")
++    with pytest.raises(ValueError, match="dense storage"):
++        env.sp2.quantize_sp2_keys(k, 4, capacity=128)
++    monkeypatch.delenv("TC_APA_SP_STORAGE")
++    with pytest.raises(ValueError, match="fell back to dense"):
++        env.sp2.quantize_sp2_keys(k, 2, capacity=128)   # 2-bit: the default falls back to dense
++    assert not kinds(env, "tables") and not kinds(env, "quantize_dense") and not kinds(env, "allocate")
++
++
++def test_r8_capacity_below_rows_or_not_an_int_is_refused(env):
++    k = FakeTensor((1, 2, 100, 128))
++    for bad in (99, 0, 128.0, True, "128"):
++        with pytest.raises(ValueError, match="capacity"):
++            env.sp2.quantize_sp2_keys(k, 4, capacity=bad)
++    assert not kinds(env, "allocate")
++
++
++# ------------------------------------------------------------------ R4 (source order)
++def test_r4_refusals_precede_the_first_launch_in_source():
++    spo = ROOT / "tensor_cuda/src/apa_spo"
++    eb3 = (spo / "eb3.cuh").read_text()
++    run = eb3[eb3.index("std::vector<NDArray> apa_eb3_run("):]
++    assert run.index("if(timeline && G!=2 && G!=4)") < run.index("NDArray arena(") < run.index("<<<")
++    pl = (spo / "packed_launcher.cuh").read_text()
++    for head, guard in (("NDArray apa_spq1_rotate(", 'apa_spo_require_positive_extents("apa_spq1_rotate'),
++                        ("std::pair<NDArray,NDArray> apa_spq1_prepare(", 'apa_spo_require_positive_extents("apa_spq1_prepare'),
++                        ("void apa_spq1_pack(", 'apa_spo_require_positive_extents("apa_spq1_pack')):
++        body = pl[pl.index(head):]
++        assert body.index(guard) < body.index("<<<"), head
++    eb2b = (spo / "eb2b.cuh").read_text()
++    for head, guard in (("NDArray apa_eb2b_values(", 'apa_spo_require_positive_extents("apa_eb2b_values"'),
++                        ("std::pair<NDArray,NDArray> apa_eb2b_quantize(", 'apa_spo_require_positive_extents("apa_eb2b_quantize"')):
++        body = eb2b[eb2b.index(head):]
++        assert body.index(guard) < body.index("<<<"), head
++    guards = (spo / "launcher.cuh").read_text()
++    assert "throw std::invalid_argument" in guards[guards.index("inline void apa_spo_require_positive_extents"):]
++
++
++# ------------------------------------------------------------------ R6 (P1R2-F07)
++R6_PROBE = """// R6 probe: ops.h + the eb2b.cuh definition (via kernels.cu, its include context),
++// then the address of tc::apa_eb2b_run with no target type (ambiguous iff two overloads).
++#include "tc/ops.h"
++#include "kernels.cu"
++static auto apa_p1f2_r6_probe = &tc::apa_eb2b_run;
++"""
++
++
++def r6_compile(tree, tmp_path):
++    probe = tmp_path / "r6_probe.cu"
++    probe.write_text(R6_PROBE)
++    cmd = ["timeout", "600s", str(NVCC), "-std=c++17", "-arch=sm_89", "-fdevice-syntax-only", "-Xcompiler",
++           "-fsyntax-only", "-DTC_APA_PACKED=1", "-DTC_APA_EB2B=1", "-DTC_APA_EB3=1", "-DTC_APA_EB4=1",
++           "-DAPA_EB2B_MUTANT=0", "-DAPA_FXTC1_VARIANT_DEFAULT=2", f"-I{tree}/tensor_cuda/include",
++           f"-I{tree}/tensor_cuda/src", "-c", str(probe), "-o", str(tmp_path / "probe.o")]
++    return subprocess.run(cmd, capture_output=True, text=True, cwd=tmp_path)
++
++
++def test_r6_ops_h_declares_the_one_definition():
++    ops = (ROOT / "tensor_cuda/include/tc/ops.h").read_text()
++    decl = [l for l in ops.splitlines() if "apa_eb2b_run(" in l]
++    assert decl == ["std::vector<NDArray> apa_eb2b_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,"
++                    "const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,float,"
++                    "const std::string&,bool,bool,bool);"]
++    bindings = (ROOT / "tensor_cuda/src/bindings.cpp").read_text()
++    assert "tc::apa_eb2b_run(q.data()" in bindings and "apa_p1f1_eb2b_run" not in bindings
++
++
++def test_r6_compile_probe_fails_on_the_base_tree_and_compiles_after(tmp_path):
++    assert NVCC.exists(), "nvcc 12.6 is the probe's compiler"
++    assert (BASE_TREE / "tensor_cuda/include/tc/ops.h").exists(), f"stage the base tree at {BASE_TREE} (git archive)"
++    (tmp_path / "base").mkdir()
++    (tmp_path / "after").mkdir()
++    base = r6_compile(BASE_TREE, tmp_path / "base")
++    assert base.returncode != 0 and 'cannot deduce "auto" type' in base.stdout + base.stderr, \
++        (base.returncode, (base.stdout + base.stderr)[-2000:])
++    after = r6_compile(ROOT, tmp_path / "after")
++    assert after.returncode == 0, (after.stdout + after.stderr)[-2000:]
++
++
++# ------------------------------------------------------------------ R7 (P1R2-F08)
++def sass_module():
++    sys.path.insert(0, str(ROOT / "scripts"))
++    return importlib.import_module("apa_p1f1_sass")
++
++
++def block(name, body):
++    return f"\t\tFunction : {name}\n{body}\t\t..........\n"
++
++
++def test_r7_renames_and_additions_are_counted_apart_and_the_active_expectation_is_recorded(tmp_path):
++    S = sass_module()
++    art = tmp_path / "art"
++    (art / "sass").mkdir(parents=True)
++    keep = "_ZN2tc51_GLOBAL__N__fc2e73a4_11_gemm_apa_cu_{}17blend_dense_exactEv"
++    base = (block(keep.format("e8bf8eed_581904"), "  /*0000*/ MOV R1, c[0x0][0x28] ;\n") +
++            block("_ZN2tc4spq17prepareIfEEvv", "  /*0000*/ FADD R0, R1, R2 ;\n") +
++            block("_ZN2tc4spq14bulkEv", "  /*0000*/ EXIT ;\n") +
++            block("__nv_static_old_gone_cu_0a0b0c0d_5", "  /*0000*/ EXIT ;\n"))
++    new = (block(keep.format("c79198e4_921183"), "  /*0000*/ MOV R1, c[0x0][0x28] ;\n") +
++           block("_ZN2tc4spq17prepareIfEEvv", "  /*0000*/ FMUL R0, R1, R2 ;\n") +
++           block("_ZN2tc4spq14bulkEv", "  /*0000*/ EXIT ;\n") +
++           block("_ZN2tc4spq114pack_int4_rowsIfEEvv", "  /*0000*/ EXIT ;\n") +
++           block("__nv_static_added_two_cu_1a2b3c4d_3", "  /*0000*/ EXIT ;\n"))
++    (art / "sass/BASE.sass").write_text(base)
++    (art / "sass/NEW.sass").write_text(new)
++    mods = {}
++    for label in ("BASE", "NEW"):
++        mods[label] = art / f"{label}.so"
++        mods[label].write_bytes(label.encode())
++    expected = art / "EXPECTED.json"
++    expected.write_text(json.dumps(dict(sass=dict(
++        expected_changed={"r": ["void tc::spq1::prepare<float>"]},
++        expected_removed={"r": ["__nv_static_old_gone_cu_00000000_0"]},
++        expected_added={"r": ["void tc::spq1::pack_int4_rows<float>", "__nv_static_added_two_cu_00000000_0"]}))))
++    override = art / "EXPECTED_SASS_NEW.json"
++    override.write_text(json.dumps(dict(expected_removed=["__nv_static_old_gone_cu_00000000_0"])))
++    sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
++    r = S.compare_builds("BASE", mods["BASE"], sha(mods["BASE"]), "NEW", mods["NEW"], sha(mods["NEW"]), art, expected,
++                         override, root=tmp_path)
++    assert r["status"] == "PASS", r["unexpected_differences"]
++    assert r["symbol_suffix_renames"] == 1, "one paired kernel changed only its _cu_ suffix"
++    assert r["symbol_only_in_new"] == 2 and r["symbol_only_in_base"] == 1, "additions/removals counted apart"
++    assert r["counts"] == dict(equal=2, changed=1, removed=1, added=2)
++    assert r["expected_json_sha256"] == sha(expected), "the original registration is still recorded"
++    assert r["expected_active"] == dict(path="art/EXPECTED_SASS_NEW.json", sha256=sha(override)), \
++        "the expectation actually compared against is recorded"
++    r2 = S.compare_builds("BASE", mods["BASE"], sha(mods["BASE"]), "NEW", mods["NEW"], sha(mods["NEW"]), art, expected,
++                          None, out_name="SECOND.json", root=tmp_path)
++    assert r2["expected_active"] == dict(path="art/EXPECTED.json", sha256=sha(expected))
++
++
++def test_r7_optional_numeric_suffix_maps_bijectively(tmp_path):
++    S = sass_module()
++    a = tmp_path / "a.sass"
++    b = tmp_path / "b.sass"
++    a.write_text(block("_ZN2tc_cu_0123abcdfooEv", "X\n") + block("_ZN2tc_cu_0123abcd_7barEv", "Y\n"))
++    b.write_text(block("_ZN2tc_cu_89abcdeffooEv", "X\n") + block("_ZN2tc_cu_89abcdef_9barEv", "Y\n"))
++    ba, na = S.read_blocks(a)
++    bb, nb = S.read_blocks(b)
++    assert set(ba) == set(bb) == {"_ZN2tc_cu_BUILDfooEv", "_ZN2tc_cu_BUILDbarEv"} and ba == bb

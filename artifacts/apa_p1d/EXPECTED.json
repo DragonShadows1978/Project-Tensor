@@ -1,0 +1,62 @@
+{
+  "order": "APA-P1-D S6",
+  "written_before_first_gpu_line": true,
+  "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1d",
+  "runner": "scripts/apa_p1d_gpu.py (one mode per line); arms staged by scripts/apa_p1d_stage.py (copies, sha-pinned in arms/<arm>/ARM.json)",
+  "arms": {
+    "A": {"package": "artifacts/apa_p1d/arms/A/tensor_cuda", "python": "e2fb85a1 tensor_cuda/tensor_cuda (git show)", "module_sha256": "ebe9ec8d82271e643dee427345a635dc01321aabba3708b3acb80ee30239ea91", "build": "build_A_r2 (e2fb85a1, -DTC_APA_PACKED=ON)"},
+    "B": {"package": "artifacts/apa_p1d/arms/<APA_P1D_ARM_B>/tensor_cuda", "python": "this round's tensor_cuda/tensor_cuda at staging (pinned per file)", "module_sha256": "8728e67e26027dbafe8a61592decb38e68171fa7b5634239ce0af7897c4e8c4e", "build": "build_B (this tree, default configuration)"}
+  },
+  "line_form": "forge-gpu-run --min 30 --max <=1800 --label p1d-<line> -- timeout <=1750s env APA_P1D_ARM_B=<arm dir> python3 -B scripts/apa_p1d_gpu.py <mode> --out artifacts/apa_p1d/gpu/<line>",
+  "dry_run": "each line once with FORGE_GPU_DRY_RUN=1 before its real run; expected exit 78",
+  "retry_rule": "exit 76 = lock not acquired, nothing ran: retry unchanged after >= 5 min, at most 6 times, each recorded",
+  "comparison_rule": "per output array: dtype and shape equal, then np.array_equal on same-width unsigned views; each side checked nonzero and non-constant at full width (L09, L19). Logs and timings are never compared.",
+  "lines": {
+    "L3": {
+      "argv": "forge-gpu-run --min 30 --max 600 --label p1d-L3 -- timeout 560s env APA_P1D_ARM_B=B python3 -B scripts/apa_p1d_gpu.py l3 --out artifacts/apa_p1d/gpu/L3",
+      "expected_exit": 0,
+      "cases": "D64/D128 x S255/S2048 x B1/B2, KV 2, standard-normal fp32 K (seed [20261115,3,D,S,B])",
+      "decides": "R-E branch: transient_reconstruction iff every case is bitwise equal (and informative); otherwise refuse_prefill_on_packed",
+      "seat_prediction": "NOT bitwise equal: the packed norm is a sequential fp32 sum with sqrt_rn and the rotation an ordered FMA loop, while the dense quantizer uses engine reductions, pow(0.5) and a matmul; codes and norms can differ at rounding boundaries. The branch follows the measurement either way."
+    },
+    "L5": {
+      "argv": "forge-gpu-run --min 30 --max 1800 --label p1d-L5 -- timeout 1750s env APA_P1D_ARM_B=B python3 -B scripts/apa_p1d_gpu.py l5 --out artifacts/apa_p1d/gpu/L5 --max-seconds 1500",
+      "expected_exit": 0,
+      "registration": "artifacts/apa_p1d/MARGIN_REGISTRATION.json (sha256 025b1a5116ceae3e0f272d5a8823970c31d0d65e709b785cd81e6a2cbbda1538)",
+      "expected": "32 targets PASS with instrument pins held; resumable; then CPU l5-freeze writes the table; count per entry 13,762,608",
+      "prediction_G5b": "abs(e_q_packed/e_q_dense - 1) <= 0.01 per entry (4:64 dense 1.010645866394043, 4:128 dense 0.8716114163398743)"
+    },
+    "L1": {
+      "argv": "forge-gpu-run --min 30 --max 1800 --label p1d-L1 -- timeout 1750s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l1 --out artifacts/apa_p1d/gpu/L1",
+      "expected_exit": 0,
+      "cases": "D64/D128 x B1/B2 x KV2 with H = KV*G for G in 1..8 (H = KV and every group; r2 has shared kernels for G 4/8 and the generic kernel otherwise) x S 255/256/257/2048 x causal off/on x sinks off/on = 512 cases; q = 3*N(0,1), K,V,sinks N(0,1) (seed [20261115,1,i]); epsilon 0.01; scale float32(1/sqrt(D))",
+      "comparisons_per_case": "Build B default vs Build B explicit storage='packed' (out, mask, plain output); Build B storage='dense' argument vs Build A public dense route (out, mask, plain); Build B TC_APA_SP_STORAGE=dense vs Build A (out, mask, plain) = 9 bitwise comparisons, 4,608 total",
+      "expected": "all 4,608 bitwise equal; outputs nonzero and non-constant on both sides; masks recorded for informativeness (prediction: non-constant at q = 3*N(0,1))",
+      "routes": "default quantize route source 'default' storage packed; attention route packed backend spq4_packed_r2_tq4_partition; env route source 'environment'"
+    },
+    "L2": {
+      "argv": "forge-gpu-run --min 30 --max 600 --label p1d-L2 -- timeout 560s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l2 --out artifacts/apa_p1d/gpu/L2",
+      "expected_exit": 0,
+      "checks": "R-A invalid argument/env values raise ValueError with zero device calls (spied: packed_run/packed_prepare/packed_append, the dense quantizer, the dense epsilon entry); R-B 2-bit default -> dense Tensor with reason, bitwise equal to explicit dense 2-bit; 2-bit explicit packed raises with zero device calls; R-D dense table/packed object, packed table/dense Kq, bits mismatch, k not the source, no table, wrong scale, epsilon 0, query on CPU, TC_APA_SP unset, stale generation, in-place edit of K, visible rows mismatch: each raises with zero device calls; append then attention equals a fresh object bitwise (codes, norms, output, mask); raw dense _C entries (sp_epsilon, sp, sp2_scores) raise TypeError for a packed object; delta helper equals native _C.apa_sp2_delta on every registered boundary fixture (tensor_cuda/tests/test_apa_p1d_policy.py delta_fixtures) and both refuse the same domain; the packed route's delta equals the native derivation; prefill per the L3 branch",
+      "expected": "every check ok"
+    },
+    "L4": {
+      "argv": "forge-gpu-run --min 30 --max 900 --label p1d-L4 -- timeout 860s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l4 --out artifacts/apa_p1d/gpu/L4",
+      "expected_exit": 0,
+      "cases": "Qwen3-1.7B (H16) and Qwen3-4B (H32) decode geometry, KV 8, D128, S 2,048/8,192/32,768; one child process per case",
+      "expected": "owned buffers (codes + norms) = 68 B x 8 x S exactly, plus fixed tables (rotation 8x128x128 fp32, codebook 16, boundaries 15); no K-shaped tensor reachable from the object or its workspace; own-process device memory (cudaMemGetInfo used, nvidia-smi per-PID recorded) after construction: packed_delta <= dense_delta - 8*S*(512-68) + 3*G and |measured difference - predicted| <= 3*G, with G = max(2 MiB, measured one-element step): cudaMalloc's large-page granularity, three allocations differ (one dense, two packed); a decode call on the object returns a nonzero, non-constant output"
+    },
+    "L6": {
+      "argv": [
+        "forge-gpu-run --min 30 --max 1800 --label p1d-L6a -- timeout 1750s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l6 --out artifacts/apa_p1d/gpu/L6a --files <first 22 apa files>",
+        "forge-gpu-run --min 30 --max 1800 --label p1d-L6b -- timeout 1750s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l6 --out artifacts/apa_p1d/gpu/L6b --files <remaining 21 apa files>",
+        "forge-gpu-run --min 30 --max 1800 --label p1d-L6c -- timeout 1750s env APA_P1D_ARM_B=<final arm B> python3 -B scripts/apa_p1d_gpu.py l6 --out artifacts/apa_p1d/gpu/L6c --files tensor_cuda/tests/test_dlpack.py"
+      ],
+      "files": "P150's 44 files: artifacts/apa_p1/EXPECTED.json gpu_test_files (apa 43 + dlpack 1), as in A1's STAGED_LINES.json",
+      "arm_A_tree": "/tmp/apap1d_treeA = git archive e2fb85a1 (tests and scripts at the before state); arm B runs in this worktree",
+      "expected": "per test ID, the (phase, outcome) sequence is identical between arms; collected ID sets equal",
+      "intended_changes": [],
+      "intended_changes_note": "none registered: no test in the 44 files calls quantize_sp2_keys with 4 bits and no argument (rg over tensor_cuda/tests); scripts/apa_pidv.py's 2-bit call now passes storage='dense' and 2-bit is dense under the default either way. Any difference is reported as a finding."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES= timeout 10s rg -n -e counters -e l2_bytes tensor_cuda/src/apa_spo/eb3.cuh tensor_cuda/src/apa_spo/eb4.cuh tensor_cuda/src/apa_spo/eb4_tuning.cuh
+tensor_cuda/src/apa_spo/eb4.cuh:664:inline unsigned* counters(int n,int64_t* bytes=nullptr){
+tensor_cuda/src/apa_spo/eb4.cuh:753:  const bool do_rpf=eb3::tune::REG_RPF>=1 && code_bytes+norm_bytes<=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb4.cuh:754:  const int64_t budget=(int64_t)(eb3::l2_bytes()*eb4::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb4.cuh:762:  unsigned* CTRC=eb4::tune::CHOOSE_SITE==0?eb4::counters((int)(B*KVH)):nullptr;
+tensor_cuda/src/apa_spo/eb4.cuh:774:  unsigned* CTR=eb3::counters((int)(B*KVH));
+tensor_cuda/src/apa_spo/eb4.cuh:804:  int64_t ctr_bytes=0,ctrc_bytes=0;eb3::counters(0,&ctr_bytes);if(CTRC)eb4::counters(0,&ctrc_bytes);
+tensor_cuda/src/apa_spo/eb3.cuh:545:  // counters need no reset launch. Reader: L2-only loads (__ldcg) after a
+tensor_cuda/src/apa_spo/eb3.cuh:810:inline unsigned* counters(int n,int64_t* bytes=nullptr){
+tensor_cuda/src/apa_spo/eb3.cuh:813:inline int64_t l2_bytes(){
+tensor_cuda/src/apa_spo/eb3.cuh:934:  const int64_t budget=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+tensor_cuda/src/apa_spo/eb3.cuh:978:  if(VA.sel==1 && VA.fuse)CTR=eb3::counters((int)(B*KVH));
+tensor_cuda/src/apa_spo/eb3.cuh:1040:  int64_t ctr_bytes=0;if(CTR)eb3::counters(0,&ctr_bytes);

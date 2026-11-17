@@ -1,0 +1,84 @@
+--- A3/apa_eb3_run
++++ A1/apa_eb3_run
+@@ -1,6 +1,6 @@
+ apa_eb3_run(const NDArray& q,const NDArray& k,const NDArray& v,const NDArray& codes,const NDArray& sc,
+   const NDArray& rot,const NDArray& cb,float scale,float delta,const NDArray* sinks,const std::string& carry_mode,
+-  bool diag,bool poison,bool timeline,int variant,int64_t visible,int64_t k_row_stride,int64_t v_row_stride){
++  bool diag,bool poison,bool timeline,int variant){
+   if(carry_mode!="partition" && carry_mode!="row")throw std::runtime_error("carry must be partition or row");
+   const char* flag=std::getenv("TC_APA_SP");
+   if(!flag || std::strcmp(flag,"1")!=0)throw std::runtime_error("apa_sp: experimental entry requires TC_APA_SP=1 (default OFF)");
+@@ -10,28 +10,19 @@
+   if(q.ndim()!=4 || k.ndim()!=4 || v.ndim()!=4)throw std::runtime_error("apa_eb3: q/k/v must be rank four");
+   if(q.dtype!=DType::BFloat16 || k.dtype!=DType::BFloat16 || v.dtype!=DType::BFloat16)throw std::runtime_error("apa_eb3: bfloat16 q/k/v required");
+   for(const NDArray* a:{&q,&k,&v,&codes,&sc,&rot,&cb})if(!a->device.is_cuda() || a->device.index!=q.device.index)throw std::runtime_error("apa_eb3: inputs must share one CUDA device");
+-  const int64_t B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3],KVH=k.shape[1],S=apa_ds1::visible(visible,k.shape[2]),VD=v.shape[3];
++  const int64_t B=q.shape[0],H=q.shape[1],L=q.shape[2],D=q.shape[3],KVH=k.shape[1],S=k.shape[2],VD=v.shape[3];
+   if(L!=1)throw std::runtime_error("apa_eb3: requires L=1");
+-  if(KVH<=0 || H%KVH!=0 || k.shape[0]!=B || k.shape[3]!=D || v.shape[0]!=B || v.shape[1]!=KVH)throw std::runtime_error("apa_eb3: shape/GQA mismatch");
++  if(KVH<=0 || H%KVH!=0 || k.shape[0]!=B || k.shape[3]!=D || v.shape[0]!=B || v.shape[1]!=KVH || v.shape[2]!=S)throw std::runtime_error("apa_eb3: shape/GQA mismatch");
+   if(D!=128 || VD!=128)throw std::runtime_error("apa_eb3: D=VD=128 only");
+   int G=(int)(H/KVH);
+   if(G<2 || G>spq4::MAXG)throw std::runtime_error("apa_eb3: needs 2 <= H/KVH <= 8");
+-  if(S<1 || apa_ds1::mul(B,H)>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_eb3: dimension range");
++  if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error("apa_eb3: dimension range");
+   if(rot.shape!=Shape({KVH,D,D}) || rot.dtype!=DType::Float32)throw std::runtime_error("apa_eb3: rotation shape/dtype");
+   if(cb.shape!=Shape({16}) || cb.dtype!=DType::Float32)throw std::runtime_error("apa_eb3: codebook shape/dtype");
+   if(sinks && (sinks->ndim()!=1 || sinks->shape[0]!=H || sinks->dtype!=q.dtype || !sinks->device.is_cuda() || sinks->device.index!=q.device.index))throw std::runtime_error("apa_sp: sinks must be [H] with matching dtype/device");
+-  // APA-DS1 prior art: BLAS leading dimensions (Dongarra 1988/1990; LAPACK 1992),
+-  // vLLM PagedAttention (Kwon 2023) logical/physical separation, SPQ1 capacity
+-  // codes (2026). Taken: visible length separate from pitch, append in place.
+-  // Ours: head-row ABI only. Unverified -- lead to check S4 search terms.
+-  k_row_stride=apa_ds1_row(k,S,k_row_stride,D,16,8);
+-  v_row_stride=apa_ds1_row(v,S,v_row_stride,VD,16,8);
+-  apa_spq1_buffer_check(k,codes,sc,S);
+-  apa_ds1_row(codes,S,apa_ds1::mul(codes.shape[2],codes.shape[3]),codes.shape[3],16,16);
+-  apa_ds1_row(sc,S,sc.shape[2],1,4,1);
++  apa_spq1_buffer_check(k,codes,sc);
+   if(variant<0 || variant>=eb3::NVARIANTS)throw std::runtime_error("apa_eb3: unknown variant");
+   const eb3::Variant VA=eb3::VARIANTS[variant];
+-  if(VA.sel==0 && (k_row_stride!=S*D || v_row_stride!=S*VD))throw std::runtime_error("apa_ds1: predecessor selector is compact only");
+   if(variant!=eb3::tune::REGISTERED_VARIANT && G!=2 && G!=4)throw std::runtime_error("apa_eb3: ablation variants are built for G=2,4 only");
+   if(diag && variant!=eb3::tune::REGISTERED_VARIANT)throw std::runtime_error("apa_eb3: diagnostics only on the registered variant");
+   if(timeline && variant!=eb3::tune::REGISTERED_VARIANT && variant!=6 && variant!=1)throw std::runtime_error("apa_eb3: timeline only on variants 0, 1, 6");
+@@ -82,7 +73,7 @@
+   // 1. rotation
+   eb3::Prefetch pf;
+   if(do_rpf){pf.a=CODES;pf.abytes=code_bytes;pf.b=SC;pf.bbytes=norm_bytes;}
+-  if(do_rpfv){pf.c=V;pf.cbytes=v_bytes;pf.c_row_bytes=v_row_stride*2;pf.c_visible_bytes=S*VD*2;}
++  if(do_rpfv){pf.c=V;pf.cbytes=v_bytes;}
+   if(VA.rot==1){
+     eb3::rotate_q<128,eb3::tune::ROT_DB><<<dim3((unsigned)(B*KVH),128/eb3::tune::ROT_DB),128>>>(Q,(const float*)rot.data_ptr(),PQ,(int)H,(int)KVH,pf);
+   }else{
+@@ -101,16 +92,16 @@
+         break;
+       case 2:
+         if(timeline){
+-          if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB,true,true><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,TLB,v_row_stride);
+-          else eb3::bulk_swap<128,eb3::tune::BULK_MINB,false,true><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,TLB,v_row_stride);
++          if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB,true,true><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,TLB);
++          else eb3::bulk_swap<128,eb3::tune::BULK_MINB,false,true><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,TLB);
+         }else{
+-          if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB,true,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,nullptr,v_row_stride);
+-          else eb3::bulk_swap<128,eb3::tune::BULK_MINB,false,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,nullptr,v_row_stride);
++          if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB,true,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,nullptr);
++          else eb3::bulk_swap<128,eb3::tune::BULK_MINB,false,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,nullptr);
+         }
+         break;
+       case 3:
+-        if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB_ALT,true,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,nullptr,v_row_stride);
+-        else eb3::bulk_swap<128,eb3::tune::BULK_MINB_ALT,false,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,nullptr,v_row_stride);
++        if(VA.xpf)eb3::bulk_swap<128,eb3::tune::BULK_MINB_ALT,true,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,VP,(int)VD,nullptr);
++        else eb3::bulk_swap<128,eb3::tune::BULK_MINB_ALT,false,false><<<grid,128>>>(PQ,CODES,SC,CB,BS,CM,Hi,KVi,Si,nc,capacity,scale,nullptr,(int)VD,nullptr);
+         break;
+       default: throw std::runtime_error("apa_eb3: bulk id");
+     }
+@@ -124,7 +115,7 @@
+     auto launch=[&](auto gt,auto dg,auto big,auto vpf,auto fuse,auto on,auto kpf){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value,BG=decltype(big)::value,VP=decltype(vpf)::value,FU=decltype(fuse)::value,ON=decltype(on)::value,KP=decltype(kpf)::value;
+       constexpr int MB=BG?1:eb3::tune::SEL_MINB;
+-      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr,k_row_stride,v_row_stride);};
++      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr);};
+     using T=std::true_type;using F=std::false_type;
+     // All G in [2,8] are instantiated only for the registered select options;
+     // ablations are G=2,4.

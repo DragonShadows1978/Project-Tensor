@@ -1,0 +1,1142 @@
+## Project-Tensor current worktree
+
+```sh
+CUDA_VISIBLE_DEVICES= timeout 35s rg -n --hidden --no-ignore -g '*.py' -g '*.cpp' -g '*.cu' -g '*.cuh' -g '*.h' -g '!**/.git/**' -g '!**/__pycache__/**' -g '!**/.venv/**' -g '!**/node_modules/**' -g '!**/build*/**' -g '!Fork/**' -g '!WorkTree/**' '\b(apa_selective_attention_sp(_epsilon|_d1_packed|_d1)?|quantize_sp2_keys|apa_spq1_(dump|rotate)|apa_spo2_dump|apa_sp2_(delta|scores|baseline_thresholds)|apa_sp1_1_baseline_diagnostics)\b' .
+```
+
+Exit 0; output:
+
+```text
+./scripts/apa_sp5_item2_sinkpin.py:125:            on, sel_on = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp5_item2_sinkpin.py:127:            off, sel_off = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp1_1_gpu.py:27:                out,mask=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),.5,True,sinks,diagnostics=True)
+./scripts/apa_sp1_1_gpu.py:29:                plain=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),.5,True,sinks).numpy().astype(np.float32)
+./scripts/apa_sp1_1_gpu.py:46:        dt,dm=tc._C.apa_sp1_1_baseline_diagnostics(tt[0],tt[2])
+./scripts/apa_pidv.py:269:            kq = tc.quantize_sp2_keys(up(self.k, "float32"), 2)
+./scripts/apa_pidv.py:303:                    y = tc.apa_selective_attention_sp(q, k, self.kq_t, v_t, self.scale, 0.05, bulk_bits=2,
+./scripts/apa_sp1_gpu.py:145:    new=lambda:tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal)
+./scripts/apa_sp1_gpu.py:148:        diagnostic,mask=tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal,diagnostics=True)
+./scripts/apa_sp1_gpu.py:217:                got=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),0.5,True,sinks).numpy().astype(np.float32)
+./scripts/apa_sp2_gpu.py:53:    kqt = tc.quantize_sp2_keys(kt, bits)
+./scripts/apa_sp2_gpu.py:73:        bulk, exact = tc._C.apa_sp2_scores(qt,kt,kqt,float(scale),0,len(indices),
+./scripts/apa_sp2_gpu.py:159:    e_q=margins.lookup(bits,D,'float32',float(scale));delta=tc._C.apa_sp2_delta(epsilon,e_q)
+./scripts/apa_sp2_gpu.py:163:    new=lambda:tc.apa_selective_attention_sp(*args,epsilon,bulk_bits=bits,margins=margins,is_causal=s['causal'])
+./scripts/apa_sp2_gpu.py:166:        out,mask=tc.apa_selective_attention_sp(*args,epsilon,bulk_bits=bits,margins=margins,is_causal=s['causal'],diagnostics=True)
+./scripts/apa_sp2_gpu.py:169:        direct=tc._C.apa_selective_attention_sp(*args,delta,s['causal']).numpy()
+./scripts/apa_sp2_gpu.py:171:        thresholds=tc._C.apa_sp2_baseline_thresholds(qt,kqt,float(scale),reg['baseline']['zthr'],s['causal']).numpy()
+./scripts/apa_sp2_gpu.py:179:        bdev,edev=tc._C.apa_sp2_scores(qt,kt,kqt,float(scale),first,n,wc)
+./scripts/apa_sp5_frac.py:47:        attn, sel = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp5_model.py:85:    # C/D/E: single pass. tc._C.apa_selective_attention_sp(..., sinks=...)
+./scripts/apa_sp5_model.py:125:        res = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp5_a1_margins.py:132:            attn, sel = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp5_a1_margins.py:181:                o2, s2 = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp4g_a2_model.py:88:            d=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,True,None,False)
+./scripts/apa_sp4g_a2_model.py:94:        d=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,True,None,False)
+./scripts/apa_sp4g_a2_model.py:96:        d32=tc._C.apa_selective_attention_sp(q.float(),k.float(),kq.float(),v.float(),scale,MAX_DELTA,True,None,False)
+./scripts/apa_sp4g_a2_model.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./scripts/apa_sp4g_a2_model.py:124:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./scripts/apa_sp4g_a5_model.py:33:    return dict(entry='tc._C.apa_selective_attention_sp',
+./scripts/apa_sp4g_a5_model.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./scripts/apa_sp4g_a5_model.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./scripts/apa_sp4g_a4_model.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./scripts/apa_sp3_model.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./scripts/apa_sp4g_a3_sweep.py:17:    entry = tc._C.apa_selective_attention_sp
+./scripts/apa_sp5_shape_pin.py:117:        out_all = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, st, False)
+./scripts/apa_sp5_shape_pin.py:128:        out_zero = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, zero, False)
+./scripts/apa_sp5_shape_pin.py:129:        out_none = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, None, False)
+./scripts/apa_sp5_shape_pin.py:146:        out_d, sel = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, delta, True, st, True)
+./scripts/apa_sp4g_a6_metrics.py:95:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)
+./scripts/apa_spd1_common.py:72:                         entry="tensor_cuda._C.apa_selective_attention_sp; prefill / split-K decode; TC_APA_SP=1",
+./scripts/apa_spd1_common.py:136:                                 'apa_selective_attention_sp', 'set_alloc_pooling']},
+./scripts/apa_sp4g_model.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./scripts/apa_sp4g_model.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./scripts/apa_sp4g_model.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./scripts/apa_sp4g_gpu.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./scripts/apa_sp4g_gpu.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./scripts/apa_sp4g_a3_model.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./scripts/apa_sp4g_a3_model.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./scripts/apa_sp3_gpu.py:186:            out,mask = tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,
+./scripts/apa_sp3_gpu.py:201:            _,chosen=tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,.125,True,None,True)
+./scripts/apa_sp3_a6_decode.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./scripts/apa_sp3_a4_capture.py:123:        native = self.tc._C.apa_selective_attention_sp
+./scripts/apa_sp4g_a4_metrics.py:94:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)
+./scripts/apa_spd1_bench.py:141:    out, mask = tc._C.apa_selective_attention_sp(q, k, kq, v,
+./scripts/apa_spd1_bench.py:227:            funcs[name] = lambda t=engine[dtype]: tc._C.apa_selective_attention_sp(*t, scale, shape['delta'], shape['causal'])
+./scripts/apa_sp5_item3_exactness.py:147:                sp, sel = tc._C.apa_selective_attention_sp(
+./scripts/apa_sp4g_metrics.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./scripts/apa_sp3_a4_jobs.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(
+./scripts/apa_sp4g_a2_metrics.py:91:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)
+./tensor_cuda/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./tensor_cuda/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./tensor_cuda/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./tensor_cuda/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./tensor_cuda/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./tensor_cuda/tests/test_apa_sp4g_a4.py:34:    return SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=sp),matmul=mm,causal_softmax=lambda x:x),seen
+./tensor_cuda/tests/test_apa_sp2.py:111:            actual=tc._C.apa_sp2_delta(epsilon,e)
+./tensor_cuda/tests/test_apa_sp2.py:115:        with pytest.raises(RuntimeError):tc._C.apa_sp2_delta(eps,e)
+./tensor_cuda/tests/test_apa_sp2.py:123:        delta=tc._C.apa_sp2_delta(epsilon,e)
+./tensor_cuda/tests/test_apa_sp2.py:125:        for call in [lambda:tc._C.apa_selective_attention_sp(*args,delta),
+./tensor_cuda/tests/test_apa_sp2.py:126:                     lambda:tc._C.apa_selective_attention_sp_epsilon(*args,epsilon,e)]:
+./tensor_cuda/tests/test_apa_sp2.py:146:        tc._C.apa_selective_attention_sp_epsilon(*args,.1,.5)
+./tensor_cuda/tests/test_apa_sp2.py:172:    monkeypatch.setattr(tc._C,'apa_selective_attention_sp_epsilon',lambda *a:calls.append(a) or 'ok')
+./tensor_cuda/tests/test_apa_sp2.py:175:    assert tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)=='ok'
+./tensor_cuda/tests/test_apa_sp2.py:178:        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=None)
+./tensor_cuda/tests/test_apa_sp2.py:181:        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)
+./tensor_cuda/tests/test_apa_sp4g_a3.py:58:    return SimpleNamespace(matmul=mm,causal_softmax=sm,_C=SimpleNamespace(apa_selective_attention_sp=sp),
+./tensor_cuda/tests/test_apa_sp4g_a3.py:134:    tc=fake_tc();seen=[];original=tc._C.apa_selective_attention_sp
+./tensor_cuda/tests/test_apa_sp4g_a3.py:136:    tc._C.apa_selective_attention_sp=sp
+./tensor_cuda/tests/test_apa_sp4g_a3.py:203:    original=tc._C.apa_selective_attention_sp
+./tensor_cuda/tests/test_apa_sp4g_a3.py:208:    tc._C.apa_selective_attention_sp=broken
+./tensor_cuda/tests/test_apa_sp4g_a5.py:229:    owner.tc=NS(_C=NS(apa_selective_attention_sp=sp))
+./tensor_cuda/tests/test_apa_sp4g.py:61:    s=(R/'tensor_cuda/src/kernels.cu').read_text();entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./tensor_cuda/tests/test_apa_sp4g.py:86:    with pytest.raises(RuntimeError,match='default OFF'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./tensor_cuda/tests/test_apa_sp4g.py:88:    with pytest.raises(RuntimeError,match='share CUDA device'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./tensor_cuda/tests/test_apa_sp4g.py:90:        with pytest.raises(RuntimeError,match='finite nonnegative'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,delta)
+./tensor_cuda/tests/test_apa_sp4g.py:237:    calls=[];tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *args:calls.append(args) or 'out'))
+./tensor_cuda/tests/test_apa_sp1_host.py:30:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)
+./tensor_cuda/tests/test_apa_sp1_host.py:38:        runtime._C.apa_selective_attention_sp(t,t,t,t,scale,delta)
+./tensor_cuda/tests/test_apa_sp1_host.py:45:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)
+./tensor_cuda/tests/test_apa_sp1_host.py:48:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)
+./tensor_cuda/tests/test_apa_sp1_host.py:55:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)
+./tensor_cuda/tests/test_apa_sp3.py:35:    entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./tensor_cuda/tests/test_apa_sp3.py:76:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./tensor_cuda/tests/test_apa_sp3.py:79:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./tensor_cuda/tests/test_apa_sp3.py:81:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,float('inf'))
+./tensor_cuda/tests/test_apa_sp3.py:127:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *a: calls.append(a) or 'out'))
+./tensor_cuda/tests/test_apa_sp3_a6.py:93:          _C=NS(apa_selective_attention_sp=native))
+./tensor_cuda/tests/test_apa_pidv.py:185:    for exc in (ImportError("cannot import name 'quantize_sp2_keys' from 'tensor_cuda.apa_sp2'",
+./tensor_cuda/tests/test_apa_sp4g_a2.py:135:    owner.tc=SimpleNamespace(matmul=mm,causal_softmax=lambda x:T(np.ones(x.shape,np.float32)/3),_C=SimpleNamespace(apa_selective_attention_sp=sp))
+./tensor_cuda/tests/test_apa_sp3_a4.py:166:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=native))
+./tensor_cuda/tests/test_apa_sp3_a4.py:177:        obj.tc._C.apa_selective_attention_sp=bad
+./tensor_cuda/src/apa_sp1_1.cuh:200:std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq) {
+./tensor_cuda/src/apa_sp1_1.cuh:207:    throw std::runtime_error("apa_sp1_1_baseline_diagnostics: registered fp32 CUDA Part B shape only");
+./tensor_cuda/include/tc/ops.h:15:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./tensor_cuda/include/tc/ops.h:18:std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq);
+./tensor_cuda/include/tc/ops.h:20:float apa_sp2_delta(double epsilon, double e_q);
+./tensor_cuda/include/tc/ops.h:21:NDArray apa_selective_attention_sp_epsilon(const NDArray& q, const NDArray& k,
+./tensor_cuda/include/tc/ops.h:24:std::pair<NDArray,NDArray> apa_sp2_scores(const NDArray& q, const NDArray& k,
+./tensor_cuda/include/tc/ops.h:26:NDArray apa_sp2_baseline_thresholds(const NDArray& q, const NDArray& kq,
+./tensor_cuda/include/tc/ops.h:317:NDArray apa_spq1_rotate(const NDArray&,const NDArray&,int,bool);
+./tensor_cuda/src/kernels.cu:8418:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./tensor_cuda/src/bindings.cpp:2334:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./tensor_cuda/src/bindings.cpp:2342:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./tensor_cuda/src/bindings.cpp:2351:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./tensor_cuda/src/bindings.cpp:2352:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./tensor_cuda/src/bindings.cpp:2356:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./tensor_cuda/src/bindings.cpp:2357:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./tensor_cuda/src/bindings.cpp:2363:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./tensor_cuda/src/bindings.cpp:2372:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./tensor_cuda/src/bindings.cpp:2374:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./tensor_cuda/src/bindings.cpp:2378:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./tensor_cuda/src/bindings.cpp:2380:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./tensor_cuda/src/bindings.cpp:2779: m.def("packed_rotate",[](Tensor& q,Tensor& r,int kvh,bool tq){return Tensor::make(tc::apa_spq1_rotate(q.data(),r.data(),kvh,tq),false);});
+./tensor_cuda/src/apa_spo/eb2b.cuh:137:  NDArray pq=apa_spq1_rotate(q,rot,KVH,true);
+./tensor_cuda/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./tensor_cuda/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./tensor_cuda/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./tensor_cuda/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./tensor_cuda/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./tensor_cuda/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./tensor_cuda/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./tensor_cuda/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./tensor_cuda/src/apa_spo/packed_launcher.cuh:14:NDArray apa_spq1_rotate(const NDArray& q,const NDArray& r,int KVH,bool tq){
+./tensor_cuda/src/apa_spo/packed_launcher.cuh:20: cuda_check_last("apa_spq1_rotate");return out;
+./tensor_cuda/src/apa_spo/packed_launcher.cuh:49: NDArray pq=apa_spq1_rotate(q,r,k.shape[1],fmt=="tq4");
+./tensor_cuda/src/apa_sp2.cuh:3:float apa_sp2_delta(double epsilon, double e_q) {
+./tensor_cuda/src/apa_sp2.cuh:16:NDArray apa_selective_attention_sp_epsilon(const NDArray& q, const NDArray& k,
+./tensor_cuda/src/apa_sp2.cuh:20:  return apa_selective_attention_sp(q, k, kq, v, scale,
+./tensor_cuda/src/apa_sp2.cuh:21:      apa_sp2_delta(epsilon, e_q), is_causal, sinks, selected);
+./tensor_cuda/src/apa_sp2.cuh:73:std::pair<NDArray,NDArray> apa_sp2_scores(const NDArray& q, const NDArray& k,
+./tensor_cuda/src/apa_sp2.cuh:91:  cuda_check_last("apa_sp2_scores");
+./tensor_cuda/src/apa_sp2.cuh:95:NDArray apa_sp2_baseline_thresholds(const NDArray& q, const NDArray& kq,
+./tensor_cuda/src/apa_sp2.cuh:113:  cuda_check_last("apa_sp2_baseline_thresholds");
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2334:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2342:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2351:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2352:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2356:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2357:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2363:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2372:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2374:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2378:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2380:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_p1_s3_r2/source_before/tensor_cuda/src/bindings.cpp:2758: m.def("packed_rotate",[](Tensor& q,Tensor& r,int kvh,bool tq){return Tensor::make(tc::apa_spq1_rotate(q.data(),r.data(),kvh,tq),false);});
+./tensor_cuda/src/apa_spo/spq4.cuh:456:    NDArray pq=apa_spq1_rotate(q,r,k.shape[1],false);   // mutant: query NOT rotated
+./tensor_cuda/src/apa_spo/spq4.cuh:458:    NDArray pq=apa_spq1_rotate(q,r,k.shape[1],true);
+./artifacts/bp_kernel_4/baseline/bindings.cpp:682:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_4/baseline/bindings.cpp:690:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/bp_kernel_4/baseline/bindings.cpp:699:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/bp_kernel_4/baseline/bindings.cpp:700:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/bp_kernel_4/baseline/bindings.cpp:704:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/bp_kernel_4/baseline/bindings.cpp:705:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_4/baseline/bindings.cpp:711:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/bp_kernel_4/baseline/bindings.cpp:720:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/bp_kernel_4/baseline/bindings.cpp:722:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/bp_kernel_4/baseline/bindings.cpp:726:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/bp_kernel_4/baseline/bindings.cpp:728:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_sp1/sp1_1_before/scripts__apa_sp1_gpu.py:142:    new=lambda:tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal)
+./artifacts/apa_sp1/sp1_1_before/scripts__apa_sp1_gpu.py:145:        diagnostic,mask=tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal,diagnostics=True)
+./artifacts/apa_sp1/sp1_1_before/scripts__apa_sp1_gpu.py:212:                got=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),0.5,True,sinks).numpy().astype(np.float32)
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1_s3_r2/refs/after/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/bp_kernel_4/baseline/kernels.cu:7947:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_mf2_2/before/tensor_cuda__src__kernels.cu:7961:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/__init__.py:1287:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_mf2_1/before/pkg/tensor_cuda/__init__.py:1288:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_mf2_1/snap/item3/tensor_cuda__src__kernels.cu:7961:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1_s3_r2/refs/before/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_mf2_1/before/files/tensor_cuda__src__kernels.cu:7947:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp5/a2_inject/sitecustomize.py:16:`apa_selective_attention_sp` in all three returns nothing), so a third mode
+./artifacts/apa_sp5/a2_inject/sitecustomize.py:48:    # 'apa_selective_attention_sp') is False on it). Since the smoke is
+./artifacts/apa_sp5/a2_inject/sitecustomize.py:60:            if not hasattr(_tc_preload._C, 'apa_selective_attention_sp'):
+./artifacts/apa_sp5/a2_inject/sitecustomize.py:62:                    'apa_sp5_a2: preloaded engine lacks apa_selective_attention_sp; '
+./artifacts/apa_sp5/a2_inject/sitecustomize.py:107:            attn = tc._C.apa_selective_attention_sp(
+./artifacts/apa_sp4g/mutations_a4/output_dtype_ignored.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/a1_baseline/tensor_cuda/tests/test_apa_sp4g.py:60:    s=(R/'tensor_cuda/src/kernels.cu').read_text();entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./artifacts/apa_sp4g/a1_baseline/tensor_cuda/tests/test_apa_sp4g.py:85:    with pytest.raises(RuntimeError,match='default OFF'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./artifacts/apa_sp4g/a1_baseline/tensor_cuda/tests/test_apa_sp4g.py:87:    with pytest.raises(RuntimeError,match='share CUDA device'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./artifacts/apa_sp4g/a1_baseline/tensor_cuda/tests/test_apa_sp4g.py:89:        with pytest.raises(RuntimeError,match='finite nonnegative'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,delta)
+./artifacts/apa_sp4g/a1_baseline/tensor_cuda/tests/test_apa_sp4g.py:225:    calls=[];tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *args:calls.append(args) or 'out'))
+./artifacts/apa_sp4g/mutations_a5/off_by_one.py:33:    return dict(entry='tc._C.apa_selective_attention_sp',
+./artifacts/apa_sp4g/mutations_a5/off_by_one.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/off_by_one.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_sp4g/mutations_a5/prefill_only.py:33:    return dict(entry='tc._C.apa_selective_attention_sp',
+./artifacts/apa_sp4g/mutations_a5/prefill_only.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/prefill_only.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_mf2_1/snap/item2/tensor_cuda__src__kernels.cu:7961:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp4g/mutations_a4/input_dtype_ignored.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/capture_wrong_layer.py:33:    return dict(entry='tc._C.apa_selective_attention_sp',
+./artifacts/apa_sp4g/mutations_a5/capture_wrong_layer.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/capture_wrong_layer.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_sp4g/mutations_a4/cast_dropped.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/splitk_for_cached.py:33:    return dict(entry='tc._C.apa_selective_attention_sp',
+./artifacts/apa_sp4g/mutations_a5/splitk_for_cached.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a5/splitk_for_cached.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_sp4g/mutations_a4/coverage_gap.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a4/return_wrong_arm.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_metrics.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a2/bf16_lowbits.py:88:            d=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/bf16_lowbits.py:94:        d=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/bf16_lowbits.py:96:        d32=tc._C.apa_selective_attention_sp(q.float(),k.float(),kq.float(),v.float(),scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/bf16_lowbits.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a2/bf16_lowbits.py:124:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a3_final/native_tolerance.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a3_final/native_tolerance.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_model.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_model.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_model.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a3_final/refine_mask_ignored.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a3_final/refine_mask_ignored.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/bp_kernel_1/baseline/bindings.cpp:664:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_1/baseline/bindings.cpp:672:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/bp_kernel_1/baseline/bindings.cpp:681:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/bp_kernel_1/baseline/bindings.cpp:682:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/bp_kernel_1/baseline/bindings.cpp:686:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/bp_kernel_1/baseline/bindings.cpp:687:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_1/baseline/bindings.cpp:693:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/bp_kernel_1/baseline/bindings.cpp:702:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/bp_kernel_1/baseline/bindings.cpp:704:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/bp_kernel_1/baseline/bindings.cpp:708:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/bp_kernel_1/baseline/bindings.cpp:710:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_sp4g/mutations_a2/fp32_arm.py:88:            d=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/fp32_arm.py:94:        d=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/fp32_arm.py:96:        d32=tc._C.apa_selective_attention_sp(q.float(),k.float(),kq.float(),v.float(),scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/fp32_arm.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a2/fp32_arm.py:124:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_sp4g/mutations_final/margin_term.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_final/percentile.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_gpu.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/a1_baseline/scripts/apa_sp4g_gpu.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_final/wrong_target.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_final/wrong_target.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_final/wrong_target.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a2/output_tolerance.py:91:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)
+./artifacts/apa_sp4g/mutations_final/reverse_bracket.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_final/reverse_bracket.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_a2/scale.py:88:            d=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/scale.py:94:        d=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/scale.py:96:        d32=tc._C.apa_selective_attention_sp(q.float(),k.float(),kq.float(),v.float(),scale,MAX_DELTA,True,None,False)
+./artifacts/apa_sp4g/mutations_a2/scale.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a2/scale.py:124:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_final/relaxed_match.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_final/relaxed_match.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_a2/mask_ignored.py:91:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)
+./artifacts/apa_sp4g/mutations_final/tail_denominator.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_final/target_boundary.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_final/target_boundary.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_final/target_boundary.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/bp_kernel_1/baseline/kernels.cu:7441:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp4g/mutations_a1/margin_term.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1/percentile.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/__init__.py:1287:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_mf2_2b/before/pkg/tensor_cuda/__init__.py:1288:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_sp4g/mutations_a1/wrong_target.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1/wrong_target.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a1/wrong_target.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/a2_baseline/tensor_cuda/tests/test_apa_sp4g.py:61:    s=(R/'tensor_cuda/src/kernels.cu').read_text();entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./artifacts/apa_sp4g/a2_baseline/tensor_cuda/tests/test_apa_sp4g.py:86:    with pytest.raises(RuntimeError,match='default OFF'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./artifacts/apa_sp4g/a2_baseline/tensor_cuda/tests/test_apa_sp4g.py:88:    with pytest.raises(RuntimeError,match='share CUDA device'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)
+./artifacts/apa_sp4g/a2_baseline/tensor_cuda/tests/test_apa_sp4g.py:90:        with pytest.raises(RuntimeError,match='finite nonnegative'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,delta)
+./artifacts/apa_sp4g/a2_baseline/tensor_cuda/tests/test_apa_sp4g.py:237:    calls=[];tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *args:calls.append(args) or 'out'))
+./artifacts/apa_sp4g/mutations_a7/pool_off.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a7/pool_off.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a7/pool_off.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1/reverse_bracket.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_a1/reverse_bracket.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_a1/relaxed_match.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_a1/relaxed_match.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/bp_kernel_3/baseline/bindings.cpp:680:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_3/baseline/bindings.cpp:688:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/bp_kernel_3/baseline/bindings.cpp:697:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/bp_kernel_3/baseline/bindings.cpp:698:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/bp_kernel_3/baseline/bindings.cpp:702:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/bp_kernel_3/baseline/bindings.cpp:703:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_3/baseline/bindings.cpp:709:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/bp_kernel_3/baseline/bindings.cpp:718:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/bp_kernel_3/baseline/bindings.cpp:720:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/bp_kernel_3/baseline/bindings.cpp:724:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/bp_kernel_3/baseline/bindings.cpp:726:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_sp4g/mutations_a1/tail_denominator.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1/target_boundary.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1/target_boundary.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a1/target_boundary.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1_final/margin_term.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/percentile.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/wrong_target.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1_final/wrong_target.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/wrong_target.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_metrics.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/reverse_bracket.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/reverse_bracket.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_a1_final/relaxed_match.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/relaxed_match.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp4g/mutations_a1_final/tail_denominator.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/target_boundary.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_a1_final/target_boundary.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_a1_final/target_boundary.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_model.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_model.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_model.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_gpu.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/a2_baseline/scripts/apa_sp4g_gpu.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/__init__.py:1301:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_ste1/engine/tensor_cuda/tensor_cuda/__init__.py:1302:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_sp2/before/tensor_cuda__src__apa_sp1_1.cuh:200:std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq) {
+./artifacts/apa_sp2/before/tensor_cuda__src__apa_sp1_1.cuh:207:    throw std::runtime_error("apa_sp1_1_baseline_diagnostics: registered fp32 CUDA Part B shape only");
+./artifacts/bp_kernel_3/baseline/kernels.cu:7727:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp2/before/tensor_cuda__src__bindings.cpp:664:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/apa_sp2/before/tensor_cuda__src__bindings.cpp:672:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/apa_sp2/before/tensor_cuda__src__bindings.cpp:681:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/apa_sp2/before/tensor_cuda__src__bindings.cpp:682:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_sp2/before/tensor_cuda__include__tc__ops.h:15:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp2/before/tensor_cuda__include__tc__ops.h:18:std::pair<NDArray,NDArray> apa_sp1_1_baseline_diagnostics(const NDArray& q, const NDArray& kq);
+./artifacts/apa_sp4g/mutations_a3/native_tolerance.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a3/native_tolerance.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/bp_kernel_2/baseline/bindings.cpp:675:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_2/baseline/bindings.cpp:683:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/bp_kernel_2/baseline/bindings.cpp:692:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/bp_kernel_2/baseline/bindings.cpp:693:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/bp_kernel_2/baseline/bindings.cpp:697:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/bp_kernel_2/baseline/bindings.cpp:698:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/bp_kernel_2/baseline/bindings.cpp:704:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/bp_kernel_2/baseline/bindings.cpp:713:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/bp_kernel_2/baseline/bindings.cpp:715:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/bp_kernel_2/baseline/bindings.cpp:719:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/bp_kernel_2/baseline/bindings.cpp:721:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_sp4g/mutations_a3/refine_mask_ignored.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a3/refine_mask_ignored.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)
+./artifacts/apa_sp2/before/tensor_cuda__src__kernels.cu:7441:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3.py:35:    entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3.py:76:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3.py:79:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3.py:81:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,float('inf'))
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3.py:127:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *a: calls.append(a) or 'out'))
+./artifacts/apa_sp3/a5_mutations/shorten_measured_steps.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_sp3/capture_dtype_mutation_r3/mutations/final/off_by_one_targets.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3_a4.py:166:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=native))
+./artifacts/apa_sp3/a6_baseline/tensor_cuda/tests/test_apa_sp3_a4.py:177:        obj.tc._C.apa_selective_attention_sp=bad
+./artifacts/apa_sp4g/mutations_sealed/margin_term.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1_a1/refs/production/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_sp3/a6_mutations/force_layer_hook.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_sp4g/mutations_sealed/percentile.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_p1_a1/source_before/tensor_cuda/src/apa_spo/eb2b.cuh:137:  NDArray pq=apa_spq1_rotate(q,rot,KVH,true);
+./artifacts/apa_sp4g/mutations_sealed/wrong_target.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_sealed/wrong_target.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_sealed/wrong_target.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp3/a6_mutations/shorten_steps.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_sp4g/mutations_sealed/reverse_bracket.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_sealed/reverse_bracket.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp3/a6_mutations/rail_boundary.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_sp4g/mutations_sealed/relaxed_match.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations_sealed/relaxed_match.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp3/a6_mutations/force_full_copy.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_sp4g/mutations_sealed/tail_denominator.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp3/a6_mutations/pool_after_load.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_sp4g/mutations_sealed/target_boundary.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations_sealed/target_boundary.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations_sealed/target_boundary.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp3/a6_mutations/drop_cache.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/__init__.py:1287:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_mf2_2c/before/pkg/tensor_cuda/__init__.py:1288:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_sp3/a6_baseline/scripts/apa_sp3_a4_jobs.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3.py:35:    entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3.py:76:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3.py:79:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3.py:81:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,float('inf'))
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3.py:127:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *a: calls.append(a) or 'out'))
+./artifacts/apa_sp3/a6_baseline/scripts/apa_sp3_gpu.py:185:            out,mask = tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,
+./artifacts/apa_sp3/a6_baseline/scripts/apa_sp3_gpu.py:200:            _,chosen=tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,.125,True,None,True)
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3_a4.py:166:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=native))
+./artifacts/apa_sp3/a5_baseline/tensor_cuda/tests/test_apa_sp3_a4.py:177:        obj.tc._C.apa_selective_attention_sp=bad
+./artifacts/apa_p1_a1/source_before/tensor_cuda/src/apa_spo/spq4.cuh:450:    NDArray pq=apa_spq1_rotate(q,r,k.shape[1],false);   // mutant: query NOT rotated
+./artifacts/apa_p1_a1/source_before/tensor_cuda/src/apa_spo/spq4.cuh:452:    NDArray pq=apa_spq1_rotate(q,r,k.shape[1],true);
+./artifacts/apa_sp3/a6_baseline/scripts/apa_sp3_a4_capture.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/bp_kernel_2/baseline/kernels.cu:7608:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_sp3/a6_baseline/scripts/apa_sp3_model.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_sp3/capture_dtype_mutation_r3/mutations/final/swapped_scale_delta.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, self.delta, scale,
+./artifacts/apa_sp3/a5_baseline/scripts/apa_sp3_a4_jobs.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(
+./artifacts/apa_sp4g/mutations/margin_term.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp4g/mutations/percentile.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp3/a5_baseline/scripts/apa_sp3_gpu.py:184:            out,mask = tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,
+./artifacts/apa_sp3/a5_baseline/scripts/apa_sp3_gpu.py:199:            _,chosen=tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,.125,True,None,True)
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1287:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1288:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1303:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1304:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1389:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1390:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1391:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1_a1/refs/lab/tensor_cuda/__init__.py:1404:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_sp3/a4_mutations/range_row_skip.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations/wrong_target.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations/wrong_target.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations/wrong_target.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations/reverse_bracket.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations/reverse_bracket.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp3/a5_baseline/scripts/apa_sp3_a4_capture.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations/relaxed_match.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)
+./artifacts/apa_sp4g/mutations/relaxed_match.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)
+./artifacts/apa_sp3/a5_baseline/scripts/apa_sp3_model.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1_a1/refs/port/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_sp4g/mutations/tail_denominator.py:49:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)
+./artifacts/apa_sp3/a4_mutations/no_file_integrity.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations/target_boundary.py:95:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)
+./artifacts/apa_sp4g/mutations/target_boundary.py:108:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)
+./artifacts/apa_sp4g/mutations/target_boundary.py:109:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)
+./artifacts/apa_sp3/a4_mutations/mask_bitorder.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations_a4_v2/output_dtype_ignored.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp3/a4_final_verification/a4_mutations/range_row_skip.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations_a4_v2/input_dtype_ignored.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp3/a4_final_verification/a4_mutations/no_file_integrity.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp3/a4_final_verification/a4_mutations/mask_bitorder.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp4g/mutations_a4_v2/cast_dropped.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp4g/mutations_a4_v2/coverage_gap.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp3/a4_mutations/ceiling_fit_bypass.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(
+./artifacts/apa_sp4g/mutations_a4_v2/return_wrong_arm.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)
+./artifacts/apa_sp3/a4_final_verification/a4_mutations/ceiling_fit_bypass.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(
+./artifacts/apa_sp3/a4_mutations/native_parity_bypass.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp3/a4_final_verification/a4_mutations/native_parity_bypass.py:123:        native = self.tc._C.apa_selective_attention_sp
+./artifacts/apa_sp3/mutations/off_by_one_targets.py:213:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_sp3/mutations/protocol2/off_by_one_targets.py:246:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_sp3/mutations/protocol2/swapped_scale_delta.py:246:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, self.delta, scale,
+./artifacts/apa_sp3/mutations/final/off_by_one_targets.py:221:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_sp3/mutations/final/swapped_scale_delta.py:221:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, self.delta, scale,
+./artifacts/apa_sp3/mutations/swapped_scale_delta.py:213:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, self.delta, scale,
+./artifacts/apa_sp3/a4_baseline/scripts/apa_sp3_gpu.py:179:            out,mask = tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,
+./artifacts/apa_sp3/a4_baseline/scripts/apa_sp3_gpu.py:194:            _,chosen=tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,.125,True,None,True)
+./artifacts/apa_sp3/a4_baseline/scripts/apa_sp3_model.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,
+./artifacts/apa_sp3/a4_baseline/tensor_cuda/tests/test_apa_sp3.py:35:    entry=s[s.index('NDArray apa_selective_attention_sp('):]
+./artifacts/apa_sp3/a4_baseline/tensor_cuda/tests/test_apa_sp3.py:76:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a4_baseline/tensor_cuda/tests/test_apa_sp3.py:79:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)
+./artifacts/apa_sp3/a4_baseline/tensor_cuda/tests/test_apa_sp3.py:81:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,float('inf'))
+./artifacts/apa_sp3/a4_baseline/tensor_cuda/tests/test_apa_sp3.py:127:    obj.tc=SimpleNamespace(_C=SimpleNamespace(apa_selective_attention_sp=lambda *a: calls.append(a) or 'out'))
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/tensor_cuda/__init__.py:1515:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/tensor_cuda/__init__.py:1516:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2178:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2186:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2195:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2196:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2200:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2201:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2207:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2216:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2218:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2222:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+./artifacts/p1t_fix7/preL1_sources/tensor_cuda/src/bindings.cpp:2224:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+./artifacts/apa_p1/refs/production/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1/refs/production/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1/refs/production/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1/refs/production/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1/refs/production/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1536:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1537:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1554:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1555:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1603:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1604:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1605:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1/refs/production/tensor_cuda/__init__.py:1618:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_p1/refs/lab/tensor_cuda/apa_sp2.py:4:Callers must supply keys from quantize_sp2_keys and the calibrated input regime.
+./artifacts/apa_p1/refs/lab/tensor_cuda/apa_sp2.py:61:def quantize_sp2_keys(k, bulk_bits):
+./artifacts/apa_p1/refs/lab/tensor_cuda/apa_sp2.py:72:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,
+./artifacts/apa_p1/refs/lab/tensor_cuda/apa_sp2.py:77:    kq must come from quantize_sp2_keys(k, bulk_bits). Calibration does not certify
+./artifacts/apa_p1/refs/lab/tensor_cuda/apa_sp2.py:88:    return _C.apa_selective_attention_sp_epsilon(q, k, kq, v, float(scale),
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1287:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1288:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1303:    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1304:    _C.apa_spo2_dump = _spo2.run
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1352:    _C.apa_selective_attention_sp_d1_packed=_apa_spq1_entry
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1353:    _C.apa_spq1_dump=_spo2.packed_run
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1354:    _C.apa_spq1_rotate=_spo2.packed_rotate
+./artifacts/apa_p1/refs/lab/tensor_cuda/__init__.py:1367:    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+./artifacts/apa_mf2_2a/before/tensor_cuda__src__kernels.cu:7980:NDArray apa_selective_attention_sp(const NDArray& q, const NDArray& k,
+./artifacts/apa_ste5/receipts/INIT_BEFORE.py:1294:from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
+./artifacts/apa_ste5/receipts/INIT_BEFORE.py:1295:__all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+```
+
+## GRAPA
+
+```sh
+CUDA_VISIBLE_DEVICES= timeout 35s rg -n --hidden --no-ignore -g '*.py' -g '*.cpp' -g '*.cu' -g '*.cuh' -g '*.h' -g '!**/.git/**' -g '!**/__pycache__/**' -g '!**/.venv/**' -g '!**/node_modules/**' -g '!**/build*/**' -g '!Fork/**' -g '!WorkTree/**' '\b(apa_selective_attention_sp(_epsilon|_d1_packed|_d1)?|quantize_sp2_keys|apa_spq1_(dump|rotate)|apa_spo2_dump|apa_sp2_(delta|scores|baseline_thresholds)|apa_sp1_1_baseline_diagnostics)\b' /mnt/ForgeRealm/GRAPA-Native-LLM
+```
+
+Exit 0; output:
+
+```text
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_run8/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc76/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc98/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc83/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc58/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc95/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc79/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc102/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_nm1a/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc90/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc86/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc60/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc71/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc73/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc68/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc59/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc103/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc69/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc84/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc82/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_env1/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc85/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc87/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc94/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc72/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97a2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc75/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc93/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc100/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc89/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc97/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc80/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc67/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc91/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc92/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc96/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc77/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc78/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc66/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc99/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc74/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_pa2/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc46/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc88/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc70/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc65/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc61/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:667:  m.def("apa_selective_attention_sp", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:675:    NDArray result = tc::apa_selective_attention_sp(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:684:  m.def("apa_sp1_1_baseline_diagnostics", [](Tensor& q, Tensor& kq) {
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:685:    auto result = tc::apa_sp1_1_baseline_diagnostics(q.data(),kq.data());
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:689:  m.def("apa_sp2_delta", &tc::apa_sp2_delta, py::arg("epsilon"), py::arg("e_q"));
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:690:  m.def("apa_selective_attention_sp_epsilon", [](Tensor& q, Tensor& k, Tensor& kq,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:696:    NDArray result = tc::apa_selective_attention_sp_epsilon(q.data(), k.data(),
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:705:  m.def("apa_sp2_scores", [](Tensor& q, Tensor& k, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:707:    auto r = tc::apa_sp2_scores(q.data(),k.data(),kq.data(),(float)scale,first,count,wcoop);
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:711:  m.def("apa_sp2_baseline_thresholds", [](Tensor& q, Tensor& kq, double scale,
+/mnt/ForgeRealm/GRAPA-Native-LLM/WorkTree/grapa_wt_cc62/artifacts/bp_census_1/engine_patch/src/bindings.cpp:713:    return Tensor::make(tc::apa_sp2_baseline_thresholds(q.data(),kq.data(),
+```
+
+## GraftRepositoryMemory service / GraftRepository checkout
+
+```sh
+CUDA_VISIBLE_DEVICES= timeout 35s rg -n --hidden --no-ignore -g '*.py' -g '*.cpp' -g '*.cu' -g '*.cuh' -g '*.h' -g '!**/.git/**' -g '!**/__pycache__/**' -g '!**/.venv/**' -g '!**/node_modules/**' -g '!**/build*/**' -g '!Fork/**' -g '!WorkTree/**' '\b(apa_selective_attention_sp(_epsilon|_d1_packed|_d1)?|quantize_sp2_keys|apa_spq1_(dump|rotate)|apa_spo2_dump|apa_sp2_(delta|scores|baseline_thresholds)|apa_sp1_1_baseline_diagnostics)\b' /mnt/ForgeRealm/GraftRepository
+```
+
+Exit 1; output:
+
+```text
+(no matches)
+```
+
+## Project-Voice
+
+```sh
+CUDA_VISIBLE_DEVICES= timeout 35s rg -n --hidden --no-ignore -g '*.py' -g '*.cpp' -g '*.cu' -g '*.cuh' -g '*.h' -g '!**/.git/**' -g '!**/__pycache__/**' -g '!**/.venv/**' -g '!**/node_modules/**' -g '!**/build*/**' -g '!Fork/**' -g '!WorkTree/**' '\b(apa_selective_attention_sp(_epsilon|_d1_packed|_d1)?|quantize_sp2_keys|apa_spq1_(dump|rotate)|apa_spo2_dump|apa_sp2_(delta|scores|baseline_thresholds)|apa_sp1_1_baseline_diagnostics)\b' /mnt/ForgeRealm/Project-Voice
+```
+
+Exit 1; output:
+
+```text
+(no matches)
+```

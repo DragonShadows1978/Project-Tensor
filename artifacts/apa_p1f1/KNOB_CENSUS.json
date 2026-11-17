@@ -1,0 +1,26 @@
+{
+  "rule": "R7 (P1R-F07): in the default build (TC_APA_P1_TEST_HOOKS off) every environment read that changes numerics or dispatch on a packed entry is compiled out; a non-default value raises, naming the variable; TC_APA_SP (the feature switch) stays. The hooks build keeps today's behaviour.",
+  "method": "rg -n 'getenv' tensor_cuda/src/apa_spo (order L82) at Build B (f01201cf) and at this round; plus every os.environ read in the packed Python regions (tensor_cuda/tensor_cuda/__init__.py packed region, apa_packed.py) and the spo2 binding (bindings.cpp _tensor_cuda_spo2: none).",
+  "build_B_reads": [
+    "launcher.cuh:14 TC_APA_SP",
+    "launcher.cuh:93 TC_APA_SPQ1_REFERENCE",
+    "eb3.cuh:104 APA_P1_EARLY_COUNTER (inside #if TC_APA_P1_TEST_HOOKS)",
+    "eb3.cuh:862 TC_APA_SP",
+    "eb3.cuh:864 APA_FXTC1_VARIANT",
+    "spq6.cuh:192 TC_APA_SP",
+    "spq6.cuh:240 APA_FXTC1_VARIANT",
+    "spq4.cuh:365 TC_APA_SP",
+    "eb2b.cuh:122 TC_APA_SP",
+    "eb4.cuh:678 TC_APA_SP",
+    "eb4.cuh:680 APA_FXTC1_VARIANT"
+  ],
+  "rows": [
+    {"variable": "TC_APA_SP", "sites": "apa_spq1_core_check (d1, packed r2), apa_spq4_tc, apa_spq6_tq4_tc, apa_eb2b_run, apa_eb3_run, apa_eb4_run; apa_packed.packed_attention", "kind": "feature switch", "default_build": "kept (order R7: not a knob); every packed attention entry raises RuntimeError before its first launch when it is not 1 (LF4)", "hooks_build": "same"},
+    {"variable": "APA_FXTC1_VARIANT", "sites": "apa_spq6_tq4_tc (tc tq4 bulk precision variant 0..3)", "kind": "A/B knob, numerics", "default_build": "compiled out: var is the compile-time default APA_FXTC1_VARIANT_DEFAULT=2; unset or '2' accepted; any other value raises ValueError naming APA_FXTC1_VARIANT (apa_spo_knob, launcher.cuh) before the rotation launch. The variant kernels stay instantiated but unreachable (see EXPECTED_SASS_F_r2.json)", "hooks_build": "today's behaviour: 0..3 select the variant, anything else raises RuntimeError"},
+    {"variable": "APA_FXTC1_VARIANT", "sites": "apa_eb3_run, apa_eb4_run", "kind": "guard (variant B only)", "default_build": "unchanged: any value other than unset or '2' raises RuntimeError naming the variable (already a refusal in Build B)", "hooks_build": "unchanged"},
+    {"variable": "TC_APA_SPQ1_REFERENCE", "sites": "apa_spq1_core packed r2 bulk (r1 reference vs grouped-reuse kernel for G = 4, 8)", "kind": "A/B knob, dispatch", "default_build": "compiled out: always the grouped-reuse kernel; unset or '0' accepted; any other value raises ValueError naming TC_APA_SPQ1_REFERENCE in apa_spq1_core_check, before the rotation launch", "hooks_build": "today's behaviour: '1' selects the r1 reference kernel"},
+    {"variable": "APA_P1_EARLY_COUNTER", "sites": "eb3 early_counter_setup (test hook)", "kind": "test hook", "default_build": "not read by any packed computation (the hook is compiled out); apa_eb3_run and apa_eb4_run refuse a value other than unset or '0' with ValueError naming it, so it is never silently ignored", "hooks_build": "today's behaviour for '1'; 'timeout' added for LF5 (forced test-hook timeout)"},
+    {"variable": "TC_APA_SP_STORAGE", "sites": "apa_packed.resolve_storage, called from quantize_sp2_keys (apa_sp2.py, read-only this round)", "kind": "storage policy (P1-D R-A: argument > environment > shipped default packed)", "default_build": "kept unchanged: it selects which representation quantize_sp2_keys builds, before any packed entry is called; it is P1-D's registered policy, tested by test_apa_p1d_policy.py (unchanged, G9). Flagged for the lead: if this policy variable is to count as an R7 knob, removing it contradicts P1-D's lead ruling R-A", "hooks_build": "same"}
+  ],
+  "not_env": "variant, poison, timeline, force_bf16, profile, inject, diagnostics are call arguments, not environment reads (REV1 Q8 lists them as debug arguments; out of R7's scope)"
+}

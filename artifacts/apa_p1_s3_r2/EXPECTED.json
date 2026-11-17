@@ -1,0 +1,84 @@
+{
+  "registration_sha256": "edae67d0ba2a7a4a68dbcc711cdbc910d2d6783c00c646363efa4c8040960565",
+  "written_before_staging": true,
+  "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod",
+  "dry_run_exit": 78,
+  "mutant_authority": "APA-2P SURVEY.md S3; EB3 order/lead notes mutant3 and EB4 lead tie fixture/positive-negative receipts; no mutant GPU outcome inferred from this round.",
+  "lines": [
+    {
+      "case": "threads",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_tickets.py::test_two_host_threads_bitwise"
+      ],
+      "mutant": false,
+      "expected_exit": 0,
+      "max": 240,
+      "timeout": 210
+    },
+    {
+      "case": "early_correct",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_early_counter.py::test_early_counter_gpu[eb3]",
+        "tensor_cuda/tests/test_apa_p1_early_counter.py::test_early_counter_gpu[eb4]"
+      ],
+      "mutant": false,
+      "expected_exit": 0,
+      "max": 240,
+      "timeout": 210
+    },
+    {
+      "case": "eb3_early",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_early_counter.py::test_early_counter_gpu[eb3]"
+      ],
+      "mutant": true,
+      "expected_exit": 1,
+      "failure_marker": "deterministic poisoned-partial output mismatch",
+      "max": 590,
+      "timeout": 560
+    },
+    {
+      "case": "eb4_early",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_early_counter.py::test_early_counter_gpu[eb4]"
+      ],
+      "mutant": true,
+      "expected_exit": 1,
+      "failure_marker": "deterministic poisoned-partial output mismatch",
+      "max": 590,
+      "timeout": 560
+    },
+    {
+      "case": "tie_correct",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_exact_tie.py::test_exact_tie_gpu"
+      ],
+      "mutant": false,
+      "expected_exit": 0,
+      "max": 240,
+      "timeout": 210
+    },
+    {
+      "case": "eb4_reverse_tie",
+      "tests": [
+        "tensor_cuda/tests/test_apa_p1_exact_tie.py::test_exact_tie_gpu"
+      ],
+      "mutant": true,
+      "expected_exit": 1,
+      "failure_marker": "exact-tie lower-index winner mismatch",
+      "max": 590,
+      "timeout": 560
+    }
+  ],
+  "code_sha256": {
+    "tensor_cuda/src/apa_spo/eb3.cuh": "1c34580445210bd50365e773b37fdbab45bcddeff2249b7514041d3fa87f564e",
+    "tensor_cuda/src/apa_spo/eb4.cuh": "c6a3654815f76e8bd689f1a42f24d7c2b64b03561d7e9513727cfc3139beb9cf",
+    "tensor_cuda/src/apa_spo/eb4_tuning.cuh": "4f7d5554b04f5169fe6d5480c145c0aa0e2c4b843cb6f2bfb5a79b51278db766",
+    "tensor_cuda/src/bindings.cpp": "fee2711e16a5e0bcf38cc486a0296186b4ba2211dbd9ff9f0134502f1e567718",
+    "tensor_cuda/tests/test_apa_p1_early_counter.py": "d6b5b377bf8329103a17b957ace6129f3a1e8f4d52db8446ae70f36483b62097",
+    "tensor_cuda/tests/test_apa_p1_exact_tie.py": "7efdce34367380d65860ed9b5ee36e69199df4099a3bb6718af3cb882e4dd2c2",
+    "tensor_cuda/tests/test_apa_p1_tickets.py": "53c05e5e5ad16a72affabdcafbc13b38a212ffb6f053ff7032de5dfd540d5b0d",
+    "artifacts/apa_p1_s3_r2/gpu_line.py": "32767d7c20a2ab32072420e4f20bf21a3d5b07493aa79d56d2d98b5ec9ab6e8d"
+  },
+  "source_pin_amendment": "STAGING_AMENDMENT_1.json"
+}

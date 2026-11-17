@@ -8708,3 +8708,15 @@ std::tuple<NDArray,NDArray,NDArray> apa_selective_fwd_train_variant(
 }
 // BP-KERNEL-4 END
 }  // namespace tc
+
+// APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+// Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026), unchanged numerics.
+#ifdef TC_APA_PACKED
+// APA_SPO2_D1_BEGIN include
+namespace tc {
+#include "apa_spo/d1.cuh"
+#include "apa_spo/launcher.cuh"
+}
+// APA_SPO2_D1_END include
+
+#endif  // TC_APA_PACKED

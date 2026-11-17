@@ -266,7 +266,7 @@ class PidvAttn(P.Attn):
         if f == "apa_sp":
             if self.margins_dir is None:
                 raise ValueError("PidvAttn: apa_sp needs margins_dir (a caller-owned directory)")
-            kq = tc.quantize_sp2_keys(up(self.k, "float32"), 2)
+            kq = tc.quantize_sp2_keys(up(self.k, "float32"), 2, storage="dense")
             self.kq = down(kq)
             self.sigma_rows = [self.k, self.kq]
             self.kq_np = self._kv_layout(self.kq)

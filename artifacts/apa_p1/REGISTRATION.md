@@ -1,0 +1,7 @@
+# APA-P1 gate registration (immutable)
+
+Registered 2026-11-02T18:06:39.540791+00:00, before edits/build/tests. Authority: committed order at HEAD fb3b04b09282e018e67c4c3d86d5b3e42f7443fe and user order.
+
+G1: exactly 16 specified byte-identical headers from aaa9b4ea and additive-only D2 hunks in five seams relative to 0e1dea3; no removed production line. G2: CUDA 12.6 Release sm89 build in build-p1 with AB-1 main feature defines; module sha256 and exact per-kernel SASS instruction-count comparison. G3: CPU-runnable production import suites, exact per-ID outcome strings and difference messages, threads=1, baseline module sha256 d6b1b7ad1d87e0d7d5eed70cff94b33e469e6f18b857d78679110e6b2dce3c24, then port module. G4: stage only forge-gpu-run --max lines with inner timeout, bitwise EB3/EB4/append at S=2048,8192,32768, GPU production APA/DLPack parity and 580*S bytes/KV head plus exact bf16 layer zero. Expected references nonzero and nonconstant, integer views, no tolerance. ACCEPT iff G1–G3 pass and G4 staged; lead scores GPU. P142/P143 registered in order.
+
+Stop: 3h wall budget; every command <30min; disk free >=25GB ForgeRealm and >=20GB root. No GPU; no writes outside order; no existing production line/test changes; no git writes/deletes/subagents/background waits. Gate failures reported honestly. Poll a running command only with yield_time_ms=300000; no intervening status. TMPDIR=/tmp/apa_p1_seat.

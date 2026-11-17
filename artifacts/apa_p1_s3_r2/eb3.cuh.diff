@@ -1,0 +1,256 @@
+--- before/tensor_cuda/src/apa_spo/eb3.cuh
++++ after/tensor_cuda/src/apa_spo/eb3.cuh
+@@ -65,7 +65,76 @@
+ #ifndef APA_EB3_MUTANT
+ #define APA_EB3_MUTANT 0
+ #endif
++#ifndef TC_APA_P1_TEST_HOOKS
++#define TC_APA_P1_TEST_HOOKS 0
++#endif
+ namespace eb3 {
++#if TC_APA_P1_TEST_HOOKS
++// Prior art: DeMillo, Lipton and Sayward (1978) mutation testing; CUDA
++// fence/atomic happens-before; survey APA-2P S3 (2026), deterministic
++// early-counter design. Taken: negative control and explicit ordering;
++// ours: integration of its poisoned-partial completion handshake. No prior
++// art known to me for this exact fixture. Literature unverified -- lead to
++// check: mutation testing 1978; CUDA memory fence atomic release acquire.
++// The default build contains NONE of this hook or its kernel parameters.
++// APA_P1_EARLY_DEVICE_BEGIN (CPU compiles this actual structural code too)
++struct EarlyCounterHook {unsigned* state=nullptr;unsigned long long ticks=0;};
++__device__ __forceinline__ bool early_counter_wait(EarlyCounterHook hook,int c){
++  if(!hook.state || c!=1)return true;
++  unsigned timed_out=0;
++  if(threadIdx.x==0){
++    const auto start=clock64();
++    while(atomicAdd(hook.state,0u)==0u){
++      if(clock64()-start>=hook.ticks){timed_out=1;atomicExch(hook.state+1,1u);break;}
++    }
++  }
++  // CUDA bar.red.or broadcasts the leader timeout without introducing a
++  // static shared object into this translation unit (NVIDIA CUDA API).
++  return __syncthreads_or(timed_out)!=1;
++}
++__device__ __forceinline__ void early_counter_done(EarlyCounterHook hook,int c){
++  if(!hook.state || c!=0)return;
++  // Every writer has finished ALL possible merge/output stores before the
++  // leader releases chunk 1. Also called on the non-merging early exit.
++  __threadfence();__syncthreads();
++  if(threadIdx.x==0)atomicExch(hook.state,1u);
++}
++// APA_P1_EARLY_DEVICE_END
++inline bool early_counter_enabled(){
++  const char* flag=std::getenv("APA_P1_EARLY_COUNTER");return flag && std::strcmp(flag,"1")==0;
++}
++inline EarlyCounterHook early_counter_setup(NDArray& state,const Device& device,
++    int bh,int nc,bool eligible,float* pm,float* pl,float* pa,int rows,int vd){
++  if(!early_counter_enabled())return {};
++  if(bh!=1 || nc!=2 || !eligible)throw std::runtime_error("APA P1 early-counter requires one bh, NC=2, registered fused path");
++  state=NDArray({8},DType::Uint8,device);int khz=0;
++  if(cudaDeviceGetAttribute(&khz,cudaDevAttrClockRate,device.index)!=cudaSuccess || khz<=0)throw std::runtime_error("APA P1 clock rate");
++  // Poison all partials: chunk 0 overwrites its own; chunk 1 stays poisoned
++  // until the completion signal. 0xffffffff is an explicit fp32 NaN sentinel.
++  if(cudaMemsetAsync(state.data_ptr(),0,8,0)!=cudaSuccess ||
++     cudaMemsetAsync(pm,0xff,(size_t)rows*nc*4,0)!=cudaSuccess ||
++     cudaMemsetAsync(pl,0xff,(size_t)rows*nc*4,0)!=cudaSuccess ||
++     cudaMemsetAsync(pa,0xff,(size_t)rows*nc*vd*4,0)!=cudaSuccess)throw std::runtime_error("APA P1 early-counter poison");
++  constexpr unsigned long long poll_milliseconds=2000;
++  return {(unsigned*)state.data_ptr(),(unsigned long long)khz*poll_milliseconds};
++}
++inline void early_counter_check(EarlyCounterHook hook,const void* kernel){
++  if(!hook.state)return;
++  int blocks=0,sms=0;
++  if(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks,kernel,128,0)!=cudaSuccess)
++    throw std::runtime_error("APA P1 early-counter occupancy");
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess || cudaDeviceGetAttribute(&sms,cudaDevAttrMultiProcessorCount,device)!=cudaSuccess || blocks*sms<2)
++    throw std::runtime_error("APA P1 early-counter needs two concurrently resident CTAs");
++}
++inline void early_counter_finish(EarlyCounterHook hook){
++  if(!hook.state)return;
++  unsigned state[2]={0,0};
++  if(cudaDeviceSynchronize()!=cudaSuccess || cudaMemcpy(state,hook.state,sizeof(state),cudaMemcpyDeviceToHost)!=cudaSuccess)throw std::runtime_error("APA P1 early-counter completion");
++  if(state[1])throw std::runtime_error("APA P1 early-counter poll timed out (FAIL, never a mutant kill)");
++  if(state[0]!=1)throw std::runtime_error("APA P1 early-counter missing completion signal");
++}
++#endif
+ using bf16=__nv_bfloat16;
+ constexpr int C=spq4::C,NT=spq4::NT,MAXG=spq4::MAXG,PSTRIDE=spq4::PSTRIDE;
+ 
+@@ -319,7 +388,11 @@
+ __global__ void __launch_bounds__(128,MINB) select_pv(const bf16* q,const bf16* k,const bf16* v,
+  const float* bulk,const float* cm,uint8_t* mask,float* prefix,float* pm,float* pl,float* pa,
+  int H,int KVH,int S,int NC,int PK,float scale,float delta,
+- unsigned* ctr,const bf16* sinks,bf16* out,unsigned long long* tl){
++ unsigned* ctr,const bf16* sinks,bf16* out,unsigned long long* tl
++#if TC_APA_P1_TEST_HOOKS
++ ,EarlyCounterHook test_hook
++#endif
++ ){
+   constexpr int G=GT,SG=BIG?MAXG:GT;
+   constexpr int DPL=D/4,NS=DPL/4,NU4=DPL/8,NTW=VD/32,U=VD/8;
+   __shared__ float scs[SG][C];
+@@ -328,6 +401,10 @@
+   __shared__ __align__(16) bf16 Vs[32][VD+8];
+   __shared__ float lsum[SG];
+   int bh=blockIdx.x,c=blockIdx.y+gridDim.y*blockIdx.z;if(c>=NC)return;
++#if TC_APA_P1_TEST_HOOKS
++  // Hold chunk 1 BEFORE any pm/pl/pa partial store (survey S3).
++  if(!early_counter_wait(test_hook,c))return;
++#endif
+   Stamp st;tl_begin<TL>(st);
+   int b=bh/KVH,h0=(bh%KVH)*G,tid=threadIdx.x,lane=tid&31,warp=tid>>5,r=lane>>2,tig=lane&3;
+   int start=c*C,count=min(C,S-start);
+@@ -492,7 +569,12 @@
+ #endif
+   }
+   __syncthreads();
+-  if(!last_s){tl_end<TL>(tl,(int64_t)bh*NC+c,st);return;}
++  if(!last_s){
++#if TC_APA_P1_TEST_HOOKS
++    early_counter_done(test_hook,c);
++#endif
++    tl_end<TL>(tl,(int64_t)bh*NC+c,st);return;
++  }
+   __threadfence();
+   const int64_t row0=(int64_t)b*H+h0;
+   constexpr int Q4=VD/4,QPT=(G*Q4+NT-1)/NT,MB=tune::MERGE_BATCH/QPT;
+@@ -676,32 +758,71 @@
+       o[3]=__float2bfloat16_rn(den>0.f?__fdiv_rn(macc[qi].w,den):0.f);
+     }
+   }
++#if TC_APA_P1_TEST_HOOKS
++  early_counter_done(test_hook,c);
++#endif
+   tl_end<TL>(tl,(int64_t)bh*NC+c,st);
+   }
+ }
+ 
+-// ---- persistent merge tickets ----------------------------------------------
+-// One unsigned per (batch, KV head), zeroed once at allocation and returned to
+-// zero by every completed launch (atomicInc wrap). Grown (never shrunk) on the
+-// first call that needs more; growth synchronizes the device. Single-stream,
+-// single-device use (the engine's legacy default stream).
++// ---- persistent per-device tickets (APA-P1-S3 r2b) -------------------------
++// Contract: ONE stream, the CUDA legacy default stream (0), on each device.
++// A launch on any other stream is out of contract. atomicInc/fence arithmetic
++// is inherited unchanged from CUDA Samples threadFenceReduction (NVIDIA).
++// Prior art: CUDA stream-ordered lifetime APIs (cudaMallocAsync, NVIDIA 2021)
++// and std::mutex/map ownership (ISO C++11, 2011). Taken: stream ordering and
++// last-writer tickets; ours: device-keyed merge/choose slots and a launch lock.
++// Literature unverified -- lead to check: CUDA Samples threadFenceReduction;
++// CUDA 11.2 stream ordered memory allocator 2021. No new reduction.
++// APA_P1_HOST_TICKETS_BEGIN (also compiled by the CPU ownership test)
++struct TicketSlot { unsigned* buffer=nullptr; int capacity=0; };
++struct DeviceTickets { TicketSlot merge,choose; int64_t l2=-1; };
++inline std::recursive_mutex& ticket_mutex(){static std::recursive_mutex m;return m;}
++inline std::unordered_map<int,DeviceTickets>& device_tickets(){
++  // Process lifetime, as before. Do not call CUDA from static destructors.
++  static std::unordered_map<int,DeviceTickets> states;return states;
++}
++// Reuse the engine guard: checked success-path restore, counted unwind errors.
++using TicketDeviceGuard=CheckedDeviceGuard;
++inline unsigned* ticket_buffer(bool choose,int n,int minimum,int64_t* bytes){
++  std::lock_guard<std::recursive_mutex> lock(ticket_mutex());
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess)throw std::runtime_error("apa tickets: get device");
++  auto& state=device_tickets()[device];auto& slot=choose?state.choose:state.merge;
++  if(n>slot.capacity){
++    const int want=std::max(n,minimum);unsigned* next=nullptr;
++    if(cudaMalloc(&next,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa tickets: allocation");
++    if(cudaMemset(next,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess){
++      cudaFree(next);throw std::runtime_error("apa tickets: zero");
++    }
++    if(slot.buffer){
++      // Only the CURRENT (guarded operand) device is synchronized. The launch
++      // lock remains held from lookup through enqueue, so no caller can hold
++      // an old pointer that has not yet been submitted when growth frees it.
++      if(cudaDeviceSynchronize()!=cudaSuccess){cudaFree(next);throw std::runtime_error("apa tickets: growth sync");}
++      if(cudaFree(slot.buffer)!=cudaSuccess){cudaFree(next);throw std::runtime_error("apa tickets: growth free");}
++    }
++    slot.buffer=next;slot.capacity=want;
++  }
++  if(bytes)*bytes=(int64_t)slot.capacity*(int64_t)sizeof(unsigned);
++  return slot.buffer;
++}
+ inline unsigned* counters(int n,int64_t* bytes=nullptr){
+-  static unsigned* buf=nullptr;static int cap=0;
+-  if(n>cap){
+-    int want=std::max(n,tune::COUNTER_MIN_ENTRIES);unsigned* nb=nullptr;
+-    if(cudaMalloc(&nb,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb3: counter allocation");
+-    if(cudaMemset(nb,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb3: counter zero");
+-    if(buf){cudaDeviceSynchronize();cudaFree(buf);}
+-    buf=nb;cap=want;
+-  }
+-  if(bytes)*bytes=(int64_t)cap*(int64_t)sizeof(unsigned);
+-  return buf;
++  return ticket_buffer(false,n,tune::COUNTER_MIN_ENTRIES,bytes);
+ }
+ inline int64_t l2_bytes(){
+-  static int64_t cached=-1;
+-  if(cached<0){int dev=0,v=0;cudaGetDevice(&dev);cudaDeviceGetAttribute(&v,cudaDevAttrL2CacheSize,dev);cached=v;}
++  std::lock_guard<std::recursive_mutex> lock(ticket_mutex());
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess)throw std::runtime_error("apa tickets: L2 device");
++  auto& cached=device_tickets()[device].l2;
++  if(cached<0){
++    int value=0;
++    if(cudaDeviceGetAttribute(&value,cudaDevAttrL2CacheSize,device)!=cudaSuccess)throw std::runtime_error("apa tickets: L2 size");
++    cached=value;
++  }
+   return cached;
+ }
++// APA_P1_HOST_TICKETS_END
+ 
+ // ---- variant table (runtime `variant`; 0 = registered path) -----------------
+ // rot: 0 spq1::rotate (baseline kernel), 1 eb3::rotate_q<128,ROT_DB>;
+@@ -762,6 +883,10 @@
+   if(variant!=eb3::tune::REGISTERED_VARIANT && G!=2 && G!=4)throw std::runtime_error("apa_eb3: ablation variants are built for G=2,4 only");
+   if(diag && variant!=eb3::tune::REGISTERED_VARIANT)throw std::runtime_error("apa_eb3: diagnostics only on the registered variant");
+   if(timeline && variant!=eb3::tune::REGISTERED_VARIANT && variant!=6 && variant!=1)throw std::runtime_error("apa_eb3: timeline only on variants 0, 1, 6");
++  // Prior art: CUDA legacy-default-stream ordering and RAII (C++11, 2011).
++  // Serialize host submission through growth; no steady-state device sync.
++  std::lock_guard<std::recursive_mutex> ticket_launch_lock(eb3::ticket_mutex());
++  eb3::TicketDeviceGuard operand_device(q.device.index,"apa_eb3");
+   int np,pk;apa_int4_fixed_partition_layout((int)S,np,pk);
+   if(pk%spq4::C)throw std::runtime_error("apa_eb3: partition must align to chunk");
+   int nc=(int)((S+spq4::C-1)/spq4::C),rows=(int)(B*H);
+@@ -800,6 +925,11 @@
+   auto SNK=sinks?(spq4::bf16*)sinks->data_ptr():nullptr;auto OUT=(spq4::bf16*)out.data_ptr();
+   int capacity=(int)codes.shape[2];
+   const uint8_t* CODES=(const uint8_t*)codes.data_ptr();const float* SC=(const float*)sc.data_ptr();const float* CB=(const float*)cb.data_ptr();
++#if TC_APA_P1_TEST_HOOKS
++  NDArray test_state;
++  auto test_hook=eb3::early_counter_setup(test_state,q.device,(int)(B*KVH),nc,
++    variant==0 && VA.sel==1 && VA.fuse,PM,PL,PA,rows,(int)VD);
++#endif
+   // L2-capacity budget for cross-kernel prefetch (tuning: L2_FRACTION).
+   const int64_t budget=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+   const int64_t code_bytes=(int64_t)codes.numel(),norm_bytes=(int64_t)sc.numel()*4,v_bytes=(int64_t)B*KVH*S*VD*2;
+@@ -851,7 +981,14 @@
+     auto launch=[&](auto gt,auto dg,auto big,auto vpf,auto fuse,auto on,auto kpf){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value,BG=decltype(big)::value,VP=decltype(vpf)::value,FU=decltype(fuse)::value,ON=decltype(on)::value,KP=decltype(kpf)::value;
+       constexpr int MB=BG?1:eb3::tune::SEL_MINB;
+-      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr);};
++#if TC_APA_P1_TEST_HOOKS
++      eb3::early_counter_check(test_hook,(const void*)eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP>);
++#endif
++      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr
++#if TC_APA_P1_TEST_HOOKS
++        ,test_hook
++#endif
++      );};
+     using T=std::true_type;using F=std::false_type;
+     // All G in [2,8] are instantiated only for the registered select options;
+     // ablations are G=2,4.
+@@ -903,6 +1040,10 @@
+   int64_t ctr_bytes=0;if(CTR)eb3::counters(0,&ctr_bytes);
+   NDArray foot({6},DType::Int64,Device::from_string("cpu"));
+   {auto* f=(int64_t*)foot.data_ptr();f[0]=total;f[1]=B*H*VD*2;f[2]=ctr_bytes;f[3]=(VA.sel==1 && VA.fuse)?3:4;f[4]=do_rpf;f[5]=do_xpf;}
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_finish(test_hook);
++#endif
++  operand_device.restore();
+   return {out,pq,mask,bulk,prefix,tlb,tls,foot};
+ }
+ 

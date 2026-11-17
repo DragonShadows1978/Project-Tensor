@@ -1,0 +1,81 @@
+{
+  "status": "RED: SCOPE MISMATCH",
+  "stop_rule": "L82",
+  "evidence_class": "static source reading",
+  "order_sha256": "902153c024de297c4fc855957419b99c293fb036ebc0460c3c26c419623d69f0",
+  "blocking_read_only_files": [
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "sites": [
+        14,
+        19,
+        24,
+        29,
+        33,
+        39,
+        41
+      ],
+      "reason": "Query rotation, key preparation and TQ4/INT4 packing host functions have no stream argument; kernel launches use implicit stream 0.",
+      "required_for": "S1 explicit rotation/preparation/packing stream propagation"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "sites": [
+        109,
+        114
+      ],
+      "reason": "V quantization host function has no stream argument; its kernel launch uses implicit stream 0.",
+      "required_for": "S1 explicit quantization stream propagation"
+    }
+  ],
+  "additional_host_chain": {
+    "file": "tensor_cuda/src/apa_spo/launcher.cuh",
+    "sites": [
+      5,
+      98,
+      105,
+      117,
+      119,
+      133,
+      135,
+      137,
+      139,
+      147,
+      148
+    ],
+    "reason": "Packed predecessor route forwards to apa_spq1_core without a stream; its launch sites are here. Include only if this route is covered by amended S1."
+  },
+  "parallel_cuh": "Kernel definitions only: no host <<< launch sites or stream parameters found. No need to edit it established by this preflight.",
+  "declaration_boundary": {
+    "file": "tensor_cuda/include/tc/ops.h",
+    "sites": [
+      316,
+      317,
+      318,
+      326,
+      334,
+      342
+    ],
+    "reason": "Current exported declarations carry no stream. A changed internal signature needs coordinated declarations or deliberate default-stream wrappers."
+  },
+  "binding_boundary": {
+    "file": "tensor_cuda/src/bindings.cpp",
+    "sites": [
+      2757,
+      2758,
+      2759,
+      2776,
+      2794,
+      2810
+    ],
+    "reason": "Existing forwarding carries no stream. This order permits binding edits for S2 only; S1 stream forwarding would need an explicit scope amendment."
+  },
+  "implementation_performed": false,
+  "build_performed": false,
+  "tests_performed": false,
+  "gpu_lines_staged": 0,
+  "dry_runs_performed": 0,
+  "instrument_checks": "NOT_RUN_STOP_L82",
+  "full_caller_census": "NOT_RUN_STOP_L82",
+  "amendment_needed": "Authorize the listed host helpers and necessary internal declarations/forwarding for explicit stream propagation while retaining public defaults, or explicitly narrow S1. No such amendment has been assumed."
+}

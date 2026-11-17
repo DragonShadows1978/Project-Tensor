@@ -1,0 +1,21 @@
+{
+  "name": "m01_lookup_rereads_mapping",
+  "line": "S4",
+  "exit": 1,
+  "package": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1f2/artifacts/apa_p1f3/mutants/m01_lookup_rereads_mapping/arm/tensor_cuda",
+  "env": {
+    "APA_P1F3_SRC": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1f2/artifacts/apa_p1f3/mutants/m01_lookup_rereads_mapping/arm/tensor_cuda"
+  },
+  "expected_failure": "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[64]",
+  "killed": true,
+  "failed_ids": [
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_margin_mapping_reads_census",
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_attention_gets_the_pinned_e_q_or_is_refused[128-4]",
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_attention_gets_the_pinned_e_q_or_is_refused[64-4]",
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[128]",
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[64]"
+  ],
+  "executed_line_evidence": [
+    "tensor_cuda/tests/test_apa_p1f3_cpu.py:77: in test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value\n    assert type(got) is float and bits(got) == bits(pin), \\\nE   AssertionError: lookup returned 0.0, not the pinned 1.010646104812622; mapping item reads = 3\nE   assert (<class 'float'> is float and 0 == 4607230364593684480)\nE    +  where <class 'float'> = type(0.0)\nE    +  and   0 = bits(0.0)\nE    +  and   4607230364593684480 = bits(1.010646104812622)"
+  ]
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "REV2": "P1R2-F01",
+    "ruling": "R1",
+    "complete": false,
+    "answer": "Common pinned-load, wrong sha, wrong entries and subclass cases fixed; stateful hand-built mapping still bypasses use pin (P1R3-F01).",
+    "evidence": "apa_packed.py:408-473,476-516; receipts012; GT R1 tests"
+  },
+  {
+    "REV2": "P1R2-F02",
+    "ruling": "R2",
+    "complete": true,
+    "answer": "The prescribed non-finite-input fix is complete across the one shared TQ4 prepare/pack quantizer; the universal containment claim still fails on finite norm overflow (P1R3-F02).",
+    "evidence": "packed.cuh:101-112,15-22; CENSUS_AUDIT.json; BLIND_CHECKS.json"
+  },
+  {
+    "REV2": "P1R2-F04",
+    "ruling": "R3",
+    "complete": false,
+    "answer": "Capacity and main helper bounds fixed; signed multiplication in EB2b and attention out-of-range error contract remain (P1R3-F03).",
+    "evidence": "eb2b.cuh:158-159,179; packed_launcher.cuh:21-70; launcher.cuh:30-34,132-146; GT R3 tests"
+  },
+  {
+    "REV2": "P1R2-F05",
+    "ruling": "R4",
+    "complete": true,
+    "answer": "All six raw helpers refuse non-positive leading extents on the host; EB3 timeline G=3,5,6,7,8 refuses before lock/arena/launch; G2/G4 remains accepted.",
+    "evidence": "packed_launcher.cuh:23-75,93-118; eb2b.cuh:106-134; eb3.cuh:939-960; GT source-order test"
+  },
+  {
+    "REV2": "P1R2-F06",
+    "ruling": "R5",
+    "complete": true,
+    "answer": "Comments correctly restrict identity to finite intermediate scores and denominator; overflow, NaN/+Inf sinks and Inf queries are named. No merge arithmetic changed in this diff.",
+    "evidence": "merge.cuh:23-42; eb3.cuh:782-800; eb4.cuh:645-658; review.diff"
+  },
+  {
+    "REV2": "P1R2-F07",
+    "ruling": "R6",
+    "complete": true,
+    "answer": "Header has the one current 16-argument declaration; direct tc binding replaces the bridge. Native syntax probe passes after and fails before as intended. NIT closed.",
+    "evidence": "ops.h:328; eb2b.cuh:146-149; bindings.cpp:2803-2817; GT R6 tests (including syntax-only nvcc probe)"
+  },
+  {
+    "REV2": "P1R2-F08",
+    "ruling": "R7",
+    "complete": true,
+    "answer": "Active expectation path/hash recorded beside original; paired renames separated from additions/removals. Synthetic tests pass. Registered G6 remains FAIL for unregistered path-derived names. NIT closed.",
+    "evidence": "scripts/apa_p1f1_sass.py:47-176; GT R7 tests; SASS_RECOUNT.json"
+  },
+  {
+    "REV2": "P1R2-F09",
+    "ruling": "R8",
+    "complete": true,
+    "answer": "Keyword-only capacity forwarded for packed; dense/fallback rejects non-None capacity before device work; None default unchanged.",
+    "evidence": "apa_sp2.py:61-111; __init__.py:1632-1680; GT R8 tests"
+  }
+]

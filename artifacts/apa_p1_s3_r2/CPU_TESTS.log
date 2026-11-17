@@ -1,0 +1,87 @@
+FsF.ss..s                                                                [100%]
+=================================== FAILURES ===================================
+_______________________ test_per_device_ticket_ownership _______________________
+tensor_cuda/tests/test_apa_p1_tickets.py:105: in test_per_device_ticket_ownership
+    exe = compile_cpp(tmp_path, source, 'ticket_ownership')
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tensor_cuda/tests/test_apa_p1_tickets.py:30: in compile_cpp
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: /tmp/apap1s3r2_cpu_tests/pytest/test_per_device_ticket_ownersh0/ticket_ownership.cpp:76:7: error: expected ‘)’ before ‘compiled’
+E        76 |  (also compiled by the CPU ownership test)
+E           |  ~    ^~~~~~~~~
+E           |       )
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_per_device_ticket_ownersh0/ticket_ownership.cpp:78:24: error: ‘TicketSlot’ does not name a type
+E        78 | struct DeviceTickets { TicketSlot merge,choose; int64_t l2=-1; };
+E           |                        ^~~~~~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_per_device_ticket_ownersh0/ticket_ownership.cpp: In function ‘unsigned int* eb3::ticket_buffer(bool, int, int, int64_t*)’:
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_per_device_ticket_ownersh0/ticket_ownership.cpp:90:64: error: ‘struct eb3::DeviceTickets’ has no member named ‘choose’
+E        90 |   auto& state=device_tickets()[device];auto& slot=choose?state.choose:state.merge;
+E           |                                                                ^~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_per_device_ticket_ownersh0/ticket_ownership.cpp:90:77: error: ‘struct eb3::DeviceTickets’ has no member named ‘merge’
+E        90 |   auto& state=device_tickets()[device];auto& slot=choose?state.choose:state.merge;
+E           |                                                                             ^~~~~
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['timeout', '45s', 'c++', '-std=c++17', '-O2', '-pthread', '/tmp/apap1s3r2_cpu_tests/pytest/test...tate.choose:state.merge;\n      |                                                                             ^~~~~\n').returncode
+____________________ test_early_counter_compiled_structure _____________________
+tensor_cuda/tests/test_apa_p1_early_counter.py:87: in test_early_counter_compiled_structure
+    exe = compile_cpp(tmp_path, prefix + defines + helpers + main.replace('PREDICATE', predicate), family + ('_early' if mutant else '_correct'))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tensor_cuda/tests/test_apa_p1_tickets.py:30: in compile_cpp
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:20:6: error: expected ‘)’ before ‘compiles’
+E        20 |  (CPU compiles this actual structural code too)
+E           |  ~   ^~~~~~~~~
+E           |      )
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:22:52: error: ‘EarlyCounterHook’ was not declared in this scope
+E        22 | __device__ __forceinline__ bool early_counter_wait(EarlyCounterHook hook,int c){
+E           |                                                    ^~~~~~~~~~~~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:22:74: error: expected primary-expression before ‘int’
+E        22 | __device__ __forceinline__ bool early_counter_wait(EarlyCounterHook hook,int c){
+E           |                                                                          ^~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:22:79: error: expression list treated as compound expression in initializer [-fpermissive]
+E        22 | __device__ __forceinline__ bool early_counter_wait(EarlyCounterHook hook,int c){
+E           |                                                                               ^
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:34:33: error: variable or field ‘early_counter_done’ declared void
+E        34 | __device__ __forceinline__ void early_counter_done(EarlyCounterHook hook,int c){
+E           |                                 ^~~~~~~~~~~~~~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:34:52: error: ‘EarlyCounterHook’ was not declared in this scope
+E        34 | __device__ __forceinline__ void early_counter_done(EarlyCounterHook hook,int c){
+E           |                                                    ^~~~~~~~~~~~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:34:74: error: expected primary-expression before ‘int’
+E        34 | __device__ __forceinline__ void early_counter_done(EarlyCounterHook hook,int c){
+E           |                                                                          ^~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp: In function ‘int main()’:
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:59:2: error: ‘EarlyCounterHook’ was not declared in this scope
+E        59 |  EarlyCounterHook hook{state,5000000000ull};
+E           |  ^~~~~~~~~~~~~~~~
+E     In file included from /usr/include/c++/13/cassert:44,
+E                      from /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:3:
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp: In lambda function:
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:60:52: error: ‘hook’ was not declared in this scope
+E        60 |  std::thread delayed([&]{assert(early_counter_wait(hook,1));partial[1]=7.f;if(takes_ticket(&counter))out=partial[0]+partial[1];});
+E           |                                                    ^~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:60:51: error: ‘early_counter_wait’ cannot be used as a function
+E        60 |  std::thread delayed([&]{assert(early_counter_wait(hook,1));partial[1]=7.f;if(takes_ticket(&counter))out=partial[0]+partial[1];});
+E           |                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp: In function ‘int main()’:
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:63:21: error: ‘hook’ was not declared in this scope
+E        63 |  early_counter_done(hook,0);delayed.join();
+E           |                     ^~~~
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:63:2: error: ‘early_counter_done’ was not declared in this scope; did you mean ‘early_counter_wait’?
+E        63 |  early_counter_done(hook,0);delayed.join();
+E           |  ^~~~~~~~~~~~~~~~~~
+E           |  early_counter_wait
+E     /tmp/apap1s3r2_cpu_tests/pytest/test_early_counter_compiled_st0/eb3_correct.cpp:66:52: error: ‘early_counter_wait’ cannot be used as a function
+E        66 |  unsigned timed[2]={0,0};assert(!early_counter_wait({timed,1},1) && timed[1]==1);
+E           |                                  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['timeout', '45s', 'c++', '-std=c++17', '-O2', '-pthread', '/tmp/apap1s3r2_cpu_tests/pytest/test...ounter_wait({timed,1},1) && timed[1]==1);\n      |                                  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~\n').returncode
+=========================== short test summary info ============================
+SKIPPED [1] tensor_cuda/tests/test_apa_p1_tickets.py:135: staged lead GPU test; CPU seat has no GPU
+SKIPPED [2] tensor_cuda/tests/test_apa_p1_early_counter.py:134: staged lead GPU test; CPU seat has no GPU
+SKIPPED [1] tensor_cuda/tests/test_apa_p1_exact_tie.py:60: staged lead GPU test; CPU seat has no GPU
+FAILED tensor_cuda/tests/test_apa_p1_tickets.py::test_per_device_ticket_ownership
+FAILED tensor_cuda/tests/test_apa_p1_early_counter.py::test_early_counter_compiled_structure
+2 failed, 3 passed, 4 skipped in 1.32s

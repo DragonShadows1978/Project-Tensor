@@ -1,0 +1,127 @@
+{
+  "order": "orders/APA_P1F1_REV1_FIXES.md (APA-P1-F1)",
+  "written": "2026-11-15 22:05 EST, before Build F was started and before any GPU line",
+  "note": "Kernel names are c++filt-demangled names without the parameter list. The SASS comparison maps only the _cu_<8 hex>_<n> suffix (scripts/apa_p1d_sass.py read/compare, imported).",
+  "sass": {
+    "comparison": "Build F vs Build B (artifacts/apa_p1d/build_B, module sha256 8728e67e26027dbafe8a61592decb38e68171fa7b5634239ce0af7897c4e8c4e), per kernel, exact instruction text",
+    "expected_changed": {
+      "P1R-F01 spo2 merge guard denom>0 -> denom!=0 (merge.cuh)": [
+        "void tc::spo2::merge_kernel<float>",
+        "void tc::spo2::merge_kernel<__half>",
+        "void tc::spo2::merge_kernel<__nv_bfloat16>"
+      ],
+      "P1R-F01 EB3 fused merge guard den>0.f -> den!=0.f (eb3.cuh select_pv, FUSE=true instantiations only)": [
+        "void tc::eb3::select_pv<128, 128, 2, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 2, false, 5, false, true, true, false, true>",
+        "void tc::eb3::select_pv<128, 128, 2, false, 5, false, true, true, true, false>",
+        "void tc::eb3::select_pv<128, 128, 2, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 3, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 3, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 4, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 4, false, 5, false, true, true, false, true>",
+        "void tc::eb3::select_pv<128, 128, 4, false, 5, false, true, true, true, false>",
+        "void tc::eb3::select_pv<128, 128, 4, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 5, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 5, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 6, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 6, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 7, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 7, true, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 8, false, 5, false, true, true, false, false>",
+        "void tc::eb3::select_pv<128, 128, 8, true, 5, false, true, true, false, false>"
+      ],
+      "P1R-F01 EB4 fused merge guard den>0.f -> den!=0.f (eb4.cuh select_mixed, every instantiation)": [
+        "void tc::eb4::select_mixed<128, 128, 2, false, true>",
+        "void tc::eb4::select_mixed<128, 128, 2, true, true>",
+        "void tc::eb4::select_mixed<128, 128, 4, false, true>",
+        "void tc::eb4::select_mixed<128, 128, 4, true, true>",
+        "void tc::eb4::select_mixed<128, 128, 8, false, true>",
+        "void tc::eb4::select_mixed<128, 128, 8, true, true>"
+      ],
+      "P1R-F01 EB2b/EB4 value quantizer non-finite carry (eb2b.cuh)": [
+        "tc::eb2b::quantize"
+      ]
+    },
+    "expected_removed": {
+      "P1R-F07 APA_FXTC1_VARIANT compiled out of the default build: only the shipped variant 2 is instantiated by apa_spq6_tq4_tc": [
+        "void tc::spq6::bulk_mma_tq<128, 0>",
+        "void tc::spq6::bulk_mma_tq<128, 1>",
+        "void tc::spq6::bulk_mma_tq<128, 3>",
+        "void tc::spq6::bulk_mma_tq<64, 0>",
+        "void tc::spq6::bulk_mma_tq<64, 1>",
+        "void tc::spq6::bulk_mma_tq<64, 3>"
+      ]
+    },
+    "expected_added": {
+      "P1R-F01 packed-owned INT4 key quantizer with non-finite carry (packed.cuh spq1::pack_int4_rows; kernels.cu apa_int4_pack_rows_kernel stays, used by other paths)": [
+        "void tc::spq1::pack_int4_rows<float>",
+        "void tc::spq1::pack_int4_rows<__half>",
+        "void tc::spq1::pack_int4_rows<__nv_bfloat16>"
+      ]
+    },
+    "every_other_kernel": "bitwise-identical SASS text (unchanged: the 10 FUSE=false eb3::select_pv instantiations, every spq4::select_pv, spq6::bulk_mma_tq<64|128, 2>, apa_int4_pack_rows_kernel, apa_selective_merge_kernel and all non-APA kernels)",
+    "counts": {"changed": 28, "removed": 6, "added": 3}
+  },
+  "gpu_lines": {
+    "common": "Each line: one FORGE_GPU_DRY_RUN=1 dry run first (expected exit 78), then forge-gpu-run --min 30 --max <=1800 --label p1f1-<line> -- timeout <=1750s python3 -B scripts/apa_p1f1_gpu.py <mode> --out artifacts/apa_p1f1/gpu/<line>, from the worktree root. Before the lease the script refuses a module whose sha256 differs from its build receipt, and for Build F/FH a working tree whose engine source sha map differs from the receipt; Build B is checked against 8728e67e... Exit 76 = nothing ran (retry unchanged after >= 5 min, <= 6 times). Exit 124 = timeout, never a pass. Bitwise = np.array_equal on same-width unsigned views after dtype and shape checks; every bitwise pair checks both sides nonzero and non-constant. 'Nothing launched' is shown by an LD_PRELOAD counter of cudaLaunchKernel (libcudart.so.12 is dynamically linked; positive control: the accepted call counts > 0).",
+    "LF1": {
+      "label": "p1f1-LF1",
+      "builds": "B (P1-D arm B_v2 package + build_B module) vs F (this round's package + Build F module), one child process per build",
+      "cases": [
+        "P1-D L1 grid on the public route: scripts/apa_p1d_gpu.py l1_arm imported unchanged (512 cases x default/explicit packed/dense argument/dense environment, out+mask+plain).",
+        "Raw packed entries on REV1 gpu/rule shapes (seed 20261115, S=4096, D=128, delta grid {2.0, 0.0}): bf16_G4 (B1 H8 KV2): d1 ordered, d1 tensor, r2 tq4, r2 int4, tc tq4 (SPQ6), tc int4 (SPQ4), EB2b, EB3 (variants 0..8), EB4; bf16_G1 (H2 KV2): d1 ordered, r2 tq4, r2 int4; f32_G4: d1 ordered, r2 tq4, r2 int4; f32_G1: d1 ordered, r2 tq4. carry in {partition, row} passed explicitly on both sides, with and without sinks where the entry takes sinks, diagnostics on (out, mask, bulk, prefix and every returned diagnostic array) and off (out). d1 baseline dump (partition/ordered). EB2b: Build B has no delta/carry argument and hard-wires delta=8.1, row carry; Build F is called with delta=8.1, carry='row' (L12 replacement predicate). EB3 S=70000 (REV1 eb3_S70000) variants 0 and 8.",
+        "Quantizer outputs on the same finite inputs: workspace tq4 codes+norms, workspace int4 codes+scales (new spq1::pack_int4_rows vs kernels.cu apa_int4_pack_rows_kernel), apa_eb2b_quantize vi+vs."
+      ],
+      "expected": "every compared array bitwise equal Build B vs Build F, both sides informative (G1)"
+    },
+    "LF2": {
+      "label": "p1f1-LF2",
+      "build": "F only, one process",
+      "inputs": "REV1 gpu/nan shapes (B1 H8 KV2 S1024 D128, REV1 make_inputs seed 11, plant=False), bf16 for every entry and fp32 for d1 ordered, r2 tq4, r2 int4. The packed workspaces and EB2b/EB4 int8 V are built from the corrupted tensors.",
+      "cases": "NaN in q at [0,0,0,5] (REV1) and [0,5,0,77]; NaN in k at [0,0,100,5] (REV1) and [0,1,3000 mod S -> 700,64]; NaN in v at [0,0,100,5] and [0,1,700,64]; +Inf in q and +Inf in k at the same positions.",
+      "entries": "dense production SP (_C.apa_selective_attention_sp, kq=k as REV1) vs d1 ordered, d1 tensor (bf16), r2 tq4, r2 int4, tc tq4, tc int4, EB2b (delta 2.0, carry partition), EB3, EB4 (carry partition), delta 2.0.",
+      "row": "one (batch, head, query) output vector; non-finite if any element is",
+      "expected": "G2: for every NaN case each entry's non-finite row set equals the dense set; in every case no row is all-zero in an entry where the dense row is non-finite; each case's dense side has >=1 non-finite and >=1 finite row (L19). G2b (registered prediction, order L07): for +Inf in q or k each entry's set equals the dense set; reported HELD/NOT HELD with differing rows; a miss changes no code."
+    },
+    "LF3": {
+      "label": "p1f1-LF3",
+      "build": "F, one child process per census row (artifacts/apa_p1f1/ALIGNMENT_CENSUS.json)",
+      "method": "REV1 gpu/bounds: DLPack re-import with byte_offset of one element (2 bytes for bf16/uint8 operands; 4 bytes, one element, for fp32 operands, whose DLPack import must be element aligned)",
+      "expected": "for each (launcher, operand) row: aligned call runs; misaligned call raises ValueError naming the entry, the operand and the required alignment, with 0 kernel launches during it; the aligned call rerun in the same process is bitwise equal. Acceptance rows: dense production entry (q, k, v bf16 G4; k bf16 G1) and the r2 public route (fp32 G4, q and v) with the same misaligned operands return output bitwise equal to the aligned copy."
+    },
+    "LF4": {
+      "label": "p1f1-LF4",
+      "build": "F",
+      "expected": [
+        "REV1 int4_stats case (codes [1,0,S,64], scales [1,0,S]) in a child: ValueError, child exits 0",
+        "empty extents (B=0; also H=0, S=0, KV=0 where expressible) on every packed attention entry: RuntimeError 'dimensions must be positive', 0 launches",
+        "TC_APA_SP unset: every packed attention entry raises before any launch (0 launches)",
+        "EB2b: on REV1 rule inputs (bf16_G4, S=4096) delta=2.0 vs delta=8.1 (both carry row) give different selected counts (mask sums); carry partition vs row (delta 8.1) give different masks",
+        "R7 knobs set to a non-default value raise ValueError naming the variable, 0 launches: APA_FXTC1_VARIANT in {0,1,3,x} on tc tq4; TC_APA_SPQ1_REFERENCE=1 on packed r2 G4; APA_P1_EARLY_COUNTER=1 on EB3 and EB4. Default values (APA_FXTC1_VARIANT=2, TC_APA_SPQ1_REFERENCE=0, APA_P1_EARLY_COUNTER=0) are accepted and bitwise equal to unset",
+        "unsupported dots (fp32 with dots='tensor'; dots='bogus') and carry ('bogus' on d1, r2, tc, EB2b, EB3, EB4) raise, 0 launches; apa_eb2b without delta or carry raises TypeError"
+      ]
+    },
+    "LF5": {
+      "label": "p1f1-LF5",
+      "build": "FH (hooks build)",
+      "expected": [
+        "APA_P1_EARLY_COUNTER=timeout forces the test-hook timeout on merge slot 0 (B*KVH=1, NC=2) for EB3 (variant 0) and then EB4: the call raises 'poll timed out'; _p1_test_merge_tickets(1) reads [0]",
+        "the next fused merge on that slot in the same process (apa_eb3 / apa_eb4 with poison=True, carry row, delta 8.1) is bitwise equal to the same call in a fresh process",
+        "knobs as in S3: APA_FXTC1_VARIANT=0 on tc tq4 runs and differs from variant 2; TC_APA_SPQ1_REFERENCE=1 on packed r2 G4 runs; apa_eb3 with APA_FXTC1_VARIANT=0 raises as today; APA_P1_EARLY_COUNTER=1 handshake output equals the separate-merge variant 8 (S3's predicate)"
+      ]
+    },
+    "LF6": {
+      "labels": ["p1f1-LF6a (P1-D L6a's 22 files)", "p1f1-LF6b (P1-D L6b's 21 files + test_dlpack.py)"],
+      "builds": "B (arm B_v2 + f01201cf tests via git archive into /tmp/apap1f1_treeB) vs F (arm F + this worktree)",
+      "expected": "per-ID outcomes identical. Predicted intended changes: none. Census (grep of the 44 files for apa_eb2b, apa_eb3, apa_eb4, APA_FXTC1_VARIANT, TC_APA_SPQ1_REFERENCE, ApaSpq1Workspace, _spo2, apa_spo2_dump, apa_selective_attention_sp_d1, apa_spq1_dump, eb2b_run, int4_stats) found no reference, so neither R3's default change nor R4's required arguments is reachable from this set. Any difference must be attributed to a finding with its message, or it fails G9."
+    },
+    "MUT": {
+      "label": "p1f1-MUT",
+      "builds": "the GPU-run mutants of artifacts/apa_p1f1/mutants/MUTANTS.json, one child per mutant module, each against its named line subset and named assertion"
+    }
+  },
+  "cpu": {
+    "S4": "tensor_cuda/tests/test_apa_p1f1_cpu.py: R3/R4 signatures and defaults, R8 identity rules, R9 loader (simulated packed load failure; clear error on a non-packed module), R10, R12 (eb3.cuh preprocessed standalone with and without CUDA_API_PER_THREAD_DEFAULT_STREAM)",
+    "G3": "P1's CPU G3 set and test_apa_p1d_policy.py, before (arm B_v2 + f01201cf tree) and after (arm F + this tree), per test ID: predicted identical"
+  }
+}

@@ -1,0 +1,270 @@
+{
+  "review": "APA-P1-REV3",
+  "phase": "complete narrow CPU/source review; one GPU reproduction staged only",
+  "created_utc": "2026-11-16T10:53:53.015209+00:00",
+  "verdict": "RED: R1/R3 incomplete and MAJOR D12 containment violation; GT PASS",
+  "findings": [
+    {
+      "id": "P1R3-F01",
+      "severity": "MINOR",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "line": 446,
+      "title": "R1 validates a snapshot then rereads the caller-controlled mapping",
+      "argument": "The public frozen dataclass accepts entries of arbitrary type. check_pinned_margins copies two values and validates them, but lookup returns self.entries[key] again. A dict subclass returning pinned floats for the validation reads and 0.0 on the next read returns an unpinned zero margin. packed_attention repeats validation but also reaches its recording packed_run with e_q=0, delta=0 at epsilon=1 (five mapping reads). No product monkeypatch or dataclass mutation used. Ordinary loaded tables are immutable and safe; this gap is hand-built mapping provenance/TOCTOU.",
+      "suggested_fix": "Use the validated immutable snapshot (or canonical pinned value) for lookup; normalize public construction to a private immutable copy. Do not reread untrusted mapping values after checking them.",
+      "evidence": [
+        "BLIND_CHECKS.json:margin_pin_bypass",
+        "receipts/012_blind_checks_repair2.log",
+        "apa_packed.py:463-473,440-446,488-499"
+      ],
+      "prior_art": "TOCTOU / CWE-367, unverified -- lead to check: CWE-367 check use snapshot; SHA-256 NIST FIPS180-4 (2015). No new technique.",
+      "status": "confirmed CPU host bypass; no GPU required",
+      "final_text": "P1R3-F01 \u2014 MINOR \u2014 apa_packed.py:446. R1 validates a snapshot, then lookup rereads the caller-controlled mapping. A public hand-built table with a stateful dict supplies pinned validation values but returns e_q=0; attention reaches the recording backend with delta=0 at epsilon=1. Loaded pinned tables are safe. Fix: return the validated snapshot or canonical pinned value. Confirmed on CPU."
+    },
+    {
+      "id": "P1R3-F02",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/apa_spo/packed.cuh",
+      "line": 108,
+      "title": "D12 finite squared-norm overflow still hides a dense non-finite row",
+      "argument": "D64, seed42/KV1 tables, all finite k[bad,0]=float32(1e20), other coordinates zero, q=-ones. Sequential fp32 v*v makes ss=Inf, norm=Inf, unit=0, all codes=8. Packed coefficient=-0.0803470984, score=-Inf, so the key is skipped beside zero keys. Dense reconstruction (CB[8] @ R)*Inf has 31 +Inf and 33 -Inf coordinates; q dot it is NaN. F2 keeps Inf because all input elements are finite. This violates the ruling never hide dense non-finite rows. It is inherited behavior deliberately retained, not a new F-to-F2 finite-result change. Device confirmation staged after blind seal.",
+      "suggested_fix": "Carry a NaN stored norm for non-finite computed norm as well as non-finite input, keeping rotation arithmetic unchanged; lead must resolve the conflict with the blanket finite-operand LF1 requirement by explicitly classifying intermediate overflow.",
+      "evidence": [
+        "BLIND_CHECKS.json:arithmetic finite_squared_norm_overflow",
+        "receipts/012_blind_checks_repair2.log",
+        "packed.cuh:94-108,198-201",
+        "quant.py:122-127",
+        "D12_SOFTMAX.json",
+        "receipts/031_dense_nonfinite_arithmetic.log",
+        "tensor_cuda/src/apa_sp1_1.cuh:73-102",
+        "repro/r01_finite_norm_overflow.py",
+        "receipts/026_repro01_cpu_prefix_repair1.log"
+      ],
+      "prior_art": "IEEE 754-2008 overflow/NaN propagation; TurboQuant (Zandieh et al. 2025) inherited norm/rotation. External literature unverified -- lead to check: TurboQuant normalized key norm overflow.",
+      "status": "MAJOR source/host-arithmetic finding; GPU confirmation staged, not run; CPU prefix PASS",
+      "final_text": "P1R3-F02 \u2014 MAJOR \u2014 packed.cuh:108. D12 can hide a dense non-finite row: at D64, finite k[1,0]=1e20 and q=-ones yield norm=Inf, code 8 and packed bulk=-Inf, while dense reconstruction has mixed-sign infinities and a NaN dot. Beside zero keys, packed skips the bad key. This is retained behavior, not a new F-to-F2 finite-result change. Fix: carry a NaN norm on norm overflow; the lead must resolve LF1\u2019s finite-operand constraint. Source/CPU arithmetic supports this; GPU confirmation is pending."
+    },
+    {
+      "id": "P1R3-F03",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "line": 159,
+      "title": "R3 census misses overflow in EB2b B*H guard and retains wrong extent exception contract",
+      "argument": "INDEX_CENSUS row apa_eb2b_run claims B*H is guarded, but B,H are signed int (line158) and B*H is first evaluated as signed int in line159. B=H=65536, KVH=8192, S=1 gives true product 2^32: signed overflow is undefined in ISO C++17; modular illustration is zero. IMPORTANT REFINEMENT OF BLIND V1: downstream apa_spq1_rotate (line179) has F2s int64/product range check and refuses such an oversized B*H before allocation under ordinary modular execution. Thus no observed out-of-buffer access or allocation is claimed; the earlier undefined signed multiplication is still not a valid host range check. Separately attention extent guards (launcher.cuh:132-134 and apa_spo_require_extents:30-34) retain generic RuntimeError for positive extents above INT_MAX, while R3 requires ValueError naming the operand. These are incomplete R3 coverage, not newly introduced arithmetic.",
+      "suggested_fix": "Check B*H in int64 or with apa_spo_product before any int multiplication/allocation; use an operand-naming ValueError for out-of-range extents while preserving R4/F1 zero-extent contract as ruled.",
+      "evidence": [
+        "BLIND_CHECKS.json:unguarded_eb2b_product",
+        "receipts/007_index_entries.log",
+        "eb2b.cuh:157-159",
+        "launcher.cuh:30-34",
+        "artifacts/apa_p1f2/INDEX_CENSUS.json",
+        "receipts/023_ledger_tables_bindings.log",
+        "receipts/029_dense_and_dependencies.log",
+        "packed_launcher.cuh:26-28",
+        "eb2b.cuh:179"
+      ],
+      "prior_art": "ISO C++17 (2017) signed integer range/overflow; ordinary checked multiplication, no prior art known to me for the exact repair.",
+      "status": "source and host integer arithmetic; huge allocation not attempted",
+      "final_text": "P1R3-F03 \u2014 MINOR \u2014 eb2b.cuh:159; launcher.cuh:30-34,132-134. R3\u2019s census overstates coverage: EB2b evaluates B*H in signed int before checking its range, and attention extents above INT_MAX still raise generic RuntimeError instead of operand-naming ValueError. The later rotate guard catches oversized B*H under ordinary execution; no out-of-bounds access was demonstrated. Fix: widen/check the multiplication first and implement R3\u2019s extent error contract."
+    }
+  ],
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 1,
+    "MINOR": 2,
+    "NIT": 0
+  },
+  "checked": {
+    "premises": "all three match",
+    "diff": "all 16 files read including new 538-line CPU tests",
+    "R2": "one shared prepare/pack TQ4 quantizer; Inf-input row fixed; finite norm overflow retained",
+    "R4": "positive helper extents and EB3 timeline precheck present",
+    "R5": "comment-only narrow intermediate-finite claim",
+    "R6": "header/binding signatures match",
+    "R7": "active expectation and paired rename bookkeeping present",
+    "R8": "capacity forwarding and dense refusal present"
+  },
+  "pending": [],
+  "finalized_utc": "2026-11-16T11:11:34.572135+00:00",
+  "blind_snapshot_sha256": "75d9aae9ba1cb06b9f848ba13837a3cd8c13e7c76416fb8511f412ad3ab12eba",
+  "fix_completeness": [
+    {
+      "REV2": "P1R2-F01",
+      "ruling": "R1",
+      "complete": false,
+      "answer": "Common pinned-load, wrong sha, wrong entries and subclass cases fixed; stateful hand-built mapping still bypasses use pin (P1R3-F01).",
+      "evidence": "apa_packed.py:408-473,476-516; receipts012; GT R1 tests"
+    },
+    {
+      "REV2": "P1R2-F02",
+      "ruling": "R2",
+      "complete": true,
+      "answer": "The prescribed non-finite-input fix is complete across the one shared TQ4 prepare/pack quantizer; the universal containment claim still fails on finite norm overflow (P1R3-F02).",
+      "evidence": "packed.cuh:101-112,15-22; CENSUS_AUDIT.json; BLIND_CHECKS.json"
+    },
+    {
+      "REV2": "P1R2-F04",
+      "ruling": "R3",
+      "complete": false,
+      "answer": "Capacity and main helper bounds fixed; signed multiplication in EB2b and attention out-of-range error contract remain (P1R3-F03).",
+      "evidence": "eb2b.cuh:158-159,179; packed_launcher.cuh:21-70; launcher.cuh:30-34,132-146; GT R3 tests"
+    },
+    {
+      "REV2": "P1R2-F05",
+      "ruling": "R4",
+      "complete": true,
+      "answer": "All six raw helpers refuse non-positive leading extents on the host; EB3 timeline G=3,5,6,7,8 refuses before lock/arena/launch; G2/G4 remains accepted.",
+      "evidence": "packed_launcher.cuh:23-75,93-118; eb2b.cuh:106-134; eb3.cuh:939-960; GT source-order test"
+    },
+    {
+      "REV2": "P1R2-F06",
+      "ruling": "R5",
+      "complete": true,
+      "answer": "Comments correctly restrict identity to finite intermediate scores and denominator; overflow, NaN/+Inf sinks and Inf queries are named. No merge arithmetic changed in this diff.",
+      "evidence": "merge.cuh:23-42; eb3.cuh:782-800; eb4.cuh:645-658; review.diff"
+    },
+    {
+      "REV2": "P1R2-F07",
+      "ruling": "R6",
+      "complete": true,
+      "answer": "Header has the one current 16-argument declaration; direct tc binding replaces the bridge. Native syntax probe passes after and fails before as intended. NIT closed.",
+      "evidence": "ops.h:328; eb2b.cuh:146-149; bindings.cpp:2803-2817; GT R6 tests (including syntax-only nvcc probe)"
+    },
+    {
+      "REV2": "P1R2-F08",
+      "ruling": "R7",
+      "complete": true,
+      "answer": "Active expectation path/hash recorded beside original; paired renames separated from additions/removals. Synthetic tests pass. Registered G6 remains FAIL for unregistered path-derived names. NIT closed.",
+      "evidence": "scripts/apa_p1f1_sass.py:47-176; GT R7 tests; SASS_RECOUNT.json"
+    },
+    {
+      "REV2": "P1R2-F09",
+      "ruling": "R8",
+      "complete": true,
+      "answer": "Keyword-only capacity forwarded for packed; dense/fallback rejects non-None capacity before device work; None default unchanged.",
+      "evidence": "apa_sp2.py:61-111; __init__.py:1632-1680; GT R8 tests"
+    }
+  ],
+  "questions": [
+    {
+      "question": 1,
+      "answer": "R1 and R3 incomplete; R2 closes its Inf-input finding, but D12 defeats the broader non-finite contract; R4-R8 complete.",
+      "evidence": "FIX_COMPLETENESS.json (eight individual rulings)"
+    },
+    {
+      "question": 2,
+      "answer": "No demonstrated new finite-result change, valid-input refusal, off-by-one bound or broken binding. P1R3-F01 is an incomplete new guard; F02/F03 are retained defects/contract gaps. The +127 eb2b_values bound is needed for its existing int launch numerator (total+127), not merely its largest thread index. S+2047 exactly bounds the existing int partition expression. R4s exception changes are authorized; R3s positive out-of-int exception contract is incomplete.",
+      "evidence": "all 38 hunks in HUNK_COVERAGE.json; eb2b.cuh:113,118-119; launcher.cuh:101-104,143; GT86; SASS3 changed prepare bodies"
+    },
+    {
+      "question": 3,
+      "answer": "One shared TQ4 key quantizer: prepare owns norm/rotation and pack_tq copies norm into scales; EB2b/EB3/EB4/SPQ4/SPQ6 read it. All owned packed quantizers carry non-finite inputs as NaN. For k0=+/-Inf, old norm Inf plus code0 gives coefficient -1.6977524757 and old score -Inf; F2 stored norm/score are NaN; dense has 33 +Inf and 31 -Inf components and NaN dot. NaN-input classification arithmetic is unchanged. Universal containment is false because D12 is outside that input-only test. Raw caller-supplied codes/norms are a caller contract, not another owned quantizer.",
+      "evidence": "BLIND_CHECKS.json, CENSUS_AUDIT.json (10 TQ4 rows, five matching source files); packed.cuh:15-22,101-112; readers/callers in receipts005-007"
+    },
+    {
+      "question": 4,
+      "answer": "Yes: a public constructed stateful mapping returns pins during validation, then zero during lookup; the recording attention backend receives e_q=0 and delta=0. Real load() cannot override the digest and its immutable mapping is safe.",
+      "evidence": "P1R3-F01; BLIND_CHECKS.json; receipts012; apa_packed.py:440-446,463-473,488-499"
+    },
+    {
+      "question": 5,
+      "answer": "The 16-row index census matches its source hashes but is not complete as a correctness claim: EB2b B*H is evaluated in signed int before its check. Its later rotate guard mitigates ordinary execution before allocation. Native capacity checks and prepare/pack/rotation product checks precede allocation/launch; other main guards use safe int64 products or division. Positive attention extents beyond int range still return the wrong R3 exception contract.",
+      "evidence": "CENSUS_AUDIT.json, BLIND_CHECKS.json; eb2b.cuh:158-159,179; packed_launcher.cuh:26-28; launcher.cuh:132-146"
+    },
+    {
+      "question": 6,
+      "answer": "MAJOR: a finite row k0=1e20 squares to Inf in fp32. Norm Inf gives unit0 and code8; q=-ones yields coefficient -0.0803470984 and packed score -Inf. Dense reconstruction has 31 +Inf and 33 -Inf coordinates, hence NaN dot. Packed softmax weights [1,0,1] and denominator2 are finite; dense NaN accumulator times its guarded zero remains NaN. Thus it can hide a dense non-finite row. This does not demonstrate a new F-to-F2 finite result change: both retain the same overflow path. No claim of general finite-output parity with dense is made.",
+      "evidence": "BLIND_CHECKS.json; D12_SOFTMAX.json; quant.py:122-127; packed.cuh:94-112,198-201; apa_sp1_1.cuh:73-102; staged r01, CPU prefix PASS"
+    },
+    {
+      "question": 7,
+      "answer": "Own recount: F781, F2 781, paired781, equal778, changed3, added0, removed0. Lead: 781/build, changed3, added0, removed0. Only prepare<float>, prepare<__half>, prepare<__nv_bfloat16> differ. Raw names pair521 (518 equal/3 changed) with260 only per side; independent path-length/hash map pairs all260. Exact body bytes untouched. G6 as registered remains FAIL.",
+      "evidence": "SASS_RECOUNT.json; receipts020-021; sha-verified streaming inputs"
+    },
+    {
+      "question": 8,
+      "answer": "No further production defect detected within these 16 files/38 hunks. Ship disposition remains RED for the retained non-finite violation and incomplete guards. No GPU, model quality, speed or promotion conclusion was measured.",
+      "evidence": "HUNK_COVERAGE.json, CLAIM_CHECKS.json, GT and source/census audit"
+    }
+  ],
+  "reproductions": [
+    {
+      "path": "artifacts/apa_p1_rev3/repro/r01_finite_norm_overflow.py",
+      "sha256": "afce010a8678490475d7571e01de6018a7a5507812039a26e242783a05801150",
+      "finding": "P1R3-F02",
+      "CPU_prefix": "PASS",
+      "CPU_prefix_receipt": "receipts/026_repro01_cpu_prefix_repair1.log",
+      "CPU_prefix_receipt_sha256": "8ca1e36f131905b8b7e2936ee538f24d195cc02bde9f56242cec7d62e8a8d165",
+      "confirm": "finite control valid, dense has a non-finite row missing from default packed output",
+      "refute": "finite control valid, dense non-finite row retained in packed on this instance",
+      "inconclusive": "dense all finite",
+      "GPU_status": "STAGED; NOT RUN",
+      "lead_command": "forge-gpu-run --min 30 --max 600 --label p1rev3-01 -- timeout 560s python3 artifacts/apa_p1_rev3/repro/r01_finite_norm_overflow.py"
+    }
+  ],
+  "step_T": {
+    "GT": "PASS",
+    "ids": 86,
+    "collection_unchanged": true,
+    "skips": [],
+    "before": {
+      "PASSED": 78,
+      "FAILED": 8
+    },
+    "after": {
+      "PASSED": 86
+    },
+    "files": {
+      "tensor_cuda/tests/test_apa_p1d_policy.py": 40,
+      "tensor_cuda/tests/test_apa_p1f1_cpu.py": 15,
+      "tensor_cuda/tests/test_apa_p1f2_cpu.py": 31
+    },
+    "exactly_eight_changed": true,
+    "other_outcomes_unchanged": true,
+    "recorded_baseline_agrees": true,
+    "scope_changed": [
+      "tensor_cuda/tests/test_apa_p1d_policy.py"
+    ],
+    "diff_sha256": "e53d930f4ffaab20644376a99c3306632bf03961dbc695037161ef52dca95d67"
+  },
+  "SASS": {
+    "own": {
+      "F": 781,
+      "F2": 781,
+      "paired": 781,
+      "counts": {
+        "equal": 778,
+        "changed": 3
+      },
+      "paired_symbol_renames": 260
+    },
+    "raw": {
+      "paired": 521,
+      "equal": 518,
+      "changed": 3,
+      "only_F": 260,
+      "only_F2": 260
+    },
+    "lead_receipt": {
+      "collisions": {},
+      "B": 781,
+      "F": 781,
+      "changed": 3,
+      "removed": 0,
+      "added": 0,
+      "unlisted_changed": [],
+      "unlisted_removed": [],
+      "unlisted_added": [],
+      "listed_changed_not_changed": [],
+      "listed_removed_not_removed": [],
+      "listed_added_not_added": [],
+      "n_unlisted_changed": 0
+    }
+  },
+  "limits": [
+    "No GPU execution; D12 device confirmation remains staged.",
+    "Author LF1/LF2 GPU counts are receipt claims, not rerun GPU proof.",
+    "F2 REPORT.md contains no quoted lead-ledger entry or ledger path; named local ledgers searched without a matching F2 entry; optional path request pending.",
+    "Broader CPU G3 IDs outside the three requested files were not rerun."
+  ]
+}

@@ -1,0 +1,287 @@
+{
+  "ruling": "R3' (P1R3-F03)",
+  "base": "25f59b9c",
+  "rows": [
+    {
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "function": "std::vector<NDArray> apa_eb2b_run",
+      "anchor_now": "apa_spo_product({q.shape[0],q.shape[1]}),kApaSpoIntMax/4);",
+      "line_now": 167,
+      "anchor_base": "B*H>std::numeric_limits<int>::max()/4",
+      "line_base": 159,
+      "operand_types": "before: int B,H narrowed from int64 extents, product in int (2^16*2^16 undefined, wraps to 0); now: int64 extents through apa_spo_product (saturating)",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": false,
+      "disposition": "FIXED (R3'): formed in int64 before the check and before `int B=`; ValueError naming apa_eb2b and B*H"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_tc",
+      "anchor_now": "B*H>std::numeric_limits<int>::max()/4",
+      "line_now": 381,
+      "anchor_base": "B*H>std::numeric_limits<int>::max()/4",
+      "line_base": 379,
+      "operand_types": "const int64_t B,H from the extents (each <= INT_MAX after the extent checks), product < 2^62",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: already int64; narrowed (rows=(int)(B*H)) only after the check"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq6_tq4_tc",
+      "anchor_now": "B*H>std::numeric_limits<int>::max()/4",
+      "line_now": 208,
+      "anchor_base": "B*H>std::numeric_limits<int>::max()/4",
+      "line_base": 206,
+      "operand_types": "const int64_t B,H",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: already int64"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+      "function": "std::vector<NDArray> apa_eb3_run",
+      "anchor_now": "B*H>std::numeric_limits<int>::max()/4",
+      "line_now": 935,
+      "anchor_base": "B*H>std::numeric_limits<int>::max()/4",
+      "line_base": 933,
+      "operand_types": "const int64_t B,H",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: already int64"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+      "function": "std::vector<NDArray> apa_eb4_run",
+      "anchor_now": "B*H>std::numeric_limits<int>::max()/4",
+      "line_now": 706,
+      "anchor_base": "B*H>std::numeric_limits<int>::max()/4",
+      "line_base": 704,
+      "operand_types": "const int64_t B,H; (int64_t)BLK*NSORT_MAX",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: already int64"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/launcher.cuh",
+      "function": "inline void apa_spq1_core_check",
+      "anchor_now": "B > std::numeric_limits<int>::max() / H / L",
+      "line_now": 179,
+      "anchor_base": "B > std::numeric_limits<int>::max() / H / L",
+      "line_base": 145,
+      "operand_types": "const int64_t B,H,L; division, no product formed",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: the bound is tested by int64 division"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/launcher.cuh",
+      "function": "inline void apa_spo_require_key_range",
+      "anchor_now": "S+(int64_t)TC_APA_SPLITK_PART_KEYS-1",
+      "line_now": 103,
+      "anchor_base": "S+(int64_t)TC_APA_SPLITK_PART_KEYS-1",
+      "line_base": 103,
+      "operand_types": "int64 S + int64 constant",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change: int64 sum"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "void apa_spq1_buffer_check",
+      "anchor_now": "apa_spo_require_int_range(\"apa_spq1 packed buffers\",\"capacity (codes.shape[2])\",codes.shape[2]);",
+      "line_now": 21,
+      "anchor_base": "apa_spo_require_int_range(\"apa_spq1 packed buffers\",\"capacity (codes.shape[2])\",codes.shape[2]);",
+      "line_base": 21,
+      "operand_types": "int64 extent, no product",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "NDArray apa_spq1_rotate",
+      "anchor_now": "apa_spo_product({q.shape[0],q.shape[1]})",
+      "line_now": 28,
+      "anchor_base": "apa_spo_product({q.shape[0],q.shape[1]})",
+      "line_base": 28,
+      "operand_types": "int64 extents through apa_spo_product",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "std::pair<NDArray,NDArray> apa_spq1_prepare",
+      "anchor_now": "apa_spo_product({k.shape[0],k.shape[1],N64})",
+      "line_now": 54,
+      "anchor_base": "apa_spo_product({(int64_t)B,(int64_t)H,(int64_t)N})",
+      "line_base": 48,
+      "operand_types": "before: factor N = S - start formed in int before the start < 0 refusal (S - start overflows for a large negative start); now N64 = k.shape[2] - (int64_t)start and the product from the int64 extents",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": false,
+      "disposition": "FIXED (R3' like site): N formed in int64; same refusals for every defined input (start < 0 still raises the RuntimeError 'prepare geometry/rotation')"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "void apa_spq1_pack",
+      "anchor_now": "apa_spo_product({k.shape[0],k.shape[1]})",
+      "line_now": 69,
+      "anchor_base": "apa_spo_product({k.shape[0],k.shape[1]})",
+      "line_base": 62,
+      "operand_types": "int64 extents through apa_spo_product (B*KV)",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "void apa_spq1_pack",
+      "anchor_now": "apa_spo_ceil_div(apa_spo_product({(int64_t)BH,(int64_t)N,(int64_t)(D/2)}),128)",
+      "line_now": 80,
+      "anchor_base": "apa_spo_ceil_div(apa_spo_product({(int64_t)BH,(int64_t)N,(int64_t)(D/2)}),128)",
+      "line_base": 66,
+      "operand_types": "before: factor N = S - start formed in int before the start < 0 refusal; now N = (int)N64 after the start checks (0 <= N <= S <= INT_MAX), BH = the checked int64 B*KV narrowed after its check",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": false,
+      "disposition": "FIXED (R3' like site): N64 formed in int64 before the start check and narrowed after it"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "std::pair<NDArray,NDArray> apa_spq1_int4_stats",
+      "anchor_now": "q.shape[0]*q.shape[1]>std::numeric_limits<int>::max()",
+      "line_now": 125,
+      "anchor_base": "q.shape[0]*q.shape[1]>std::numeric_limits<int>::max()",
+      "line_base": 109,
+      "operand_types": "int64 extents, each <= INT_MAX after the preceding per-extent check, product < 2^62",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "function": "std::pair<NDArray,NDArray> apa_eb2b_quantize",
+      "anchor_now": "v.numel()/128>std::numeric_limits<int>::max()",
+      "line_now": 129,
+      "anchor_base": "v.numel()/128>std::numeric_limits<int>::max()",
+      "line_base": 129,
+      "operand_types": "int64 numel (checked at import), division",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "function": "NDArray apa_eb2b_values",
+      "anchor_now": "v.numel()/8+127",
+      "line_now": 113,
+      "anchor_base": "v.numel()/8+127",
+      "line_base": 113,
+      "operand_types": "int64 numel",
+      "formed_in_int64_before_check_and_narrowing_now": true,
+      "formed_in_int64_before_check_and_narrowing_base": true,
+      "disposition": "no change"
+    }
+  ],
+  "files_sha256": {
+    "eb2b.cuh": {
+      "now": "0fcc9c259b518201739640d0bf48360e1ac7a1685f8e9e0558adb12337269930",
+      "base": "12f3381d455675bc16574f3f66e739481663d88a365427517703f17816e88f3a"
+    },
+    "spq4.cuh": {
+      "now": "db0de75dd22cb9b39a90296a5ab1579751f1211166bdea551772af407b315e93",
+      "base": "686d007bf1d7cd2a7c34199ee08c67d31eee132c11b436c54656d4cda9e74d3e"
+    },
+    "spq6.cuh": {
+      "now": "ca5e36900c55ab032a7592e2c54e73461ca3d67131bd89337391554dea5e3b39",
+      "base": "b9392252fbc42a7a4e697b63784a1ef056c2e2bd37df153b972e47147a97a800"
+    },
+    "eb3.cuh": {
+      "now": "5c4c47c2302a61b11ffc0db7fef27d5421d7e77d8f42b980d50ee0cc7a1cb624",
+      "base": "886ef396b7b085e32d5915b661574f1d84c61b3ef03059a644366d1c1489df45"
+    },
+    "eb4.cuh": {
+      "now": "d0e8568de5d80c65014103f7ab34f943d3003fd68b0bc4f9d6f7a5112620db6a",
+      "base": "461180210c66f388309e6508dae4ac19286552ffcfce94956dd2a2004695e898"
+    },
+    "launcher.cuh": {
+      "now": "805cd7751a0157bc10789dd83e6d0d605e503278c7c14789896ac680aaa715ed",
+      "base": "87754cd7ebe89ecb0a67d0035e3b0bdd465d8efd387a7e4c5b920698363aaed8"
+    },
+    "packed_launcher.cuh": {
+      "now": "81e55fb87ccfb3848c27a1fc08c227e2c693b70f7083ed182ecaf4a98c23e8f9",
+      "base": "3282e62f27e8071695877653d8441087b5d5f7c105d337b9d421752be194159b"
+    }
+  },
+  "rows_fixed": 3,
+  "all_formed_in_int64_now": true,
+  "attention_extent_guards": [
+    {
+      "file": "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq1_run",
+      "entry": "apa_spq1 packed r2 (packed_run)",
+      "first_statement_is_guard": true,
+      "line": 94
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_run",
+      "entry": "apa_spq4_run (packed_run)",
+      "first_statement_is_guard": true,
+      "line": 459
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_tc",
+      "entry": "apa_spq4 tc int4",
+      "first_statement_is_guard": true,
+      "line": 365
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+      "function": "std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq6_tq4_tc",
+      "entry": "apa_spq6 tc tq4",
+      "first_statement_is_guard": true,
+      "line": 192
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "function": "std::vector<NDArray> apa_eb2b_run",
+      "entry": "apa_eb2b",
+      "first_statement_is_guard": true,
+      "line": 151
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+      "function": "std::vector<NDArray> apa_eb3_run",
+      "entry": "apa_eb3",
+      "first_statement_is_guard": true,
+      "line": 915
+    },
+    {
+      "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+      "function": "std::vector<NDArray> apa_eb4_run",
+      "entry": "apa_eb4",
+      "first_statement_is_guard": true,
+      "line": 684
+    }
+  ],
+  "start_grep": {
+    "cmd": "rg -n 'numeric_limits<int>' tensor_cuda/src/apa_spo",
+    "exit": 0,
+    "lines": [
+      "tensor_cuda/src/apa_spo/eb4.cuh:706:  if(S<1 || S>(int64_t)eb4::BLK*eb4::tune::NSORT_MAX || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error(\"apa_eb4: dimension range (S <= 65536)\");",
+      "tensor_cuda/src/apa_spo/eb2b.cuh:129:  if(!v.device.is_cuda() || v.dtype!=DType::BFloat16 || (v.ndim()!=3 && v.ndim()!=4) || v.shape.back()!=128 || v.numel()==0 || v.numel()/128>std::numeric_limits<int>::max())",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:121:   for(int64_t n:a->shape)if(n<=0 || n>std::numeric_limits<int>::max())throw std::invalid_argument(\"apa_spq1_int4_stats: dimensions must be positive and fit int (KVH > 0)\");",
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh:125: if(q.shape[0]*q.shape[1]>std::numeric_limits<int>::max())throw std::invalid_argument(\"apa_spq1_int4_stats: launch range\");",
+      "tensor_cuda/src/apa_spo/launcher.cuh:33:      if(n<=0 || n>std::numeric_limits<int>::max())",
+      "tensor_cuda/src/apa_spo/launcher.cuh:67:constexpr int64_t kApaSpoIntMax=std::numeric_limits<int>::max();",
+      "tensor_cuda/src/apa_spo/launcher.cuh:167:      if (n <= 0 || n > std::numeric_limits<int>::max())",
+      "tensor_cuda/src/apa_spo/launcher.cuh:179:  if (cap > TC_APA_MAXD || B > std::numeric_limits<int>::max() / H / L)",
+      "tensor_cuda/src/apa_spo/spq4.cuh:381:  if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error(\"apa_spq4: dimension range\");",
+      "tensor_cuda/src/apa_spo/spq6.cuh:208:  if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error(\"apa_spq6: dimension range\");",
+      "tensor_cuda/src/apa_spo/eb3.cuh:935:  if(S<1 || B*H>std::numeric_limits<int>::max()/4)throw std::runtime_error(\"apa_eb3: dimension range\");"
+    ]
+  },
+  "note": "Range-checked host products only. Arena sizes (int64 RS/RC/RP products) are allocation sizes, not range checks, and are out of this census. The attention extents themselves are guarded by apa_spo_require_attention_extents as each entry's first statement (listed)."
+}

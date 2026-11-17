@@ -1,0 +1,147 @@
+{
+  "order": "orders/APA_P1F2_REV2_FIXES.md (d01118b4)",
+  "written_utc": "2026-11-16T08:42:33.237500+00:00",
+  "note": "Written once, before the first Build F2 and before any GPU line (S3, S6, L35). Never amended; every later F2 build is compared against this file.",
+  "sass": {
+    "comparison": "Build F2 vs Build F (tensor_fork_apa_wt_p1d artifacts/apa_p1f1/build_F_r2, module sha256 5c17147715ffc422b0aa7ba8fae826c554a4caff63b1231c22ce580867efc243), per kernel, exact Function-block text, cuobjdump -sass sm_89; only the bijective _cu_<8 hex>[_<n>] suffix is mapped (scripts/apa_p1f1_sass.py after R7)",
+    "expected_changed": {
+      "R2 (P1R2-F02) spq1::prepare stores a quiet NaN norm for a key row with any non-finite element (packed.cuh); DISPATCH_FLOAT instantiates float, __half, __nv_bfloat16": [
+        "void tc::spq1::prepare<float>",
+        "void tc::spq1::prepare<__half>",
+        "void tc::spq1::prepare<__nv_bfloat16>"
+      ]
+    },
+    "expected_removed": {},
+    "expected_added": {},
+    "not_expected_to_change": "Every other kernel. R1, R3, R4, R6, R7 and R8 are host/Python only (host checks, ops.h declaration, binding call, scripts); R5 changes comments only."
+  },
+  "builds": {
+    "F2": "this tree, default configuration (hooks off), P1-D path adapter and flags imported (scripts/apa_p1f2_build.py)",
+    "F2H": "NOT BUILT: the diff changes no code compiled only with TC_APA_P1_TEST_HOOKS (the one edit inside an #if TC_APA_P1_TEST_HOOKS block is a comment in eb3.cuh)",
+    "F": "p1d worktree artifacts/apa_p1f1/arms/F (build_F_r2), module sha256 5c17147715ffc422b0aa7ba8fae826c554a4caff63b1231c22ce580867efc243, checked before every use"
+  },
+  "gpu_lines": {
+    "common": "Each line: precheck (module sha vs receipt; Build F2 working-tree engine source map vs its receipt; Build F vs 5c171477...), one FORGE_GPU_DRY_RUN=1 dry run (exit 78), then forge-gpu-run --min 30 --max <=1800 --label p1f2-<line> -- timeout <=1750s python3 -B scripts/apa_p1f2_gpu.py <mode> --out artifacts/apa_p1f2/gpu/<line>, from the worktree root. Exit 76: nothing ran, retry unchanged after >= 5 min, <= 6 times. Exit 124 = timeout, never a pass. Bitwise = np.array_equal on same-width unsigned views after dtype and shape checks; each bitwise pair checks both sides nonzero and non-constant (L19). A row = one (batch, head, query) output vector; non-finite if any element is. \"No launch\" = LD_PRELOAD counter of cudaLaunchKernel (F1 SHIM_SOURCE, imported), with a positive control. Timing fields (t, seconds) are excluded from every comparison.",
+    "LF1": {
+      "label": "p1f2-LF1",
+      "builds": "Build F (p1d arm F) vs Build F2 (artifacts/apa_p1f2/arms/F2), one child process per build",
+      "cases": "F1's LF1 cases unchanged (scripts/apa_p1f1_gpu.py lf1_arm imported, its ART/arm/receipt globals pointed at each build): P1-D's L1 grid on the public route (512 cases x default/explicit packed/dense argument/dense environment; out, mask, plain) and every raw packed entry on REV1's rule shapes (bf16_G4 d1 ordered/tensor, r2 tq4/int4, tc tq4/int4, EB2b, EB3 variants 0..8, EB4; bf16_G1; f32_G4; f32_G1; delta 2.0 and 0.0; carry partition and row passed explicitly on both sides; sinks on/off; diagnostics on/off; EB2b delta=8.1 carry=row on both sides; d1 baseline dump; EB3 S=70000 variants 0 and 8), plus the tq4/int4 workspace codes and norms/scales and eb2b vi/vs.",
+      "expected": "every compared array bitwise equal F vs F2; identical key sets (F1 had 6,922 arrays); every output array informative on both sides (G1)"
+    },
+    "LF2": {
+      "label": "p1f2-LF2",
+      "build": "F2 only, one process",
+      "comparators": "(a) production's dense SP entry _C.apa_selective_attention_sp(q,k,kq=k,v,scale,delta=2.0) on the same tensors, for every entry; (b) additionally for the public default route: the dense opt-out route (quantize_sp2_keys(k,4,storage='dense') + the dense registered table), REV2 r01's comparator",
+      "entries": {
+        "bfloat16": [
+          "d1_ordered",
+          "d1_tensor",
+          "r2_tq4",
+          "r2_int4",
+          "tc_tq4",
+          "tc_int4",
+          "eb2b",
+          "eb3",
+          "eb4"
+        ],
+        "float32": [
+          "d1_ordered",
+          "r2_tq4",
+          "r2_int4",
+          "public_default (storage=None, PackedSpKeys, pinned packed table, epsilon 0.01)"
+        ],
+        "sinks_entries": "every entry above except eb2b (no sinks argument)"
+      },
+      "case_groups": {
+        "qkv": "REV1 make_inputs seed 11, B1 H8 KV2 S1024 D128 plant=False (F1 LF2 inputs), bf16 and fp32; one element set to NaN, +Inf or -Inf at F1 positions q (0,0,0,5),(0,5,0,77); k (0,0,100,5),(0,1,700,64); v (0,0,100,5),(0,1,700,64), plus one more position each: q (0,7,0,127), k (0,0,1023,127), v (0,1,0,0). 27 cases per dtype.",
+        "sinks": "same base inputs, sinks = bf16-rounded linspace(1,3,8) with head 2 set to NaN (sink_nan) or +Inf (sink_posinf); bf16 and fp32",
+        "flt_max_r02": "REV2 r02 exactly: fp32 B1 H1 KV1 S3 D128, q=k=ones, v=arange(384)/512, scale=FLT_MAX; entries d1_ordered, r2_tq4, r2_int4 (the public route refuses this scale in lookup before device work: recorded, not an entry)",
+        "flt_max_g4": "bf16 and fp32 B1 H8 KV2 S1024 D128: q heads 0-3 ones, heads 4-7 zeros, k ones, v = seed-11 v; scale=FLT_MAX; every raw entry of the dtype",
+        "all_negative_logits": "REV2 r01 construction on the raw entries: bf16 and fp32 B1 H8 KV2 S1024 D128, q zero except q[0,0:4,0,0] = +Inf (k all -1) or -Inf (k all +1), v = seed-11 v; every entry of the dtype incl. the fp32 public route",
+        "r01_default_route": "REV2 r01's twelve cases unchanged (D64, B1 H1 KV1 S3, q=ones, k=zeros, v=arange/256, scale .125, epsilon .5; k/q/v NaN, +Inf, -Inf, zero_keys, q +-Inf over all-negative logits), public default route vs both comparators"
+      },
+      "gates": {
+        "G2a": "NaN in q, k or v (qkv NaN cases, r01 k_nan/q_nan/v_nan): each entry non-finite row set == dense set (comparator a; and b for the public route)",
+        "G2b": "every case: entry non-finite set contains the dense set (a; and b for the public route)",
+        "G2c": "every case: no all-zero row in the entry where the dense row is non-finite",
+        "G2d": "rows non-finite in the entry and finite in dense are listed per case (allowed)"
+      },
+      "L19": {
+        "rule": "each case: comparator (a) has >= 1 non-finite and >= 1 finite row, unless declared here",
+        "declared_dense_all_finite": [
+          "sink_nan",
+          "sink_posinf",
+          "all_negative_logits (both signs)",
+          "k +Inf at (0,0,100,5) (rule from inputs: every KV-group-0 head has q[...,5] < 0, so every dense score of that key is -Inf; matches F1 LF2 k_inf_rev1)"
+        ],
+        "declared_single_row": [
+          "flt_max_r02 (H1: one row; dense expected non-finite)",
+          "r01_default_route (H1: one row each)"
+        ],
+        "prediction_record": "dense non-finite heads predicted from the inputs by sign rule (not a gate): k +Inf (0,0,100,5) [] ; k -Inf (0,0,100,5) [0,1,2,3] ; k +Inf (0,1,700,64) [6] ; k -Inf (0,1,700,64) [4,5,7] ; k +Inf (0,0,1023,127) [0,1] ; k -Inf (0,0,1023,127) [2,3] ; q +-Inf at head h: [h] ; v +-Inf: the 4 heads of the KV group"
+      },
+      "expected": "G2a-c hold in every case; F1 G2b misses (tq4 entries finite where dense is non-finite on +Inf k) are gone"
+    },
+    "LF3": {
+      "label": "p1f2-LF3",
+      "build": "F2 in one process (LD_PRELOAD launch counter); Build F boundary rows (no gate) each in its own child process",
+      "rows": {
+        "controls": "packed_rotate (B1 H8 D128 fp32) and the public default route (fp32 D128 G4) run before every refusal and again after all of them: bitwise equal, informative, launches > 0",
+        "raw_helper_zero_extents": "packed_rotate q B=0 / H=0; packed_prepare k B=0 / KV=0 / S=0; packed_append tq4 and int4 k B=0 / KV=0 (N>0); int4_stats q B=0 / H=0, codes KV=0; eb2b_quantize v B=0 / KV=0 / S=0; eb2b_values v B=0 / KV=0 / S=0: each raises ValueError (R4 message: \"extent\", no \"CUDA error\"), 0 launches",
+        "eb3_timeline": "apa_eb3(timeline=True, variant=0) at G=H/KVH in {3,5,6,7,8} (B1 KV1 S256 D128 bf16): ValueError naming timeline, 0 launches; at G in {2,4}: runs, launches > 0, output informative",
+        "margins": "public default route with: hand-built PackedRegisteredMargins(sha256=\"0\"*64, pinned entries); (PACKED_TABLE_SHA256, entries 0.0/0.0); (PACKED_TABLE_SHA256, pinned entries + an extra key); a subclass instance carrying the pinned sha and entries; a loaded pinned table whose entries were replaced after load (object.__setattr__); PackedRegisteredMargins.load(pinned file, expected_sha256=\"0\"*64): each ValueError, 0 launches; positive control: the loaded pinned table launches > 0",
+        "capacity": "quantize_sp2_keys(k,4,capacity=2**31), PackedSpKeys(k,capacity=2**31), ApaSpq1Workspace(k,2**31,fmt=\"tq4\"): ValueError naming capacity, 0 launches, device memory in use (cudaMemGetInfo total-free) unchanged; native: packed_append and packed_run (r2) with codes/scales whose capacity axis is 2**31 (DLPack re-import of a small buffer, F1 reimport() method): ValueError naming capacity, 0 launches"
+      },
+      "boundary": "Build F behaviour on every refusal input recorded in BOUNDARY.json (child process per row; the two native fake-capacity rows are recorded by source reasoning, not run on Build F)",
+      "expected": "every F2 row as stated (G3)"
+    },
+    "LF4": {
+      "label": "p1f2-LF4",
+      "build": "F2, one process",
+      "case": {
+        "D": [
+          64,
+          128
+        ],
+        "B": 1,
+        "H": 8,
+        "KV": 2,
+        "S0": 192,
+        "steps": 64,
+        "capacity_N": 256,
+        "keys": "fp32 from SeedSequence([20261116, 4, D]): k = N(0,1) * per-channel scale exp(0.5 N(0,1)) + 0.1 N(0,1) bias, four channels (0, D/4, D/2, 3D/4) scaled x6 (outlier channels); v N(0,1); a fresh q N(0,1) per step",
+        "route": "public default route (storage=None), pinned packed table, epsilon 0.01, scale 1/sqrt(D) fp32"
+      },
+      "method": "P1-Q's append check (apa_p1q_harness.py:235-260): obj = quantize_sp2_keys(k[:S0],4,capacity=256); for t=1..64: obj.append(k[:S0+t]); rebuilt = quantize_sp2_keys(k[:S0+t],4); compare codes[:,:,:S] and norms[:,:,:S] and the route output (same q, k, v) bitwise; step 0 compared too; then append k[:257]: ValueError before any launch (0 launches), codes and norms buffers bitwise unchanged, visible_rows 256 unchanged",
+      "expected": "bitwise on every step at both D, each array informative (G4); 65 x 3 comparisons per D"
+    },
+    "LF6": {
+      "label": "p1f2-LF6a / p1f2-LF6b",
+      "builds": "Build F (tests from /tmp/apap1f2_treeF0 = git archive d01118b4) vs Build F2 (this worktree)",
+      "files": "F1's LF6 set (P150's 44 files): LF6a = F1 LF6a's 22 files, LF6b = F1 LF6b's 22 files",
+      "expected": "per-ID outcomes identical; intended changes: none expected (none of the 44 files uses a hand-built packed table, quantize_sp2_keys(capacity=), a raw helper on an empty extent, EB3 timeline at G not in {2,4}, or a non-finite key on the packed route)"
+    },
+    "MUT": {
+      "label": "p1f2-MUT",
+      "mutants": "device/binding mutants of artifacts/apa_p1f2/mutants/MUTANTS.json (m02, m04, m05) and m06 on LF4, each against its named line with its named assertion"
+    }
+  },
+  "cpu": {
+    "S4": "tensor_cuda/tests/test_apa_p1f2_cpu.py: R1, R3, R8, R6 (compile probe on /tmp/apap1f2_treeF0 fails, on this tree compiles), R7 (synthetic SASS dumps); all pass",
+    "per_id": "CPU G3 set (A1 REGISTRATION cpu_g3_files, 689 IDs) + test_apa_p1d_policy.py + test_apa_p1f1_cpu.py: before = Build F arm on /tmp/apap1f2_treeF0, after = Build F2 arm on this worktree, CUDA_VISIBLE_DEVICES empty",
+    "intended_changes": {
+      "ruling": "R1: load() on the public path cannot override the pin, and any table whose sha or entries differ from the pinned one is refused. These policy tests build their margin table with PackedRegisteredMargins.load(synthetic file, expected_sha256=<its own digest>) (packed_table(), test_apa_p1d_policy.py:132-143); after R1 that load raises ValueError, so each test changes PASSED -> FAILED. The properties they covered are re-covered with the pinned table in test_apa_p1f2_cpu.py.",
+      "ids": [
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_stale_generation_is_refused",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_packed_table_on_dense_kq_is_refused",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_packed_route_refusals_before_launch",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_packed_route_forwards_delta_causal_sinks_and_r2[64]",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_packed_route_forwards_delta_causal_sinks_and_r2[128]",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_packed_loader_checks_its_own_registration_quantizer_and_entries",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_routes_are_reported_for_quantize_and_attention",
+        "tensor_cuda/tests/test_apa_p1d_policy.py::test_prefill_on_packed_keys_is_refused_naming_dense"
+      ]
+    },
+    "other_ids": "identical outcome before and after"
+  }
+}

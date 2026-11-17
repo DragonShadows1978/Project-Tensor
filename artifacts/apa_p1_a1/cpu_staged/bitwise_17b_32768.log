@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_p1_a1/RUN.py", line 109, in <module>
+    if os.environ.get('APA_P1_A1_CPU_REHEARSAL')=='1':ok=cpu_rehearsal(args,exp)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_p1_a1/RUN.py", line 91, in cpu_rehearsal
+    a=geometry(host,c,n,k);assert list(a.shape)==[c['B'],c['H'] if k=='q' else c['KV'],1 if k=='q' else n,128]
+      ^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_p1_a1/worker_core.py", line 29, in geometry
+    return np.ascontiguousarray(a).reshape(B,heads,1 if key=='q' else n,128)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: cannot reshape array of size 0 into shape (1,16,1,128)

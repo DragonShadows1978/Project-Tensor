@@ -302,3 +302,49 @@ Tensor max_pool2d(const Tensor& a, int kh, int kw, int sh, int sw, int ph, int p
 
 }  // namespace ops
 }  // namespace tc
+
+// APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+// Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026), unchanged numerics.
+#ifdef TC_APA_PACKED
+// APA_SPO2_D1_BEGIN declaration
+namespace tc {
+std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spo2_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const NDArray*,bool,bool,const std::string&,const std::string&);
+}
+// APA_SPQ1_BEGIN declarations
+namespace tc {
+std::pair<NDArray,NDArray> apa_spq1_int4_stats(const NDArray&,const NDArray&,const NDArray&,int,float,float);
+std::pair<NDArray,NDArray> apa_spq1_prepare(const NDArray&,const NDArray&,int);
+NDArray apa_spq1_rotate(const NDArray&,const NDArray&,int,bool);
+void apa_spq1_pack(const NDArray&,NDArray&,NDArray&,const NDArray&,const NDArray&,const NDArray&,int,bool);
+std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq1_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const NDArray*,bool,const std::string&,const std::string&);
+// APA_SPQ4_BEGIN decl
+std::tuple<NDArray,NDArray,NDArray,NDArray> apa_spq4_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const NDArray*,bool,const std::string&,const std::string&,const std::string&);
+// APA_SPQ4_END decl
+#ifdef TC_APA_EB2B
+// Prior art: KIVI 2024 per-token V; ThriftAttention 2026 block precision;
+// Flash-Decoding 2023 split-K; BLASST 2025 inherited SP criterion.
+std::pair<NDArray,NDArray> apa_eb2b_quantize(const NDArray&);
+NDArray apa_eb2b_values(const NDArray&,const NDArray&,const NDArray&,const NDArray&);
+std::vector<NDArray> apa_eb2b_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,float,const std::string&,bool,bool,bool);
+#endif
+#ifdef TC_APA_EB3
+// APA_EB3_BEGIN decl
+// Prior art: Flash-Decoding 2023 split-K/merge; NVIDIA threadFenceReduction
+// last-block pattern; TurboQuant 2025 rotated query (details in eb3.cuh).
+std::vector<NDArray> apa_eb3_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,const NDArray*,const std::string&,bool,bool,bool,int);
+std::vector<std::tuple<std::string,int,int,int,int,int>> apa_eb3_resources();
+// APA_EB3_END decl
+#endif
+#ifdef TC_APA_EB4
+// APA_EB4_BEGIN decl
+// Prior art: ThriftAttention 2026 / Calver tk8 block promotion (via E2a/EB2b); KIVI 2024 per-token V;
+// Flash-Decoding 2023; NVIDIA threadFenceReduction last-block pattern (details in eb4.cuh).
+std::vector<NDArray> apa_eb4_run(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,float,const NDArray*,const std::string&,bool,const NDArray*,bool,bool);
+std::vector<std::tuple<std::string,int,int,int,int,int>> apa_eb4_resources();
+// APA_EB4_END decl
+#endif
+}
+// APA_SPQ1_END declarations
+// APA_SPO2_D1_END declaration
+
+#endif  // TC_APA_PACKED

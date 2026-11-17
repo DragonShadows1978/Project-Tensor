@@ -1,0 +1,79 @@
+{
+  "order": "orders/APA_P1F3_REV3_FIXES.md S5",
+  "written_utc": "2026-11-16T11:49:53.113773+00:00",
+  "note": "Written before any mutant is staged, built or run (L41). Each mutant is one change in a patched copy. The Python mutant runs on Build F3's module with the mutant Python; the device and host mutants are rebuilt incrementally in a copy of Build F3's tree. Expected failures come from the order's rules and REV3's receipts, never from this round's runs (L47).",
+  "mutants": [
+    {
+      "name": "m01_lookup_rereads_mapping",
+      "kind": "python",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "rule": "R1'",
+      "change": "lookup returns self.entries[...] again (a second read of the caller's mapping after the check)",
+      "old": "        return PACKED_PINNED_ENTRIES[f\"{bulk_bits}:{dim}\"]\n",
+      "new": "        return self.entries[f\"{bulk_bits}:{dim}\"]\n",
+      "cpu": {
+        "line": "S4",
+        "env": "APA_P1F3_SRC",
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[64]",
+        "assertion": "type(got) is float and bits(got) == bits(pin): lookup returns the third read of the mapping, 0.0, not the pinned 1.010646104812622 (the message shows mapping item reads = 3, the executed re-read)"
+      },
+      "runs_on": [
+        "cpu"
+      ]
+    },
+    {
+      "name": "m02_overflow_norm_kept",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed.cuh",
+      "rule": "R2'",
+      "change": "prepare keeps the Inf norm for an overflowing finite row (F2's store: NaN only for a non-finite element)",
+      "old": "norms[row]=(nonfinite || !isfinite(norm))?__int_as_float(0x7fc00000):norm;",
+      "new": "norms[row]=nonfinite?__int_as_float(0x7fc00000):norm;",
+      "gpu": {
+        "line": "LF2",
+        "cases": [
+          "ovf_D128_qpos",
+          "ovf_D128_qneg",
+          "ovf_D64_qpos",
+          "ovf_D64_qneg",
+          "r01_ovf_qneg",
+          "r01_ovf_qpos"
+        ],
+        "expected_failure": "G2b containment (never hides): public_default float32 r01_ovf_qneg vs dense_opt_out",
+        "assertion": "LF2 G2b on REV3 r01 (D64, q=-ones, k[0,0,1,0]=1e20): the packed public row is finite while the dense opt-out row 0 is non-finite, as the lead measured on Build F2 (artifacts/apa_p1_rev3/lead_p1rev3_gpu_repro.json; F2's prepare store is this mutant's); executed-line evidence: the stored norm of the overflow key is inf, not nan"
+      },
+      "runs_on": [
+        "gpu"
+      ]
+    },
+    {
+      "name": "m03_eb2b_product_int32",
+      "kind": "host",
+      "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+      "rule": "R3'",
+      "change": "EB2b's B*H back to a signed int product of the narrowed extents (checked by the same named check)",
+      "old": "  apa_spo_require_at_most(\"apa_eb2b\",\"B*H (q batch * q heads; the int row count, times 4, must fit int)\",\n    apa_spo_product({q.shape[0],q.shape[1]}),kApaSpoIntMax/4);\n  int B=q.shape[0],H=q.shape[1],KVH=k.shape[1],S=k.shape[2];\n",
+      "new": "  int B=q.shape[0],H=q.shape[1],KVH=k.shape[1],S=k.shape[2];\n  apa_spo_require_at_most(\"apa_eb2b\",\"B*H (q batch * q heads; the int row count, times 4, must fit int)\",\n    B*H,kApaSpoIntMax/4);\n",
+      "kill_rule": "killed iff the S4 or the LF3 named assertion fails (order S5: \"S4 or LF3\"); both are run and reported",
+      "cpu": {
+        "line": "S4",
+        "env": "APA_P1F3_ENGINE_ROOT",
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_that_wraps_a_signed_int_raises_value_error_naming_it",
+        "assertion": "host-level fake (g++ -O0 -fwrapv): 65536*65536 wraps to 0 in int, the named check passes and the prologue returns (\"none\") instead of ValueError naming apa_eb2b and B*H"
+      },
+      "gpu": {
+        "line": "LF3",
+        "rows": [
+          "eb2b_BH_past_bound",
+          "eb2b_BH_2p32"
+        ],
+        "expected_failure": "LF3 R3' row eb2b_BH_2p32",
+        "assertion": "LF3: B=H=65536 passes EB2b's check with a wrapped product; the call is refused later by packed_rotate's own B*H check, so the ValueError names apa_spq1_rotate, not apa_eb2b (executed-line evidence: that later message)"
+      },
+      "runs_on": [
+        "cpu",
+        "gpu"
+      ]
+    }
+  ]
+}

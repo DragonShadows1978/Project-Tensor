@@ -1,0 +1,20 @@
+[
+  {
+    "path": "repro/r01_inf_key_default.py",
+    "sha256": "3e4b6e46dd403fc28195e7ffd2dffd547c78f69b003f1a867117a8ea9d345595",
+    "docstring": "P1R2-F02, GPU staging only. Run unchanged from this worktree root.\nCONFIRM: for either Inf sign, default packed output is finite while the dense\nopt-out output on the same exact Q/K/V is non-finite. REFUTE for this instance:\nboth Inf cases keep the dense non-finite row non-finite in packed output.\nA finite dense control is INCONCLUSIVE, never a refutation. Other q/k/v NaN,\nInf and zero-key cases report classification only; they are not universal proof.\nPrior art: IEEE 754-2008; TurboQuant (Zandieh et al., 2025) inherited tables;\nF1 path/sha loader (Project-Tensor, 2026); no new algorithm.\n",
+    "status": "STAGED ONLY; compiled, not executed"
+  },
+  {
+    "path": "repro/r02_finite_overflow.py",
+    "sha256": "bc5b40085ef6427c53295a4ac2e9532a7bcb441fba80218bc3b1d757ab185910",
+    "docstring": "P1R2-F06, GPU staging only. Run unchanged from this worktree root.\nCONFIRM finite-input identity counterexample: finite Q/K/Kq/V and FLT_MAX\nscale give all-zero finite D1 output on B and a non-finite output on F.\nAlso CONFIRM sink parity gap if a NaN/+Inf sink gives finite dense output and\nnon-finite F D1 output. REFUTE for these instances: no B/F classification\nchange on overflow and no F/dense sink divergence, with finite regular controls.\nB and F load in separate child processes; each sha is checked before import.\nThis is a behavior/claim counterexample, not a proposal to restore NaN masking.\nPrior art: IEEE 754-2008 overflow/NaNs; F1 path/sha loader (Project-Tensor, 2026).\n",
+    "status": "STAGED ONLY; compiled, not executed"
+  },
+  {
+    "path": "repro/r03_empty_helpers.py",
+    "sha256": "8b9f52067eff058b310b41798ac9660cb737370327f2c4fea08cdad99eef9738",
+    "docstring": "P1R2-F05 empty-helper portion, GPU staging only; worktree-root invocation.\nCONFIRM: raw packed_rotate or packed_prepare on B=0 reaches a CUDA invalid\nconfiguration error (attempted zero-grid launch), while a valid control still\nworks. REFUTE for these instances: both calls refuse positive-extent\npreconditions on the host, with no CUDA launch error, and control stays finite.\nOther errors or failure to exercise the control are INCONCLUSIVE/ERROR.\nThe separate EB3 timeline/G refusal is established by source, not this script.\nPrior art: CUDA launch geometry validation (NVIDIA CUDA Programming Guide;\nedition unverified); F1 path/sha loader (Project-Tensor, 2026); no new algorithm.\n",
+    "status": "STAGED ONLY; compiled, not executed"
+  }
+]

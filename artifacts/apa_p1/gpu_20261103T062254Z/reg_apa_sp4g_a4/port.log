@@ -1,0 +1,37 @@
+......F.....F                                                            [100%]
+=================================== FAILURES ===================================
+____________ test_a4_registration_preservation_and_transitive_gate _____________
+tensor_cuda/tests/test_apa_sp4g_a4.py:89: in test_a4_registration_preservation_and_transitive_gate
+    before=common.preserved();assert len(before['receipt_sha256'])>=75
+           ^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a4_common.py:16: in preserved
+    verify_sources();build_check()
+    ^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:37: in verify_sources
+    if sha(R/p)!=h:raise Red('SOURCE_CHANGED: '+p)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   apa_sp4g_common.Red: SOURCE_CHANGED: tensor_cuda/include/tc/core.h
+_____________ test_a4_calibration_uses_actual_ppl_fraction_receipt _____________
+tensor_cuda/tests/test_apa_sp4g_a4.py:185: in test_a4_calibration_uses_actual_ppl_fraction_receipt
+    b=common.require_a4('ppl_capture_B_2048_w0')
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a4_common.py:37: in require_a4
+    if name not in by_id():return require_a2(name)
+                                  ^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a2_common.py:21: in require_a2
+    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or j.get('fingerprint')!=fingerprint_a2(c):raise Red('A2_STALE_OR_RED_RECEIPT: '+name)
+                                                                                                                     ^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a2_common.py:14: in fingerprint_a2
+    return {str(x.relative_to(R)):sha(x) for x in p}
+                                  ^^^^^^
+scripts/apa_sp4g_common.py:14: in sha
+    with Path(p).open('rb') as f:
+         ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_sp4g_a4.py::test_a4_registration_preservation_and_transitive_gate
+FAILED tensor_cuda/tests/test_apa_sp4g_a4.py::test_a4_calibration_uses_actual_ppl_fraction_receipt
+2 failed, 11 passed in 0.15s

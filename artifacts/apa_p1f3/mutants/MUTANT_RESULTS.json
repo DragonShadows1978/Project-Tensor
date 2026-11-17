@@ -1,0 +1,152 @@
+{
+  "mutants_json_sha256": "a824c1cc4b22e8db8fc73d3940765953b4469bbc78bad0c260aa97c93c726b03",
+  "killed": 3,
+  "total": 3,
+  "status": "PASS",
+  "rows": [
+    {
+      "name": "m01_lookup_rereads_mapping",
+      "kind": "python",
+      "rule": "R1'",
+      "change": "lookup returns self.entries[...] again (a second read of the caller's mapping after the check)",
+      "S4": {
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[64]",
+        "killed": true,
+        "failed_ids": [
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_margin_mapping_reads_census",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_attention_gets_the_pinned_e_q_or_is_refused[128-4]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_attention_gets_the_pinned_e_q_or_is_refused[64-4]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[128]",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value[64]"
+        ],
+        "executed_line_evidence": [
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py:77: in test_r1p_stateful_mapping_at_lookup_returns_the_pinned_value\n    assert type(got) is float and bits(got) == bits(pin), \\\nE   AssertionError: lookup returned 0.0, not the pinned 1.010646104812622; mapping item reads = 3\nE   assert (<class 'float'> is float and 0 == 4607230364593684480)\nE    +  where <class 'float'> = type(0.0)\nE    +  and   0 = bits(0.0)\nE    +  and   4607230364593684480 = bits(1.010646104812622)"
+        ]
+      },
+      "module_sha256": "Build F3 module (Python-only mutant)",
+      "killed": true
+    },
+    {
+      "name": "m02_overflow_norm_kept",
+      "kind": "device",
+      "rule": "R2'",
+      "change": "prepare keeps the Inf norm for an overflowing finite row (F2's store: NaN only for a non-finite element)",
+      "LF2": {
+        "expected_failure": "G2b containment (never hides): public_default float32 r01_ovf_qneg vs dense_opt_out",
+        "killed": true,
+        "failed_assertions": [
+          "G2b containment (never hides): r2_tq4 bfloat16 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): tc_tq4 bfloat16 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): eb2b bfloat16 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): eb3 bfloat16 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): eb4 bfloat16 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): r2_tq4 float32 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D128_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D128_qpos vs dense_opt_out",
+          "G2b containment (never hides): r2_tq4 bfloat16 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): tc_tq4 bfloat16 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): eb2b bfloat16 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): eb3 bfloat16 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): eb4 bfloat16 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): r2_tq4 float32 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D128_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D128_qneg vs dense_opt_out",
+          "G2b containment (never hides): r2_tq4 bfloat16 ovf_D64_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): tc_tq4 bfloat16 ovf_D64_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): r2_tq4 float32 ovf_D64_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D64_qpos vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D64_qpos vs dense_opt_out",
+          "G2b containment (never hides): r2_tq4 bfloat16 ovf_D64_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): tc_tq4 bfloat16 ovf_D64_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): r2_tq4 float32 ovf_D64_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D64_qneg vs dense_sp_quantized",
+          "G2b containment (never hides): public_default float32 ovf_D64_qneg vs dense_opt_out",
+          "G2b containment (never hides): public_default float32 r01_ovf_qneg vs dense_opt_out",
+          "G2b containment (never hides): public_default float32 r01_ovf_qpos vs dense_opt_out"
+        ],
+        "stored_norms": {
+          "bfloat16 ovf_D128_qpos": {
+            "stored_norm_ws_tq4": "inf"
+          },
+          "bfloat16 ovf_D128_qneg": {
+            "stored_norm_ws_tq4": "inf"
+          },
+          "bfloat16 ovf_D64_qpos": {
+            "stored_norm_ws_tq4": "inf"
+          },
+          "bfloat16 ovf_D64_qneg": {
+            "stored_norm_ws_tq4": "inf"
+          },
+          "float32 ovf_D128_qpos": {
+            "stored_norm_ws_tq4": "inf",
+            "stored_norm_public": "inf"
+          },
+          "float32 ovf_D128_qneg": {
+            "stored_norm_ws_tq4": "inf",
+            "stored_norm_public": "inf"
+          },
+          "float32 ovf_D64_qpos": {
+            "stored_norm_ws_tq4": "inf",
+            "stored_norm_public": "inf"
+          },
+          "float32 ovf_D64_qneg": {
+            "stored_norm_ws_tq4": "inf",
+            "stored_norm_public": "inf"
+          },
+          "float32 r01_ovf_qneg": {
+            "stored_norm_public": "inf"
+          },
+          "float32 r01_ovf_qpos": {
+            "stored_norm_public": "inf"
+          }
+        },
+        "checks": [
+          {
+            "id": "G2b containment (never hides): public_default float32 r01_ovf_qneg vs dense_opt_out",
+            "ok": false,
+            "raised": null,
+            "launches": null
+          }
+        ]
+      },
+      "module_sha256": "781029589a00bbd90205a6a2f3cfab4feecfe03dd726b4925dc2ff8bc5054186",
+      "killed": true
+    },
+    {
+      "name": "m03_eb2b_product_int32",
+      "kind": "host",
+      "rule": "R3'",
+      "change": "EB2b's B*H back to a signed int product of the narrowed extents (checked by the same named check)",
+      "S4": {
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_that_wraps_a_signed_int_raises_value_error_naming_it",
+        "killed": true,
+        "failed_ids": [
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_eb2b_product_that_wraps_a_signed_int_raises_value_error_naming_it",
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py::test_r3p_guard_refuses_only_above_int_max_and_products_form_in_int64"
+        ],
+        "executed_line_evidence": [
+          "tensor_cuda/tests/test_apa_p1f3_cpu.py:253: in test_r3p_eb2b_product_that_wraps_a_signed_int_raises_value_error_naming_it\n    assert kind == \"ValueError\" and \"apa_eb2b\" in what and \"B*H\" in what and \"4294967296\" in what, (kind, what)\nE   AssertionError: ('none', '')\nE   assert ('none' == 'ValueError'\nE     \nE     - ValueError\nE     + none)"
+        ]
+      },
+      "LF3": {
+        "expected_failure": "LF3 R3' row eb2b_BH_2p32",
+        "killed": true,
+        "failed_assertions": [
+          "LF3 R3' row eb2b_BH_2p32"
+        ],
+        "stored_norms": null,
+        "checks": [
+          {
+            "id": "LF3 R3' row eb2b_BH_2p32",
+            "ok": false,
+            "raised": "ValueError: apa_spq1_rotate (packed_rotate): B*H (rotate grid rows) = 4294967296 does not fit the native int index that receives it (max 2147483647); refused before any allocation or launch",
+            "launches": 0
+          }
+        ]
+      },
+      "module_sha256": "9af99ddc6a744257aef21e15cd2437316c16bd10c61f55d6f9f8eaac06b94a2b",
+      "killed": true,
+      "kill_rule": "killed iff the S4 or the LF3 named assertion fails (order S5: \"S4 or LF3\"); both are run and reported"
+    }
+  ]
+}

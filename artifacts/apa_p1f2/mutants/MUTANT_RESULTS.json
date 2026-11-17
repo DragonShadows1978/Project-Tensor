@@ -1,0 +1,137 @@
+{
+  "killed": 6,
+  "total": 6,
+  "mutants": [
+    {
+      "name": "m01_margin_pin_unchecked",
+      "kind": "python",
+      "rule": "R1",
+      "change": "lookup and packed_attention accept any PackedRegisteredMargins: check_pinned_margins returns at once",
+      "S4": {
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f2_cpu.py::test_r1_hand_built_table_refused_at_lookup_and_at_attention_before_any_device_call[wrong_sha_pinned_entries]",
+        "killed": true,
+        "module_sha256": "6f03b2cdd5d7f9bee4456ed34759c6c710cccfab9a50f9ac0fc6a678c076f579",
+        "failed_ids": 10
+      },
+      "killed": true
+    },
+    {
+      "name": "m02_tq4_inf_norm_kept",
+      "kind": "device",
+      "rule": "R2",
+      "change": "the public route's TQ4 quantizer (spq1::prepare) stores the infinite norm unchanged",
+      "builds": [
+        {
+          "dir": null,
+          "status": "FAIL",
+          "module_sha256": null,
+          "rebuilt": null,
+          "attempt": 1
+        },
+        {
+          "dir": null,
+          "status": "FAIL",
+          "module_sha256": null,
+          "rebuilt": null,
+          "attempt": 2
+        },
+        {
+          "dir": "build_r3",
+          "status": "PASS",
+          "module_sha256": "26b6c9ee79a69a31be7a6eb4bdc6fa0cfb982fbb118c473632c0b5522285f68e",
+          "rebuilt": [
+            "[  6%] Building CUDA object CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1f2/artifacts/apa_p1f2/mutants/m02_tq4_inf_norm_kept/tree/tensor_cuda/src/kernels.cu.o"
+          ],
+          "attempt": 3
+        }
+      ],
+      "LF2": {
+        "expected_failure": "G2b containment (never hides): r2_tq4 bfloat16 k_posinf_p1 vs dense_entry",
+        "killed": true,
+        "module_sha256": "26b6c9ee79a69a31be7a6eb4bdc6fa0cfb982fbb118c473632c0b5522285f68e",
+        "failed_assertions": 19
+      },
+      "killed": true
+    },
+    {
+      "name": "m03_capacity_unbounded",
+      "kind": "python",
+      "rule": "R3",
+      "change": "R3's bound removed from PackedSpKeys (the constructor's check_native_range call)",
+      "S4": {
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f2_cpu.py::test_r3_packed_capacity_at_the_bound_is_accepted_one_past_is_refused_before_allocation",
+        "killed": true,
+        "module_sha256": "6f03b2cdd5d7f9bee4456ed34759c6c710cccfab9a50f9ac0fc6a678c076f579",
+        "failed_ids": 3
+      },
+      "killed": true
+    },
+    {
+      "name": "m04_raw_extent_unchecked",
+      "kind": "binding",
+      "rule": "R4",
+      "change": "R4's positive-extent check removed from packed_rotate (apa_spq1_rotate)",
+      "builds": [
+        {
+          "dir": "build",
+          "status": "PASS",
+          "module_sha256": "98cf265c664bff9a3bde900ecd9f56c9b13a2306f25043e3a5b9f6141d6681b8",
+          "rebuilt": [
+            "[  6%] Building CUDA object CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1f2/artifacts/apa_p1f2/mutants/m04_raw_extent_unchecked/tree/tensor_cuda/src/kernels.cu.o"
+          ],
+          "attempt": 1
+        }
+      ],
+      "LF3": {
+        "expected_failure": "LF3 raw helper zero extent raises ValueError, no launch: rotate_q_B0",
+        "killed": true,
+        "module_sha256": "98cf265c664bff9a3bde900ecd9f56c9b13a2306f25043e3a5b9f6141d6681b8",
+        "failed_assertions": 1
+      },
+      "killed": true
+    },
+    {
+      "name": "m05_eb3_timeline_g_late",
+      "kind": "device",
+      "rule": "R4",
+      "change": "R4's EB3 timeline/G pre-check removed",
+      "builds": [
+        {
+          "dir": "build",
+          "status": "PASS",
+          "module_sha256": "efb74aadb077c50bb24bebc0cee7d7217783e3b4a88f50a3d59b9ab4fc676974",
+          "rebuilt": [
+            "[  6%] Building CUDA object CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1f2/artifacts/apa_p1f2/mutants/m05_eb3_timeline_g_late/tree/tensor_cuda/src/kernels.cu.o"
+          ],
+          "attempt": 1
+        }
+      ],
+      "LF3": {
+        "expected_failure": "LF3 EB3 timeline=True G=3 raises before any launch",
+        "killed": true,
+        "module_sha256": "efb74aadb077c50bb24bebc0cee7d7217783e3b4a88f50a3d59b9ab4fc676974",
+        "failed_assertions": 5
+      },
+      "killed": true
+    },
+    {
+      "name": "m06_factory_capacity_dropped",
+      "kind": "python",
+      "rule": "R8",
+      "change": "quantize_sp2_keys ignores capacity (always PackedSpKeys(k))",
+      "S4": {
+        "expected_failure": "tensor_cuda/tests/test_apa_p1f2_cpu.py::test_r8_capacity_is_forwarded_to_packed_keys",
+        "killed": true,
+        "module_sha256": "6f03b2cdd5d7f9bee4456ed34759c6c710cccfab9a50f9ac0fc6a678c076f579",
+        "failed_ids": 3
+      },
+      "LF4": {
+        "expected_failure": "LF4 D64: factory capacity forwarded",
+        "killed": true,
+        "module_sha256": "6f03b2cdd5d7f9bee4456ed34759c6c710cccfab9a50f9ac0fc6a678c076f579",
+        "failed_assertions": 3
+      },
+      "killed": true
+    }
+  ]
+}

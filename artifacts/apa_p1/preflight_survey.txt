@@ -1,0 +1,348 @@
+# APA-2P static survey
+
+**ACCEPT — static survey only. G1 PASS; G2 PASS; G3 PASS.** S1–S5 are complete. Required byte totals reproduce AB-1 exactly, and the baseline/final tracked diffs are empty (verification.json; baseline_tracked.diff; final_tracked.diff). No implementation, build, test or GPU run.
+
+The lab SP cache uses **580 B/key/KV head**, against production raw bf16 SP's derived **768 B**, while retaining bf16 exact K and V. Packed SP and 2P-INT4 therefore have identical cache-layout bytes (S1/S2 source tables; scripts/apa_ab1_common.py:237-250). Both remain above FLASH's 512 B/head. Production's public calibrated SP2 wrapper is fp32-only; the bf16 production comparison is explicitly a raw-entry derivation (S1). The decoder ABI forces visible-prefix copies even with capacity allocated; removing them needs pitches in **both decode and key append** (S4). The engine merge conflict list is empty, but the port must retain production-only DLPack/numerical fixes (S5).
+
+Gates: **G1 PASS** — entry points, all 47 engine-diff paths / 24 lab-modified paths, four promotion items, 22 contiguity-census rows and S1–S5 source citations. **G2 PASS** — 23 recorded exact allocation equalities, with capacity exceptions preserved; AB-1's historical overall G2 RED is unchanged. **G3 PASS** — authorized output paths only and no tracked change. Static checks and their limits are in verification.json. The four production promotion items remain open; survey acceptance does not promote code.
+
+## S1 — production SP decode
+
+**Evidence class: static source reading and exact integer derivation.** `P:path:a-b` below means lines a-b of **`git show 0e1dea3:path | nl -ba`**, never a production working-file read. `H:path:a-b` means this worktree at `9de6b98998be6432bf933b314026a32569ef427c`. Production source excerpts and commands are preserved in `production_source_receipts.txt` (generated before final acceptance).
+
+### Entry-point census
+
+| Layer | Entry / helper | Source |
+|---|---|---|
+| Python public | `tc.apa_selective_attention_sp` re-export; implemented in `apa_sp2.apa_selective_attention_sp(q,k,kq,v,scale,epsilon,bulk_bits,margins,...)` | P:tensor_cuda/tensor_cuda/__init__.py:1535-1537; P:tensor_cuda/tensor_cuda/apa_sp2.py:72-89 |
+| Python preparation/governance | `quantize_sp2_keys`, `RegisteredMargins.load/lookup`; `quant._tables`, `_quantize_keys` produce dense reconstructed `kq` | P:tensor_cuda/tensor_cuda/apa_sp2.py:21-69; P:tensor_cuda/tensor_cuda/quant.py:69-80,111-132 |
+| Python-accessible raw C++ | `_C.apa_selective_attention_sp` (explicit delta) and `_C.apa_selective_attention_sp_epsilon` (epsilon + supplied error margin); both expose sinks/diagnostics | P:tensor_cuda/src/bindings.cpp:2332-2371 |
+| C++ host | `tc::apa_selective_attention_sp_epsilon` derives delta via `apa_sp2_delta`, forwards to `tc::apa_selective_attention_sp` | P:tensor_cuda/src/apa_sp2.cuh:3-22; P:tensor_cuda/src/kernels.cu:8418-8481; declarations P:tensor_cuda/include/tc/ops.h:14-28 |
+| Decode dispatch | L=1 always calls `apa_selective_sp_splitk_dispatch<T>` | P:tensor_cuda/src/kernels.cu:8450-8456; P:tensor_cuda/src/apa_sp1_1.cuh:148-182 |
+| Diagnostics (not additional attention implementations) | `_C.apa_sp1_1_baseline_diagnostics`, `_C.apa_sp2_delta`, `_C.apa_sp2_scores`, `_C.apa_sp2_baseline_thresholds` | P:tensor_cuda/src/bindings.cpp:2351-2382; P:tensor_cuda/src/apa_sp2.cuh:24-113; P:tensor_cuda/src/apa_sp1_1.cuh:184-218 |
+
+**Precision/API boundary.** The governed Python wrapper requires `TC_APA_SP=1`, registered 2/4-bit, D64/128 margins and **fp32** queries at scale 1/sqrt(D); its documented quantizer also requires fp32 K. It does not accept the bf16 model route through this calibrated API. The raw C++ entry independently permits fp32/fp16/bf16 and uses the same input dtype for q/k/kq/v (P:tensor_cuda/tensor_cuda/apa_sp2.py:53-89; P:tensor_cuda/src/kernels.cu:8421-8441, paths above). Accordingly the bf16 row below is a **derived raw-entry layout**, not a measured deployment of the calibrated wrapper. Both production entries are experimental/default-off in the source (same citations). The bit count labels the approximation source, not reconstructed kq's resident element width.
+
+### D=VD=128 storage per key per KV head
+
+| Route | Bulk operand stored / computed | Bulk B | Exact K B | V B | Per-key metadata B | Total B |
+|---|---|---:|---:|---:|---:|---:|
+| Production raw SP, bf16 (derived) | low-bit TQ reconstruction stored **bf16 dense `kq`** / loaded as float, fp32 multiply/add + shuffle reductions | 256 | 256 bf16 | 256 bf16 | 0 | **768** |
+| Production calibrated SP, fp32 | low-bit TQ reconstruction stored **fp32 dense `kq`** / fp32 dot and accumulate | 512 | 512 fp32 | 512 fp32 | 0 | **1536** |
+| FLASH comparator, bf16 | exact bf16 K / comparator, no APA bulk | 0 | 256 bf16 | 256 bf16 | 0 | **512** |
+
+Derivation: three D128 same-dtype arrays; kq has exactly K's shape (P:tensor_cuda/src/kernels.cu:8426-8441); reconstruction returns a dense tensor, not packed codes (P:tensor_cuda/tensor_cuda/quant.py:111-132). Bulk and exact loads/FP32 accumulators are P:tensor_cuda/src/apa_sp1_1.cuh:25-85, and bf16 V loads enter fp32 accumulation at :90-103. No norm or code is an argument of either attention entry. Quantizer rotation/codebook/boundaries are persistent table state, not per-token fields (P:tensor_cuda/tensor_cuda/quant.py:69-80); norms/rotated keys are preparation intermediates (P:tensor_cuda/tensor_cuda/quant.py:122-127). Sinks are optional [H] values, and diagnostic masks [B,H,L,S] and split scratch are separate from cache layout (P:tensor_cuda/src/kernels.cu:8447-8452; P:tensor_cuda/src/apa_sp1_1.cuh:155-158).
+
+### Model-token normalization for comparison to AB-1 (derived, not a production memory measurement)
+
+| Layout assumption | Bulk stored / computed | Qwen3-1.7B B/token | Qwen3-4B B/token |
+|---|---|---:|---:|
+| Raw production SP bf16, AB-1 exact layer 0 | bf16 reconstructed TQ / fp32 arithmetic | **169,984** | **219,136** |
+| Raw production SP bf16, every layer SP | bf16 reconstructed TQ / fp32 arithmetic | 172,032 | 221,184 |
+| Calibrated production SP fp32, every layer SP | fp32 reconstructed TQ / fp32 arithmetic | 344,064 | 442,368 |
+| FLASH bf16, all layers | exact bf16 K / no APA bulk | **114,688** | **147,456** |
+
+Geometry is 28/36 layers, eight KV heads and D128; AB-1 applies FLASH to layer 0 (H:scripts/apa_ab1_common.py:237-250; H:scripts/apa_ab1_arms.py:351-362). Thus the first row is `8*(512+27*768)` / `8*(512+35*768)`, the all-layer rows are `8*28*b` / `8*36*b`. The production engine itself does **not** impose the AB-1 layer-0 exception; it has no layer argument (P:tensor_cuda/src/kernels.cu:8418-8420). FLASH totals exactly reproduce G2 allocation/capacity (artifacts/apa_ab1/g2/result.json:5-16,187-198; S2 gives all comparisons).
+
+### Kernels actually dispatched
+
+For L=1, **two attention launches**: `apa_selective_sp_splitk_kernel<T,CAP,WCOOP,DIAGNOSTICS>` then `apa_selective_merge_kernel<T,CAP>`, both 128 threads, with fixed partition layout and three fp32 partial arrays. At D=VD=128 CAP=128 and WCOOP=true. Partition-local inclusive running bulk maximum chooses `bulk >= prefix - delta`; selected keys use exact K, every key keeps a score and contributes V/denominator. Sinks enter the merge. Evidence: P:tensor_cuda/src/apa_sp1_1.cuh:5-19,37-105,148-182; P:tensor_cuda/src/kernels.cu:8453-8456. L>1 instead runs `apa_selective_sp_kernel` (one warp per row), outside the decode route (P:tensor_cuda/src/kernels.cu:8334-8414,8457-8476). Epsilon governance is host work and adds no device pass (P:tensor_cuda/src/apa_sp2.cuh:16-22). This differs from the older paper's Gaussian/z-score rule: preflight docs/APA_PAPER_DRAFT.md:149-167 describe that historical rule, while the cited production SP source defines the running-max rule.
+
+
+## S2 — lab packed path
+
+**Evidence class: static source and existing AB-1 receipts.** The operative SP arm calls EB3 variant 0, while SP-tk8 calls EB4 T-fresh. Both use δ=8.1 and whole-row carry; layer 0 is FLASH. This is not a branch-wide replacement of the production `tc.apa_selective_attention_sp` wrapper (scripts/apa_ab1_arms.py:271-338,351-362; orders/APA_AB1_T1_QWEN3.md:53-82; tensor_cuda/tensor_cuda/__init__.py:1392-1417).
+
+### Entry points, preparations and launch chains
+
+| Route | Python → binding → C++ → kernels | Evidence |
+|---|---|---|
+| Packed cache allocation/append | `ApaSpq1Workspace.__init__/append/packed` → companion `_spo2.packed_prepare/packed_append` → `apa_spq1_prepare/pack` → `spq1::prepare`, `spq1::pack_tq` | tensor_cuda/tensor_cuda/__init__.py:1308-1343; tensor_cuda/src/bindings.cpp:1001-1003; tensor_cuda/src/apa_spo/packed_launcher.cuh:8-43; tensor_cuda/src/apa_spo/packed.cuh:15-40 |
+| SP main | `SPLayer.forward` → `tc.apa_eb3` → `_spo2.eb3_run` → `tc::apa_eb3_run` | scripts/apa_ab1_arms.py:323-335; tensor_cuda/tensor_cuda/__init__.py:1392-1399; tensor_cuda/src/bindings.cpp:1030-1042; tensor_cuda/src/apa_spo/eb3.cuh:737-900 |
+| SP main launches | `eb3::rotate_q<128,16>`; `eb3::bulk_swap<128,1,true,false>`; `eb3::select_pv` specialized by G=2/4 (D=VD=128, V prefetch, fused merge; no K prefetch) | tensor_cuda/src/apa_spo/eb3_tuning.cuh:13-36; tensor_cuda/src/apa_spo/eb3.cuh:718-720,803-895 |
+| SP variant-B cross-check (explicit alternative) | `_C.apa_selective_attention_sp_d1_packed(...fmt='tq4',gqa_path='tc')` → Python `_apa_spq4_entry` → `_spo2.packed_run` → `apa_spq4_run` → `apa_spq6_tq4_tc`: `spq1::rotate`, `spq6::bulk_mma_tq<...,2>`, `spq4::select_pv`, `spo2::merge_kernel` | scripts/apa_ab1_arms.py:324-326; tensor_cuda/tensor_cuda/__init__.py:1360-1367; tensor_cuda/src/bindings.cpp:1004-1012; tensor_cuda/src/apa_spo/spq4.cuh:441-457; tensor_cuda/src/apa_spo/spq6.cuh:189-257 |
+| SP-tk8 main | `SPLayer.forward` → `tc.apa_eb4` → `_spo2.eb4_run` → `tc::apa_eb4_run` | scripts/apa_ab1_arms.py:337-348; tensor_cuda/tensor_cuda/__init__.py:1410-1417; tensor_cuda/src/bindings.cpp:1045-1058; tensor_cuda/src/apa_spo/eb4.cuh:664-776 |
+| SP-tk8 main launches | shared `eb3::rotate_q`; `eb4::bulk_stats` (packed bulk + chunk/block mass statistics + int8-V prefetch); `eb4::select_mixed` (fresh stable-rank flags, SP exact K, mixed V, fused merge). **Three launches**, not EB2b's standalone statistics/choose sequence. Registered CHOOSE_SITE=1 computes flags redundantly in select; no choose-ticket allocation on this route. | tensor_cuda/src/apa_spo/eb4_tuning.cuh:15,22-37; tensor_cuda/src/apa_spo/eb4.cuh:269-365,732-775 |
+| SP-tk8 V append | `tc.apa_eb2b_quantize` → `_spo2.eb2b_quantize` → `apa_eb2b_quantize` → `eb2b::quantize`; called only on new V rows, copied into cache | scripts/apa_ab1_arms.py:298-301; tensor_cuda/tensor_cuda/__init__.py:1373-1375; tensor_cuda/src/bindings.cpp:1020; tensor_cuda/src/apa_spo/eb2b.cuh:11-21,109-115 |
+| Both prefill routes | `SPLayer.forward(L>1)` reconstructs `kq` from the packed cache and calls Python `apa_triton.k1.k1_attention` → `_k1`; **not** the C++ AOT K1 wrapper and not packed decode | scripts/apa_ab1_arms.py:118-126,304-315; apa_triton/k1.py:30-35,119-152 |
+
+Main decode bulk consumes packed TQ4 directly. In variant B, the rotated fp32 query and fp32 codebook centroids are split into bf16 hi/lo pairs; three tensor-core products (`C_hi*q_hi`, `C_hi*q_lo`, `C_lo*q_hi`) accumulate fp32, followed by fp32 norm and attention scaling. Exact K uses bf16 MMA with a GQA union gather; P is rounded to bf16 before PV, with fp32 denominator/accumulator. These are computational differences from production's scalar FP32 dots, not only a storage adapter (tensor_cuda/src/apa_spo/eb3.cuh:245-298,310-312,368-419,420-460; tensor_cuda/src/apa_spo/eb4.cuh:122-175,395-443,445-499). The registered EB3 merge preserves its variant-B predecessor's arithmetic, not production SP1.1's partition selection (tensor_cuda/src/apa_spo/eb3.cuh:464-477; P:tensor_cuda/src/apa_sp1_1.cuh:2-3,37-85).
+
+### Additional explicit lab SP entry census
+
+The lab inherits both production raw attention entries and the public SP2 governor unchanged (engine_diff.patch's kernels/bindings/Python hunks). Dense `_C.apa_selective_attention_sp_d1` is `_apa_spo2_entry` → `_spo2.run` → `apa_spo2_run` → `apa_spq1_core` (tensor_cuda/tensor_cuda/__init__.py:1301-1304; tensor_cuda/src/bindings.cpp:990-998; tensor_cuda/src/apa_spo/packed_launcher.cuh:4-6; tensor_cuda/src/apa_spo/launcher.cuh:5-154). `_C.apa_spo2_dump` is a diagnostic alias of that run. Packed `_C.apa_selective_attention_sp_d1_packed` is finally bound to `_apa_spq4_entry`; `gqa_path='r2'` → `apa_spq1_run` → `apa_spq1_core`, while `'tc'` routes TQ4 to `apa_spq6_tq4_tc` and INT4 to `apa_spq4_tc`, with MHA falling back to r2 (tensor_cuda/tensor_cuda/__init__.py:1345-1367; tensor_cuda/src/bindings.cpp:1004-1012; tensor_cuda/src/apa_spo/spq4.cuh:441-457). `_C.apa_spq1_dump` is the raw packed diagnostic alias (tensor_cuda/tensor_cuda/__init__.py:1353). `tc.apa_eb2b` / `_spo2.eb2b_run` is the older mixed-V SP decode entry, with δ=8.1 and separate statistics/choose/PV/merge stages (tensor_cuda/tensor_cuda/__init__.py:1377-1384; tensor_cuda/src/apa_spo/eb2b.cuh:118-171). Resource, packing, rotation and score-diagnostic methods prepare or inspect operands; they are not additional attention algorithms. K1's C++ AOT entry rejects L≤1 and is prefill-only (tensor_cuda/src/apa_spo/k1_launcher.cpp:109-111). None of these added entries redirects the inherited production SP entry.
+
+### D128 persistent layout and exact byte arithmetic
+
+| Arm | Bulk stored / computed | Bulk codes or reconstruction B | K bf16 B | V bf16 B | Metadata B | Extra int8 V B | Total B/key/KV head (layers ≥1) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| SP | TQ4 4-bit codes / bf16 hi/lo MMA, fp32 accumulate | 64 | 256 | 256 | 4 fp32 norm | 0 | **580** |
+| SP-tk8 | TQ4 4-bit codes / bf16 hi/lo MMA, fp32 accumulate | 64 | 256 | 256 | 4 norm + 4 V scale | 128 | **712** |
+| 2P-INT4 comparator | symmetric-7 INT4 / dequantized fp32 bulk dot | 64 | 256 | 256 | 4 fp32 scale | 0 | **580** |
+| 2P-TQ16 comparator | reconstructed TQ4 bf16 / float-loaded bulk dot, fp32 accumulate | 256 | 256 | 256 | 0 | 0 | **768** |
+| FLASH/STD comparator | exact bf16 K / no APA bulk | 0 | 256 | 256 | 0 | 0 | **512** |
+
+Cache allocation evidence: scripts/apa_ab1_arms.py:209-228,271-293; packed field shapes tensor_cuda/tensor_cuda/__init__.py:1308-1326. EB2b int8 V is per-token absmax/127 symmetric quantization, nearest-even rounding and signed bits in uint8; its bf16 source stays resident even for low blocks (tensor_cuda/src/apa_spo/eb2b.cuh:11-21; scripts/apa_ab1_arms.py:275-292). Per-block flags, bulk scores, statistics, rotated Q, masks and merge partials are per-call scratch, not persistent bytes per token (tensor_cuda/src/apa_spo/eb3.cuh:770-791; tensor_cuda/src/apa_spo/eb4.cuh:696-714). Optional sinks are per query head, not per key (same launchers' sink checks).
+
+| Arm | Bulk stored / computed | Qwen3-1.7B B/token | Qwen3-4B B/token | Exact formula |
+|---|---|---:|---:|---|
+| SP | packed TQ4 / bf16 hi/lo, fp32 accumulate | **129,376** | **166,496** | `8*(512+(NL-1)*580)` |
+| SP-tk8 | packed TQ4 / bf16 hi/lo, fp32 accumulate | **157,888** | **203,456** | `8*(512+(NL-1)*712)` |
+| 2P-INT4 | packed symmetric-7 INT4 / fp32 dequantized dot | **129,376** | **166,496** | `8*(512+(NL-1)*580)` |
+| 2P-TQ16 | bf16 TQ reconstruction / fp32 float-loaded dot | 169,984 | 219,136 | `8*(512+(NL-1)*768)` |
+| FLASH/STD | exact bf16 K / no APA bulk | **114,688** | **147,456** | `8*NL*512` |
+
+NL=28/36, KVH=8. Layer 0 contributes 512 B/head for **every** arm; no packed fields or int8 V are allocated there (scripts/apa_ab1_arms.py:351-362; scripts/apa_ab1_common.py:237-250). Every listed total was compared by exact integer arithmetic to each model/arm's G2 `alloc` arithmetic **and measured** bytes divided by capacity, at every recorded capacity (normally 4096/16384; 4B 2P-TQ16 uses 12288 as its high point; 4B STD has only 4096). All 23 recorded allocation equalities hold; full operands and equality booleans are in survey.json. Receipt authority: artifacts/apa_ab1/g2/result.json:5-16,95-106,125-136,155-166 and corresponding 4B sections :187-198,265-276,295-306,325-336 (full receipt census below). This survey's G2 is layout-only: AB-1's **overall G2 remains RED** for FLASH/STD NVML slopes (artifacts/apa_ab1/summary/report_head.md:63-68).
+
+At D128, `(64+4)*8/128 = 4.25` stored bulk bits/element for both packed formats. The AB-1 order calls INT4 “4.5” at orders/APA_AB1_T1_QWEN3.md:51; its simultaneously specified one fp32 scale, code and G2 layout instead give **4.25**, which is the arithmetic used here. No layout correction or rule change is made.
+
+### TQ4 codes and row stride
+
+Logical coordinates are `[B,KVH,C,D/2]` uint8 codes plus `[B,KVH,C]` fp32 norms, where C is capacity (distinct from the kernel chunk constant also named C=256) and S≤C is visible length. Byte `pair` packs coordinate `2*pair` in its low nibble and `2*pair+1` in its high nibble; threshold equality goes to the lower centroid (`x > boundary`, not ≥). Norm/rotation preparation uses a fixed per-row operation order independent of append shape (tensor_cuda/src/apa_spo/packed.cuh:15-40). Rotations `[KVH,D,D]`, codebook[16] and boundaries[15] are shared, non-token state (tensor_cuda/tensor_cuda/__init__.py:1321-1329).
+
+For flattened head `bh=b*KVH+h`, code byte address is `((bh*C+j)*(D/2)+pair)`; norm address is `bh*C+j`. Thus token pitch is **64 bytes**, head-row pitch is **C*64 bytes**, and norm token/head pitches are **4 / C*4 bytes** at D128. This is not an arbitrary stride vector: a capacity parameter derived from codes.shape[2] supplies the pitch. Both main bulk kernels already distinguish visible S from code capacity (tensor_cuda/src/apa_spo/eb3.cuh:264-275,795-818; tensor_cuda/src/apa_spo/eb4.cuh:139-152,723-745). `apa_spq1_buffer_check` explicitly accepts codes capacity ≥ K visible length (tensor_cuda/src/apa_spo/packed_launcher.cuh:8-12).
+
+### Every differing engine file and function
+
+Command: **`git diff 0e1dea3 HEAD -- tensor_cuda/`**; exact output is engine_diff.patch. Its 47-path name/status census is in survey.json and Appendix A. Only **24** paths differ between the common ancestor and this lab branch: 19 new files plus five integration files. The other 23 diff paths reflect production-only development missing from this older fork, **not lab deletions to port** (commands recorded in git_evidence.json and Appendix A).
+
+The complete added-function/site census follows; every listed path is relative to `tensor_cuda/`, with line numbers in the current worktree. Existing production SP APIs and bodies are inherited unchanged; the new names are explicit companion entries.
+
+| Engine path | New / differing functions, constants or integration sites |
+|---|---|
+| `tensor_cuda/__init__.py` | second initializer loading :1288-1304; `ApaSpq1Workspace.__init__/packed/append` :1314/1328/1330; `_apa_spq1_entry` :1345; `_apa_spq4_entry` :1360; `apa_eb2b_quantize/apa_eb2b` :1374/1377; `apa_eb3/apa_eb3_resources` :1392/1401; `apa_eb4/apa_eb4_resources` :1410/1419; `apa_selective_attention_sp_k1` :1427 |
+| `src/bindings.cpp` | companion `PYBIND11_MODULE(_tensor_cuda_spo2)` :990; `run`, `packed_prepare/rotate/append/run`, `int4_stats` :991-1013; EB2b quantize/values/run :1020-1028; EB3 run/resources :1034-1042; EB4 run/resources :1049-1058; `apa_spo3_exec`/K1 :1074-1091; wrapper `PyInit__tensor_cuda` :1097-1113 |
+| `include/tc/ops.h` | declarations for all of these host functions :302-355 |
+| `src/kernels.cu` | append-only namespace/includes for D1 and launcher :8191-8197; no inherited production SP function changed |
+| `CMakeLists.txt` | K1 AOT build/initializer wiring :71-113; outside AB-1 packed decode's runtime call chain |
+| `src/apa_spo/packed.cuh` | `spq1::rotate` :8; `pack_tq` :15; `prepare` :30; `bulk_shared` :49; `bulk` :105 |
+| `src/apa_spo/packed_launcher.cuh` | `apa_spo2_run` :4; `apa_spq1_buffer_check` :8; `apa_spq1_rotate` :14; `apa_spq1_prepare` :24; `apa_spq1_pack` :33; `apa_spq1_run` :45; `apa_spq1_int4_stats` :57; include-dispatch :69-72 |
+| `src/apa_spo/spq4.cuh` | `spq4::mma_bf16/nib2bf/warp_max` :49/54/64; `bulk_mma` :69; `select_pv` :147-150; `apa_spq4_tc` :362; `apa_spq4_run` :441; conditional EB includes :420-438 |
+| `src/apa_spo/spq6.cuh` | precision variant macros :40-53; `spq6::pack_bf2/bf16_val/bf2_lo/bf2_hi` :57-62; `bulk_mma_tq` :63; `apa_spq6_tq4_tc` :189 |
+| `src/apa_spo/eb2b_values.cuh` | `eb2b::value_pair/value8/high_flag/fetch_value8` :12/21/28/39 |
+| `src/apa_spo/eb2b.cuh` | `eb2b::quantize/statistics/choose/values_dump` :11/26/45/92; `apa_eb2b_values/quantize/run` :99/109/118 |
+| `src/apa_spo/eb3.cuh` | `eb3::smid_/gtimer_/tl_begin/tl_end/l2_prefetch` :76-87; `rotate_q` :98; `bulk_copy` :139; `mma_full` :226; `bulk_swap` :230; `select_pv` :319; `counters/l2_bytes` :688/700; `VARIANTS` :718; `apa_eb3_run/resources` :737/906 |
+| `src/apa_spo/eb3_tuning.cuh` | namespace tuning constants :13-40; registered variant-0 configuration |
+| `src/apa_spo/eb4.cuh` | `eb4::prefetch_v/lz_warp` :61/76; `bulk_stats` :102; `select_mixed` :270; `counters` :645; `apa_eb4_run/resources` :664/780 |
+| `src/apa_spo/eb4_tuning.cuh` | tuning constants :9-44; CHOOSE_SITE=1, NSORT_MAX=1024 |
+| `src/apa_spo/d1.cuh` | `spo2::stage/dot/dot_trans/bulk_kernel/select_kernel` :21/33/47/50/92; includes parallel/tensor/packed :200-208; predecessor/reference dependencies |
+| `src/apa_spo/launcher.cuh` | `apa_spq1_core` :5; routes baseline / packed / ordered / tensor predecessors; include packed_launcher :157-159 |
+| `src/apa_spo/parallel.cuh` | `spo4::dot4/max128/bulk_kernel/select_kernel` :17/36/43/76; predecessor paths |
+| `src/apa_spo/tensor.cuh` | `spo5::pair16/mma8/bulk_kernel/select_kernel` :17/22/47/73; predecessor paths |
+| `src/apa_spo/merge.cuh` | `spo2::merge_kernel` :7; shared reference merge |
+| `src/apa_spo/baseline_dump.cuh` | `apa_spo2_baseline_dump_kernel` :7; diagnostics/reference only |
+| `src/apa_spo/sink_mutant.cuh` | `apa_spo2_sink_twice_kernel` :5; mutant-only |
+| `src/apa_spo/k1_launcher.cpp` | `apa_spo3::check/check_runtime/narrow/config/image_index/function_for` :25/32/35/42/48/56; `apa_selective_attention_sp_k1` :79; AOT prefill, not AB-1's Python K1 call |
+| `src/apa_spo/profile_interposer.cpp` | interposed `cudaLaunchKernel` :9; profiling only, not production engine linkage (:4) |
+
+## S3 — promotion items
+
+**Evidence class: existing receipts for the open status; reasoning for the designs below. No proposed test or hardening was run.** The four-item promotion register is orders/APA_2P_SURVEY.md:47-54. EB3 and EB4 independently reserve production promotion for later work (orders/APA_EB3_VARIANT_B_LATENCY.md:64; orders/APA_EB4_CHEAP_TK8_DECISION.md:72-73). AB-1 explicitly forbids promotion too (orders/APA_AB1_T1_QWEN3.md:95).
+
+| Item and where raised | Code concerned | Minimal proposed design and closure receipt |
+|---|---|---|
+| **Per-device, stream-safe tickets.** EB3 lead notes :23-29; EB4 lead notes :46-47 carry it forward. EB4 order :72 excludes hardening. AB-1 order :82 retains one device / legacy default stream / no graph capture. | `eb3::counters` process-static pointer+capacity, allocations/growth and process-static `l2_bytes` cache (tensor_cuda/src/apa_spo/eb3.cuh:683-703); EB3 ticket at :480-496, caller :841-842. EB4 shares the same merge buffer (:750); its optional choose buffer has the same defect (:642-655,738). Registered CHOOSE_SITE=1 does not allocate choose tickets (eb4_tuning.cuh:31-37). | Own buffers by **(CUDA device, actual stream)**, with distinct merge and choose slots. Use an explicit launch stream, default 0, consistently for rotation, bulk, select, packing, quantization and initialization; guard the device before allocation/launch. A host lock protects lookup/growth/enqueue bookkeeping; keep superseded allocations alive until the owning stream's completion event, so growth never frees an in-flight buffer. Reuse slots only in stream order; initialize new/grown slots on that stream, preserve atomicInc reset and fence/load protocol. Reject capture until graph lifetimes are separately designed. Make L2 cache device-keyed too. Closure needs overlapping streams and devices, same-stream repeated chunk counts, growth beyond 1024, and explicit zero-after-completion / output-reference receipts. No global synchronization on steady-state calls. |
+| **Deterministic early-counter test.** EB3 order :170,173 registers early and stale-counter mutants; EB3 lead notes :28-29 report only **9/1024** real checks killed mutant 3 and require a deterministic test. EB4 lead notes :47 inherits it. | Fused `eb3::select_pv` writes partials, fences, then mut3 substitutes `prev==NC-2` for `prev==NC-1` (tensor_cuda/src/apa_spo/eb3.cuh:464-496); analogous EB4 merger :504-512. | A test-only two-CTA case (one bh, NC=2) poisons the delayed CTA's partials. Hold chunk 1 **before its partial stores** until chunk 0 signals that it has finished every possible merge/output store. Correct chunk 0 takes ticket 0, does not merge, signals, and permits chunk 1 to write then merge. Mutant 3 merges poisoned chunk-1 state before signaling; chunk 1 subsequently does not replace the output, so the incorrect result is deterministic. Signal on both early-return and completed-merge exits, after a fence. Require two concurrent resident CTAs for the handshake; bound the device poll and treat timeout as failure, never as a kill/pass. Use a captured Qwen row and real 257-key prefix, plus an explicit poison sentinel; assert correct-reference bitwise output and mutant failure. Retain existing real-data tests. This closes the race with ordering rather than probabilistic sleeps. |
+| **Exact-tie suite test.** EB4 order :109-110 defines lower-index stable order; :182 registers reverse ties. Seat report docs/APA_EB4_REPORT.md:185-191 records mutant 7 surviving. Lead notes :15-17 already supply a deterministic kill; :48 says add it to the suite. | `eb4::select_mixed` rank predicate `sj>si || (sj==si && j<i)` and mut7 reversed comparator (tensor_cuda/src/apa_spo/eb4.cuh:288-325); alternative choose path comparator at :231-250. | Promote the **existing** lead fixture without changing selection: H16/KV8, D128, S2048, bit-identical key blocks 5/20 and fraction 1/32. Require equal fp32 scores at the cutoff, exactly one high block per head, block 5 selected, bitwise EB2b/EB4 flags/output, and reversed-tie mutant selecting block 20. This is suite integration, not invention of a new fixture. Code: artifacts/apa_eb4/lead_gate/lead_check.py:59-68; positive/negative receipts lead_check_output.txt:35-41. Add boundary variants only in a subsequent test order if needed. |
+| **Blind red team.** AB-1 summary tail :65 explicitly says author-run only, no blind review; :101-102 excludes it. The four-item requirement is explicit in this survey order :47-54. No EB3/EB4 lead note found names a completed blind red team; their checks are the independent lead checks documented at EB3 notes :12-21 / EB4 notes :9-17. | Full packed call chain and cache/interop lifecycle: scripts/apa_ab1_arms.py:271-348; scripts/apa_ab1_interop.py:22-60; EB3/4 launch validation, packed append, ticket lifetimes and mixed V sites above. | The **lead** dispatches a fresh-context, separate verifier against the original orders, proposed patch and frozen acceptance (never the author's transcript). Find-don't-fix review covers device/stream lifetime races, ABI bounds/alignment/overflow, append/cache identity and stale prefixes, tie/refine/denominator invariants, and byte/quality claim boundaries. Receipt lists concrete attacks, observed checks and residuals. The author does not select or run this verifier. This survey dispatches none. |
+
+Full receipt paths in the table: `artifacts/apa_eb3/lead_gate/LEAD_NOTES.md`, `artifacts/apa_eb4/lead_gate/LEAD_NOTES.md`, `artifacts/apa_ab1/summary/report_tail.md`; order prefixes are the `orders/` paths named above. Independent lead checks and AB-1 model quality are useful finite evidence, not a substitute for these open requirements. EB4's additional model-quality prerequisite (:49) has AB-1 next-token evidence (artifacts/apa_ab1/summary/report_head.md:19-22,59-62), with AB-1's RED G1/G2 and corpus/scale limits retained (:46-68; report_tail.md:59-65).
+
+### Prior-art annotations for the future code sites (proposals only)
+
+The actual engine is read-only in this order. The following comments are supplied **at named proposed sites in this design** and must accompany any later implementation; the ledger repeats the provenance. No production code comment was edited.
+
+- At a successor to `eb3::counters` / `eb4::counters`: `// Prior art: NVIDIA CUDA Samples threadFenceReduction and CUDA stream-ordered lifetime APIs (NVIDIA; cudaMallocAsync, 2021), inherited last-writer fencing/tickets and stream ordering. This change scopes ownership by device/stream; it does not alter the reduction.` Literature metadata unverified — lead to check: “CUDA Samples threadFenceReduction”, “CUDA 11.2 stream ordered memory allocator 2021”.
+- At the future early-counter test hook: `// Prior art: DeMillo, Lipton and Sayward (1978) mutation testing; standard happens-before synchronization from CUDA. Taken: negative-control mutation and explicit ordering. Ours: the two-CTA poisoned-partial completion handshake. No prior art known to me for this exact fixture.` Unverified — lead to check: “mutation testing 1978”, “CUDA memory fence atomic release acquire”.
+- At the exact-tie test copied from the lead fixture: `// Prior art: EB4 lead_check.py (Project-Tensor, 2026); Batcher (1968) sorting network and stable score/index total order inherited via EB2b. Taken: existing blocks-5/20 fixture and lower-index tie order; no new selection rule.` Unverified — lead to check: “Batcher sorting networks 1968”.
+- At the future review order/receipt: house-rules blind-agent review protocol (HOUSE_RULES mirror:167-210), plus DeMillo et al. (1978) negative controls. No prior art known to me for the exact review packet assembly; no claim of novelty. This is a review protocol, not an engine change.
+
+## S4 — K/V row-stride ABI
+
+### Contiguity/visible-length operand census
+
+**Evidence class: static source.** There is no generic `NDArray.is_contiguous()` gate in EB3/EB4: compact storage is the NDArray invariant, and kernels derive head pitch from visible S. Distinguish an explicit check from an implicit addressing requirement; a stride check cannot catch a stride the type cannot represent.
+
+| Layer / operand | Every relevant enforcement or assumption on the surveyed call chains | Source |
+|---|---|---|
+| Engine tensor representation | NDArray stores Storage, shape, dtype, device, element offset, **no independent strides**. The invariant is compact storage. | H:tensor_cuda/include/tc/core.h:70-91; P:tensor_cuda/include/tc/core.h:104-125 |
+| Production Python governor | Public wrapper forwards q/k/kq/v as-is; no stride arguments; kq preparation returns a dense result. | P:tensor_cuda/tensor_cuda/apa_sp2.py:72-89; P:tensor_cuda/tensor_cuda/quant.py:111-132 |
+| Production DLPack boundary | Explicitly rejects non-C-contiguous nonempty inputs (size-1 dimensions may have arbitrary stride). Importing `cache[:,:,:S]` from a larger multi-head cache will fail here; importing the **whole capacity tensor** is possible without changing DLPack. | P:tensor_cuda/src/bindings.cpp:1175-1190 |
+| Production SP bindings | Direct-delta and epsilon bindings pass `.data()` NDArrays only; no pitch/visible-length override. | P:tensor_cuda/src/bindings.cpp:2334-2350,2357-2371 |
+| Production SP host | Rank four; identical K/kq shape; V shares B/KVH/S; derives **S=k.shape[2]**, and selected shape uses S. | P:tensor_cuda/src/kernels.cu:8426-8455 |
+| Production decode kernels | Both K and kq address `(kvbh*S+j)*D`; V addresses `(kvbh*S+j)*VD`; S is both visible count and head-row pitch. Merge only reads partials, so no K/V pitch there. | P:tensor_cuda/src/apa_sp1_1.cuh:15-17,42-48,78-83,97-102,163-172 |
+| Production nondecode / diagnostics | Serial SP has the same K/kq/V offsets; SP2 score diagnostics use `kvbh*S*D`, so any future generalized production stride API must either forward strides there or keep those diagnostics explicitly compact-only. | P:tensor_cuda/src/kernels.cu:8355-8392; P:tensor_cuda/src/apa_sp2.cuh:27-39 |
+| Lab Python wrappers | EB3, EB4 and packed-r2/tc wrappers require workspace.valid_rows == **k.shape[2]**, making a capacity-shaped K appear fully visible. Append also takes S from shape and advances valid_rows to S. | H:tensor_cuda/tensor_cuda/__init__.py:1330-1343,1345-1367,1392-1399,1410-1417 |
+| Lab bindings | `packed_prepare/append/run`, `eb3_run`, `eb4_run` forward Tensor `.data()`; they carry no K/V pitch or distinct visible S. These are ABI omissions, not explicit contiguity checks. | H:tensor_cuda/src/bindings.cpp:1001-1012,1034-1057 |
+| Lab packed append source K | `apa_spq1_prepare` derives S/N from K shape, `spq1::prepare` uses source `((row/N)*S+j)*D`; buffer checks compare code capacity to K.shape[2]. Destination packed capacity is already independent. | H:tensor_cuda/src/apa_spo/packed_launcher.cuh:8-12,24-41; H:tensor_cuda/src/apa_spo/packed.cuh:30-40 |
+| EB3 host | Rank4 bf16 q/k/v, L=1, D=VD=128, common B/KVH and **V.shape[2]==S=k.shape[2]**. | H:tensor_cuda/src/apa_spo/eb3.cuh:745-759 |
+| EB3 K/V loads and prefetch | `bulk_swap` V prefetch `bh*S`; `select_pv` V base and prefetch `bh*S`; optional K prefetch and exact K gather `bh*S`; PV fetch advances from that base. Optional rotation prefetch sees one flat V range. | H:tensor_cuda/src/apa_spo/eb3.cuh:241-243,334-337,363-386,425-429,799-806 |
+| EB4 host | EB3 constraints plus vi.dtype=uint8, **vi.shape==v.shape**, vs.fp32 **[B,KVH,S]**, visible S≤65536. | H:tensor_cuda/src/apa_spo/eb4.cuh:674-690 |
+| EB4 K/V/vi/vs reads and prefetch | `prefetch_v` row=bh*S, bulk V/vi/vs prefetch bh*S, exact K `bh*S`, PV shared offset token=bh*S+... for both V and vi, vs indexed by that token. | H:tensor_cuda/src/apa_spo/eb4.cuh:61-68,115-120,411,450-466 |
+| Variant-B predecessor (AB-1 alternative) | `apa_spq6_tq4_tc` derives S from K and matches V S. `spq4::select_pv` uses compact V base, exact K gather and shared EB2b mixed loader; the latter also uses bh*S for V/vi/vs. | H:tensor_cuda/src/apa_spo/spq6.cuh:195-209; H:tensor_cuda/src/apa_spo/spq4.cuh:168-170,232,282-302; H:tensor_cuda/src/apa_spo/eb2b_values.cuh:39-48 |
+| Other explicit lab predecessor entries | Dense D1/packed r2 launcher has same K/kq/V shape guards. Ordered/head-parallel/tensor predecessor kernels hard-code compact head bases; they need forwarding if that optional route is given the new ABI. Standalone EB2b also requires vi/V same shape and [B,KVH,S] scales. | H:tensor_cuda/src/apa_spo/launcher.cuh:19-44,77-142; d1.cuh:145,179; parallel.cuh:43-104; tensor.cuh:47-110; eb2b.cuh:124-136 (all under tensor_cuda/src/apa_spo/) |
+| AB-1 cache/harness (decode) | K/V are allocated at capacity, then `.slice(2,0,nk)` materializes each prefix. Workspace.append consumes copied K. tk8 similarly slices fp32 int8 carrier + scales then aliases the sliced carrier to uint8. | H:scripts/apa_ab1_arms.py:274-305,316-320 |
+| Materialization primitive | Tensor.slice → ops::slice → slice_nd allocates a new visible-shaped NDArray and dispatches dimcopy using contiguous source/destination strides. This is a **copy**, not a view, even when source was already capacity-allocated. | H:tensor_cuda/src/bindings.cpp:275; H:tensor_cuda/src/ops.cpp:280-287; H:tensor_cuda/src/kernels.cu:4744-4756 |
+| AB-1 staging/interop | to_tc fills a shape-specific compact staging tensor. CAI holder emits strides=None and tview uses the engine's full shape. The tk8 fp32 carrier prevents bf16 NaN canonicalization while copying arbitrary int8 bits. | H:scripts/apa_ab1_arms.py:93-104,279-285; H:scripts/apa_ab1_interop.py:22-48,58-60 |
+| AB-1 prefill | Python K1 explicitly requires q/k/kq/v contiguous and matching KV shapes; `_k1` hard-codes bh*S for K/kq/V. SPLayer copies prefixes **before** taking the L>1 branch. | H:apa_triton/k1.py:61-66,123-136; H:scripts/apa_ab1_arms.py:304-315 |
+| Separate AOT K1 wrapper (not AB-1 call) | Rank/dtype/device/positive shape checks, no stride vector; explicit compact-shape check; K=kq and V S guard; L>1 only. Every pointer 16-byte aligned, innermost stride 1, outer strides divisible by16 and recomputed from shape. Thus AOT kernel stride arguments do not make its current C++ API support arbitrary capacity views. | H:tensor_cuda/src/apa_spo/k1_launcher.cpp:95-120,136-163 |
+| Comparator cache copy (context only) | Two-pass arm slices K/V and kq similarly; FLASH/STD instead use torch prefix **views** with capacity pitch. Fixing packed SP does not silently fix the two-pass comparator. | H:scripts/apa_ab1_arms.py:241-256,153-164 |
+
+The inherited raw SP code in this worktree follows S1's compact ABI too; the new companion entries are additive (engine_diff.patch, append-only inherited-source hunks). This census includes all explicit K/V contiguity checks in the active SP/tk8 harness plus the production import boundary, and separately identifies predecessor/pre-fill checks so decode support is not confused with whole-engine strided support.
+
+### Existing precedent
+
+Packed codes already accept **capacity ≥ visible S** and address `bh*capacity+j`, whereas K/V use `bh*S+j`. Token vectors remain compact in both formats. Code token/head-row pitches are D/2 / C*D/2 bytes; norms 4 / C*4 bytes. Evidence: tensor_cuda/src/apa_spo/packed_launcher.cuh:8-12; tensor_cuda/src/apa_spo/eb3.cuh:264-275; tensor_cuda/src/apa_spo/eb4.cuh:139-152. This is the model for the new ABI, without requiring arbitrary global NDArray stride support or changing production DLPack's contiguous-only contract.
+
+### Minimal proposed ABI (reasoning; no implementation)
+
+1. **Separate visibility from backing storage.** Add optional `visible_length` and **64-bit element pitches** `k_row_stride`, `v_row_stride`, plus `vi_row_stride` and `vs_row_stride` for tk8. Here a “row” is a flattened `(batch,KV head)` cache row, not a single token: `bh=b*KVH+kvh`, address `K[bh*k_row_stride+j*D+d]`, `V[bh*v_row_stride+j*VD+d]`, `VI[bh*vi_row_stride+j*VD+d]`, `VS[bh*vs_row_stride+j]`. Tensor storage is compact capacity-shaped `[B,KVH,C,D]` / `[B,KVH,C]`; its head pitch is C*D / C. Default S=K.shape[2] and compact pitches reproduce old calls. Support a compact capacity tensor first; do not reinterpret a metadata-only visible-shaped NDArray as if it had a larger legal storage extent. Bindings forward explicit S/pitches through `include/tc/ops.h` and EB3/4 host functions (existing sites: bindings.cpp:1034-1057; ops.h:331-340; eb3.cuh:737-768; eb4.cuh:664-694).
+2. **Validate once on host.** Require 0<S≤each storage capacity, same B/KVH/device, correct dtypes, inner dimension contiguous and D=VD=128 for these EB entries, and workspace.valid_rows==S. Derive/check pitches against the capacity shape and storage extent; use checked 64-bit byte arithmetic including offset, final vector width and last head so oversized values cannot overflow into an in-bounds-looking pointer. Keep S≤65536 for EB4, and preserve group restrictions. Select masks, NB=ceil(S/64), NC=ceil(S/256), row carry, scratch and every launch bound use **S**, never capacity. Code capacity remains independently validated. Sites to replace are the host shape/equality checks in the census, not generic Tensor/DLPack ownership code.
+3. **Change actual K/V addresses and every prefetch.** EB3 `select_pv` needs K and V pitches; `bulk_swap` needs V pitch for cross-kernel prefetch, and optional rotation V prefetch must iterate per-head visible ranges rather than a flat B*KVH*S range. Update optional KPF addresses too. EB4 `select_mixed`, `bulk_stats` prefetch and `prefetch_v` need V/VI/VS pitches; exact K gets its own pitch. Separate `voff`, `vioff`, `vsoff` instead of reusing one compact `tok/off`. No pitch enters merge arithmetic, query rotation math, bulk packed loads, score/flag layouts or reduction ordering. The existing kernel signatures/addresses are cited in the census. Variant-B cross-check needs matching host forwarding and pitches in `spq4::select_pv`; shared `eb2b::fetch_value8` needs the same independent V/VI/VS address split if exposed. Compact-only predecessor entries may retain their old contracts; do not route capacity arguments into them accidentally.
+4. **Pack only new K rows in place.** Extend `ApaSpq1Workspace.append`/`packed_prepare`/`apa_spq1_prepare` and `spq1::prepare` with S, input head pitch and start=old valid_rows. Read `bh*k_row_stride+j*D`, j∈[oldS,S), keeping exactly the existing per-key norm and rotation operation sequence. `pack_tq` already has independent destination capacity and start; it can remain unchanged. Atomically at the host state level advance valid_rows only after successful enqueue on the same stream used by the consumer. Sites: __init__.py:1330-1343; bindings.cpp:1001-1003; packed_launcher.cuh:24-43; packed.cuh:15-40. Merely adding decode pitches and leaving `append(kp)` would retain the K prefix copy.
+5. **Change SPLayer, not the model's source tensors.** Keep capacity allocations and torch in-place writes at scripts/apa_ab1_arms.py:274-301. For L=1, pass `self.Kt/self.Vt` directly with visible nk and their capacity pitches; call pitched workspace append; pass whole uint8 alias of `self.VIt` plus capacity-shaped `self.VSt` for tk8. Remove the per-step `.slice` uses at :304 and :317-319 from this branch. Keep quantizing **new** V rows at :300-301 (unchanged standalone quantizer), then copying those new code/scale rows to cache; do not re-quantize the prefix. Query staging at :320 is independent. Preserve cache owner references and the stream-order agreement in interop.py:3-6,22-48. The fp32 carrier can remain as a backing allocation; a full-capacity uint8 alias avoids all prefix-carrier copies and never converts int8 bytes via bf16.
+6. **Prefill boundary.** For the smallest decode-only change, move the existing prefix copies inside L>1 and leave K1/reconstruction behavior unchanged. That removes all growing-cache prefix copies **per decode step**, with one-time/chunked prefill copies still present. If the implementation order instead demands zero prefix copy across prefill too, extend Python K1 with separate K/KQ/V pitches and visible S, relax its all-tensors-is_contiguous check only for the validated capacity-backed layout, and change `_k1` loads at apa_triton/k1.py:61-66. KQ reconstruction remains a temporary dense visible tensor and can keep its own compact pitch. AOT K1 is a separate optional integration; its wrapper currently fabricates contiguous strides (:147-159), although the AOT arguments already include strides. Do not bundle its redesign into the packed decode minimum.
+7. **Optional production raw SP extension.** The packed port can leave the old dense SP APIs compact-only. A general pitched production SP API additionally needs a **kq pitch** (not just K and V): forward S/pitches through the two bindings and epsilon host forwarder, update `apa_selective_sp_splitk_dispatch/kernel` (and serial SP/diagnostics if those APIs expose pitches), retain the merge unchanged. Sources are S1 and the production rows in the census. This is additive ABI scope, not a packed-cache requirement.
+
+**Alignment/vector constraints.** Preserve 16-byte-aligned K/V base pointers and head pitches divisible by 8 bf16 elements for the exact-K/PV uint4 loads; query uint2 loads need 8-byte alignment. TQ4 code bases/head pitches must remain 16-byte aligned for uint4 packed loads (D128 token pitch 64 bytes automatically satisfies this for integer capacities). Int8 `value8` uses an 8-byte uint2 read and bf16 conversion, so require vi base/head pitch multiple of8 bytes; scale base/head offset aligned to4 bytes. Token D=VD=128 makes K/V token pitch256 bytes and VI pitch128, so **capacity need not be a multiple of64/256**; visible tail masking stays necessary. Sources: eb3.cuh:256,272-275,374-388,424-435; eb4.cuh:149-152,399-411,450-466; eb2b_values.cuh:12-24. Explicitly validate these assumptions at the new boundary because vector reinterpret_casts themselves are not alignment checks. Reject unsupported layout/alignment with a clear error, before launching.
+
+**Bitwise-preservation boundary (reasoning, not a new result).** On identical finite cached K/V and the same code/norm bytes, S, δ, fraction, carry, sinks and flags, the pitch changes only integer addresses. Preserve per-row pack arithmetic, all three hi/lo MMAs, exact-K union, P rounding, FP32 reduction chains and ascending-chunk merge order. Then the mathematical instruction/operand sequence within the **same EB3/EB4 arm** is unchanged; suffix/padding must not participate in statistics or softmax. Fused merge's arrival CTA may differ, but its reduction order is fixed (eb3.cuh:464-477). Preserve launch/tile configuration and verify emitted behavior in a later order, since source reasoning alone does not establish compiler-level bitwise identity. This is not a claim that packed SP is bitwise equal to production SP1.1, which uses different bulk math and partition-local carry. Future verification should compare compact vs capacity-backed output, packed bytes, masks/flags and append histories on identical captured rows, with poisoned unused suffixes and lengths crossing64/256 boundaries; no such run occurs here.
+
+### Prior art and future code-site comment
+
+At the proposed pitched-cache descriptor / SPLayer change:
+
+```cpp
+// Prior art: matrix BLAS leading dimensions (Dongarra et al., 1988/1990; LAPACK, 1992),
+// and capacity-backed KV caches in vLLM PagedAttention (Kwon et al., 2023).
+// Taken: separate logical length from physical address pitch and append in place.
+// Local predecessor: Project-Tensor SPQ1 capacity-strided packed codes (2026).
+// Ours: explicit K/V/VI/scale head-row pitches in this existing APA decode ABI.
+// No paging, eviction, sparse selection or new precision rule is introduced.
+```
+
+Unverified — lead to check: “Level 2 BLAS Dongarra 1988 leading dimension”, “Level 3 BLAS 1990”, “LAPACK Users Guide 1992 leading dimension”, “vLLM PagedAttention Kwon 2023”. The design uses a simple contiguous capacity cache; PagedAttention is a precedent for logical/physical separation, not a claim of reproducing its block-table algorithm. Existing arithmetic prior art is TurboQuant (Zandieh et al., 2025), split BF16 (Henry et al., 2019, inherited SPQ6), Flash-Decoding (2023), BLASST (2025), and KIVI (2024)/ThriftAttention (2026) for mixed V (source annotations: packed.cuh:1-6; spq6.cuh:1-33; eb3.cuh:35-62; eb4.cuh:29-47). All are inherited, not proposed novel algorithms.
+
+## S5 — production port
+
+### Read-only merge dry run
+
+Commands and exact results are recorded in git_evidence.json, engine_diff.patch, branch_delta.patch and merge_tree_engine.txt. Production source was read only with `git show 0e1dea3:<path>`; no production engine working files were opened. HEAD is `9de6b98998be6432bf933b314026a32569ef427c` (`apa-2p`), production resolves to `0e1dea3c` (full hash in git_evidence.json). Common ancestor **fd32b6dc5f637b93c401dec5efbf5c484488228f** was obtained by intersecting the ancestor lists from `git log --format=%H 0e1dea3` and `git log --format=%H HEAD` (both saved in scratch; ancestor subject recorded below).
+
+```text
+git merge-tree --trivial-merge fd32b6dc5f637b93c401dec5efbf5c484488228f 0e1dea3 HEAD
+exit: 0
+engine records: 24
+  19 added in remote (the lab's new files)
+   2 merged (CMakeLists.txt, include/tc/ops.h)
+   3 changed in both (listed below)
+engine conflict markers: 0
+repeat verification: identical engine output
+```
+
+This is legacy **three-tree** inspection, not `merge-tree --write-tree` or a merge/checkout. Legacy merge-tree has no pathspec, so the command reads the full trees; the saved engine receipt selects records whose **metadata path** begins `tensor_cuda/`. Nonengine conflicts are outside this engine-only finding. The first postprocessor encountered non-UTF8 text in a nonengine payload; the raw bytes were preserved, then parsed with replacement decoding outside engine, and the exact engine output/exit were independently re-read. The frozen registration was not changed (LEDGER.md and AMENDMENT_001.md).
+
+**Conflict list: empty for the engine.** “Changed in both” is not itself a conflict; the emitted diffs contain clean added lab tails and no conflict delimiters:
+
+| File | Dry-run output / cause | Port implication |
+|---|---|---|
+| tensor_cuda/src/bindings.cpp | `changed in both`, clean append starting `@@ -2735,3 +2735,132 @@`; production added P1-T DLPack/import/export/lifetime machinery earlier in the file, lab appended companion `_tensor_cuda_spo2` plus optional K1 wrapper. Receipt merge_tree_engine.txt:4260 onward. | Append selected bindings to production; do not replace this file with the lab version. Production DLPack stays authoritative. |
+| tensor_cuda/src/kernels.cu | `changed in both`, clean append `@@ -8659,3 +8659,10 @@`; lab adds only namespace/includes after production's existing bodies. Receipt :4397 onward. | Keep production's numerical fixes and core/DLPack support; add packed include wiring. |
+| tensor_cuda/tensor_cuda/__init__.py | `changed in both`, clean append `@@ -1535,3 +1535,145 @@`; lab loader/workspace/wrappers follow the existing SP2 exports, while production independently extended earlier APIs. Receipt :4412 onward. | Keep production exports and append the selected opt-in wrappers. |
+| tensor_cuda/CMakeLists.txt; tensor_cuda/include/tc/ops.h | `merged` (clean); lab CMake tail is K1 AOT wiring, and ops tail adds declarations. Receipt :1-107. | Do not import the AOT tail merely to get EB3/EB4; add deliberate feature definitions and declarations only. |
+
+The apparent deleted DLPack header/core additions and missing production APA test/fix files in `git diff 0e1dea3 HEAD` are **ancestry differences**, not modify/delete merge conflicts: this lab did not modify those paths after the common ancestor. Appendix A classifies all 47 paths using `git diff fd32b6dc5f637b93c401dec5efbf5c484488228f HEAD -- tensor_cuda/`. Production P1-T lineage is visible in `git log -3 --format='%H %s' 0e1dea3 -- tensor_cuda/include/tc/core.h tensor_cuda/src/bindings.cpp` (latest e4cf1d69, 6991939b, 429446dc). Storage external_release/ownership/device-drain fields are P:tensor_cuda/include/tc/core.h:63-103; compact import rejection is P:tensor_cuda/src/bindings.cpp:1175-1190. Production APA numerical fixes are also absent from the fork: `git log -3 ... 0e1dea3 -- tensor_cuda/tensor_cuda/quant.py tensor_cuda/tensor_cuda/functional.py tensor_cuda/tests/test_apa_phase6.py` returns bcd6d072, 70454229, e47ef4b7 (blocked-row/large-S/scale-stable definition statistics). Those are retained, not rolled back.
+
+### Smallest port, in order (proposal; static dependency assessment, not a build result)
+
+1. **Start from production 0e1dea3 and select additive hunks.** Keep `include/dlpack/dlpack.h`, `include/tc/core.h`, all production tests and the production quant.py/functional.py fixes. Do not apply the 47-path main→HEAD diff as a patch. The task is an explicit new packed decode entry, not redirecting the calibrated SP2 API or changing its epsilon contract. Basis: production and lab entry census S1/S2 and Appendix A.
+2. **Carry the existing non-refactoring CUDA dependency closure.** Copy these **16 headers** under `tensor_cuda/src/apa_spo/`: `d1.cuh`, `parallel.cuh`, `tensor.cuh`, `packed.cuh`, `launcher.cuh`, `baseline_dump.cuh`, `merge.cuh`, `packed_launcher.cuh`, `spq4.cuh`, `spq6.cuh`, `eb2b_values.cuh`, `eb2b.cuh`, `eb3_tuning.cuh`, `eb3.cuh`, `eb4_tuning.cuh`, `eb4.cuh`. This carries the inherited r2/variant-B references required by the current dispatchers without refactoring arithmetic. Include graph: d1.cuh:200-208; launcher.cuh:2-3,158; packed_launcher.cuh:71; spq4.cuh:41-42,420-436; eb3.cuh:64; eb4.cuh:48. `sink_mutant.cuh` is orphaned in the normal include closure, and `profile_interposer.cpp` is a diagnostic interposer; neither is necessary (source search for includes in that directory; sink_mutant.cuh:5; profile_interposer.cpp:4-9). A later leaf-kernel extraction might copy fewer lines but would be a new refactoring/validation task, not this minimum-risk source port.
+3. **Add only four integration seams plus deliberate build options.** In `src/kernels.cu`, add guarded D1/launcher includes as the lab tail does (:8191-8197). In `include/tc/ops.h`, add the needed declarations from :302-342. In `src/bindings.cpp`, add the companion initializer and packed/EB bindings from :986-1064 (or register those selected entries directly on the existing module, with corresponding wrapper changes). In `tensor_cuda/__init__.py`, add the loader, workspace and EB wrappers from :1290-1422. In `CMakeLists.txt`, add an explicit default-off packed feature and **consistent** `TC_APA_EB2B`, `TC_APA_EB3`, `TC_APA_EB4` definitions to C++ and CUDA for the paired arms/quantizer. Existing include guards show why all three are required (spq4.cuh:41-42,422-436; bindings.cpp:1016-1059); AB-1's build receipt confirms all three defines (artifacts/apa_ab1/g0/build.json:5). Preserve production's primary module initializer and output location. Do **not** copy lab CMake :71-113, K1 `k1_launcher.cpp`, bindings :1067-1113 initializer wrapping/renaming, or Python's K1 export for a decode-only port. Those AOT changes require external generator/Triton files and are not called by AB-1 decode. This gives 16 new source headers and five existing integration files, before hardening/tests.
+4. **Clear the S3 promotion requirements under separate implementation/verification orders.** First device/stream ownership and lifetimes (including per-device L2 metadata), then deterministic early-counter and existing exact-tie fixture integration. The lead arranges the blind review. Keep registered TQ4, variant-B bulk, δ, row carry, stable tk8 ranking and all-key denominator unchanged. Compile-time mutants remain test-only; feature defaults remain explicit. This order does none of those actions.
+5. **Add the S4 capacity ABI as a separate small patch after numerical port identity.** Files: `ops.h`, `bindings.cpp`, Python `__init__.py`, `apa_spo/packed.cuh`, `packed_launcher.cuh`, `eb3.cuh`, `eb4.cuh`; plus `spq4.cuh`/`eb2b_values.cuh` if the variant-B/mixed predecessor is exposed with pitches. The packer source pitch is essential. Update `scripts/apa_ab1_arms.py` SPLayer's L=1 call/append path and its full-capacity int8 alias; keep `apa_ab1_interop.py` owner/shape metadata correct. Keep Python K1 prefill compact for the smallest port, or give it a separate explicit pitched-prefill order. Fixing packed decode does not change the two-pass arm. In a production harness, native DLPack may replace the lab-only CAI adapter, but that is an explicit interop integration choice subject to P1-T's ownership/stream contract, not a license to copy the lab core backwards.
+6. **Only then collect new verification receipts before any promotion decision.** Future orders need compact-vs-capacity bitwise comparisons of output/masks/flags/code/scale and append histories on identical captures, the S3 negative controls, real model quality within the stated Qwen models, allocation arithmetic and a measured per-step copy census. AB-1's own report has RED G1/G2 and no blind review; it cannot certify a new production port (report_head.md:46-68; report_tail.md:59-65,101-102). No performance gain, production acceptance, or newly passing test is claimed by this static survey.
+
+**Prior art for the port:** existing Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026) supply the full packed algorithm and integration pattern; Git (2005) three-way merge supplies the static dry run. This proposal takes additive integration and preserves those mechanisms; it introduces no selection algorithm. Use S3/S4's code-site comments, ledger annotations and literature leads on the corresponding future changes. No prior art known to me for this exact hunk-selection/port assembly; no novelty claimed.
+
+## Appendix A — complete engine path census
+
+Authority commands: `git diff --name-status 0e1dea3 HEAD -- tensor_cuda/` and `git diff --name-status fd32b6dc5f637b93c401dec5efbf5c484488228f HEAD -- tensor_cuda/`. Their path/status results are in git_evidence.json and survey.json. A/D/M are the direction **production → lab**, not proposed port actions.
+
+| Path | Main→lab status | Changed on lab since common base? | Port disposition |
+|---|---|---|---|
+| tensor_cuda/CMakeLists.txt | M | yes | select required added code / integration hunks |
+| tensor_cuda/include/dlpack/dlpack.h | D | no | retain production; no lab rollback |
+| tensor_cuda/include/tc/core.h | M | no | retain production; no lab rollback |
+| tensor_cuda/include/tc/ops.h | M | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/baseline_dump.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/d1.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb2b.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb2b_values.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb3.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb3_tuning.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb4.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/eb4_tuning.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/k1_launcher.cpp | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/launcher.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/merge.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/packed.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/packed_launcher.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/parallel.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/profile_interposer.cpp | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/sink_mutant.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/spq4.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/spq6.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/apa_spo/tensor.cuh | A | yes | select required added code / integration hunks |
+| tensor_cuda/src/bindings.cpp | M | yes | select required added code / integration hunks |
+| tensor_cuda/src/kernels.cu | M | yes | select required added code / integration hunks |
+| tensor_cuda/tensor_cuda/__init__.py | M | yes | select required added code / integration hunks |
+| tensor_cuda/tensor_cuda/functional.py | M | no | retain production; no lab rollback |
+| tensor_cuda/tensor_cuda/quant.py | M | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_ld1_pdwl.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_ld2_pdwl.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf1_quant.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_1_definition.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_1_gaps.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_1_sentinel.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_1_short.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2_n1.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2_n2.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2a_blocked.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2b_blocked.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2c_longkeys.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_2c_nits.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_mask.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_mf2_rule.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_om135_imm.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_phase6.py | M | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_apa_pidv.py | D | no | retain production; no lab rollback |
+| tensor_cuda/tests/test_dlpack.py | D | no | retain production; no lab rollback |
+
+## Appendix B — G2 exact allocation receipt census
+
+Static reads of existing receipts, not a rerun. All **23 existing records** satisfy `measured == arithmetic == capacity * bytes/token` as exact integers. This does not invent absent records. 4B STD has no recorded 16K allocation; 4B 2P-TQ16's recorded high point is 12K. Separate NVML slope failures stay RED (artifacts/apa_ab1/summary/report_head.md:63-68).
+
+| Model | Arm | Bulk stored / computed | B/token | Recorded capacity: measured (= arithmetic) B | Source |
+|---|---|---|---:|---|---|
+| Qwen3-1.7B | FLASH | none; exact bf16 K / no APA bulk | 114688 | 4096: 469762048; 16384: 1879048192 | artifacts/apa_ab1/g2/result.json:5-16 |
+| Qwen3-4B | FLASH | none; exact bf16 K / no APA bulk | 147456 | 4096: 603979776; 16384: 2415919104 | artifacts/apa_ab1/g2/result.json:187-198 |
+| Qwen3-1.7B | STD | none; exact bf16 K / no APA bulk | 114688 | 4096: 469762048; 16384: 1879048192 | artifacts/apa_ab1/g2/result.json:35-46 |
+| Qwen3-4B | STD | none; exact bf16 K / no APA bulk | 147456 | 4096: 603979776 | artifacts/apa_ab1/g2/result.json:217-228 |
+| Qwen3-1.7B | 2P-TQ16 | TQ4 reconstructed to dense bf16 kq / bf16 operands, fp32 accumulation | 169984 | 4096: 696254464; 16384: 2785017856 | artifacts/apa_ab1/g2/result.json:65-76 |
+| Qwen3-4B | 2P-TQ16 | TQ4 reconstructed to dense bf16 kq / bf16 operands, fp32 accumulation | 219136 | 4096: 897581056; 12288: 2692743168 | artifacts/apa_ab1/g2/result.json:235-246 |
+| Qwen3-1.7B | 2P-INT4 | INT4 symmetric-7 packed codes + fp32 scale / unpack/dequantize to fp32 in scalar dot, fp32 accumulation | 129376 | 4096: 529924096; 16384: 2119696384 | artifacts/apa_ab1/g2/result.json:95-106 |
+| Qwen3-4B | 2P-INT4 | INT4 symmetric-7 packed codes + fp32 scale / unpack/dequantize to fp32 in scalar dot, fp32 accumulation | 166496 | 4096: 681967616; 16384: 2727870464 | artifacts/apa_ab1/g2/result.json:265-276 |
+| Qwen3-1.7B | SP | TQ4 packed codes + fp32 norm, 4.25 bits/element at D128 / bf16 hi/lo tensor-core products, fp32 accumulation (variant B) | 129376 | 4096: 529924096; 16384: 2119696384 | artifacts/apa_ab1/g2/result.json:125-136 |
+| Qwen3-4B | SP | TQ4 packed codes + fp32 norm, 4.25 bits/element at D128 / bf16 hi/lo tensor-core products, fp32 accumulation (variant B) | 166496 | 4096: 681967616; 16384: 2727870464 | artifacts/apa_ab1/g2/result.json:295-306 |
+| Qwen3-1.7B | SP-tk8 | TQ4 packed codes + fp32 norm, 4.25 bits/element at D128 / bf16 hi/lo tensor-core products, fp32 accumulation (variant B) | 157888 | 4096: 646709248; 16384: 2586836992 | artifacts/apa_ab1/g2/result.json:155-166 |
+| Qwen3-4B | SP-tk8 | TQ4 packed codes + fp32 norm, 4.25 bits/element at D128 / bf16 hi/lo tensor-core products, fp32 accumulation (variant B) | 203456 | 4096: 833355776; 16384: 3333423104 | artifacts/apa_ab1/g2/result.json:325-336 |
+
+## Prior art
+
+S3/S4 include comments for named future code sites, repeated in LEDGER.md. This read-only survey changes no code site. Taken: NVIDIA threadFenceReduction and stream-ordered lifetime management (2021 lead), DeMillo/Lipton/Sayward mutation testing (1978), Batcher stable sorting lineage (1968) and the existing EB4 exact-tie fixture (2026), BLAS/LAPACK leading dimensions (1988/1990/1992), logical/physical cache separation from vLLM PagedAttention (Kwon et al., 2023), and the existing packed-code capacity ABI (2026). Existing TQ4, split-bf16, Flash-Decoding, BLASST and mixed-V algorithms remain inherited and attributed at source sites listed in S2/S4. External metadata is **unverified — lead to check**, with search leads beside each proposal. No prior art known to me for the exact two-CTA fixture, review packet or hunk-selection assembly; no novelty claimed.
+
+## Scope and leave-and-list
+
+Static CPU source/receipt survey only. No build, test run, CUDA import, GPU query/use, engine/harness edit, git write, file move, deletion, external communication, or subagent. Production code was obtained only with git show at 0e1dea3. CUDA_VISIBLE_DEVICES is explicitly empty on all survey/worktree shell commands; initial rule/memory text reads are clarified in AMENDMENT_001.md. The original order and REGISTRATION.md are unchanged. Relevant memory supplied only the preference to verify current source and preserve evidence classes; no old measurement is used as current evidence.
+
+Every written artifact and retained scratch file is listed in FILES_WRITTEN.md. Nothing was moved to DELETE_ME; no cleanup is performed. Final tracked diff and scope receipts are verification.json and final_tracked.diff. Acceptance is for this survey only; the four promotion items remain open, and no production port or memory/speed gain is certified.

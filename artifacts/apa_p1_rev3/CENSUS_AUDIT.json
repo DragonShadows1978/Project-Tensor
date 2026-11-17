@@ -1,0 +1,393 @@
+{
+  "TQ4_CENSUS": {
+    "rows_recounted": 10,
+    "source_map_checked": 16,
+    "source_map_mismatches": [],
+    "assessment": [
+      {
+        "site": "tensor_cuda/src/apa_spo/packed.cuh:101",
+        "kernel": "spq1::prepare<T>",
+        "role": "OWNS the TQ4 key quantization of the packed route: per key row norm (sequential add/mul, sqrt_rn), unit = k/(norm+1e-12), rotated coordinates; writes norms[row]",
+        "reached_by": "ApaSpq1Workspace.append (tq4) -> _spo2.packed_prepare; PackedSpKeys (public default route) owns an ApaSpq1Workspace(fmt=\"tq4\"); raw _spo2.packed_prepare",
+        "r2_fix": "YES: a row with any non-finite element stores a quiet NaN norm; the shared norm used for the unit vector is unchanged, so rotated outputs are bit-identical; finite rows unchanged",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/packed.cuh:15",
+        "kernel": "spq1::pack_tq",
+        "role": "OWNS the code assignment (15 boundaries, NaN > bnd is false -> code 0) and copies the norm unchanged: scales[dst]=norms[key]; no norm of its own",
+        "reached_by": "ApaSpq1Workspace.append (tq4) -> _spo2.packed_append(tq=True); raw _spo2.packed_append",
+        "r2_fix": "NO CHANGE NEEDED: it stores prepare's norm verbatim, so the NaN carried by prepare reaches scales[]. A norm made non-finite elsewhere (caller-supplied norms on the raw helper) is stored as given (caller contract)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/packed.cuh:36",
+        "kernel": "spq1::pack_int4_rows<T>",
+        "role": "INT4 (not TQ4) key quantizer; F1 already stores a NaN scale for a row with any non-finite element",
+        "r2_fix": "out of R2 (INT4); unchanged",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/eb3.cuh:911",
+        "kernel": "EB3 (rotate_q, bulk_copy, bulk_swap, spq6::bulk_mma_tq)",
+        "role": "READS caller codes + norms (packed tuple from ApaSpq1Workspace); rotates only the query; owns no key quantizer",
+        "r2_fix": "none (reader)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/spq6.cuh:189",
+        "kernel": "SPQ6 tc tq4 (spq6::bulk_mma_tq)",
+        "role": "READS caller codes + norms; rotates the query via apa_spq1_rotate; owns no key quantizer",
+        "r2_fix": "none (reader)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/spq4.cuh:455",
+        "kernel": "SPQ4 dispatch (tq4 -> SPQ6 / r2)",
+        "role": "READS caller codes; dispatches; owns no key quantizer",
+        "r2_fix": "none (reader)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:39",
+        "kernel": "host apa_spq1_prepare / apa_spq1_pack / apa_spq1_run",
+        "role": "LAUNCH the two kernels above (prepare_launcher, pack); apa_spq1_run reads codes; no quantizer of their own",
+        "r2_fix": "none (launchers)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/eb4.cuh:680",
+        "kernel": "EB4 (eb4::bulk_stats)",
+        "role": "READS caller codes + norms (not in L99's five-file list; checked because it is a packed entry)",
+        "r2_fix": "none (reader)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/src/apa_spo/eb2b.cuh:146",
+        "kernel": "EB2b",
+        "role": "READS caller codes + norms; eb2b::quantize is the int8 V quantizer, not a key quantizer",
+        "r2_fix": "none (reader)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      },
+      {
+        "site": "tensor_cuda/tensor_cuda/quant.py (_quantize_keys)",
+        "kernel": "Python TurboQuant dense quantizer",
+        "role": "the DENSE route's quantizer (fp32 reconstruction); not owned by any packed entry; read-only here",
+        "r2_fix": "out of scope (dense comparator)",
+        "review": "shared quantizer/reader classification agrees; finite norm overflow exception is P1R3-F02"
+      }
+    ]
+  },
+  "INDEX_CENSUS": {
+    "rows_recounted": 16,
+    "source_map_checked": 16,
+    "source_map_mismatches": [],
+    "assessment": [
+      {
+        "entry": "PackedSpKeys(k, capacity) / quantize_sp2_keys(..., capacity=)",
+        "site": "tensor_cuda/tensor_cuda/apa_packed.py:267",
+        "receives": "capacity -> ApaSpq1Workspace -> codes.shape[2] -> native int capacity/dst_s; B*KV*S -> int prepare grid",
+        "guard": "Python check_native_range before the workspace allocates (ValueError)",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "PackedSpKeys.append",
+        "site": "tensor_cuda/tensor_cuda/apa_packed.py:354",
+        "receives": "B*KV*(new rows) -> int prepare grid",
+        "guard": "Python, before the generation moves",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "ApaSpq1Workspace(k, capacity, fmt) / append",
+        "site": "tensor_cuda/tensor_cuda/__init__.py:1641",
+        "receives": "same as PackedSpKeys",
+        "guard": "Python check_native_range before zeros() and before each native append",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_buffer_check (every packed attention + append entry)",
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:21",
+        "receives": "codes.shape[2] -> int capacity (spq1::bulk/bulk_shared/pack_tq), int dst_s (pack_int4_rows), int capacity (spq4::bulk_mma, spq6::bulk_mma_tq, eb3::bulk_copy/bulk_swap, eb4::bulk_stats); each launcher does `int capacity=(int)codes.shape[2]` or passes codes.shape[2] to an int parameter",
+        "guard": "native ValueError naming capacity, before any allocation or launch",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_rotate (packed_rotate)",
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:28",
+        "receives": "grid q.shape[0]*q.shape[1] (dim3 x, kernel int row); H, KVH, D int",
+        "guard": "per-axis extents 1..INT_MAX and B*H <= INT_MAX (ValueError) before the launch",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_prepare (packed_prepare)",
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:48",
+        "receives": "int B,H,S,D,N from shape; grid B*H*N computed in int; kernel int row",
+        "guard": "per-axis extents 1..INT_MAX before narrowing; B*KV*N <= INT_MAX before allocation",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_pack (packed_append)",
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:62",
+        "receives": "int S,D,BH,N; pack_tq int BH,N,capacity,start and grid (BH*N*D/2+127)/128; pack_int4_rows int src_s,dst_s,row0,nrows and grid (BH*N+3)/4",
+        "guard": "extents of k/codes/scales, capacity (buffer_check), B*KV and the grid block count <= INT_MAX",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_int4_stats (int4_stats)",
+        "site": "tensor_cuda/src/apa_spo/packed_launcher.cuh:109",
+        "receives": "all axes and B*H",
+        "guard": "already complete since F1 (ValueError); unchanged",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_spq1_core_check (spo2 run / packed r2 run)",
+        "site": "tensor_cuda/src/apa_spo/launcher.cuh:143",
+        "receives": "per-axis int (existing RuntimeError, kept), B*H*L (existing), S+2047 in apa_int4_fixed_partition_layout(int) and nc*256 (int pk)",
+        "guard": "new: S + 2047 <= INT_MAX (ValueError); capacity via buffer_check on the packed path",
+        "review": "R3 ValueError/operand contract retained incorrectly on attention extents; otherwise guard verified"
+      },
+      {
+        "entry": "apa_spq4_tc (tc int4)",
+        "site": "tensor_cuda/src/apa_spo/spq4.cuh:380",
+        "receives": "int capacity, (int)S, nc, pk",
+        "guard": "existing B*H <= INT_MAX/4; new S + 2047; capacity via buffer_check",
+        "review": "R3 ValueError/operand contract retained incorrectly on attention extents; otherwise guard verified"
+      },
+      {
+        "entry": "apa_spq6_tq4_tc (tc tq4)",
+        "site": "tensor_cuda/src/apa_spo/spq6.cuh:207",
+        "receives": "int capacity, (int)S, nc, pk",
+        "guard": "existing B*H <= INT_MAX/4; new S + 2047; capacity via buffer_check",
+        "review": "R3 ValueError/operand contract retained incorrectly on attention extents; otherwise guard verified"
+      },
+      {
+        "entry": "apa_eb3_run",
+        "site": "tensor_cuda/src/apa_spo/eb3.cuh:934",
+        "receives": "int capacity, (int)S, nc, pk, rows",
+        "guard": "existing B*H <= INT_MAX/4; new S + 2047; capacity via buffer_check",
+        "review": "R3 ValueError/operand contract retained incorrectly on attention extents; otherwise guard verified"
+      },
+      {
+        "entry": "apa_eb2b_run",
+        "site": "tensor_cuda/src/apa_spo/eb2b.cuh:159",
+        "receives": "int B,H,KVH,S; codes.shape[2] as int capacity",
+        "guard": "existing S <= 65536, B*H <= INT_MAX/4; capacity via buffer_check",
+        "review": "Signed-int multiplication in B*H guard before later rotate guard (P1R3-F03)"
+      },
+      {
+        "entry": "apa_eb4_run",
+        "site": "tensor_cuda/src/apa_spo/eb4.cuh:762",
+        "receives": "int capacity, S <= 65536",
+        "guard": "existing S and B*H bounds; capacity via buffer_check",
+        "review": "R3 ValueError/operand contract retained incorrectly on attention extents; otherwise guard verified"
+      },
+      {
+        "entry": "apa_eb2b_values",
+        "site": "tensor_cuda/src/apa_spo/eb2b.cuh:113",
+        "receives": "int total=numel/8; kernel int i up to total+127",
+        "guard": "new: numel/8+127 <= INT_MAX; positive extents",
+        "review": "checked from source; guard precedes allocation/launch"
+      },
+      {
+        "entry": "apa_eb2b_quantize",
+        "site": "tensor_cuda/src/apa_spo/eb2b.cuh:129",
+        "receives": "rows=numel/128 int",
+        "guard": "existing; positive extents added (R4)",
+        "review": "checked from source; guard precedes allocation/launch"
+      }
+    ]
+  },
+  "HELPER_CENSUS": {
+    "rows_recounted": 15,
+    "source_map_checked": 16,
+    "source_map_mismatches": [],
+    "assessment": [
+      {
+        "name": "_p1_test_run",
+        "kind": "hooks build only (not in Build F2)",
+        "extent_behaviour": "not compiled in the default build",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "_p1_test_merge_tickets",
+        "kind": "hooks build only (not in Build F2)",
+        "extent_behaviour": "not compiled in the default build",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "run",
+        "kind": "attention entry (D1 dense-K route)",
+        "extent_behaviour": "refuses empty extents before any launch (core_check, RuntimeError \"dimensions must be positive and fit int\", F1 R11 dense-entry parity); unchanged",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "packed_prepare",
+        "kind": "RAW HELPER",
+        "extent_behaviour": "F1: B=0/KV=0 reached a zero-grid launch (CUDA invalid configuration, lead repro p1rev2-03). F2: ValueError (positive extents) before the launch",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "packed_rotate",
+        "kind": "RAW HELPER",
+        "extent_behaviour": "F1: B=0/H=0 reached a zero-grid launch (lead repro p1rev2-03). F2: ValueError",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "packed_append",
+        "kind": "RAW HELPER",
+        "extent_behaviour": "F1: zero B/KV with N>0 reached a zero-grid launch (REV2 F05). F2: ValueError",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "packed_run",
+        "kind": "attention entry (r2 / tc)",
+        "extent_behaviour": "refuses empty extents before any launch (core_check / apa_spo_require_extents, RuntimeError, F1 R11); unchanged",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "int4_stats",
+        "kind": "RAW HELPER (diagnostic)",
+        "extent_behaviour": "already ValueError for every non-positive axis since F1 R6; unchanged",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb2b_quantize",
+        "kind": "RAW HELPER",
+        "extent_behaviour": "F1: numel()==0 refused as RuntimeError before launch. F2: positive extents ValueError first",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb2b_values",
+        "kind": "RAW HELPER",
+        "extent_behaviour": "F1: apa_spo_require_extents RuntimeError before launch. F2: positive extents ValueError first",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb2b_run",
+        "kind": "attention entry",
+        "extent_behaviour": "refuses empty extents before any launch (RuntimeError, F1 R11); unchanged",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb3_run",
+        "kind": "attention entry",
+        "extent_behaviour": "refuses empty extents before any launch (RuntimeError, F1 R11); unchanged. R4 timeline/G pre-check added (below)",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb3_resources",
+        "kind": "diagnostic, no operands",
+        "extent_behaviour": "no extents",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb4_run",
+        "kind": "attention entry",
+        "extent_behaviour": "refuses empty extents before any launch (RuntimeError, F1 R11); unchanged",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      },
+      {
+        "name": "eb4_resources",
+        "kind": "diagnostic, no operands",
+        "extent_behaviour": "no extents",
+        "review": "agrees with source; hooks excluded in BuildF2"
+      }
+    ]
+  },
+  "BOUNDARY": {
+    "rows_recounted": 47,
+    "source_map_checked": 0,
+    "source_map_mismatches": [],
+    "receipt_count": 47,
+    "f2_ok": {
+      "True": 44,
+      "None": 3
+    },
+    "inputs": [
+      "LF3 raw helper zero extent raises ValueError, no launch: rotate_q_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: rotate_q_H0",
+      "LF3 raw helper zero extent raises ValueError, no launch: prepare_k_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: prepare_k_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: prepare_k_S0",
+      "LF3 raw helper zero extent raises ValueError, no launch: append_tq4_k_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: append_tq4_k_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: append_int4_k_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: append_int4_k_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: int4_stats_q_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: int4_stats_q_H0",
+      "LF3 raw helper zero extent raises ValueError, no launch: int4_stats_codes_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_quantize_v_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_values_v_B0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_quantize_v_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_values_v_KV0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_quantize_v_S0",
+      "LF3 raw helper zero extent raises ValueError, no launch: eb2b_values_v_S0",
+      "LF3 EB3 timeline=True G=3 raises before any launch",
+      "LF3 EB3 timeline=True G=5 raises before any launch",
+      "LF3 EB3 timeline=True G=6 raises before any launch",
+      "LF3 EB3 timeline=True G=7 raises before any launch",
+      "LF3 EB3 timeline=True G=8 raises before any launch",
+      "LF3 hand-built margin table refused before any launch: margins_wrong_sha",
+      "LF3 hand-built margin table refused before any launch: margins_pinned_sha_zero_entries",
+      "LF3 hand-built margin table refused before any launch: margins_pinned_sha_extra_key",
+      "LF3 hand-built margin table refused before any launch: margins_subclass",
+      "LF3 hand-built margin table refused before any launch: margins_replaced_after_load",
+      "LF3 hand-built margin table refused before any launch: margins_load_override",
+      "LF3 capacity 2**31 refused before allocation: quantize_sp2_keys_capacity",
+      "LF3 capacity 2**31 refused before allocation: PackedSpKeys_capacity",
+      "LF3 capacity 2**31 refused before allocation: ApaSpq1Workspace_capacity",
+      "LF3 native packed_append with capacity 2**31 refused (names codes/capacity)",
+      "LF3 native packed_run (r2) with capacity 2**31 refused (names capacity)",
+      "R1 hand-built PackedRegisteredMargins (9 cases) refused at lookup and at packed_attention",
+      "R1 subclass / entries or sha replaced after load",
+      "R1 load(expected_sha256 != pin)",
+      "R3 PackedSpKeys capacity 2**31 / 2**40",
+      "R3 B*KV*S > INT_MAX (prepare grid) in PackedSpKeys",
+      "R3 append product past the bound",
+      "R3 ApaSpq1Workspace capacity 2**31 / 2**40 / float",
+      "R3 quantize_sp2_keys(capacity=2**31)",
+      "R8 dense storage + capacity (argument, environment, 2-bit fallback)",
+      "R8 capacity < S, 0, float, bool, str",
+      "R3 S + 2047 > INT_MAX on the attention entries (core, spq4 tc, spq6 tc, eb3)",
+      "R3 eb2b_values numel/8+127 > INT_MAX",
+      "R3 packed_append grid block count > INT_MAX"
+    ]
+  },
+  "own_native_symbols": {
+    "spo2_defs": [
+      "_p1_test_run",
+      "_p1_test_merge_tickets",
+      "run",
+      "packed_prepare",
+      "packed_rotate",
+      "packed_append",
+      "packed_run",
+      "int4_stats",
+      "eb2b_quantize",
+      "eb2b_values",
+      "eb2b_run",
+      "eb3_run",
+      "eb3_resources",
+      "eb4_run",
+      "eb4_resources"
+    ],
+    "defs_count": 15,
+    "helpers": [
+      "packed_prepare",
+      "packed_rotate",
+      "packed_append",
+      "int4_stats",
+      "eb2b_quantize",
+      "eb2b_values"
+    ],
+    "helpers_count": 6,
+    "TQ4_match_files": [
+      "tensor_cuda/src/apa_spo/packed_launcher.cuh",
+      "tensor_cuda/src/apa_spo/spq4.cuh",
+      "tensor_cuda/src/apa_spo/spq6.cuh",
+      "tensor_cuda/src/apa_spo/packed.cuh",
+      "tensor_cuda/src/apa_spo/eb3.cuh"
+    ],
+    "TQ4_match_file_count": 5
+  }
+}

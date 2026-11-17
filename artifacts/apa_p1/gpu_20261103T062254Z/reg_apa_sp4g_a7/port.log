@@ -1,0 +1,25 @@
+F.............................                                           [100%]
+=================================== FAILURES ===================================
+___________ test_a7_registration_grid_rails_anchors_and_preservation ___________
+tensor_cuda/tests/test_apa_sp4g_a7.py:30: in test_a7_registration_grid_rails_anchors_and_preservation
+    before=common.preserved(); assert len(before['receipt_sha256'])==127
+           ^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a7_common.py:48: in preserved
+    registration(); verify_weight(); build_check()
+                                     ^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:50: in build_check
+    m=read(BUILD/'manifest.json')
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:17: in read
+    def read(p):return json.loads(Path(p).read_text())
+                                  ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_sp4g_a7.py::test_a7_registration_grid_rails_anchors_and_preservation
+1 failed, 29 passed in 0.19s

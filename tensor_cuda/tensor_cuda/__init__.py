@@ -1554,3 +1554,229 @@ __version__ = "0.1.0-phase1"
 # APA-SP2: explicit epsilon API; existing launchers remain unchanged.
 from .apa_sp2 import RegisteredMargins, apa_selective_attention_sp, quantize_sp2_keys
 __all__ += ["RegisteredMargins", "apa_selective_attention_sp", "quantize_sp2_keys"]
+# APA-P1-D: packed SP keys are the default representation (apa_packed.py).
+from . import apa_packed
+from .apa_packed import PackedSpKeys, PackedRegisteredMargins
+__all__ += ["PackedSpKeys", "PackedRegisteredMargins"]
+
+# APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+# Project-Tensor SPQ1/SPQ4/SPQ6/EB2b/EB3/EB4 (2026), unchanged numerics.
+# APA_SPO2_D1_BEGIN binding
+# Prior art: CPython ExtensionFileLoader, Python Software Foundation; taken.
+# Load the second initializer from the same binary, only when built with D1.
+# APA-P1-F1 R9 (P1R-F09): whether the binary is a packed build is decided by
+# its exported initializer symbol, not by catching ImportError. A binary that
+# exports PyInit__tensor_cuda_spo2 is a packed build: any failure to load that
+# initializer raises here, at package import, with the real cause. A binary
+# without it (built without TC_APA_PACKED) leaves _spo2 None, and the packed
+# API raises a clear error before allocating anything.
+# Prior art: POSIX dlopen/dlsym (RTLD_NOLOAD returns the handle of a library
+# that is already loaded, here the _C module itself), via Python ctypes; taken.
+import importlib.util as _spo2_import
+_SPO2_INITIALIZER = "PyInit__tensor_cuda_spo2"
+_PACKED_BUILD_MESSAGE = "this tensor_cuda module was built without TC_APA_PACKED"
+
+
+def _spo2_initializer_present(path):
+    import ctypes
+    import os as _os
+    try:
+        library = ctypes.CDLL(path, mode=_os.RTLD_NOLOAD | _os.RTLD_LAZY)
+    except OSError:
+        library = ctypes.CDLL(path, mode=_os.RTLD_LAZY)
+    return hasattr(library, _SPO2_INITIALIZER)
+
+
+def _spo2_load(path):
+    if not _spo2_initializer_present(path):
+        return None
+    try:
+        spec = _spo2_import.spec_from_file_location("_tensor_cuda_spo2", path)
+        module = _spo2_import.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        raise ImportError(f"tensor_cuda: packed build ({_SPO2_INITIALIZER} exported by {path}) "
+                          f"failed to load its packed APA module: {exc!r}") from exc
+    return module
+
+
+def _require_packed_build(api):
+    if _spo2 is None:
+        raise RuntimeError(f"tensor_cuda: {api} is packed APA API; {_PACKED_BUILD_MESSAGE}")
+
+
+_spo2 = _spo2_load(_C.__file__)
+if _spo2 is not None:
+    def _apa_spo2_entry(q, k, kq, v, scale, delta, is_causal=False, sinks=None, diagnostics=False, *, carry="partition", dots="ordered"):
+        return _spo2.run(q,k,kq,v,scale,delta,is_causal,sinks,diagnostics,carry=carry,dots=dots)
+    _C.apa_selective_attention_sp_d1 = _apa_spo2_entry
+    _C.apa_spo2_dump = _spo2.run
+# APA_SPQ1_BEGIN python_binding
+# Prior art: ApaInt4Workspace V1 (Project-Tensor 2026), persistent append-only
+# derived state; TurboQuant Zandieh et al. 2025 rotation/centroids, reused.
+class ApaSpq1Workspace:
+    """Append-only packed keys. Reset by constructing a new workspace after edits.
+
+    Tuple ABI is (uint8 codes [B,KV,capacity,D/2], fp32 scales [B,KV,capacity],
+    fp32 rotations [KV,D,D], fp32 codebook [16]). Caller owns table validity.
+
+    APA-P1-F1 R8 (P1R-F08): the workspace carries the same exact-K identity as
+    PackedSpKeys (source object, append generation, storage revision), through
+    the one shared helper in apa_packed. append() may extend rows; a call with
+    no new rows, or check_source(), refuses a different K or an in-place edit.
+    """
+    def __init__(self, k, capacity, *, fmt):
+        _require_packed_build("ApaSpq1Workspace")   # R9: before any allocation
+        if fmt not in ("tq4", "int4"):
+            raise ValueError("fmt must be tq4 or int4")
+        B, H, S, D = k.shape
+        if D not in (64, 128) or capacity < S:
+            raise ValueError("packed workspace requires D64/D128 and capacity >= S")
+        # APA-P1-F2 R3 (P1R2-F04): the capacity and the index products must fit
+        # the native int that receives them, checked before anything is
+        # allocated (shared helper with PackedSpKeys; INDEX_CENSUS.json).
+        import numbers as _numbers
+        if isinstance(capacity, bool) or not isinstance(capacity, _numbers.Integral):
+            raise ValueError("packed workspace capacity must be an integer")
+        apa_packed.check_native_range(B, H, S, D, int(capacity), S, fmt)
+        from .quant import _tables
+        self.fmt, self.capacity, self.valid_rows = fmt, int(capacity), 0
+        self.geometry, self.dtype = (B,H,D), k.dtype
+        self.generation, self._bound_generation = 0, -1
+        self._source = self._source_id = self._source_revision = None
+        self.codes = zeros([B,H,capacity,D//2],dtype="uint8",device=k.device)
+        self.scales = zeros([B,H,capacity],device=k.device)
+        self.rotation, self.codebook, self.boundaries = _tables(D,4,H,True,k.device)
+        self.append(k)
+    @property
+    def packed(self):
+        return (self.codes,self.scales,self.rotation,self.codebook)
+    def invalidate(self):
+        """Mark stale after a non-append edit of the keys; build a new workspace."""
+        self.generation += 1
+    def check_source(self, k):
+        """Raise ValueError unless k is this workspace's current exact K (R8)."""
+        apa_packed.check_exact_k(self, k)
+        if k.shape[2] != self.valid_rows:
+            raise ValueError("workspace format/valid rows mismatch; append explicitly before attention")
+    def append(self, k):
+        B,H,S,D=k.shape
+        if self.valid_rows and self._bound_generation != self.generation:
+            raise ValueError("apa_sp2: stale packed keys (append generation); build a new PackedSpKeys")
+        if (B,H,D)!=self.geometry or k.dtype!=self.dtype or S<self.valid_rows or S>self.capacity:
+            raise ValueError("packed append geometry/dtype/range mismatch")
+        if S==self.valid_rows:
+            if self._bound_generation == -1:   # an empty first append binds k
+                apa_packed.bind_exact_k(self, k)
+                return
+            # No new rows: only the bound exact K, unedited, is accepted (R8).
+            self.check_source(k)
+            return
+        # APA-P1-F2 R3: this append's prepare/pack grid fits the native int.
+        apa_packed.check_native_range(B, H, S, D, self.capacity, S-self.valid_rows, self.fmt)
+        if self.fmt=="tq4":
+            # IEEE754 fixed-row arithmetic; TurboQuant tables unchanged.
+            # Native norm/rotation schedule is independent of batch/append size.
+            rotated,norms=_spo2.packed_prepare(k,self.rotation,self.valid_rows)
+        else:
+            rotated=norms=self.boundaries
+        _spo2.packed_append(k,self.codes,self.scales,rotated,norms,self.boundaries,self.valid_rows,self.fmt=="tq4")
+        self.valid_rows=S
+        if self._bound_generation != -1:
+            self.generation += 1
+        apa_packed.bind_exact_k(self, k)
+
+
+def _workspace_tuple(packed, k, fmt, refusal):
+    """Resolve an ApaSpq1Workspace argument to its tuple after the R8 identity check."""
+    if isinstance(packed,ApaSpq1Workspace):
+        if packed.fmt!=fmt:
+            raise ValueError(refusal)
+        packed.check_source(k)
+        packed=packed.packed
+    return packed
+# APA-P1-F1 R10 (P1R-F10): the dead first wrapper of
+# _C.apa_selective_attention_sp_d1_packed and its assignment were removed; the
+# name has one definition, _apa_spq4_entry below.
+if _spo2 is not None and hasattr(_spo2,"packed_run"):
+    _C.apa_spq1_dump=_spo2.packed_run
+    _C.apa_spq1_rotate=_spo2.packed_rotate
+# APA_SPQ1_END python_binding
+# APA_SPQ4_BEGIN python_binding
+# Prior art: none beyond the SPQ1 entry it wraps (keyword plumbing only).
+# gqa_path="r2" (default) is the unchanged SPQ1.1 r2 packed path; "tc" routes
+# INT4 GQA decode (2 <= H/KV <= 8, bf16) to the tensor-core path (spq4.cuh).
+def _apa_spq4_entry(q,k,v,packed,scale,delta,is_causal=False,sinks=None,diagnostics=False,*,fmt,carry="partition",gqa_path="r2"):
+    packed=_workspace_tuple(packed,k,fmt,"workspace format/valid rows mismatch; append explicitly before attention")
+    return _spo2.packed_run(q,k,v,packed,scale,delta,is_causal,sinks,diagnostics,fmt=fmt,carry=carry,gqa_path=gqa_path)
+if _spo2 is not None and hasattr(_spo2,"packed_run"):
+    _C.apa_selective_attention_sp_d1_packed=_apa_spq4_entry
+# APA_SPQ4_END python_binding
+# APA_EB2B_BEGIN python_binding
+# Prior art: KIVI (Liu et al. 2024), per-token V; ThriftAttention (Sharratt
+# 2026), block precision; existing SPQ4 entry convention. Explicit entry,
+# never selected by existing APIs. Signed int8 bits use uint8 storage.
+# APA-P1-F1 R4 (P1R-F04): delta and carry are required keyword arguments
+# (validated natively as EB3's: delta finite >= 0, carry "partition" or
+# "row"); the values the launch site used to hard-code are delta=8.1,
+# carry="row". No prior art claimed; argument plumbing.
+if _spo2 is not None and hasattr(_spo2, "eb2b_run"):
+    def apa_eb2b_quantize(v):
+        return _spo2.eb2b_quantize(v)
+
+    def apa_eb2b(q, k, v, vi, vs, packed, scale, fraction, *, delta, carry,
+                 force_bf16=False, diagnostics=False, profile=False):
+        packed = _workspace_tuple(packed, k, "tq4", "EB2b requires current TQ4 packed workspace")
+        return _spo2.eb2b_run(q, k, v, vi, vs, packed, scale, fraction, delta=delta, carry=carry,
+                              force_bf16=force_bf16, diagnostics=diagnostics, profile=profile)
+    __all__ += ["apa_eb2b_quantize", "apa_eb2b"]
+# APA_EB2B_END python_binding
+# APA_EB3_BEGIN python_binding
+# Prior art: existing SPQ4/EB2b entry convention (keyword plumbing only).
+# Explicit opt-in entry for the EB3 variant-B latency path, present only in
+# builds compiled with TC_APA_EB3; never selected by existing APIs.
+# APA-P1-F1 R3 (P1R-F03): carry defaults to "partition", as the other packed
+# wrappers; row carry stays available by explicit argument.
+if _spo2 is not None and hasattr(_spo2, "eb3_run"):
+    def apa_eb3(q, k, v, packed, scale, delta, *, sinks=None, carry="partition",
+                diagnostics=False, poison=False, timeline=False, variant=0):
+        packed = _workspace_tuple(packed, k, "tq4", "EB3 requires a current TQ4 packed workspace")
+        return _spo2.eb3_run(q, k, v, packed, scale, delta, sinks, carry,
+                             diagnostics, poison, timeline, variant)
+
+    def apa_eb3_resources():
+        return _spo2.eb3_resources()
+    __all__ += ["apa_eb3", "apa_eb3_resources"]
+# APA_EB3_END python_binding
+# APA_EB4_BEGIN python_binding
+# Prior art: existing SPQ4/EB2b/EB3 entry convention (keyword plumbing only); KIVI (Liu et al. 2024) per-token
+# int8 V; ThriftAttention (Sharratt 2026) block precision (tk8). Explicit opt-in entry for the EB4 tk8 path on
+# EB3, present only in builds compiled with TC_APA_EB4; never selected by existing APIs.
+if _spo2 is not None and hasattr(_spo2, "eb4_run"):
+    # APA-P1-F1 R3 (P1R-F03): carry defaults to "partition".
+    def apa_eb4(q, k, v, vi, vs, packed, scale, delta, fraction, *, sinks=None, carry="partition",
+                force_bf16=False, inject=None, diagnostics=False, poison=False):
+        packed = _workspace_tuple(packed, k, "tq4", "EB4 requires a current TQ4 packed workspace")
+        return _spo2.eb4_run(q, k, v, vi, vs, packed, scale, delta, fraction, sinks, carry,
+                             force_bf16, inject, diagnostics, poison)
+
+    def apa_eb4_resources():
+        return _spo2.eb4_resources()
+    __all__ += ["apa_eb4", "apa_eb4_resources"]
+# APA_EB4_END python_binding
+# APA-P1-F1 R9 (P1R-F09): in a build without TC_APA_PACKED the packed public
+# functions exist and raise a clear error (not an AttributeError) before
+# allocating anything. They are not added to __all__.
+if _spo2 is None:
+    def _packed_stub(name):
+        def stub(*args, **kwargs):
+            _require_packed_build(name)
+        stub.__name__ = name
+        return stub
+    apa_eb2b_quantize = _packed_stub("apa_eb2b_quantize")
+    apa_eb2b = _packed_stub("apa_eb2b")
+    apa_eb3 = _packed_stub("apa_eb3")
+    apa_eb3_resources = _packed_stub("apa_eb3_resources")
+    apa_eb4 = _packed_stub("apa_eb4")
+    apa_eb4_resources = _packed_stub("apa_eb4_resources")
+# APA_SPO2_D1_END binding

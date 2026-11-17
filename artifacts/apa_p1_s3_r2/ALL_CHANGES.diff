@@ -1,0 +1,827 @@
+--- before/tensor_cuda/src/apa_spo/eb3.cuh
++++ after/tensor_cuda/src/apa_spo/eb3.cuh
+@@ -65,7 +65,76 @@
+ #ifndef APA_EB3_MUTANT
+ #define APA_EB3_MUTANT 0
+ #endif
++#ifndef TC_APA_P1_TEST_HOOKS
++#define TC_APA_P1_TEST_HOOKS 0
++#endif
+ namespace eb3 {
++#if TC_APA_P1_TEST_HOOKS
++// Prior art: DeMillo, Lipton and Sayward (1978) mutation testing; CUDA
++// fence/atomic happens-before; survey APA-2P S3 (2026), deterministic
++// early-counter design. Taken: negative control and explicit ordering;
++// ours: integration of its poisoned-partial completion handshake. No prior
++// art known to me for this exact fixture. Literature unverified -- lead to
++// check: mutation testing 1978; CUDA memory fence atomic release acquire.
++// The default build contains NONE of this hook or its kernel parameters.
++// APA_P1_EARLY_DEVICE_BEGIN (CPU compiles this actual structural code too)
++struct EarlyCounterHook {unsigned* state=nullptr;unsigned long long ticks=0;};
++__device__ __forceinline__ bool early_counter_wait(EarlyCounterHook hook,int c){
++  if(!hook.state || c!=1)return true;
++  unsigned timed_out=0;
++  if(threadIdx.x==0){
++    const auto start=clock64();
++    while(atomicAdd(hook.state,0u)==0u){
++      if(clock64()-start>=hook.ticks){timed_out=1;atomicExch(hook.state+1,1u);break;}
++    }
++  }
++  // CUDA bar.red.or broadcasts the leader timeout without introducing a
++  // static shared object into this translation unit (NVIDIA CUDA API).
++  return __syncthreads_or(timed_out)!=1;
++}
++__device__ __forceinline__ void early_counter_done(EarlyCounterHook hook,int c){
++  if(!hook.state || c!=0)return;
++  // Every writer has finished ALL possible merge/output stores before the
++  // leader releases chunk 1. Also called on the non-merging early exit.
++  __threadfence();__syncthreads();
++  if(threadIdx.x==0)atomicExch(hook.state,1u);
++}
++// APA_P1_EARLY_DEVICE_END
++inline bool early_counter_enabled(){
++  const char* flag=std::getenv("APA_P1_EARLY_COUNTER");return flag && std::strcmp(flag,"1")==0;
++}
++inline EarlyCounterHook early_counter_setup(NDArray& state,const Device& device,
++    int bh,int nc,bool eligible,float* pm,float* pl,float* pa,int rows,int vd){
++  if(!early_counter_enabled())return {};
++  if(bh!=1 || nc!=2 || !eligible)throw std::runtime_error("APA P1 early-counter requires one bh, NC=2, registered fused path");
++  state=NDArray({8},DType::Uint8,device);int khz=0;
++  if(cudaDeviceGetAttribute(&khz,cudaDevAttrClockRate,device.index)!=cudaSuccess || khz<=0)throw std::runtime_error("APA P1 clock rate");
++  // Poison all partials: chunk 0 overwrites its own; chunk 1 stays poisoned
++  // until the completion signal. 0xffffffff is an explicit fp32 NaN sentinel.
++  if(cudaMemsetAsync(state.data_ptr(),0,8,0)!=cudaSuccess ||
++     cudaMemsetAsync(pm,0xff,(size_t)rows*nc*4,0)!=cudaSuccess ||
++     cudaMemsetAsync(pl,0xff,(size_t)rows*nc*4,0)!=cudaSuccess ||
++     cudaMemsetAsync(pa,0xff,(size_t)rows*nc*vd*4,0)!=cudaSuccess)throw std::runtime_error("APA P1 early-counter poison");
++  constexpr unsigned long long poll_milliseconds=2000;
++  return {(unsigned*)state.data_ptr(),(unsigned long long)khz*poll_milliseconds};
++}
++inline void early_counter_check(EarlyCounterHook hook,const void* kernel){
++  if(!hook.state)return;
++  int blocks=0,sms=0;
++  if(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks,kernel,128,0)!=cudaSuccess)
++    throw std::runtime_error("APA P1 early-counter occupancy");
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess || cudaDeviceGetAttribute(&sms,cudaDevAttrMultiProcessorCount,device)!=cudaSuccess || blocks*sms<2)
++    throw std::runtime_error("APA P1 early-counter needs two concurrently resident CTAs");
++}
++inline void early_counter_finish(EarlyCounterHook hook){
++  if(!hook.state)return;
++  unsigned state[2]={0,0};
++  if(cudaDeviceSynchronize()!=cudaSuccess || cudaMemcpy(state,hook.state,sizeof(state),cudaMemcpyDeviceToHost)!=cudaSuccess)throw std::runtime_error("APA P1 early-counter completion");
++  if(state[1])throw std::runtime_error("APA P1 early-counter poll timed out (FAIL, never a mutant kill)");
++  if(state[0]!=1)throw std::runtime_error("APA P1 early-counter missing completion signal");
++}
++#endif
+ using bf16=__nv_bfloat16;
+ constexpr int C=spq4::C,NT=spq4::NT,MAXG=spq4::MAXG,PSTRIDE=spq4::PSTRIDE;
+ 
+@@ -319,7 +388,11 @@
+ __global__ void __launch_bounds__(128,MINB) select_pv(const bf16* q,const bf16* k,const bf16* v,
+  const float* bulk,const float* cm,uint8_t* mask,float* prefix,float* pm,float* pl,float* pa,
+  int H,int KVH,int S,int NC,int PK,float scale,float delta,
+- unsigned* ctr,const bf16* sinks,bf16* out,unsigned long long* tl){
++ unsigned* ctr,const bf16* sinks,bf16* out,unsigned long long* tl
++#if TC_APA_P1_TEST_HOOKS
++ ,EarlyCounterHook test_hook
++#endif
++ ){
+   constexpr int G=GT,SG=BIG?MAXG:GT;
+   constexpr int DPL=D/4,NS=DPL/4,NU4=DPL/8,NTW=VD/32,U=VD/8;
+   __shared__ float scs[SG][C];
+@@ -328,6 +401,10 @@
+   __shared__ __align__(16) bf16 Vs[32][VD+8];
+   __shared__ float lsum[SG];
+   int bh=blockIdx.x,c=blockIdx.y+gridDim.y*blockIdx.z;if(c>=NC)return;
++#if TC_APA_P1_TEST_HOOKS
++  // Hold chunk 1 BEFORE any pm/pl/pa partial store (survey S3).
++  if(!early_counter_wait(test_hook,c))return;
++#endif
+   Stamp st;tl_begin<TL>(st);
+   int b=bh/KVH,h0=(bh%KVH)*G,tid=threadIdx.x,lane=tid&31,warp=tid>>5,r=lane>>2,tig=lane&3;
+   int start=c*C,count=min(C,S-start);
+@@ -492,7 +569,12 @@
+ #endif
+   }
+   __syncthreads();
+-  if(!last_s){tl_end<TL>(tl,(int64_t)bh*NC+c,st);return;}
++  if(!last_s){
++#if TC_APA_P1_TEST_HOOKS
++    early_counter_done(test_hook,c);
++#endif
++    tl_end<TL>(tl,(int64_t)bh*NC+c,st);return;
++  }
+   __threadfence();
+   const int64_t row0=(int64_t)b*H+h0;
+   constexpr int Q4=VD/4,QPT=(G*Q4+NT-1)/NT,MB=tune::MERGE_BATCH/QPT;
+@@ -676,32 +758,71 @@
+       o[3]=__float2bfloat16_rn(den>0.f?__fdiv_rn(macc[qi].w,den):0.f);
+     }
+   }
++#if TC_APA_P1_TEST_HOOKS
++  early_counter_done(test_hook,c);
++#endif
+   tl_end<TL>(tl,(int64_t)bh*NC+c,st);
+   }
+ }
+ 
+-// ---- persistent merge tickets ----------------------------------------------
+-// One unsigned per (batch, KV head), zeroed once at allocation and returned to
+-// zero by every completed launch (atomicInc wrap). Grown (never shrunk) on the
+-// first call that needs more; growth synchronizes the device. Single-stream,
+-// single-device use (the engine's legacy default stream).
++// ---- persistent per-device tickets (APA-P1-S3 r2b) -------------------------
++// Contract: ONE stream, the CUDA legacy default stream (0), on each device.
++// A launch on any other stream is out of contract. atomicInc/fence arithmetic
++// is inherited unchanged from CUDA Samples threadFenceReduction (NVIDIA).
++// Prior art: CUDA stream-ordered lifetime APIs (cudaMallocAsync, NVIDIA 2021)
++// and std::mutex/map ownership (ISO C++11, 2011). Taken: stream ordering and
++// last-writer tickets; ours: device-keyed merge/choose slots and a launch lock.
++// Literature unverified -- lead to check: CUDA Samples threadFenceReduction;
++// CUDA 11.2 stream ordered memory allocator 2021. No new reduction.
++// APA_P1_HOST_TICKETS_BEGIN (also compiled by the CPU ownership test)
++struct TicketSlot { unsigned* buffer=nullptr; int capacity=0; };
++struct DeviceTickets { TicketSlot merge,choose; int64_t l2=-1; };
++inline std::recursive_mutex& ticket_mutex(){static std::recursive_mutex m;return m;}
++inline std::unordered_map<int,DeviceTickets>& device_tickets(){
++  // Process lifetime, as before. Do not call CUDA from static destructors.
++  static std::unordered_map<int,DeviceTickets> states;return states;
++}
++// Reuse the engine guard: checked success-path restore, counted unwind errors.
++using TicketDeviceGuard=CheckedDeviceGuard;
++inline unsigned* ticket_buffer(bool choose,int n,int minimum,int64_t* bytes){
++  std::lock_guard<std::recursive_mutex> lock(ticket_mutex());
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess)throw std::runtime_error("apa tickets: get device");
++  auto& state=device_tickets()[device];auto& slot=choose?state.choose:state.merge;
++  if(n>slot.capacity){
++    const int want=std::max(n,minimum);unsigned* next=nullptr;
++    if(cudaMalloc(&next,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa tickets: allocation");
++    if(cudaMemset(next,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess){
++      cudaFree(next);throw std::runtime_error("apa tickets: zero");
++    }
++    if(slot.buffer){
++      // Only the CURRENT (guarded operand) device is synchronized. The launch
++      // lock remains held from lookup through enqueue, so no caller can hold
++      // an old pointer that has not yet been submitted when growth frees it.
++      if(cudaDeviceSynchronize()!=cudaSuccess){cudaFree(next);throw std::runtime_error("apa tickets: growth sync");}
++      if(cudaFree(slot.buffer)!=cudaSuccess){cudaFree(next);throw std::runtime_error("apa tickets: growth free");}
++    }
++    slot.buffer=next;slot.capacity=want;
++  }
++  if(bytes)*bytes=(int64_t)slot.capacity*(int64_t)sizeof(unsigned);
++  return slot.buffer;
++}
+ inline unsigned* counters(int n,int64_t* bytes=nullptr){
+-  static unsigned* buf=nullptr;static int cap=0;
+-  if(n>cap){
+-    int want=std::max(n,tune::COUNTER_MIN_ENTRIES);unsigned* nb=nullptr;
+-    if(cudaMalloc(&nb,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb3: counter allocation");
+-    if(cudaMemset(nb,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb3: counter zero");
+-    if(buf){cudaDeviceSynchronize();cudaFree(buf);}
+-    buf=nb;cap=want;
+-  }
+-  if(bytes)*bytes=(int64_t)cap*(int64_t)sizeof(unsigned);
+-  return buf;
++  return ticket_buffer(false,n,tune::COUNTER_MIN_ENTRIES,bytes);
+ }
+ inline int64_t l2_bytes(){
+-  static int64_t cached=-1;
+-  if(cached<0){int dev=0,v=0;cudaGetDevice(&dev);cudaDeviceGetAttribute(&v,cudaDevAttrL2CacheSize,dev);cached=v;}
++  std::lock_guard<std::recursive_mutex> lock(ticket_mutex());
++  int device=0;
++  if(cudaGetDevice(&device)!=cudaSuccess)throw std::runtime_error("apa tickets: L2 device");
++  auto& cached=device_tickets()[device].l2;
++  if(cached<0){
++    int value=0;
++    if(cudaDeviceGetAttribute(&value,cudaDevAttrL2CacheSize,device)!=cudaSuccess)throw std::runtime_error("apa tickets: L2 size");
++    cached=value;
++  }
+   return cached;
+ }
++// APA_P1_HOST_TICKETS_END
+ 
+ // ---- variant table (runtime `variant`; 0 = registered path) -----------------
+ // rot: 0 spq1::rotate (baseline kernel), 1 eb3::rotate_q<128,ROT_DB>;
+@@ -762,6 +883,10 @@
+   if(variant!=eb3::tune::REGISTERED_VARIANT && G!=2 && G!=4)throw std::runtime_error("apa_eb3: ablation variants are built for G=2,4 only");
+   if(diag && variant!=eb3::tune::REGISTERED_VARIANT)throw std::runtime_error("apa_eb3: diagnostics only on the registered variant");
+   if(timeline && variant!=eb3::tune::REGISTERED_VARIANT && variant!=6 && variant!=1)throw std::runtime_error("apa_eb3: timeline only on variants 0, 1, 6");
++  // Prior art: CUDA legacy-default-stream ordering and RAII (C++11, 2011).
++  // Serialize host submission through growth; no steady-state device sync.
++  std::lock_guard<std::recursive_mutex> ticket_launch_lock(eb3::ticket_mutex());
++  eb3::TicketDeviceGuard operand_device(q.device.index,"apa_eb3");
+   int np,pk;apa_int4_fixed_partition_layout((int)S,np,pk);
+   if(pk%spq4::C)throw std::runtime_error("apa_eb3: partition must align to chunk");
+   int nc=(int)((S+spq4::C-1)/spq4::C),rows=(int)(B*H);
+@@ -800,6 +925,11 @@
+   auto SNK=sinks?(spq4::bf16*)sinks->data_ptr():nullptr;auto OUT=(spq4::bf16*)out.data_ptr();
+   int capacity=(int)codes.shape[2];
+   const uint8_t* CODES=(const uint8_t*)codes.data_ptr();const float* SC=(const float*)sc.data_ptr();const float* CB=(const float*)cb.data_ptr();
++#if TC_APA_P1_TEST_HOOKS
++  NDArray test_state;
++  auto test_hook=eb3::early_counter_setup(test_state,q.device,(int)(B*KVH),nc,
++    variant==0 && VA.sel==1 && VA.fuse,PM,PL,PA,rows,(int)VD);
++#endif
+   // L2-capacity budget for cross-kernel prefetch (tuning: L2_FRACTION).
+   const int64_t budget=(int64_t)(eb3::l2_bytes()*eb3::tune::L2_FRACTION);
+   const int64_t code_bytes=(int64_t)codes.numel(),norm_bytes=(int64_t)sc.numel()*4,v_bytes=(int64_t)B*KVH*S*VD*2;
+@@ -851,7 +981,14 @@
+     auto launch=[&](auto gt,auto dg,auto big,auto vpf,auto fuse,auto on,auto kpf){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value,BG=decltype(big)::value,VP=decltype(vpf)::value,FU=decltype(fuse)::value,ON=decltype(on)::value,KP=decltype(kpf)::value;
+       constexpr int MB=BG?1:eb3::tune::SEL_MINB;
+-      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr);};
++#if TC_APA_P1_TEST_HOOKS
++      eb3::early_counter_check(test_hook,(const void*)eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP>);
++#endif
++      eb3::select_pv<128,128,GT,DG,MB,BG,VP,FU,ON,KP><<<grid,128>>>(Q,K,V,BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT,ON?TLS:nullptr
++#if TC_APA_P1_TEST_HOOKS
++        ,test_hook
++#endif
++      );};
+     using T=std::true_type;using F=std::false_type;
+     // All G in [2,8] are instantiated only for the registered select options;
+     // ablations are G=2,4.
+@@ -903,6 +1040,10 @@
+   int64_t ctr_bytes=0;if(CTR)eb3::counters(0,&ctr_bytes);
+   NDArray foot({6},DType::Int64,Device::from_string("cpu"));
+   {auto* f=(int64_t*)foot.data_ptr();f[0]=total;f[1]=B*H*VD*2;f[2]=ctr_bytes;f[3]=(VA.sel==1 && VA.fuse)?3:4;f[4]=do_rpf;f[5]=do_xpf;}
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_finish(test_hook);
++#endif
++  operand_device.restore();
+   return {out,pq,mask,bulk,prefix,tlb,tls,foot};
+ }
+ 
+--- before/tensor_cuda/src/apa_spo/eb4.cuh
++++ after/tensor_cuda/src/apa_spo/eb4.cuh
+@@ -271,7 +271,11 @@
+  const int8_t* vi,const float* vs,const uint8_t* flags,uint8_t* used,
+  const float* cz,const float* blog,uint8_t* fl_out,float* sc_out,float* lz_out,const uint8_t* inject,float fraction,bool force,int vpf_mode,
+  const float* bulk,const float* cm,uint8_t* mask,float* prefix,float* pm,float* pl,float* pa,
+- int H,int KVH,int S,int NC,int PK,float scale,float delta,unsigned* ctr,const bf16* sinks,bf16* out){
++ int H,int KVH,int S,int NC,int PK,float scale,float delta,unsigned* ctr,const bf16* sinks,bf16* out
++#if TC_APA_P1_TEST_HOOKS
++ ,eb3::EarlyCounterHook test_hook
++#endif
++ ){
+   constexpr int G=GT,SG=GT;
+   constexpr int DPL=D/4,NS=DPL/4,NU4=DPL/8,NTW=VD/32,U=VD/8;
+   __shared__ float scs[SG][C];
+@@ -281,6 +285,10 @@
+   __shared__ float lsum[SG];
+   __shared__ uint8_t hf[BPC];
+   int bh=blockIdx.x,c=blockIdx.y+gridDim.y*blockIdx.z;if(c>=NC)return;
++#if TC_APA_P1_TEST_HOOKS
++  // Survey S3: hold chunk 1 before ALL partial stores, not after pm/pl.
++  if(!eb3::early_counter_wait(test_hook,c))return;
++#endif
+   int b=bh/KVH,h0=(bh%KVH)*G,tid=threadIdx.x,lane=tid&31,warp=tid>>5,r=lane>>2,tig=lane&3;
+   int start=c*C,count=min(C,S-start);
+   const int NB=(S+BLK-1)/BLK;
+@@ -508,7 +516,12 @@
+     last_s=prev==(unsigned)(NC-1);
+   }
+   __syncthreads();
+-  if(!last_s)return;
++  if(!last_s){
++#if TC_APA_P1_TEST_HOOKS
++    eb3::early_counter_done(test_hook,c);
++#endif
++    return;
++  }
+   __threadfence();
+   const int64_t row0=(int64_t)b*H+h0;
+   constexpr int Q4=VD/4,QPT=(G*Q4+NT-1)/NT,MB=eb3::tune::MERGE_BATCH/QPT;
+@@ -637,22 +650,19 @@
+       o[3]=__float2bfloat16_rn(den>0.f?__fdiv_rn(macc[qi].w,den):0.f);
+     }
+   }
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_done(test_hook,c);
++#endif
+ }
+ 
+-// ---- persistent choose tickets (as eb3::counters, separate buffer) ------------------------------------------
+-// One unsigned per (batch, KV head), zeroed once and returned to zero by every completed bulk launch (atomicInc
+-// wrap). Single-stream, single-device use (EB3's documented contract; LEAD_NOTES item 1 applies here too).
++// ---- persistent choose tickets, separate from merge on EACH CUDA device ---
++// Contract: one stream, CUDA legacy default stream; every other stream is out
++// of contract. Prior art: CUDA Samples threadFenceReduction, CUDA stream-ordered
++// lifetime APIs (NVIDIA 2021), ISO C++11 mutex/map (2011). Taken: existing
++// tickets/order; ours: per-device choose ownership via EB3's locked registry.
++// Unverified -- lead to check: CUDA 11.2 stream ordered memory allocator 2021.
+ inline unsigned* counters(int n,int64_t* bytes=nullptr){
+-  static unsigned* buf=nullptr;static int cap=0;
+-  if(n>cap){
+-    int want=std::max(n,tune::COUNTER_MIN_ENTRIES);unsigned* nb=nullptr;
+-    if(cudaMalloc(&nb,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb4: counter allocation");
+-    if(cudaMemset(nb,0,sizeof(unsigned)*(size_t)want)!=cudaSuccess)throw std::runtime_error("apa_eb4: counter zero");
+-    if(buf){cudaDeviceSynchronize();cudaFree(buf);}
+-    buf=nb;cap=want;
+-  }
+-  if(bytes)*bytes=(int64_t)cap*(int64_t)sizeof(unsigned);
+-  return buf;
++  return eb3::ticket_buffer(true,n,tune::COUNTER_MIN_ENTRIES,bytes);
+ }
+ } // namespace eb4
+ 
+@@ -688,6 +698,10 @@
+   const int64_t NB=(S+eb4::BLK-1)/eb4::BLK;
+   if(inject && (inject->dtype!=DType::Uint8 || inject->shape!=Shape({B,KVH,NB}) || !inject->device.is_cuda() || inject->device.index!=q.device.index))throw std::runtime_error("apa_eb4: inject must be CUDA uint8 [B,KVH,ceil(S/64)]");
+   apa_spq1_buffer_check(k,codes,sc);
++  // Same locked enqueue interval as EB3, including choose and merge slots.
++  // Prior art: legacy-default-stream ordering and C++11 RAII (2011).
++  std::lock_guard<std::recursive_mutex> ticket_launch_lock(eb3::ticket_mutex());
++  eb3::TicketDeviceGuard operand_device(q.device.index,"apa_eb4");
+   int np,pk;apa_int4_fixed_partition_layout((int)S,np,pk);
+   if(pk%spq4::C)throw std::runtime_error("apa_eb4: partition must align to chunk");
+   int nc=(int)((S+spq4::C-1)/spq4::C),rows=(int)(B*H);
+@@ -728,6 +742,10 @@
+   auto SNK=sinks?(spq4::bf16*)sinks->data_ptr():nullptr;auto OUT=(spq4::bf16*)out.data_ptr();
+   int capacity=(int)codes.shape[2];
+   const uint8_t* CODES=(const uint8_t*)codes.data_ptr();const float* SC=(const float*)sc.data_ptr();const float* CB=(const float*)cb.data_ptr();
++#if TC_APA_P1_TEST_HOOKS
++  NDArray test_state;
++  auto test_hook=eb3::early_counter_setup(test_state,q.device,(int)(B*KVH),nc,true,PM,PL,PA,rows,(int)VD);
++#endif
+   // L2-capacity budgets: EB3's rotation prefetch (codes+norms, eb3::tune::L2_FRACTION) unchanged; the bulk's
+   // V-operand prefetch budgeted with eb4::tune::L2_FRACTION against the bytes it would prefetch.
+   const int64_t code_bytes=(int64_t)codes.numel(),norm_bytes=(int64_t)sc.numel()*4;
+@@ -763,8 +781,15 @@
+     constexpr bool SCH=eb4::tune::CHOOSE_SITE==1;
+     auto launch=[&](auto gt,auto dg){
+       constexpr int GT=decltype(gt)::value;constexpr bool DG=decltype(dg)::value;
++#if TC_APA_P1_TEST_HOOKS
++      eb3::early_counter_check(test_hook,(const void*)eb4::select_mixed<128,128,GT,DG,SCH>);
++#endif
+       eb4::select_mixed<128,128,GT,DG,SCH><<<grid,128>>>(Q,K,V,VI,VS,FL,US,CZ,BL,SCH?FL:nullptr,SCH?SCO:nullptr,SCH?LZ:nullptr,INJ,fraction,force_bf16,svpf,
+-        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT);};
++        BS,CM,M,PX,PM,PL,PA,Hi,KVi,Si,nc,pk,scale,delta,CTR,SNK,OUT
++#if TC_APA_P1_TEST_HOOKS
++        ,test_hook
++#endif
++      );};
+     auto byG=[&](auto dg){
+       switch(G){
+         case 2: launch(std::integral_constant<int,2>{},dg);break;
+@@ -779,6 +804,10 @@
+   int64_t ctr_bytes=0,ctrc_bytes=0;eb3::counters(0,&ctr_bytes);if(CTRC)eb4::counters(0,&ctrc_bytes);
+   NDArray foot({7},DType::Int64,Device::from_string("cpu"));
+   {auto* f=(int64_t*)foot.data_ptr();f[0]=total;f[1]=B*H*VD*2;f[2]=ctr_bytes;f[3]=ctrc_bytes;f[4]=3;f[5]=do_rpf;f[6]=xpf*10+svpf;}
++#if TC_APA_P1_TEST_HOOKS
++  eb3::early_counter_finish(test_hook);
++#endif
++  operand_device.restore();
+   return {out,flags,used,scores,logz,cm,cz,blog,mask,bulk,prefix,pq,foot};
+ }
+ 
+--- before/tensor_cuda/src/bindings.cpp
++++ after/tensor_cuda/src/bindings.cpp
+@@ -2744,6 +2744,27 @@
+ // Prior art: pybind11 keyword defaults (Jakob 2015), taken.
+ // Prior art: pybind11 (Jakob 2015); companion initializer preserves file prefix.
+ PYBIND11_MODULE(_tensor_cuda_spo2,m) {
++#if defined(TC_APA_P1_TEST_HOOKS) && TC_APA_P1_TEST_HOOKS
++  // Test-only entry for survey S3's two-CTA handshake. pybind11 (Jakob 2015)
++  // scoped GIL release is taken so tests can also exercise native host threads.
++  // No default-build binding or public Python API change.
++  m.def("_p1_test_run",[](bool mixed,Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,
++      py::tuple packed,double scale,double delta,double fraction,bool force,int variant){
++    if(packed.size()!=4)throw std::runtime_error("P1 test: packed tuple size");
++    auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();
++    auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
++    std::vector<NDArray> result;
++    {
++      py::gil_scoped_release release;
++      if(mixed)result=tc::apa_eb4_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,fraction,nullptr,"row",force,nullptr,true,true);
++      else result=tc::apa_eb3_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,nullptr,"row",variant==0,true,false,variant);
++    }
++    py::tuple out(result.size());
++    for(size_t i=0;i<result.size();++i)out[i]=result[i].defined()?py::cast(Tensor::make(result[i],false)):py::none();
++    return out;
++  });
++#endif
++
+   auto call=[](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double delta,bool causal,py::object sink,bool diag,bool baseline,bool dump,const std::string& carry,const std::string& dots)->py::object {
+     const NDArray* s=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+     auto r=tc::apa_spo2_run(q.data(),k.data(),kq.data(),v.data(),scale,delta,causal,s,diag||dump,baseline,carry,dots);
+--- /dev/null
++++ after/tensor_cuda/tests/test_apa_p1_early_counter.py
+@@ -0,0 +1,157 @@
++"""Deterministic survey-S3 poisoned-partial handshake, compiled structural and GPU.
++
++Prior art: DeMillo, Lipton, Sayward (1978) mutation testing; CUDA happens-before;
++APA-2P survey S3 (2026). Taken: its ordered two-CTA design. No prior art known
++to me for this exact fixture. Unverified -- lead to check: mutation testing
++1978; CUDA memory fence atomic release acquire.
++"""
++from pathlib import Path
++import os
++import re
++import subprocess
++
++import numpy as np
++import pytest
++
++from test_apa_p1_tickets import ROOT, ART, GPU, compile_cpp, gpu_runtime, float_bits, assert_informative
++
++
++def test_early_counter_compiled_structure(tmp_path):
++    """Compile the actual device handshake and each actual ticket predicate.
++
++    One CPU thread represents a CTA leader; CUDA barriers/fences are CPU
++    synchronization instruments. This is structural coverage, not a GPU run.
++    """
++    text3 = (ROOT / 'tensor_cuda/src/apa_spo/eb3.cuh').read_text()
++    text4 = (ROOT / 'tensor_cuda/src/apa_spo/eb4.cuh').read_text()
++    helpers = text3.split('// APA_P1_EARLY_DEVICE_BEGIN', 1)[1].split('\n', 1)[1].split('// APA_P1_EARLY_DEVICE_END', 1)[0]
++    predicates = {}
++    for name, text in [('eb3', text3), ('eb4', text4)]:
++        kernel = text[text.index('__global__ void __launch_bounds__(128' + (',MINB)' if name == 'eb3' else ',eb3::tune::SEL_MINB)')):]
++        # Select the last-writer predicate, not the optional bulk-choose ticket.
++        if name == 'eb3': kernel = text[text.index(' select_pv('):]
++        else: kernel = text[text.index(' select_mixed('):]
++        start = kernel.index('  if(tid==0){\n', kernel.index('__shared__ unsigned last_s;'))
++        end = kernel.index('\n  }', start)
++        predicates[name] = kernel[start:end + 4]
++        assert kernel.index('early_counter_wait(test_hook,c)') < kernel.index('pm[row*NC+c]=m')
++        early = kernel[kernel.index('if(!last_s)'):kernel.index('if(!last_s)') + 230]
++        assert 'early_counter_done(test_hook,c)' in early
++        # The second signal follows all merge output stores.
++        assert kernel.rindex('early_counter_done(test_hook,c)') > kernel.rindex('o[3]=__float2bfloat16_rn')
++    prefix = r'''
++#include <atomic>
++#include <cassert>
++#include <chrono>
++#include <cmath>
++#include <iostream>
++#include <thread>
++#define __device__
++#define __forceinline__ inline
++#define __shared__ thread_local
++struct {int x=0;} threadIdx;
++void __syncthreads(){std::atomic_thread_fence(std::memory_order_seq_cst);}
++void __threadfence(){std::atomic_thread_fence(std::memory_order_seq_cst);}
++int __syncthreads_or(int value){std::atomic_thread_fence(std::memory_order_seq_cst);return value!=0;}
++unsigned long long clock64(){return std::chrono::steady_clock::now().time_since_epoch().count();}
++unsigned atomicAdd(unsigned* p,unsigned v){return __atomic_fetch_add(p,v,__ATOMIC_SEQ_CST);}
++unsigned atomicExch(unsigned* p,unsigned v){return __atomic_exchange_n(p,v,__ATOMIC_SEQ_CST);}
++unsigned atomicInc(unsigned* p,unsigned limit){unsigned old=__atomic_load_n(p,__ATOMIC_SEQ_CST);for(;;){unsigned next=old>=limit?0:old+1;if(__atomic_compare_exchange_n(p,&old,next,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST))return old;}}
++'''
++    main = r'''
++bool takes_ticket(unsigned* ctr){int tid=0,bh=0,NC=2;unsigned last_s=0;
++PREDICATE
++return last_s;
++}
++int main(){
++ unsigned state[2]={0,0},counter=0;float partial[2]={NAN,NAN},out=NAN;
++ EarlyCounterHook hook{state,5000000000ull};
++ std::thread delayed([&]{assert(early_counter_wait(hook,1));partial[1]=7.f;if(takes_ticket(&counter))out=partial[0]+partial[1];});
++ partial[0]=3.f;
++ if(takes_ticket(&counter))out=partial[0]+partial[1];
++ early_counter_done(hook,0);delayed.join();
++ assert(counter==0 && state[0]==1 && state[1]==0);
++ // Timeout is a harness failure, never counted as a successful mutant kill.
++ unsigned timed[2]={0,0};assert(!early_counter_wait({timed,1},1) && timed[1]==1);
++ if(out!=10.f){std::cout << "deterministic poisoned-partial output mismatch\n";return 1;}
++ std::cout << "PASS ordered two-CTA structural check\n";
++}
++'''
++    rows = []
++    for family in ('eb3', 'eb4'):
++        for mutant in (False, True):
++            predicate = predicates[family]
++            defines = '\n#define APA_EB3_MUTANT ' + ('3' if mutant and family == 'eb3' else '0') + '\n'
++            if mutant and family == 'eb4':
++                assert predicate.count('last_s=prev==(unsigned)(NC-1);') == 1
++                predicate = predicate.replace('last_s=prev==(unsigned)(NC-1);', 'last_s=prev==(unsigned)(NC-2);')
++            exe = compile_cpp(tmp_path, prefix + defines + helpers + main.replace('PREDICATE', predicate), family + ('_early' if mutant else '_correct'))
++            result = subprocess.run(['timeout', '10s', str(exe)], capture_output=True, text=True)
++            expected = 1 if mutant else 0
++            assert result.returncode == expected, result.stdout + result.stderr
++            rows.append((family, mutant, result.returncode, result.stdout.strip()))
++    # Retain actual CPU evidence under pytest's authorized /tmp basetemp.
++    (tmp_path / 'structural_results.txt').write_text(repr(rows) + '\n')
++
++
++def qwen_two_cta_input():
++    """Read only on the lead GPU host. Paths/hashes are inherited A1 records.
++
++    The CPU seat reads only A1's metadata, not the external SPQ3 captures.
++    Real post-norm/post-RoPE Qwen3-1.7B L05: two q heads and one KV head,
++    query at row 256, real K/V prefix [0,257), no synthetic replacement.
++    """
++    import json
++    import hashlib
++    record = json.loads((ROOT / 'artifacts/apa_p1_a1/INPUT_CENSUS.json').read_text())[0]
++    result = []
++    for name in 'qkv':
++        row = record['files'][name]
++        p = ROOT / row['path']
++        assert hashlib.sha256(p.read_bytes()).hexdigest() == row['sha256'], str(p)
++        a = np.load(p, mmap_mode='r', allow_pickle=False)
++        assert a.dtype == np.uint16 and list(a.shape) == row['shape']
++        u = a[:2, 256:257] if name == 'q' else a[:1, :257]
++        f = (np.ascontiguousarray(u).astype(np.uint32) << 16).view(np.float32)[None]
++        assert np.isfinite(f).all()
++        assert_informative(f.view(np.uint32))
++        result.append(f)
++    return result
++
++
++def test_two_cta_operand_census_cpu():
++    import json
++    case = json.loads((ROOT / 'artifacts/apa_p1_a1/INPUT_CENSUS.json').read_text())[0]
++    assert case['model'] == 'Qwen3-1.7B' and case['layer'] == 5
++    assert case['files']['q']['shape'][0] >= 2
++    for name in 'qkv':
++        assert case['files'][name]['dtype'] == 'uint16'
++        assert case['files'][name]['shape'][1] >= 257
++        assert case['files'][name]['shape'][2] == 128
++        assert len(case['files'][name]['sha256']) == 64
++    assert (257 + 255) // 256 == 2
++
++
++@pytest.mark.skipif(not GPU, reason='staged lead GPU test; CPU seat has no GPU')
++@pytest.mark.parametrize('family', ['eb3', 'eb4'])
++def test_early_counter_gpu(family):
++    tc, native = gpu_runtime()
++    q, k, v = qwen_two_cta_input()
++    T = lambda x: tc.tensor(np.ascontiguousarray(x), dtype='bfloat16')
++    qt, kt, vt = T(q), T(k), T(v)
++    w = tc.ApaSpq1Workspace(kt, 257, fmt='tq4')
++    vi, vs = tc.apa_eb2b_quantize(vt)
++    scale = float(np.float32(1 / np.sqrt(128)))
++    os.environ.pop('APA_P1_EARLY_COUNTER', None)
++    # EB3 variant 8 is the same ordered merge in a separate kernel and is
++    # unaffected by EB3 mutant 3 or the EB4 early-counter analogue.
++    ref = float_bits(native._p1_test_run(False, qt, kt, vt, vi, vs, w.packed, scale, 8.1, 1 / 32, True, 8)[0])
++    assert_informative(ref)
++    os.environ['APA_P1_EARLY_COUNTER'] = '1'
++    try:
++        got = float_bits(native._p1_test_run(family == 'eb4', qt, kt, vt, vi, vs, w.packed, scale, 8.1, 1 / 32, True, 0)[0])
++    finally:
++        os.environ.pop('APA_P1_EARLY_COUNTER', None)
++    # Named negative controls: EB3 APA_EB3_MUTANT=3; EB4 select_mixed's
++    # last_s predicate NC-1 -> NC-2. Both MUST fail this exact assertion.
++    assert np.array_equal(ref, got), 'deterministic poisoned-partial output mismatch'
+--- /dev/null
++++ after/tensor_cuda/tests/test_apa_p1_exact_tie.py
+@@ -0,0 +1,87 @@
++"""The unchanged EB4 lead fixture is now a production suite test.
++
++Prior art: EB4 lead_check.py (Project-Tensor, 2026), Batcher (1968) sorting
++network/stable score-index total order inherited via EB2b. Taken: existing
++blocks-5/20 fixture and lower-index tie order; no new selection rule.
++Unverified literature -- lead to check: Batcher sorting networks 1968.
++"""
++import ast
++import os
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++from test_apa_p1_tickets import ROOT, ART, GPU, gpu_runtime, float_bits, assert_informative
++
++LEAD = Path('/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eb4/artifacts/apa_eb4/lead_gate/lead_check.py')
++
++
++def rnd(x):
++    u = np.asarray(x, np.float32).view(np.uint32); u = (u + 0x7FFF + ((u >> 16) & 1)) & 0xFFFF0000
++    return u.view(np.float32)
++
++
++def tie_fixture():
++    # Unchanged lead_check.py:60-64, including seed, rounding and draw order.
++    rng = np.random.default_rng(20261019); H, KVH, S, D = 16, 8, 2048, 128
++    q = rnd(rng.standard_normal((1, H, 1, D))); k = rnd(0.5 * rng.standard_normal((1, KVH, S, D))); v = rnd(rng.standard_normal((1, KVH, S, D)))
++    for kh in range(KVH):
++        blk = rnd(0.3 * q[0, 2 * kh, 0][None, :] + 0.05 * rng.standard_normal((64, D)))
++        k[0, kh, 5 * 64:6 * 64] = blk; k[0, kh, 20 * 64:21 * 64] = blk   # bit-identical blocks 5 and 20
++    return q, k, v
++
++
++def test_fixture_matches_lead_ast():
++    # The pinned faithful excerpt is inside this round's authorized artifacts;
++    # its SHA and origin are recorded in FIXTURE_PROVENANCE.json.
++    reference = ast.parse((ART / 'lead_tie_fixture.py.txt').read_text())
++    own = ast.parse(Path(__file__).read_text())
++    fn = next(x for x in own.body if isinstance(x, ast.FunctionDef) and x.name == 'tie_fixture')
++    assert ast.dump(ast.Module(body=fn.body[:-1], type_ignores=[]), include_attributes=False) == ast.dump(reference, include_attributes=False)
++
++
++def test_exact_tie_fixture_cpu():
++    q, k, v = tie_fixture()
++    assert q.shape == (1, 16, 1, 128) and k.shape == v.shape == (1, 8, 2048, 128)
++    for a in (q, k, v):
++        assert a.dtype == np.float32 and np.isfinite(a).all()
++        assert np.all((a.view(np.uint32) & 0xFFFF) == 0), 'fixture must be bf16-exact'
++        assert_informative(a.view(np.uint32))
++    assert np.array_equal(k[:, :, 320:384].view(np.uint32), k[:, :, 1280:1344].view(np.uint32))
++    assert int(np.ceil((1 / 32) * (2048 // 64))) == 1
++    # CPU fixture sanity only. Actual fp32 packed scores are asserted on GPU.
++    scores = np.einsum('bhd,bhsd->bhs', q[:, ::2, 0], k, dtype=np.float32)
++    block_mass = np.exp(scores - scores.max(axis=-1, keepdims=True)).reshape(1, 8, 32, 64).sum(axis=-1)
++    assert np.array_equal(block_mass[:, :, 5].view(np.uint32), block_mass[:, :, 20].view(np.uint32))
++    assert np.all(block_mass[:, :, 5] == block_mass.max(axis=-1))
++
++
++@pytest.mark.skipif(not GPU, reason='staged lead GPU test; CPU seat has no GPU')
++def test_exact_tie_gpu(tmp_path):
++    tc, _ = gpu_runtime()
++    os.environ.pop('APA_P1_EARLY_COUNTER', None)
++    q, k, v = tie_fixture()
++    T = lambda x: tc.tensor(np.ascontiguousarray(x), dtype='bfloat16')
++    qt, kt, vt = T(q), T(k), T(v)
++    w = tc.ApaSpq1Workspace(kt, 2049, fmt='tq4')
++    vi, vs = tc.apa_eb2b_quantize(vt)
++    scale = float(np.float32(1 / np.sqrt(128)))
++    ref = tc.apa_eb2b(qt, kt, vt, vi, vs, w.packed, scale, 1 / 32, diagnostics=True)
++    got = tc.apa_eb4(qt, kt, vt, vi, vs, w.packed, scale, 8.1, 1 / 32, carry='row', diagnostics=True)
++    flags_ref = ref[4].numpy().astype(np.uint8).reshape(1, 8, 32)
++    flags_got = got[1].numpy().astype(np.uint8).reshape(1, 8, 32)
++    out_ref, out_got = float_bits(ref[0]), float_bits(got[0])
++    scores = got[3].numpy().astype(np.float32).reshape(1, 8, 32)
++    for a in (flags_ref, out_ref): assert_informative(a)
++    assert np.array_equal(scores[:, :, 5].view(np.uint32), scores[:, :, 20].view(np.uint32)), 'cutoff scores must tie in fp32 bits'
++    assert np.all(scores[:, :, 5] == scores.max(axis=-1)), 'tie must straddle top-1 cutoff'
++    assert np.all(flags_ref.sum(axis=-1) == 1) and np.all(flags_got.sum(axis=-1) == 1), 'one high block per KV head'
++    # Save references at full bit width before the registered mutant fails.
++    np.savez(tmp_path / 'tie_readback.npz', ref_out=out_ref, out=out_got, ref_flags=flags_ref, flags=flags_got, scores=scores.view(np.uint32))
++    if os.environ.get('APA_P1_MUTANT') == 'eb4_reverse_tie':
++        assert np.all(flags_got[:, :, 20] == 1) and np.all(flags_got[:, :, 5] == 0), 'reverse-tie mutant must select block 20'
++    # Named negative control: APA_EB4_MUTANT=7 must fail selecting block 20.
++    assert np.all(flags_got[:, :, 5] == 1) and np.all(flags_got[:, :, 20] == 0), 'exact-tie lower-index winner mismatch'
++    assert np.array_equal(flags_ref, flags_got), 'EB2b/EB4 flags differ bitwise'
++    assert np.array_equal(out_ref, out_got), 'EB2b/EB4 output differs bitwise'
+--- /dev/null
++++ after/tensor_cuda/tests/test_apa_p1_tickets.py
+@@ -0,0 +1,165 @@
++"""P1 per-device ticket ownership and lead-only native concurrency test.
++
++Prior art: NVIDIA CUDA Samples threadFenceReduction and stream-ordered lifetime
++APIs (2021); ISO C++11 mutex/map. Taken: existing tickets and legacy stream;
++new here: device ownership unit coverage. Literature unverified -- lead to
++check: CUDA 11.2 stream ordered memory allocator 2021.
++"""
++from pathlib import Path
++import hashlib
++import json
++import os
++import subprocess
++import threading
++from concurrent.futures import ThreadPoolExecutor
++
++import numpy as np
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++ART = ROOT / 'artifacts/apa_p1_s3_r2'
++GPU = os.environ.get('APA_P1_GPU') == '1'
++
++
++def compile_cpp(tmp_path, source, name):
++    p = tmp_path / (name + '.cpp')
++    p.write_text(source)
++    exe = tmp_path / name
++    cmd = ['timeout', '45s', 'c++', '-std=c++17', '-O2', '-pthread', str(p), '-o', str(exe)]
++    result = subprocess.run(cmd, capture_output=True, text=True)
++    assert result.returncode == 0, result.stdout + result.stderr
++    return exe
++
++
++def test_per_device_ticket_ownership(tmp_path):
++    """Compile the actual registry, EB4 wrapper and existing checked guard.
++
++    The CUDA API recorder is a CPU unit instrument, not evidence of a device
++    runtime. GPU ownership/concurrency is reserved for the staged lead run.
++    """
++    eb3 = (ROOT / 'tensor_cuda/src/apa_spo/eb3.cuh').read_text()
++    eb4 = (ROOT / 'tensor_cuda/src/apa_spo/eb4.cuh').read_text()
++    core = (ROOT / 'tensor_cuda/src/kernels.cu').read_text()
++    host = eb3.split('// APA_P1_HOST_TICKETS_BEGIN', 1)[1].split('\n', 1)[1].split('// APA_P1_HOST_TICKETS_END', 1)[0]
++    guard = core[core.index('class CheckedDeviceGuard {'):]
++    guard = guard[:guard.index('\n};') + 3]
++    choose = eb4[eb4.index('inline unsigned* counters('):]
++    choose = choose[:choose.index('\n}') + 2]
++    prefix = r'''
++#include <algorithm>
++#include <atomic>
++#include <cassert>
++#include <cstdint>
++#include <cstring>
++#include <map>
++#include <mutex>
++#include <stdexcept>
++#include <string>
++#include <thread>
++#include <unordered_map>
++#include <vector>
++#include <iostream>
++using cudaError_t=int;
++constexpr int cudaSuccess=0,cudaDevAttrL2CacheSize=1;
++thread_local int current_device=0;
++std::map<void*,int> owner;
++std::map<int,int> syncs,attributes,allocations;
++std::map<void*,size_t> sizes;
++std::atomic<unsigned long long> g_dlpack_device_restore_failures{0};
++int cudaGetDevice(int* d){*d=current_device;return 0;}
++int cudaSetDevice(int d){current_device=d;return 0;}
++int cudaGetLastError(){return 0;}
++[[noreturn]] void raise_cuda_failure(const std::string& msg,int){throw std::runtime_error(msg);}
++void note_core_unraisable(const char*,int,int){}
++int cudaMalloc(unsigned** p,size_t n){*p=new unsigned[n/4];owner[*p]=current_device;sizes[*p]=n;allocations[current_device]++;std::memset(*p,0xcd,n);return 0;}
++int cudaMemset(void* p,int v,size_t n){assert(owner.at(p)==current_device && sizes.at(p)==n);std::memset(p,v,n);return 0;}
++int cudaFree(void* p){assert(owner.at(p)==current_device);return 0;} // keep CPU instrument allocations for inspection
++int cudaDeviceSynchronize(){syncs[current_device]++;return 0;}
++int cudaDeviceGetAttribute(int* v,int,int d){assert(d==current_device);*v=(d+1)*1000000;attributes[d]++;return 0;}
++'''
++    main = r'''
++int main(){
++  using eb3::TicketDeviceGuard;
++  int64_t bytes=0;
++  auto* m0=eb3::counters(1,&bytes);auto* c0=eb4::counters(2);
++  assert(bytes==4096 && m0!=c0 && owner[m0]==0 && owner[c0]==0);
++  for(int i=0;i<1024;++i)assert(m0[i]==0 && c0[i]==0);
++  assert(eb3::l2_bytes()==1000000 && eb3::l2_bytes()==1000000 && attributes[0]==1);
++  unsigned *m1,*c1;
++  {TicketDeviceGuard g(1,"unit");m1=eb3::counters(3);c1=eb4::counters(4);assert(m1!=c1 && m1!=m0 && c1!=c0);assert(owner[m1]==1 && owner[c1]==1);assert(eb3::l2_bytes()==2000000 && eb3::l2_bytes()==2000000 && attributes[1]==1);g.restore();}
++  assert(current_device==0);
++  try{TicketDeviceGuard g(1,"unit unwind");throw std::runtime_error("unit");}catch(const std::runtime_error&){}
++  assert(current_device==0);
++  auto* grown=eb3::counters(2049,&bytes);
++  assert(grown!=m0 && bytes==2049*4 && syncs[0]==1 && syncs[1]==0);
++  assert(eb4::counters(0)==c0 && owner[grown]==0);
++  for(int i=0;i<2049;++i)assert(grown[i]==0);
++  {TicketDeviceGuard g(1,"unit");assert(eb3::counters(0)==m1);assert(eb4::counters(2049)!=c1);assert(syncs[1]==1);g.restore();}
++  auto worker=[](int d){for(int i=0;i<100;++i){std::lock_guard<std::recursive_mutex> lock(eb3::ticket_mutex());TicketDeviceGuard g(d,"unit threads");auto* m=eb3::counters(2);auto* c=eb4::counters(2);assert(m!=c && owner[m]==d && owner[c]==d);g.restore();assert(current_device==0);}};
++  std::thread a(worker,0),b(worker,1);a.join();b.join();
++  assert(eb3::device_tickets().size()==2 && allocations[0]==3 && allocations[1]==3);
++  std::cout << "PASS: two devices; distinct merge/choose; first-use zero; device-local growth; per-device L2; restore/unwind; native host threads\n";
++}
++'''
++    source = prefix + guard + '\nnamespace eb3 { namespace tune {constexpr int COUNTER_MIN_ENTRIES=1024;}\n' + host + '\n}\nnamespace eb4 {namespace tune {constexpr int COUNTER_MIN_ENTRIES=1024;}\n' + choose + '\n}\n' + main
++    exe = compile_cpp(tmp_path, source, 'ticket_ownership')
++    result = subprocess.run(['timeout', '10s', str(exe)], capture_output=True, text=True)
++    assert result.returncode == 0, result.stdout + result.stderr
++    # The actual native entry must hold its lock over lookup and submission.
++    for text, name in [(eb3, 'apa_eb3_run'), (eb4, 'apa_eb4_run')]:
++        launcher = text[text.index('std::vector<NDArray> ' + name):]
++        assert launcher.index('ticket_launch_lock') < launcher.index('NDArray arena')
++        assert launcher.index('operand_device(q.device.index') < launcher.index('NDArray arena')
++        assert launcher.index('ticket_launch_lock') < launcher.index('<<<')
++        assert 'operand_device.restore();' in launcher
++
++
++def gpu_runtime():
++    assert GPU, 'Lead-only GPU test; set APA_P1_GPU=1 under forge-gpu-run'
++    assert os.environ.get('CUDA_VISIBLE_DEVICES') != '', 'GPU visibility is empty'
++    import tensor_cuda as tc
++    native = tc._spo2
++    assert hasattr(native, '_p1_test_run'), 'This round needs TC_APA_P1_TEST_HOOKS=1'
++    return tc, native
++
++
++def float_bits(tensor):
++    return tensor.numpy().astype(np.float32).view(np.uint32).copy()
++
++
++def assert_informative(a):
++    assert np.any(a != 0), 'zero reference'
++    assert a.size > 1 and np.any(a != a.flat[0]), 'constant reference'
++
++
++@pytest.mark.skipif(not GPU, reason='staged lead GPU test; CPU seat has no GPU')
++def test_two_host_threads_bitwise():
++    """Native GIL-releasing S2 test entry exercises the same launch lock.
++
++    Prior art: serial-reference concurrency testing; no prior art known to me
++    for this exact packed fixture. One legacy default stream on each device.
++    """
++    tc, native = gpu_runtime()
++    os.environ.pop('APA_P1_EARLY_COUNTER', None)
++    tc.set_alloc_pooling(True)
++    from test_apa_p1_exact_tie import tie_fixture
++    q, k, v = tie_fixture()
++    T = lambda x: tc.tensor(np.ascontiguousarray(x), dtype='bfloat16')
++    qt, kt, vt = T(q), T(k), T(v)
++    w = tc.ApaSpq1Workspace(kt, 2049, fmt='tq4')
++    vi, vs = tc.apa_eb2b_quantize(vt)
++    scale = float(np.float32(1 / np.sqrt(128)))
++    def run(mixed):
++        return native._p1_test_run(mixed, qt, kt, vt, vi, vs, w.packed, scale, 8.1, 1 / 32, False, 0)
++    refs = {mixed: float_bits(run(mixed)[0]) for mixed in (False, True)}
++    for ref in refs.values(): assert_informative(ref)
++    barrier = threading.Barrier(2, timeout=20)
++    def worker(mixed):
++        for _ in range(64):
++            barrier.wait()
++            # Calls release the GIL inside the native test binding.
++            out = run(mixed)[0]
++            assert np.array_equal(float_bits(out), refs[mixed]), 'thread/serial bitwise mismatch'
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        futures = [pool.submit(worker, mixed) for mixed in (False, True)]
++        for f in futures: f.result(timeout=120)

@@ -1,0 +1,30 @@
+--- before/tensor_cuda/src/bindings.cpp
++++ after/tensor_cuda/src/bindings.cpp
+@@ -2744,6 +2744,27 @@
+ // Prior art: pybind11 keyword defaults (Jakob 2015), taken.
+ // Prior art: pybind11 (Jakob 2015); companion initializer preserves file prefix.
+ PYBIND11_MODULE(_tensor_cuda_spo2,m) {
++#if defined(TC_APA_P1_TEST_HOOKS) && TC_APA_P1_TEST_HOOKS
++  // Test-only entry for survey S3's two-CTA handshake. pybind11 (Jakob 2015)
++  // scoped GIL release is taken so tests can also exercise native host threads.
++  // No default-build binding or public Python API change.
++  m.def("_p1_test_run",[](bool mixed,Tensor& q,Tensor& k,Tensor& v,Tensor& vi,Tensor& vs,
++      py::tuple packed,double scale,double delta,double fraction,bool force,int variant){
++    if(packed.size()!=4)throw std::runtime_error("P1 test: packed tuple size");
++    auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();
++    auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
++    std::vector<NDArray> result;
++    {
++      py::gil_scoped_release release;
++      if(mixed)result=tc::apa_eb4_run(q.data(),k.data(),v.data(),vi.data(),vs.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,fraction,nullptr,"row",force,nullptr,true,true);
++      else result=tc::apa_eb3_run(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),scale,delta,nullptr,"row",variant==0,true,false,variant);
++    }
++    py::tuple out(result.size());
++    for(size_t i=0;i<result.size();++i)out[i]=result[i].defined()?py::cast(Tensor::make(result[i],false)):py::none();
++    return out;
++  });
++#endif
++
+   auto call=[](Tensor& q,Tensor& k,Tensor& kq,Tensor& v,double scale,double delta,bool causal,py::object sink,bool diag,bool baseline,bool dump,const std::string& carry,const std::string& dots)->py::object {
+     const NDArray* s=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+     auto r=tc::apa_spo2_run(q.data(),k.data(),kq.data(),v.data(),scale,delta,causal,s,diag||dump,baseline,carry,dots);

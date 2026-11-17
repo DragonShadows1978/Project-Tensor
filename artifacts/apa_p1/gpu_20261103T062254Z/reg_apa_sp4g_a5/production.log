@@ -1,0 +1,44 @@
+...F............F...........                                             [100%]
+=================================== FAILURES ===================================
+_____________ test_a5_completed_RED_accepted_without_waiving_gate ______________
+tensor_cuda/tests/test_apa_sp4g_a5.py:83: in test_a5_completed_RED_accepted_without_waiving_gate
+    assert common.completed_d32()['status']=='RED'
+           ^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a5_common.py:77: in completed_d32
+    require_a4(d)
+scripts/apa_sp4g_a4_common.py:37: in require_a4
+    if name not in by_id():return require_a2(name)
+                                  ^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a2_common.py:19: in require_a2
+    if name not in by_id():return require_pass(name)
+                                  ^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:104: in require_pass
+    if j.get('status')!='PASS' or j.get('cell')!=c or j.get('registration_sha256')!=REG_SHA or (j.get('fingerprint')!=fingerprint(c) and not legacy_compatible(j)):raise Red('STALE_OR_RED_RECEIPT: '+name)
+                                                                                                                      ^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:94: in fingerprint
+    return {str(p.relative_to(R)):sha(p) for p in paths}
+                                  ^^^^^^
+scripts/apa_sp4g_common.py:14: in sha
+    with Path(p).open('rb') as f:
+         ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+____________ test_a5_propagation_ungated_and_registration_preserved ____________
+tensor_cuda/tests/test_apa_sp4g_a5.py:120: in test_a5_propagation_ungated_and_registration_preserved
+    before=common.preserved()
+           ^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_a5_common.py:25: in preserved
+    a4.preserved()
+scripts/apa_sp4g_a4_common.py:16: in preserved
+    verify_sources();build_check()
+    ^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:37: in verify_sources
+    if sha(R/p)!=h:raise Red('SOURCE_CHANGED: '+p)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   apa_sp4g_common.Red: SOURCE_CHANGED: tensor_cuda/include/tc/core.h
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_sp4g_a5.py::test_a5_completed_RED_accepted_without_waiving_gate
+FAILED tensor_cuda/tests/test_apa_sp4g_a5.py::test_a5_propagation_ungated_and_registration_preserved
+2 failed, 26 passed in 1.44s

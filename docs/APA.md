@@ -106,3 +106,42 @@ quality, peak-memory, prefill, and decode gates at its intended operating point.
 - [Kernel optimization synthesis](KERNEL_OPT_SYNTHESIS.md)
 - [Kernel implementation ledger](KERNEL_OPT_IMPLEMENTATION_LEDGER.md)
 - [`tensor_cuda` APA kernel tests](../tensor_cuda/tests/test_apa_selective.py)
+
+## 8. The shipped selective-precision path (APA-P1)
+
+**Entry points.** These live in `tensor_cuda.apa_sp2`:
+- `quantize_sp2_keys(k, bulk_bits, *, storage=None, capacity=None)` stores the keys.
+- `apa_selective_attention_sp(...)` attends over them.
+
+**Storage.** Packed is the shipped default.
+- **How storage is chosen:** the `storage` argument wins, then `TC_APA_SP_STORAGE`, then the default `"packed"`. Only
+  `"packed"` and `"dense"` are accepted.
+- **What packed holds:** the 4-bit codes, the per-key norms and fixed tables, and no K-shaped dense tensor.
+- **Where it applies:** packed covers 4-bit bulk at head dimensions 64 and 128 on the public fp32 route.
+  - Under the default, an ineligible input takes the dense representation and records why.
+  - An explicit `storage="packed"` that cannot be honoured raises an error.
+  - Nothing changes 2 bits to 4.
+- **Prefill in this release:** prefill (more than one query row) on packed keys is refused with a `ValueError`. Quantize
+  with `storage="dense"` for prefill. A packed prefill kernel is in testing.
+
+**Non-finite contract.** This is what the packed and dense routes promise for non-finite values:
+1. A NaN in q, k or v gives the same set of non-finite output rows on both routes.
+2. If any element of q, k, v or a sink is non-finite, the packed route never hides a row that the dense route makes
+   non-finite.
+3. A key whose stored norm is non-finite, for any reason, makes every row that reads it non-finite.
+4. Finite inputs whose score or softmax arithmetic overflows fp32 are outside both routes' contract.
+   - Each route follows IEEE propagation, and the two may differ: they form different sums in different orders.
+   - Example: a finite key element of 1e19 against a query element of −1e23 overflows the packed bulk score to −Inf,
+     which gives weight 0. The dense lane sums give NaN.
+
+**Evidence.**
+- **Model quality.** On Qwen3-1.7B and Qwen3-4B (AB-1's G1_2 rule at refine-all, 2,560 scored tokens per model), the
+  ratio of mean KL to the floor is 0.88 to 0.96, against a bar of 1.50. Top-1 agreement is within the one-sided slack.
+- **Review.** Four cross-model review rounds found 12, 8, 3 and 1 findings. All are fixed, or closed by the contract
+  above (clause 4).
+
+**Not covered by this release:**
+- decode and prefill speed;
+- the packed prefill kernel;
+- the memory-saving tiered design;
+- installation of a rebuilt engine binary.

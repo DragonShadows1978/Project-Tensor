@@ -1,0 +1,5 @@
+rng = np.random.default_rng(20261019); H, KVH, S, D = 16, 8, 2048, 128
+q = rnd(rng.standard_normal((1, H, 1, D))); k = rnd(0.5 * rng.standard_normal((1, KVH, S, D))); v = rnd(rng.standard_normal((1, KVH, S, D)))
+for kh in range(KVH):
+    blk = rnd(0.3 * q[0, 2 * kh, 0][None, :] + 0.05 * rng.standard_normal((64, D)))
+    k[0, kh, 5 * 64:6 * 64] = blk; k[0, kh, 20 * 64:21 * 64] = blk   # bit-identical blocks 5 and 20

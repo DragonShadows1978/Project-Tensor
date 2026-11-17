@@ -1,0 +1,91 @@
+F............FF....................F.........F..                         [100%]
+=================================== FAILURES ===================================
+__________ test_registration_and_all_preexisting_source_bytes_pinned ___________
+tensor_cuda/tests/test_apa_sp4g.py:27: in test_registration_and_all_preexisting_source_bytes_pinned
+    r=common.verify_sources();assert common.sha(common.A/'registration.json')==common.REG_SHA
+      ^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:37: in verify_sources
+    if sha(R/p)!=h:raise Red('SOURCE_CHANGED: '+p)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   apa_sp4g_common.Red: SOURCE_CHANGED: tensor_cuda/include/tc/core.h
+____________ test_compiled_d512_mqa_flag_device_scalar_guards[7-19] ____________
+tensor_cuda/tests/test_apa_sp4g.py:84: in test_compiled_d512_mqa_flag_device_scalar_guards
+    tc=common.load_runtime();q=tc.tensor(np.zeros((0,16,L,512),np.float32),device='cpu');k=tc.tensor(np.zeros((0,1,S,512),np.float32),device='cpu')
+       ^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:56: in load_runtime
+    build_check();sys.dont_write_bytecode=True
+    ^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:50: in build_check
+    m=read(BUILD/'manifest.json')
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:17: in read
+    def read(p):return json.loads(Path(p).read_text())
+                                  ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+___________ test_compiled_d512_mqa_flag_device_scalar_guards[1-4097] ___________
+tensor_cuda/tests/test_apa_sp4g.py:84: in test_compiled_d512_mqa_flag_device_scalar_guards
+    tc=common.load_runtime();q=tc.tensor(np.zeros((0,16,L,512),np.float32),device='cpu');k=tc.tensor(np.zeros((0,1,S,512),np.float32),device='cpu')
+       ^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:56: in load_runtime
+    build_check();sys.dont_write_bytecode=True
+    ^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:50: in build_check
+    m=read(BUILD/'manifest.json')
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:17: in read
+    def read(p):return json.loads(Path(p).read_text())
+                                  ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+_______________ test_live_gemma_kq_cache_only_quantizes_new_rows _______________
+tensor_cuda/tests/test_apa_sp4g.py:246: in test_live_gemma_kq_cache_only_quantizes_new_rows
+    common.load_runtime();sys.path.insert(0,'/mnt/ForgeRealm/GraftRepository')
+    ^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:56: in load_runtime
+    build_check();sys.dont_write_bytecode=True
+    ^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:50: in build_check
+    m=read(BUILD/'manifest.json')
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:17: in read
+    def read(p):return json.loads(Path(p).read_text())
+                                  ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+________ test_kernel_bridge_exact_endpoint_and_unknown_changes_rejected ________
+tensor_cuda/tests/test_apa_sp4g.py:352: in test_kernel_bridge_exact_endpoint_and_unknown_changes_rejected
+    now=common.fingerprint(j['cell'])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/apa_sp4g_common.py:94: in fingerprint
+    return {str(p.relative_to(R)):sha(p) for p in paths}
+                                  ^^^^^^
+scripts/apa_sp4g_common.py:14: in sha
+    with Path(p).open('rb') as f:
+         ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_apa2pprod/artifacts/apa_sp4g/build/manifest.json'
+=========================== short test summary info ============================
+FAILED tensor_cuda/tests/test_apa_sp4g.py::test_registration_and_all_preexisting_source_bytes_pinned
+FAILED tensor_cuda/tests/test_apa_sp4g.py::test_compiled_d512_mqa_flag_device_scalar_guards[7-19]
+FAILED tensor_cuda/tests/test_apa_sp4g.py::test_compiled_d512_mqa_flag_device_scalar_guards[1-4097]
+FAILED tensor_cuda/tests/test_apa_sp4g.py::test_live_gemma_kq_cache_only_quantizes_new_rows
+FAILED tensor_cuda/tests/test_apa_sp4g.py::test_kernel_bridge_exact_endpoint_and_unknown_changes_rejected
+5 failed, 43 passed in 0.61s
