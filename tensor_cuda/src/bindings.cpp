@@ -2677,27 +2677,28 @@ PYBIND11_MODULE(_tensor_cuda, m) {
                              "'; expected cpu, cuda, or cuda:N naming the current device");
     };
     if (text == "cpu") return Device{DeviceType::CPU, 0};
-    if (text == "cuda") return Device{DeviceType::CUDA, 0};
-    if (text.compare(0, 5, "cuda:") != 0) throw refuse();
-    const std::string idx = text.substr(5);
+    const bool bare_cuda = text == "cuda";
+    if (!bare_cuda && text.compare(0, 5, "cuda:") != 0) throw refuse();
+    const std::string idx = bare_cuda ? "" : text.substr(5);
     // As in public empty: an index longer than 9 digits cannot name a device.
-    if (idx.empty() || idx.size() > 9 || idx.find_first_not_of("0123456789") != std::string::npos)
+    if (!bare_cuda && (idx.empty() || idx.size() > 9 || idx.find_first_not_of("0123456789") != std::string::npos))
       throw refuse();
-    const int requested = std::stoi(idx);
+    // ENG3-F3 F02/F04. Prior art: tensor_empty/P1T-FIX4 (2026); reuse
+    // its checked current-device label and report-before-consuming helper.
     int current = -1;
     const cudaError_t e = cudaGetDevice(&current);
     if (e != cudaSuccess) {
-      cudaGetLastError();
-      throw refuse();
+      throw_cuda_report_after_consuming(std::string(who) + ": the current-device query cudaGetDevice failed (" +
+                                      cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + "); nothing was allocated");
     }
-    if (requested != current) throw refuse();
+    if (!bare_cuda && std::stoi(idx) != current) throw refuse();
     return Device{DeviceType::CUDA, current};
   };
   m.def("_core_full",
         [core_device](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {
           const Device dev = core_device(device, "_core_full");
           if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
-            throw py::value_error("_core_full: rank exceeds TC_MAX_DIMS=8");
+            throw py::value_error("_core_full: rank exceeds TC_MAX_DIMS=" + std::to_string(TC_MAX_DIMS));
           for (int64_t s : shape)
             if (s < 0) throw py::value_error("_core_full: negative extent");
           return Tensor::make(NDArray::full(Shape(shape.begin(), shape.end()), value, dtype_from_string(dtype), dev),
@@ -2709,7 +2710,7 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         [core_device](std::vector<int64_t> shape, const std::string& dtype, const std::string& device) {
           const Device dev = core_device(device, "_core_zeros");
           if (shape.size() > static_cast<size_t>(TC_MAX_DIMS))
-            throw py::value_error("_core_zeros: rank exceeds TC_MAX_DIMS=8");
+            throw py::value_error("_core_zeros: rank exceeds TC_MAX_DIMS=" + std::to_string(TC_MAX_DIMS));
           for (int64_t s : shape)
             if (s < 0) throw py::value_error("_core_zeros: negative extent");
           return Tensor::make(NDArray::zeros(Shape(shape.begin(), shape.end()), dtype_from_string(dtype), dev), false);
@@ -2718,7 +2719,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         "ENG3 test hook (private): NDArray::zeros(shape, dtype, device).");
   m.def("_core_clone", [](Tensor& t) {
           if (t.data().shape.size() > static_cast<size_t>(TC_MAX_DIMS))
-            throw py::value_error("_core_clone: rank exceeds TC_MAX_DIMS=8");
+            throw py::value_error("_core_clone: rank exceeds TC_MAX_DIMS=" + std::to_string(TC_MAX_DIMS));
+          // Defensive: the NDArray constructor already refuses negative extents.
           for (int64_t s : t.data().shape)
             if (s < 0) throw py::value_error("_core_clone: negative extent");
           return Tensor::make(t.data().clone(), false);
@@ -2727,7 +2729,8 @@ PYBIND11_MODULE(_tensor_cuda, m) {
         [core_device](Tensor& t, const std::string& device) {
           const Device dev = core_device(device, "_core_to");
           if (t.data().shape.size() > static_cast<size_t>(TC_MAX_DIMS))
-            throw py::value_error("_core_to: rank exceeds TC_MAX_DIMS=8");
+            throw py::value_error("_core_to: rank exceeds TC_MAX_DIMS=" + std::to_string(TC_MAX_DIMS));
+          // Defensive: the NDArray constructor already refuses negative extents.
           for (int64_t s : t.data().shape)
             if (s < 0) throw py::value_error("_core_to: negative extent");
           return Tensor::make(t.data().to(dev), false);

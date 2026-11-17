@@ -1,0 +1,33 @@
+{
+  "arm": "f3m01_bare_cuda_no_query",
+  "module_sha256": "4e9b90866b86cf24c4209b83bcaf42052dd5738bb927d7a955c166e5db911a7f",
+  "exit": 1,
+  "args": [
+    "-q",
+    "-s",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3",
+    "--basetemp=/tmp/eng3f3_scratch/pt_G3_m01",
+    "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3f3/host/G3_m01/junit.xml",
+    "-k",
+    "test_f3_cpu_no_device_query and bare",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_host.py",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_f3.py"
+  ],
+  "outcomes": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_full]": "failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_zeros]": "failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_to]": "failed"
+  },
+  "counts": {
+    "failed": 3
+  },
+  "collection_errors": {},
+  "failures": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_full]": "hook = '_core_full', device = 'cuda'\n\n    @pytest.mark.parametrize(\"hook\", [\"_core_full\", \"_core_zeros\", \"_core_to\"])\n    @pytest.mark.parametrize(\"device\", [\"cuda\", \"cuda:0\"], ids=[\"bare\", \"indexed\"])\n    def test_f3_cpu_no_device_query(hook, device):\n        # Prior art: public tensor_empty/P1T-FIX4 checked query (2026).\n        # Real runtime with no visible device; no stub or synthetic CUDA error.\n        assert os.environ.get(\"CUDA_VISIBLE_DEVICES\") == \"\"\n        source = tc.tensor([1.0, 2.0], device=\"cpu\")\n>       with pytest.raises(RuntimeError) as caught:\nE       Failed: DID NOT RAISE <class 'RuntimeError'>\n\ntensor_cuda/tests/test_eng3_f3.py:152: Failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_zeros]": "hook = '_core_zeros', device = 'cuda'\n\n    @pytest.mark.parametrize(\"hook\", [\"_core_full\", \"_core_zeros\", \"_core_to\"])\n    @pytest.mark.parametrize(\"device\", [\"cuda\", \"cuda:0\"], ids=[\"bare\", \"indexed\"])\n    def test_f3_cpu_no_device_query(hook, device):\n        # Prior art: public tensor_empty/P1T-FIX4 checked query (2026).\n        # Real runtime with no visible device; no stub or synthetic CUDA error.\n        assert os.environ.get(\"CUDA_VISIBLE_DEVICES\") == \"\"\n        source = tc.tensor([1.0, 2.0], device=\"cpu\")\n>       with pytest.raises(RuntimeError) as caught:\nE       Failed: DID NOT RAISE <class 'RuntimeError'>\n\ntensor_cuda/tests/test_eng3_f3.py:152: Failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[bare-_core_to]": "d\"])\n    def test_f3_cpu_no_device_query(hook, device):\n        # Prior art: public tensor_empty/P1T-FIX4 checked query (2026).\n        # Real runtime with no visible device; no stub or synthetic CUDA error.\n        assert os.environ.get(\"CUDA_VISIBLE_DEVICES\") == \"\"\n        source = tc.tensor([1.0, 2.0], device=\"cpu\")\n        with pytest.raises(RuntimeError) as caught:\n            tc._C._core_to(source, device) if hook == \"_core_to\" else call(hook, [0], device=device)\n        message = str(caught.value)\n>       assert hook in message and \"cudaGetDevice\" in message, message\nE       AssertionError: cudaMalloc failed: no CUDA-capable device is detected\nE       assert ('_core_to' in 'cudaMalloc failed: no CUDA-capable device is detected')\n\ntensor_cuda/tests/test_eng3_f3.py:155: AssertionError"
+  },
+  "CUDA_VISIBLE_DEVICES": ""
+}

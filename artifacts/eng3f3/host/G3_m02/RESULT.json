@@ -1,0 +1,33 @@
+{
+  "arm": "f3m02_query_error_as_invalid",
+  "module_sha256": "91d53eae7c147ba4280a5ec6827da21c83fdbd03f8d844d2c981f26769b0b1c8",
+  "exit": 1,
+  "args": [
+    "-q",
+    "-s",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3",
+    "--basetemp=/tmp/eng3f3_scratch/pt_G3_m02",
+    "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3f3/host/G3_m02/junit.xml",
+    "-k",
+    "test_f3_cpu_no_device_query and indexed",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_host.py",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_f3.py"
+  ],
+  "outcomes": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_full]": "failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_zeros]": "failed",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_to]": "failed"
+  },
+  "counts": {
+    "failed": 3
+  },
+  "collection_errors": {},
+  "failures": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_full]": "raises(RuntimeError) as caught:\n>           tc._C._core_to(source, device) if hook == \"_core_to\" else call(hook, [0], device=device)\n                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntensor_cuda/tests/test_eng3_f3.py:153: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nhook = '_core_full', shape = [0], dt = 'float32', device = 'cuda:0'\n\n    def call(hook, shape, dt=\"float32\", device=\"cpu\"):\n        if hook == \"_core_full\":\n>           return tc._C._core_full(shape, 1.0, dt, device)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           ValueError: _core_full: invalid device 'cuda:0'; expected cpu, cuda, or cuda:N naming the current device\n\ntensor_cuda/tests/test_eng3_f3.py:26: ValueError",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_zeros]": "  tc._C._core_to(source, device) if hook == \"_core_to\" else call(hook, [0], device=device)\n                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntensor_cuda/tests/test_eng3_f3.py:153: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nhook = '_core_zeros', shape = [0], dt = 'float32', device = 'cuda:0'\n\n    def call(hook, shape, dt=\"float32\", device=\"cpu\"):\n        if hook == \"_core_full\":\n            return tc._C._core_full(shape, 1.0, dt, device)\n>       return tc._C._core_zeros(shape, dt, device)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       ValueError: _core_zeros: invalid device 'cuda:0'; expected cpu, cuda, or cuda:N naming the current device\n\ntensor_cuda/tests/test_eng3_f3.py:27: ValueError",
+    "tensor_cuda/tests/test_eng3_f3.py::test_f3_cpu_no_device_query[indexed-_core_to]": "ore_full\", \"_core_zeros\", \"_core_to\"])\n    @pytest.mark.parametrize(\"device\", [\"cuda\", \"cuda:0\"], ids=[\"bare\", \"indexed\"])\n    def test_f3_cpu_no_device_query(hook, device):\n        # Prior art: public tensor_empty/P1T-FIX4 checked query (2026).\n        # Real runtime with no visible device; no stub or synthetic CUDA error.\n        assert os.environ.get(\"CUDA_VISIBLE_DEVICES\") == \"\"\n        source = tc.tensor([1.0, 2.0], device=\"cpu\")\n        with pytest.raises(RuntimeError) as caught:\n>           tc._C._core_to(source, device) if hook == \"_core_to\" else call(hook, [0], device=device)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           ValueError: _core_to: invalid device 'cuda:0'; expected cpu, cuda, or cuda:N naming the current device\n\ntensor_cuda/tests/test_eng3_f3.py:153: ValueError"
+  },
+  "CUDA_VISIBLE_DEVICES": ""
+}

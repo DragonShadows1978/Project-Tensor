@@ -600,7 +600,7 @@ import ctypes, json, os, sys
 sys.path.insert(0, os.environ["ENG3_PKG_PARENT"])
 import numpy as np
 import tensor_cuda as tc
-rt = ctypes.CDLL("/usr/local/cuda-12.6/lib64/libcudart.so")
+rt = ctypes.CDLL("libcudart.so.12")
 rt.cudaGetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
 n = ctypes.c_int(-1)
 init_error = rt.cudaGetDeviceCount(ctypes.byref(n))

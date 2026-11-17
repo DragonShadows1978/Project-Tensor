@@ -1,0 +1,29 @@
+{
+  "arm": "f1m02_malloc_unchecked",
+  "module_sha256": "264493c91b61bf03c8027082a62dc1cb1d86fa8c5381ee7605b391f6a257879b",
+  "exit": 1,
+  "args": [
+    "-q",
+    "-s",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3",
+    "--basetemp=/tmp/eng3f3_scratch/pt_G3_malloc_verified",
+    "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3f3/host/G3_malloc_verified/junit.xml",
+    "-k",
+    "test_f1_cpu_memoryerror",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_host.py",
+    "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_f3.py"
+  ],
+  "outcomes": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f1_cpu_memoryerror": "failed"
+  },
+  "counts": {
+    "failed": 1
+  },
+  "collection_errors": {},
+  "failures": {
+    "tensor_cuda/tests/test_eng3_f3.py::test_f1_cpu_memoryerror": "def test_f1_cpu_memoryerror():\n        p = run_child(\"memoryerror\")\n>       assert p.returncode == 0 and \"MEMORYERROR_CHILD_OK\" in p.stdout, (\"MemoryError child must exit 0\", p.returncode, p.stdout, p.stderr)\nE       AssertionError: ('MemoryError child must exit 0', -11, '{\"mapped_bytes\": 944521216, \"limit\": 961298432, \"shape\": [33554432]}\nE         CALL _core_full malloc-null\nE         ', 'ENG3F1_EXEC f1m02_malloc_unchecked\nE         ')\nE       assert (-11 == 0)\nE        +  where -11 = CompletedProcess(args=['/usr/bin/python3', '-B', '-P', '/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/t...limit\": 961298432, \"shape\": [33554432]}\\nCALL _core_full malloc-null\\n', stderr='ENG3F1_EXEC f1m02_malloc_unchecked\\n').returncode\n\ntensor_cuda/tests/test_eng3_f3.py:87: AssertionError"
+  },
+  "CUDA_VISIBLE_DEVICES": ""
+}
