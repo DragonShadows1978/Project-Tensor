@@ -644,12 +644,27 @@ def test_g1_cpu_runtime_unavailable():
 @pytest.mark.parametrize("empty", [False, True], ids=["nonempty", "zero_extent"])
 def test_f2_cpu_overflow_message(dtype, itemsize, hook, device, empty):
     """Execute the allocating constructor's byte-bound throw, before allocation.
-    Both CPU and bare CUDA descriptors reach the same check without CUDA calls.
+    Bare CUDA first resolves the current device (ENG3-F3 Amendment 1, A1.1).
     """
     shape = [2, 2**62] if itemsize == 1 else [(2**63 - 1) // itemsize + 1]
     if empty:
         shape = [0] + shape
     args = (shape, 1.0, dtype, device) if hook == "_core_full" else (shape, dtype, device)
+    if device == "cuda":
+        # Prior art: public tensor_empty/P1T-FIX4 (2026), CUDA cudaGetDevice;
+        # reuse the real query, pin F02/F04's error before the byte check.
+        # Unverified -- lead to check: CUDA Runtime API cudaGetDevice.
+        import ctypes
+        rt = ctypes.CDLL("libcudart.so.12")
+        current = ctypes.c_int(-1)
+        if rt.cudaGetDevice(ctypes.byref(current)) != 0:
+            with pytest.raises(RuntimeError) as caught:
+                getattr(_C, hook)(*args)
+            message = str(caught.value)
+            assert "cudaGetDevice" in message and hook in message, message
+            record("f2_overflow", {"hook": hook, "shape": shape, "dtype": dtype,
+                                   "device": device, "message": message})
+            return
     with pytest.raises(OverflowError) as caught:
         getattr(_C, hook)(*args)
     message = str(caught.value)

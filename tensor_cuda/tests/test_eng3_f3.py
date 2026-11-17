@@ -124,6 +124,10 @@ def test_f1_gpu_device_index():
 
 @pytest.mark.parametrize("dtype", ["float16", "float32", "bfloat16"])
 def test_f3_cpu_zero_extent_astype_ruling(dtype):
+    """ENG3R3-F01, closed by lead ruling (ENG3_F3_REV3_FIXES.md; A1.2):
+    refuse nominal byte overflow even with zero extent, matching NumPy and
+    P1T-FIX2. This pins the existing rule; kernels.cu remains read-only.
+    """
     # Prior art: NumPy nominal-size refusal and P1T-FIX2 (2026), as ruled
     # in ENG3R3-F01; pin the existing constructor rule, no new byte rule.
     shape = [0, 2**62]
@@ -136,6 +140,9 @@ def test_f3_cpu_zero_extent_astype_ruling(dtype):
 
 @pytest.mark.parametrize("dtype", ["float32", "int64"])
 def test_f3_cpu_zero_extent_zeros_ruling(dtype):
+    """ENG3R3-F01 / ENG3_F3_REV3_FIXES.md, Amendment 1 A1.2:
+    pin P1T-FIX2's zero-extent nominal byte refusal, as ruled to match NumPy.
+    """
     shape = [0, 2**62]
     with pytest.raises(OverflowError) as caught:
         tc._C._core_zeros(shape, dtype, "cpu")
