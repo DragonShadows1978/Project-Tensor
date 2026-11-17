@@ -1,0 +1,128 @@
+--- before/test_eng3_f3.py
++++ tensor_cuda/tests/test_eng3_f3.py
+@@ -30,29 +30,22 @@
+ 
+ def child(mode):
+     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+-    if mode == "overflow":
+-        rows = []
+-        for dt, width in DTYPES.items():
+-            q = (2**63 - 1) // width
+-            overflow = [q + 1] if width > 1 else [2**62, 4]
+-            for hook in ("_core_full", "_core_zeros"):
+-                for shape in (overflow, [0] + overflow, [2**62] if width >= 2 else overflow):
+-                    print("CALL", hook, dt, shape, flush=True)
+-                    try:
+-                        call(hook, shape, dt)
+-                    except OverflowError as e:
+-                        assert "overflow" in str(e), str(e)
+-                        rows.append({"hook": hook, "dtype": dt, "shape": shape, "error": type(e).__name__})
+-                    else:
+-                        raise AssertionError(("byte overflow accepted", hook, dt, shape))
+-            # Public path remains checked too, independently of private entries.
+-            with pytest.raises(ValueError, match="overflow"):
+-                tc.empty(overflow, dtype=dt, device="cpu")
+-            boundary = call("_core_zeros", [0, q], dt)
+-            assert boundary.shape == (0, q) and boundary.data_ptr() == 0
+-            rows.append({"dtype": dt, "boundary_shape": [0, q], "bound_bytes": q * width,
+-                         "representable_max_multiple": True, "accepted": True})
+-        print(json.dumps(rows), flush=True)
++    if mode == "no_device_query":
++        # Prior art: Python subprocess env isolation (PSF, 2003+), and
++        # tensor_empty/P1T-FIX4 checked query (2026). Reuse the real runtime
++        # checks in a hidden-device child; ours is per-row isolation.
++        # Unverified -- lead to check: Python subprocess env; cudaGetDevice.
++        hook, device = sys.argv[3:5]
++        assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
++        source = tc.tensor([1.0, 2.0], device="cpu")
++        with pytest.raises(RuntimeError) as caught:
++            tc._C._core_to(source, device) if hook == "_core_to" else call(hook, [0], device=device)
++        message = str(caught.value)
++        assert hook in message and "cudaGetDevice" in message, message
++        assert "cudaError" in message and ": " in message, message
++        assert "invalid device" not in message, message
++        print("ENG3F3_QUERY", hook, device, message)
++        print("NO_DEVICE_QUERY_CHILD_OK", hook, device, flush=True)
+     elif mode == "memoryerror":
+         mapped = int(Path("/proc/self/statm").read_text().split()[0]) * os.sysconf("SC_PAGE_SIZE")
+         limit = mapped + 16 * 1024**2
+@@ -73,8 +66,8 @@
+ 
+ 
+ 
+-def run_child(mode):
+-    p = subprocess.run([sys.executable, "-B", "-P", __file__, "child", mode],
++def run_child(mode, *args):
++    p = subprocess.run([sys.executable, "-B", "-P", __file__, "child", mode, *args],
+                        env=dict(os.environ, CUDA_VISIBLE_DEVICES=""), capture_output=True, text=True, timeout=120)
+     print(p.stdout)
+     sys.stderr.write(p.stderr)
+@@ -118,7 +111,9 @@
+             assert hook in str(exc.value) and device in str(exc.value)
+         for device in ("cuda", f"cuda:{current.value}"):
+             t = tc._C._core_to(source, device) if hook == "_core_to" else call(hook, [2], device=device)
+-            assert t.device.startswith("cuda") and t.shape == (2,)
++            # Prior art: NVIDIA CUDA current-device labels, pinned by F1
++            # (2026); exact equality now asserts REV4-F02's existing rule.
++            assert t.device == f"cuda:{current.value}" and t.shape == (2,)
+ 
+ 
+ 
+@@ -152,17 +147,12 @@
+ @pytest.mark.parametrize("hook", ["_core_full", "_core_zeros", "_core_to"])
+ @pytest.mark.parametrize("device", ["cuda", "cuda:0"], ids=["bare", "indexed"])
+ def test_f3_cpu_no_device_query(hook, device):
+-    # Prior art: public tensor_empty/P1T-FIX4 checked query (2026).
+-    # Real runtime with no visible device; no stub or synthetic CUDA error.
+-    assert os.environ.get("CUDA_VISIBLE_DEVICES") == ""
+-    source = tc.tensor([1.0, 2.0], device="cpu")
+-    with pytest.raises(RuntimeError) as caught:
+-        tc._C._core_to(source, device) if hook == "_core_to" else call(hook, [0], device=device)
+-    message = str(caught.value)
+-    assert hook in message and "cudaGetDevice" in message, message
+-    assert "cudaError" in message and ": " in message, message
+-    assert "invalid device" not in message, message
+-    print("ENG3F3_QUERY", hook, device, message)
++    # Prior art: existing F1 run_child (2026), Python subprocess env
++    # isolation (PSF, 2003+). Keep all six rows active on GPU parents too.
++    p = run_child("no_device_query", hook, device)
++    marker = f"NO_DEVICE_QUERY_CHILD_OK {hook} {device}"
++    assert p.returncode == 0 and marker in p.stdout, (p.returncode, p.stdout, p.stderr)
++
+ 
+ 
+ if __name__ == "__main__":
+--- before/test_eng3_host.py
++++ tensor_cuda/tests/test_eng3_host.py
+@@ -651,13 +651,28 @@
+         shape = [0] + shape
+     args = (shape, 1.0, dtype, device) if hook == "_core_full" else (shape, dtype, device)
+     if device == "cuda":
+-        # Prior art: public tensor_empty/P1T-FIX4 (2026), CUDA cudaGetDevice;
+-        # reuse the real query, pin F02/F04's error before the byte check.
++        # Prior art: public tensor_empty/P1T-FIX4 (2026), NVIDIA CUDA
++        # cudaGetDevice; pytest environment configuration (2004+).
++        # Taken: real query. Ours: expectation from registration, never from
++        # the probe. Default preserves the documented empty-CVD CPU lane;
++        # other parents require a working device. Explicit 0/1 overrides it.
+         # Unverified -- lead to check: CUDA Runtime API cudaGetDevice.
++        expected = os.environ.get("ENG3_EXPECT_CUDA",
++                                  "0" if os.environ.get("CUDA_VISIBLE_DEVICES") == "" else "1")
++        assert expected in ("0", "1"), "ENG3_EXPECT_CUDA must be 0 or 1"
+         import ctypes
+         rt = ctypes.CDLL("libcudart.so.12")
+         current = ctypes.c_int(-1)
+-        if rt.cudaGetDevice(ctypes.byref(current)) != 0:
++        query_rc = rt.cudaGetDevice(ctypes.byref(current))
++        query_success = query_rc == 0
++        branch = "overflow" if expected == "1" else "no_device"
++        print(f"ENG3F4_BRANCH expected={expected} branch={branch} "
++              f"query_success={query_success} query_rc={query_rc} "
++              f"hook={hook} dtype={dtype} shape={shape}", flush=True)
++        assert query_success == (expected == "1"), (
++            f"registered ENG3_EXPECT_CUDA={expected} branch={branch} disagrees "
++            f"with cudaGetDevice return {query_rc}")
++        if expected == "0":
+             with pytest.raises(RuntimeError) as caught:
+                 getattr(_C, hook)(*args)
+             message = str(caught.value)

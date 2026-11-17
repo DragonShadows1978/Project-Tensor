@@ -651,13 +651,28 @@ def test_f2_cpu_overflow_message(dtype, itemsize, hook, device, empty):
         shape = [0] + shape
     args = (shape, 1.0, dtype, device) if hook == "_core_full" else (shape, dtype, device)
     if device == "cuda":
-        # Prior art: public tensor_empty/P1T-FIX4 (2026), CUDA cudaGetDevice;
-        # reuse the real query, pin F02/F04's error before the byte check.
+        # Prior art: public tensor_empty/P1T-FIX4 (2026), NVIDIA CUDA
+        # cudaGetDevice; pytest environment configuration (2004+).
+        # Taken: real query. Ours: expectation from registration, never from
+        # the probe. Default preserves the documented empty-CVD CPU lane;
+        # other parents require a working device. Explicit 0/1 overrides it.
         # Unverified -- lead to check: CUDA Runtime API cudaGetDevice.
+        expected = os.environ.get("ENG3_EXPECT_CUDA",
+                                  "0" if os.environ.get("CUDA_VISIBLE_DEVICES") == "" else "1")
+        assert expected in ("0", "1"), "ENG3_EXPECT_CUDA must be 0 or 1"
         import ctypes
         rt = ctypes.CDLL("libcudart.so.12")
         current = ctypes.c_int(-1)
-        if rt.cudaGetDevice(ctypes.byref(current)) != 0:
+        query_rc = rt.cudaGetDevice(ctypes.byref(current))
+        query_success = query_rc == 0
+        branch = "overflow" if expected == "1" else "no_device"
+        print(f"ENG3F4_BRANCH expected={expected} branch={branch} "
+              f"query_success={query_success} query_rc={query_rc} "
+              f"hook={hook} dtype={dtype} shape={shape}", flush=True)
+        assert query_success == (expected == "1"), (
+            f"registered ENG3_EXPECT_CUDA={expected} branch={branch} disagrees "
+            f"with cudaGetDevice return {query_rc}")
+        if expected == "0":
             with pytest.raises(RuntimeError) as caught:
                 getattr(_C, hook)(*args)
             message = str(caught.value)
