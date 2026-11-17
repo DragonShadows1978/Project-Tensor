@@ -43,7 +43,7 @@ import tensor_cuda as tc  # noqa: E402
 
 _C = tc._C
 ROOT = os.path.dirname(os.path.dirname(HERE))
-SHIM = os.path.join(ROOT, "artifacts", "eng3", "tools", "cudart_count.so")
+SHIM = os.path.join(HERE, "support", "cudart_count.c")
 SEED = 20261116
 
 # NaN outputs of the device casts (ENG3 probe on Build B, artifacts/eng3/probe/device_probe.npz).
@@ -493,13 +493,24 @@ print({"host_calls": host_calls, "host_counts": host_counts, "control_calls": L.
 """
 
 
-def test_g1_cpu_no_cuda_calls():
+def test_g1_cpu_no_cuda_calls(tmp_path):
     """Counts calls through the module's global libcudart imports after import.
     Cannot see direct-handle, driver-API or other-library calls. Every E2 host
     member is exercised; a device attempt is a positive control for this scope.
     """
-    assert os.path.exists(SHIM), SHIM
-    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", LD_PRELOAD=SHIM, ENG3_PKG_PARENT=PKG_PARENT)
+    # Prior art: pytest tmp_path (Krekel et al., 2004+), subprocess (PSF,
+    # 2003+), and the ENG3 interposer (2026). Reuse their APIs/source;
+    # ours: test-local compilation. Unverified -- lead to check: pytest tmp_path.
+    import shutil
+    compiler = next((path for name in ("cc", "gcc", "clang") if (path := shutil.which(name))), None)
+    if compiler is None:
+        pytest.skip("No C compiler available (tried cc, gcc, clang) to build the CUDA-call counter shim")
+    shim = tmp_path / "cudart_count.so"
+    command = [compiler, "-shared", "-fPIC", "-O2", "-o", str(shim), SHIM, "-ldl"]
+    compiled = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    assert compiled.returncode == 0, (command, compiled.returncode, compiled.stdout, compiled.stderr)
+    print("ENG3 shim compile:", command)
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", LD_PRELOAD=str(shim), ENG3_PKG_PARENT=PKG_PARENT)
     p = subprocess.run([sys.executable, "-B", "-P", "-c", _NO_CUDA_CHILD], env=env, capture_output=True, text=True,
                        timeout=300)
     sys.stderr.write(p.stderr)
