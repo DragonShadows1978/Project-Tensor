@@ -1,0 +1,959 @@
+diff --git a/artifacts/eng3/LEDGER.md b/artifacts/eng3/LEDGER.md
+index b37eff80..e03f14b0 100644
+--- a/artifacts/eng3/LEDGER.md
++++ b/artifacts/eng3/LEDGER.md
+@@ -65,3 +65,45 @@ Times EST (UTC-5), 2026-11-16, unless marked UTC. No git writes; read-only git o
+ - The planned E3 work (not started) rests on IEEE 754-2008 conversions and round-to-nearest-even; the bfloat16 format
+   (Google Brain); CUDA Math API `__float2half_rn` / `__float2bfloat16_rn`; mutation testing (DeMillo, Lipton and
+   Sayward, 1978). All unverified in this sandbox -- lead to check.
++
++# r2 (resume under Amendment 1, then Amendment 2) -- 2026-11-16
++
++## Setup and probe
++- 07:18 read orders/ENG3_R2_RESUME.md (cba230b1). 07:20 L01 r2 (`preflight_L01_r2.txt`): cmake 3.28.3, nvcc 12.6.85,
++  pytest 9.0.2, Python 3.12.3 + numpy 2.4.2, forge-gpu-run --status rc 0. torch 2.11 present (used by G2 for bfloat16
++  NaN-payload inputs via DLPack).
++- 07:21 probe line `probe_B` (exploration, not a gate) launched; its wrapper sat in the 76-retry sleep with no forge
++  output; stopped by me (my own process) at 07:34 to allow Build E, since the wrapper checked the module only once
++  (receipts moved to gpu/probe_B_attempt1_stopped). Wrapper fixed: module sha256 re-checked before EVERY attempt
++  (L103), ATTEMPTS.json written progressively. 07:41 probe_B ran: forge exit 0, inner 0
++  (gpu/probe_B/RESULT.json). Device NaN outputs: every half NaN -> float 0x7FFFFFFF; every float NaN -> half 0x7FFF,
++  bfloat16 0x7FFF; half -> float non-NaN equals NumPy's widening on all 65,536 patterns; uint8 -> float exact.
++## Product edits (diff: artifacts/eng3/before vs artifacts/eng3/E_src)
++- kernels.cu: ENG3 host block (host_f32_to_f16, host_f16_to_f32, host_f32_to_bf16, host_bf16_to_f32, host_ld/st,
++  host_rintf, host_to_u8, host_astype_into); zeros/full/from_host/to_host/clone/astype host branches. Device branches
++  unchanged statement for statement. Prior art in the code comment (IEEE 754-2008 RNE; bfloat16; CUDA Math API / PTX
++  cvt; c10::BFloat16 RNE formulation, unverified).
++- bindings.cpp: A1.1 private hooks _core_full, _core_zeros, _core_clone, _core_to (no public name; __init__.py
++  untouched); A2.1 Bool branch in tensor_to_numpy. An edit hook flagged TX3-F1B's earlier, unmerged fix of the same
++  defect (fork worktree tensor_fork_apa_wt_tx3f1, tc/numpy_export.h); cited as in-repo prior art in the comment.
++- core.h: unchanged (no new declarations needed).
++## Builds (build/build_receipts.json, MODULES.txt)
++- E 9f070b6f... (first E build had no Bool branch; rebuilt after A2.1; a comment-only edit after the probe rebuilt to
++  the same sha256). Bh 17f305eb... = B's kernels.cu/core.h + the A1.1 hook block only (device-path reference for
++  zeros/full/clone/to, which Build B cannot reach). Mutants from /tmp/eng3_src_<id> trees: m01 1cbc36ae, m02 5521073d,
++  m03 9c3530d7, m04 72a72c1a, m05 4e7d9fc9. First mutant trees (before the comment edit) moved to /tmp/eng3_old and
++  artifacts/eng3/mutants_superseded_v1 (never built).
++## Instruments
++- artifacts/eng3/tools/cudart_count.c (.so): LD_PRELOAD counter of the 32 libcudart functions the module imports.
++  Repair 1 of 3 (L56(b)): dlsym(RTLD_NEXT) cannot see libcudart (a dependency of an RTLD_LOCAL extension) -> segfault;
++  fixed with dlopen(RTLD_NOLOAD). Verified on Build B: import 0 calls, empty host tensor 0, nonempty host tensor 2.
++  (A /proc/self/maps libcuda check was tried first and rejected: libcuda is mapped at import.)
++- scripts/eng3_suite.py repair (L56(b) 2 of 3): collection errors interrupted the session -> --continue-on-collection-
++  errors (both builds); try 1 kept as g3/cpu_B_try1_interrupted.
++## Registrations (before the runs they govern)
++- MUTANTS.json 12:49:16 UTC (sha cd41f97d...), A14_PAIRS.json, G3_INTENDED.json 13:05:45 UTC (sha 0f8224e0...),
++  g3/SPLIT.json (GPU halves).
++## Deviation: first CPU before-run read E sources
++- g3/cpu_B (07:51-08:01) ran Build B's module with E's kernels.cu/bindings.cpp in the worktree, so the suite's
++  source-pin tests read E bytes. Kept as g3/cpu_B_srcE; G3 uses reruns with each build's own sources
++  (scripts/eng3_srcswap.py B|E).
+diff --git a/artifacts/eng3/build/build_receipts.json b/artifacts/eng3/build/build_receipts.json
+index 1b2a107a..6f635e40 100644
+--- a/artifacts/eng3/build/build_receipts.json
++++ b/artifacts/eng3/build/build_receipts.json
+@@ -73,5 +73,600 @@
+       "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
+     },
+     "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_E",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "tensor_cuda",
++      "-B",
++      "tensor_cuda/build-eng3/E",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 380,
++    "start": "2026-11-16T12:34:53.884068+00:00",
++    "end": "2026-11-16T12:35:03.684171+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_E.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_E",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/E",
++      "-j6"
++    ],
++    "bound_seconds": 3300,
++    "start": "2026-11-16T12:35:07.799653+00:00",
++    "end": "2026-11-16T12:38:52.968313+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_E.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_E_a2",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/E",
++      "-j6"
++    ],
++    "bound_seconds": 580,
++    "start": "2026-11-16T12:39:30.302673+00:00",
++    "end": "2026-11-16T12:40:28.157855+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_E_a2.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_E_final",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/E",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:01:33.234791+00:00",
++    "end": "2026-11-16T13:04:03.622383+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_E_final.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_Bh",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_Bh",
++      "-B",
++      "tensor_cuda/build-eng3/Bh",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:04:03.869311+00:00",
++    "end": "2026-11-16T13:04:11.758920+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_Bh.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_Bh",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/Bh",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:04:11.837349+00:00",
++    "end": "2026-11-16T13:07:22.221178+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_Bh.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_m01_from_host_checks_cuda",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_m01_from_host_checks_cuda",
++      "-B",
++      "tensor_cuda/build-eng3/m01_from_host_checks_cuda",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:07:22.341470+00:00",
++    "end": "2026-11-16T13:07:30.480488+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_m01_from_host_checks_cuda.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_m01_from_host_checks_cuda",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/m01_from_host_checks_cuda",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:07:30.550748+00:00",
++    "end": "2026-11-16T13:10:45.351606+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_m01_from_host_checks_cuda.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_m02_host_astype_truncates",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_m02_host_astype_truncates",
++      "-B",
++      "tensor_cuda/build-eng3/m02_host_astype_truncates",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:10:45.451702+00:00",
++    "end": "2026-11-16T13:10:54.202252+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_m02_host_astype_truncates.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_m02_host_astype_truncates",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/m02_host_astype_truncates",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:10:54.308585+00:00",
++    "end": "2026-11-16T13:14:41.942165+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_m02_host_astype_truncates.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_m03_host_clone_cudamemcpy",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_m03_host_clone_cudamemcpy",
++      "-B",
++      "tensor_cuda/build-eng3/m03_host_clone_cudamemcpy",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:14:42.214420+00:00",
++    "end": "2026-11-16T13:14:51.962288+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_m03_host_clone_cudamemcpy.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_m03_host_clone_cudamemcpy",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/m03_host_clone_cudamemcpy",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:14:52.045890+00:00",
++    "end": "2026-11-16T13:18:37.287624+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_m03_host_clone_cudamemcpy.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_m04_u8_no_clamp",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_m04_u8_no_clamp",
++      "-B",
++      "tensor_cuda/build-eng3/m04_u8_no_clamp",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:18:37.433896+00:00",
++    "end": "2026-11-16T13:18:47.485295+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_m04_u8_no_clamp.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_m04_u8_no_clamp",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/m04_u8_no_clamp",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:18:47.865496+00:00",
++    "end": "2026-11-16T13:21:48.020165+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_m04_u8_no_clamp.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "configure_m05_bool_numpy_float",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "-S",
++      "/tmp/eng3_src_m05_bool_numpy_float",
++      "-B",
++      "tensor_cuda/build-eng3/m05_bool_numpy_float",
++      "-DCMAKE_BUILD_TYPE=Release",
++      "-DCMAKE_CUDA_ARCHITECTURES=89",
++      "-DFETCHCONTENT_SOURCE_DIR_PYBIND11=/mnt/ForgeRealm/Project-Tensor/tensor_cuda/build/_deps/pybind11-src",
++      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
++    ],
++    "bound_seconds": 600,
++    "start": "2026-11-16T13:21:48.139691+00:00",
++    "end": "2026-11-16T13:21:57.208276+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_configure_m05_bool_numpy_float.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
++  },
++  {
++    "name": "build_m05_bool_numpy_float",
++    "command": [
++      "systemd-run",
++      "--user",
++      "--scope",
++      "-q",
++      "-p",
++      "MemoryMax=12G",
++      "-p",
++      "OOMPolicy=continue",
++      "-p",
++      "CPUWeight=50",
++      "--setenv=TMPDIR=/tmp/eng3_tmp",
++      "nice",
++      "-n",
++      "19",
++      "cmake",
++      "--build",
++      "tensor_cuda/build-eng3/m05_bool_numpy_float",
++      "-j6"
++    ],
++    "bound_seconds": 3000,
++    "start": "2026-11-16T13:21:57.319230+00:00",
++    "end": "2026-11-16T13:25:30.742171+00:00",
++    "exit": 0,
++    "timeout": false,
++    "log": "artifacts/eng3/build/build_receipts_build_m05_bool_numpy_float.log",
++    "env": {
++      "CUDA_VISIBLE_DEVICES": "",
++      "TMPDIR": "/tmp/eng3_tmp",
++      "CUDACXX": "/usr/local/cuda-12.6/bin/nvcc"
++    },
++    "cwd": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3"
+   }
+ ]
+\ No newline at end of file
+diff --git a/tensor_cuda/src/bindings.cpp b/tensor_cuda/src/bindings.cpp
+index 4c1e4903..293c8d49 100644
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -104,6 +104,13 @@ py::array tensor_to_numpy(Tensor& t) {
+   if (a.dtype == DType::Float16) out = py::array(py::dtype("float16"), shape);
+   else if (a.dtype == DType::Int64) out = py::array(py::dtype("int64"), shape);
+   else if (a.dtype == DType::Uint8) out = py::array(py::dtype("uint8"), shape);
++  // ENG3 A2.1 (BOOL-NUMPY1): a bool tensor is stored one byte per element (dtype_size(Bool) == 1; tc.tensor copies a
++  // NumPy bool_ buffer byte for byte through from_host), so it is returned as a NumPy bool array of the same bytes.
++  // Before: no Bool branch, so a float32 array was allocated and only its first numel bytes were written (garbage).
++  // Prior art: NumPy's bool_ is one byte per element (NumPy docs, "Data types"). In this repo, TX3-F1B (fork worktree
++  // tensor_fork_apa_wt_tx3f1, tc/numpy_export.h, 2026-10-28, not merged) found and fixed the same defect with a dtype
++  // table and an itemsize check; this is the minimal one-branch form A2.1 allows, not a copy of that code.
++  else if (a.dtype == DType::Bool) out = py::array(py::dtype("bool"), shape);
+   else out = py::array(py::dtype("float32"), shape);
+   NDArray host = a.device.is_cuda() ? a : a;  // to_host handles D2H
+   host.to_host(out.request().ptr);
+@@ -2642,6 +2649,38 @@ PYBIND11_MODULE(_tensor_cuda, m) {
+         },
+         "empty(shape, dtype='float32', device='cuda')\n\n"
+         "Uninitialized tensor (tensor_cuda.empty wraps it). P1T-FIX6: shape must be a tuple or list of ints.");
++  // ENG3 A1.1 (orders/ENG3_R2_RESUME.md): PRIVATE TEST HOOKS, not public API (underscore names; tensor_cuda/__init__.py
++  // does not export them). Each calls one NDArray core member directly, so ENG3's G1/G3 tests reach full, zeros, clone
++  // and to, which no public entry exposes. The result never requires grad. Prior art: test-only private entry points
++  // (e.g. CPython's _testcapi module, PyTorch's torch._C._* test helpers; unverified -- lead to check); no specific
++  // prior art for these four.
++  m.def("_core_full",
++        [](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {
++          for (int64_t s : shape)
++            if (s < 0) throw py::value_error("_core_full: negative extent");
++          return Tensor::make(NDArray::full(Shape(shape.begin(), shape.end()), value, dtype_from_string(dtype),
++                                            Device::from_string(device)),
++                              false);
++        },
++        py::arg("shape"), py::arg("value"), py::arg("dtype"), py::arg("device"),
++        "ENG3 test hook (private): NDArray::full(shape, value, dtype, device).");
++  m.def("_core_zeros",
++        [](std::vector<int64_t> shape, const std::string& dtype, const std::string& device) {
++          for (int64_t s : shape)
++            if (s < 0) throw py::value_error("_core_zeros: negative extent");
++          return Tensor::make(
++              NDArray::zeros(Shape(shape.begin(), shape.end()), dtype_from_string(dtype), Device::from_string(device)),
++              false);
++        },
++        py::arg("shape"), py::arg("dtype"), py::arg("device"),
++        "ENG3 test hook (private): NDArray::zeros(shape, dtype, device).");
++  m.def("_core_clone", [](Tensor& t) { return Tensor::make(t.data().clone(), false); }, py::arg("tensor"),
++        "ENG3 test hook (private): NDArray::clone() of the tensor's data.");
++  m.def("_core_to",
++        [](Tensor& t, const std::string& device) {
++          return Tensor::make(t.data().to(Device::from_string(device)), false);
++        },
++        py::arg("tensor"), py::arg("device"), "ENG3 test hook (private): NDArray::to(device) of the tensor's data.");
+   // P1T-FIX1 (F04/F05): counters of the DLPack import release policy (tests).
+   m.def("_dlpack_release_stats", [](py::args a, py::kwargs k) {
+     const CoreCallArgs c("_dlpack_release_stats", a, k, {});
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 92435ef3..90615081 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -572,15 +572,188 @@ __global__ void cast_kernel(const SrcT* s, DstT* d, int64_t n) {
+     else throw std::runtime_error("op supports float32/float16/bfloat16 only"); \
+   } while (0)
+ 
++// ------------------------------------------------------------ ENG3: host data path
++// ENG3 E2/E3 (orders/ENG3_HOST_TENSOR_CORE.md + ENG3_R2_RESUME.md). A host (device="cpu") tensor's core members
++// (zeros, full, from_host, to_host, clone, to host->host, astype) run on the CPU and call no CUDA API: std::memcpy,
++// std::memset or a CPU loop. Before ENG3 they called cudaMemset / fill_kernel / cudaMemcpy(DeviceToDevice) /
++// cast kernels on malloc'd memory (working only where the driver enables HMM) and cuda_check_last after a host memcpy
++// (failing with no visible GPU). Device tensors keep their path unchanged.
++//
++// E3: the host casts reproduce the device kernels bit for bit. Each rule below is derived from the device code this TU
++// compiles (sm_89, no fast-math, no -ftz), not from a library cast:
++//  * ld<float> / st<float>: identity.
++//  * ld<__half> = __half2float = PTX cvt.f32.f16 (cuda_fp16.hpp:709): exact widening; half subnormals become float
++//    normals. NaN output: see kHostF16NaNToF32 below (measured on the device, ENG3 probe).
++//  * st<__half> = __float2half = PTX cvt.rn.f16.f32 (cuda_fp16.hpp:550): IEEE 754 round-to-nearest-even, overflow to
++//    +-Inf (|x| >= 65520), float subnormals (< 2^-126) round to a signed zero, half subnormals rounded RNE.
++//  * ld<__nv_bfloat16> = __bfloat162float = `mov.b32 {0,h}` below sm_90 (cuda_bf16.hpp:588): the 16 bits shifted left
++//    by 16, NaN payloads included.
++//  * st<__nv_bfloat16> = __float2bfloat16 = PTX cvt.rn.bf16.f32 on sm_80+ (cuda_bf16.hpp:475): RNE on the top 16 bits
++//    (subnormals kept, overflow to Inf). NaN output: see kHostF32NaNToBF16.
++//  * cast_to_u8_kernel: v = fminf(255, fmaxf(0, rintf(ld(v)))); (uint8_t)v. rintf = cvt.rni (ties to even);
++//    fmaxf(0, NaN) = 0.  cast_from_u8_kernel: st<T>((float)u), exact before st.
++// Prior art: IEEE 754-2008 (binary16, binary32, conversion with roundTiesToEven); the bfloat16 format (Google Brain,
++// 2018-2019; its RNE-by-adding-0x7FFF+lsb formulation is the common one, e.g. TensorFlow's and PyTorch's c10::BFloat16
++// round_to_nearest_even -- unverified, lead to check: "c10 BFloat16 round_to_nearest_even"); the CUDA Math API
++// __float2half_rn / __float2bfloat16_rn semantics and the PTX ISA cvt instruction. Taken: the formats and the rounding
++// rule. Ours: the integer formulation of each rule here and the choice to mirror the engine's ld -> float -> st
++// structure step for step, so a two-step cast (half -> float -> bfloat16) rounds exactly where the device does.
++namespace {
++inline uint32_t host_f32_bits(float f) { uint32_t u; std::memcpy(&u, &f, sizeof u); return u; }
++inline float host_bits_f32(uint32_t u) { float f; std::memcpy(&f, &u, sizeof f); return f; }
++
++// NaN outputs of the device conversions: the cvt instructions return one canonical NaN whatever the input's sign and
++// payload. Measured by the ENG3 device probe on Build B (artifacts/eng3/probe/device_probe.npz: every half NaN ->
++// 0x7FFFFFFF, every float NaN -> half 0x7FFF and bfloat16 0x7FFF); G2 holds every NaN input of its census to it.
++constexpr uint32_t kHostF16NaNToF32 = 0x7FFFFFFFu;  // cvt.f32.f16 of any half NaN
++constexpr uint16_t kHostF32NaNToF16 = 0x7FFFu;      // cvt.rn.f16.f32 of any float NaN
++constexpr uint16_t kHostF32NaNToBF16 = 0x7FFFu;     // cvt.rn.bf16.f32 of any float NaN
++
++// Right shift of an integer significand with round-to-nearest-even (shift >= 1). For shift >= 32 the significand
++// (< 2^24 at every call site) is below half of the result's unit, so the result is 0.
++inline uint32_t host_rne_shift(uint32_t m, int shift) {
++  if (shift >= 32) return 0;
++  const uint32_t q = m >> shift;
++  const uint32_t rem = m & ((1u << shift) - 1u);
++  const uint32_t half = 1u << (shift - 1);
++  return (rem > half || (rem == half && (q & 1u))) ? q + 1u : q;
++}
++
++// st<__half>: cvt.rn.f16.f32.
++uint16_t host_f32_to_f16(float f) {
++  const uint32_t u = host_f32_bits(f);
++  const uint16_t sign = static_cast<uint16_t>((u >> 16) & 0x8000u);
++  const uint32_t exp = (u >> 23) & 0xFFu, man = u & 0x7FFFFFu;
++  if (exp == 0xFFu) return man ? kHostF32NaNToF16 : static_cast<uint16_t>(sign | 0x7C00u);
++  if (exp == 0) return sign;  // float zero or subnormal (< 2^-126): below half of the smallest half subnormal
++  const int e = static_cast<int>(exp) - 127;
++  if (e > 15) return static_cast<uint16_t>(sign | 0x7C00u);  // >= 2^16: overflow to Inf
++  if (e >= -14) {
++    // Normal half: keep 10 of the 23 fraction bits, round the 13 dropped bits to nearest even. A carry out of the
++    // fraction moves into the exponent (and from the largest finite half into 0x7C00, Inf), as in IEEE 754.
++    uint32_t h = (static_cast<uint32_t>(e + 15) << 10) | (man >> 13);
++    const uint32_t rem = man & 0x1FFFu;
++    if (rem > 0x1000u || (rem == 0x1000u && (h & 1u))) ++h;
++    return static_cast<uint16_t>(sign | h);
++  }
++  // Half subnormal: the value is m * 2^(e-23), i.e. m * 2^(e+1) units of 2^-24; a round up to 1024 is the smallest
++  // normal (0x0400), which is the correct encoding.
++  return static_cast<uint16_t>(sign | host_rne_shift(man | 0x800000u, -(e + 1)));
++}
++
++// ld<__half>: cvt.f32.f16 (exact).
++float host_f16_to_f32(uint16_t h) {
++  const uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16;
++  const uint32_t exp = (h >> 10) & 0x1Fu;
++  uint32_t man = h & 0x3FFu;
++  if (exp == 0x1Fu) return host_bits_f32(man ? kHostF16NaNToF32 : (sign | 0x7F800000u));
++  if (exp == 0) {
++    if (man == 0) return host_bits_f32(sign);
++    int e = -14;  // subnormal: normalize into a float normal
++    while (!(man & 0x400u)) { man <<= 1; --e; }
++    return host_bits_f32(sign | (static_cast<uint32_t>(e + 127) << 23) | ((man & 0x3FFu) << 13));
++  }
++  return host_bits_f32(sign | ((exp - 15u + 127u) << 23) | (man << 13));
++}
++
++// st<__nv_bfloat16>: cvt.rn.bf16.f32 (sm_80+): RNE on the dropped 16 bits; no 32-bit overflow for any non-NaN input
++// (the largest, 0xFF800000, plus 0x7FFF stays below 2^32).
++uint16_t host_f32_to_bf16(float f) {
++  const uint32_t u = host_f32_bits(f);
++  if ((u & 0x7FFFFFFFu) > 0x7F800000u) return kHostF32NaNToBF16;
++  const uint32_t lsb = (u >> 16) & 1u;
++  return static_cast<uint16_t>((u + 0x7FFFu + lsb) >> 16);
++}
++
++// ld<__nv_bfloat16> below sm_90: mov.b32 {0,h}.
++inline float host_bf16_to_f32(uint16_t b) { return host_bits_f32(static_cast<uint32_t>(b) << 16); }
++
++[[noreturn]] void host_float_only() { throw std::runtime_error("op supports float32/float16/bfloat16 only"); }
++inline bool host_is_float(DType dt) {
++  return dt == DType::Float32 || dt == DType::Float16 || dt == DType::BFloat16;
++}
++
++// The engine's ld<T>: element i of a float32/float16/bfloat16 buffer, as float.
++float host_ld(DType dt, const void* p, int64_t i) {
++  switch (dt) {
++    case DType::Float32: { float v; std::memcpy(&v, static_cast<const char*>(p) + 4 * i, 4); return v; }
++    case DType::Float16: return host_f16_to_f32(static_cast<const uint16_t*>(p)[i]);
++    case DType::BFloat16: return host_bf16_to_f32(static_cast<const uint16_t*>(p)[i]);
++    default: host_float_only();
++  }
++}
++// The engine's st<T>.
++void host_st(DType dt, void* p, int64_t i, float v) {
++  switch (dt) {
++    case DType::Float32: std::memcpy(static_cast<char*>(p) + 4 * i, &v, 4); return;
++    case DType::Float16: static_cast<uint16_t*>(p)[i] = host_f32_to_f16(v); return;
++    case DType::BFloat16: static_cast<uint16_t*>(p)[i] = host_f32_to_bf16(v); return;
++    default: host_float_only();
++  }
++}
++
++// rintf = cvt.rni.f32.f32: nearest integer, ties to even, sign of a zero result kept. Exact for every float: |v| >=
++// 2^23 (and Inf/NaN) is returned as is; below that, floor(v) and v - floor(v) are exact, so the rounding mode of the
++// host FPU never enters.
++float host_rintf(float v) {
++  if (!(std::fabs(v) < 8388608.0f)) return v;
++  const float fl = std::floor(v);
++  const float d = v - fl;
++  float r = fl;
++  if (d > 0.5f || (d == 0.5f && std::fmod(fl, 2.0f) != 0.0f)) r = fl + 1.0f;
++  return std::copysign(r, v);
++}
++// cast_to_u8_kernel's element rule: fminf(255, fmaxf(0, rintf(v))), then (uint8_t). fmaxf returns the non-NaN operand,
++// so NaN -> 0; +-0 -> 0; +Inf -> 255; -Inf -> 0.
++uint8_t host_to_u8(float v) {
++  v = host_rintf(v);
++  v = (v > 0.0f) ? v : 0.0f;
++  v = (v < 255.0f) ? v : 255.0f;
++  return static_cast<uint8_t>(v);
++}
++
++// NDArray::astype's host branch: the same branch order and refusals as the device branch (to-u8, from-u8, float pair).
++void host_astype_into(const NDArray& src, NDArray& out) {
++  const int64_t n = src.numel();
++  const void* s = src.data_ptr();
++  void* d = out.data_ptr();
++  if (out.dtype == DType::Uint8 && src.dtype != DType::Uint8) {
++    if (!host_is_float(src.dtype)) host_float_only();
++    uint8_t* o = static_cast<uint8_t*>(d);
++    for (int64_t i = 0; i < n; ++i) o[i] = host_to_u8(host_ld(src.dtype, s, i));
++    return;
++  }
++  if (src.dtype == DType::Uint8 && out.dtype != DType::Uint8) {
++    if (!host_is_float(out.dtype)) host_float_only();
++    const uint8_t* in = static_cast<const uint8_t*>(s);
++    for (int64_t i = 0; i < n; ++i) host_st(out.dtype, d, i, static_cast<float>(in[i]));
++    return;
++  }
++  if (!host_is_float(src.dtype) || !host_is_float(out.dtype)) host_float_only();
++  for (int64_t i = 0; i < n; ++i) host_st(out.dtype, d, i, host_ld(src.dtype, s, i));
++}
++}  // namespace
++
+ NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
+   NDArray a(shape, dtype, device);
+-  if (a.numel() > 0) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
++  if (a.numel() > 0) {
++    if (device.is_cuda()) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
++    else std::memset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));  // ENG3 E2: host path, no CUDA call
++  }
+   return a;
+ }
+ NDArray NDArray::full(const Shape& shape, double value, DType dtype, Device device) {
+   NDArray a(shape, dtype, device);
+   int64_t n = a.numel();
+   if (n == 0) return a;
++  if (!device.is_cuda()) {
++    // ENG3 E2/E3: fill_kernel's element rule st<T>(p, i, (float)value) on the CPU; the (float) narrowing is host code
++    // on both paths. Non-float dtypes refuse with DISPATCH_FLOAT's message, as the device path does.
++    if (!host_is_float(dtype)) host_float_only();
++    const float v = static_cast<float>(value);
++    for (int64_t i = 0; i < n; ++i) host_st(dtype, a.data_ptr(), i, v);
++    return a;
++  }
+   DISPATCH_FLOAT(dtype, T, {
+     fill_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), n, (float)value);
+   });
+@@ -680,22 +853,33 @@ NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Dev
+   NDArray a(shape, dtype, device);
+   size_t bytes = a.numel() * dtype_size(dtype);
+   if (bytes == 0) return a;
+-  if (device.is_cuda()) cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
+-  else std::memcpy(a.data_ptr(), src, bytes);
+-  cuda_check_last("from_host");
++  // ENG3 E2 (HOST-TENSOR-NEEDS-DEVICE): the error check belongs to the device copy only; a host copy calls no CUDA API.
++  if (device.is_cuda()) {
++    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
++    cuda_check_last("from_host");
++  } else {
++    std::memcpy(a.data_ptr(), src, bytes);
++  }
+   return a;
+ }
+ void NDArray::to_host(void* dst) const {
+   size_t bytes = numel() * dtype_size(dtype);
+   if (bytes == 0) return;
+-  if (device.is_cuda()) cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
+-  else std::memcpy(dst, data_ptr(), bytes);
+-  cuda_check_last("to_host");
++  // ENG3 E2: as from_host.
++  if (device.is_cuda()) {
++    cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
++    cuda_check_last("to_host");
++  } else {
++    std::memcpy(dst, data_ptr(), bytes);
++  }
+ }
+ NDArray NDArray::clone() const {
+   NDArray out(shape, dtype, device);
+   size_t bytes = numel() * dtype_size(dtype);
+-  if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
++  if (bytes) {
++    if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
++    else std::memcpy(out.data_ptr(), data_ptr(), bytes);  // ENG3 E2: host clone, no CUDA call
++  }
+   return out;
+ }
+ NDArray NDArray::to(Device dev) const {
+@@ -729,6 +913,10 @@ NDArray NDArray::astype(DType dt) const {
+   NDArray out(shape, dt, device);
+   int64_t n = numel();
+   if (n == 0) return out;
++  if (!device.is_cuda()) {  // ENG3 E2/E3 (HOST-ASTYPE-HMM): host cast on the CPU, bit-exact to the kernels below
++    host_astype_into(*this, out);
++    return out;
++  }
+   if (dt == DType::Uint8 && dtype != DType::Uint8) {
+     DISPATCH_FLOAT(dtype, ST, {
+       cast_to_u8_kernel<ST><<<nblk(n), kT>>>(static_cast<ST*>(data_ptr()),

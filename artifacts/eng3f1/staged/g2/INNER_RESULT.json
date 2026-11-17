@@ -1,0 +1,35 @@
+{
+  "line": "g2",
+  "prefix_only": false,
+  "pass": true,
+  "inner_exit": 0,
+  "results": [
+    {
+      "arm": "F",
+      "kind": "own",
+      "split": "",
+      "argv": [
+        "timeout",
+        "1700s",
+        "nice",
+        "-n",
+        "19",
+        "/usr/bin/python3",
+        "-B",
+        "-P",
+        "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3f1/tools/eng3f1_stage.py",
+        "worker",
+        "F",
+        "own",
+        "",
+        "g2_F",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "....................................................[\n {\n  \"rule\": \"float->bfloat16 tie (1 + 2^-8): RNE keeps even 0x3F80\",\n  \"pair\": \"float32->bfloat16\",\n  \"input\": \"0x3f808000\",\n  \"offset\": 0,\n  \"host\": \"0x3f80\",\n  \"device\": \"0x3f80\",\n  \"reference\": \"0x3f80\"\n },\n {\n  \"rule\": \"float->bfloat16 tie (1 + 3*2^-8): RNE rounds up to 0x3F82\",\n  \"pair\": \"float32->bfloat16\",\n  \"input\": \"0x3f818000\",\n  \"offset\": 0,\n  \"host\": \"0x3f82\",\n  \"device\": \"0x3f82\",\n  \"reference\": \"0x3f82\"\n },\n {\n  \"rule\": \"float->half subnormal tie 1.5*2^-24: RNE -> 0x0002\",\n  \"pair\": \"float32->float16\",\n  \"input\": \"0x33c00000\",\n  \"offset\": 0,\n  \"host\": \"0x2\",\n  \"device\": \"0x2\",\n  \"reference\": \"0x2\"\n },\n {\n  \"rule\": \"float->half subnormal tie 2.5*2^-24: RNE -> 0x0002\",\n  \"pair\": \"float32->float16\",\n  \"input\": \"0x34200000\",\n  \"offset\": 0,\n  \"host\": \"0x2\",\n  \"device\": \"0x2\",\n  \"reference\": \"0x2\"\n },\n {\n  \"rule\": \"float NaN with payload -> half: canonical 0x7FFF\",\n  \"pair\": \"float32->float16\",\n  \"input\": \"0x7fc01234\",\n  \"offset\": 0,\n  \"host\": \"0x7fff\",\n  \"device\": \"0x7fff\",\n  \"reference\": \"0x7fff\"\n },\n {\n  \"rule\": \"half NaN with payload -> float: canonical 0x7FFFFFFF\",\n  \"pair\": \"float16->float32\",\n  \"input\": \"0x7c01\",\n  \"offset\": 0,\n  \"host\": \"0x7fffffff\",\n  \"device\": \"0x7fffffff\",\n  \"reference\": \"0x7fffffff\"\n },\n {\n  \"rule\": \"uint8 .5 tie: rintf(0.5) = 0\",\n  \"pair\": \"float32->uint8\",\n  \"input\": \"0x3f000000\",\n  \"offset\": 0,\n  \"host\": \"0x0\",\n  \"device\": \"0x0\",\n  \"reference\": \"0x0\"\n },\n {\n  \"rule\": \"uint8 .5 tie: rintf(254.5) = 254\",\n  \"pair\": \"float32->uint8\",\n  \"input\": \"0x437e8000\",\n  \"offset\": 0,\n  \"host\": \"0xfe\",\n  \"device\": \"0xfe\",\n  \"reference\": \"0xfe\"\n },\n {\n  \"rule\": \"uint8: rintf(255.5) = 256, clamp -> 255\",\n  \"pair\": \"float32->uint8\",\n  \"input\": \"0x437f8000\",\n  \"offset\": 0,\n  \"host\": \"0xff\",\n  \"device\": \"0xff\",\n  \"reference\": \"0xff\"\n }\n]\n..\n54 passed, 73 deselected in 11.83s\n",
+      "stderr": "",
+      "module_sha256": "642d5ab7b57d4c6796cd59f701ad4dcdddde24c0a01f478d3c6630b513f6040e"
+    }
+  ],
+  "time": "2026-11-16T16:25:11.506452+00:00"
+}

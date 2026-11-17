@@ -1,0 +1,11 @@
+--- F/src/kernels.cu
++++ f1m02_malloc_unchecked/src/kernels.cu
+@@ -194,7 +194,7 @@
+     ptr = std::malloc(nbytes);
+     // ENG3-F1 R1. Prior art: ISO C++17 bad_alloc (2017), CWE-252 unchecked
+     // return value (MITRE, year unverified -- lead to check). Ours: this site.
+-    if (ptr == nullptr) throw std::bad_alloc();  // pybind11 -> MemoryError
++    if (ptr == nullptr) std::fprintf(stderr, "ENG3F1_EXEC f1m02_malloc_unchecked\n");
+   }
+ }
+ // P1T-M1 (DLPack import): wrap a producer's memory. No allocation, no pool.

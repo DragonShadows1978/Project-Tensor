@@ -1,0 +1,13 @@
+--- H
++++ f3m02_query_error_as_invalid
+@@ -2688,8 +2688,8 @@
+     int current = -1;
+     const cudaError_t e = cudaGetDevice(&current);
+     if (e != cudaSuccess) {
+-      throw_cuda_report_after_consuming(std::string(who) + ": the current-device query cudaGetDevice failed (" +
+-                                      cudaGetErrorName(e) + ": " + cudaGetErrorString(e) + "); nothing was allocated");
++      cudaGetLastError();
++      throw refuse(); // registered F04 reversion
+     }
+     if (!bare_cuda && std::stoi(idx) != current) throw refuse();
+     return Device{DeviceType::CUDA, current};

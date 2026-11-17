@@ -1,0 +1,10 @@
+--- H
++++ f3m01_bare_cuda_no_query
+@@ -2677,6 +2677,7 @@
+                              "'; expected cpu, cuda, or cuda:N naming the current device");
+     };
+     if (text == "cpu") return Device{DeviceType::CPU, 0};
++    if (text == "cuda") return Device{DeviceType::CUDA, 0}; // registered F02 reversion
+     const bool bare_cuda = text == "cuda";
+     if (!bare_cuda && text.compare(0, 5, "cuda:") != 0) throw refuse();
+     const std::string idx = bare_cuda ? "" : text.substr(5);

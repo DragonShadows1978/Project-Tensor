@@ -1,0 +1,24 @@
+{
+  "registered_before_mutant_runs": true,
+  "expected": "all three killed by named assertion, not tool errors",
+  "mutants": {
+    "f1m01_bytes_unchecked": {
+      "mutation": "replace checked constructor byte bound by original unchecked multiplication",
+      "test": "test_f1_cpu_overflow",
+      "assertion": "overflow child exits 0 with every private byte bound refused before allocation",
+      "line_evidence": "ENG3F1_EXEC f1m01_bytes_unchecked printed in NDArray allocating constructor"
+    },
+    "f1m02_malloc_unchecked": {
+      "mutation": "replace malloc-null throw by stderr execution marker",
+      "test": "test_f1_cpu_memoryerror",
+      "assertion": "RLIMIT_AS child raises MemoryError for valid [2**25] and exits 0",
+      "line_evidence": "ENG3F1_EXEC f1m02_malloc_unchecked printed only after malloc returns null"
+    },
+    "f1m03_device_lenient": {
+      "mutation": "replace private strict device parser by Device::from_string",
+      "test": "test_f1_cpu_device_strings",
+      "assertion": "each device-taking hook raises ValueError naming hook and invalid string",
+      "line_evidence": "ENG3F1_EXEC f1m03_device_lenient printed at lenient parser return"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+ "registered": "2026-11-16T12:49:16.518567+00:00",
+ "rule": "Expected failures come from the order (G4) and Amendment 2 (A2.4), never from this round's runs (L47). Each mutant is one hunk on a copy of Build E's sources under /tmp/eng3_src_<id>, built to tensor_cuda/build-eng3/<id>; the hunk also prints 'ENG3-MUTANT <id> executed' to stderr once, from the mutated line, so the killing test's captured stderr (junit system-err) shows the line ran with the mutant module loaded (L41). Run mode: m01, m03, m05 with CUDA hidden (G1/G1b CPU rows, test_eng3_host.py -k cpu); m02, m04 as GPU lines (test_eng3_host.py, the G2 rows); m05 also in its GPU line's G1b cuda rows only if a GPU line is used for it.",
+ "mutants": [
+  {
+   "id": "m01_from_host_checks_cuda",
+   "file": "tensor_cuda/src/kernels.cu",
+   "where": "NDArray::from_host, host branch",
+   "edit": "after std::memcpy, call cuda_check_last(\"from_host\") again",
+   "gate": "G1",
+   "named_assertion": "tensor_cuda/tests/test_eng3_host.py::test_g1_cpu_tensor_numpy[float32] -- tc.tensor(..., device='cpu') raises RuntimeError 'CUDA error at from_host' with CUDA hidden",
+   "also_expected": "every G1 CPU test that builds a nonempty host tensor; test_g1_cpu_no_cuda_calls (child exits nonzero / host_calls > 0)"
+  },
+  {
+   "id": "m02_host_astype_truncates",
+   "file": "tensor_cuda/src/kernels.cu",
+   "where": "host_f32_to_bf16",
+   "edit": "return u >> 16 (truncate) instead of RNE for non-NaN inputs",
+   "gate": "G2",
+   "named_assertion": "tensor_cuda/tests/test_eng3_host.py::test_g2_host_equals_device[float32-bfloat16] -- assert bad.size == 0 (host bits != device bits)",
+   "also_expected": "test_g2_host_equals_device[float16-bfloat16]; test_g2_l55_constructed_values; G1 rows that use a rounding float->bfloat16 cast"
+  },
+  {
+   "id": "m03_host_clone_cudamemcpy",
+   "file": "tensor_cuda/src/kernels.cu",
+   "where": "NDArray::clone, host branch",
+   "edit": "cudaMemcpy(..., cudaMemcpyDeviceToDevice) instead of std::memcpy",
+   "gate": "G1",
+   "named_assertion": "tensor_cuda/tests/test_eng3_host.py::test_g1_cpu_no_cuda_calls -- assert res['host_calls'] == 0",
+   "also_expected": "test_g1_cpu_clone[*] and test_g1_cpu_to_cpu[*] values (with CUDA hidden the copy does not happen)"
+  },
+  {
+   "id": "m04_u8_no_clamp",
+   "file": "tensor_cuda/src/kernels.cu",
+   "where": "host_to_u8",
+   "edit": "drop the [0, 255] clamp (the two lines after host_rintf)",
+   "gate": "G2",
+   "named_assertion": "tensor_cuda/tests/test_eng3_host.py::test_g2_host_equals_device[float32-uint8] -- assert bad.size == 0",
+   "also_expected": "test_g2_host_equals_device[float16-uint8], [bfloat16-uint8]; test_g2_l55_constructed_values (255.5 -> 255); test_g1_cpu_astype[*-uint8]"
+  },
+  {
+   "id": "m05_bool_numpy_float",
+   "file": "tensor_cuda/src/bindings.cpp",
+   "where": "tensor_to_numpy",
+   "edit": "remove the Bool branch (A2.1) again",
+   "gate": "G1b",
+   "named_assertion": "tensor_cuda/tests/test_eng3_host.py::test_g1b_bool_numpy[cpu-n5_pattern] -- assert a.dtype == np.bool_",
+   "also_expected": "every test_g1b_bool_numpy row; test_g1_cpu_zeros[bool], test_g1_cpu_clone[bool], test_g1_cpu_to_cpu[bool], test_g1_cpu_tensor_numpy has no bool row"
+  }
+ ]
+}

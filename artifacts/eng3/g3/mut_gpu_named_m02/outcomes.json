@@ -1,0 +1,46 @@
+{
+ "label": "mut_gpu_named_m02",
+ "start": "2026-11-16T15:03:02.674374+00:00",
+ "end": "2026-11-16T15:03:04.393743+00:00",
+ "module": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tensor_cuda/_tensor_cuda.cpython-312-x86_64-linux-gnu.so",
+ "module_sha256": "5521073d262197962e8785de0b4ae47d8da874e5e1ebaa1ce07798aee0e841a4",
+ "CUDA_VISIBLE_DEVICES": null,
+ "pytest_args": [
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "-rfE",
+  "--rootdir=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3",
+  "--basetemp=/tmp/eng3_tmp/pt/mut_gpu_named_m02",
+  "--junitxml=/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/artifacts/eng3/g3/mut_gpu_named_m02/junit.xml",
+  "-o",
+  "junit_logging=all",
+  "--continue-on-collection-errors",
+  "-k",
+  "test_g2_host_equals_device and float32-bfloat16",
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "pytest_exit": 1,
+ "counts": {
+  "failed": 1
+ },
+ "n_ids": 1,
+ "collection_errors": {},
+ "outcomes": {
+  "tensor_cuda/tests/test_eng3_host.py::test_g2_host_equals_device[float32-bfloat16]": "failed"
+ },
+ "failures": {
+  "tensor_cuda/tests/test_eng3_host.py::test_g2_host_equals_device[float32-bfloat16]": "       record(\"g2\", {\"pair\": f\"{src}->{dst}\", \"n\": int(hb.size), \"mismatches\": int(bad.size),\n                      \"ref_mismatches\": ref_bad, \"first\": [(hex(int(hin[i])), hex(int(hb[i])), hex(int(db[i])))\n                                                            for i in bad[:8]]})\n>       assert bad.size == 0, [(hex(int(hin[i])), hex(int(hb[i])), hex(int(db[i]))) for i in bad[:8]]\nE       AssertionError: [('0x7fffff', '0x7f', '0x80'), ('0x807fffff', '0x807f', '0x8080'), ('0x7f7fffff', '0x7f7f', '0x7f80'), ('0xff7fffff', '0xff7f', '0xff80'), ('0x18000', '0x1', '0x2'), ('0x7f7f8000', '0x7f7f', '0x7f80'), ...]\nE       assert 5020 == 0\nE        +  where 5020 = array([    4,     5,     8, ..., 10061, 10062, 10063], shape=(5020,)).size\n\ntensor_cuda/tests/test_eng3_host.py:512: AssertionError"
+ },
+ "git_status_before": [
+  " M tensor_cuda/src/bindings.cpp",
+  " M tensor_cuda/src/kernels.cu",
+  "?? tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "git_status_after": [
+  " M tensor_cuda/src/bindings.cpp",
+  " M tensor_cuda/src/kernels.cu",
+  "?? tensor_cuda/tests/test_eng3_host.py"
+ ],
+ "worktree_writes_by_tests": []
+}

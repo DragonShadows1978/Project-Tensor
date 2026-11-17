@@ -1,0 +1,31 @@
+--- F/src/bindings.cpp
++++ f1m03_device_lenient/src/bindings.cpp
+@@ -2658,26 +2658,8 @@
+   // tensor_empty's current-device rule (P1T-FIX4, 2026), TC_MAX_DIMS (8).
+   // Taken: rank/index refusal. Ours: strict syntax before CUDA or allocation.
+   const auto core_device = [](const std::string& text, const char* who) {
+-    const auto refuse = [&]() {
+-      return py::value_error(std::string(who) + ": invalid device '" + text +
+-                             "'; expected cpu, cuda, or cuda:N naming the current device");
+-    };
+-    if (text == "cpu") return Device{DeviceType::CPU, 0};
+-    if (text == "cuda") return Device{DeviceType::CUDA, 0};
+-    if (text.compare(0, 5, "cuda:") != 0) throw refuse();
+-    const std::string idx = text.substr(5);
+-    // As in public empty: an index longer than 9 digits cannot name a device.
+-    if (idx.empty() || idx.size() > 9 || idx.find_first_not_of("0123456789") != std::string::npos)
+-      throw refuse();
+-    const int requested = std::stoi(idx);
+-    int current = -1;
+-    const cudaError_t e = cudaGetDevice(&current);
+-    if (e != cudaSuccess) {
+-      cudaGetLastError();
+-      throw refuse();
+-    }
+-    if (requested != current) throw refuse();
+-    return Device{DeviceType::CUDA, current};
++    std::fprintf(stderr, "ENG3F1_EXEC f1m03_device_lenient\n");
++    return Device::from_string(text);
+   };
+   m.def("_core_full",
+         [core_device](std::vector<int64_t> shape, double value, const std::string& dtype, const std::string& device) {

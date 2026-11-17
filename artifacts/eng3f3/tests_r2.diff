@@ -1,0 +1,54 @@
+--- r1/test_eng3_host.py
++++ r2/test_eng3_host.py
+@@ -644,12 +644,27 @@
+ @pytest.mark.parametrize("empty", [False, True], ids=["nonempty", "zero_extent"])
+ def test_f2_cpu_overflow_message(dtype, itemsize, hook, device, empty):
+     """Execute the allocating constructor's byte-bound throw, before allocation.
+-    Both CPU and bare CUDA descriptors reach the same check without CUDA calls.
++    Bare CUDA first resolves the current device (ENG3-F3 Amendment 1, A1.1).
+     """
+     shape = [2, 2**62] if itemsize == 1 else [(2**63 - 1) // itemsize + 1]
+     if empty:
+         shape = [0] + shape
+     args = (shape, 1.0, dtype, device) if hook == "_core_full" else (shape, dtype, device)
++    if device == "cuda":
++        # Prior art: public tensor_empty/P1T-FIX4 (2026), CUDA cudaGetDevice;
++        # reuse the real query, pin F02/F04's error before the byte check.
++        # Unverified -- lead to check: CUDA Runtime API cudaGetDevice.
++        import ctypes
++        rt = ctypes.CDLL("libcudart.so.12")
++        current = ctypes.c_int(-1)
++        if rt.cudaGetDevice(ctypes.byref(current)) != 0:
++            with pytest.raises(RuntimeError) as caught:
++                getattr(_C, hook)(*args)
++            message = str(caught.value)
++            assert "cudaGetDevice" in message and hook in message, message
++            record("f2_overflow", {"hook": hook, "shape": shape, "dtype": dtype,
++                                   "device": device, "message": message})
++            return
+     with pytest.raises(OverflowError) as caught:
+         getattr(_C, hook)(*args)
+     message = str(caught.value)
+--- r1/test_eng3_f3.py
++++ r2/test_eng3_f3.py
+@@ -124,6 +124,10 @@
+ 
+ @pytest.mark.parametrize("dtype", ["float16", "float32", "bfloat16"])
+ def test_f3_cpu_zero_extent_astype_ruling(dtype):
++    """ENG3R3-F01, closed by lead ruling (ENG3_F3_REV3_FIXES.md; A1.2):
++    refuse nominal byte overflow even with zero extent, matching NumPy and
++    P1T-FIX2. This pins the existing rule; kernels.cu remains read-only.
++    """
+     # Prior art: NumPy nominal-size refusal and P1T-FIX2 (2026), as ruled
+     # in ENG3R3-F01; pin the existing constructor rule, no new byte rule.
+     shape = [0, 2**62]
+@@ -136,6 +140,9 @@
+ 
+ @pytest.mark.parametrize("dtype", ["float32", "int64"])
+ def test_f3_cpu_zero_extent_zeros_ruling(dtype):
++    """ENG3R3-F01 / ENG3_F3_REV3_FIXES.md, Amendment 1 A1.2:
++    pin P1T-FIX2's zero-extent nominal byte refusal, as ruled to match NumPy.
++    """
+     shape = [0, 2**62]
+     with pytest.raises(OverflowError) as caught:
+         tc._C._core_zeros(shape, dtype, "cpu")

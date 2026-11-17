@@ -1,0 +1,2476 @@
+{
+  "order": "orders/ENG3_HOST_TENSOR_CORE.md (114d6269)",
+  "method": "static reading at 2478a4d: L82 grep of kernels.cu 531-760 for the core rows (hand-written); regex inventory of bindings.cpp's PYBIND11_MODULE for the Python rows (scripts/eng3_census.py). Evidence class: reasoning from source, not measured. device_checks_in_targets looks ONE call level deep (the binding body's named targets); deeper refusals (e.g. the APA-SP1 host refusal that tests/test_apa_sp1_host.py exercises) are not traced, so a compute row may already refuse a host tensor further down. The 172 compute rows are the upper bound of E4's population.",
+  "core_members": [
+    {
+      "member": "Storage::Storage(nbytes, device)",
+      "where": "kernels.cu:174-196",
+      "host_calls": "std::malloc (194); no CUDA call for a CPU device",
+      "class": "no_cuda_on_host",
+      "python_reach": "every host tensor construction"
+    },
+    {
+      "member": "Storage::~Storage",
+      "where": "kernels.cu:493-528",
+      "host_calls": "std::free (526); the external (DLPack) branch only drains for a CUDA device, and DLPack import refuses CPU producers",
+      "class": "no_cuda_on_host",
+      "python_reach": "every host tensor release"
+    },
+    {
+      "member": "NDArray::NDArray / NDArray::empty",
+      "where": "kernels.cu:531-537",
+      "host_calls": "Storage only",
+      "class": "no_cuda_on_host",
+      "python_reach": "tc.empty(device='cpu') (bindings.cpp:1279); every constructor below"
+    },
+    {
+      "member": "NDArray::data_ptr / reshape / contiguous",
+      "where": "kernels.cu:538, 757-795; core.h",
+      "host_calls": "pointer arithmetic / metadata",
+      "class": "no_cuda_on_host",
+      "python_reach": "Tensor.reshape, Tensor.data_ptr"
+    },
+    {
+      "member": "NDArray::zeros",
+      "where": "kernels.cu:575-579",
+      "host_calls": "cudaMemset on the host pointer (577)",
+      "class": "E2",
+      "python_reach": "only inside backward closures of compute ops: ops.cpp:813 (sum), :888 (where), :898 (masked_fill); tc.zeros is NumPy np.zeros + from_host (__init__.py:68-82), not NDArray::zeros"
+    },
+    {
+      "member": "NDArray::full",
+      "where": "kernels.cu:580-589",
+      "host_calls": "fill_kernel launch on the host pointer (585), cuda_check_last (587)",
+      "class": "E2",
+      "python_reach": "Tensor.backward seed full(shape, 1.0) (autograd.cpp:51); ops::masked_fill (ops.cpp:894, a compute op); no Python entry takes a fill value"
+    },
+    {
+      "member": "fill_ (free function)",
+      "where": "kernels.cu:641-678",
+      "host_calls": "none: refuses 'fill_: CUDA arrays only' (643)",
+      "class": "refuses_already",
+      "python_reach": "Tensor.fill_"
+    },
+    {
+      "member": "NDArray::from_host",
+      "where": "kernels.cu:679-687",
+      "host_calls": "std::memcpy, then cuda_check_last('from_host') (685) -> cudaGetLastError",
+      "class": "E2",
+      "python_reach": "tc.tensor / from_numpy / zeros / ones / randn / rand (bindings.cpp:94)"
+    },
+    {
+      "member": "NDArray::to_host",
+      "where": "kernels.cu:688-694",
+      "host_calls": "std::memcpy, then cuda_check_last('to_host') (693)",
+      "class": "E2",
+      "python_reach": "Tensor.numpy (bindings.cpp:109)"
+    },
+    {
+      "member": "NDArray::clone",
+      "where": "kernels.cu:695-700",
+      "host_calls": "cudaMemcpy(..., cudaMemcpyDeviceToDevice) on host pointers (698)",
+      "class": "E2",
+      "python_reach": "Tensor.backward -> Variable::accumulate_grad (autograd.cpp:19) -> reduce_to (kernels.cu:1144) when the grad shape equals the data shape; NDArray::astype same dtype (728) and NDArray::to same kind (702), neither reached from Python (ops::cast returns its input for the same dtype, ops.cpp:1073); no Python entry named clone"
+    },
+    {
+      "member": "NDArray::to",
+      "where": "kernels.cu:701-708",
+      "host_calls": "host->host: clone (702); host<->device: cudaMemcpy (706)",
+      "class": "E2",
+      "python_reach": "NONE: no caller anywhere in tensor_cuda/src (grep '\\.to(' finds only the definition) and no Python binding; Tensor has no 'to' attribute (also ENG2 g2/to_method_check.txt: 'Tensor.to exists: False')"
+    },
+    {
+      "member": "NDArray::astype",
+      "where": "kernels.cu:727-756",
+      "host_calls": "cast_to_u8_kernel (734) / cast_from_u8_kernel (742) / cast_kernel (750) launched on host pointers; cuda_check_last (737/745/754); same dtype -> clone (728); int64/bool -> DISPATCH_FLOAT refusal 'op supports float32/float16/bfloat16 only'",
+      "class": "E2/E3",
+      "python_reach": "Tensor.astype/half/float (ops::cast, ops.cpp:1074), Tensor.numpy for bfloat16 (bindings.cpp:101), tc.tensor/factories with dtype='bfloat16' (__init__.py:62,73), cast backward (ops.cpp:1077), pow backward (ops.cpp:867-869)"
+    },
+    {
+      "member": "cuda_storage_device_mismatch",
+      "where": "kernels.cu:473-491",
+      "host_calls": "returns before any CUDA call for a non-CUDA array (474)",
+      "class": "no_cuda_on_host",
+      "python_reach": "fill_, __dlpack__"
+    }
+  ],
+  "python_entries_summary": {
+    "no_device_work_on_host_storage": 34,
+    "E2_data_path": 7,
+    "refuses_host_already": 4,
+    "compute_launches_kernel": 172
+  },
+  "python_entries": [
+    {
+      "name": "shape",
+      "kind": "method:Tensor",
+      "line": 1802,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "ndim",
+      "kind": "method:Tensor",
+      "line": 1805,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "dtype",
+      "kind": "method:Tensor",
+      "line": 1806,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "device",
+      "kind": "method:Tensor",
+      "line": 1807,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "requires_grad",
+      "kind": "method:Tensor",
+      "line": 1808,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "grad",
+      "kind": "method:Tensor",
+      "line": 1811,
+      "targets": [
+        "grad_of"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "numpy",
+      "kind": "method:Tensor",
+      "line": 1812,
+      "targets": [
+        "tensor_to_numpy"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/bindings.cpp:108"
+      ],
+      "class": "E2_data_path",
+      "note": "tensor_to_numpy -> NDArray::astype(Float32) for bfloat16 (E2/E3), NDArray::to_host (E2)"
+    },
+    {
+      "name": "__dlpack__",
+      "kind": "method:Tensor",
+      "line": 1816,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "refuses_host_already",
+      "note": "bindings.cpp tensor_dlpack: BufferError for a non-CUDA tensor (pre-existing)"
+    },
+    {
+      "name": "__dlpack_device__",
+      "kind": "method:Tensor",
+      "line": 1827,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "refuses_host_already",
+      "note": "bindings.cpp tensor_dlpack_device: BufferError on CPU (pre-existing)"
+    },
+    {
+      "name": "data_ptr",
+      "kind": "method:Tensor",
+      "line": 1833,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "fill_",
+      "kind": "method:Tensor",
+      "line": 1841,
+      "targets": [
+        "fill_"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:643"
+      ],
+      "class": "refuses_host_already",
+      "note": "kernels.cu fill_: 'fill_: CUDA arrays only' (pre-existing refusal)"
+    },
+    {
+      "name": "mark_modified",
+      "kind": "method:Tensor",
+      "line": 1863,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "revision",
+      "kind": "method:Tensor",
+      "line": 1871,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "backward",
+      "kind": "method:Tensor",
+      "line": 1877,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "Tensor::backward -> NDArray::full(1.0) seed (E2), Variable::accumulate_grad -> reduce_to -> NDArray::clone when shapes match (E2); a second accumulation -> ew_binary (compute kernel)"
+    },
+    {
+      "name": "zero_grad",
+      "kind": "method:Tensor",
+      "line": 1878,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "reshape",
+      "kind": "method:Tensor",
+      "line": 1879,
+      "targets": [
+        "reshape"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "transpose_last",
+      "kind": "method:Tensor",
+      "line": 1880,
+      "targets": [
+        "transpose_last"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sum",
+      "kind": "method:Tensor",
+      "line": 1881,
+      "targets": [
+        "sum"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "mean",
+      "kind": "method:Tensor",
+      "line": 1883,
+      "targets": [
+        "mean"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "relu",
+      "kind": "method:Tensor",
+      "line": 1885,
+      "targets": [
+        "relu"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "gelu",
+      "kind": "method:Tensor",
+      "line": 1886,
+      "targets": [
+        "gelu"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "gelu_exact",
+      "kind": "method:Tensor",
+      "line": 1887,
+      "targets": [
+        "gelu_exact"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "silu",
+      "kind": "method:Tensor",
+      "line": 1888,
+      "targets": [
+        "silu"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "abs",
+      "kind": "method:Tensor",
+      "line": 1889,
+      "targets": [
+        "abs"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "detach",
+      "kind": "method:Tensor",
+      "line": 1890,
+      "targets": [
+        "detach"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "half",
+      "kind": "method:Tensor",
+      "line": 1891,
+      "targets": [
+        "cast"
+      ],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "ops::cast -> NDArray::astype(Float16) (E2/E3)"
+    },
+    {
+      "name": "float",
+      "kind": "method:Tensor",
+      "line": 1892,
+      "targets": [
+        "cast"
+      ],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "ops::cast -> NDArray::astype(Float32) (E2/E3)"
+    },
+    {
+      "name": "astype",
+      "kind": "method:Tensor",
+      "line": 1893,
+      "targets": [
+        "cast"
+      ],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "ops::cast -> NDArray::astype (E2/E3); same dtype returns the input (no clone)"
+    },
+    {
+      "name": "sin",
+      "kind": "method:Tensor",
+      "line": 1896,
+      "targets": [
+        "sin"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "cos",
+      "kind": "method:Tensor",
+      "line": 1897,
+      "targets": [
+        "cos"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "tan",
+      "kind": "method:Tensor",
+      "line": 1898,
+      "targets": [
+        "tan"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "asin",
+      "kind": "method:Tensor",
+      "line": 1899,
+      "targets": [
+        "asin"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "acos",
+      "kind": "method:Tensor",
+      "line": 1900,
+      "targets": [
+        "acos"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "atan",
+      "kind": "method:Tensor",
+      "line": 1901,
+      "targets": [
+        "atan"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sinh",
+      "kind": "method:Tensor",
+      "line": 1902,
+      "targets": [
+        "sinh"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "cosh",
+      "kind": "method:Tensor",
+      "line": 1903,
+      "targets": [
+        "cosh"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "log2",
+      "kind": "method:Tensor",
+      "line": 1904,
+      "targets": [
+        "log2"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "log10",
+      "kind": "method:Tensor",
+      "line": 1905,
+      "targets": [
+        "log10"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sign",
+      "kind": "method:Tensor",
+      "line": 1906,
+      "targets": [
+        "sign"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "floor",
+      "kind": "method:Tensor",
+      "line": 1907,
+      "targets": [
+        "floor"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "ceil",
+      "kind": "method:Tensor",
+      "line": 1908,
+      "targets": [
+        "ceil"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "round",
+      "kind": "method:Tensor",
+      "line": 1909,
+      "targets": [
+        "round"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "isnan",
+      "kind": "method:Tensor",
+      "line": 1910,
+      "targets": [
+        "isnan"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "isinf",
+      "kind": "method:Tensor",
+      "line": 1911,
+      "targets": [
+        "isinf"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "isfinite",
+      "kind": "method:Tensor",
+      "line": 1912,
+      "targets": [
+        "isfinite"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "nan_to_num",
+      "kind": "method:Tensor",
+      "line": 1913,
+      "targets": [
+        "nan_to_num"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "reciprocal",
+      "kind": "method:Tensor",
+      "line": 1915,
+      "targets": [
+        "reciprocal"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "clamp",
+      "kind": "method:Tensor",
+      "line": 1916,
+      "targets": [
+        "clamp"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "maximum",
+      "kind": "method:Tensor",
+      "line": 1917,
+      "targets": [
+        "maximum"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "minimum",
+      "kind": "method:Tensor",
+      "line": 1918,
+      "targets": [
+        "minimum"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "slice",
+      "kind": "method:Tensor",
+      "line": 1919,
+      "targets": [
+        "slice"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__getitem__",
+      "kind": "method:Tensor",
+      "line": 1920,
+      "targets": [
+        "getitem"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sigmoid",
+      "kind": "method:Tensor",
+      "line": 1921,
+      "targets": [
+        "sigmoid"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "tanh",
+      "kind": "method:Tensor",
+      "line": 1922,
+      "targets": [
+        "tanh"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "exp",
+      "kind": "method:Tensor",
+      "line": 1923,
+      "targets": [
+        "exp"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "log",
+      "kind": "method:Tensor",
+      "line": 1924,
+      "targets": [
+        "log"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sqrt",
+      "kind": "method:Tensor",
+      "line": 1925,
+      "targets": [
+        "sqrt"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "softmax",
+      "kind": "method:Tensor",
+      "line": 1926,
+      "targets": [
+        "softmax"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "log_softmax",
+      "kind": "method:Tensor",
+      "line": 1927,
+      "targets": [
+        "log_softmax"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "pow",
+      "kind": "method:Tensor",
+      "line": 1928,
+      "targets": [
+        "pow_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "max",
+      "kind": "method:Tensor",
+      "line": 1929,
+      "targets": [
+        "max"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "min",
+      "kind": "method:Tensor",
+      "line": 1930,
+      "targets": [
+        "min"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "var",
+      "kind": "method:Tensor",
+      "line": 1931,
+      "targets": [
+        "var"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "std",
+      "kind": "method:Tensor",
+      "line": 1932,
+      "targets": [
+        "std"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "prod",
+      "kind": "method:Tensor",
+      "line": 1933,
+      "targets": [
+        "prod"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "argmax",
+      "kind": "method:Tensor",
+      "line": 1934,
+      "targets": [
+        "argmax"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "argmin",
+      "kind": "method:Tensor",
+      "line": 1935,
+      "targets": [
+        "argmin"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "argmax_last_axis",
+      "kind": "method:Tensor",
+      "line": 1936,
+      "targets": [
+        "argmax_last_axis"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "cumsum",
+      "kind": "method:Tensor",
+      "line": 1937,
+      "targets": [
+        "cumsum"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "gather",
+      "kind": "method:Tensor",
+      "line": 1938,
+      "targets": [
+        "gather"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "flip",
+      "kind": "method:Tensor",
+      "line": 1939,
+      "targets": [
+        "flip"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "topk",
+      "kind": "method:Tensor",
+      "line": 1940,
+      "targets": [
+        "topk"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sort",
+      "kind": "method:Tensor",
+      "line": 1944,
+      "targets": [
+        "topk"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "permute",
+      "kind": "method:Tensor",
+      "line": 1948,
+      "targets": [
+        "permute"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "transpose",
+      "kind": "method:Tensor",
+      "line": 1949,
+      "targets": [
+        "transpose"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "squeeze",
+      "kind": "method:Tensor",
+      "line": 1950,
+      "targets": [
+        "squeeze"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "unsqueeze",
+      "kind": "method:Tensor",
+      "line": 1951,
+      "targets": [
+        "unsqueeze"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "expand",
+      "kind": "method:Tensor",
+      "line": 1952,
+      "targets": [
+        "expand"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "flatten",
+      "kind": "method:Tensor",
+      "line": 1953,
+      "targets": [
+        "flatten"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "masked_fill",
+      "kind": "method:Tensor",
+      "line": 1954,
+      "targets": [
+        "masked_fill"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "gt",
+      "kind": "method:Tensor",
+      "line": 1955,
+      "targets": [
+        "compare"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "ge",
+      "kind": "method:Tensor",
+      "line": 1956,
+      "targets": [
+        "compare"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "lt",
+      "kind": "method:Tensor",
+      "line": 1957,
+      "targets": [
+        "compare"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "le",
+      "kind": "method:Tensor",
+      "line": 1958,
+      "targets": [
+        "compare"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "eq",
+      "kind": "method:Tensor",
+      "line": 1959,
+      "targets": [
+        "compare"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__gt__",
+      "kind": "method:Tensor",
+      "line": 1960,
+      "targets": [
+        "compare_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__ge__",
+      "kind": "method:Tensor",
+      "line": 1961,
+      "targets": [
+        "compare_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__lt__",
+      "kind": "method:Tensor",
+      "line": 1962,
+      "targets": [
+        "compare_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__le__",
+      "kind": "method:Tensor",
+      "line": 1963,
+      "targets": [
+        "compare_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__pow__",
+      "kind": "method:Tensor",
+      "line": 1964,
+      "targets": [
+        "pow_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__add__",
+      "kind": "method:Tensor",
+      "line": 1966,
+      "targets": [
+        "add"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__add__",
+      "kind": "method:Tensor",
+      "line": 1967,
+      "targets": [
+        "add_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__radd__",
+      "kind": "method:Tensor",
+      "line": 1968,
+      "targets": [
+        "add_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__sub__",
+      "kind": "method:Tensor",
+      "line": 1969,
+      "targets": [
+        "sub"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__sub__",
+      "kind": "method:Tensor",
+      "line": 1970,
+      "targets": [
+        "add_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__mul__",
+      "kind": "method:Tensor",
+      "line": 1971,
+      "targets": [
+        "mul"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__mul__",
+      "kind": "method:Tensor",
+      "line": 1972,
+      "targets": [
+        "mul_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__rmul__",
+      "kind": "method:Tensor",
+      "line": 1973,
+      "targets": [
+        "mul_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__truediv__",
+      "kind": "method:Tensor",
+      "line": 1974,
+      "targets": [
+        "div"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__truediv__",
+      "kind": "method:Tensor",
+      "line": 1975,
+      "targets": [
+        "mul_scalar"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__matmul__",
+      "kind": "method:Tensor",
+      "line": 1976,
+      "targets": [
+        "matmul"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "__neg__",
+      "kind": "method:Tensor",
+      "line": 1977,
+      "targets": [
+        "neg"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "capacity",
+      "kind": "method:ApaInt4Workspace",
+      "line": 1981,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "valid_rows",
+      "kind": "method:ApaInt4Workspace",
+      "line": 1983,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "nbytes",
+      "kind": "method:ApaInt4Workspace",
+      "line": 1985,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "reset",
+      "kind": "method:ApaInt4Workspace",
+      "line": 1988,
+      "targets": [
+        "apa_int4_workspace_reset"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "_rewind",
+      "kind": "method:ApaInt4Workspace",
+      "line": 1990,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "tensor",
+      "kind": "module",
+      "line": 1997,
+      "targets": [
+        "tensor_from_numpy"
+      ],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "tensor_from_numpy -> NDArray::from_host (E2)"
+    },
+    {
+      "name": "matmul",
+      "kind": "module",
+      "line": 2001,
+      "targets": [
+        "matmul"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "rms_norm",
+      "kind": "module",
+      "line": 2003,
+      "targets": [
+        "rms_norm"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "rope_apply",
+      "kind": "module",
+      "line": 2004,
+      "targets": [
+        "rope_apply"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "write_rows",
+      "kind": "module",
+      "line": 2007,
+      "targets": [
+        "write_rows"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "export_rows",
+      "kind": "module",
+      "line": 2009,
+      "targets": [
+        "export_rows"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:7931"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "export_rope_rows",
+      "kind": "module",
+      "line": 2011,
+      "targets": [
+        "export_rope_rows"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:8093"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "export_row_pair",
+      "kind": "module",
+      "line": 2015,
+      "targets": [
+        "export_row_pair"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "export_row_pairs",
+      "kind": "module",
+      "line": 2020,
+      "targets": [
+        "export_row_pairs"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "swap_row_pairs_with_rope",
+      "kind": "module",
+      "line": 2025,
+      "targets": [
+        "swap_row_pairs_with_rope"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "evict_row_pairs",
+      "kind": "module",
+      "line": 2031,
+      "targets": [
+        "evict_row_pairs"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "arena_row_pair_transaction",
+      "kind": "module",
+      "line": 2034,
+      "targets": [
+        "arena_row_pair_transaction"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "splice_rows",
+      "kind": "module",
+      "line": 2040,
+      "targets": [
+        "splice_rows"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:7962"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "evict_rows",
+      "kind": "module",
+      "line": 2043,
+      "targets": [
+        "evict_rows"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:7995"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "dda_raycast",
+      "kind": "module",
+      "line": 2045,
+      "targets": [
+        "dda_raycast"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/dda.cu:229",
+        "tensor_cuda/src/dda.cu:230"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "raster_winner_scatter_min",
+      "kind": "module",
+      "line": 2054,
+      "targets": [
+        "raster_winner_scatter_min"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/paint_raster.cu:370",
+        "tensor_cuda/src/paint_raster.cu:371"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "raster_triangle_winners",
+      "kind": "module",
+      "line": 2064,
+      "targets": [
+        "raster_triangle_winners"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "raster_winner_resolve",
+      "kind": "module",
+      "line": 2074,
+      "targets": [
+        "raster_winner_resolve"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/paint_raster.cu:451"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "rasterize_clip",
+      "kind": "module",
+      "line": 2083,
+      "targets": [
+        "rasterize_clip"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bake_back_project",
+      "kind": "module",
+      "line": 2095,
+      "targets": [
+        "bake_back_project"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/paint_bake.cu:304"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bake_cosine_blend",
+      "kind": "module",
+      "line": 2112,
+      "targets": [
+        "bake_cosine_blend"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/paint_bake.cu:398"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "inpaint_island_passes",
+      "kind": "module",
+      "line": 2124,
+      "targets": [
+        "inpaint_island_passes"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/paint_inpaint.cu:136"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "terrain_render",
+      "kind": "module",
+      "line": 2141,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "causal_softmax",
+      "kind": "module",
+      "line": 2228,
+      "targets": [
+        "causal_softmax"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "fused_sdpa_noncausal",
+      "kind": "module",
+      "line": 2229,
+      "targets": [
+        "fused_sdpa_noncausal"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_int4_sdpa_noncausal",
+      "kind": "module",
+      "line": 2231,
+      "targets": [
+        "apa_int4_sdpa_noncausal"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_refine_stats",
+      "kind": "module",
+      "line": 2234,
+      "targets": [
+        "apa_refine_stats"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "argmax_last_axis",
+      "kind": "module",
+      "line": 2240,
+      "targets": [
+        "argmax_last_axis"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "mse_loss",
+      "kind": "module",
+      "line": 2241,
+      "targets": [
+        "mse_loss"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "cross_entropy",
+      "kind": "module",
+      "line": 2242,
+      "targets": [
+        "cross_entropy"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "add",
+      "kind": "module",
+      "line": 2243,
+      "targets": [
+        "add"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "mul",
+      "kind": "module",
+      "line": 2244,
+      "targets": [
+        "mul"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "where",
+      "kind": "module",
+      "line": 2245,
+      "targets": [
+        "where"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "cat",
+      "kind": "module",
+      "line": 2246,
+      "targets": [
+        "cat"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "stack",
+      "kind": "module",
+      "line": 2247,
+      "targets": [
+        "stack"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "embedding",
+      "kind": "module",
+      "line": 2248,
+      "targets": [
+        "embedding"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_quantize_gather",
+      "kind": "module",
+      "line": 2249,
+      "targets": [
+        "apa_quantize_gather"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "int4_linear",
+      "kind": "module",
+      "line": 2255,
+      "targets": [
+        "int4_linear"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "int4_linear_fused",
+      "kind": "module",
+      "line": 2258,
+      "targets": [
+        "int4_linear_fused"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "w8a16_matmul",
+      "kind": "module",
+      "line": 2261,
+      "targets": [
+        "w8a16_matmul"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:4439"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "intn_linear",
+      "kind": "module",
+      "line": 2264,
+      "targets": [
+        "intn_linear"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "intn_linear_fused",
+      "kind": "module",
+      "line": 2268,
+      "targets": [
+        "intn_linear_fused"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "mxfp4_linear",
+      "kind": "module",
+      "line": 2272,
+      "targets": [
+        "mxfp4_linear"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "mxfp4_linear_expert",
+      "kind": "module",
+      "line": 2274,
+      "targets": [
+        "mxfp4_linear_expert"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_train",
+      "kind": "module",
+      "line": 2278,
+      "targets": [
+        "apa_selective_train"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "gated_delta_step",
+      "kind": "module",
+      "line": 2285,
+      "targets": [
+        "gated_delta_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "int4_dequant",
+      "kind": "module",
+      "line": 2295,
+      "targets": [
+        "int4_dequant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "intn_dequant",
+      "kind": "module",
+      "line": 2303,
+      "targets": [
+        "intn_dequant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "kv_int4_pack",
+      "kind": "module",
+      "line": 2317,
+      "targets": [
+        "kv_int4_pack"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "kv_int4_unpack",
+      "kind": "module",
+      "line": 2323,
+      "targets": [
+        "kv_int4_unpack"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention_sp",
+      "kind": "module",
+      "line": 2334,
+      "targets": [
+        "apa_selective_attention_sp"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:8480",
+        "tensor_cuda/src/kernels.cu:8497"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_sp1_1_baseline_diagnostics",
+      "kind": "module",
+      "line": 2351,
+      "targets": [
+        "apa_sp1_1_baseline_diagnostics"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_sp2_delta",
+      "kind": "module",
+      "line": 2356,
+      "targets": [
+        "apa_sp2_delta"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention_sp_epsilon",
+      "kind": "module",
+      "line": 2357,
+      "targets": [
+        "apa_selective_attention_sp_epsilon"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_sp2_scores",
+      "kind": "module",
+      "line": 2372,
+      "targets": [
+        "apa_sp2_scores"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_sp2_baseline_thresholds",
+      "kind": "module",
+      "line": 2378,
+      "targets": [
+        "apa_sp2_baseline_thresholds"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention",
+      "kind": "module",
+      "line": 2384,
+      "targets": [
+        "apa_selective_attention"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention_int4",
+      "kind": "module",
+      "line": 2392,
+      "targets": [
+        "apa_selective_attention_int4"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_int4_workspace",
+      "kind": "module",
+      "line": 2402,
+      "targets": [
+        "apa_int4_workspace_create"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention_int4_workspace",
+      "kind": "module",
+      "line": 2405,
+      "targets": [
+        "apa_selective_attention_int4_workspace"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "_apa_int4_profile_stages",
+      "kind": "module",
+      "line": 2415,
+      "targets": [
+        "apa_selective_attention_int4_profile"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "_apa_int4_decode_plan",
+      "kind": "module",
+      "line": 2427,
+      "targets": [
+        "apa_int4_decode_plan"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_gemm_selective_attention",
+      "kind": "module",
+      "line": 2430,
+      "targets": [
+        "apa_gemm_selective_attention"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_gemm_selective_attention_cached",
+      "kind": "module",
+      "line": 2441,
+      "targets": [
+        "apa_gemm_selective_attention"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_gemm_selective_quantize_k",
+      "kind": "module",
+      "line": 2455,
+      "targets": [
+        "apa_gemm_selective_quantize_k"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_gemm_selective_stats",
+      "kind": "module",
+      "line": 2460,
+      "targets": [
+        "apa_gemm_selective_stats"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_gemm_selective_debug",
+      "kind": "module",
+      "line": 2465,
+      "targets": [
+        "apa_gemm_selective_debug"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_attention_sink",
+      "kind": "module",
+      "line": 2482,
+      "targets": [
+        "apa_selective_attention_sink"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_fwd_train",
+      "kind": "module",
+      "line": 2495,
+      "targets": [
+        "apa_selective_fwd_train"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_bwd",
+      "kind": "module",
+      "line": 2505,
+      "targets": [
+        "apa_selective_bwd"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_selective_bwd_variant",
+      "kind": "module",
+      "line": 2518,
+      "targets": [
+        "apa_selective_bwd_variant"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/ops.cpp:1167"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_blend_softmax",
+      "kind": "module",
+      "line": 2536,
+      "targets": [
+        "apa_blend_softmax"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "apa_blend_softmax_sink",
+      "kind": "module",
+      "line": 2544,
+      "targets": [
+        "apa_blend_softmax_sink"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "im2col",
+      "kind": "module",
+      "line": 2553,
+      "targets": [
+        "im2col"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "col2im",
+      "kind": "module",
+      "line": 2554,
+      "targets": [
+        "col2im"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "avg_pool2d",
+      "kind": "module",
+      "line": 2555,
+      "targets": [
+        "avg_pool2d"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "max_pool2d",
+      "kind": "module",
+      "line": 2556,
+      "targets": [
+        "max_pool2d"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "sgd_step",
+      "kind": "module",
+      "line": 2559,
+      "targets": [
+        "sgd_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "adam_step",
+      "kind": "module",
+      "line": 2562,
+      "targets": [
+        "adam_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "rmsprop_step",
+      "kind": "module",
+      "line": 2566,
+      "targets": [
+        "rmsprop_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "lion_step",
+      "kind": "module",
+      "line": 2569,
+      "targets": [
+        "lion_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "radam_step",
+      "kind": "module",
+      "line": 2572,
+      "targets": [
+        "radam_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "adagrad_step",
+      "kind": "module",
+      "line": 2577,
+      "targets": [
+        "adagrad_step"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "scale_",
+      "kind": "module",
+      "line": 2580,
+      "targets": [
+        "scale_"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "axpy_",
+      "kind": "module",
+      "line": 2581,
+      "targets": [
+        "axpy_"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bp_kernel_4_set_variant",
+      "kind": "module",
+      "line": 2585,
+      "targets": [
+        "bp_kernel_4_set_variant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_kernel_4_get_variant",
+      "kind": "module",
+      "line": 2586,
+      "targets": [
+        "bp_kernel_4_get_variant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "apa_selective_fwd_train_variant",
+      "kind": "module",
+      "line": 2587,
+      "targets": [
+        "apa_selective_fwd_train_variant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bp_kernel_4_diagnostic",
+      "kind": "module",
+      "line": 2591,
+      "targets": [
+        "apa_selective_fwd_bk4"
+      ],
+      "device_checks_in_targets": [
+        "tensor_cuda/src/kernels.cu:8683"
+      ],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bp_kernel_3_profile",
+      "kind": "module",
+      "line": 2595,
+      "targets": [
+        "bp_kernel_3_profile"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bp_kernel_3_halves",
+      "kind": "module",
+      "line": 2596,
+      "targets": [
+        "bp_kernel_3_halves"
+      ],
+      "device_checks_in_targets": [],
+      "class": "compute_launches_kernel",
+      "note": "reaches engine kernels with the tensor's data pointer; with a host tensor they run on malloc'd memory (HMM) unless a device check below refuses first"
+    },
+    {
+      "name": "bp_kernel_2_set_variant",
+      "kind": "module",
+      "line": 2597,
+      "targets": [
+        "bp_kernel_2_set_variant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_kernel_2_get_variant",
+      "kind": "module",
+      "line": 2598,
+      "targets": [
+        "bp_kernel_2_get_variant"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_source_pin",
+      "kind": "module",
+      "line": 2600,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_wall_begin",
+      "kind": "module",
+      "line": 2601,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_wall_end",
+      "kind": "module",
+      "line": 2602,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_configure",
+      "kind": "module",
+      "line": 2603,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_begin",
+      "kind": "module",
+      "line": 2604,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_end",
+      "kind": "module",
+      "line": 2605,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "bp_rows",
+      "kind": "module",
+      "line": 2606,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "is_grad_enabled",
+      "kind": "module",
+      "line": 2622,
+      "targets": [
+        "grad_enabled"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "set_grad_enabled",
+      "kind": "module",
+      "line": 2623,
+      "targets": [
+        "set_grad_enabled"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "checkpoint",
+      "kind": "module",
+      "line": 2624,
+      "targets": [
+        "checkpoint_py"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "synchronize",
+      "kind": "module",
+      "line": 2625,
+      "targets": [
+        "cuda_sync"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "_from_dlpack_capsule",
+      "kind": "module",
+      "line": 2629,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "refuses_host_already",
+      "note": "bindings.cpp: refuses non-CUDA capsules (BufferError, pre-existing); takes no tc tensor"
+    },
+    {
+      "name": "empty",
+      "kind": "module",
+      "line": 2635,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "E2_data_path",
+      "note": "bindings empty -> NDArray::empty (host: std::malloc only; no CUDA call for device='cpu')"
+    },
+    {
+      "name": "_dlpack_release_stats",
+      "kind": "module",
+      "line": 2646,
+      "targets": [],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "_dlpack_raise_unraisable",
+      "kind": "module",
+      "line": 2711,
+      "targets": [
+        "kBeginShutdownDef",
+        "kExitReportWrittenDef",
+        "kExitRunnerDef",
+        "kTestFailExitReportDef"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "empty_cache",
+      "kind": "module",
+      "line": 2735,
+      "targets": [
+        "empty_cache"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    },
+    {
+      "name": "set_alloc_pooling",
+      "kind": "module",
+      "line": 2736,
+      "targets": [
+        "set_alloc_pooling"
+      ],
+      "device_checks_in_targets": [],
+      "class": "no_device_work_on_host_storage",
+      "note": "metadata/config; no kernel on the tensor's storage"
+    }
+  ]
+}

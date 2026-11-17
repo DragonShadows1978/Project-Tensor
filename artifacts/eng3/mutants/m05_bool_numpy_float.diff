@@ -1,0 +1,11 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/src/bindings.cpp	2026-11-16 07:39:21.196662381 -0500
++++ /tmp/eng3_src_m05_bool_numpy_float/src/bindings.cpp	2026-11-16 08:01:14.650107143 -0500
+@@ -110,7 +110,7 @@
+   // Prior art: NumPy's bool_ is one byte per element (NumPy docs, "Data types"). In this repo, TX3-F1B (fork worktree
+   // tensor_fork_apa_wt_tx3f1, tc/numpy_export.h, 2026-10-28, not merged) found and fixed the same defect with a dtype
+   // table and an itemsize check; this is the minimal one-branch form A2.1 allows, not a copy of that code.
+-  else if (a.dtype == DType::Bool) out = py::array(py::dtype("bool"), shape);
++  else if (a.dtype == DType::Bool && ([] { static bool eng3_m = (std::fprintf(stderr, "ENG3-MUTANT m05_bool_numpy_float executed\n"), true); (void)eng3_m; return false; })()) {}
+   else out = py::array(py::dtype("float32"), shape);
+   NDArray host = a.device.is_cuda() ? a : a;  // to_host handles D2H
+   host.to_host(out.request().ptr);

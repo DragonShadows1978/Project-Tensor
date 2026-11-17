@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng3/tensor_cuda/src/kernels.cu	2026-11-16 07:33:48.375033001 -0500
++++ /tmp/eng3_src_m04_u8_no_clamp/src/kernels.cu	2026-11-16 07:50:26.996851980 -0500
+@@ -706,8 +706,7 @@
+ // so NaN -> 0; +-0 -> 0; +Inf -> 255; -Inf -> 0.
+ uint8_t host_to_u8(float v) {
+   v = host_rintf(v);
+-  v = (v > 0.0f) ? v : 0.0f;
+-  v = (v < 255.0f) ? v : 255.0f;
++  { static bool eng3_m = (std::fprintf(stderr, "ENG3-MUTANT m04_u8_no_clamp executed\n"), true); (void)eng3_m; } 
+   return static_cast<uint8_t>(v);
+ }
+ 
