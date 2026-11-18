@@ -1,0 +1,82 @@
+--- a/tensor_cuda/src/apa_spo/packed.cuh
++++ b/tensor_cuda/src/apa_spo/packed.cuh
+@@ -147,6 +147,8 @@
+    int64_t key=(int64_t)bh*capacity+start+j;
+    float n;
+    if constexpr(D==128){n=lane==0?scales[key]:0.f;n=__shfl_sync(0xffffffffu,n,0);}else n=scales[key];
++   // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse prefill's quiet-NaN sentinel at the decode load.
++   n=isfinite(n)?n:__int_as_float(0x7fc00000);
+    float acc[G]={};
+    if constexpr(D==128){
+      #pragma unroll
+@@ -200,7 +202,12 @@
+     int n=min(TILE,count-t);
+     // Exactly D/2 global code bytes + one fp32 scale per KV row, shared by G.
+     for(int i=tid;i<n*(D/2);i+=128)codes[i]=packed[((int64_t)bh*capacity+start+t)*(D/2)+i];
+-    if(tid<n)norms[tid]=scales[(int64_t)bh*capacity+start+t+tid];__syncthreads();
++    if(tid<n){
++      const float norm=scales[(int64_t)bh*capacity+start+t+tid];
++      // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse prefill's quiet-NaN sentinel at the decode load.
++      norms[tid]=isfinite(norm)?norm:__int_as_float(0x7fc00000);
++    }
++    __syncthreads();
+     for(int g=0;g<G;++g){int row=b*H+h0+g;const float* Q=q+(int64_t)row*D;
+       if constexpr(W){
+         for(int j=tid/32;j<n;j+=4){float x=0;
+--- a/tensor_cuda/tests/test_apa_pf2_nonfinite.py
++++ b/tensor_cuda/tests/test_apa_pf2_nonfinite.py
+@@ -1,6 +1,6 @@
+-"""PF2-F1: REV1's sink/norm witnesses, skipped without a GPU; CPU index test.
++"""PF2-F2: REV1's sink/norm witnesses and partition-carry decode coverage.
+ Prior art: IEEE 754-2008; Project-Tensor REV1 reproductions (2026), preserved
+-operands and packed-decode oracle. ISO C++17/CERT INT32-C boundary widening
++operands and extended decode coverage by kernel and dtype. ISO C++17/CERT INT32-C boundary widening
+ (unverified - lead to check). No new numerical algorithm.
+ """
+ from pathlib import Path
+@@ -10,14 +10,14 @@
+ 
+ ROOT=Path(__file__).resolve().parents[2]
+ sys.path.insert(0,str(ROOT/'scripts'))
+-import apa_pf2f1_nonfinite as N
++import apa_pf2f2_nonfinite as N
+ 
+ 
+ def test_actual_diagnostic_tail_helper():
+-    import apa_pf2f1_index as I
+     if os.environ.get('CUDA_VISIBLE_DEVICES') != '':
+         pytest.skip('CPU helper check requires CUDA_VISIBLE_DEVICES empty')
+-    r=I.check(ROOT/'tensor_cuda/src/apa_spo/packed_prefill.cuh','pytest_F1')
++    import apa_pf2f2_index as I
++    r=I.check(ROOT/'tensor_cuda/src/apa_spo/packed_prefill.cuh','pytest_F2')
+     assert r['status']=='PASS',r
+ 
+ 
+@@ -28,11 +28,15 @@
+     import torch
+     if not torch.cuda.is_available():
+         pytest.skip('CUDA unavailable')
+-    import apa_pf2f1_common as C
+     torch.set_num_threads(1)
+     torch.set_num_interop_threads(1)
+     os.environ['TC_APA_SP']='1'
+-    return C.load_arm(os.environ.get('APA_PF2F1_ARM','F1'))[0]
++    label = os.environ.get('APA_PF2F2_ARM')
++    if label or (ROOT/'artifacts/apa_pf2f2/arms/F2/ARM.json').is_file():
++        import apa_pf2f2_cpu as C
++        return C.load_arm(label or 'F2')
++    import tensor_cuda
++    return tensor_cuda
+ 
+ 
+ @pytest.mark.parametrize('case',N.sink_cases())
+@@ -45,3 +49,9 @@
+ def test_nonfinite_stored_norm(runtime,case):
+     r=N.run_norm(runtime,case)
+     assert not r['failed'],r
++
++
++@pytest.mark.parametrize('case', N.partition_norm_cases())
++def test_decode_partition_raw_nonfinite_norm(runtime, case):
++    result = N.run_partition_norm(runtime, case)
++    assert not result['failed'], result

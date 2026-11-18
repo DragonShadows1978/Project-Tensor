@@ -1,0 +1,20 @@
+--- a/tensor_cuda/src/apa_spo/packed_prefill.cuh
++++ b/tensor_cuda/src/apa_spo/packed_prefill.cuh
+@@ -101,7 +101,7 @@
+           // Prior art: P1-F3 (Project-Tensor 2026), IEEE 754-2008 NaN
+           // sentinel. Reuse at the accessor so raw Inf norms propagate too.
+           const float norm = kn[jk];
+-          x = __fmul_rn(x, isfinite(norm) ? norm : __int_as_float(0x7fc00000));
++          x = __fmul_rn(x, norm);
+           x = __fmul_rn(x, scale);
+         }
+         block = x;
+@@ -124,7 +124,7 @@
+         x = __fadd_rn(x, __shfl_down_sync(FULL, x, off));
+       // Same P1-F3 non-finite norm sentinel as the sequential accessor above.
+       const float norm = kn[j];
+-      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), isfinite(norm) ? norm : __int_as_float(0x7fc00000)), scale);
++      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), norm), scale);
+     }
+ #if TC_APA_P1_TEST_HOOKS
+     if (bulk_dump && lane == 0) bulk_dump[(int64_t)row * S + j] = bulk;

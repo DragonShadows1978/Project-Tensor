@@ -1,0 +1,105 @@
+{
+  "copies": [
+    {
+      "source": "scripts/apa_p1pf2_gpu.py",
+      "source_sha256": "cd927b86ee66b8c50d08c7a3a025bcc21ca79b39a6e9665e088b7db7ea156311",
+      "copy": "scripts/apa_pf2f1_reference.py",
+      "copy_sha256": "3297fa1402f7195941359c3a2391da105e1c82a12addad90d6c317f390e128c0",
+      "substitutions": [
+        [
+          "artifacts/apa_p1pf2",
+          "artifacts/apa_pf2f1"
+        ],
+        [
+          "/tmp/apap1pf2_",
+          "/tmp/pf2f1_"
+        ],
+        [
+          "import apa_p1pf2_build as pfb",
+          "import apa_pf2f1_build as pfb"
+        ]
+      ]
+    },
+    {
+      "source": "scripts/apa_p1pf2_g45.py",
+      "source_sha256": "9cec41f8d90532287619d6812d034569d1e64f6172d75224756052a3ce7ac16e",
+      "copy": "scripts/apa_pf2f1_g45.py",
+      "copy_sha256": "1c0fd42f0b4380a0c315c4591bdf0aac2477ebbf250b1910f46e4b0a721cda79",
+      "substitutions": [
+        [
+          "artifacts/apa_p1pf2",
+          "artifacts/apa_pf2f1"
+        ],
+        [
+          "/tmp/apap1pf2_",
+          "/tmp/pf2f1_"
+        ],
+        [
+          "import apa_p1pf2_gpu as G",
+          "import apa_pf2f1_common as G"
+        ]
+      ]
+    },
+    {
+      "source": "scripts/apa_p1pf2_sass.py",
+      "source_sha256": "c7109d88a1572881a37e3d6d79426f2c78dd0f167d3c41efdf3c373af91ec654",
+      "copy": "scripts/apa_pf2f1_sass_reference.py",
+      "copy_sha256": "545b66223baced5dc22a2edac12c75058cadf86601924c6e75ae5017273e1bdc",
+      "substitutions": [
+        [
+          "artifacts/apa_p1pf2",
+          "artifacts/apa_pf2f1"
+        ],
+        [
+          "/tmp/apap1pf2_",
+          "/tmp/pf2f1_"
+        ],
+        [
+          "import apa_p1pf2_build as pfb",
+          "import apa_pf2f1_build as pfb"
+        ]
+      ]
+    }
+  ],
+  "outputs": [
+    "artifacts/apa_pf2f1/build_*/**",
+    "artifacts/apa_pf2f1/arms/**",
+    "artifacts/apa_pf2f1/gpu/**",
+    "artifacts/apa_pf2f1/identity/**",
+    "artifacts/apa_pf2f1/coverage/**",
+    "artifacts/apa_pf2f1/nonfinite/**",
+    "artifacts/apa_pf2f1/regression/**",
+    "artifacts/apa_pf2f1/sass/**",
+    "artifacts/apa_pf2f1/*.json",
+    "artifacts/apa_pf2f1/*.md",
+    "/tmp/pf2f1_shim/**",
+    "/tmp/pf2f1_index*/**",
+    "logs/apa_pf2f1_*",
+    "artifacts/apa_pf2f1/originals/**",
+    "artifacts/apa_pf2f1/*.sha256",
+    "artifacts/apa_pf2f1/*.txt",
+    "artifacts/apa_pf2f1/gpu_superseded_min30/**",
+    "artifacts/apa_pf2f1/*.superseded_*"
+  ],
+  "imported_read_only": [
+    "scripts/apa_p1f1_gpu.py (fake extent fixture only)",
+    "scripts/apa_p1d_sass.py (not invoked; parser reference import only)",
+    "artifacts/apa_p1pf2/arms/PF/** (finite baseline, imported -B)",
+    "artifacts/apa_p1pf2/a1/PF_I3_A1.json (exact per-dtype tau)"
+  ],
+  "unused_writers": "Copied PF2 reference modules retain unused CLI functions; only pure grid/input/oracle/parser helpers are called. No original PF2 writer is called.",
+  "reproduction_sources": [
+    {
+      "path": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2rev1/artifacts/pf2_rev1/repro/sink_nonfinite.py",
+      "sha256": "7b1300ef7482905fcf2ca2451690ea2507ef84488360271cef3eba899690bb90",
+      "copied_to": "scripts/apa_pf2f1_nonfinite.py",
+      "scope": "faithful fixture port; expectation changed from finding confirmation to G2 contract assertion"
+    },
+    {
+      "path": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2rev1/artifacts/pf2_rev1/repro/norm_nonfinite.py",
+      "sha256": "afcd1e2d1ee6952b046e43882de763af10b6beb6a9f528ee1231f4eaeaeb747d",
+      "copied_to": "scripts/apa_pf2f1_nonfinite.py",
+      "scope": "faithful fixture port; expectation changed from finding confirmation to G2 contract assertion"
+    }
+  ]
+}

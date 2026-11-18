@@ -1,0 +1,371 @@
+{
+ "line": "G7",
+ "status": "FAIL",
+ "killed": 8,
+ "total": 8,
+ "results": [
+  {
+   "name": "m01_partition_restart",
+   "design": "1: running maximum restarts every 2,048 keys",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every key j of rows with smax > 2048 passes the restart at j = 2048 (S 2049 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m01_partition_restart",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 2,
+      "pf_i3_max": 0.0003667954470957371,
+      "mask_unequal_rows": 4,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.3,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 3.4005302456913252e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m02_gt_for_ge",
+   "design": "2: > in place of >=",
+   "expected_failure": "pf_i1_ties",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_ties"
+   ],
+   "mutant_exit": 0,
+   "executes": "the compare runs for every key; the tie rows put a key exactly at the threshold",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 3.3,
+     "arm": "mutant:m02_gt_for_ge",
+     "failed": [
+      "pf_i1_ties"
+     ],
+     "info": {
+      "ties_ok": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "ties_ok": 32
+     }
+    }
+   }
+  },
+  {
+   "name": "m03_dense_delta",
+   "design": "3: delta from the dense table in the packed branch",
+   "expected_failure": "g4_route_record_packed_delta",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "g4_route_record_packed_delta"
+   ],
+   "mutant_exit": 0,
+   "executes": "the public L > 1 branch (G4 acceptance row calls apa_selective_attention_sp with L = 33)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.6,
+     "arm": "mutant:m03_dense_delta",
+     "failed": [
+      "g4_route_record_packed_delta"
+     ],
+     "info": {
+      "route": {
+       "storage": "packed",
+       "backend": "spq_packed_prefill_tq4_row",
+       "l": 33,
+       "fallback_reason": null,
+       "delta": 6.348393440246582,
+       "e_q": 0.8716114163398743
+      }
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.0,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "route": {
+       "storage": "packed",
+       "backend": "spq_packed_prefill_tq4_row",
+       "l": 33,
+       "fallback_reason": null,
+       "delta": 6.348392486572266,
+       "e_q": 0.8716110587120056
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "m04_causal_bound",
+   "design": "4: causal bound S-L+i",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every causal row",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 4.3,
+     "arm": "mutant:m04_causal_bound",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 8,
+      "rows": 1160,
+      "pf_i3_rows_above_tau": 1047,
+      "pf_i3_max": 1.589335721634256,
+      "mask_unequal_rows": 828,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.6,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 8,
+      "rows": 1160,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.5321381197840465e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m05_kv_head_mod",
+   "design": "5: KV head taken as h % KVH",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every row; at G > 1 head 1 maps to KV head 1, not 0",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m05_kv_head_mod",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 4.010699129933457,
+      "mask_unequal_rows": 132,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.751175506224729e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m06_norm_dropped",
+   "design": "6: norm multiply dropped (lane order site)",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the lane-order bulk (D128 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "mutant:m06_norm_dropped",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 66,
+      "pf_i3_max": 0.004751428685433378,
+      "mask_unequal_rows": 66,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 1.1772387228272878e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m07_nibble_swap",
+   "design": "7: nibble order swapped (lane order site)",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the lane-order bulk (D128 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.6,
+     "arm": "mutant:m07_nibble_swap",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 66,
+      "pf_i3_max": 1.6806540595927657,
+      "mask_unequal_rows": 66,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 1.1772387228272878e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m08_rotation_transposed",
+   "design": "8: rotation indexed R[i,d]",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the in-kernel rotation of every row",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m08_rotation_transposed",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 2.116017937389792,
+      "mask_unequal_rows": 132,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.438714315666207e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  }
+ ],
+ "terminal": "MUT_DONE"
+}

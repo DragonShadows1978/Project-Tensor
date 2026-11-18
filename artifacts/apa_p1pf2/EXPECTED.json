@@ -1,0 +1,78 @@
+{
+  "order": "orders/APA_P1PF2_PACKED_PREFILL.md (5c9b9584)",
+  "note": "Written once, before the first Build PF and before any GPU line (order: Builds and SASS; L35). Never amended after a PF build exists; Build PF and every PF rebuild are compared against this file.",
+  "sass": {
+    "comparison": "Build PF (this worktree, artifacts/apa_p1pf2/build_PF) vs Build F3 (tensor_fork_apa_wt_p1f2 artifacts/apa_p1f3/arms/F3, module sha256 2e557a23eaf228512a2f1a2f0629401d91d02d05705087661be5c48849c0f3e9), per kernel, exact Function-block text of cuobjdump -sass --gpu-architecture sm_89 (P1-D dump(), imported), after the registered mappings below and nothing else (scripts/apa_p1pf2_sass.py).",
+    "expected_changed": {},
+    "expected_removed": {},
+    "expected_added": {
+      "APA-P1-PF2 route (a-S): the new prefill kernel spq_pf::prefill<T, CAP, DIAG, SEQ> in tensor_cuda/src/apa_spo/packed_prefill.cuh (lead rulings 2026-11-16: R-E replaced by route a-S, row carry, pinned packed table). Instantiated by its host entry for T in {float, __nv_bfloat16} (the packed K dtypes), CAP in {64, 128, 256, 512} (the dense prefill kernel's cap dispatch), DIAG in {false, true}, SEQ in {false, true} (lane vs sequential bulk order): 32 kernels.": [
+        "void tc::spq_pf::prefill<float, 64, false, false>",
+        "void tc::spq_pf::prefill<float, 64, false, true>",
+        "void tc::spq_pf::prefill<float, 64, true, false>",
+        "void tc::spq_pf::prefill<float, 64, true, true>",
+        "void tc::spq_pf::prefill<float, 128, false, false>",
+        "void tc::spq_pf::prefill<float, 128, false, true>",
+        "void tc::spq_pf::prefill<float, 128, true, false>",
+        "void tc::spq_pf::prefill<float, 128, true, true>",
+        "void tc::spq_pf::prefill<float, 256, false, false>",
+        "void tc::spq_pf::prefill<float, 256, false, true>",
+        "void tc::spq_pf::prefill<float, 256, true, false>",
+        "void tc::spq_pf::prefill<float, 256, true, true>",
+        "void tc::spq_pf::prefill<float, 512, false, false>",
+        "void tc::spq_pf::prefill<float, 512, false, true>",
+        "void tc::spq_pf::prefill<float, 512, true, false>",
+        "void tc::spq_pf::prefill<float, 512, true, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 64, false, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 64, false, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 64, true, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 64, true, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 128, false, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 128, false, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 128, true, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 128, true, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 256, false, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 256, false, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 256, true, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 256, true, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 512, false, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 512, false, true>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 512, true, false>",
+        "void tc::spq_pf::prefill<__nv_bfloat16, 512, true, true>"
+      ]
+    },
+    "not_expected_to_change": "Every pre-existing kernel (781 in Build F3). The round adds one new file (apa_spo/packed_prefill.cuh, included at the end of packed_launcher.cuh), one binding in the _tensor_cuda_spo2 module (host code) and a Python branch; no existing __global__ function, device helper or launcher is edited.",
+    "non_code_sources_of_difference": [
+      {
+        "source": "source path",
+        "rule": "MAPPED. Build F3 compiled tensor_fork_apa_wt_p1f2 and Build PF compiles tensor_fork_apa_wt_p1pf2, so nvcc path-derived names differ. In symbol names AND in body text (call targets), each of these token classes is replaced by a fixed placeholder: (a) <digits>_GLOBAL__N__<8 hex>_ (mangled anonymous namespace with its length prefix, e.g. tc33_GLOBAL__N__...) -> <prefix>N_GLOBAL__N__H_; (b) _GLOBAL__N__<8 hex>_ without a length prefix -> _GLOBAL__N__H_; (c) __nv_static_<digits>__<8 hex>_ -> __nv_static_N__H_ (the counter and the hash). Pattern set: P1-D apa_p1d_sass_a1.PATTERNS widened by the lead check artifacts/apa_p1f3/lead_f3_sass_check.py (tensor_fork_apa_wt_p1f2) to any length prefix. The mapped symbol key must stay unique per build (asserted; a collision is a FAIL)."
+      },
+      {
+        "source": "build directory",
+        "rule": "MAPPED: the per-build _cu_<8 hex> symbol suffix with an optional _<n> counter is replaced by _cu_H (names and bodies). Build F3 built in tensor_fork_apa_wt_p1f2/artifacts/apa_p1f3/build_F3, Build PF builds in this worktree's artifacts/apa_p1pf2/build_PF. Uniqueness asserted as above."
+      },
+      {
+        "source": "TMPDIR of the build and the cmake_source directory",
+        "rule": "Not mapped separately: they can reach symbol names only through the _cu_ suffix (mapped above)."
+      },
+      {
+        "source": "compiler, flags and dump tool",
+        "rule": "EQUAL, checked from the receipts: Build PF records same_flags_as_F3 and same_adapter_replacements_as_F3 (P1-D adapter evaluated with each build's own paths, so the replacement strings are compared as recorded); both dumps use P1-D dump() (cuobjdump -sass sm_89). Build F3 is re-dumped by this round, and the fresh dump's sha256 is compared with F3's own dump (e1b49ad97118210b9949679b1af3d697a5e3043826a9a642751892a52f8524af) as a receipt check."
+      },
+      {
+        "source": "test hooks",
+        "rule": "Build PF has TC_APA_P1_TEST_HOOKS undefined (0), as Build F3. Build PFH (hooks on, used only for PF-I1's bulk-bit comparison) is never compared against Build F3."
+      }
+    ]
+  },
+  "gpu_lines_planned": [
+    "G1 (PF-I1, PF-I1n, PF-I2, PF-I3 on Build PF; PF-I1 bulk bits on Build PFH)",
+    "G2 (PF-A1, PF-A2, PF-I4 on the four SPQ3 layers)",
+    "G3 (PF-Q1 through P1-Q's harness)",
+    "G4 (refusal rows on Build PF)",
+    "G5 (allocator high-water census)",
+    "G6 (LF1 finite identity, P1-D L1/L2/L4/L6 against Build F3)",
+    "G7 (mutants)",
+    "speed line"
+  ]
+}

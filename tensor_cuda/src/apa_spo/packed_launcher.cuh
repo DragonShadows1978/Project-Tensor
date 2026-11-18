@@ -138,3 +138,9 @@ std::pair<NDArray,NDArray> apa_spq1_int4_stats(const NDArray& q,const NDArray& c
 // gqa_path dispatch ("r2" default = unchanged apa_spq1_run; "tc" = tensor-core GQA path).
 #include "spq4.cuh"
 // APA_SPQ4_END include
+// APA_P1PF2_BEGIN include
+// APA-P1-PF2: packed prefill (route a-S), a new kernel and its host entry in
+// their own file; no existing kernel or launcher changes. Prior art: see
+// packed_prefill.cuh.
+#include "packed_prefill.cuh"
+// APA_P1PF2_END include

@@ -1,0 +1,630 @@
+{
+ "note": "L90 caller census of packed_attention (direct) and its public entry apa_selective_attention_sp; roots: tensor_cuda/tensor_cuda, tensor_cuda/tests, scripts, tests of this worktree (rg).",
+ "counts": {
+  "apa_selective_attention_sp\\( definition": 1,
+  "apa_selective_attention_sp\\( script": 91,
+  "apa_selective_attention_sp\\( test": 26,
+  "packed_attention\\( definition": 3,
+  "packed_attention\\( product": 1
+ },
+ "product_callers": [
+  {
+   "pattern": "packed_attention\\(",
+   "site": "tensor_cuda/tensor_cuda/apa_sp2.py:124:        return packed_attention(q, k, kq, v, scale, epsilon, bulk_bits=bulk_bits,",
+   "role": "product"
+  }
+ ],
+ "treatment": "product: apa_sp2.apa_selective_attention_sp dispatches a PackedSpKeys to packed_attention for any L, so prefill callers reach the new L > 1 route through it; test/harness/script callers listed only, none changed (L38)",
+ "rows": [
+  {
+   "pattern": "packed_attention\\(",
+   "site": "tensor_cuda/tensor_cuda/apa_packed.py:489:def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,",
+   "role": "definition"
+  },
+  {
+   "pattern": "packed_attention\\(",
+   "site": "tensor_cuda/tensor_cuda/apa_sp2.py:124:        return packed_attention(q, k, kq, v, scale, epsilon, bulk_bits=bulk_bits,",
+   "role": "product"
+  },
+  {
+   "pattern": "packed_attention\\(",
+   "site": "tensor_cuda/tests/test_apa_p1f3_cpu.py:120:    attention = text[text.index(\"def packed_attention(\"):]",
+   "role": "definition"
+  },
+  {
+   "pattern": "packed_attention\\(",
+   "site": "tensor_cuda/tests/test_apa_p1f3_cpu.py:122:    check = text[text.index(\"def check_pinned_margins(\"):text.index(\"def packed_attention(\")]",
+   "role": "definition"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tensor_cuda/apa_sp2.py:109:def apa_selective_attention_sp(q, k, kq, v, scale, epsilon, *, bulk_bits,",
+   "role": "definition"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:354:        env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(128), .01, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:381:        env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(128), .01, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:391:        env.sp2.apa_selective_attention_sp(q, k, kq, k, 1 / math.sqrt(128), .01, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:432:    out = env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(D), eps, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:455:    out = env.sp2.apa_selective_attention_sp(q, k, kq, k, 1 / math.sqrt(128), .001, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:561:    env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(128), .01, bulk_bits=4,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1d_policy.py:580:        env.sp2.apa_selective_attention_sp(q, k, p, FakeTensor((1, 2, 64, 64)), 1 / math.sqrt(64), .01,",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp3.py:35:    entry=s[s.index('NDArray apa_selective_attention_sp('):]",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp3.py:76:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp3.py:79:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,1.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp3.py:81:        tc._C.apa_selective_attention_sp(t,k,k,k,96**-.5,float('inf'))",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp1_host.py:30:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp1_host.py:38:        runtime._C.apa_selective_attention_sp(t,t,t,t,scale,delta)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp1_host.py:45:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp1_host.py:48:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp1_host.py:55:        runtime._C.apa_selective_attention_sp(t,t,t,t,1.,0.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp4g.py:61:    s=(R/'tensor_cuda/src/kernels.cu').read_text();entry=s[s.index('NDArray apa_selective_attention_sp('):]",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp4g.py:86:    with pytest.raises(RuntimeError,match='default OFF'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp4g.py:88:    with pytest.raises(RuntimeError,match='share CUDA device'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,1.)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp4g.py:90:        with pytest.raises(RuntimeError,match='finite nonnegative'):tc._C.apa_selective_attention_sp(q,k,k,k,1.,delta)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1f2_cpu.py:139:    return env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(D), .01, bulk_bits=4, margins=margins, **kw)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_p1f2_cpu.py:236:    out = env.sp2.apa_selective_attention_sp(q, k, p, v, 1 / math.sqrt(D), .001, bulk_bits=4, margins=pinned(env),",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp2.py:125:        for call in [lambda:tc._C.apa_selective_attention_sp(*args,delta),",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp2.py:175:    assert tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)=='ok'",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp2.py:178:        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=None)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "tensor_cuda/tests/test_apa_sp2.py:181:        tc.apa_selective_attention_sp(q,q,q,q,.125,.001,bulk_bits=2,margins=margins)",
+   "role": "test"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp1_gpu.py:145:    new=lambda:tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp1_gpu.py:148:        diagnostic,mask=tc._C.apa_selective_attention_sp(*tensors,scale,delta,causal,diagnostics=True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp1_gpu.py:217:                got=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),0.5,True,sinks).numpy().astype(np.float32)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_gpu.py:33:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_gpu.py:34:                clean=tc._C.apa_selective_attention_sp(q,k,kq,v,1.,float(np.finfo(np.float32).max),L>1,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp2_gpu.py:163:    new=lambda:tc.apa_selective_attention_sp(*args,epsilon,bulk_bits=bits,margins=margins,is_causal=s['causal'])",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp2_gpu.py:166:        out,mask=tc.apa_selective_attention_sp(*args,epsilon,bulk_bits=bits,margins=margins,is_causal=s['causal'],diagnostics=True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp2_gpu.py:169:        direct=tc._C.apa_selective_attention_sp(*args,delta,s['causal']).numpy()",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:246:                    dense = f2.classify(npf(tc._C.apa_selective_attention_sp(cc.q, cc.k, cc.k, cc.v, cc.scale, 2.0,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:249:                    dq = f2.classify(npf(tc._C.apa_selective_attention_sp(cc.q, cc.k, kqd, cc.v, cc.scale, 2.0,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:293:                rec['public_default'] = f2.classify(npf(tc.apa_selective_attention_sp(Q, K, pk, V, .125, .5, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:297:            rec['dense_opt_out'] = f2.classify(npf(tc.apa_selective_attention_sp(Q, K, dk, V, .125, .5, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:299:            rec['dense_entry'] = f2.classify(npf(tc._C.apa_selective_attention_sp(Q, K, K, V, .125, 2.0, False, None,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:436:    ref = npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=pm))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:442:        got = npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=m))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_gpu.py:466:            b = npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=pm))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a3_model.py:71:    out = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a3_model.py:72:    checked, mask = tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_shape_pin.py:117:        out_all = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, st, False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_shape_pin.py:128:        out_zero = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, zero, False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_shape_pin.py:129:        out_none = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, big, True, None, False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_shape_pin.py:146:        out_d, sel = tc._C.apa_selective_attention_sp(qt, kt, kqt, vt, scale, delta, True, st, True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp1_1_gpu.py:27:                out,mask=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),.5,True,sinks,diagnostics=True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp1_1_gpu.py:29:                plain=tc._C.apa_selective_attention_sp(*tt,1/np.sqrt(D),.5,True,sinks).numpy().astype(np.float32)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_pidv.py:303:                    y = tc.apa_selective_attention_sp(q, k, self.kq_t, v_t, self.scale, 0.05, bulk_bits=2,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_gpu.py:249:        r = self.tc._C.apa_selective_attention_sp(self.to_tc(q), self.to_tc(k), self.to_tc(k), self.to_tc(v), scale,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_gpu.py:507:    out_d = E.tt(E.tc._C.apa_selective_attention_sp(E.to_tc(q), E.to_tc(k), E.to_tc(kd_t), E.to_tc(v), scale, delta_d,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a5_model.py:115:        out = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a5_model.py:116:        checked,mask = self.tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,causal,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a6_metrics.py:95:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g45.py:340:            w = tc.apa_selective_attention_sp(q, k, p, v, scale, .01, bulk_bits=4, margins=pm, is_causal=True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g45.py:351:                    r = tc.apa_selective_attention_sp(q, k, p, v, scale, .01, bulk_bits=4, margins=pm, is_causal=True,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f1_gpu.py:462:                dense = npf(tc._C.apa_selective_attention_sp(c.q, c.k, c.k, c.v, c.scale, 2.0, False, None, False))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f1_gpu.py:581:        return tc._C.apa_selective_attention_sp(q, k, k, v, c.scale, 2.0)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f1_gpu.py:608:            fn = lambda ops: tc.apa_selective_attention_sp(ops.get('q', c.q), c.k, kq, ops.get('v', c.v), c.scale,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_model.py:109:                return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,is_causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_model.py:122:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_model.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp3_model.py:249:        result = self.tc._C.apa_selective_attention_sp(q, k, kq, v, scale, self.delta,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a4_metrics.py:94:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a4_model.py:28:        out=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_spd1_bench.py:141:    out, mask = tc._C.apa_selective_attention_sp(q, k, kq, v,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_spd1_bench.py:227:            funcs[name] = lambda t=engine[dtype]: tc._C.apa_selective_attention_sp(*t, scale, shape['delta'], shape['causal'])",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_item3_exactness.py:147:                sp, sel = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp3_gpu.py:186:            out,mask = tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp3_gpu.py:201:            _,chosen=tc._C.apa_selective_attention_sp(q,k,kq,v,96**-.5,.125,True,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp3_a4_jobs.py:79:            other, mask = model.tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g2.py:11:  exact  : _C.apa_selective_attention_sp(q, k, k, v, scale, 1e30, True, None, False) (every key scored from k)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g2.py:58:    out_d, mask_d = tc.apa_selective_attention_sp(Q, K, kd, V, scale, G.EPSILON, bulk_bits=4, margins=dm,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g2.py:67:    out_p, mask_p = tc.apa_selective_attention_sp(Q, K, kp, V, scale, G.EPSILON, bulk_bits=4, margins=pm,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_g2.py:72:    out_x = E.tt(tc._C.apa_selective_attention_sp(Q, K, K, V, scale, G.DELTA_ALL, True, None, False))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:330:    out = npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=pm, sinks=sinks))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:332:    opt = npf(tc.apa_selective_attention_sp(c.q, c.k, kd, c.v, c.scale, 0.01, bulk_bits=4, margins=dm, sinks=sinks))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:352:                dense = classify(npf(tc._C.apa_selective_attention_sp(cc.q, cc.k, cc.k, cc.v, cc.scale, 2.0, False, sinks,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:393:            dense = classify(npf(tc._C.apa_selective_attention_sp(cc.q, cc.k, cc.k, cc.v, cc.scale, 2.0, False, None,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:432:                rec['public_default'] = classify(npf(tc.apa_selective_attention_sp(Q, K, pk, V, .125, .5, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:436:            rec['dense_opt_out'] = classify(npf(tc.apa_selective_attention_sp(Q, K, dk, V, .125, .5, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:438:            rec['dense'] = classify(npf(tc._C.apa_selective_attention_sp(Q, K, K, V, .125, 2.0, False, None, False)), 1)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:532:    rows = {name: (lambda m=m: tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=m))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:567:            b = npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=pm))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:596:        ok = informative(npf(tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=pm)))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:666:                        fn = lambda: tc.apa_selective_attention_sp(c.q, c.k, kq, c.v, c.scale, 0.01, bulk_bits=4, margins=m)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:780:                o1 = npf(tc.apa_selective_attention_sp(qt, kt, obj, vt, scale, 0.01, bulk_bits=4, margins=pm))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f2_gpu.py:781:                o2 = npf(tc.apa_selective_attention_sp(qt, kt, ref, vt, scale, 0.01, bulk_bits=4, margins=pm))",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_mutants.py:126:         new=('        result = importlib.import_module(__package__)._C.apa_selective_attention_sp(\\n'",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp3_a6_decode.py:88:                    return tc._C.apa_selective_attention_sp(q,k,kq,v,scale,delta,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1d_gpu.py:349:                out, mask = tc.apa_selective_attention_sp(qt, kt, kq, vt, scale, L1_EPSILON, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1d_gpu.py:352:                plain = tc.apa_selective_attention_sp(qt, kt, kq, vt, scale, L1_EPSILON, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1d_gpu.py:562:                         ('apa_selective_attention_sp', lambda: tc._C.apa_selective_attention_sp(qt, kt, p, vt, scale, 8., False, None, False)),",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1d_gpu.py:689:        out = tc.apa_selective_attention_sp(q, k, p, v, float(np.float32(1 / math.sqrt(D))), .01, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_item2_sinkpin.py:125:            on, sel_on = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_item2_sinkpin.py:127:            off, sel_off = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_metrics.py:53:            out,mask=tc._C.apa_selective_attention_sp(qt,kt,kqt,vt,1.,m['delta'],True,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_speed.py:65:                t_p, ts_p = timed(lambda: tc.apa_selective_attention_sp(Q, K, kp, V, scale, .01, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_speed.py:68:                t_d, ts_d = timed(lambda: tc.apa_selective_attention_sp(Q, K, kd, V, scale, .01, bulk_bits=4,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_q1.py:12:  apa_selective_attention_sp(..., epsilon 0.01, is_causal=True)), i.e. dense SP prefill or packed prefill; L = 1 is",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_q1.py:70:            out = tc.apa_selective_attention_sp(qt, kt, kq, vt, c.scale, c.eps, bulk_bits=PT.BULK_BITS,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_model.py:85:    # C/D/E: single pass. tc._C.apa_selective_attention_sp(..., sinks=...)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_model.py:125:        res = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_a1_margins.py:132:            attn, sel = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_a1_margins.py:181:                o2, s2 = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_metrics.py:91:                out,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,rec['scale'],m['delta'],rec['causal'],None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1pf2_mut.py:121:            out, mask = tc.apa_selective_attention_sp(q, k, p, v, scale, .01, bulk_bits=4, margins=pm, is_causal=True,",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_register.py:124:                              '_C.apa_selective_attention_sp(q,k,kq=k,v,scale,2.0) (F2\\'s comparator) and (b) '",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_p1f3_register.py:125:                              'dense_sp_quantized: _C.apa_selective_attention_sp(q,k,kq=quant._quantize_keys(k, '",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_model.py:88:            d=tc._C.apa_selective_attention_sp(qf,kf,kqf,vf,scale,MAX_DELTA,True,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_model.py:94:        d=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,MAX_DELTA,True,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_model.py:96:        d32=tc._C.apa_selective_attention_sp(q.float(),k.float(),kq.float(),v.float(),scale,MAX_DELTA,True,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_model.py:123:            out=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,False)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp4g_a2_model.py:124:            check,mask=tc._C.apa_selective_attention_sp(q,k,kq,v,scale,self.delta,is_causal,None,True)",
+   "role": "script"
+  },
+  {
+   "pattern": "apa_selective_attention_sp\\(",
+   "site": "scripts/apa_sp5_frac.py:47:        attn, sel = tc._C.apa_selective_attention_sp(",
+   "role": "script"
+  }
+ ]
+}

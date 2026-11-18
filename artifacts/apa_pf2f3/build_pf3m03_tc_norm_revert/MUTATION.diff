@@ -1,0 +1,22 @@
+--- a/tensor_cuda/src/apa_spo/spq4.cuh
++++ b/tensor_cuda/src/apa_spo/spq4.cuh
+@@ -113,7 +113,7 @@
+         const float norm=scales[(int64_t)bh*capacity+start+j];
+ #endif
+         // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse the quiet-NaN norm guard on tc.
+-        ks[t][i]=isfinite(norm)?norm:__int_as_float(0x7fc00000);
++        ks[t][i]=norm;
+       }
+     }
+   }
+--- a/tensor_cuda/src/apa_spo/spq6.cuh
++++ b/tensor_cuda/src/apa_spo/spq6.cuh
+@@ -144,7 +144,7 @@
+         const float norm=scales[(int64_t)bh*capacity+start+j];
+ #endif
+         // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse the quiet-NaN norm guard on tc.
+-        ks[t][i]=isfinite(norm)?norm:__int_as_float(0x7fc00000);
++        ks[t][i]=norm;
+       }
+     }
+   }

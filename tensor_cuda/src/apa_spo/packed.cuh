@@ -147,6 +147,8 @@ template<int D,int G,bool TQ> __global__ void bulk_shared(const float* q,const u
    int64_t key=(int64_t)bh*capacity+start+j;
    float n;
    if constexpr(D==128){n=lane==0?scales[key]:0.f;n=__shfl_sync(0xffffffffu,n,0);}else n=scales[key];
+   // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse prefill's quiet-NaN sentinel at the decode load.
+   n=isfinite(n)?n:__int_as_float(0x7fc00000);
    float acc[G]={};
    if constexpr(D==128){
      #pragma unroll
@@ -200,7 +202,12 @@ template<int CAP,bool W> __global__ void bulk(const float* q,const uint8_t* pack
     int n=min(TILE,count-t);
     // Exactly D/2 global code bytes + one fp32 scale per KV row, shared by G.
     for(int i=tid;i<n*(D/2);i+=128)codes[i]=packed[((int64_t)bh*capacity+start+t)*(D/2)+i];
-    if(tid<n)norms[tid]=scales[(int64_t)bh*capacity+start+t+tid];__syncthreads();
+    if(tid<n){
+      const float norm=scales[(int64_t)bh*capacity+start+t+tid];
+      // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse prefill's quiet-NaN sentinel at the decode load.
+      norms[tid]=isfinite(norm)?norm:__int_as_float(0x7fc00000);
+    }
+    __syncthreads();
     for(int g=0;g<G;++g){int row=b*H+h0+g;const float* Q=q+(int64_t)row*D;
       if constexpr(W){
         for(int j=tid/32;j<n;j+=4){float x=0;

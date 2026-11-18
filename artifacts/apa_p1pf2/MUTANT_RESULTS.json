@@ -1,0 +1,929 @@
+{
+ "line": "G7",
+ "status": "PASS",
+ "killed": 16,
+ "total": 16,
+ "control_clean": 16,
+ "sources": {
+  "G7a": "gpu/G7a/MUTANT_RESULTS_a.json",
+  "G7b": "gpu/G7b/MUTANT_RESULTS_b.json",
+  "G7c": "gpu/G7c/MUTANT_RESULTS_c.json"
+ },
+ "note": "m15 from G7c: in G7b its G5 children (mutant and control) crashed with SIGSEGV in the allocation shim (RTLD_NEXT returned NULL for libcudart symbols), so G7b counted it killed with an unclean control; the shim was repaired (L56b repair 3) and m15 rerun in G7c. A1.2 receipt: gpu/G7/MUTANT_RESULTS_A12.json.",
+ "mutant_module_sha256": {
+  "m01_partition_restart": "mutant:m01_partition_restart",
+  "m02_gt_for_ge": "mutant:m02_gt_for_ge",
+  "m03_dense_delta": "mutant:m03_dense_delta",
+  "m04_causal_bound": "mutant:m04_causal_bound",
+  "m05_kv_head_mod": "mutant:m05_kv_head_mod",
+  "m06_norm_dropped": "mutant:m06_norm_dropped",
+  "m07_nibble_swap": "mutant:m07_nibble_swap",
+  "m08_rotation_transposed": "mutant:m08_rotation_transposed",
+  "m09_s_stride": "mutant:m09_s_stride",
+  "m10_refined_keeps_bulk": "mutant:m10_refined_keeps_bulk",
+  "m11_exact_from_codes": "mutant:m11_exact_from_codes",
+  "m12_unrefined_dropped": "mutant:m12_unrefined_dropped",
+  "m13_rotation_order": "mutant:m13_rotation_order",
+  "m14_sinks_omitted": "mutant:m14_sinks_omitted",
+  "m15_silent_fallback": "mutant:m15_silent_fallback",
+  "m16_nan_norm_as_zero": "mutant:m16_nan_norm_as_zero"
+ },
+ "results": [
+  {
+   "name": "m01_partition_restart",
+   "design": "1: running maximum restarts every 2,048 keys",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every key j of rows with smax > 2048 passes the restart at j = 2048 (S 2049 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m01_partition_restart",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 2,
+      "pf_i3_max": 0.0003667954470957371,
+      "mask_unequal_rows": 4,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.3,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 3.4005302456913252e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m02_gt_for_ge",
+   "design": "2: > in place of >=",
+   "expected_failure": "pf_i1_ties",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_ties"
+   ],
+   "mutant_exit": 0,
+   "executes": "the compare runs for every key; the tie rows put a key exactly at the threshold",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 3.3,
+     "arm": "mutant:m02_gt_for_ge",
+     "failed": [
+      "pf_i1_ties"
+     ],
+     "info": {
+      "ties_ok": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "ties_ok": 32
+     }
+    }
+   }
+  },
+  {
+   "name": "m03_dense_delta",
+   "design": "3: delta from the dense table in the packed branch",
+   "expected_failure": "g4_route_record_packed_delta",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "g4_route_record_packed_delta"
+   ],
+   "mutant_exit": 0,
+   "executes": "the public L > 1 branch (G4 acceptance row calls apa_selective_attention_sp with L = 33)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.6,
+     "arm": "mutant:m03_dense_delta",
+     "failed": [
+      "g4_route_record_packed_delta"
+     ],
+     "info": {
+      "route": {
+       "storage": "packed",
+       "backend": "spq_packed_prefill_tq4_row",
+       "l": 33,
+       "fallback_reason": null,
+       "delta": 6.348393440246582,
+       "e_q": 0.8716114163398743
+      }
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.0,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "route": {
+       "storage": "packed",
+       "backend": "spq_packed_prefill_tq4_row",
+       "l": 33,
+       "fallback_reason": null,
+       "delta": 6.348392486572266,
+       "e_q": 0.8716110587120056
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "m04_causal_bound",
+   "design": "4: causal bound S-L+i",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every causal row",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 4.3,
+     "arm": "mutant:m04_causal_bound",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 8,
+      "rows": 1160,
+      "pf_i3_rows_above_tau": 1047,
+      "pf_i3_max": 1.589335721634256,
+      "mask_unequal_rows": 828,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.6,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 8,
+      "rows": 1160,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.5321381197840465e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m05_kv_head_mod",
+   "design": "5: KV head taken as h % KVH",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every row; at G > 1 head 1 maps to KV head 1, not 0",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m05_kv_head_mod",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 4.010699129933457,
+      "mask_unequal_rows": 132,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.751175506224729e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m06_norm_dropped",
+   "design": "6: norm multiply dropped (lane order site)",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the lane-order bulk (D128 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "mutant:m06_norm_dropped",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 66,
+      "pf_i3_max": 0.004751428685433378,
+      "mask_unequal_rows": 66,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 1.1772387228272878e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m07_nibble_swap",
+   "design": "7: nibble order swapped (lane order site)",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the lane-order bulk (D128 cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.6,
+     "arm": "mutant:m07_nibble_swap",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 66,
+      "pf_i3_max": 1.6806540595927657,
+      "mask_unequal_rows": 66,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 2,
+      "rows": 66,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 1.1772387228272878e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m08_rotation_transposed",
+   "design": "8: rotation indexed R[i,d]",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "the in-kernel rotation of every row",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.9,
+     "arm": "mutant:m08_rotation_transposed",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 2.116017937389792,
+      "mask_unequal_rows": 132,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.438714315666207e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m09_s_stride",
+   "design": "9: codes addressed with an S stride when capacity > S",
+   "expected_failure": "pf_i1_mask_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_mask_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every row of KV head >= 1 (kvbh > 0) at capacity S + 37",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.8,
+     "arm": "mutant:m09_s_stride",
+     "failed": [
+      "pf_i1_mask_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 1.9207043162069366,
+      "mask_unequal_rows": 132,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.8,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.22642522811375e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m10_refined_keeps_bulk",
+   "design": "10: refined key keeps its bulk score",
+   "expected_failure": "pf_i2_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every refined key (all keys at delta 1e30)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 3.4,
+     "arm": "mutant:m10_refined_keeps_bulk",
+     "failed": [
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 0.730681028397855,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 14.9,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.933528167551532e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m11_exact_from_codes",
+   "design": "11: exact score read from the reconstruction or the rotated domain, not from k (L111)",
+   "expected_failure": "pf_i2_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every refined key (all keys at delta 1e30)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.7,
+     "arm": "mutant:m11_exact_from_codes",
+     "failed": [
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 5.3379872383438265,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.8,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.933528167551532e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m12_unrefined_dropped",
+   "design": "12: unrefined key dropped from the softmax",
+   "expected_failure": "pf_i3_rows_within_tau",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every unrefined key at the registered delta",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "mutant:m12_unrefined_dropped",
+     "failed": [
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 132,
+      "pf_i3_max": 0.03958372582736494,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.6,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 2.933528167551532e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m13_rotation_order",
+   "design": "13: rotated query in a different reduction order (one-ulp drift)",
+   "expected_failure": "pf_i1_bulk_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1_bulk_equal"
+   ],
+   "mutant_exit": 0,
+   "executes": "the in-kernel rotation of every row (hooks build: bulk dump)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "mutant:m13_rotation_order",
+     "failed": [
+      "pf_i1_bulk_equal"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 132
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.4,
+     "arm": "PFH",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m14_sinks_omitted",
+   "design": "14: sinks omitted",
+   "expected_failure": "pf_i2_equal",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i2_equal",
+    "pf_i3_rows_within_tau"
+   ],
+   "mutant_exit": 0,
+   "executes": "every row of a case with sinks",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "mutant:m14_sinks_omitted",
+     "failed": [
+      "pf_i2_equal",
+      "pf_i3_rows_within_tau"
+     ],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 84,
+      "pf_i3_max": 0.004122584717094286,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 2.5,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 4,
+      "rows": 132,
+      "pf_i3_rows_above_tau": 0,
+      "pf_i3_max": 1.974965620541389e-06,
+      "mask_unequal_rows": 0,
+      "bulk_unequal_rows": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "m15_silent_fallback",
+   "design": "15: silent fallback: reconstruct and call the dense kernel",
+   "expected_failure": "g5_no_key_shaped_transient",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "g5_no_key_shaped_transient"
+   ],
+   "mutant_exit": 0,
+   "executes": "the public L > 1 branch (G5 census calls apa_selective_attention_sp with L > 1)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 12.0,
+     "arm": "mutant:m15_silent_fallback",
+     "failed": [
+      "g5_no_key_shaped_transient"
+     ],
+     "info": {
+      "rows": [
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": false,
+        "diag": false,
+        "hw": 25755648,
+        "bound": 18874368
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": false,
+        "diag": true,
+        "hw": 92274688,
+        "bound": 85983232
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": true,
+        "diag": false,
+        "hw": 25755648,
+        "bound": 18874368
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": true,
+        "diag": true,
+        "hw": 92274688,
+        "bound": 85983232
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": false,
+        "diag": false,
+        "hw": 101449728,
+        "bound": 69206016
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": false,
+        "diag": true,
+        "hw": 1174405120,
+        "bound": 1142947840
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": true,
+        "diag": false,
+        "hw": 101449728,
+        "bound": 69206016
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": true,
+        "diag": true,
+        "hw": 1174405120,
+        "bound": 1142947840
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": false,
+        "diag": false,
+        "hw": 404226048,
+        "bound": 18874368
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": false,
+        "diag": true,
+        "hw": 1224736768,
+        "bound": 1092616192
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": true,
+        "diag": false,
+        "hw": 404226048,
+        "bound": 18874368
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": true,
+        "diag": true,
+        "hw": 1224736768,
+        "bound": 1092616192
+       }
+      ]
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 9.2,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "rows": [
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": false,
+        "diag": false,
+        "hw": 16777216,
+        "bound": 18874368
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": false,
+        "diag": true,
+        "hw": 83886080,
+        "bound": 85983232
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": true,
+        "diag": false,
+        "hw": 16777216,
+        "bound": 18874368
+       },
+       {
+        "S": 2048,
+        "L": 2048,
+        "pooling": true,
+        "diag": true,
+        "hw": 83886080,
+        "bound": 85983232
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": false,
+        "diag": false,
+        "hw": 67108864,
+        "bound": 69206016
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": false,
+        "diag": true,
+        "hw": 1140850688,
+        "bound": 1142947840
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": true,
+        "diag": false,
+        "hw": 67108864,
+        "bound": 69206016
+       },
+       {
+        "S": 8192,
+        "L": 8192,
+        "pooling": true,
+        "diag": true,
+        "hw": 1140850688,
+        "bound": 1142947840
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": false,
+        "diag": false,
+        "hw": 16777216,
+        "bound": 18874368
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": false,
+        "diag": true,
+        "hw": 1090519040,
+        "bound": 1092616192
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": true,
+        "diag": false,
+        "hw": 16777216,
+        "bound": 18874368
+       },
+       {
+        "S": 32768,
+        "L": 2048,
+        "pooling": true,
+        "diag": true,
+        "hw": 1090519040,
+        "bound": 1092616192
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "m16_nan_norm_as_zero",
+   "design": "16: NaN norm treated as zero (key skipped)",
+   "expected_failure": "pf_i1n_ok",
+   "killed": true,
+   "control_clean": true,
+   "mutant_failed": [
+    "pf_i1n_ok"
+   ],
+   "mutant_exit": 0,
+   "executes": "the lane-order bulk of a key with a NaN stored norm (D128 non-finite k cases)",
+   "sides": {
+    "mutant": {
+     "exit": 0,
+     "seconds": 5.8,
+     "arm": "mutant:m16_nan_norm_as_zero",
+     "failed": [
+      "pf_i1n_ok"
+     ],
+     "info": {
+      "cases": 32,
+      "ok": 0,
+      "finite_where_dense_nonfinite": 1400
+     }
+    },
+    "control": {
+     "exit": 0,
+     "seconds": 3.3,
+     "arm": "PF",
+     "failed": [],
+     "info": {
+      "cases": 32,
+      "ok": 32,
+      "finite_where_dense_nonfinite": 0
+     }
+    }
+   }
+  }
+ ]
+}

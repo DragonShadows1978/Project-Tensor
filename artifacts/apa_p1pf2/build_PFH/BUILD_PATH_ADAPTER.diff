@@ -1,0 +1,55 @@
+--- tree/CMakeLists.txt
++++ build_PFH/cmake_source/CMakeLists.txt
+@@ -42,22 +42,22 @@
+ FetchContent_MakeAvailable(pybind11)
+ 
+ pybind11_add_module(_tensor_cuda
+-  src/kernels.cu
+-  src/paint_raster.cu
+-  src/paint_bake.cu
+-  src/paint_inpaint.cu
+-  src/dda.cu
+-  src/terrain.cu
+-  src/terrain_objects.cu
+-  src/matmul.cu
+-  src/gemm_apa.cu
+-  src/conv.cu
+-  src/autograd.cpp
+-  src/ops.cpp
+-  src/bindings.cpp
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/kernels.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/paint_raster.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/paint_bake.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/paint_inpaint.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/dda.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/terrain.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/terrain_objects.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/matmul.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/gemm_apa.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/conv.cu
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/autograd.cpp
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/ops.cpp
++  /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/src/bindings.cpp
+ )
+ 
+-target_include_directories(_tensor_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
++target_include_directories(_tensor_cuda PRIVATE /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/tensor_cuda/include)
+ target_link_libraries(_tensor_cuda PRIVATE CUDA::cudart CUDA::cublas CUDA::cublasLt)
+ if(TC_APA_GEMM_DEBUG_ASSERTS)
+   target_compile_definitions(_tensor_cuda PRIVATE TC_APA_GEMM_DEBUG_ASSERTS=1)
+@@ -65,7 +65,7 @@
+ set_target_properties(_tensor_cuda PROPERTIES
+   CUDA_SEPARABLE_COMPILATION ON
+   # Drop the built module straight into the Python package directory.
+-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tensor_cuda
++  LIBRARY_OUTPUT_DIRECTORY /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_p1pf2/artifacts/apa_p1pf2/build_PFH/lib
+ )
+ 
+ # APA-P1 port: Git three-way merge (2005), survey S5 dry run; inherited
+@@ -80,3 +80,6 @@
+     TC_APA_PACKED=1 TC_APA_EB2B=1 TC_APA_EB3=1 TC_APA_EB4=1
+     APA_EB2B_MUTANT=0 APA_FXTC1_VARIANT_DEFAULT=2)
+ endif()
++
++# Test-only hook; never enabled by the shipped CMake default.
++target_compile_definitions(_tensor_cuda PRIVATE TC_APA_P1_TEST_HOOKS=1)
