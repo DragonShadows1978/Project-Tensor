@@ -1,0 +1,11 @@
+--- a/tensor_cuda/tests/test_apa_p1f2_cpu.py
++++ b/tensor_cuda/tests/test_apa_p1f2_cpu.py
+@@ -97,7 +97,7 @@
+         def packed_prefill(self, *args, **kwargs):
+             # Recording test double (Meszaros, xUnit Test Patterns, 2007).
+             calls.append(("packed_prefill", args, kwargs))
+-            return ("packed_prefill_out", "packed_mask") if args[8] else "packed_prefill_out"
++            raise RuntimeError("PF2-F4 power: FakeSpo2.packed_prefill called")
+ 
+     class FakeC:
+         def apa_selective_attention_sp_epsilon(self, *args):

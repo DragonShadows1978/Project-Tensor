@@ -94,6 +94,11 @@ def make_package(monkeypatch):
             calls.append(("packed_run", args, kwargs))
             return ("packed_out", "packed_mask") if args[8] else "packed_out"
 
+        def packed_prefill(self, *args, **kwargs):
+            # Recording test double (Meszaros, xUnit Test Patterns, 2007).
+            calls.append(("packed_prefill", args, kwargs))
+            return ("packed_prefill_out", "packed_mask") if args[8] else "packed_prefill_out"
+
     class FakeC:
         def apa_selective_attention_sp_epsilon(self, *args):
             calls.append(("dense_epsilon", args))
@@ -257,8 +262,12 @@ def test_r1_pinned_route_refusals_still_precede_any_device_call(env, monkeypatch
         call(q, k, p, v, .2, .01, bulk_bits=4, margins=m)
     with pytest.raises(ValueError, match="epsilon must be"):
         call(q, k, p, v, s, 0., bulk_bits=4, margins=m)
-    with pytest.raises(ValueError, match="storage='dense'"):
-        call(FakeTensor((1, 4, 8, 128)), k, p, v, s, .01, bulk_bits=4, margins=m, is_causal=True)
+    assert not device_calls(env) and not kinds(env, "packed_prefill")
+    prefill_q = FakeTensor((1, 4, 8, 128))
+    assert call(prefill_q, k, p, v, s, .01, bulk_bits=4, margins=m, is_causal=True) == "packed_prefill_out"
+    prefill_calls = kinds(env, "packed_prefill")
+    (_, args, _), = prefill_calls
+    assert args[0] is prefill_q
     p.invalidate()
     with pytest.raises(ValueError, match="stale packed keys"):
         call(q, k, p, v, s, .01, bulk_bits=4, margins=m)
@@ -268,7 +277,7 @@ def test_r1_pinned_route_refusals_still_precede_any_device_call(env, monkeypatch
     monkeypatch.delenv("TC_APA_SP")
     with pytest.raises(RuntimeError, match="TC_APA_SP=1"):
         call(q, k, p, v, s, .01, bulk_bits=4, margins=m)
-    assert not device_calls(env)
+    assert not device_calls(env) and kinds(env, "packed_prefill") == prefill_calls
 
 
 # ------------------------------------------------------------------ R3 (P1R2-F04)

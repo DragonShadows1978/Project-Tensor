@@ -1,0 +1,313 @@
+{
+  "summary": {
+    "prefill_grep_hits": 41,
+    "prefill_grep_files": 16,
+    "hits_by_category": {
+      "dense dispatch": 12,
+      "harness or receipt": 25,
+      "packed helper": 1,
+      "re-pin": 3
+    },
+    "packed_prefill_refusal_tests": [
+      "tensor_cuda/tests/test_apa_p1d_policy.py::test_prefill_on_packed_keys_is_refused_naming_dense",
+      "tensor_cuda/tests/test_apa_p1f2_cpu.py::test_r1_pinned_route_refusals_still_precede_any_device_call"
+    ],
+    "other_packed_prefill_refusal_tests": 0
+  },
+  "grep": "grep -rn -i 'prefill' tensor_cuda/tests/*.py",
+  "hits": [
+    {
+      "path": "tensor_cuda/tests/test_apa_p1d_policy.py",
+      "line": 573,
+      "text": "# ---------------------------------------------------------------- R-E prefill",
+      "category": "re-pin",
+      "finding": "R-E block. It requires a ValueError naming dense and a packed route with a prefill fallback reason. PF2 dispatches packed prefill."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_p1d_policy.py",
+      "line": 574,
+      "text": "def test_prefill_on_packed_keys_is_refused_naming_dense(env, tmp_path):",
+      "category": "re-pin",
+      "finding": "R-E block. It requires a ValueError naming dense and a packed route with a prefill fallback reason. PF2 dispatches packed prefill."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_p1d_policy.py",
+      "line": 584,
+      "text": "    assert route[\"storage\"] == \"packed\" and route[\"l\"] == 8 and \"prefill\" in route[\"fallback_reason\"]",
+      "category": "re-pin",
+      "finding": "R-E block. It requires a ValueError naming dense and a packed route with a prefill fallback reason. PF2 dispatches packed prefill."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_pf2_nonfinite.py",
+      "line": 62,
+      "text": "    header = (ROOT / \"tensor_cuda/src/apa_spo/packed_prefill.cuh\").read_text()",
+      "category": "packed helper",
+      "finding": "Extracts the actual diagnostic tail index helper for a host arithmetic check. It does not assert a packing route, refusal or dense fallback."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_pidv.py",
+      "line": 129,
+      "text": "# decode cells (W23, I07) to the fused kernel, which makes a split-K defect (I2) unreachable, and =2 makes the prefill",
+      "category": "dense dispatch",
+      "finding": "Documents clearing inherited dense selective-attention overrides so split-K and prefill rows reach the registered branches."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_selective.py",
+      "line": 142,
+      "text": "    _run(True, L=16, S=512, D=512)    # Gemma-shaped chunked-prefill",
+      "category": "dense dispatch",
+      "finding": "Gemma-shaped rectangular causal cell calls the dense-tensor selective attention entry."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_selective_splitk.py",
+      "line": 219,
+      "text": "def test_force_splitk_at_prefill_shape_raises():",
+      "category": "dense dispatch",
+      "finding": "Forcing the decode-only split-K path on L=8 raises for the dense-tensor APA entry and an ordinary dense kq."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_selective_splitk.py",
+      "line": 220,
+      "text": "    \"\"\"Addendum #5: split-K is decode-only (L==1). Forcing it at a prefill",
+      "category": "dense dispatch",
+      "finding": "Forcing the decode-only split-K path on L=8 raises for the dense-tensor APA entry and an ordinary dense kq."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp1_1.py",
+      "line": 89,
+      "text": "    assert shape['id']=='prefill_s2048_d64_c1_h4_kv4'",
+      "category": "dense dispatch",
+      "finding": "Pins a prefill registration ID and dense-kq mask and output evidence."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp1_1.py",
+      "line": 150,
+      "text": "    assert scores['P2_prefill_overlap_ge_0_8']['verdict']=='MISS'",
+      "category": "harness or receipt",
+      "finding": "Checks historical prefill overlap and speed verdicts from pinned scoring inputs."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp1_1.py",
+      "line": 151,
+      "text": "    assert scores['P3_all_prefill_speed']['verdict']=='MISS'",
+      "category": "harness or receipt",
+      "finding": "Checks historical prefill overlap and speed verdicts from pinned scoring inputs."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp2.py",
+      "line": 118,
+      "text": "def test_both_entries_agree_on_host_guards_and_cpu_prefill_split_outputs(monkeypatch):",
+      "category": "dense dispatch",
+      "finding": "Compares dense native SP entries, CPU device guards and reference outputs. All four input tensors are ordinary dense tensors."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp2.py",
+      "line": 191,
+      "text": "    for bad in ['bad','eq_b8_prefill_s2048_d64_c1_h4_kv4','../../tmp/evil']:",
+      "category": "harness or receipt",
+      "finding": "Rejects an unregistered sweep ID, with no attention call."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp2.py",
+      "line": 249,
+      "text": "            islong=s['S']==(8192 if s['kind']=='prefill' else 32768)",
+      "category": "harness or receipt",
+      "finding": "Uses prefill geometry to generate synthetic scoring rows."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3.py",
+      "line": 33,
+      "text": "def test_d96_prefill_contract_and_dense_pin():",
+      "category": "dense dispatch",
+      "finding": "Pins D=96 dense launcher dispatch and the rectangular dense reference."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3.py",
+      "line": 236,
+      "text": "def test_protocol2_six_disjoint_full_prefills_pool_nll_not_ppl():",
+      "category": "harness or receipt",
+      "finding": "Measures mock call scheduling and NLL aggregation."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3.py",
+      "line": 489,
+      "text": "    fixture={'decode_b4_C_2048':dict(status='PASS',result=dict(bits=4,S=2048,arm='C',tokens_s=12.,steps=32,prefill_s=2.))}",
+      "category": "harness or receipt",
+      "finding": "Constructs a reporting fixture with a prefill time."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a4.py",
+      "line": 197,
+      "text": "                      selected=1,pairs=2,fraction=.5,path='SP_prefill')",
+      "category": "harness or receipt",
+      "finding": "Builds a mock captured prefill record."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a5.py",
+      "line": 76,
+      "text": "            # pool must be True for cache prefill and EVERY measured token.",
+      "category": "harness or receipt",
+      "finding": "Asserts pool state in the mock decode worker's cache initialization."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a5.py",
+      "line": 148,
+      "text": "                 prefill_s=10.,decode_work_s=(estimate-190.)/4))",
+      "category": "harness or receipt",
+      "finding": "Seeds a planning fixture with prefill timing."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a6.py",
+      "line": 140,
+      "text": "    assert len(forwards)==34  # one prefill, one discarded warmup, 32 measured",
+      "category": "harness or receipt",
+      "finding": "Counts fake model forwards including the prefill."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a6.py",
+      "line": 207,
+      "text": "           setup_s=10.,prefill_s=10.,warmup_s=1.,decode_work_s=(estimate-189.)/4)",
+      "category": "harness or receipt",
+      "finding": "Uses synthetic prefill timing and tests invalid timing receipts."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp3_a6.py",
+      "line": 227,
+      "text": "                                     ('feeding','greedy'),('config',{}),('setup_s',-1),('prefill_s',float('nan'))])",
+      "category": "harness or receipt",
+      "finding": "Uses synthetic prefill timing and tests invalid timing receipts."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g.py",
+      "line": 60,
+      "text": "def test_d512_mqa_prefill_contract_and_dense_pin():",
+      "category": "dense dispatch",
+      "finding": "Pins the D=512 MQA dense launcher and dense per-head reference."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g.py",
+      "line": 212,
+      "text": "    monkeypatch.setattr(gpu,'require_pass',lambda d:dict(result=dict(steps=32,fit=True,setup_s=100,prefill_s=20,decode_s=5)))",
+      "category": "harness or receipt",
+      "finding": "Mocks planning receipt timing fields."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a3.py",
+      "line": 218,
+      "text": "    owner.tc=tc;owner.model=SimpleNamespace(layers=[None]*5+[SimpleNamespace(mixer=mx)],PREFILL_CHUNK=512)",
+      "category": "harness or receipt",
+      "finding": "Configures a fake model to exercise diagnostic capture."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a4.py",
+      "line": 183,
+      "text": "    # SP4G A2 (2026): real PPL receipt schema differs from old prefill capture.",
+      "category": "harness or receipt",
+      "finding": "Distinguishes calibration PPL receipts and historical capture schema."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a5.py",
+      "line": 46,
+      "text": "def test_a5_dispatch_L64_is_prefill_even_with_cache():",
+      "category": "dense dispatch",
+      "finding": "Checks the D=512 dense launch metadata and apa_selective_sp_kernel symbol."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a5.py",
+      "line": 51,
+      "text": "                assert r['path']=='prefill' and r['symbol']=='apa_selective_sp_kernel'",
+      "category": "dense dispatch",
+      "finding": "Checks the D=512 dense launch metadata and apa_selective_sp_kernel symbol."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a5.py",
+      "line": 168,
+      "text": "    # reaches index17 only by feeding all16 cached blocks after true prefill.",
+      "category": "harness or receipt",
+      "finding": "Documents mock cache scheduling and its discarded blocks."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a5.py",
+      "line": 264,
+      "text": "    owner.model=NS(layers=[NS(mixer=m) for m in mixers],PREFILL_CHUNK=512)",
+      "category": "dense dispatch",
+      "finding": "Builds the fake model and verifies its captured dense prefill dispatch metadata."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a5.py",
+      "line": 290,
+      "text": "        assert meta['mask_'+precision]['dispatch']['path']=='prefill'",
+      "category": "dense dispatch",
+      "finding": "Builds the fake model and verifies its captured dense prefill dispatch metadata."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 40,
+      "text": "        assert anchor['prefill_s']==j['result']['prefill_s']",
+      "category": "harness or receipt",
+      "finding": "Pins prefill timing anchors for the worker budget."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 41,
+      "text": "        assert c['estimate_worker_s']==anchor['load_s']+anchor['prefill_s']*(c['S']/8192)**2",
+      "category": "harness or receipt",
+      "finding": "Pins prefill timing anchors for the worker budget."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 205,
+      "text": "        return dict(prefill_s=400.,cache_shape_verified=True,**progress)",
+      "category": "harness or receipt",
+      "finding": "Fakes and assesses model prefill timing and partial progress."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 207,
+      "text": "    monkeypatch.setattr(model,'run_prefill',run)",
+      "category": "harness or receipt",
+      "finding": "Fakes and assesses model prefill timing and partial progress."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 227,
+      "text": "    assert r['sampled_peak_resident_mib']==7500. and r['prefill_attempt_wall_s']>=0",
+      "category": "harness or receipt",
+      "finding": "Fakes and assesses model prefill timing and partial progress."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 231,
+      "text": "def test_a7_entire_prefix_uses_june_prefill(monkeypatch):",
+      "category": "harness or receipt",
+      "finding": "Tests the mock full-prefix model call and its recorded time and cache shape."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 233,
+      "text": "    owner=NS(prefill=lambda x:(seen.append(x.copy()),[],123.))",
+      "category": "harness or receipt",
+      "finding": "Tests the mock full-prefix model call and its recorded time and cache shape."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 236,
+      "text": "    r=model.run_prefill(owner,ids,c,NS(check=lambda:None),None,{'completed_tokens':c['S']})",
+      "category": "harness or receipt",
+      "finding": "Tests the mock full-prefix model call and its recorded time and cache shape."
+    },
+    {
+      "path": "tensor_cuda/tests/test_apa_sp4g_a7.py",
+      "line": 238,
+      "text": "    assert r['cache_shape_verified'] and r['prefill_s']==123.",
+      "category": "harness or receipt",
+      "finding": "Tests the mock full-prefix model call and its recorded time and cache shape."
+    }
+  ],
+  "additional_hit": {
+    "path": "tensor_cuda/tests/test_apa_p1f2_cpu.py",
+    "line": 260,
+    "discovered_by": "Cross-check of dense guidance and the MAINCHK3 second ID.",
+    "finding": "The text omits 'prefill'. The next line passes an 8-row query to the public packed entry and expects a ValueError naming dense."
+  }
+}
