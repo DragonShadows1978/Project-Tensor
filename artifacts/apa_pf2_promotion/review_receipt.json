@@ -1,0 +1,14 @@
+{
+ "order": "APA-PF2: packed prefill on packed keys, with fix rounds PF2-F1, PF2-F2 (packed decode norm guard) and PF2-F3",
+ "author_model": "claude-opus-5-5 (PF2 kernel); gpt-6.1-sol and gpt-6.2-sol (PF2-F1, PF2-F2, PF2-F3)",
+ "reviewer_model": "gpt-6.1-sol (PF2-REV1, of the Claude-written kernel); claude-opus-5-5 (PF2-REV2 and its re-check, of the Codex-written fixes)",
+ "verdict": "PASS_WITH_FINDINGS",
+ "cross_model_coverage": "PF2 kernel authored by Claude, reviewed blind by Codex (PF2-REV1 42b818fd); PF2-F1, F2, F3 authored by Codex, reviewed by Claude (PF2-REV2 419bc3699, re-check fb2777b33)",
+ "final_review": {
+  "reviews": "PF2-REV1 (Codex, blind), PF2-REV2 and its re-check (Claude, narrow)",
+  "findings": "REV1 5 (2 MAJOR, 3 MINOR) fixed in PF2-F1, plus the decode clause-3 defect found by the lead's G2_norm line and fixed in PF2-F2; REV2 8 (2 MAJOR, 4 MINOR, 2 NIT) fixed in PF2-F3 and the lead's doc edit, or closed (F06: an infinite denominator cannot occur); re-check 2 (R2-F01 doc MINOR fixed f480b661c; R2-F02 NIT closed, scripts/ ships with the test)"
+ },
+ "reviewed_tip": "apa-pf2f3 at f480b661c (code at bc4d5ca48, GPU receipts 497df5ab9)",
+ "gpu_run": "PF2 gates PASS (abb1770c); PF2-F1 56/58 with 2 superseded; PF2-F2 62/62 (8c35792e); PF2-F3 69/69 (497df5ab9)",
+ "promoted_tip_difference": "promoted tree = production main 3138cf54 + the reviewed tip's files for every path PF2 changed since 2945c3e9, with PF2's bindings.cpp hunk applied over ENG3's; tensor_cuda equals the reviewed tip plus ENG3's diff, line for line; this promotion record added"
+}
