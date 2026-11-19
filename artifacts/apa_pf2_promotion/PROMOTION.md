@@ -56,4 +56,8 @@ What it contains:
 **Before push:** a merged-tree check (MAINCHK3) builds this tree and compares it per test ID with both parents. Both
 CPU and GPU must pass.
 
-**Approval:** the owner's verbatim approval is recorded here when given.
+**Approval:** the owner approved this merge via Ember on 2026-11-19 (01:08 UTC), replying A to the decision request
+`20261118T144104Z_Project-Tensor_decision-pf2-merge.md` (merge into production and push once the merged-tree check
+passes). The merged-tree check of this exact tip passed on CPU and GPU (MAINCHK3 r2, commit `06ce73222` against
+production `3138cf54`). The verbatim text is in the local promotion ticket and the lead's register. The engine binary
+install is not part of this merge and remains a separate request.
