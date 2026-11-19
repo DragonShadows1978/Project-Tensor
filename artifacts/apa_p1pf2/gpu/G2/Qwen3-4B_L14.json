@@ -1,0 +1,88 @@
+{
+ "unit": "Qwen3-4B:14",
+ "files_sha256": {
+  "q": "e34fc30a1f23823d5254313de729245506d967cd01ee2b7401250fbc0afd4a53",
+  "k": "0895394d1360080c7c9a71a1967d3e7eec5dc8f7e143909206412c8a591bb1a4",
+  "v": "51cf5dbdd8197425ee26a9dbd924b4f6b5b3616d23d2e2ad3b966e68ee096dff"
+ },
+ "H": 32,
+ "KV": 8,
+ "S": 8192,
+ "D": 128,
+ "scale": 0.0883883461356163,
+ "routes": {
+  "dense": {
+   "storage": "dense",
+   "backend": "sp_epsilon_dense",
+   "l": 8192,
+   "fallback_reason": null
+  },
+  "packed": {
+   "storage": "packed",
+   "backend": "spq_packed_prefill_tq4_row",
+   "l": 8192,
+   "fallback_reason": null,
+   "delta": 6.348392486572266,
+   "e_q": 0.8716110587120056
+  },
+  "packed_quantize": {
+   "storage": "packed",
+   "backend": "spq4_packed_r2_tq4_partition",
+   "source": "default",
+   "fallback_reason": null,
+   "bulk_bits": 4
+  }
+ },
+ "seconds": {
+  "dense": 0.6359591484069824,
+  "packed": 0.9835500717163086,
+  "exact": 0.9367082118988037
+ },
+ "pf_a1": {
+  "decisions": 1073872896,
+  "flips": 81,
+  "dense_only": 72,
+  "packed_only": 9,
+  "rate": 7.542792103396192e-08,
+  "bar": 1e-06,
+  "max_flips": 1073,
+  "refined_dense": 50788931,
+  "refined_packed": 50788868,
+  "refined_fraction_dense": 0.04729510465268322,
+  "refined_fraction_packed": 0.04729504598652241,
+  "upper_triangle_mask_entries": 0,
+  "pass_": true
+ },
+ "pf_a2": {
+  "rows": 262144,
+  "pooled_e_sp": 5.096211921239278,
+  "pooled_d": 0.008902733399415939,
+  "pooled_e_packed": 5.09621361401555,
+  "pooled_exact_norm": 1192.0850587312655,
+  "pooled_rel_e_sp": 0.004275040513185502,
+  "ratio_d_over_e_sp": 0.0017469315517104722,
+  "ratio_e_packed_over_e_sp": 1.0000003321636342,
+  "rows_above_floor": 259733,
+  "rows_d_gt_e_sp": 0,
+  "max_rows_d_gt_e_sp": 26,
+  "floor_rows": 2411,
+  "floor_rows_d_above_floor": 0,
+  "row_ratio_median": 2.1691238199941955e-05,
+  "row_ratio_p99": 0.0006468466599471867,
+  "row_ratio_max": 0.4683376495306227,
+  "rows_d_zero": 1660,
+  "pass_": true
+ },
+ "pf_i4": {
+  "device_flips": 81,
+  "emulated_flips": 91
+ },
+ "route_ok": true,
+ "informative": [
+  true,
+  true,
+  true,
+  true,
+  true
+ ]
+}

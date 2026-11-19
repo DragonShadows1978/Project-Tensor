@@ -1,0 +1,612 @@
+{
+  "order": "orders/APA_P1PF2_PACKED_PREFILL.md (5c9b9584), G7: the design's 16 mutants as written",
+  "written_utc": "2026-11-16T19:53:05.164171+00:00",
+  "note": "Written before any mutant is staged, built or run (L41). Each mutant is one change in a patched copy. Python mutants run on Build PF's module with the mutant Python; device mutants are rebuilt incrementally in a copy of Build PF's tree (m13: Build PFH's). A mutant is killed iff its expected_failure assertion fails. Expected failures come from the order and the design (DESIGN.md 5.1 mutant table), never from this round's runs (L47).",
+  "source_sha256": {
+    "tensor_cuda/src/apa_spo/packed_prefill.cuh": "50fb475017ae9584957e9220b250de386ae4982dc9849e67d886a587393c99f5",
+    "tensor_cuda/tensor_cuda/apa_packed.py": "0577524ce09d4387cf6c34fc5f4e6e45cb832ef26bb1681b33613034d86ae0b7"
+  },
+  "mutants": [
+    {
+      "name": "m01_partition_restart",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "1: running maximum restarts every 2,048 keys",
+      "old": "    bulk_max = fmaxf(bulk_max, bulk);\n",
+      "new": "    if ((j & 2047) == 0) bulk_max = -INFINITY;\n    bulk_max = fmaxf(bulk_max, bulk);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            2049
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "every key j of rows with smax > 2048 passes the restart at j = 2048 (S 2049 cases)"
+    },
+    {
+      "name": "m02_gt_for_ge",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "2: > in place of >=",
+      "old": "    const bool refine = bulk >= bulk_max - delta;\n",
+      "new": "    const bool refine = bulk > bulk_max - delta;\n",
+      "run": {
+        "check": "ties"
+      },
+      "expected_failure": "pf_i1_ties",
+      "executes": "the compare runs for every key; the tie rows put a key exactly at the threshold"
+    },
+    {
+      "name": "m03_dense_delta",
+      "kind": "python",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "design": "3: delta from the dense table in the packed branch",
+      "old": "        result = spo2.packed_prefill(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,\n                                     sinks, diagnostics, fmt=PACKED_FORMAT)\n",
+      "new": "        e_q = {64: 1.010645866394043, 128: 0.8716114163398743}[q.shape[-1]]   # dense table e_q\n        delta = derive_delta(epsilon, e_q)\n        result = spo2.packed_prefill(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,\n                                     sinks, diagnostics, fmt=PACKED_FORMAT)\n",
+      "run": {
+        "check": "g4_accept"
+      },
+      "expected_failure": "g4_route_record_packed_delta",
+      "executes": "the public L > 1 branch (G4 acceptance row calls apa_selective_attention_sp with L = 33)"
+    },
+    {
+      "name": "m04_causal_bound",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "4: causal bound S-L+i",
+      "old": "  const int smax = causal ? S - L + i + 1 : S;\n",
+      "new": "  const int smax = causal ? S - L + i : S;\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            2
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33,
+            257
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "every causal row"
+    },
+    {
+      "name": "m05_kv_head_mod",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "5: KV head taken as h % KVH",
+      "old": "  const int64_t kvbh = (int64_t)b * KVH + h / group;\n",
+      "new": "  const int64_t kvbh = (int64_t)b * KVH + h % KVH;\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            2,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "every row; at G > 1 head 1 maps to KV head 1, not 0"
+    },
+    {
+      "name": "m06_norm_dropped",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "6: norm multiply dropped (lane order site)",
+      "old": "      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), kn[j]), scale);\n",
+      "new": "      bulk = __fmul_rn(__shfl_sync(FULL, x, 0), scale);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "the lane-order bulk (D128 cases)"
+    },
+    {
+      "name": "m07_nibble_swap",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "7: nibble order swapped (lane order site)",
+      "old": "          const int ix = (c[d / 2] >> (4 * (d % 2))) & 15;\n          x = __fmaf_rn(qd[t], table[ix], x);\n",
+      "new": "          const int ix = (c[d / 2] >> (4 * (1 - d % 2))) & 15;\n          x = __fmaf_rn(qd[t], table[ix], x);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            128
+          ],
+          "G": [
+            1,
+            2
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "the lane-order bulk (D128 cases)"
+    },
+    {
+      "name": "m08_rotation_transposed",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "8: rotation indexed R[i,d]",
+      "old": "rot[((int64_t)(h / group) * D + d) * D + i2]",
+      "new": "rot[((int64_t)(h / group) * D + i2) * D + d]",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "the in-kernel rotation of every row"
+    },
+    {
+      "name": "m09_s_stride",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "9: codes addressed with an S stride when capacity > S",
+      "old": "  const uint8_t* kc = codes + kvbh * (int64_t)capacity * (D / 2);\n",
+      "new": "  const uint8_t* kc = codes + kvbh * (int64_t)S * (D / 2);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1,
+            2
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            37
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_mask_equal",
+      "executes": "every row of KV head >= 1 (kvbh > 0) at capacity S + 37"
+    },
+    {
+      "name": "m10_refined_keeps_bulk",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "10: refined key keeps its bulk score",
+      "old": "      score = __shfl_sync(FULL, ex, 0) * scale;\n",
+      "new": "      score = bulk;\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i2_equal",
+      "executes": "every refined key (all keys at delta 1e30)"
+    },
+    {
+      "name": "m11_exact_from_codes",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "11: exact score read from the reconstruction or the rotated domain, not from k (L111)",
+      "old": "        if (d < D) ex += qr[t] * ld<T>(k, koff + d);\n",
+      "new": "        if (d < D) ex += qr[t] * (table[(kc[(int64_t)j * (D / 2) + d / 2] >> (4 * (d % 2))) & 15] * kn[j]);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i2_equal",
+      "executes": "every refined key (all keys at delta 1e30)"
+    },
+    {
+      "name": "m12_unrefined_dropped",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "12: unrefined key dropped from the softmax",
+      "old": "    float score = bulk;\n",
+      "new": "    float score = -INFINITY;\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i3_rows_within_tau",
+      "executes": "every unrefined key at the registered delta"
+    },
+    {
+      "name": "m13_rotation_order",
+      "kind": "device",
+      "base": "PFH",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "13: rotated query in a different reduction order (one-ulp drift)",
+      "old": "    for (int i2 = 0; i2 < D; ++i2)\n",
+      "new": "    for (int i2 = D - 1; i2 >= 0; --i2)\n",
+      "run": {
+        "check": "g1h",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            false
+          ],
+          "sinks": [
+            false
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i1_bulk_equal",
+      "executes": "the in-kernel rotation of every row (hooks build: bulk dump)"
+    },
+    {
+      "name": "m14_sinks_omitted",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "14: sinks omitted",
+      "old": "  if (sinks) {\n    const float sink = ld<T>(sinks, h);\n",
+      "new": "  if (false && sinks) {\n    const float sink = ld<T>(sinks, h);\n",
+      "run": {
+        "check": "g1",
+        "subset": {
+          "sub": "grid",
+          "D": [
+            64,
+            128
+          ],
+          "G": [
+            1,
+            4
+          ],
+          "dt": [
+            "float32"
+          ],
+          "B": [
+            1
+          ],
+          "S": [
+            257
+          ],
+          "L": [
+            33
+          ],
+          "causal": [
+            true
+          ],
+          "sinks": [
+            true
+          ],
+          "capx": [
+            0
+          ]
+        }
+      },
+      "expected_failure": "pf_i2_equal",
+      "executes": "every row of a case with sinks"
+    },
+    {
+      "name": "m15_silent_fallback",
+      "kind": "python",
+      "file": "tensor_cuda/tensor_cuda/apa_packed.py",
+      "design": "15: silent fallback: reconstruct and call the dense kernel",
+      "old": "        result = spo2.packed_prefill(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,\n                                     sinks, diagnostics, fmt=PACKED_FORMAT)\n",
+      "new": "        result = importlib.import_module(__package__)._C.apa_selective_attention_sp(\n            q, k, kq._dense_reconstruction(), v, float(scale), delta, is_causal, sinks, diagnostics)\n",
+      "run": {
+        "check": "g5"
+      },
+      "expected_failure": "g5_no_key_shaped_transient",
+      "executes": "the public L > 1 branch (G5 census calls apa_selective_attention_sp with L > 1)"
+    },
+    {
+      "name": "m16_nan_norm_as_zero",
+      "kind": "device",
+      "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+      "design": "16: NaN norm treated as zero (key skipped)",
+      "old": "      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), kn[j]), scale);\n",
+      "new": "      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), kn[j]), scale);\n      if (isnan(kn[j])) bulk = -INFINITY;\n",
+      "run": {
+        "check": "i1n",
+        "subset": {
+          "D": [
+            128
+          ],
+          "kind": [
+            "nan_k",
+            "inf_k"
+          ]
+        }
+      },
+      "expected_failure": "pf_i1n_ok",
+      "executes": "the lane-order bulk of a key with a NaN stored norm (D128 non-finite k cases)"
+    }
+  ]
+}

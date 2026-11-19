@@ -1,0 +1,13 @@
+tensor_cuda/src/apa_spo/eb2b.cuh:26:  if(tid==0)scales[row]=nonfinite?__int_as_float(0x7fc00000):scale;
+tensor_cuda/src/apa_spo/eb3.cuh:285:      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j];
+tensor_cuda/src/apa_spo/eb3.cuh:372:    k0[t]=j0<count?scales[(int64_t)bh*capacity+start+j0]:0.f;
+tensor_cuda/src/apa_spo/eb3.cuh:373:    k1[t]=j1<count?scales[(int64_t)bh*capacity+start+j1]:0.f;
+tensor_cuda/src/apa_spo/eb4.cuh:151:    k0[t]=j0<count?scales[(int64_t)bh*capacity+start+j0]:0.f;
+tensor_cuda/src/apa_spo/eb4.cuh:152:    k1[t]=j1<count?scales[(int64_t)bh*capacity+start+j1]:0.f;
+tensor_cuda/src/apa_spo/packed.cuh:22:  codes[dst*(D/2)+pair]=(uint8_t)(a|(b<<4));if(pair==0)scales[dst]=norms[key];
+tensor_cuda/src/apa_spo/packed.cuh:149:   if constexpr(D==128){n=lane==0?scales[key]:0.f;n=__shfl_sync(0xffffffffu,n,0);}else n=scales[key];
+tensor_cuda/src/apa_spo/packed.cuh:203:    if(tid<n)norms[tid]=scales[(int64_t)bh*capacity+start+t+tid];__syncthreads();
+tensor_cuda/src/apa_spo/spq4.cuh:110:      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j+1];   // scale from the neighbour key
+tensor_cuda/src/apa_spo/spq4.cuh:112:      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j];
+tensor_cuda/src/apa_spo/spq6.cuh:141:      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j+1];   // norm from the neighbour key
+tensor_cuda/src/apa_spo/spq6.cuh:143:      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j];

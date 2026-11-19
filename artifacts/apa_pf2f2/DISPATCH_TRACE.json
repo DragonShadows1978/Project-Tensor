@@ -1,0 +1,40 @@
+{
+  "evidence": "Source inspection before r2 edits. Locations refer to the inherited source.",
+  "scope": "All valid packed decode calls from apa_packed.py. Native r2 extensions are listed because the same compiled edit sites serve them and the inherited G2 calls use them.",
+  "public": {
+    "entry": "tensor_cuda/tensor_cuda/apa_sp2.py:110-126",
+    "validation": "tensor_cuda/tensor_cuda/apa_packed.py:442-445,489-525",
+    "decode": "tensor_cuda/tensor_cuda/apa_packed.py:547-549",
+    "store_tuple": "tensor_cuda/tensor_cuda/apa_packed.py:369-370",
+    "settings": {"L": 1, "D": [64, 128], "dtype": ["float32"], "bulk_bits": 4, "fmt": "tq4", "TQ": true, "carry": "partition", "gqa_path": "r2", "diagnostics": [false, true]},
+    "bounds": "G = H/KVH is any positive integer satisfying H % KVH == 0 and native shape/range checks. VD is 1 through 512. CAP uses max(D,VD). Neither diagnostics nor B, S, sinks or causality changes the packed norm consumer.",
+    "excluded": "Public margin lookup refuses non-FP32. PACKED_FORMAT is tq4 at apa_packed.py:52. L != 1 enters packed_prefill, and dense keys enter the dense route."
+  },
+  "native": {
+    "chain": ["tensor_cuda/src/bindings.cpp:2785-2793 unpacks codes, scales, rotation and codebook", "tensor_cuda/src/apa_spo/spq4.cuh:457-469 r2 returns directly to apa_spq1_run", "tensor_cuda/src/apa_spo/packed_launcher.cuh:92-102 forwards scales as pscale and fixes baseline=false, dots=ordered", "tensor_cuda/src/apa_spo/launcher.cuh:258-279 dispatches packed bulk", "tensor_cuda/src/apa_spo/launcher.cuh:299-321 ordered selection and merge consume bulk scores and never read scales"],
+    "settings": {"L": 1, "D": [64, 128], "dtype": ["float32", "bfloat16"], "fmt": ["tq4", "int4"], "carry": ["partition", "row"]},
+    "excluded": "Native FP16 is refused by the packed K and query checks (packed_launcher.cuh:8-10,30), despite the general ordered core admitting it.",
+    "hooks": "The default F1/F2 builds have hooks off. In a hooks build TC_APA_SPQ1_REFERENCE=1 selects bulk for G=4 or 8 as well (launcher.cuh:261-267). No extra norm load is reachable."
+  },
+  "loads": [
+    {"site": "tensor_cuda/src/apa_spo/packed.cuh:149", "kernel": "spq1::bulk_shared<D,G,TQ>", "G": [4, 8], "D": [64, 128], "public_TQ": [true], "native_TQ": [true, false], "public_instantiations": ["<64,4,true>", "<64,8,true>", "<128,4,true>", "<128,8,true>"], "load": "D64 loads once per key in its thread. D128 loads once per key in lane 0 and broadcasts.", "uses": [157, 170, 178], "G2": "G=4, both D, both dtype and both prefill diagnostic settings (8)", "mutant": "pf2m02_shared_norm_finite_only"},
+    {"site": "tensor_cuda/src/apa_spo/packed.cuh:203", "kernel": "spq1::bulk<CAP,W>", "G": "all valid G except 4 and 8 in default builds", "D": [64, 128], "public_tq": [true], "native_tq": [true, false], "instantiations": ["<64,false> (D=64 and VD<=64)", "<128,true> (64<max(D,VD)<=128)", "<256,true> (128<VD<=256)", "<512,true> (256<VD<=512)"], "load": "One fp32 scale per key in each tile copied into shared norms[tid]. The template is independent of q dtype and diagnostics. D and tq are runtime arguments.", "uses": [208, 211, 215, 216], "G2": "G=1, both D, both dtype and both prefill diagnostic settings (8)", "mutant": "pf2m01_bulk_norm_finite_only"}
+  ],
+  "census_command": "grep -n 'scales\\[' tensor_cuda/src/apa_spo/*.cuh",
+  "census": [
+    {"site": "tensor_cuda/src/apa_spo/eb2b.cuh:26", "reason": "Store write in eb2b::quantize to V scales."},
+    {"site": "tensor_cuda/src/apa_spo/eb3.cuh:285", "reason": "eb3::bulk_copy, separate EB3 path."},
+    {"site": "tensor_cuda/src/apa_spo/eb3.cuh:372", "reason": "eb3::bulk_swap, separate EB3 path."},
+    {"site": "tensor_cuda/src/apa_spo/eb3.cuh:373", "reason": "eb3::bulk_swap, separate EB3 path."},
+    {"site": "tensor_cuda/src/apa_spo/eb4.cuh:151", "reason": "eb4::bulk_stats, separate EB4 path."},
+    {"site": "tensor_cuda/src/apa_spo/eb4.cuh:152", "reason": "eb4::bulk_stats, separate EB4 path."},
+    {"site": "tensor_cuda/src/apa_spo/packed.cuh:22", "reason": "Store write in spq1::pack_tq, invoked by packing/append."},
+    {"site": "tensor_cuda/src/apa_spo/packed.cuh:149", "reason": "Reachable load, bulk_shared."},
+    {"site": "tensor_cuda/src/apa_spo/packed.cuh:203", "reason": "Reachable load, bulk."},
+    {"site": "tensor_cuda/src/apa_spo/spq4.cuh:110", "reason": "spq4::bulk_mma, native tc/int4 route with grouped heads."},
+    {"site": "tensor_cuda/src/apa_spo/spq4.cuh:112", "reason": "spq4::bulk_mma, native tc/int4 route with grouped heads."},
+    {"site": "tensor_cuda/src/apa_spo/spq6.cuh:141", "reason": "spq6::bulk_mma_tq, native tc/tq4 route with grouped heads."},
+    {"site": "tensor_cuda/src/apa_spo/spq6.cuh:143", "reason": "spq6::bulk_mma_tq, native tc/tq4 route with grouped heads."}
+  ],
+  "other_accessor": "packed_prefill.cuh:103,126 aliases scales through kn and consumes those values only on the L != 1 prefill branch. The existing F1 guards stay read-only."
+}

@@ -1,0 +1,80 @@
+--- before/tensor_cuda/src/apa_spo/packed_prefill.cuh
++++ after/tensor_cuda/src/apa_spo/packed_prefill.cuh
+@@ -35,6 +35,13 @@
+ // Unverified - lead to check: "attention scores from quantized keys without
+ // dequantization rotated query".
+ namespace spq_pf {
++// APA_PF2F1_INDEX_BEGIN
++// Prior art: ISO C++17 integer promotion; CERT INT32-C (unverified - lead
++// to check). Ordinary widening before addition, also callable by host tests.
++__host__ __device__ inline int64_t diagnostic_tail_index(int64_t base, int step) {
++  return base + step;
++}
++// APA_PF2F1_INDEX_END
+ template<class T,int CAP,bool DIAG,bool SEQ>
+ __global__ void prefill(
+     const T* q, const T* k, const T* v, const T* sinks,
+@@ -91,7 +98,10 @@
+             const int ix = (c[d / 2] >> (4 * (d % 2))) & 15;
+             x = __fmaf_rn(qrot[d], table[ix], x);
+           }
+-          x = __fmul_rn(x, kn[jk]);
++          // Prior art: P1-F3 (Project-Tensor 2026), IEEE 754-2008 NaN
++          // sentinel. Reuse at the accessor so raw Inf norms propagate too.
++          const float norm = kn[jk];
++          x = __fmul_rn(x, isfinite(norm) ? norm : __int_as_float(0x7fc00000));
+           x = __fmul_rn(x, scale);
+         }
+         block = x;
+@@ -112,7 +122,9 @@
+       #pragma unroll
+       for (int off = 16; off > 0; off >>= 1)
+         x = __fadd_rn(x, __shfl_down_sync(FULL, x, off));
+-      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), kn[j]), scale);
++      // Same P1-F3 non-finite norm sentinel as the sequential accessor above.
++      const float norm = kn[j];
++      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), isfinite(norm) ? norm : __int_as_float(0x7fc00000)), scale);
+     }
+ #if TC_APA_P1_TEST_HOOKS
+     if (bulk_dump && lane == 0) bulk_dump[(int64_t)row * S + j] = bulk;
+@@ -148,7 +160,7 @@
+     m = next;
+   }
+   if constexpr (DIAG) {
+-    for (int j = smax + lane; j < S; j += 32)
++    for (int64_t j = diagnostic_tail_index(smax, lane); j < S; j = diagnostic_tail_index(j, 32))
+       selected[(int64_t)row * S + j] = 0;
+   }
+   if (sinks) {
+@@ -159,7 +171,9 @@
+     #pragma unroll
+     for (int t = 0; t < N; ++t) acc[t] *= correction;
+   }
+-  const float inv = denom > 0.f ? 1.f / denom : 0.f;
++  // Prior art: packed decode merge.cuh (Project-Tensor P1-F1/F2, 2026),
++  // IEEE 754-2008 propagation. Keep the finite reciprocal/multiply order.
++  const float inv = denom != 0.f ? 1.f / denom : 0.f;
+   #pragma unroll
+   for (int t = 0; t < N; ++t) {
+     const int d = lane + 32 * t;
+--- before/scripts/apa_p1pf2_g45.py
++++ after/scripts/apa_p1pf2_g45.py
+@@ -238,10 +238,15 @@
+                                                     is_causal=True), 'ValueError', 'epsilon')
+         expect('PF_sinks_wrong_shape', lambda: call(qt, kt, p, vt, scale, .01, bulk_bits=4, margins=pm, is_causal=True,
+                                                     sinks=s4), 'RuntimeError', 'sinks')
+-        kshort = tc.tensor(np.ascontiguousarray(k[:, :, :200]))
+-        pa = tc.PackedSpKeys(kshort, capacity=S)
++        # Prior art: isolated xUnit preconditions (Beck 2002, unverified -
++        # lead to check). Bind the exact same K, then vary only visible rows.
++        pa = tc.PackedSpKeys(kt, capacity=S)
++        pa._ws.valid_rows = 200
++        assert pa._is_source(kt)
+         expect('PF_visible_rows_not_k_rows', lambda: call(qt, kt, pa, vt, scale, .01, bulk_bits=4, margins=pm,
+-                                                          is_causal=True), 'ValueError', 'exact-K source')
++                                                          is_causal=True), 'ValueError', 'packed visible rows differ')
++        assert rows[-1]['ok'] and rows[-1]['spied_calls'] == 0
++        assert rows[-1]['launches'] == 0 and rows[-1]['allocations'] == 0
+         raw = getattr(spo2, 'packed_prefill', None) if hasattr(real_spo2, 'packed_prefill') else None
+         # Fake-extent operands over small real buffers, built before the row so the row's own allocation count is
+         # the entry's (F3 LF3's fake(), F1 reimport()).

@@ -1,0 +1,31 @@
+{
+  "command": [
+    "timeout",
+    "30s",
+    "grep",
+    "-n",
+    "denom\\|inv\\|norm\\|smax\\|j += 32",
+    "tensor_cuda/src/apa_spo/packed_prefill.cuh"
+  ],
+  "output": "48:    const uint8_t* codes, const float* norms, const float* rot, const float* cb,\n55:  const int smax = causal ? S - L + i + 1 : S;\n73:  const float* kn = norms + kvbh * (int64_t)capacity;\n83:  float bulk_max = -INFINITY, m = -INFINITY, denom = 0.f;\n85:  for (int j = 0; j < smax; ++j) {\n95:        if (jk < smax) {\n102:          // sentinel. Reuse at the accessor so raw Inf norms propagate too.\n103:          const float norm = kn[jk];\n104:          x = __fmul_rn(x, isfinite(norm) ? norm : __int_as_float(0x7fc00000));\n125:      // Same P1-F3 non-finite norm sentinel as the sequential accessor above.\n126:      const float norm = kn[j];\n127:      bulk = __fmul_rn(__fmul_rn(__shfl_sync(FULL, x, 0), isfinite(norm) ? norm : __int_as_float(0x7fc00000)), scale);\n153:    denom = denom * correction + weight;\n163:    for (int64_t j = diagnostic_tail_index(smax, lane); j < S; j = diagnostic_tail_index(j, 32))\n170:    denom = denom * correction + __expf(sink - next);\n176:  const float inv = denom != 0.f ? 1.f / denom : 0.f;\n180:    if (d < VD) st<T>(out, (int64_t)row * VD + d, acc[t] * inv);\n200:  if(fmt!=\"tq4\")throw std::invalid_argument(std::string(entry)+\": fmt must be tq4 (prefill is served on TQ4 packed keys only)\");\n202:  if(dump)throw std::invalid_argument(std::string(entry)+\": dump (bulk scores) needs a TC_APA_P1_TEST_HOOKS build\");\n",
+  "source_sha256": "d8f50bcad09be249af8097bfcd5ba53da940902ca3127b07746d1eeedbdec350",
+  "norm_reads": [
+    "SEQ kn[jk], non-finite to quiet NaN before original multiply",
+    "lane kn[j], non-finite to quiet NaN before original multiply"
+  ],
+  "denominator_reads": [
+    "init 0",
+    "per-key update unchanged",
+    "sink update unchanged",
+    "zero-only reciprocal guard; original reciprocal then acc*inv"
+  ],
+  "sink": "one ld<T>(sinks,h) read; max/rescale/exp order unchanged",
+  "indices": [
+    "smax=S-L+i+1 stays in [1,S] for causal S>=L",
+    "key-loop ++j reaches S, at most INT_MAX",
+    "SEQ j+lane: j is a multiple of 32 <=INT_MAX-31; sum <=INT_MAX",
+    "diagnostic initializer and stride both use actual int64 helper; 128 boundary additions checked",
+    "row*S and kvbh*S/capacity/key/value offsets already widen before products"
+  ],
+  "templates": "28 reachable of 32 compiled; COVERAGE.json"
+}

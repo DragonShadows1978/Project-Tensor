@@ -121,11 +121,16 @@ quality, peak-memory, prefill, and decode gates at its intended operating point.
   - Under the default, an ineligible input takes the dense representation and records why.
   - An explicit `storage="packed"` that cannot be honoured raises an error.
   - Nothing changes 2 bits to 4.
-- **Prefill in this release:** prefill (more than one query row) on packed keys is refused with a `ValueError`. Quantize
-  with `storage="dense"` for prefill. A packed prefill kernel is in testing.
+- **Prefill:** prefill (more than one query row) on packed keys runs the packed prefill kernel
+  (`_spo2.packed_prefill`, APA-PF2).
+  - Its bulk scores and refine decisions equal packed decode's with `carry="row"`. The public decode's partition
+    carry gives the same decisions for S ≤ 2048.
+  - Its outputs match packed decode within tolerance, not bit for bit.
 
 **Non-finite contract.** This is what the packed and dense routes promise for non-finite values:
-1. A NaN in q, k or v gives the same set of non-finite output rows on both routes.
+1. With finite sinks (or no sink), a NaN in q, k or v gives the same set of non-finite output rows on both routes.
+   A NaN or +Inf sink makes every row of that head non-finite on the packed route; the dense route may keep some of
+   them finite. Clause 2 allows that difference.
 2. If any element of q, k, v or a sink is non-finite, the packed route never hides a row that the dense route makes
    non-finite.
 3. A key whose stored norm is non-finite, for any reason, makes every row that reads it non-finite.
@@ -141,7 +146,6 @@ quality, peak-memory, prefill, and decode gates at its intended operating point.
   above (clause 4).
 
 **Not covered by this release:**
-- decode and prefill speed;
-- the packed prefill kernel;
+- decode and prefill speed (prefill speed is tracked as APA-SP-PREFILL-SPEED);
 - the memory-saving tiered design;
 - installation of a rebuilt engine binary.

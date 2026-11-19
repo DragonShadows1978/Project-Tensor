@@ -1,0 +1,420 @@
+{
+  "line": "L2",
+  "status": "PASS",
+  "checks": [
+    {
+      "check": "RA_storage_argument_'Packed'",
+      "expected": "ValueError",
+      "match": "storage must be",
+      "raised": "ValueError",
+      "message": "apa_sp2: storage must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_argument_'int4'",
+      "expected": "ValueError",
+      "match": "storage must be",
+      "raised": "ValueError",
+      "message": "apa_sp2: storage must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_argument_''",
+      "expected": "ValueError",
+      "match": "storage must be",
+      "raised": "ValueError",
+      "message": "apa_sp2: storage must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_argument_1",
+      "expected": "ValueError",
+      "match": "storage must be",
+      "raised": "ValueError",
+      "message": "apa_sp2: storage must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_environment_'Packed'",
+      "expected": "ValueError",
+      "match": "TC_APA_SP_STORAGE",
+      "raised": "ValueError",
+      "message": "apa_sp2: TC_APA_SP_STORAGE must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_environment_''",
+      "expected": "ValueError",
+      "match": "TC_APA_SP_STORAGE",
+      "raised": "ValueError",
+      "message": "apa_sp2: TC_APA_SP_STORAGE must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RA_storage_environment_'none'",
+      "expected": "ValueError",
+      "match": "TC_APA_SP_STORAGE",
+      "raised": "ValueError",
+      "message": "apa_sp2: TC_APA_SP_STORAGE must be 'packed' or 'dense'",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RB_two_bit_default_takes_dense_with_reason",
+      "ok": true,
+      "route": {
+        "storage": "dense",
+        "backend": "sp_epsilon_dense",
+        "source": "default",
+        "fallback_reason": "bulk_bits=2: packed storage covers 4-bit bulk only",
+        "bulk_bits": 2
+      }
+    },
+    {
+      "check": "RB_two_bit_explicit_packed_raises",
+      "expected": "ValueError",
+      "match": "cannot be honoured",
+      "raised": "ValueError",
+      "message": "apa_sp2: storage='packed' cannot be honoured: bulk_bits=2: packed storage covers 4-bit bulk only",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_dense_table_on_packed",
+      "expected": "ValueError",
+      "match": "dense margin table",
+      "raised": "ValueError",
+      "message": "apa_sp2: dense margin table with packed keys; load the packed table",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_packed_table_on_dense",
+      "expected": "ValueError",
+      "match": "packed margin table",
+      "raised": "ValueError",
+      "message": "apa_sp2: packed margin table with dense Kq; load the dense table",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_bulk_bits_mismatch",
+      "expected": "ValueError",
+      "match": "bulk_bits",
+      "raised": "ValueError",
+      "message": "apa_sp2: bulk_bits does not match the packed keys",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_k_not_exact_source",
+      "expected": "ValueError",
+      "match": "exact-K source",
+      "raised": "ValueError",
+      "message": "apa_sp2: k is not the exact-K source of these packed keys; append explicitly",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_no_margins",
+      "expected": "ValueError",
+      "match": "packed margin",
+      "raised": "ValueError",
+      "message": "apa_sp2: load a registered packed margin table before launching",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_wrong_scale",
+      "expected": "ValueError",
+      "match": "scale",
+      "raised": "ValueError",
+      "message": "apa_sp2: packed table covers fp32 at scale=1/sqrt(D) only",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_epsilon_zero",
+      "expected": "ValueError",
+      "match": "epsilon",
+      "raised": "ValueError",
+      "message": "apa_sp2: epsilon must be in (0,1]; e_q finite nonnegative",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_query_on_cpu",
+      "expected": "ValueError",
+      "match": "device",
+      "raised": "ValueError",
+      "message": "apa_sp2: q is not on the packed keys' device",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_tc_apa_sp_unset",
+      "expected": "RuntimeError",
+      "match": "TC_APA_SP=1",
+      "raised": "RuntimeError",
+      "message": "apa_sp: experimental entry requires TC_APA_SP=1 (default OFF)",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_stale_generation",
+      "expected": "ValueError",
+      "match": "stale",
+      "raised": "ValueError",
+      "message": "apa_sp2: stale packed keys (append generation); build a new PackedSpKeys",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_exact_k_edited_in_place",
+      "expected": "ValueError",
+      "match": "edited in place",
+      "raised": "ValueError",
+      "message": "apa_sp2: exact K was edited in place after packing; build a new PackedSpKeys",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RD_visible_rows_mismatch",
+      "expected": "ValueError",
+      "match": "exact-K source",
+      "raised": "ValueError",
+      "message": "apa_sp2: k is not the exact-K source of these packed keys; append explicitly",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RC_append_equals_fresh_bitwise",
+      "ok": true,
+      "generation": 1
+    },
+    {
+      "check": "RH_attention_route_packed",
+      "ok": true,
+      "route": {
+        "storage": "packed",
+        "backend": "spq4_packed_r2_tq4_partition",
+        "l": 1,
+        "fallback_reason": null,
+        "delta": 6.348392486572266,
+        "e_q": 0.8716110587120056
+      }
+    },
+    {
+      "check": "RI_raw_dense_entry_refuses_packed_apa_selective_attention_sp_epsilon",
+      "expected": "TypeError",
+      "match": null,
+      "raised": "TypeError",
+      "message": "apa_selective_attention_sp_epsilon(): incompatible function arguments. The following argument types are supported:\n    1. (q: tensor_cuda._tensor_cuda.Tensor, k: tensor_cuda._tensor_cuda.Tensor, kq: tensor_cuda._tensor_cuda.Tensor, v: tensor_cuda._tensor_cuda.Tensor, scale: float, epsilon: float, e_q: float, is_causal: bool = False, sinks: object = None, diagnostics: bool = False) -> object\n\nInvoked with: <tensor_cuda._tensor_cuda.Tensor object at 0x7759ee6b3bf0>, <tensor_cuda._tensor_cuda.Tensor object at 0x7759ecdc72f0>, PackedSpKeys(B=1, KV=2, D=128, visible=257, capacity=257, device=cuda:0, generation=0), <tensor_cuda._tensor_cuda.Tensor object at 0x7759bec48630>, 0.0883883461356163, 0.01, 0.5, False, None, False",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RI_raw_dense_entry_refuses_packed_apa_selective_attention_sp",
+      "expected": "TypeError",
+      "match": null,
+      "raised": "TypeError",
+      "message": "apa_selective_attention_sp(): incompatible function arguments. The following argument types are supported:\n    1. (q: tensor_cuda._tensor_cuda.Tensor, k: tensor_cuda._tensor_cuda.Tensor, kq: tensor_cuda._tensor_cuda.Tensor, v: tensor_cuda._tensor_cuda.Tensor, scale: float, delta: float, is_causal: bool = False, sinks: object = None, diagnostics: bool = False) -> object\n\nInvoked with: <tensor_cuda._tensor_cuda.Tensor object at 0x7759ee6b3bf0>, <tensor_cuda._tensor_cuda.Tensor object at 0x7759ecdc72f0>, PackedSpKeys(B=1, KV=2, D=128, visible=257, capacity=257, device=cuda:0, generation=0), <tensor_cuda._tensor_cuda.Tensor object at 0x7759bec48630>, 0.0883883461356163, 8.0, False, None, False",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RI_raw_dense_entry_refuses_packed_apa_sp2_scores",
+      "expected": "TypeError",
+      "match": null,
+      "raised": "TypeError",
+      "message": "apa_sp2_scores(): incompatible function arguments. The following argument types are supported:\n    1. (q: tensor_cuda._tensor_cuda.Tensor, k: tensor_cuda._tensor_cuda.Tensor, kq: tensor_cuda._tensor_cuda.Tensor, scale: float, first: int, count: int, wcoop: bool) -> tuple\n\nInvoked with: <tensor_cuda._tensor_cuda.Tensor object at 0x7759ee6b3bf0>, <tensor_cuda._tensor_cuda.Tensor object at 0x7759ecdc72f0>, PackedSpKeys(B=1, KV=2, D=128, visible=257, capacity=257, device=cuda:0, generation=0), 0.0883883461356163, 0, 1, True",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "G3_delta_helper_equals_native",
+      "ok": true,
+      "fixtures": 116,
+      "mismatches": []
+    },
+    {
+      "check": "G3_route_delta_equals_native",
+      "ok": true,
+      "delta": 6.348392486572266,
+      "e_q": 0.8716110587120056
+    },
+    {
+      "check": "RE_prefill_on_packed_refused",
+      "expected": "ValueError",
+      "match": "storage='dense'",
+      "raised": "ValueError",
+      "message": "apa_sp2: prefill (L > 1) on packed keys is not supported; quantize with storage='dense' for prefill",
+      "device_calls_during": 0,
+      "ok": true
+    },
+    {
+      "check": "RE_prefill_on_dense_runs",
+      "ok": true
+    }
+  ],
+  "module_sha256": "2e557a23eaf228512a2f1a2f0629401d91d02d05705087661be5c48849c0f3e9",
+  "steps": [
+    {
+      "step": "RA_storage_argument_'Packed'",
+      "t": 1794897158.3172984,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_argument_'int4'",
+      "t": 1794897158.3173702,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_argument_''",
+      "t": 1794897158.3173938,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_argument_1",
+      "t": 1794897158.317412,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_environment_'Packed'",
+      "t": 1794897158.317442,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_environment_''",
+      "t": 1794897158.3174675,
+      "ok": true
+    },
+    {
+      "step": "RA_storage_environment_'none'",
+      "t": 1794897158.3174922,
+      "ok": true
+    },
+    {
+      "step": "RB_two_bit_default_takes_dense_with_reason",
+      "t": 1794897158.4271026,
+      "ok": true
+    },
+    {
+      "step": "RB_two_bit_explicit_packed_raises",
+      "t": 1794897158.427163,
+      "ok": true
+    },
+    {
+      "step": "RD_dense_table_on_packed",
+      "t": 1794897158.4654212,
+      "ok": true
+    },
+    {
+      "step": "RD_packed_table_on_dense",
+      "t": 1794897158.4654698,
+      "ok": true
+    },
+    {
+      "step": "RD_bulk_bits_mismatch",
+      "t": 1794897158.4655173,
+      "ok": true
+    },
+    {
+      "step": "RD_k_not_exact_source",
+      "t": 1794897158.4655921,
+      "ok": true
+    },
+    {
+      "step": "RD_no_margins",
+      "t": 1794897158.465621,
+      "ok": true
+    },
+    {
+      "step": "RD_wrong_scale",
+      "t": 1794897158.4656775,
+      "ok": true
+    },
+    {
+      "step": "RD_epsilon_zero",
+      "t": 1794897158.4657288,
+      "ok": true
+    },
+    {
+      "step": "RD_query_on_cpu",
+      "t": 1794897158.465771,
+      "ok": true
+    },
+    {
+      "step": "RD_tc_apa_sp_unset",
+      "t": 1794897158.465798,
+      "ok": true
+    },
+    {
+      "step": "RD_stale_generation",
+      "t": 1794897158.4660783,
+      "ok": true
+    },
+    {
+      "step": "RD_exact_k_edited_in_place",
+      "t": 1794897158.4663768,
+      "ok": true
+    },
+    {
+      "step": "RD_visible_rows_mismatch",
+      "t": 1794897158.466591,
+      "ok": true
+    },
+    {
+      "step": "RC_append_equals_fresh_bitwise",
+      "t": 1794897158.4674623,
+      "ok": true
+    },
+    {
+      "step": "RH_attention_route_packed",
+      "t": 1794897158.4674892,
+      "ok": true
+    },
+    {
+      "step": "RI_raw_dense_entry_refuses_packed_apa_selective_attention_sp_epsilon",
+      "t": 1794897158.46753,
+      "ok": true
+    },
+    {
+      "step": "RI_raw_dense_entry_refuses_packed_apa_selective_attention_sp",
+      "t": 1794897158.4675558,
+      "ok": true
+    },
+    {
+      "step": "RI_raw_dense_entry_refuses_packed_apa_sp2_scores",
+      "t": 1794897158.467578,
+      "ok": true
+    },
+    {
+      "step": "G3_delta_helper_equals_native",
+      "t": 1794897158.468946,
+      "ok": true
+    },
+    {
+      "step": "G3_route_delta_equals_native",
+      "t": 1794897158.4689715,
+      "ok": true
+    },
+    {
+      "step": "RE_prefill_on_packed_refused",
+      "t": 1794897158.4729433,
+      "ok": true
+    },
+    {
+      "step": "RE_prefill_on_dense_runs",
+      "t": 1794897158.4732633,
+      "ok": true
+    }
+  ],
+  "terminal": "L2_DONE"
+}

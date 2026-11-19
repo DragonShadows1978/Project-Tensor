@@ -1,0 +1,135 @@
+--- scripts/apa_pf2f2_nonfinite.py
++++ scripts/apa_pf2f3_nonfinite.py
+@@ -88,39 +88,57 @@
+     return q,k,v,codes,rot,cb,norm
+ 
+ 
++NORM_KINDS = ("inf", "-inf", "nan")
++
++
++def check_nan_rows(array, wanted):
++    nonfinite_rows = np.any(~np.isfinite(array), axis=-1)
++    nan_rows = np.isnan(array).all(axis=-1)
++    return dict(
++        nonfinite_rows=int(nonfinite_rows.sum()),
++        all_nan_rows=int(nan_rows.sum()),
++        nan_elements=int(np.isnan(array).sum()),
++        ok=bool(np.array_equal(nonfinite_rows, wanted) and np.array_equal(nan_rows, wanted)),
++    )
++
++
+ def run_norm(tc, c):
+-    D,dt,G,diag=c['D'],c['dt'],c['G'],c['diag']
+-    qn,kn,vn,cn,rn,cb,norm=norm_fixture(tc,D)
+-    qn=np.repeat(qn,G,axis=1)
+-    T=lambda a: tc.tensor(np.ascontiguousarray(a),device='cuda',dtype=dt)
+-    q,k,v=T(qn),T(kn),T(vn)
+-    codes=tc.tensor(cn,device='cuda',dtype='uint8')
+-    rot=tc.tensor(rn,device='cuda'); table=tc.tensor(cb,device='cuda')
+-    scale=float(np.float32(1/np.sqrt(D)))
+-    outs={}; decs={}
+-    for kind in ('finite','inf','nan'):
+-        n=np.array([[[norm,norm if kind=='finite' else float(kind)]]],np.float32)
+-        norms=tc.tensor(n,device='cuda')
+-        packed=(codes,norms,rot,table)
+-        outs[kind]=_out(tc._spo2.packed_prefill(q,k,v,packed,scale,0.,False,None,diag,fmt='tq4'),diag)
+-        if kind!='finite':
+-            decs[kind]=_decode(tc,qn,k,v,packed,scale,0.,None,dt)
+-        assert outs[kind].shape==(1,G,2,D) and outs[kind].dtype==np.float32
+-    assert_finite_control(outs['finite'])
+-    bad=[]
+-    if not np.isnan(outs['inf']).all(): bad.append('norm_nonfinite')
+-    if not np.isnan(outs['nan']).all(): bad.append('nan_norm_control')
+-    if not np.isnan(decs['nan']).all(): bad.append('nan_norm_decode_control')
+-    # Registered G2 wording requires the raw-Inf decode comparison too. Keep
+-    # this explicit: decode is read-only; an oracle boundary mismatch is RED.
+-    if not np.array_equal(np.any(~np.isfinite(outs['inf']),axis=-1),
+-                          np.any(~np.isfinite(decs['inf']),axis=-1)):
+-        bad.append('raw_inf_decode_row_sets')
+-    return dict(case=c, failed=bad, finite_control=True, nan_control_all_nan=bool(np.isnan(outs['nan']).all()),
+-                rows=2*G, structurally_constant_nan_rows=int(np.isnan(outs['inf']).all(-1).sum()),
+-                inf_prefill_nan_elements=int(np.isnan(outs['inf']).sum()),
+-                inf_decode_nan_elements=int(np.isnan(decs['inf']).sum()),
+-                nan_decode_all_nan=bool(np.isnan(decs['nan']).all()))
++    D, dt, G, diag = (c[key] for key in ("D", "dt", "G", "diag"))
++    qn, kn, vn, cn, rn, cb, norm = norm_fixture(tc, D)
++    qn = np.repeat(qn, G, axis=1)
++
++    def tensor(array):
++        return tc.tensor(np.ascontiguousarray(array), device="cuda", dtype=dt)
++
++    q, k, v = tensor(qn), tensor(kn), tensor(vn)
++    codes = tc.tensor(cn, device="cuda", dtype="uint8")
++    rot, table = (tc.tensor(a, device="cuda") for a in (rn, cb))
++    scale = float(np.float32(1 / np.sqrt(D)))
++    wanted = np.ones((1, G, 2), dtype=bool)
++    rows = {}
++    failed = []
++    # PF2-REV2 (2026): a negative code dot can turn -Inf into +Inf,
++    # which is selected for refinement and replaced by a finite score.
++    for kind in ("finite", *NORM_KINDS):
++        raw = np.array([[[norm, norm if kind == "finite" else float(kind)]]], np.float32)
++        packed = (codes, tc.tensor(raw, device="cuda"), rot, table)
++        prefill = _out(tc._spo2.packed_prefill(q, k, v, packed, scale, 0., False, None, diag, fmt="tq4"), diag)
++        decode = _decode(tc, qn, k, v, packed, scale, 0., None, dt)
++        assert prefill.shape == decode.shape == (1, G, 2, D)
++        assert prefill.dtype == decode.dtype == np.float32
++        if kind == "finite":
++            assert_finite_control(prefill)
++            assert_finite_control(decode)
++            continue
++        prefill_rows = check_nan_rows(prefill, wanted)
++        decode_rows = check_nan_rows(decode, wanted)
++        equal = bool(np.array_equal(np.any(~np.isfinite(prefill), axis=-1),
++                                    np.any(~np.isfinite(decode), axis=-1)))
++        rows[kind] = dict(prefill=prefill_rows, decode=decode_rows, equal_row_sets=equal)
++        for key, ok in (("prefill", prefill_rows["ok"]), ("decode", decode_rows["ok"]), ("parity", equal)):
++            if not ok:
++                failed.append(f"{kind}:{key}")
++    return dict(case=c, failed=failed, finite_control=True, expected_nonfinite_rows=2 * G, results=rows)
+ 
+ 
+ def partition_norm_cases():
+@@ -134,7 +152,7 @@
+             itertools.product(shapes, ('float32', 'bfloat16'), (False, True))]
+ 
+ 
+-def run_partition_norm(tc, c):
++def run_partition_norm(tc, c, *, check_prefill=False):
+     D, VD, G, dt, diag = (c[key] for key in ('D', 'VD', 'G', 'dt', 'diag'))
+     qn, kn, _, cn, rn, cb, norm = norm_fixture(tc, D)
+     qn = np.repeat(qn[:, :, :1], 2 * G, axis=1)
+@@ -150,6 +168,10 @@
+     wanted = np.zeros((1, 2 * G, 1), dtype=bool)
+     wanted[:, :G] = True
+     results = {}
++    if check_prefill:
++        prefill_qn = np.concatenate((qn, 1.25 * qn), axis=2)
++        prefill_q = T(prefill_qn)
++        prefill_wanted = np.repeat(wanted, 2, axis=2)
+     for kind, bad in (('finite', norm), ('inf', np.inf), ('-inf', -np.inf), ('nan', np.nan)):
+         raw = np.array([[[norm, bad], [norm, norm]]], dtype=np.float32)
+         packed = (codes, T(raw, 'float32'), rot, table)
+@@ -165,5 +187,22 @@
+                                  nan_elements=int(np.isnan(result).sum()),
+                                  ok=bool(np.array_equal(np.isnan(result).all(axis=-1), wanted)
+                                          and np.isfinite(result[:, G:]).all()))
++        if check_prefill:
++            second = tc._spo2.packed_run(T(prefill_qn[:, :, 1:]), k, v, packed, scale, 0.,
++                                        False, None, diag, fmt="tq4", carry="partition", gqa_path="r2")
++            prefill = _out(tc._spo2.packed_prefill(prefill_q, k, v, packed, scale, 0.,
++                                                  False, None, diag, fmt="tq4"), diag)
++            decode = np.concatenate((result, _out(second, diag)), axis=2)
++            assert prefill.shape == decode.shape == (1, 2 * G, 2, VD)
++            if kind == "finite":
++                assert_finite_control(prefill)
++                assert_finite_control(decode)
++            else:
++                row = results[kind]
++                row["prefill"] = check_nan_rows(prefill, prefill_wanted)
++                row["decode"] = check_nan_rows(decode, prefill_wanted)
++                row["equal_row_sets"] = bool(np.array_equal(np.any(~np.isfinite(prefill), axis=-1),
++                                                           np.any(~np.isfinite(decode), axis=-1)))
++                row["ok"] &= row["prefill"]["ok"] and row["decode"]["ok"] and row["equal_row_sets"]
+     return dict(case=c, finite_control=True, expected_nonfinite_rows=G, results=results,
+                 failed=[kind for kind, result in results.items() if not result['ok']])

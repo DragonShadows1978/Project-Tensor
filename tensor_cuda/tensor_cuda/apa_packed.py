@@ -489,7 +489,17 @@ def check_pinned_margins(margins):
 def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,
                      is_causal=False, sinks=None, diagnostics=False):
     """R-D: the packed route of apa_selective_attention_sp. Every refusal is raised
-    before any device work."""
+    before any device work.
+
+    L == 1 (decode): the ordered packed-r2 route, partition carry (unchanged).
+    L > 1 (prefill, APA-P1-PF2, replacing P1-D's R-E refusal): route (a-S) of the
+    P1-PF design, one native kernel (packed_prefill) with the dense SP prefill
+    kernel's structure and the whole-row running-maximum carry; each key's bulk
+    score comes from its 4-bit codes in rotated space (packed decode's per-pair
+    arithmetic), refined keys are scored exactly from k, and one softmax covers
+    every key. It holds no key-shaped transient and never reconstructs dense
+    keys. Returns out, or (out, mask) with diagnostics, as the dense route does.
+    The pinned packed margin table and the delta rule apply unchanged."""
     import importlib
     from .apa_sp2 import RegisteredMargins
     if os.environ.get("TC_APA_SP") != "1":
@@ -511,17 +521,29 @@ def packed_attention(q, k, kq, v, scale, epsilon, *, bulk_bits, margins,
     e_q = PackedRegisteredMargins.lookup(margins, bulk_bits, q.shape[-1], q.dtype, scale)
     delta = derive_delta(epsilon, e_q)
     L = q.shape[2]
-    if L != 1:
-        # R-E, branch decided by L3 (artifacts/apa_p1d/gpu/L3/RESULT.json): the
-        # transient dense reconstruction of packed keys is NOT bitwise equal to
-        # quantize_sp2_keys(k, 4, storage="dense") (norms and rotation use
-        # different fp32 arithmetic), so prefill on packed keys is refused, with
-        # no persistent second representation. No prior art known to me.
-        _record_route("attention", storage="packed", backend=None, l=L,
-                      fallback_reason="refused: prefill (L > 1) on packed keys")
-        raise ValueError("apa_sp2: prefill (L > 1) on packed keys is not supported; "
-                         "quantize with storage='dense' for prefill")
     spo2 = importlib.import_module(__package__)._spo2
+    if L != 1:
+        # APA-P1-PF2 (lead ruling 2026-11-16, replacing P1-D's R-E refusal):
+        # prefill on packed keys takes route (a-S) of the P1-PF design
+        # (tensor_fork_apa_wt_p1pf artifacts/apa_p1pf/DESIGN.md section 2.1):
+        # the native packed_prefill kernel reads the store's codes and norms
+        # (bulk, in rotated space), the caller's exact k (refined keys only) and
+        # v; the carry is the whole-row running maximum (the dense prefill rule);
+        # delta is the pinned packed table's, derived above. No dense
+        # reconstruction and no key-shaped transient. Every refusal above ran
+        # first; the native entry restates the shape/dtype checks before any
+        # allocation or launch.
+        # Prior art: TurboQuant (Zandieh et al., 2025, arXiv 2504.19874) codes;
+        # asymmetric distance computation (Jegou, Douze and Schmid, 2011);
+        # BLASST (arXiv 2512.12087) running-max threshold; online softmax
+        # (Milakov and Gimelshein, 2018); FlashAttention (Dao et al., 2022).
+        # Ours: the packed decode's bulk arithmetic inside the dense prefill
+        # structure (details at the kernel, apa_spo/packed_prefill.cuh).
+        result = spo2.packed_prefill(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,
+                                     sinks, diagnostics, fmt=PACKED_FORMAT)
+        _record_route("attention", storage="packed", backend="spq_packed_prefill_tq4_row", l=L,
+                      fallback_reason=None, delta=delta, e_q=e_q)
+        return result
     result = spo2.packed_run(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,
                              sinks, diagnostics, fmt=PACKED_FORMAT, carry="partition",
                              gqa_path="r2")

@@ -1,0 +1,22 @@
+{
+  "G3_FAKE": {
+    "failures": [
+      {
+        "longrepr": "power_fake/tensor_cuda/tests/test_apa_p1f2_cpu.py:267: in test_r1_pinned_route_refusals_still_precede_any_device_call\n    assert call(prefill_q, k, p, v, s, .01, bulk_bits=4, margins=m, is_causal=True) == \"packed_prefill_out\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\npower_fake/tensor_cuda/tensor_cuda/apa_sp2.py:124: in apa_selective_attention_sp\n    return packed_attention(q, k, kq, v, scale, epsilon, bulk_bits=bulk_bits,\npower_fake/tensor_cuda/tensor_cuda/apa_packed.py:542: in packed_attention\n    result = spo2.packed_prefill(q, k, v, kq._packed_tuple(), float(scale), delta, is_causal,\npower_fake/tensor_cuda/tests/test_apa_p1f2_cpu.py:100: in packed_prefill\n    raise RuntimeError(\"PF2-F4 power: FakeSpo2.packed_prefill called\")\nE   RuntimeError: PF2-F4 power: FakeSpo2.packed_prefill called",
+        "when": "call"
+      }
+    ],
+    "node": "power_fake/tensor_cuda/tests/test_apa_p1f2_cpu.py::test_r1_pinned_route_refusals_still_precede_any_device_call",
+    "status": "PASS"
+  },
+  "G3_ROUTE": {
+    "failures": [
+      {
+        "longrepr": "tensor_cuda/tests/test_apa_p1d_policy.py:589: in test_prefill_on_packed_keys_routes_to_packed_prefill\n    out = env.sp2.apa_selective_attention_sp(q, k, p, v, scale, .01, bulk_bits=4,\n../power_route/apa_sp2.py:124: in apa_selective_attention_sp\n    return packed_attention(q, k, kq, v, scale, epsilon, bulk_bits=bulk_bits,\n../power_route/apa_packed.py:532: in packed_attention\n    raise ValueError(\"apa_sp2: prefill (L > 1) on packed keys is not supported; \"\nE   ValueError: apa_sp2: prefill (L > 1) on packed keys is not supported; quantize with storage='dense' for prefill",
+        "when": "call"
+      }
+    ],
+    "node": "tensor_cuda/tests/test_apa_p1d_policy.py::test_prefill_on_packed_keys_routes_to_packed_prefill",
+    "status": "PASS"
+  }
+}

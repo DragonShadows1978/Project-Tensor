@@ -571,16 +571,30 @@ def test_routes_are_reported_for_quantize_and_attention(env, tmp_path):
 
 
 # ---------------------------------------------------------------- R-E prefill
-def test_prefill_on_packed_keys_is_refused_naming_dense(env, tmp_path):
-    """L3 found the transient reconstruction not bitwise equal: R-E refuses."""
+def test_prefill_on_packed_keys_routes_to_packed_prefill(env, tmp_path, monkeypatch):
+    """PF2 dispatches prefill directly on packed keys."""
+    # Recording test double (Meszaros, xUnit Test Patterns, 2007), as above.
+    prefill_out = object()
+
+    def packed_prefill(*args, **kwargs):
+        env.rec.calls.append(("packed_prefill", args, kwargs))
+        return prefill_out
+
+    monkeypatch.setattr(env.pkg._spo2, "packed_prefill", packed_prefill, raising=False)
     k = keys(B=1, KV=2, S=64, D=64)
     p = env.sp2.quantize_sp2_keys(k, 4)
     q = FakeTensor((1, 4, 8, 64))
-    with pytest.raises(ValueError, match="storage='dense'"):
-        env.sp2.apa_selective_attention_sp(q, k, p, FakeTensor((1, 2, 64, 64)), 1 / math.sqrt(64), .01,
-                                           bulk_bits=4, margins=packed_table(env, tmp_path), is_causal=True)
-    assert not calls(env, "packed_run") and not calls(env, "quantize_dense")
+    v = FakeTensor((1, 2, 64, 64))
+    scale = 1 / math.sqrt(64)
+    out = env.sp2.apa_selective_attention_sp(q, k, p, v, scale, .01, bulk_bits=4,
+                                            margins=packed_table(env, tmp_path), is_causal=True)
+    assert out is prefill_out
+    (_, args, kwargs), = calls(env, "packed_prefill")
+    assert args[:5] == (q, k, v, p._packed_tuple(), scale)
+    assert args[6] is True and kwargs == {"fmt": "tq4"}
+    assert not any(calls(env, kind) for kind in ("packed_run", "dense_epsilon", "quantize_dense"))
     route = env.packed.last_route("attention")
-    assert route["storage"] == "packed" and route["l"] == 8 and "prefill" in route["fallback_reason"]
+    assert route["storage"] == "packed" and route["l"] == 8
+    assert route["backend"] == "spq_packed_prefill_tq4_row" and route["fallback_reason"] is None
     # The object never gains a dense copy.
     assert not [t for t in _reachable_tensors(p) if t.shape[-1] == 64 and len(t.shape) == 4]

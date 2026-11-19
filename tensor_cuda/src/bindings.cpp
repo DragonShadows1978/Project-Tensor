@@ -2886,6 +2886,25 @@ PYBIND11_MODULE(_tensor_cuda_spo2,m) {
    return py::cast(Tensor::make(std::get<0>(r),false));
  },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("packed"),py::arg("scale"),py::arg("delta"),py::arg("is_causal")=false,py::arg("sinks")=py::none(),py::arg("diagnostics")=false,py::kw_only(),py::arg("fmt"),py::arg("carry")="partition",py::arg("dump")=false,py::arg("gqa_path")="r2");
 m.def("int4_stats",[](Tensor& q,Tensor& codes,Tensor& scales,int S,double scale,double zthr){auto r=tc::apa_spq1_int4_stats(q.data(),codes.data(),scales.data(),S,scale,zthr);return py::make_tuple(Tensor::make(r.first,false),Tensor::make(r.second,false));});
+// APA_P1PF2_BEGIN binding
+// APA-P1-PF2: prefill (L > 1) on TQ4 packed keys, route (a-S); reached from
+// apa_packed.packed_attention's L > 1 branch. Same tuple ABI and return shape
+// as packed_run: out, or (out, mask) with diagnostics; dump (hooks build only)
+// adds the bulk scores (out, mask, bulk). The entry is declared at block scope
+// (tc/ops.h is outside this round's writable set) and defined in
+// apa_spo/packed_prefill.cuh, as apa_p1f1_merge_tickets above.
+// Prior art: pybind11 (Jakob 2015) and the existing packed_run tuple ABI.
+ std::tuple<NDArray,NDArray,NDArray> apa_p1pf2_packed_prefill(const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,const NDArray&,float,float,bool,const NDArray*,bool,const std::string&,bool);
+ m.def("packed_prefill",[](Tensor& q,Tensor& k,Tensor& v,py::tuple packed,double scale,double delta,bool causal,py::object sink,bool diag,const std::string& fmt,bool dump)->py::object {
+   if(packed.size()!=4)throw std::runtime_error("packed tuple must be codes,scales,rotation,codebook");
+   auto& codes=packed[0].cast<Tensor&>();auto& sc=packed[1].cast<Tensor&>();auto& rot=packed[2].cast<Tensor&>();auto& cb=packed[3].cast<Tensor&>();
+   const NDArray* sn=sink.is_none()?nullptr:&sink.cast<Tensor&>().data();
+   auto r=apa_p1pf2_packed_prefill(q.data(),k.data(),v.data(),codes.data(),sc.data(),rot.data(),cb.data(),(float)scale,(float)delta,causal,sn,diag||dump,fmt,dump);
+   if(dump)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false),Tensor::make(std::get<2>(r),false));
+   if(diag)return py::make_tuple(Tensor::make(std::get<0>(r),false),Tensor::make(std::get<1>(r),false));
+   return py::cast(Tensor::make(std::get<0>(r),false));
+ },py::arg("q"),py::arg("k"),py::arg("v"),py::arg("packed"),py::arg("scale"),py::arg("delta"),py::arg("is_causal")=false,py::arg("sinks")=py::none(),py::arg("diagnostics")=false,py::kw_only(),py::arg("fmt"),py::arg("dump")=false);
+// APA_P1PF2_END binding
 // APA_SPQ1_END bindings
 
 #ifdef TC_APA_EB2B

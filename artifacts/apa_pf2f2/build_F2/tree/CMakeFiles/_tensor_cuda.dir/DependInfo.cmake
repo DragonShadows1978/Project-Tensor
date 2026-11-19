@@ -1,0 +1,35 @@
+
+# Consider dependencies only in project.
+set(CMAKE_DEPENDS_IN_PROJECT_ONLY OFF)
+
+# The set of languages for which implicit dependencies are needed:
+set(CMAKE_DEPENDS_LANGUAGES
+  )
+
+# The set of dependency files which are needed:
+set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/conv.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/conv.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/conv.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/dda.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/dda.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/dda.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/gemm_apa.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/gemm_apa.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/gemm_apa.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/kernels.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/kernels.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/kernels.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/matmul.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/matmul.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/matmul.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_bake.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_bake.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_bake.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_inpaint.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_inpaint.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_inpaint.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_raster.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_raster.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/paint_raster.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain_objects.cu" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain_objects.cu.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/terrain_objects.cu.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/autograd.cpp" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/autograd.cpp.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/autograd.cpp.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/bindings.cpp" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/bindings.cpp.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/bindings.cpp.o.d"
+  "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/ops.cpp" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/ops.cpp.o" "gcc" "CMakeFiles/_tensor_cuda.dir/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_pf2f2/tensor_cuda/src/ops.cpp.o.d"
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_LINKED_INFO_FILES
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_FORWARD_LINKED_INFO_FILES
+  )
+
+# Fortran module output directory.
+set(CMAKE_Fortran_TARGET_MODULE_DIR "")

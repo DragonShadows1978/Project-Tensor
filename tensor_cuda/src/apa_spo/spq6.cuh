@@ -137,11 +137,15 @@ template<int D,int V> __global__ void __launch_bounds__(128) bulk_mma_tq(const f
     #pragma unroll
     for(int i=0;i<2;++i){
       int j=(warp+4*t)*8+2*tig+i;ks[t][i]=0.f;
+      if(j<count){
 #if APA_SPQ6_MUTANT==3
-      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j+1];   // norm from the neighbour key
+        const float norm=scales[(int64_t)bh*capacity+start+j+1];   // norm from the neighbour key
 #else
-      if(j<count)ks[t][i]=scales[(int64_t)bh*capacity+start+j];
+        const float norm=scales[(int64_t)bh*capacity+start+j];
 #endif
+        // PF2-F1 (Project-Tensor, 2026) and IEEE 754-2008: reuse the quiet-NaN norm guard on tc.
+        ks[t][i]=isfinite(norm)?norm:__int_as_float(0x7fc00000);
+      }
     }
   }
   __syncthreads();   // ctab ready

@@ -1,0 +1,41 @@
+tensor_cuda/tests/test_apa_p1d_policy.py:573:# ---------------------------------------------------------------- R-E prefill
+tensor_cuda/tests/test_apa_p1d_policy.py:574:def test_prefill_on_packed_keys_is_refused_naming_dense(env, tmp_path):
+tensor_cuda/tests/test_apa_p1d_policy.py:584:    assert route["storage"] == "packed" and route["l"] == 8 and "prefill" in route["fallback_reason"]
+tensor_cuda/tests/test_apa_pf2_nonfinite.py:62:    header = (ROOT / "tensor_cuda/src/apa_spo/packed_prefill.cuh").read_text()
+tensor_cuda/tests/test_apa_pidv.py:129:# decode cells (W23, I07) to the fused kernel, which makes a split-K defect (I2) unreachable, and =2 makes the prefill
+tensor_cuda/tests/test_apa_selective.py:142:    _run(True, L=16, S=512, D=512)    # Gemma-shaped chunked-prefill
+tensor_cuda/tests/test_apa_selective_splitk.py:219:def test_force_splitk_at_prefill_shape_raises():
+tensor_cuda/tests/test_apa_selective_splitk.py:220:    """Addendum #5: split-K is decode-only (L==1). Forcing it at a prefill
+tensor_cuda/tests/test_apa_sp1_1.py:89:    assert shape['id']=='prefill_s2048_d64_c1_h4_kv4'
+tensor_cuda/tests/test_apa_sp1_1.py:150:    assert scores['P2_prefill_overlap_ge_0_8']['verdict']=='MISS'
+tensor_cuda/tests/test_apa_sp1_1.py:151:    assert scores['P3_all_prefill_speed']['verdict']=='MISS'
+tensor_cuda/tests/test_apa_sp2.py:118:def test_both_entries_agree_on_host_guards_and_cpu_prefill_split_outputs(monkeypatch):
+tensor_cuda/tests/test_apa_sp2.py:191:    for bad in ['bad','eq_b8_prefill_s2048_d64_c1_h4_kv4','../../tmp/evil']:
+tensor_cuda/tests/test_apa_sp2.py:249:            islong=s['S']==(8192 if s['kind']=='prefill' else 32768)
+tensor_cuda/tests/test_apa_sp3.py:33:def test_d96_prefill_contract_and_dense_pin():
+tensor_cuda/tests/test_apa_sp3.py:236:def test_protocol2_six_disjoint_full_prefills_pool_nll_not_ppl():
+tensor_cuda/tests/test_apa_sp3.py:489:    fixture={'decode_b4_C_2048':dict(status='PASS',result=dict(bits=4,S=2048,arm='C',tokens_s=12.,steps=32,prefill_s=2.))}
+tensor_cuda/tests/test_apa_sp3_a4.py:197:                      selected=1,pairs=2,fraction=.5,path='SP_prefill')
+tensor_cuda/tests/test_apa_sp3_a5.py:76:            # pool must be True for cache prefill and EVERY measured token.
+tensor_cuda/tests/test_apa_sp3_a5.py:148:                 prefill_s=10.,decode_work_s=(estimate-190.)/4))
+tensor_cuda/tests/test_apa_sp3_a6.py:140:    assert len(forwards)==34  # one prefill, one discarded warmup, 32 measured
+tensor_cuda/tests/test_apa_sp3_a6.py:207:           setup_s=10.,prefill_s=10.,warmup_s=1.,decode_work_s=(estimate-189.)/4)
+tensor_cuda/tests/test_apa_sp3_a6.py:227:                                     ('feeding','greedy'),('config',{}),('setup_s',-1),('prefill_s',float('nan'))])
+tensor_cuda/tests/test_apa_sp4g.py:60:def test_d512_mqa_prefill_contract_and_dense_pin():
+tensor_cuda/tests/test_apa_sp4g.py:212:    monkeypatch.setattr(gpu,'require_pass',lambda d:dict(result=dict(steps=32,fit=True,setup_s=100,prefill_s=20,decode_s=5)))
+tensor_cuda/tests/test_apa_sp4g_a3.py:218:    owner.tc=tc;owner.model=SimpleNamespace(layers=[None]*5+[SimpleNamespace(mixer=mx)],PREFILL_CHUNK=512)
+tensor_cuda/tests/test_apa_sp4g_a4.py:183:    # SP4G A2 (2026): real PPL receipt schema differs from old prefill capture.
+tensor_cuda/tests/test_apa_sp4g_a5.py:46:def test_a5_dispatch_L64_is_prefill_even_with_cache():
+tensor_cuda/tests/test_apa_sp4g_a5.py:51:                assert r['path']=='prefill' and r['symbol']=='apa_selective_sp_kernel'
+tensor_cuda/tests/test_apa_sp4g_a5.py:168:    # reaches index17 only by feeding all16 cached blocks after true prefill.
+tensor_cuda/tests/test_apa_sp4g_a5.py:264:    owner.model=NS(layers=[NS(mixer=m) for m in mixers],PREFILL_CHUNK=512)
+tensor_cuda/tests/test_apa_sp4g_a5.py:290:        assert meta['mask_'+precision]['dispatch']['path']=='prefill'
+tensor_cuda/tests/test_apa_sp4g_a7.py:40:        assert anchor['prefill_s']==j['result']['prefill_s']
+tensor_cuda/tests/test_apa_sp4g_a7.py:41:        assert c['estimate_worker_s']==anchor['load_s']+anchor['prefill_s']*(c['S']/8192)**2
+tensor_cuda/tests/test_apa_sp4g_a7.py:205:        return dict(prefill_s=400.,cache_shape_verified=True,**progress)
+tensor_cuda/tests/test_apa_sp4g_a7.py:207:    monkeypatch.setattr(model,'run_prefill',run)
+tensor_cuda/tests/test_apa_sp4g_a7.py:227:    assert r['sampled_peak_resident_mib']==7500. and r['prefill_attempt_wall_s']>=0
+tensor_cuda/tests/test_apa_sp4g_a7.py:231:def test_a7_entire_prefix_uses_june_prefill(monkeypatch):
+tensor_cuda/tests/test_apa_sp4g_a7.py:233:    owner=NS(prefill=lambda x:(seen.append(x.copy()),[],123.))
+tensor_cuda/tests/test_apa_sp4g_a7.py:236:    r=model.run_prefill(owner,ids,c,NS(check=lambda:None),None,{'completed_tokens':c['S']})
+tensor_cuda/tests/test_apa_sp4g_a7.py:238:    assert r['cache_shape_verified'] and r['prefill_s']==123.
