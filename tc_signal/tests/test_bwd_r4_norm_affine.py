@@ -162,3 +162,25 @@ def test_gpu_norm_affine_single_slot_fp64_reference_n2_t7(supplied):
     assert x.grad is not None and slot.grad is not None
     within_g_aff("x", x.grad.numpy(), grads["x"], term_sums)
     within_g_aff(supplied, slot.grad.numpy(), grads[supplied], term_sums)
+
+
+def test_gpu_norm_affine_scale_only_frozen_x_fp64_reference_n2_t7():
+    require_gpu()
+    # BWD-REV4AX F03 (2026): reuse R4a r5d’s scale-only fp64 case with x frozen.
+    # The affine derivative follows Ulyanov et al. (2016) and Ioffe & Szegedy (2015).
+    x_np, scale_np, bias_np, dy_np = affine_operands()
+    assert x_np.shape[0] == 2 and x_np.shape[-1] == 7
+    ref_bias = np.zeros_like(bias_np)
+    x = tc.tensor(x_np, requires_grad=False)
+    scale = tc.tensor(scale_np, requires_grad=True)
+    y = ts.instance_norm1d(x, scale=scale, eps=EPS)
+    assert y.requires_grad
+    y_ref, _, _ = norm_fp64(x_np, scale_np, ref_bias)
+    within_g_aff("x", y.numpy(), y_ref, None)
+    (y * tc.tensor(dy_np)).sum().backward()
+    assert x.grad is None
+    assert scale.grad is not None, "scale gradient missing for frozen x"
+    dscale = scale.grad.numpy()
+    assert np.any(dscale), "scale gradient is zero for frozen x"
+    grads, term_sums = vjp_fp64(x_np, scale_np, ref_bias, dy_np)
+    within_g_aff("scale", dscale, grads["scale"], term_sums)

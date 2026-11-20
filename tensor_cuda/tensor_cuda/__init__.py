@@ -1455,20 +1455,25 @@ def weight_tie(src_module, src_attr, dst_module, dst_attr):
 def checkpoint(fn, *inputs):
     """Gradient checkpointing.
 
-    Runs `fn(*inputs)` under no_grad during the forward pass and replays it
+    When grad mode is enabled and at least one explicit input requires grad,
+    runs `fn(*inputs)` under no_grad during the forward pass and replays it
     during backward, saving only the checkpoint inputs instead of the full
-    interior activation graph. The function must return one Tensor.
+    interior activation graph. Otherwise (including empty inputs, all-frozen
+    inputs, or a call under no_grad), calls `fn` once in the current grad mode
+    without checkpointing or revision checks. The function must return one Tensor.
 
     Input contract: every tensor ``fn`` reads must be passed in ``inputs``.
     Only ``inputs`` are saved and guarded; a tensor ``fn`` captures in a
     closure (or reaches through a global or an attribute) is neither saved nor
     checked, and a change to it before backward silently changes the
-    recomputation. ``fn`` must not write its inputs. (PyTorch's reentrant
-    checkpoint has the same contract.)
+    recomputation. ``fn`` must not write its inputs. Keep replay-relevant
+    state stable between forward and backward, including which inputs
+    require grad. PyTorch's reentrant checkpoint likewise saves and version
+    checks the explicitly passed tensor inputs.
 
     Revision guard (BWD-R4a r5b, r5d; same mechanism as ``attach_vjp``'s
-    saved slots). Each input's Storage revision is recorded before ``fn``
-    runs. If ``fn`` changes any input's revision, checkpoint raises
+    saved slots). When checkpointing is active, each input's Storage revision
+    is recorded before ``fn`` runs. If ``fn`` changes any input's revision, checkpoint raises
     RuntimeError ("checkpoint: fn modified input slot <i> in place; a
     checkpointed function must not write its inputs") as soon as ``fn``
     returns. Before recomputing, backward raises RuntimeError ("checkpoint:
@@ -1482,8 +1487,10 @@ def checkpoint(fn, *inputs):
     writes through a DLPack re-import of an engine tensor; APA's
     ``packed_append``; and tc_signal's untracked ``out=`` paths (for example
     ``instance_norm1d(..., out=t)`` and the conv ops under ``no_grad``), which
-    write ``out`` without ``mark_modified()``. Call ``mark_modified()`` on any
-    tensor written outside the engine's in-place ops.
+    write ``out`` without ``mark_modified()``. After an external write to
+    checkpointed input storage, call ``mark_modified()`` on the saved input
+    or an alias sharing that same Storage. A DLPack re-import can share the
+    data pointer while carrying a different Storage revision.
     """
     return _C.checkpoint(fn, list(inputs))
 

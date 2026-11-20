@@ -217,3 +217,21 @@ def test_host_checkpoint_closure_captured_tensor_is_outside_guard_documented_lim
     y.backward()  # no refusal
     np.testing.assert_array_equal(checked(a.grad.numpy()), np.array([40.0, -5.0, 6.0], dtype=np.float32))
     assert [mode for *_, mode in calls] == [False, True]
+
+
+def test_host_checkpoint_restores_grad_mode_after_invalid_replay_return():
+    x = host([1.0, 2.0, 3.0], True)
+    modes = []
+
+    # BWD-REV4AX F02 (2026): use the reviewed invalid-return probe through the shipped replay binding.
+    def fn(t):
+        modes.append(tc.is_grad_enabled())
+        return {"invalid": t} if modes[-1] else t
+
+    y = tc.checkpoint(fn, x)
+    with tc.no_grad():
+        assert not tc.is_grad_enabled()
+        with pytest.raises(RuntimeError, match=r"Unable to cast.*dict"):
+            y.backward()
+        assert modes == [False, True]
+        assert not tc.is_grad_enabled(), "checkpoint replay cast leaked grad mode"

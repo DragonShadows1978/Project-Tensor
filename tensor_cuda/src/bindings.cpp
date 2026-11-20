@@ -197,8 +197,9 @@ Tensor checkpoint_py(py::function fn, std::vector<Tensor> inputs) {
           set_grad_enabled(prev);
           throw;
         }
-        Tensor replay_out = replay_obj.cast<Tensor>();
         try {
+          // Scope-based exception cleanup (Stroustrup, 1994): restore the incoming mode on cast errors too.
+          Tensor replay_out = replay_obj.cast<Tensor>();
           replay_out.backward(g);
         } catch (...) {
           set_grad_enabled(prev);
