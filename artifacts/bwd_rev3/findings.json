@@ -1,0 +1,97 @@
+{
+  "order": "orders/BWD_REV3_R3_REVIEW.md",
+  "version": "final (v1 sealed in findings_v1.json / findings_v1.seal before any BWD-R3 receipt was read)",
+  "reviewer": "Claude Opus 5.5 (high), different model family from the author (Codex gpt-6.2-sol)",
+  "base": "9b76e58a",
+  "candidate": "0d110daf",
+  "evidence_classes": "source reading; NumPy fp64 emulation of the candidate's index maps (not the candidate's native code, which needs CUDA); static test census",
+  "verdict": "No BLOCKER or MAJOR. Index maps, validity conditions, pack indices, group partition, tile boundaries, merge order and the fixed-tree lane are correct in emulation at 73 boundary geometries (max error 1.8e-13 vs the Voice fp64 oracle, 9.9e-14 on an independent brute-force ONNX dot-product test). Three MINOR (two test-reach gaps; the 123 ms receipt is a cold single-shot outlier, about 8x the warm cost) and six NIT.",
+  "counts": {
+    "BLOCKER": 0,
+    "MAJOR": 0,
+    "MINOR": 3,
+    "NIT": 6
+  },
+  "findings": [
+    {
+      "id": "BWDR3R-F01",
+      "severity": "MINOR",
+      "file": "tc_signal/src/conv_backward.cu:274-275 (code correct); tc_signal/tests/test_bwd_r3_numeric.py (no case); tc_signal/tests/test_bwd_r3_paths.py:90-96",
+      "title": "The GEMM dW lane with N > 1 and groups > 1 is never compared with the oracle",
+      "argument": "The per-group source/left offsets use (n * g.groups + group). Every oracle-comparing test geometry has either N == 1 or groups == 1 on the GEMM lane (census: conv1d_small3 / conv_transpose1d_small3 are N=1 g=2; tail small2 is N=2 g=1; the N=2 g=2 small2 cells and the cancel cells fall to the fixed tree). The only N=2 GEMM synthetic cases (active-slots, dlpack) have groups=1 and compare the candidate only with itself. Mutant M1, (n + group) for (n * g.groups + group), changes dW by 84-113% relative on N=2 g=2 geometries (nonequiv.log) yet is detected by 0 of the 58 oracle-comparing geometries (reach.log). Emulation shows the shipped code is right; the gap is that no gate would catch a regression.",
+      "evidence": "artifacts/bwd_rev3/checks/reach.log, nonequiv.log, census.txt (emulation)",
+      "fix": "Add an oracle-compared synthetic case per op with N=2, groups=2, per-group coefficients > 64 (e.g. 16 channels, K=3), ideally also with length > 1024 so the same case crosses a tile."
+    },
+    {
+      "id": "BWDR3R-F02",
+      "severity": "MINOR",
+      "file": "tc_signal/src/conv_backward.cu:202-203, 268-271 (code correct); tests: no case",
+      "title": "The fixed-tree dW lane past the first time tile is never exercised",
+      "argument": "weight_tree receives `begin` per tile. Every tree-lane geometry in the tests is single-tile (conv1d_01 Tout 40, conv_transpose1d_01 Tin 40, the small2 cells, the cancel and tiny-FD cells). Mutant M2, time = j for time = begin + j, changes dW by 139-170% on two-tile depthwise geometries (nonequiv.log) and is detected by 0 of 58 oracle geometries (reach.log). The lane is production-reachable: the 1,090-group x2 transposed conv tiles over its input length and the F0/N conv over its output length; both exceed 1,024 frames for long utterances (BP2 is about 1 s at 40 decoder frames, so roughly 25 s and up).",
+      "evidence": "artifacts/bwd_rev3/checks/reach.log, nonequiv.log, census.txt (emulation)",
+      "fix": "Add oracle-compared depthwise cases (both ops, x2 with output_padding 1) with the tiled length > 1024 and N=2."
+    },
+    {
+      "id": "BWDR3R-F03",
+      "severity": "NIT",
+      "file": "tc_signal/tests/test_bwd_r3_numeric.py:110-124",
+      "title": "The ordered-merge witness covers only the GEMM lane, N=1, three full tiles",
+      "argument": "test_gpu_tile_merge (2^24, 1, -2^24 across tiles 0..2) pins the GEMM lane's tile order for one batch. The tree lane's cross-tile accumulation (dw[i] + sum per launch) and the cross-batch order (n outer) have no bitwise witness, and no witness has a partial last tile. Random-data oracle checks cannot see an order change (rounding only).",
+      "fix": "Extend the witness: a K=1 depthwise (tree) variant, and a variant with N=2 placing the cancelling terms in different batches, plus a partial last tile."
+    },
+    {
+      "id": "BWDR3R-F04",
+      "severity": "MINOR",
+      "file": "tc_signal/tests/test_bwd_r3_runtime.py:206-273; tensor_fork_bwd_wt_r3 logs/bwd_r3_gpu_memory-convT_20261119T051419775477Z-4172125.log",
+      "title": "The 123 ms Kokoro conv_transpose backward is a cold single-shot outlier, about 8x the warm cost; every runtime row is single-shot with no warm-up",
+      "argument": "Revised after reading the receipts (v1 treated 123 ms as the steady cost). In the same process, conv_transpose1d_kokoro took 122.58 ms native for xwb (the first cell of the line), 14.48 ms for x alone and 0.34 ms for w alone, both later. Every other case's xwb is within 0.1 ms of x + w, all 7 of them (ct_03 3.24 vs 3.18 + 0.15; tail 0.49 vs 0.07 + 0.46; conv1d_kokoro 0.52 vs 0.42 + 0.13), so about 108 ms of the 123 ms is a one-time cost paid by the first cell. A plausible cause (unverified, no GPU here): the convT line's forward is a gather kernel with no cuBLAS call, so the timed backward GEMM is the process's first cuBLAS GEMM; the conv1d line's forward already uses cuBLAS, and its first cell shows no outlier. Either way the code is not shown defective, but the receipt overstates the per-call cost about 8x, and the measurement (one call per row, no warm-up, xwb always first) cannot separate one-time from per-call cost.",
+      "evidence": "checks/ (reading of the R3 measure log; numbers recomputed from R3_MEASURE rows)",
+      "fix": "Lead: rerun memory-convT with one warm-up call and 5 timed repeats per row (or reorder so xwb is not first), and report the first call separately. If the first-GEMM hypothesis holds, optionally issue a tiny warm GEMM at StrictGemm::initialize so the cost lands at handle creation, outside a training step."
+    },
+    {
+      "id": "BWDR3R-F05",
+      "severity": "NIT",
+      "file": "tc_signal/src/conv_backward.cu:19-22, 237; tc_signal/README.md",
+      "title": "Lane-selection constants live in the kernel file and the selection rule is undocumented",
+      "argument": "block 256, tile 1024, the 32 MiB caps and the `size <= 64` threshold sit in conv_backward.cu, not tc_signal/src/tuning.h, and neither README nor DESIGN states when the fixed tree replaces the GEMM. The two lanes give different bits for the same math, so the rule is part of the determinism contract.",
+      "fix": "Move the constants to tuning.h with their reasons, and state the rule (per-group coefficients <= 64, > 8,388,608, or pack rows x min(length, 1024) > 8,388,608, or length > INT_MAX) in README's gradient section."
+    },
+    {
+      "id": "BWDR3R-F06",
+      "severity": "NIT",
+      "file": "tc_signal/tc_signal/_norms.py:107,120; tc_signal/tc_signal/_small.py:135; tc_signal/tc_signal/_lstm.py:110",
+      "title": "The F10 refusal treats `out` as an operand in three ops but not in lstm",
+      "argument": "layer_norm, group_norm and rint pass `out` to _refuse_no_backward, so a requires-grad TensorCUDA `out` with frozen inputs raises 'no backward yet', which misnames the problem (no operand needs a backward). lstm does not pass its out tuple. The order's F10 text is about operands. Refusing writes into a requires-grad destination is defensible, but it should be one rule with its own message.",
+      "fix": "Either drop `out` from the three calls, or refuse a requires-grad `out` in every op, including lstm's tuple, with a distinct message; add a test either way."
+    },
+    {
+      "id": "BWDR3R-F07",
+      "severity": "NIT",
+      "file": "tc_signal/src/conv_backward.cu:46-48, 81-86, 288-293; tc_signal/README.md",
+      "title": "The workspace check is self-referential, the config diagnostic allocates, and the 32 MiB is outside the pool",
+      "argument": "verify() compares installed_bytes_ (set by the same code) with workspace_size; cuBLAS has no workspace getter, and a later cublasSetStream would silently revert to the default pool. The invariant holds only because nothing else calls cublasSetStream on this handle; no comment says so. _conv_backward_config(device) creates the handle and cudaMallocs 32 MiB as a side effect of a diagnostic. The workspace is per device, process-lifetime, outside TensorCUDA's pool, and not mentioned in README.",
+      "fix": "Comment the SetStream-resets-workspace invariant at initialize(); document the per-device 32 MiB resident allocation in README."
+    },
+    {
+      "id": "BWDR3R-F08",
+      "severity": "NIT",
+      "file": "tc_signal/src/conv_backward.cu:274-278; tensor_cuda/include/tc/core.h:112",
+      "title": "Bitwise dW may depend on operand alignment, not only on values (unverified)",
+      "argument": "NDArray carries an element offset, so a tracked operand can be a 4-byte-aligned view; the per-batch left/source offsets n*Cout*Tout are odd multiples of 4 bytes when Tout is odd (4,801 at the generator). If cublasGemmEx's heuristic keys on pointer alignment, equal values at different alignments can take different kernels and summation orders. Reruns of one call are unaffected (same offsets), so G5 is not contradicted. Unverified: no GPU here.",
+      "fix": "Lead to check (search: 'cublasGemmEx pointer alignment kernel selection reproducibility'). If confirmed, state the scope of the bitwise claim (same shapes and offsets), or pack the left operand into an aligned tile as the source already is."
+    },
+    {
+      "id": "BWDR3R-F09",
+      "severity": "NIT",
+      "file": "tc_signal/src/conv_backward.cu:129-157",
+      "title": "The transposed-convolution dX gather reads dy at stride s across adjacent threads and runs about 6x below the conv1d gather per term",
+      "argument": "Warm x-only rows: conv_transpose1d_kokoro 1.11e9 terms in 14.48 ms (about 77 G terms/s) and conv_transpose1d_03 3.15e8 in 3.18 ms (about 99 G/s), against conv1d_23 8.65e8 in 1.56 ms (about 554 G/s). For the transposed case adjacent q map to output bins s apart, so dy loads are uncoalesced. Not a correctness issue and speed is outside this order; at 10 s the x2 to x10 transposed layers scale with length.",
+      "evidence": "checks/census.json (dx_candidate_terms), R3 measure log rows",
+      "fix": "If round 4's 10 s timing needs it: compute dense transposed dX as a strict-handle GEMM plus a fixed-order gather (DESIGN section 5 allows it), or map threads so a warp walks output bins."
+    }
+  ],
+  "post_blind_changes": [
+    "F04 rewritten: v1 read 123 ms as the steady per-call cost of the dX gather; the receipts show it is a first-cell outlier (warm x 14.48 ms + w 0.34 ms). The performance point moved to new NIT F09 with warm numbers.",
+    "No other finding changed. The receipts confirmed the lead's L99 readings (31 lines exit 0; G3 24/4/12+10+10+4/3; mutant kills with 1 edit, r3m09 3; peaks 49,670,784 and 72,762,368 B) and the plain-run counts (29 passed, 99 fixture skips, 23 CUDA skips), all recomputed."
+  ]
+}

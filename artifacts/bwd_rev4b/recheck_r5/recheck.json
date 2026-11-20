@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "review": "BWD-REV4B re-check 2",
+  "start": "SHIM-RUN 20261119T191127Z-1134310",
+  "verdict": "RED — original findings and three general consistency rules are not all closed",
+  "assessment_counts": {
+    "fixed": 7,
+    "partly fixed": 6,
+    "open": 0
+  },
+  "scope": "CPU source, existing self-test and lead receipt reading, and targeted verifier calls on a copied real r5 bundle",
+  "checked_diffs": [
+    {
+      "round": "r4",
+      "from": "7490aba3",
+      "to": "4f4c6168",
+      "files": 11,
+      "hunks": 43
+    },
+    {
+      "round": "r5",
+      "from": "4f4c6168",
+      "to": "a77e4fe5",
+      "files": 7,
+      "hunks": 7
+    }
+  ],
+  "evidence": {
+    "lead_r4": {
+      "commit": "c177ba7c",
+      "gpu_lines_passed": 18,
+      "reference_steps_passed": 4
+    },
+    "lead_r5": {
+      "commit": "3eab201a",
+      "gpu_lines_passed": 3,
+      "reference_steps_passed": 4,
+      "r4_lines_retained": 15,
+      "r4_pins_retained": 35
+    },
+    "selftests": {
+      "r4": {
+        "passed": 21,
+        "total": 21
+      },
+      "r5": {
+        "passed": 6,
+        "total": 6,
+        "r4bm07_refused": 7,
+        "r4bm08_refused": 2,
+        "r4bm09_refused": 3
+      }
+    },
+    "command_outputs": "commands/",
+    "targeted_check": "commands/34-verifier-check.log",
+    "receipt_recount": "commands/58-recount-execution.log"
+  },
+  "original_findings": {
+    "F01": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_gpu.py:96,194–214,723–737",
+      "check": "F01_digest_scope_covers_replays",
+      "argument": "The real digest functions are stubbed through backward and replay. The retained check counts five r3 calls and zero r4 calls. The G5 receipt also records zero."
+    },
+    "F02": {
+      "status": "partly fixed",
+      "source": "scripts/bwd_r4b_refwave.py:55–75,189–227; scripts/bwd_r4b_verify.py:238–274,299–307",
+      "check": "F02_r4bm06_stale_bundles_refused; f02_cases_still_refused",
+      "argument": "Same-wave stale capture ID and operand drift cases refuse, but self-consistently re-stamped part provenance and contradictory reference metadata pass. Capture still resolves from newest passing receipt, with no check of its staged pins or worker operand record."
+    },
+    "F03": {
+      "status": "partly fixed",
+      "source": "scripts/bwd_r4b_verify.py:70–167,278–294; scripts/bwd_r4b_gpu.py:376–386",
+      "check": "F03_g2_fails_closed; f03_cases_still_refused; r4bm07",
+      "argument": "Exact probe keys, count, directions, finite slopes, numerical caps and linear sealed file bytes are checked. MFCC crossing observations and in-bound slopes remain supplied by an unpinned merged oracle."
+    },
+    "F04": {
+      "status": "partly fixed",
+      "source": "scripts/bwd_r4b_gpu.py:425–492,708–750; scripts/bwd_r4_gpu.py:29–71",
+      "check": "F04_sampler_coverage",
+      "argument": "Separate 2 ms monotonic sampler and 50 ms maximum raw-poll gap close the observed 2.116 s stall. Missing PID polls still count toward gap/bracket checks, the median allowance is not gated and the formula does not bound physical peak."
+    },
+    "F05": {
+      "status": "fixed",
+      "source": "tc_signal/tc_signal/_conv_backward.py:153–161,196–222; tc_signal/src/bindings.cpp:339–370,662–667",
+      "check": "F05_native_preflight_before_all_off; test_host_native_preflight_refuses_beyond_int_max; test_host_preflight_runs_before_needs_and_device",
+      "argument": "The shared geometry and range code runs before tc.empty and the all-off return. A separate operand-validation gap remains for address and device provenance."
+    },
+    "F06": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_gpu.py:389–410; scripts/bwd_r4b_gpu_r5.py:55",
+      "check": "F06_residual_is_norm_of_difference",
+      "argument": "The residual is L2(candidate-reference at wave_c), plus a relative value divided by L2(reference at wave_c) when nonzero. The signed norm difference is labeled separately."
+    },
+    "F07": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_host.py:433–466,515–566; scripts/bwd_r4b_refwave.py:178–184; scripts/bwd_r4b_gpu_r5.py:55–69",
+      "check": "mfcc_paths_on_stand_in; retained stand-in and lead MFCC oracle and GPU receipt",
+      "argument": "Nonlinear MFCC is evaluated on the selected A2-1 probe endpoints. Both lead r5 schedules report three nonlinear slopes on all 40 matching keys. Round 1 is separately labeled."
+    },
+    "F08": {
+      "status": "partly fixed",
+      "source": "tc_signal/tests/test_bwd_r4b_public_conv_backward.py:303–385; scripts/bwd_r4b_gpu.py:852–894",
+      "check": "pytest_path_selftest-r4bm05; G-API; r4bm05; r4bm06",
+      "argument": "Tests cover the two missing masks, the dilation-dominant transpose case, and simulated noncurrent CUDA. The real mixed-device test skipped and constructs the cuda:1 operand using a factory that labels it cuda:0."
+    },
+    "F09": {
+      "status": "partly fixed",
+      "source": "scripts/bwd_r4b_gpu.py:787–808,811–849; scripts/bwd_r4b_stage.py:261–267",
+      "check": "F09_fixture_census; G-API and mutant worker receipts",
+      "argument": "All completed public pytest children are bracketed by pinned 58-file censuses. A timeout unwinds before the after-child hash census and detailed pytest receipt."
+    },
+    "F10": {
+      "status": "partly fixed",
+      "source": "tc_signal/tc_signal/_conv_backward.py:123–150,209–222; tensor_cuda/src/bindings.cpp:666–674,1289–1317",
+      "check": "test_host_current_device_rule; test_gpu_public_refuses_noncurrent_device_simulated; two-device case skipped",
+      "argument": "The current-device contract is documented and checked before tc.empty for correct labels. It relies on labels, which can disagree with allocation residency. Private native run with valid preallocated buffers can guard and restore a noncurrent operand device."
+    },
+    "F11": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_gpu.py:285–319",
+      "check": "F11_zero_rows_absolute_only",
+      "argument": "Structural zeros get fp32, finite, shape and absolute error checks. Exact zeros and tiny constants pass the retained check, and the excessive error fails. Zero norms outside the set are refused before relative comparison."
+    },
+    "F12": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_host.py:365–388",
+      "check": "F12_red_receipt_written",
+      "argument": "The synthetic over-bar and malformed cases record a red receipt. IDs are read from row.probe."
+    },
+    "F13": {
+      "status": "fixed",
+      "source": "scripts/bwd_r4b_stage.py:33; scripts/bwd_r4b_suite.py:32–49; git ls-tree 4f4c6168",
+      "check": "F13_trackability_screen; both paths tracked at 4f4c6168",
+      "argument": "Both pinned acceptance scripts are tracked. The screen has no hits and the current bytes match the staged pins."
+    }
+  },
+  "consistency_gaps": {
+    "registered_values": {
+      "status": "partly fixed",
+      "result": "Rho, strength floor and numerical bound are independently derived. The declared-crossing case refuses. However, actual crossing evidence and finite slopes are not tied to registered producer bytes. Replacing a real in-bound slope changed the candidate verdict.",
+      "new_findings": [
+        "BWDR4BR5-F01"
+      ]
+    },
+    "recomputed_digests": {
+      "status": "partly fixed",
+      "result": "The planted direction digest disagreement refuses. Selected archive and per-direction digests are recomputed. MFCC file checks use bundle-supplied expected digests and omit stored cotangent and capture metadata joins. The independently pinned inventory already contains the actual manifest digest.",
+      "new_findings": [
+        "BWDR4BR5-F02",
+        "BWDR4BR5-F03"
+      ]
+    },
+    "exact_inventory": {
+      "status": "fixed for unique parsed named keys on the full staged path; partly fixed in general",
+      "result": "The registered path and named operand sets refuse omissions, additions and renames. Duplicate raw keys collapse; launcher crop and source bases are count-only. FD part membership and contents are not reconstructed at consumption.",
+      "new_findings": [
+        "BWDR4BR5-F01",
+        "BWDR4BR5-F04"
+      ]
+    }
+  },
+  "g5": {
+    "checkpoint": {
+      "nvml_peak_bytes": 3063939072,
+      "pool_reserved_high_bytes": 2147483648,
+      "observed_device_nonpool_bytes": 1396899840,
+      "binding_bytes": 3544383488,
+      "valid_polls": 2076,
+      "median_gap_ms": 1.9995677284896374,
+      "max_gap_ms": 21.608343347907066
+    },
+    "plain": {
+      "nvml_peak_bytes": 9640607744,
+      "binding_bytes": 10121052160,
+      "valid_polls": 1898,
+      "max_gap_ms": 17.61950785294175,
+      "report_only": true
+    },
+    "hard_process_bound": false,
+    "phase_marks_in_raw": false
+  },
+  "new_findings": [
+    {
+      "id": "BWDR4BR5-F01",
+      "severity": "MAJOR",
+      "source": "scripts/bwd_r4b_verify.py:98–125,259–284; scripts/bwd_r4b_gpu_r5.py:53–54",
+      "argument": "The MFCC oracle can change a G2 verdict without matching its FD parts. Empty crossing maps pass. An alternative finite slope within the independent numeric cap changed one constructed candidate's result from 39/40 to 40/40 after the oracle, manifest and verdict were re-stamped, with the FD parts untouched.",
+      "fix": "Bind the capture and manifest to an independent registered digest. Parse and validate part identities and stitch the checked parts, then compare the full merged oracle. For reusable generation without a fixed pin, verify actual endpoint observations, the step schedule and complete factor-keyed crossing records before scoring.",
+      "evidence": "commands/34-verifier-check.log (CROSSINGS_OMITTED, MERGED_ORACLE_CHANGED)"
+    },
+    {
+      "id": "BWDR4BR5-F02",
+      "severity": "MAJOR",
+      "source": "scripts/bwd_r4b_verify.py:194–197,229–274,299–307; scripts/bwd_r4b_refwave.py:55–75",
+      "argument": "The verifier compares manifest, outputs, parts and sources against digests supplied by the same bundle, ignores the manifest digest in the sealed inventory's derived_from record, and leaves the capture's worker operand record and certain embedded digests unjoined. A wrong cotangent digest, wrong stored wave array digest, bogus crop and empty FD part from another capture passed together.",
+      "fix": "Use the independently sealed manifest SHA already present for this capture. Register a new capture ID and manifest digest when inputs change. Validate the capture's pins and worker operand record and bind embedded metadata/digests to the live wave, cotangent and operands.",
+      "evidence": "commands/34-verifier-check.log (STALE_PART_AND_RECORD); commands/59-r4-r5-content-links.log (actual r4/r5 manifest SHA)"
+    },
+    {
+      "id": "BWDR4BR5-F03",
+      "severity": "MINOR",
+      "source": "scripts/bwd_r4b_verify.py:275–296",
+      "argument": "A re-stamped NaN direction passes the fresh-product comparison because a NaN difference is not greater than the tolerance. A single NaN also poisons a tensor reduction and arrays are not required to have the fresh sample's shape/dtype before subtraction. The G2 strength checks provide a further barrier, but the bundle verifier already returned it, and r4bm03 consumes only the gradient.",
+      "fix": "Validate exact shape, dtype and finiteness per stored tensor and direction, then require each finite difference norm to be at or below its bound.",
+      "evidence": "commands/34-verifier-check.log (NAN_DIRECTION)"
+    },
+    {
+      "id": "BWDR4BR5-F04",
+      "severity": "MINOR",
+      "source": "scripts/bwd_r4b_verify.py:181–197,230–251; scripts/bwd_r4b_stage_r5.py:152–160",
+      "argument": "An additional occurrence of an inventory key passes because JSON decoding collapses duplicates. The launcher also checks crop and source bases by length only and accepts changed crop values at the same count. The worker's live operand equality rejects that crop change. Normal missing/extra/renamed parsed inventory keys are covered.",
+      "fix": "Use strict duplicate-free parsing and an explicit schema. Verify the fixed crop and ordered source bases in preflight or describe that admission check as structural only.",
+      "evidence": "commands/34-verifier-check.log (COUNT_ONLY_OPERAND, DUPLICATE_INVENTORY_NAME)"
+    },
+    {
+      "id": "BWDR4BR5-F05",
+      "severity": "MAJOR",
+      "source": "scripts/bwd_r4b_gpu.py:460–492,727–747; scripts/bwd_r4_gpu.py:29–71; scripts/bwd_r4b_nvml_sampler.py:49–61,93–96",
+      "argument": "Coverage can pass across a missing-PID interval because raw polling timestamps drive max gap and endpoint checks. The original 5 ms median bar is absent, and absolute phase marks are not persisted. Default-pool high-water plus the maximum observed device-wide nonpool sample cannot bound the unobserved process peak.",
+      "fix": "Require PID-valid endpoint brackets and gaps, restore the registered median check, persist phase marks and query intervals, and use that result as a sampled estimate. Claim a hard cap only with scoped high-water accounting or a proven upper bound for all process pools, native/driver and nonpool memory across the interval.",
+      "evidence": "source reasoning; commands/17-memory.log; commands/31-memory-source.log; commands/58-recount-execution.log"
+    },
+    {
+      "id": "BWDR4BR5-F06",
+      "severity": "MINOR",
+      "source": "tc_signal/tc_signal/_conv_backward.py:136–161,209–222; tc_signal/src/bindings.cpp:353–379; tc_signal/src/dlpack_operand.cpp:500–507; tensor_cuda/src/bindings.cpp:666–674,1230–1269",
+      "argument": "Public preflight checks geometry and labels before allocations, but it does not check operand address alignment or actual residency. TensorCUDA can wrap an external DLPack allocation after checking only byte_offset alignment. Native consumption then rejects a misaligned effective pointer, or export refuses a storage/label mismatch; active masks allocate first and all-off can accept.",
+      "fix": "Expose a no-device-allocation native operand check using the same DLPack/device and pointer validation before public allocation and all-off. Keep destination/scratch validation in the run entry.",
+      "evidence": "source reasoning; commands/21-api-focus.log; commands/23-native-detail.log; commands/51-dlpack-alignment.log; commands/54-allocation-label-path.log"
+    },
+    {
+      "id": "BWDR4BR5-F07",
+      "severity": "MINOR",
+      "source": "tc_signal/tests/test_bwd_r4b_public_conv_backward.py:370–385; tensor_cuda/src/bindings.cpp:87–96; tensor_cuda/src/kernels.cu:60–67,174–180",
+      "argument": "The mixed-device test creates w1 with tc.tensor after a device switch. The constructor assigns cuda:0 metadata while CUDA allocates on the current device. After restoring 0, the test cannot exercise the wrapper's mixed-label refusal and may hit the later exporter failure. The retained qualification skipped the test.",
+      "fix": "Create the negative-test operand with tc.empty on the correct current device, assert its label, check cudaSetDevice status and restore the prior device.",
+      "evidence": "source reasoning and retained G-API one-device skip; commands/53-tensor-device-construction.log; commands/54-allocation-label-path.log; commands/58-recount-execution.log"
+    },
+    {
+      "id": "BWDR4BR5-F08",
+      "severity": "MINOR",
+      "source": "scripts/bwd_r4b_stage.py:43–67,208–235,261–271; scripts/bwd_r4b_gpu.py:414–420,601–657,755–760; scripts/bwd_r4b_refwave.py:130–136; scripts/bwd_r4b_refwave_r5.py:11–20",
+      "argument": "The three documented r5 workers use the new verifier. The old r4 launcher/dispatch still accepts those affected line labels with the legacy checks. Producer steps and earlier report helpers also read these files through legacy checks. The staged r5 producer wrapper pins the round-1 input bytes, so this is a coverage and supersession gap rather than evidence of an unverified lead read.",
+      "fix": "Enforce superseded labels in the active admission path or route them to r5, preserve historical replay explicitly, and use shared verified loaders for probe and part reads. Keep the seal checks on producer inputs.",
+      "evidence": "source reasoning; commands/19-consumers.log; commands/47-stage-review.log; commands/56-census-details.log"
+    },
+    {
+      "id": "BWDR4BR5-F09",
+      "severity": "MINOR",
+      "source": "scripts/bwd_r4b_gpu.py:817–846; scripts/bwd_r4b_stage.py:261–267",
+      "argument": "A subprocess timeout raises at pytest_run before the second fixture SHA census and pytest record. The worker's generic mtime audit still runs, but the child after-hash verification is absent on that exit path.",
+      "fix": "Run the after-census in a finally path and retain a red timeout or fixture-change receipt with the available child output.",
+      "evidence": "source reasoning; commands/35-r4-caller-and-ui-gates.log"
+    }
+  ],
+  "deviations": [
+    "Read-only path/glob misses, documented in the ledger.",
+    "An oversized bootstrap shell invocation was rejected before execution; the reads were split and logged.",
+    "ONNX Runtime used an in-memory telemetry ID after it failed to persist one.",
+    "A draft recount pathname was corrected before its first execution. Zero post-run repairs."
+  ],
+  "scratch": [
+    "/tmp/bwd_rev4b_r5_bundle_b_8zadi_"
+  ],
+  "prior_art": [
+    "DeMillo, Lipton and Sayward (1978), mutation testing. The real-bundle edit and threshold witness are this review's application.",
+    "SHA-256 (NIST FIPS 180-4, 2015) and independently pinned inputs (Dolstra, Nix, 2006), applied to the R4b manifest and producer parts.",
+    "IEEE 754-2019, unordered NaN comparisons, applied to the verifier's fresh-product check.",
+    "NVIDIA CUDA/NVML pool high-water, per-process accounting, and DLPack (dmlc, 2017 onward) operand validation. Unverified — lead to check the named terms.",
+    "No prior art known to me for this harness's specific timeout receipt arrangement."
+  ]
+}

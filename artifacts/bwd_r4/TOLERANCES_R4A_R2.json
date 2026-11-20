@@ -1,0 +1,26 @@
+{
+  "g_aff": {
+    "affine_atol_floor": 2e-6,
+    "affine_atol_per_abs_term_sum": 8e-6,
+    "affine_rtol": 5e-5,
+    "dx_atol": 5e-5,
+    "dx_rtol": 3e-4,
+    "criterion": "abs(got-ref) <= atol + rtol*abs(ref), DESIGN section 6. S per channel is the fp64 absolute sum of dy*xhat for scale and dy for bias over time then batch. For AdaIN dy includes the caller gamma+1. Compare both archived fp64 VJPs and fp64 VJPs on the same fp32-rounded operands/seed. Verify finite, nonempty, nonconstant arrays before comparison, with separately defined structural zero masks checked exactly.",
+    "structural_zeros": "dscale if every n,t contribution is identically zero because normalized x or dy is zero, dbias if all dy contributions are zero, dx on singleton or zero-scale/zero-upstream rows. Never infer structural zeros from cancellation."
+  },
+  "g_aff_fd": {
+    "seed": 41907,
+    "directions_per_cell_per_slot": 8,
+    "cells": ["small1", "kokoro"],
+    "steps": [1, 0.5, 2],
+    "step": "cbrt(float64 epsilon) * max(1, L2 of the perturbed parameter) with fixed fp64 unit directions",
+    "objective": "sum(g*y) / sqrt(number of upstream entries), fixed per cell",
+    "absolute": 1e-7,
+    "relative": 1e-5,
+    "criterion": "Each candidate projection and fp64 oracle projection must match all three independently computed centered fp64 differences under DESIGN section 6. Operands and upstream are pre-rounded to the candidate fp32 storage. No step adjustment."
+  },
+  "g0": {
+    "tap": "bitwise on crop and full",
+    "archive_cross_check": "full 212-frame input only, using the unchanged sealed R4 archive bar"
+  }
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "finding": "BWDR4-F01",
+    "severity": "MAJOR",
+    "fix": "N1",
+    "edit": "Build src/bwd_selftest.cpp into the engine and bind _C._bwd_native_selftest. The native pytest file now calls that entry.",
+    "verification": "G-PLAIN and G6 passed both host IDs. G-PLAIN skipped two GPU IDs for no device. The r4 control made two CMake launches and errored. The m10 host kill exercised both overlap refusals. G4-determinism stages the two GPU IDs.",
+    "status": "host verified, GPU staged"
+  },
+  {
+    "finding": "BWDR4-F02",
+    "severity": "NIT",
+    "fix": "N2",
+    "edit": "Compare each bf16 core gradient with the analytic fp64 VJP of the stored bf16 operands, tensor divisor and seed under the sealed per-class table.",
+    "verification": "G2 passed six bf16 host IDs. G3-core stages 20 gradient comparisons across 15 bf16 op cells, including exact structural zeros.",
+    "status": "host verified, GPU staged"
+  }
+]

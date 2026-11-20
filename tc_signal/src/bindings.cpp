@@ -20,6 +20,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cstdio>  // P1T-FIX7: the exit runner's stderr line (C stdio, no Python)
 #include <sstream>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "checked_math.h"
+#include "conv_backward.h"
 #include "conv_ops.h"
 #include "dlpack_operand.h"
 #include "py_args.h"  // P1T-FIX6 sweep (g): C-level argument matching and conversion
@@ -330,6 +332,53 @@ void conv_transpose1d_run(py::object xc, py::object wc, py::object bc, py::objec
   conv_transpose1d_forward(device, p.g, X.data(), W.data(), B.present() ? B.data() : nullptr, Y.data());
 }
 
+// Reuse the forward's geometry checks and compare against the resolved
+// output extent, including pad_end and output_padding.
+using ConvAttrs = std::array<int64_t, 6>;
+
+ConvBackwardGeom backward_geom(bool transposed, const std::vector<int64_t>& x, const std::vector<int64_t>& w,
+                               const std::vector<int64_t>& dy, const ConvAttrs& attrs) {
+  for (const auto* shape : {&x, &w, &dy}) {
+    if (shape->size() != 3 || std::any_of(shape->begin(), shape->end(), [](int64_t d) { return d <= 0; }))
+      bad_attr("convolution backward: expected positive rank-3 shapes");
+    ck_fp32_bytes(ck_shape_numel(*shape, "convolution backward shape"), "convolution backward bytes");
+  }
+  const auto [s, pb, pe, op, d, groups] = attrs;
+  const auto expected = transposed ? plan_conv_transpose1d(x, w, nullptr, s, pb, pe, op, d, groups).out_shape
+                                   : plan_conv1d(x, w, nullptr, s, pb, pe, d, groups).out_shape;
+  if (dy != expected) bad_attr("convolution backward: unexpected upstream shape");
+  return {x[0], x[1], dy[1], x[2], dy[2], w[2], s, pb, op, d, groups, transposed};
+}
+
+void conv_backward_run(bool transposed, py::object x, py::object w, py::object dy, py::object dx, py::object dw,
+                       py::object db, py::object col, py::object part, const ConvAttrs& attrs) {
+  drain_completed();
+  const auto read = [](py::handle obj, const char* role, int rank, bool writable) {
+    require_operand(obj, role);
+    return Operand(to_capsule(obj, role, writable).handle(), role, rank, writable);
+  };
+  const auto optional = [&](py::handle obj, const char* role, const std::vector<int64_t>& shape) {
+    if (obj.is_none()) return Operand{};
+    auto value = read(obj, role, shape.size(), true);
+    expect_shape(value, shape);
+    return value;
+  };
+  auto X = read(x, "x", 3, false), W = read(w, "w", 3, false), DY = read(dy, "dy", 3, false);
+  const auto xs = op_shape(X), ws = op_shape(W);
+  const auto g = backward_geom(transposed, xs, ws, op_shape(DY), attrs);
+  auto DX = optional(dx, "dx", xs), DW = optional(dw, "dw", ws), DB = optional(db, "db", {g.cout});
+  const auto [col_size, part_size] = DW.present() ? conv_backward_scratch(g) : std::pair<int64_t, int64_t>{0, 0};
+  if (col.is_none() != (col_size == 0) || part.is_none() != (part_size == 0))
+    bad_attr("convolution backward: missing or unexpected dW scratch");
+  auto COL = optional(col, "col", {col_size}), PART = optional(part, "part", {part_size});
+  const int device = common_device({&X, &W, &DY, &DX, &DW, &DB, &COL, &PART});
+  const std::array<const Operand*, 8> operands{&X, &W, &DY, &DX, &DW, &DB, &COL, &PART};
+  for (size_t i = 3; i < operands.size(); ++i)
+    for (size_t j = 0; j < i; ++j) expect_disjoint(*operands[i], *operands[j]);
+  RetainUntilComplete keep(device, {&X, &W, &DY, &DX, &DW, &DB, &COL, &PART});
+  conv_backward(device, g, X.data(), W.data(), DY.data(), DX.data(), DW.data(), DB.data(), COL.data(), PART.data());
+}
+
 void divide_probe(py::object x, py::object y, py::object out) {
   drain_completed();
   require_operand(x, "x");
@@ -610,6 +659,28 @@ PYBIND11_MODULE(_tc_signal, m) {
       },
       "conv_transpose1d_run(x_capsule, w_capsule, b_capsule, out, stride, pad_begin, pad_end, output_padding, "
       "dilation, groups)\n\nConsume every operand, validate, launch on the legacy stream, release.");
+  m.def("_conv_backward_scratch",
+        [](bool transposed, const std::vector<int64_t>& x, const std::vector<int64_t>& w,
+           const std::vector<int64_t>& dy, const ConvAttrs& attrs) {
+          return conv_backward_scratch(backward_geom(transposed, x, w, dy, attrs));
+        });
+  m.def("_conv_backward_run", &conv_backward_run);
+  m.def("_conv_backward_config", [](int device) {
+    const auto cfg = conv_backward_config(device);
+    py::dict d;
+    d["legacy_stream"] = cfg.legacy;
+    d["pedantic_math"] = cfg.pedantic_math;
+    d["pedantic_compute"] = cfg.pedantic_compute;
+    d["atomics_not_allowed"] = cfg.no_atomics;
+    d["host_pointers"] = cfg.host_pointers;
+    d["default_algo"] = cfg.default_algo;
+    d["workspace_bytes"] = cfg.workspace_bytes;
+    d["tile_time"] = cfg.tile;
+    d["scratch_cap_bytes_per_buffer"] = cfg.scratch_cap_bytes;
+    d["cublas_version"] = cfg.cublas_version;
+    d["sm_count"] = cfg.sm_count;
+    return d;
+  });
   m.def(
       "fp32_divide_probe",
       [](py::args a, py::kwargs k) {

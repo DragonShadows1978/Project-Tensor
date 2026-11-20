@@ -1,0 +1,17 @@
+{
+  "BWDR2R-F02": {
+    "after": "pytest.raises(BufferError, match=\"CUDA\")",
+    "before": "pytest.raises(ValueError, match=\"scale and bias must be frozen\")",
+    "evidence": "logs/bwd_r4_r2_host-affine-retry.log",
+    "finding": "Voice model.py:751 supplies the normalization affine as tensors.",
+    "ids": [
+      "test_host_trainable_affine_refusal[bias]",
+      "test_host_trainable_affine_refusal[scale]"
+    ],
+    "only_changed_r2_assertion": "tc_signal/tests/test_bwd_r2_paths.py::test_host_trainable_affine_refusal"
+  },
+  "G0-context": {
+    "evidence": "logs/bwd_r4_r2_host-archive.log",
+    "finding": "InstanceNorm runs over the input context. The archive comparison is full-only."
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "confirm": "rev4b artifacts/bwd_rev4b/confirm_r6 (confirm.json 39506419..., receipts 57c65cdc)",
+  "items": [
+    {
+      "also_closes": "BWDR4BR5-F02 remainder",
+      "check": "verify part: r4bm15_verdict_contradictory (each variant accepted by the r6 verifier in preflight and worker, refused by r7 in both); positive_real_bundle_r6_accepted, positive_real_bundle_r4_accepted",
+      "fix": "vf.check_verdict: exact VERDICT_SCHEMA (wave_sha256, passed, manifest_sha256, summary); literal passed true on verdict and manifest; verdict manifest digest = recomputed manifest sha256; verdict wave digest = manifest wave digest = live capture wave digest; summary = the manifest-covered FD summary file (bytes checked against the manifest). Called by verify_bundle_r5, so the launcher preflight and the worker both apply it.",
+      "id": "BWDR4BR6-F01",
+      "planted": "r4bm15_verdict_contradictory: fields omitted; wrong wave and empty summary; wrong wave only; summary contradicts the file; passed \"true\"; extra field",
+      "problem": "a merge verdict with the wave or summary omitted or contradictory passed preflight and worker",
+      "severity": "MINOR",
+      "sites": [
+        "scripts/bwd_r4b_verify.py: check_verdict, verify_bundle_r5"
+      ]
+    },
+    {
+      "also_closes": "BWDR4BR5-F08 remainder",
+      "check": "producer part: r4bm16_producer_duplicate_key (r6 behaviour: returned true, wrote a passing verdict and manifest ac3fe46e..., refused downstream; r7: red verdict, no manifest, fd mode refused), r4bm16_check_before_manifest (red verdict, no manifest), positive_producer_merge_reproduces_seal (manifest 634bf770... = sealed digest, consumer accepts)",
+      "fix": "scripts/bwd_r4b_refwave_r7.py (the producer bwd_r4b_refwave.py is a manifest-pinned source and stays byte-identical): the producer module parses every JSON with the shared duplicate-free parser; before each mode the wrapper reads the producer inputs with the shared strict readers (vf.capture_record; vf.producer_intermediates: duplicate-free, exact schemas, archive and per-direction digests recomputed, capture, wave, crop and recorded sources bound, FD part identity); in merge the manifest write is held in memory and vf.verify_bundle_r5 (sealed digest, inventory, verdict schema, bundle, live operands, fresh products) runs on its exact bytes and on the verdict the producer will write; only then is the manifest written and the producer verdict must equal the checked one; any refusal writes a red verdict (passed false, reason) and no manifest, exit 1.",
+      "id": "BWDR4BR6-F02",
+      "planted": "r4bm16_producer_duplicate_key: duplicate capture key in OPERANDS_R4B.json (the confirm case), duplicate part key in an FD part, the same in fd mode; r4bm16_check_before_manifest: a consistent part edit the producer merge accepts",
+      "problem": "the producer merge read intermediates with legacy loaders; a duplicate key yielded a passing verdict and a new manifest that the consumer refused against the seal",
+      "severity": "MAJOR",
+      "sites": [
+        "scripts/bwd_r4b_refwave_r7.py",
+        "scripts/bwd_r4b_verify.py: strict_loads, producer_intermediates, verify_bundle_r5(pending=...)",
+        "scripts/bwd_r4b_refwave_r6.py: refuses superseded use"
+      ]
+    },
+    {
+      "also_closes": "BWDR4BR5-F05 remainder",
+      "check": "harness part: r4bm17_sampler_rows (r6 rule valid on wrong PID, missing PID and timestamp-only row; r7 refuses all 11), positive_real_g5_trace (2348/2348), r7_sampler_process",
+      "fix": "gpu_r7.sampler_rows/coverage: exact sampler record schema; record PID = the worker PID (else no valid sample and the record is refused); every row exactly [t_start, t_end, bytes], finite float times, t_start <= t_end, t_start >= previous t_end, bytes a non-negative int or explicit null; malformed rows refused (line red) and never counted; null readings excluded; strict parser for the sampler file.",
+      "id": "BWDR4BR6-F03",
+      "planted": "r4bm17_sampler_rows: wrong PID, missing PID, timestamp-only row, two-field row, negative/bool/float bytes, reversed interval, start before the previous end, string PID, extra record key",
+      "problem": "coverage treated rows with another PID, no PID or only a timestamp as PID-valid",
+      "severity": "MAJOR",
+      "sites": [
+        "scripts/bwd_r4b_gpu_r7.py: SAMPLER_SCHEMA, sampler_rows, coverage, SamplerProcess, line_g5"
+      ]
+    },
+    {
+      "also_closes": "BWDR4BR5-F09 remainder",
+      "check": "harness part: r4bm18_timeout_partial_output (r6 raised UnicodeDecodeError/ParseError with no receipt; r7 wrote a red receipt each time, raw bytes kept, decoded prefix kept)",
+      "fix": "gpu_r7.pytest_run: child output kept raw (.stdout.raw/.stderr.raw) and decoded with replacement; JUnit parse errors become the junit_error field; the after-census in finally; line_g_api and line_api_mutant write their receipt in finally on every path.",
+      "id": "BWDR4BR6-F04",
+      "planted": "r4bm18_timeout_partial_output: partial UTF-8; partial XML; both; plain",
+      "problem": "a timeout mid UTF-8 character or with partial JUnit XML raised instead of writing the red receipt",
+      "severity": "MINOR",
+      "sites": [
+        "scripts/bwd_r4b_gpu_r7.py: pytest_run, parse_junit, line_g_api, line_api_mutant"
+      ]
+    },
+    {
+      "check": "harness part: r4bm19_g_api_one_of_103 (r6 passed all five; r7 refused all five), census_equals_real_g_api_ids, positive_real_g_api_receipt (the real receipt and its retained JUnit report pass), pytest_path_* (complete census on CPU runs of candidate, r4bm01, r4bm05)",
+      "fix": "G_API_CENSUS_R4B_R7.json pinned at staging (pytest --collect-only of the test file on this branch, 103 unique node IDs, test file sha256); census_problems: exact unique IDs (missing, extra, duplicate), JUnit totals (tests, failures, errors, skipped) = census size and per-case counts; g-api and both mutant lines require a complete census run.",
+      "id": "BWDR4BR6-F05",
+      "planted": "r4bm19_g_api_one_of_103 (the r7 smoke, L02): 1 of 103; 1 of 103 with totals claiming 103; duplicate ID; extra ID; totals mismatch",
+      "problem": "G-API passed on exit 0 with 1 of its 103 JUnit cases",
+      "severity": "MAJOR",
+      "sites": [
+        "scripts/bwd_r4b_gpu_r7.py: collect_census, load_census, census_problems, g_api_problems",
+        "scripts/bwd_r4b_stage_r7.py: write_census, preconditions"
+      ]
+    },
+    {
+      "closed_by": "BWDR4BR6-F01",
+      "id": "BWDR4BR5-F02",
+      "remainder": "partial or contradictory merge verdict"
+    },
+    {
+      "closed_by": "BWDR4BR6-F03",
+      "id": "BWDR4BR5-F05",
+      "remainder": "wrong or missing PID metadata, incomplete samples"
+    },
+    {
+      "check": "harness part: R5_F07_device_restore_in_finally (stand-in runtime, prior device 1, failing assertion: r6 test leaves device 0, r7 test restores 1; both restore 1 on the passing path)",
+      "fix": "the mixed-device test restores the prior device in an outer finally around both cases (test file, this test only)",
+      "id": "BWDR4BR5-F07",
+      "remainder": "the prior device was restored outside the finally",
+      "sites": [
+        "tc_signal/tests/test_bwd_r4b_public_conv_backward.py: test_gpu_public_mixed_and_noncurrent_devices_two_gpus"
+      ]
+    },
+    {
+      "closed_by": "BWDR4BR6-F02",
+      "id": "BWDR4BR5-F08",
+      "remainder": "legacy loaders in the producer; green before the manifest check"
+    },
+    {
+      "closed_by": "BWDR4BR6-F04",
+      "id": "BWDR4BR5-F09",
+      "remainder": "partial UTF-8 and XML on a timeout"
+    }
+  ],
+  "order": "orders/BWD_R4B_R7_CONFIRM_FIXES.md (0f212534)",
+  "selftest_receipts": {
+    "harness": {
+      "path": "artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json",
+      "sha256": "acb6ee3b7a69cf38ca5119366ee410332c0371f3066309f0181a63c524d1e486"
+    },
+    "producer": {
+      "path": "artifacts/bwd_r4b/selftest-r7-producer_R4B_R7/SELFTEST_PRODUCER_R4B_R7.json",
+      "sha256": "e32c96fa057b6472efa30172baa6601b3c2ace5f5027732805dc71ae78803101"
+    },
+    "verify": {
+      "path": "artifacts/bwd_r4b/selftest-r7-verify_R4B_R7/SELFTEST_VERIFY_R4B_R7.json",
+      "sha256": "d93da2d319c4c96e59cb6333aca7d829145278e8d2e42fe26a88516ac43af4e4"
+    }
+  },
+  "staging": {
+    "census": "artifacts/bwd_r4b/G_API_CENSUS_R4B_R7.json",
+    "census_sha256": "d1d60d41af9f46f47a8818c33ec1e7d917f544164cc5977f2a27e459aef3146b",
+    "pins": "artifacts/bwd_r4b/STAGED_PINS_R4B_R7.json",
+    "pins_sha256": "f6d4152169443f7963dcd5117ba5746e7fd44ee943200410b7eae3509cab33b5"
+  },
+  "threat_model": "r6 unchanged: stale, incomplete, inconsistent or corrupt outputs of our own tools; deliberate consistent forgery out of scope except where the sealed manifest digest binds"
+}

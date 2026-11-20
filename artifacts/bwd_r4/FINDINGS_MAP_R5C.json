@@ -1,0 +1,207 @@
+{
+  "order": "orders/BWD_R4A_R5C_AMENDMENT3.md",
+  "supersedes": "FINDINGS_MAP_R5.json rows for item 2 and G6",
+  "rows": [
+    {
+      "item": 1,
+      "finding": "F03 (MAJOR)",
+      "kind": [
+        "edit",
+        "test",
+        "mutant"
+      ],
+      "status": "host PASS; GPU tests staged",
+      "edits": [
+        "tensor_cuda/src/bindings.cpp:checkpoint_py",
+        "tensor_cuda/tensor_cuda/__init__.py:checkpoint docstring"
+      ],
+      "tests": [
+        "tensor_cuda/tests/test_bwd_r4_checkpoint_revision.py (3 host, 3 GPU)"
+      ],
+      "evidence": [
+        "logs/bwd_r4_r5_seat_checkpoint_before.log",
+        "logs/bwd_r4_r5_seat_item1_tests.log",
+        "artifacts/bwd_r4/MUTANT_R5M01_R5.json"
+      ]
+    },
+    {
+      "item": 2,
+      "finding": "F01 (MAJOR)",
+      "kind": [
+        "amendment",
+        "harness",
+        "staged line"
+      ],
+      "status": "host GREEN 33/33 under Amendment 3 (A3-1 coordinate floor, A3-2 step choice on 1 row: noise_convs.1.weight[1165] -> T(1/2)); host power 18/18 coordinates, 15/15 dense; clean bar 33/33; candidate line g2-probes-r5c staged (dry exit 78); r5b g2-probes superseded; r5b oracle stays RED under Amendment 2",
+      "edits": [
+        "scripts/bwd_r4_r5c.py",
+        "scripts/bwd_r4_stage_r5c.py"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/AMENDMENT3_R5C.md (sha256 b2605789...)",
+        "artifacts/bwd_r4/host-probes_R5C/FD_ORACLE_R5C.json",
+        "artifacts/bwd_r4/host-probes_R5C/FD_HOST_POWER_R5C.json",
+        "artifacts/bwd_r4/host-probes_R5C/FD_TABLE_R5C.json",
+        "artifacts/bwd_r4/host-probes_R5C/FD_SUMMARY_R5C.json",
+        "artifacts/bwd_r4/STAGED_PINS_R5C.json",
+        "artifacts/bwd_r4/STAGED_LINES_R5C.md",
+        "logs/bwd_r4_r5c_host_smoke.log",
+        "logs/bwd_r4_r5c_host_probes.log",
+        "logs/bwd_r4_r5c_dry_run.log"
+      ]
+    },
+    {
+      "item": 3,
+      "finding": "F02 (MINOR)",
+      "kind": [
+        "harness",
+        "staged lines"
+      ],
+      "status": "staged: g0-crop-fine, g0-full-fine, g1-g2-fine, g4-session-fine, g4-fresh-a-fine, g4-fresh-b-fine",
+      "edits": [
+        "scripts/bwd_r4_gpu.py (execute segment count per schedule; gates3to4 fine=)",
+        "scripts/bwd_r4_r5.py (g0_fine, g1_annotated)",
+        "scripts/bwd_r4_stage_r5.py"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/STAGED_LINES_R5.md",
+        "artifacts/bwd_r4/DRY_RUNS_R5.json"
+      ]
+    },
+    {
+      "item": 4,
+      "finding": "F05 (MINOR)",
+      "kind": [
+        "test"
+      ],
+      "status": "host reference check PASS; GPU test staged (g-aff-r5, suite-gpu)",
+      "tests": [
+        "tc_signal/tests/test_bwd_r4_norm_affine.py::test_host_affine_fp64_reference_matches_centered_differences",
+        "tc_signal/tests/test_bwd_r4_norm_affine.py::test_gpu_norm_affine_fp64_reference_n2_t7"
+      ],
+      "evidence": [
+        "logs/bwd_r4_r5_seat_bwd_precheck.log (host tests pass; G6 not run)"
+      ]
+    },
+    {
+      "item": 5,
+      "finding": "F07 (MINOR)",
+      "kind": [
+        "harness",
+        "mutant",
+        "staged lines"
+      ],
+      "status": "host self-test PASS (detection logic on the real engine checkpoint); GPU lines replay-identity and r5m02 staged",
+      "edits": [
+        "scripts/bwd_r4_gpu.py (checkpoint_block digests, replay_identity, one_ulp_edit, R5M02)",
+        "scripts/bwd_r4_r5.py (replay_identity, r5m02)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/SELFTEST_R5.json",
+        "logs/bwd_r4_r5_selftest_retry.log"
+      ]
+    },
+    {
+      "item": 6,
+      "finding": "F09 (MINOR)",
+      "kind": [
+        "harness",
+        "report"
+      ],
+      "status": "census PASS: 29 structural rows == G1 small-norm rows; GPU G1 lines write annotated tables",
+      "edits": [
+        "scripts/bwd_r4_r5.py (host_census, annotated_rows)",
+        "scripts/bwd_r4_common_r5.py (ZERO_GRADIENT_PATTERN)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/host-census_R5/PARAMETER_CENSUS_R5.json"
+      ]
+    },
+    {
+      "item": 7,
+      "finding": "F04 (MAJOR)",
+      "kind": [
+        "report",
+        "harness"
+      ],
+      "status": "census PASS: 6 scales + 6 biases, 58 decoder + 12 predictor sites (4 predictor names); flagged by name with counts; kept in G1; 272 ranking-eligible",
+      "edits": [
+        "scripts/bwd_r4_r5.py (identity_norm_census, annotated_rows)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/host-census_R5/PARAMETER_CENSUS_R5.json",
+        "artifacts/bwd_r4/REPORT_R5.md"
+      ]
+    },
+    {
+      "item": 8,
+      "finding": "F08, F13, F10, F11",
+      "kind": [
+        "note"
+      ],
+      "status": "written",
+      "evidence": [
+        "artifacts/bwd_r4/DESIGN_NOTES_R4A_R5.md"
+      ]
+    },
+    {
+      "item": 9,
+      "finding": "F06 (NIT)",
+      "kind": [
+        "test"
+      ],
+      "status": "host PASS; G6 rename rule",
+      "tests": [
+        "tc_signal/tests/test_bwd_r2_paths.py::test_host_trainable_affine_reaches_cuda_planner (renamed from test_host_trainable_affine_refusal; out= witness added)"
+      ]
+    },
+    {
+      "item": 9,
+      "finding": "F12 (NIT)",
+      "kind": [
+        "edit"
+      ],
+      "status": "host self-test PASS",
+      "edits": [
+        "scripts/bwd_r4_gpu.py (rebuild_inputs tuples + refusal of unknown containers; tensor_census)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/SELFTEST_R5.json"
+      ]
+    },
+    {
+      "item": 9,
+      "finding": "F14 (NIT)",
+      "kind": [
+        "staged line"
+      ],
+      "status": "staged: suite-gpu (every test_bwd_r*.py of tensor_cuda/tests and tc_signal/tests on packages_r5; no GPU test may skip)",
+      "evidence": [
+        "artifacts/bwd_r4/STAGED_LINES_R5.md",
+        "artifacts/bwd_r4/DRY_RUNS_R5.json"
+      ]
+    },
+    {
+      "item": "G6",
+      "finding": "G6 whole CPU suite",
+      "kind": [
+        "gate"
+      ],
+      "status": "PASS both baselines under A3-3 (12 GiB RLIMIT_AS per arm, start rule MemAvailable >= 12 GiB + 12 GB): parent baea226b unexpected 0 (changes: 15 new r4 IDs + rename 2->2); production 3138cf54 unexpected 0 (all changes test_bwd_r1..r4 + rename)",
+      "edits": [
+        "scripts/bwd_r4_suite_r5.py: ARM_LIMIT 24 GiB -> 12 GiB"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/G6_PER_ID_R5.json",
+        "artifacts/bwd_r4/G6_parent_R5.json",
+        "artifacts/bwd_r4/G6_prod_R5.json",
+        "artifacts/bwd_r4/G6_candidate_R5.json",
+        "artifacts/bwd_r4/G6_MEMORY_R5.json",
+        "logs/bwd_r4_r5_g6_run_r5c.log",
+        "logs/bwd_r4_r5_g6_parent.log",
+        "logs/bwd_r4_r5_g6_prod.log",
+        "logs/bwd_r4_r5_g6_candidate.log"
+      ]
+    }
+  ]
+}

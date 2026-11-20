@@ -1,0 +1,104 @@
+{
+  "review": "BWD-REV4 confirm of BWD-R4a r5d (d7207e56) against re-check findings BWDR5R-F01..F10; Claude Opus 5.5; CPU only",
+  "read": [
+    "tensor_fork_bwd_wt_r4: git diff a515439d d7207e56 -- tensor_cuda tc_signal scripts (all hunks)",
+    "orders/BWD_R4A_R5D_GUARD_FIX.md; artifacts/bwd_r4/REPORT_R5D.md, FINDINGS_MAP_R5D.json, DESIGN_NOTES_R4A_R5D.md, MUTANTS_CPU_R5D.json, MODULES_R5D.json, dry_suite-gpu_*_R5D.json; logs/bwd_r4_r5d_smoke_case_b.log",
+    "tc_signal/tests/bwd_r2_support/cases.py:34-55, bwd_r3_support/cases.py:55-62,80-83; tensor_cuda/tests/bwd_r1_support/oracle.py:17-18,53-56; test_bwd_r1_matmul.py:97-102; test_bwd_r1_native.py:16-18",
+    "verified: packages_r5d candidate core module sha256 430c829ebfa28eb82810e4fc4b3de3b12de8e3a7fd1dfd3da26aec848298b366; MODULES_R5D src/bindings.cpp sha256 51e9c702... equals git show d7207e56:tensor_cuda/src/bindings.cpp"
+  ],
+  "ran": {
+    "checks/r5_checkpoint_guard_probe.py --package candidate": "checks/guard_probe_candidate.out rc 0: A refused (after-forward), B refused in the forward (fn called once, a=[2,2,3]), C not refused a.grad [40,-5,6] (documented limit), D numpy() is a copy",
+    "checks/r5_checkpoint_guard_probe.py --package r5m03_checkpoint_revision_recorded_after_fn": "checks/guard_probe_r5m03_checkpoint_revision_recorded_after_fn.out rc 0: A refused; B accepted, fn called twice, b.grad [2,2,3] (true [1,2,3]), a=[3,2,3] -> r5m03 reproduces r5b's defect, so the case-B test kills it",
+    "checks/r5d_refusal_hygiene.py": "checks/r5d_refusal_hygiene.out rc 0 (1 repair: case G's host fan-in backward needs a CUDA add; recorded as not testable on CPU)",
+    "pytest -p bwd_r4_pytest_gpu_r5d on test_bwd_r1_matmul.py::test_gpu_strided_canary, CUDA hidden, NVIDIA_TF32_OVERRIDE=0": "checks/f08_plugin_tf32_canary.out and _markers.json: the canary is GPU-marked and its skip is counted in gpu_skips"
+  },
+  "rulings": {
+    "BWDR5R-F01": {
+      "ruling": "fixed",
+      "where": "tensor_cuda/src/bindings.cpp:153-182 (pre-fn snapshot at 153-160, forward refusal, backward check vs pre-fn snapshot); __init__.py:1455-1488; test_bwd_r4_checkpoint_revision.py:147-219",
+      "evidence": "case B refused in the forward on the candidate, accepted with the wrong gradient on r5m03; the refusal leaves clean state (grad mode restored, returned tensor's refcount unchanged after 200 refusals, no grads, a clean checkpoint afterwards gives exact gradients); fn's own exception propagates unchanged"
+    },
+    "BWDR5R-F02": {
+      "ruling": "noted (documented contract + pinned test + design note)",
+      "where": "__init__.py:1462-1467; test ..._closure_captured_tensor_is_outside_guard_documented_limit; DESIGN_NOTES_R4A_R5D.md",
+      "evidence": "case C unchanged on the candidate, as documented; see BWDR5D-F04 for one inaccurate sentence in the note"
+    },
+    "BWDR5R-F03": {
+      "ruling": "fixed",
+      "where": "__init__.py:1480-1486 (matches attach_vjp's list at bindings.cpp:2729-2732, plus tc_signal untracked out=)"
+    },
+    "BWDR5R-F04": {
+      "ruling": "noted",
+      "where": "REPORT_R5D.md Notes F04"
+    },
+    "BWDR5R-F05": {
+      "ruling": "noted",
+      "where": "REPORT_R5D.md Notes F05"
+    },
+    "BWDR5R-F06": {
+      "ruling": "noted",
+      "where": "REPORT_R5D.md Notes F06"
+    },
+    "BWDR5R-F07": {
+      "ruling": "fixed",
+      "where": "scripts/bwd_r4_gpu.py:129-132 (inputs_digest), 177, 197-199 (digest of the consumed inputs after any mutant edit), 341-345; bwd_r4_r5.py:434-441, 452-460",
+      "note": "see BWDR5D-F02 and F03"
+    },
+    "BWDR5R-F08": {
+      "ruling": "fixed in mechanism, but the new rule turns one design-intended skip into a certain RED: BWDR5D-F01",
+      "where": "scripts/bwd_r4_pytest_gpu_r5d.py; bwd_r4_r5.py:476-523",
+      "evidence": "the fixture-root env names match the readers (TC_BWD_R2_BP{1,2}_FIXTURES, TC_BWD_R3_BP{1,2}_FIXTURES; r1 defaults to Voice artifacts/bp1); the readers only read; the record is fail-closed if absent"
+    },
+    "BWDR5R-F09": {
+      "ruling": "fixed",
+      "where": "bwd_r4_r5.py:397-411 (R5D_G1, worst over non-floor rows)"
+    },
+    "BWDR5R-F10": {
+      "ruling": "noted",
+      "where": "REPORT_R5D.md Notes F10"
+    }
+  },
+  "findings": [
+    {
+      "id": "BWDR5D-F01",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4_pytest_gpu_r5d.py; tensor_cuda/tests/test_bwd_r1_matmul.py",
+      "line": "plugin 22-27, 40-47; test 99-102",
+      "title": "suite-gpu will fail by construction on the TF32 canary",
+      "argument": "test_gpu_strided_canary carries @gpu (reason 'CUDA disabled for CPU lane') and a second skipif that skips whenever NVIDIA_TF32_OVERRIDE is set. The staged line's env sets NVIDIA_TF32_OVERRIDE=0 (dry_suite-gpu_*_R5D.json env), and pytest_line passes that env to the child. On the GPU line the canary therefore skips for the TF32 reason. The plugin marks a test GPU-gated by the presence of any skipif whose reason names CUDA, not by which condition fired, so it lists the canary in gpu_skips and the line returns False. BWD-R1 ran this canary on its own line with the override removed (scripts/bwd_r1_stage_r5.py:147). r5b's name-based rule had the same outcome. Shown on CPU: the canary is in gpu_marked and its skip is in gpu_skips (checks/f08_plugin_tf32_canary_markers.json). The GPU-line reason differs only in which condition fires.",
+      "fix": "Classify a skip as a GPU skip by the reason of the skip that fired (CUDA or fixture-absent), not by marker presence. Run the canary with NVIDIA_TF32_OVERRIDE removed (as BWD-R1 did), or list it as an expected skip on this line."
+    },
+    {
+      "id": "BWDR5D-F02",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_gpu.py",
+      "line": "124-132, 197-201",
+      "title": "The digests run inside every checkpointed line, including G5's timed and measured window",
+      "argument": "Each segment now copies to host and sha256-hashes its activation, the style tensor and every parameter it consumes, in forward and again in replay (31 segments in fine mode), plus its output. G5's forward and backward seconds now include that work, so they are not comparable with r4's 2.2 s / 0.9 s. Any device-side contiguous copy taken for .numpy() would also fall inside the reserved-peak window. The bar is report-only, so this is a disclosure, not a defect.",
+      "fix": "Add a digest-off switch for the G5 lines, or report G5 timings as including digests."
+    },
+    {
+      "id": "BWDR5D-F03",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5.py",
+      "line": "456-458",
+      "title": "r5m02's kill rule needs the output digest to move as well as the input digest",
+      "argument": "The rule is: caught requires mismatched == edited AND input_mismatched == edited. The input digest of the edited segment changes by construction. If rounding absorbs the one-ulp edit before the output, the line would report r5m02 as surviving even though F07's input check caught it.",
+      "fix": "Score the kill on input_mismatched == edited, and report the output mismatch as information."
+    },
+    {
+      "id": "BWDR5D-F04",
+      "severity": "NIT",
+      "file": "artifacts/bwd_r4/DESIGN_NOTES_R4A_R5D.md",
+      "line": "'Model constants' bullet",
+      "title": "The note says segment operations read no tensor outside their arguments",
+      "argument": "resblk1d reads self.C(p['div']) (Voice model.py:771), a cached constant tensor in model._consts reached through self, not passed as a checkpoint input. Harmless: frozen constants that are never written. The sentence is still not accurate.",
+      "fix": "Say that the only closure-reached tensors are the model's cached scalar constants (model.C), which are never written."
+    }
+  ],
+  "no_finding_observations": [
+    "No-grad early return (bindings.cpp:135-138): fn writing its input is not refused when grad is off or no input requires grad (probe H). No replay exists there, so no wrong gradient is possible. Consistent with a guard that protects only the replay.",
+    "fn calling mark_modified() on an input without changing it is refused at the forward (probe F). Conservative and consistent with the docstring.",
+    "Forward refusal: thrown after the NoGradGuard scope closed and before obj.cast. obj's destructor drops the output, and no graph exists because fn ran under no_grad. No leak was observed (refcount stable over 200 refusals). The input keeps fn's single write, as the new test asserts."
+  ]
+}

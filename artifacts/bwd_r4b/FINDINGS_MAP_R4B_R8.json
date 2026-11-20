@@ -1,0 +1,112 @@
+{
+  "closed_by_confirm_2": [
+    "BWDR4BR6-F04",
+    "BWDR4BR5-F09",
+    "BWDR4BR5-F07 (closed by confirm 2; untouched in r8)"
+  ],
+  "confirm": "rev4b artifacts/bwd_rev4b/confirm_r7 (confirm.json 64693028..., receipts e844361e)",
+  "field_audit": {
+    "path": "artifacts/bwd_r4b/FIELD_AUDIT_R4B_R8.json",
+    "sha256": "eed07906633c4b6608ba89aaa8c13783a2fd258b15dce2676bd8af7ce586f5b5"
+  },
+  "items": [
+    {
+      "class_": "exact typed joins",
+      "closes_remainders": [
+        "BWDR4BR6-F01",
+        "BWDR4BR5-F02"
+      ],
+      "fix": "vf.same / vf.join: one recursive comparison of JSON values with bool, int and float distinct and non-finite values refused; every join in bwd_r4b_verify.py calls it (verdict, manifest, capture, operands, sources, parts, stitch, record, inventory, digests, probes, selection, cotangent, oracle-row registered values); computed values pass through vf.canonical; strict_loads refuses NaN/Infinity tokens; close() requires a finite float stored value; the producer verdict joins the checked verdict with vf.same (refwave_r8.MergeGate); the census totals use vf.same (gpu_r8).",
+      "id": "BWDR4BR7-F01",
+      "planted": [
+        "r4bm20_summary_float_for_int (L02 smoke)",
+        "r4bm29_close_requires_float",
+        "same_rule_unit"
+      ],
+      "severity": "MINOR"
+    },
+    {
+      "class_": "one attempt per root",
+      "closes_remainders": [
+        "BWDR4BR6-F02",
+        "BWDR4BR5-F08"
+      ],
+      "fix": "bwd_r4b_refwave_r8.py: create-only start marker per mode, end marker with passed/exit/refused and the same launch identity; a second attempt writes a RETRY marker and exits 1 (also a reference rerun on an existing root); fd needs the reference attempt passed, merge needs reference and both fd passed and no retry or red marker; vf.verify_root_r8: a consumer accepts only the exact entry set of one complete passing attempt (launcher preflight and worker for g1-mfcc and r4bm03); retries use ref-at-wave-r8-aN, named by --ref-root.",
+      "id": "BWDR4BR7-F02",
+      "planted": [
+        "r4bm21_red_retry_reused_root",
+        "r4bm21_root_rule"
+      ],
+      "severity": "MINOR"
+    },
+    {
+      "class_": "header values against the worker",
+      "closes_remainders": [
+        "BWDR4BR6-F03",
+        "BWDR4BR5-F05"
+      ],
+      "fix": "gpu_r8.header_problems/coverage: pid, clock (CLOCK_MONOTONIC), period (finite positive, exact equal to the worker period), mode (nvml on GPU) each joined to the worker value; errors a list of strings, empty; driver informational.",
+      "id": "BWDR4BR7-F03",
+      "planted": [
+        "r4bm22_sampler_header (CLOCK_REALTIME)",
+        "r4bm23_sampler_header (negative, other and string period; fake mode; non-string errors)"
+      ],
+      "severity": "MINOR"
+    },
+    {
+      "class_": "explicit JUnit totals",
+      "closes_remainders": [
+        "BWDR4BR6-F05 (totals part)"
+      ],
+      "fix": "gpu_r8.parse_junit: exactly one testsuite named pytest; tests/failures/errors/skipped present as non-negative integers; every case inside that suite; else junit_error and the line is red; totals joined exactly to the census and counts.",
+      "id": "BWDR4BR7-F04",
+      "planted": [
+        "r4bm24_junit_totals_absent (failures and errors absent; tests absent; skipped 1.0; suite renamed; second suite)"
+      ],
+      "severity": "MINOR"
+    },
+    {
+      "class_": "per-launch provenance, every line",
+      "closes_remainders": [
+        "BWDR4BR6-F05 (baseline part)"
+      ],
+      "fix": "bwd_r4b_stage_r8.py: launch identity passed to the worker and recorded with TMPDIR and the sha256 of every worker result; worker results carry the launch identity; the G-API worker copies its JUnit report into its output; gpu_r8.verify_launch (mutant baseline, launcher preflight of the mutants, stage_r8 verify-receipt for any line): current staging seal, exit 0, label, r8 worker dir, recorded digests, launch identity, JUnit source under the launch TMPDIR, copied report reparsing to the record; bwd_r4b_suite_r8.py: G6 RUN and worker LAUNCH records with identity and digests, arm argv joined to its own JUnit path and scratch.",
+      "id": "BWDR4BR7-F05",
+      "planted": [
+        "r4bm25_foreign_g_api_result (foreign result; seal, exit, label, TMPDIR, edited JUnit copy)",
+        "r4bm26_foreign_g6_result (foreign arm result; launch mismatch; changed after record)"
+      ],
+      "severity": "MAJOR"
+    },
+    {
+      "class_": "every decision field checked",
+      "fix": "FIELD_AUDIT_R4B_R8.json (87 rows over 21 receipts: 77 decision fields each with writer, check and checking line, 10 informational; 30 new checks, each with its passing planted edit). New checks found by the audit beyond the five findings: manifest probe_rows joined to 40, record wave_c.path joined to the live capture, close() float-only.",
+      "id": "field audit",
+      "planted": [
+        "r4bm27_manifest_probe_rows",
+        "r4bm28_record_wave_path",
+        "r4bm29_close_requires_float"
+      ]
+    }
+  ],
+  "order": "orders/BWD_R4B_R8_CONFIRM2_FIXES.md (442b6e1d, 79c7fe64)",
+  "selftest_receipts": {
+    "harness": {
+      "path": "artifacts/bwd_r4b/selftest-r8-harness-final2_R4B_R8/SELFTEST_HARNESS_R4B_R8.json",
+      "sha256": "d1d5adf61e713513f74ccfc0265bdab2ab15d1d3617b734f3bb388ca47a71b70"
+    },
+    "producer": {
+      "path": "artifacts/bwd_r4b/selftest-r8-producer-final2_R4B_R8/SELFTEST_PRODUCER_R4B_R8.json",
+      "sha256": "da8bd974368557e11db535b594181a3a63c2f316c621f0a9339d23ee0421a41c"
+    },
+    "verify": {
+      "path": "artifacts/bwd_r4b/selftest-r8-verify-final2_R4B_R8/SELFTEST_VERIFY_R4B_R8.json",
+      "sha256": "a1ca1d070347f18ef76bbc6e800d6f2927c99bcf4983f35981a87baf9f3af26f"
+    }
+  },
+  "staging": {
+    "census_sha256": "5999a944bf3a0961d2a7b91fedfeefe76f9e70abdf1ea856a5e1ff7a640cd803",
+    "pins_sha256": "992b1d55d5cf2bfa02c9a6243a1447abbcb307c256c255cd704e5a8c39b91460"
+  },
+  "threat_model": "r6 unchanged"
+}

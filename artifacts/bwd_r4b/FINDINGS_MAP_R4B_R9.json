@@ -1,0 +1,67 @@
+{
+  "confirm": "rev4b artifacts/bwd_rev4b/confirm_r8 (confirm.json c0f82b5e..., receipts 8049990f)",
+  "items": [
+    {
+      "checks": [
+        "F01_generic_receipt_command_removed (0 references; the CLI answers invalid choice; the eight lead r8 receipts each hold JSON results without launch_id, the r8 cause)"
+      ],
+      "fix": "the generic verify-receipt command removed from bwd_r4b_stage_r8.py (function, CLI branch, docstring lines) and not added to bwd_r4b_stage_r9.py; provenance is required of every machine consumer of another launch (the mutants' clean baseline: gpu_r8.newest_g_api -> verify_launch with explicit names; G6: suite_r9.provenance); no script references the command.",
+      "id": "BWDR4BR8-F01",
+      "severity": "MAJOR (blocking)"
+    },
+    {
+      "checks": [
+        "r4bm30_census_write_fails (L02 smoke: 128-byte file-size limit on the census writer; r8: END passed, root and preflight accepted; r9: exit 1, END passed false, RED marker, root refused)",
+        "r4bm31_partial_census",
+        "r4bm32_census_differs_from_end",
+        "positive_r9_root_end_after_census (real merge child, manifest 634bf770...)"
+      ],
+      "fix": "bwd_r4b_refwave_r9.py: START, mode, then the producer census (refwave.main finally), then END last (finish): passed only when the mode passed, main returned 0 and the census reads strictly and clean; END records census_sha256; any failure (including a census write that raises) writes a failing END where possible and a RED marker and exits 1. bwd_r4b_verify.verify_root_r9 (launcher preflight and worker for g1-mfcc and r4bm03; merge and fd prior checks) recomputes the census digest and reads the census strictly (schema, after = before, nothing changed, no write attempt).",
+      "id": "BWDR4BR8-F02",
+      "severity": "MAJOR (blocking)"
+    },
+    {
+      "checks": [
+        "r4bm33_h01_nested_suite"
+      ],
+      "fix": "gpu_r8.parse_junit counts every testsuite element under either root shape (root.iter includes a testsuite root).",
+      "id": "BWDR4BR8-H01"
+    },
+    {
+      "checks": [
+        "r4bm34_h02_missing_keys"
+      ],
+      "fix": "child_error, junit_error and census_error must be present before the null tests (g_api_problems, census_problems; verify_launch requires them and the JUnit fields before the reparse join).",
+      "id": "BWDR4BR8-H02"
+    },
+    {
+      "checks": [
+        "r4bm35_h03_undeclared_file (G-API and G6)",
+        "positive_real_g_api_receipt (lead r8 receipt through verify_launch with H03)",
+        "positive_real_g6_records"
+      ],
+      "fix": "verify_launch joins the declared worker_results names to the enumeration of the launch output and requires the consumer names among them; suite_r9.provenance joins the declared G6 results to the enumeration G6_<label>_R4B_R9.*.",
+      "id": "BWDR4BR8-H03"
+    },
+    {
+      "fix": "retired as a deliverable (lead ruling): FIELD_AUDIT_R4B_R8.json stays as produced, beside confirm 3's audit check; not claimed complete; no r9 audit.",
+      "id": "field audit"
+    }
+  ],
+  "order": "orders/BWD_R4B_R9_CONFIRM3_FIXES.md (73b5dccc)",
+  "real_r8_root": "every census of ref-at-wave-r8 reads strictly and clean; the merge census covers every Voice source the manifest names; its END markers predate census_sha256, so the binding cannot be checked on that root",
+  "selftest_receipts": {
+    "harness": {
+      "path": "artifacts/bwd_r4b/selftest-r9-harness-final_R4B_R9/SELFTEST_HARNESS_R4B_R9.json",
+      "sha256": "c57ec5ebd1aac8f4873fe98b72616b4a3f591ee009387ab749fa99c3e651bde9"
+    },
+    "producer": {
+      "path": "artifacts/bwd_r4b/selftest-r9-producer-r3_R4B_R9/SELFTEST_PRODUCER_R4B_R9.json",
+      "sha256": "7927125a028ec43226666125900ef9c3cb6bf3929ca42e2079d4b2a528838e12"
+    }
+  },
+  "staging": {
+    "census_sha256": "4f0180ec2ba640151f4fd04dbba12c3c2ad6e2d9fd91f71ece4f4c160c4d3587",
+    "pins_sha256": "ec97a1b66b3a08059c65c5d1413bb40e2c7f1f24381b7366b51f46f5d0a23b36"
+  }
+}

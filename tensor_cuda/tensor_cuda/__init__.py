@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover
     import _tensor_cuda as _C  # fallback when the .so sits on PYTHONPATH
 
 Tensor = _C.Tensor
+attach_vjp = _C.attach_vjp
 ApaInt4Workspace = _C.ApaInt4Workspace
 
 _NP_DTYPE = {
@@ -55,11 +56,20 @@ def _np_dtype(dtype, name=False):
     raise TypeError(f"unsupported dtype {dtype!r}; supported dtypes: {supported}")
 
 
+def _tensor_from_device_cast(arr, device, dtype, requires_grad):
+    # Prior art: PyTorch (Paszke et al., 2019) constructs leaf tensors at the
+    # requested dtype; NVIDIA CUDA (2020) defines the bf16 conversion. Here
+    # the existing device cast prepares storage before enabling gradients.
+    result = _C.tensor(arr, device, False).astype(dtype).detach()
+    result.requires_grad = requires_grad
+    return result
+
+
 def tensor(data, *, device="cuda", dtype="float32", requires_grad=False):
     """Create a Tensor from array-like data."""
     if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A1 (E2R-F01): a non-string is refused first
         arr = np.ascontiguousarray(np.asarray(data, dtype=np.float32))
-        return _C.tensor(arr, device, requires_grad).astype(dtype)
+        return _tensor_from_device_cast(arr, device, dtype, requires_grad)
     arr = np.asarray(data, dtype=_np_dtype(dtype))  # ENG2 F1: refuses before any allocation
     arr = np.ascontiguousarray(arr)
     return _C.tensor(arr, device, requires_grad)
@@ -70,7 +80,7 @@ def _factory(np_fn):
         if _np_dtype(dtype, name=True) in _DEVICE_CAST_DTYPE:  # ENG2-A2 (REV2 E2R2-F01): before any shape handling
             shape = tuple(shape[0]) if len(shape) == 1 and isinstance(shape[0], (tuple, list)) else shape
             arr = np.ascontiguousarray(np_fn(shape).astype(np.float32))
-            return _C.tensor(arr, device, requires_grad).astype(dtype)
+            return _tensor_from_device_cast(arr, device, dtype, requires_grad)
         # ENG2-A2: every other dtype gets F1's check on the next line, also before the shape (a caller's list) is read.
         np_dtype = _np_dtype(dtype)  # ENG2 F1: refuses before np_fn allocates (or draws random numbers)
         # ENG2-A2 (E2R2-F01) prior art: validate-arguments-before-side-effects (no specific source known to me).
@@ -1448,6 +1458,32 @@ def checkpoint(fn, *inputs):
     Runs `fn(*inputs)` under no_grad during the forward pass and replays it
     during backward, saving only the checkpoint inputs instead of the full
     interior activation graph. The function must return one Tensor.
+
+    Input contract: every tensor ``fn`` reads must be passed in ``inputs``.
+    Only ``inputs`` are saved and guarded; a tensor ``fn`` captures in a
+    closure (or reaches through a global or an attribute) is neither saved nor
+    checked, and a change to it before backward silently changes the
+    recomputation. ``fn`` must not write its inputs. (PyTorch's reentrant
+    checkpoint has the same contract.)
+
+    Revision guard (BWD-R4a r5b, r5d; same mechanism as ``attach_vjp``'s
+    saved slots). Each input's Storage revision is recorded before ``fn``
+    runs. If ``fn`` changes any input's revision, checkpoint raises
+    RuntimeError ("checkpoint: fn modified input slot <i> in place; a
+    checkpointed function must not write its inputs") as soon as ``fn``
+    returns. Before recomputing, backward raises RuntimeError ("checkpoint:
+    saved input slot <i> was modified after the checkpointed forward") if any
+    input's revision changed after that snapshot: a TensorCUDA in-place op, an
+    optimizer step, or ``mark_modified()`` after an external write. Nothing is
+    recomputed and no gradient is accumulated for that node.
+
+    Writes the guard does not detect, because they do not update the
+    revision: an external write that does not call ``mark_modified()``;
+    writes through a DLPack re-import of an engine tensor; APA's
+    ``packed_append``; and tc_signal's untracked ``out=`` paths (for example
+    ``instance_norm1d(..., out=t)`` and the conv ops under ``no_grad``), which
+    write ``out`` without ``mark_modified()``. Call ``mark_modified()`` on any
+    tensor written outside the engine's in-place ops.
     """
     return _C.checkpoint(fn, list(inputs))
 
@@ -1505,6 +1541,7 @@ from . import quantization  # noqa: E402
 apa_quant_attention = quant.apa_quant_attention
 
 __all__ = [
+    "attach_vjp",
     "Tensor", "tensor", "from_numpy", "from_dlpack", "empty", "zeros", "ones", "randn", "rand",
     "matmul", "dda_raycast", "raster_winner_scatter_min",
     "raster_triangle_winners", "raster_winner_resolve", "rasterize_clip",

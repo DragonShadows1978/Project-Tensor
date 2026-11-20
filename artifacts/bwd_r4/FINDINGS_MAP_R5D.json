@@ -1,0 +1,149 @@
+{
+  "order": "orders/BWD_R4A_R5D_GUARD_FIX.md",
+  "recheck": "recheck.json sha256 180279ec...",
+  "rows": [
+    {
+      "finding": "BWDR5R-F01 (MAJOR)",
+      "kind": [
+        "edit",
+        "test",
+        "mutant"
+      ],
+      "status": "fixed; host PASS; r5m03 caught",
+      "edits": [
+        "tensor_cuda/src/bindings.cpp:checkpoint_py (pre-fn snapshot, forward refusal, comment)",
+        "tensor_cuda/tensor_cuda/__init__.py:checkpoint docstring"
+      ],
+      "tests": [
+        "test_host_checkpoint_refuses_fn_writing_its_own_input (case B)",
+        "test_host_checkpoint_accepts_fn_writing_a_fresh_tensor"
+      ],
+      "evidence": [
+        "logs/bwd_r4_r5d_smoke_case_b.log",
+        "artifacts/bwd_r4/MUTANTS_CPU_R5D.json",
+        "logs/bwd_r4_r5d_mutants_cpu.log",
+        "artifacts/bwd_r4/r5m03_checkpoint_revision_recorded_after_fn_R5D.diff"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F02 (MINOR)",
+      "kind": [
+        "doc",
+        "test",
+        "note"
+      ],
+      "status": "contract documented; limit pinned by test",
+      "edits": [
+        "tensor_cuda/tensor_cuda/__init__.py:checkpoint docstring (input contract)"
+      ],
+      "tests": [
+        "test_host_checkpoint_closure_captured_tensor_is_outside_guard_documented_limit (case C, asserts no refusal)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/DESIGN_NOTES_R4A_R5D.md"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F03 (NIT)",
+      "kind": [
+        "doc"
+      ],
+      "status": "fixed: docstring lists raw write without mark_modified, DLPack re-import, APA packed_append (as attach_vjp, bindings.cpp:2729-2732) and tc_signal untracked out= paths",
+      "edits": [
+        "tensor_cuda/tensor_cuda/__init__.py:checkpoint docstring",
+        "tensor_cuda/src/bindings.cpp:checkpoint_py comment"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F04 (NIT)",
+      "kind": [
+        "note"
+      ],
+      "status": "note in REPORT_R5D.md (power implied by clean pass; bar power is rho, r4 margin ~9x)",
+      "evidence": [
+        "artifacts/bwd_r4/REPORT_R5D.md"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F05 (NIT)",
+      "kind": [
+        "note"
+      ],
+      "status": "note in REPORT_R5D.md (A3-1 floor does not bind: 6.8-10x)",
+      "evidence": [
+        "artifacts/bwd_r4/REPORT_R5D.md"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F06 (NIT)",
+      "kind": [
+        "note"
+      ],
+      "status": "note in REPORT_R5D.md (A3-2 used VJP agreement; h^2 evidence)",
+      "evidence": [
+        "artifacts/bwd_r4/REPORT_R5D.md"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F07 (NIT)",
+      "kind": [
+        "edit",
+        "staged lines"
+      ],
+      "status": "fixed: per-segment replay-input digest; replay-identity and r5m02 require it; host self-test PASS",
+      "edits": [
+        "scripts/bwd_r4_gpu.py (inputs_digest, replay_identity input fields)",
+        "scripts/bwd_r4_r5.py (replay_identity, r5m02)"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/SELFTEST_R5D.json",
+        "logs/bwd_r4_r5d_selftest.log"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F08 (NIT)",
+      "kind": [
+        "edit"
+      ],
+      "status": "fixed: GPU-gated by marker (skipif with CUDA reason) or CUDA/fixture-absent run-time skip; suite line sets the fixture roots; census covers the test_core_* tests",
+      "edits": [
+        "scripts/bwd_r4_pytest_gpu_r5d.py",
+        "scripts/bwd_r4_r5.py:pytest_line"
+      ],
+      "evidence": [
+        "artifacts/bwd_r4/GPU_MARKER_CENSUS_CPU_R5D.json",
+        "artifacts/bwd_r4/GPU_MARKER_CENSUS_CPU_FIXTURES_R5D.json"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F09 (NIT)",
+      "kind": [
+        "edit"
+      ],
+      "status": "fixed: g1_annotated emits R5D_G1 with the worst over non-floor rows; no worst_parameter line",
+      "edits": [
+        "scripts/bwd_r4_r5.py:g1_annotated"
+      ]
+    },
+    {
+      "finding": "BWDR5R-F10 (NIT)",
+      "kind": [
+        "note"
+      ],
+      "status": "note in REPORT_R5D.md (G5 upper bound only at sampled phases)",
+      "evidence": [
+        "artifacts/bwd_r4/REPORT_R5D.md"
+      ]
+    },
+    {
+      "finding": "F05 residual (affine)",
+      "kind": [
+        "test"
+      ],
+      "status": "appended scale-only and bias-only GPU cases at N=2, T=7; staged in suite-gpu",
+      "tests": [
+        "tc_signal/tests/test_bwd_r4_norm_affine.py::test_gpu_norm_affine_single_slot_fp64_reference_n2_t7[scale|bias]"
+      ]
+    }
+  ]
+}

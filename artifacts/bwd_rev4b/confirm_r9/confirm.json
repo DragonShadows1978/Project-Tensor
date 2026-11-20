@@ -1,0 +1,326 @@
+{
+  "review": "BWD-REV4B confirm 4 (narrowed)",
+  "state": "complete",
+  "verdict": "CLEAN for closure",
+  "scope": "CPU-only review of the pinned r9 scripts diff and the staged pipeline paths, with retained lead receipts",
+  "order_revision": "8698b20b",
+  "start_record": "SHIM-RUN 20261120T013607Z-1641499",
+  "baseline_confirm_sha256": "c0f82b5eeed146ec7c0e46884a50e2c8e41cb558c95117b189e071649bef0a1f",
+  "scripts_baseline": "b3fe4bbf",
+  "scripts_reviewed": "dd009923",
+  "lead_receipts": "a09595ab",
+  "original_findings": {
+    "BWDR4BR8-F01": {
+      "status": "partly closed",
+      "removed_command_script_references": 0,
+      "r8_and_r9_removed_command_exit": 2,
+      "staged_mutant_baseline": "Both preflights and the shared mutant worker route use newest_g_api → verify_launch.",
+      "g6": "G6 compare gates on bwd_r4b_suite_r9.provenance. It makes zero calls to bwd_r4b_gpu_r8.verify_launch.",
+      "qualification": "The broken generic path is closed. The specified common verify_launch path is unmet for G6. The retained G6 arms pass their own verifier.",
+      "sources": [
+        "scripts/bwd_r4b_stage_r8.py:339",
+        "scripts/bwd_r4b_stage_r9.py:223",
+        "scripts/bwd_r4b_gpu_r8.py:370",
+        "scripts/bwd_r4b_gpu_r8.py:383",
+        "scripts/bwd_r4b_suite_r9.py:81",
+        "scripts/bwd_r4b_suite_r9.py:113"
+      ],
+      "receipts": [
+        "commands/49-removed-cli.out",
+        "commands/53-cpu-probes-retry.out"
+      ]
+    },
+    "BWDR4BR8-F02": {
+      "status": "closed",
+      "sources": [
+        "scripts/bwd_r4b_refwave.py:321",
+        "scripts/bwd_r4b_refwave_r9.py:185",
+        "scripts/bwd_r4b_refwave_r9.py:118",
+        "scripts/bwd_r4b_verify.py:547",
+        "scripts/bwd_r4b_verify.py:572",
+        "scripts/bwd_r4b_stage_r9.py:218",
+        "scripts/bwd_r4b_gpu_r8.py:421"
+      ],
+      "cpu_writer_failure": {
+        "end": {
+          "census_sha256": "",
+          "exit": 1,
+          "launch_id": "20261120T014352227419Z-3-5f88ca9abbde",
+          "mode": "merge",
+          "passed": false,
+          "pid": 3,
+          "refused": "census: unreadable VOICE_MTIMES_merge_R4B.json: Expecting value: line 6 column 4 (char 128)",
+          "root": "failed_writer"
+        },
+        "error": "[Errno 27] File too large",
+        "partial_bytes": 128,
+        "red_markers": 1,
+        "root_refusal": "ref-at-wave root failed_writer is not one complete attempt: missing [], extra ['RED_merge_20261120T014352231182Z_R4B_R9.json']"
+      },
+      "cpu_changed_census": {
+        "refusal": "merge census differs from the digest its END marker recorded"
+      },
+      "receipts": [
+        "commands/53-cpu-probes-retry.out",
+        "commands/54-mfcc-preflights.out",
+        "artifacts/bwd_r4b/selftest-r9-producer-r3_R4B_R9/SELFTEST_PRODUCER_R4B_R9.json:36"
+      ]
+    }
+  },
+  "blocking_findings": [],
+  "hardening_suggestions": [
+    {
+      "id": "BWDR4BR9-H01",
+      "description": "The root check accepts a planted END PID that differs from START while launch_id agrees. START and END are written from the same row.",
+      "observation": {
+        "accepted": true,
+        "edited_pid": 1613789,
+        "original_pid": 1613788
+      },
+      "fix": "Join START and END PID in _verify_root and prior_passed.",
+      "sources": [
+        "scripts/bwd_r4b_refwave_r9.py:88",
+        "scripts/bwd_r4b_refwave_r9.py:118",
+        "scripts/bwd_r4b_refwave_r9.py:72",
+        "scripts/bwd_r4b_verify.py:568"
+      ]
+    }
+  ],
+  "evidence": {
+    "diff_and_pins": {
+      "files": 9,
+      "hunks": 19,
+      "pins": 72,
+      "seal": "ec97a1b66b3a08059c65c5d1413bb40e2c7f1f24381b7366b51f46f5d0a23b36"
+    },
+    "staged": {
+      "gpu": {
+        "g-api": [
+          480,
+          540
+        ],
+        "g1-linear": [
+          240,
+          540
+        ],
+        "g1-mfcc": [
+          340,
+          540
+        ],
+        "g5-checkpoint": [
+          440,
+          540
+        ],
+        "g5-plain": [
+          360,
+          540
+        ],
+        "r4bm01_public_dw_transposed_kernel": [
+          480,
+          540
+        ],
+        "r4bm03_mfcc_vjp_sign": [
+          280,
+          540
+        ],
+        "r4bm05_public_end_padding_extent": [
+          480,
+          540
+        ]
+      },
+      "reference": [
+        "reference",
+        "fd-p0of2",
+        "fd-p1of2",
+        "merge"
+      ]
+    },
+    "dry": {
+      "count": 8,
+      "labels": [
+        "g-api",
+        "g1-linear",
+        "g1-mfcc",
+        "g5-checkpoint",
+        "g5-plain",
+        "r4bm01_public_dw_transposed_kernel",
+        "r4bm03_mfcc_vjp_sign",
+        "r4bm05_public_end_padding_extent"
+      ]
+    },
+    "gpu": {
+      "count": 8,
+      "denied_before_worker": [
+        {
+          "exit": 76,
+          "label": "g5-checkpoint",
+          "launcher_log_bytes": 4383,
+          "receipt": "gpu_g5-checkpoint_20261120T011446683391Z-1614440_R4B_R9.json",
+          "worker_started": false
+        },
+        {
+          "exit": 76,
+          "label": "g5-checkpoint",
+          "launcher_log_bytes": 4383,
+          "receipt": "gpu_g5-checkpoint_20261120T012057021078Z-1622770_R4B_R9.json",
+          "worker_started": false
+        },
+        {
+          "exit": 76,
+          "label": "g5-checkpoint",
+          "launcher_log_bytes": 4383,
+          "receipt": "gpu_g5-checkpoint_20261120T012707328479Z-1627705_R4B_R9.json",
+          "worker_started": false
+        }
+      ],
+      "passing": {
+        "g-api": "gpu_g-api_20261120T010711788535Z-1602866_R4B_R9.json",
+        "g1-linear": "gpu_g1-linear_20261120T010626686990Z-1600750_R4B_R9.json",
+        "g1-mfcc": "gpu_g1-mfcc_20261120T013336734770Z-1636043_R4B_R9.json",
+        "g5-checkpoint": "gpu_g5-checkpoint_20261120T013317724882Z-1635771_R4B_R9.json",
+        "g5-plain": "gpu_g5-plain_20261120T013327318983Z-1635886_R4B_R9.json",
+        "r4bm01_public_dw_transposed_kernel": "gpu_r4bm01_public_dw_transposed_kernel_20261120T010735545379Z-1603499_R4B_R9.json",
+        "r4bm03_mfcc_vjp_sign": "gpu_r4bm03_mfcc_vjp_sign_20261120T013424419198Z-1637457_R4B_R9.json",
+        "r4bm05_public_end_padding_extent": "gpu_r4bm05_public_end_padding_extent_20261120T010800393744Z-1604432_R4B_R9.json"
+      },
+      "worker_file_hashes": 34
+    },
+    "g5": [
+      {
+        "bar_bytes": 4000000000,
+        "checkpoint": true,
+        "estimated_bytes": 3705864192,
+        "label": "g5-checkpoint",
+        "raw_samples": 1831,
+        "valid": 1831
+      },
+      {
+        "bar_bytes": 4000000000,
+        "checkpoint": false,
+        "estimated_bytes": 10114760704,
+        "label": "g5-plain",
+        "raw_samples": 1230,
+        "valid": 1230
+      }
+    ],
+    "g_api": {
+      "baseline_receipt": "gpu_g-api_20261120T010711788535Z-1602866_R4B_R9.json",
+      "cases": 103,
+      "changed_copy_refusal": "JUNIT_g-api_R4B_R9.xml differs from the digest its launch recorded",
+      "counts": {
+        "passed": 102,
+        "skipped": 1
+      },
+      "distinct_ids": 103,
+      "mutant_preflight_verify_calls": 2,
+      "totals": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 1,
+        "tests": 103
+      }
+    },
+    "g6": {
+      "changes": {
+        "prod": 515,
+        "r4a": 103
+      },
+      "counts": {
+        "candidate": {
+          "collection_error": 1,
+          "error": 15,
+          "failed": 2171,
+          "passed": 1383,
+          "skipped": 693
+        },
+        "prod": {
+          "collection_error": 1,
+          "error": 15,
+          "failed": 2171,
+          "passed": 1222,
+          "skipped": 339
+        },
+        "r4a": {
+          "collection_error": 1,
+          "error": 15,
+          "failed": 2171,
+          "passed": 1347,
+          "skipped": 626
+        }
+      },
+      "provenance": {
+        "candidate": [],
+        "prod": [],
+        "r4a": []
+      },
+      "provenance_calls": 3,
+      "unexpected": {
+        "prod": 0,
+        "r4a": 0
+      },
+      "verdict": {
+        "prod": true,
+        "r4a": true
+      },
+      "verify_launch_calls": 0
+    },
+    "reference": {
+      "manifest_sha256": "634bf770d0ea38ee76ae02d621780f26f3ab9ac9f0bf8e4ed2ca4227527e8b49",
+      "merged_rows": 40,
+      "modes": {
+        "fd-p0of2": {
+          "census_paths": 78,
+          "passing_markers": 1,
+          "sha256": "cdf89bbc5735d6e2a5a4c65877c002ca7c4793074bdf574d55c89c420cd5deba"
+        },
+        "fd-p1of2": {
+          "census_paths": 78,
+          "passing_markers": 1,
+          "sha256": "cdf89bbc5735d6e2a5a4c65877c002ca7c4793074bdf574d55c89c420cd5deba"
+        },
+        "merge": {
+          "census_paths": 78,
+          "passing_markers": 1,
+          "sha256": "cdf89bbc5735d6e2a5a4c65877c002ca7c4793074bdf574d55c89c420cd5deba"
+        },
+        "reference": {
+          "census_paths": 78,
+          "passing_markers": 1,
+          "sha256": "cdf89bbc5735d6e2a5a4c65877c002ca7c4793074bdf574d55c89c420cd5deba"
+        }
+      },
+      "output_hashes": 7,
+      "part_lengths": {
+        "fd-p0of2": 20,
+        "fd-p1of2": 20
+      }
+    },
+    "selftests": [
+      {
+        "part": "harness",
+        "passed": 11,
+        "sha256": "c57ec5ebd1aac8f4873fe98b72616b4a3f591ee009387ab749fa99c3e651bde9",
+        "total": 11
+      },
+      {
+        "part": "producer",
+        "passed": 9,
+        "sha256": "7927125a028ec43226666125900ef9c3cb6bf3929ca42e2079d4b2a528838e12",
+        "total": 9
+      }
+    ]
+  },
+  "scope_notes": [
+    "No in-scope producer of an accidental bad output was found for the G6 call-path discrepancy.",
+    "The G6 comparison routing was exercised against the retained arms with only the downstream comparison stubbed. Per-ID comparisons were independently recomputed from the retained outcomes. The G6 scratch trees were unavailable.",
+    "G5 checkpoint passed on its first worker run, after three lease refusals (exit 76, no worker).",
+    "The retired field audit, BWDR4BR8-H01 through H03, GPU reruns, and promotion are outside this confirmation."
+  ],
+  "deviations": [
+    "The first receipt-shape inspection used unavailable jq. Python provided the replacement.",
+    "The first probe hit the marker writer's artifact-root guard. One probe repair scoped cm.ART to the authorized scratch for marker writes. The rerun passed.",
+    "The first combined source display exceeded the tool renderer budget. Durable outputs and split reads retain the source.",
+    "No files renamed. Scratch retained under /tmp/bwd_rev4b_r9_probe_snarhwqv and /tmp/bwd_rev4b_r9_probe_14xbgshl."
+  ],
+  "command_outputs": "COMMANDS.md"
+}

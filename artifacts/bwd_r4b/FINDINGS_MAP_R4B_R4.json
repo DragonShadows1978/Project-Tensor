@@ -1,0 +1,59 @@
+{
+  "findings": {
+    "BWDR4BR-F01": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F01_digest_scope_covers_replays (r3 scoping 5 real replay calls, r4 scoping 0)",
+      "edit": "scripts/bwd_r4b_gpu.py digest_scope (forward + every replay) and process-wide DIGEST_CALLS; execute records digest_calls; G5 requires 0"
+    },
+    "BWDR4BR-F02": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F02_r4bm06_stale_bundles_refused (target, pairs, empty oracle, stale capture refused; clean accepted)",
+      "edit": "scripts/bwd_r4b_refwave.py OPERANDS_R4B.json + immutable MANIFEST_R4B.json (capture ID, operand/source/part/output sha256); verify_bundle in every consumer (gpu.bundle: g1-mfcc, r4bm03); launcher pre-lease file check",
+      "planted": "r4bm06_stale_reference_bundle"
+    },
+    "BWDR4BR-F03": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F03_g2_fails_closed (empty, 39 rows, no slopes, duplicate, missing direction, unbounded row all refused; r3-style empty accepted)",
+      "edit": "scripts/bwd_r4b_gpu.py g2_check + oracle_row_ok + sealed_round1 (SEALED_PROBES sha256 checked every call)"
+    },
+    "BWDR4BR-F04": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F04_sampler_coverage (190 ms gap and empty phase red; fake-series process valid)",
+      "edit": "scripts/bwd_r4b_nvml_sampler.py (separate process, fixed 2 ms schedule, CLOCK_MONOTONIC) + gpu.SamplerProcess/coverage; G5 binding = max(NVML peak, R4a reserved+non-pool); phase coverage and 50 ms gap rule"
+    },
+    "BWDR4BR-F05": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F05_native_preflight_before_all_off; tests test_host_native_preflight_refuses_beyond_int_max, test_host_preflight_runs_before_needs_and_device",
+      "edit": "tc_signal/tc_signal/_conv_backward.py _native_preflight via the run entry's own _conv_backward_scratch (no allocation, no binding change) before the all-off return and allocation"
+    },
+    "BWDR4BR-F06": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F06_residual_is_norm_of_difference",
+      "edit": "scripts/bwd_r4b_gpu.py end_to_end: ||g_cand - g_ref_at_wave_c|| with its denominator; signed norm difference labelled"
+    },
+    "BWDR4BR-F07": {
+      "check": "selftest-r4-ref-at-wave-P2/merge/FD_ORACLE_MFCC_A21_R4B.json (a2_2 on 40/40 rows); selftest-r4-worker-r2/SELFTEST_R4B_R4.json#mfcc_paths_on_stand_in",
+      "edit": "scripts/bwd_r4b_host.py fd_rows(nonlinear=True) + refwave fd: the nonlinear fp64-wave MFCC loss at the A2-1 endpoints; gpu a2_2_on_a21_probes; round-1 report under round1_probes_report"
+    },
+    "BWDR4BR-F08": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#pytest_path_selftest-r4bm05 (7 host failures on CPU); staged line r4bm05_public_end_padding_extent",
+      "edit": "tests appended: two missing masks, dilation-dominant output padding (host + GPU), simulated non-current device (GPU), two-GPU mixed/non-current test (registered device-count skip); planted r4bm05 (packages_r4/r4bm05_public_end_padding_extent)",
+      "planted": "r4bm05_public_end_padding_extent"
+    },
+    "BWDR4BR-F09": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F09_fixture_census; pytest records fixtures_unchanged",
+      "edit": "scripts/bwd_r4b_gpu.py fixture_census around every pytest child (manifest sha256s, 58 files sha256/size/mtime, recorded in the Voice census)"
+    },
+    "BWDR4BR-F10": {
+      "check": "tests test_host_current_device_rule, test_gpu_public_refuses_noncurrent_device_simulated, test_gpu_public_mixed_and_noncurrent_devices_two_gpus (skips on one GPU)",
+      "edit": "tc_signal/tc_signal/_conv_backward.py _check_devices + _current_cuda_device before any allocation; documented"
+    },
+    "BWDR4BR-F11": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F11_zero_rows_absolute_only",
+      "edit": "scripts/bwd_r4b_gpu.py zero_row + g1_rows (zero set: finite/dtype/shape/absolute only; relative only over nonzero norms; zero reference norm outside the set refused, not divided)"
+    },
+    "BWDR4BR-F12": {
+      "check": "selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F12_red_receipt_written (synthetic over-bar and malformed rows)",
+      "edit": "scripts/bwd_r4b_host.py a2_rail_receipt (rows receipt first, identifiers from row['probe'], verdict after; errors recorded red)"
+    },
+    "BWDR4BR-F13": {
+      "check": "logs/bwd_r4b_r4_trackability.log (no match); selftest-r4-worker-r2/SELFTEST_R4B_R4.json#F13_trackability_screen",
+      "edit": "scripts/bwd_r4b_stage.py and bwd_r4b_suite.py: Path.home() / FORGE_GPU_RUN_BIN, no home literal"
+    }
+  },
+  "review": "BWD-REV4B findings.json 66100fa9 (receipts 79c88928)"
+}

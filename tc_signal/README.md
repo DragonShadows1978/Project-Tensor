@@ -66,6 +66,38 @@ tc_signal.reflection_pad1d(x, pads, *, out=None)
 tc_signal.rint(x, *, out=None)                              # round half to even
 ```
 
+### Gradients
+
+`conv1d` and `conv_transpose1d` attach a first-order VJP when grad mode is on and any of x, w or b is a
+TensorCUDA tensor requiring gradients. They allocate a fresh TensorCUDA result on the operand device and
+compute dX, dW and optional dB for the requested slots. Tracked calls require TensorCUDA operands and
+refuse `out=`. Inference continues to use the configured allocator, accepts CUDA DLPack producers and
+honors `out=`.
+
+Backward uses fp32 gathers, fixed-order reductions and a backward-only pedantic cuBLAS handle.
+`conv_transpose1d` uses the resolved output length when gathering gradients, and dB includes every
+output time position.
+
+For dW, the GEMM path packs one group at a time into tiles of up to 1,024 positions. The fixed block tree
+handles groups with at most 64 weight coefficients, groups whose partial weights or packed tile would
+exceed 32 MiB per buffer (8,388,608 fp32 values), and tiled lengths above `INT_MAX`. The packed tile size
+is the number of pack rows times the tile length. Conv1d tiles over output time and ConvTranspose1d
+tiles over input time. Both paths accumulate in batch and then time order.
+
+The backward cuBLAS handle retains a private 32 MiB workspace per initialized device for the life of
+the process, outside the TensorCUDA allocation pool. Calling `_conv_backward_config(device)` initializes
+the handle and allocates the workspace on first use. Backward bitwise reproducibility is scoped to the
+same call layout (shapes, strides and pointer alignment), cuBLAS version, GPU architecture and SM count.
+
+`instance_norm1d` tracks any active TensorCUDA operand among x, scale and bias. It replays the
+shifted fp32 row statistics for dX and dScale. dScale sums dy times the normalized input, and
+dBias sums dy, in fixed time-then-batch order. Tracked calls allocate a fresh TensorCUDA result,
+require TensorCUDA operands and refuse `out=`.
+
+Under grad mode, `layer_norm`, `group_norm`, `lstm` and `rint` raise `no backward yet` for active
+TensorCUDA inputs and `out cannot require grad` for a TensorCUDA destination that requires gradients.
+The destination rule covers each of LSTM's three outputs.
+
 The convolution semantics are ONNX `Conv` and `ConvTranspose`, 1-D. The other ops follow their ONNX operators; their
 docstrings give the details.
 
@@ -373,6 +405,18 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 - **Accuracy** on Voice's real fixtures (`run_p1t.py`, `tolerances_r2.json`): the largest normwise error is 1.4e-6
   against the 1e-5 gate. The worst ConvTranspose case, Kokoro's ups.0 with 1,024 terms per output, is at 1.23e-6. The
   order's blocked/pairwise option was therefore not needed.
+
+## Gradients
+
+`upsample_nearest1d`, `reflection_pad1d` and `instance_norm1d` select the tracked path when grad mode is enabled
+and any TensorCUDA operand requires grad. The tracked path returns a fresh TensorCUDA tensor and bypasses
+`set_allocator`. It requires TensorCUDA from BWD-R1 (accepted at `d4285023`) or a build that provides
+`tensor_cuda.attach_vjp`. With an older core it raises `RuntimeError` before running the forward.
+
+Tracked calls refuse `out=` with `ValueError` and foreign tensor operands, including DLPack producers and capsules,
+with `TypeError`. `instance_norm1d` differentiates `x` and raises `ValueError` for trainable scale or bias. Frozen
+TensorCUDA affine tensors and `None` are both supported. With grad mode disabled or all operands frozen, calls use
+the ordinary DLPack and allocator path.
 
 ## Errors
 

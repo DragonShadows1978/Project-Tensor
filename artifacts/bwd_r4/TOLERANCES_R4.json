@@ -1,0 +1,36 @@
+{
+  "g0": {
+    "tap": "identical shape, dtype and same-width unsigned bytes",
+    "archive_relative_l2": 0.0001,
+    "archive_tolerance_basis": "Voice BP1 registration specifies 1e-4 relative L2 for the waveform. Div_2 has a recorded max error but no independently registered bar. Use the published relative L2 bar for the requested Div_2 cross-check and report max absolute error separately. Compare the corresponding archived slice on the crop and disclose its full-row normalization and convolution context."
+  },
+  "g1": {
+    "style_relative_l2": 0.0001,
+    "parameter_relative_l2": 0.001,
+    "small_norm_fraction": 0.000001,
+    "small_abs_l2_fraction": 0.000001,
+    "rationale": "The 128 style components aggregate factored fp32 AdaIN contributions across the full decoder and generator. The 1e-4 bar allows deep-chain rounding and reduction-order differences against fp64. Individual parameter gradients include reductions over up to 4801 crop positions, shared initializer fan-in, and different convolution packing and reduction trees. The 1e-3 bar allows their accumulated rounding. At a reference norm strictly below 1e-6 of the largest parameter gradient, relative L2 is ill-conditioned and absolute L2 is capped at that same global scale. Every test is two-sided."
+  },
+  "g2": {
+    "seed": 41059,
+    "style_directions": 8,
+    "parameter_tensors": 6,
+    "entries_per_parameter": 3,
+    "absolute": 0.0000001,
+    "relative": 0.00001,
+    "step": "cbrt(float64 eps) * max(1, abs(entry) or L2(style)); permitted deterministic halvings only to avoid LeakyReLU crossings",
+    "max_halvings": 12,
+    "step_factors": [1, 0.5, 2],
+    "rationale": "Use DESIGN section 6 central differences and plateau bound against the fp64 directional VJP. Also compare each candidate projection to each fp64 central difference under the same bound. Scale G by 1/sqrt(boundary size), fixed per shape. Verify LeakyReLU sign masks at every endpoint and at the center. Unresolved probes fail."
+  },
+  "g3_g4": "identical shape, dtype and same-width unsigned bytes, for style and every parameter",
+  "g5": {
+    "peak_bytes": 4000000000,
+    "duration_frames": 400,
+    "wave_samples": 240000,
+    "boundary_frames": 48001,
+    "rationale": "Order bar in decimal bytes. DESIGN section 5 predicts 2.7–3.3 GB live checkpointed and 8.7–9.1 GB uncheckpointed. Record device pool peaks with raw usage accounting, as well as synchronized wall and backward times."
+  },
+  "seed": {"algorithm": "NumPy PCG64", "value": 81073, "distribution": "standard_normal in fp64, divided by sqrt(tensor size) then stored in fp32 and converted to fp64 for the oracle"},
+  "array_checks": "Each compared array is finite and nonempty, with more than one distinct value where it contains more than one element. Scalar observations must be nonzero."
+}

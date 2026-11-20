@@ -1,0 +1,272 @@
+{
+  "review": "BWD-REV4B confirm r7",
+  "state": "complete",
+  "verdict": "RED",
+  "scope": "Accidental stale, incomplete, inconsistent or corrupt harness outputs, including duplicate keys and existing independent sealed pins. Deliberate consistent bundle/manifest/verdict rewrites are out of scope except where an independent pin applies.",
+  "pinned_diff": {
+    "from": "48129fac",
+    "to": "33316880",
+    "paths": [
+      "tc_signal",
+      "scripts"
+    ],
+    "changed_files": 9,
+    "hunks": 12
+  },
+  "baseline": {
+    "receipt": "57c65cdc",
+    "sha256": "39506419948ac9223215f87c4539ff86eed568cf45d5444abc0921e3c41b0a4b"
+  },
+  "shim_run": "20261119T224203Z-1400023",
+  "execution": "CPU only",
+  "status_counts": {
+    "closed": 3,
+    "partly closed": 7,
+    "open": 0
+  },
+  "items": [
+    {
+      "id": "BWDR4BR6-F01",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_verify.py#L362",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-verify_R4B_R7/SELFTEST_VERIFY_R4B_R7.json#L18",
+      "evidence": "Exact top-level keys, literal passing flags and the wave and manifest joins reject the original verdict edits in both consumer paths. Summary counts can still change type.",
+      "findings": [
+        "BWDR4BR7-F01"
+      ]
+    },
+    {
+      "id": "BWDR4BR6-F02",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_refwave_r7.py#L99",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-producer_R4B_R7/SELFTEST_PRODUCER_R4B_R7.json#L23",
+      "evidence": "Duplicate intermediates and unsealed pending bytes go red before fresh publication. A failed retry on a reused root leaves the prior result eligible.",
+      "findings": [
+        "BWDR4BR7-F02"
+      ]
+    },
+    {
+      "id": "BWDR4BR6-F03",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L66",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L120",
+      "evidence": "Wrong or missing PID and malformed rows are rejected, and null rows are excluded. The clock and period still accept contradictory values.",
+      "findings": [
+        "BWDR4BR7-F03"
+      ]
+    },
+    {
+      "id": "BWDR4BR6-F04",
+      "status": "closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L282",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L232",
+      "evidence": "The timeout variants left red receipts, kept raw bytes and decoded prefixes, and recorded XML parse errors. The after-census and receipt writers run in finally.",
+      "findings": []
+    },
+    {
+      "id": "BWDR4BR6-F05",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L230",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L341",
+      "evidence": "The pinned unique-ID census rejects omitted, extra and duplicate cases and mismatched explicit totals. Zero-valued total fields can be absent. A mutant baseline can also consume a worker result from another launcher.",
+      "findings": [
+        "BWDR4BR7-F04",
+        "BWDR4BR7-F05"
+      ]
+    },
+    {
+      "id": "BWDR4BR5-F02",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_verify.py#L468",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-verify_R4B_R7/SELFTEST_VERIFY_R4B_R7.json#L18",
+      "evidence": "The original partial and contradictory verdict cases are rejected. The summary join still accepts wrong scalar types.",
+      "findings": [
+        "BWDR4BR7-F01"
+      ]
+    },
+    {
+      "id": "BWDR4BR5-F05",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L96",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L120",
+      "evidence": "The worker PID and row rules protect coverage from the original malformed rows. Inconsistent sampler clock and period values still pass.",
+      "findings": [
+        "BWDR4BR7-F03"
+      ]
+    },
+    {
+      "id": "BWDR4BR5-F07",
+      "status": "closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/tc_signal/tests/test_bwd_r4b_public_conv_backward.py#L379",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L6",
+      "evidence": "The outer finally restores the saved device around both assertions. The stand-in restored prior device 1 after the failing assertion. The lead one-GPU test reported the registered skip.",
+      "findings": []
+    },
+    {
+      "id": "BWDR4BR5-F08",
+      "status": "partly closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_refwave_r7.py#L141",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-producer_R4B_R7/SELFTEST_PRODUCER_R4B_R7.json#L38",
+      "evidence": "The legacy path is superseded and r7 validates inputs and the sealed pending bundle before a new green publication. The fixed root can still expose an old green after a red retry.",
+      "findings": [
+        "BWDR4BR7-F02"
+      ]
+    },
+    {
+      "id": "BWDR4BR5-F09",
+      "status": "closed",
+      "source": "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L343",
+      "selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r7-harness-final_R4B_R7/SELFTEST_HARNESS_R4B_R7.json#L232",
+      "evidence": "Partial UTF-8 and partial XML produce persisted, detailed red receipts, and mutant receipt persistence also runs in finally.",
+      "findings": []
+    }
+  ],
+  "new_findings": [
+    {
+      "id": "BWDR4BR7-F01",
+      "severity": "MINOR",
+      "title": "The summary join accepts a wrong scalar type",
+      "sites": [
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_verify.py#L376"
+      ],
+      "accident": "A verdict exporter routes a summary counter through a float-valued record and serializes it back into the verdict.",
+      "evidence": "The real covered summary has integer probes=40. Changing only the verdict to probes=40.0 passed the full preflight call. A verdict with probes=41 was refused. The manifest still matched the independent seal and the covered summary digest was unchanged.",
+      "fix": "Compare JSON values recursively with exact scalar types, or compare canonical JSON serializations with nonfinite values refused.",
+      "probe": "commands/20-probes.log"
+    },
+    {
+      "id": "BWDR4BR7-F02",
+      "severity": "MINOR",
+      "title": "A failed merge retry can leave the prior green result eligible",
+      "sites": [
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_refwave_r7.py#L122",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_refwave_r7.py#L161",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_stage_r7.py#L205"
+      ],
+      "accident": "The operator reruns merge at the fixed staging root after a completed run and a later launcher preflights that same root.",
+      "evidence": "On a copy of the complete lead bundle, the real merge hit FileExistsError and wrote a red sidecar. The consumer still accepted the old canonical verdict and manifest, whose bytes and independent seal were unchanged. The retry itself was red.",
+      "fix": "Publish each attempt under its own identity and make preflight consume the explicitly selected passing attempt. If the fixed root remains canonical, make preflight reject a red retry marker for the selected attempt.",
+      "probe": "commands/22-merge-retry.log"
+    },
+    {
+      "id": "BWDR4BR7-F03",
+      "severity": "MINOR",
+      "title": "Sampler clock and period headers are only type-checked",
+      "sites": [
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L74",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L96",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L161"
+      ],
+      "accident": "A sampler or exporter uses a stale clock label or a sign error in the configured period when writing the record header.",
+      "evidence": "Replaying the lead checkpoint rows with CLOCK_REALTIME or period -0.002 separately returned valid=true, zero problems and 1,463 PID-valid samples. Changing only the PID was refused. The producer emits CLOCK_MONOTONIC and the worker supplies its own configured period.",
+      "fix": "Require CLOCK_MONOTONIC and a finite, positive period equal to the period the worker supplied.",
+      "probe": "commands/20-probes.log"
+    },
+    {
+      "id": "BWDR4BR7-F04",
+      "severity": "MINOR",
+      "title": "Missing JUnit totals are silently inferred as zero",
+      "sites": [
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L246",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L262"
+      ],
+      "accident": "An XML report exporter drops zero-valued suite attributes while copying a completed report.",
+      "evidence": "Removing only failures and errors from the lead XML preserved all 103 IDs and child exit 0. parse_junit substituted zero for both absent fields and g_api_problems accepted the incomplete report.",
+      "fix": "Require every registered total to appear as a nonnegative integer on the expected pytest suite before comparing totals to cases.",
+      "probe": "commands/20-probes.log"
+    },
+    {
+      "id": "BWDR4BR7-F05",
+      "severity": "MAJOR",
+      "title": "A copied G-API worker result can qualify as the clean baseline",
+      "sites": [
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_gpu_r7.py#L356",
+        "../../../../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_stage_r7.py#L274"
+      ],
+      "accident": "Receipt collection stages a passing worker JSON from another run under the new worker output while the launch receipt retains its own scratch root.",
+      "evidence": "newest_g_api accepted the genuine 103-case prior worker JSON placed under a different launcher receipt in scratch. The old worker argv pointed to its original JUnit file, which lay outside the new launch's TMPDIR. No JUnit cases or worker verdict were rewritten.",
+      "fix": "Record a launch identity and worker result digest in the launcher receipt. Before either mutant uses a baseline, verify both, require the current staging pin, and join the worker JUnit provenance to the selected launcher.",
+      "probe": "commands/20-probes.log"
+    }
+  ],
+  "lead": {
+    "receipt": "d7c6c86e",
+    "passing_restaged_lines": 8,
+    "passing_reference_steps": 4,
+    "manifest_sha256": "634bf770d0ea38ee76ae02d621780f26f3ab9ac9f0bf8e4ed2ca4227527e8b49",
+    "staged_pins": 59,
+    "manifest_outputs": 7,
+    "part_rows": [
+      20,
+      20
+    ],
+    "stitched_rows": 40,
+    "g5_checkpoint": {
+      "sampled_estimate_bytes": 3638755328,
+      "bar_bytes": 4000000000,
+      "pid_valid_samples": 1463,
+      "total_samples": 1463
+    },
+    "g_api": {
+      "total": 103,
+      "passed": 102,
+      "skipped": 1
+    },
+    "g6": {
+      "r4a": {
+        "pass": true,
+        "unexpected": 0
+      },
+      "production": {
+        "pass": true,
+        "unexpected": 0
+      }
+    }
+  },
+  "retained_selftest_counts": {
+    "verify": {
+      "pass": 4,
+      "total": 4
+    },
+    "producer": {
+      "pass": 3,
+      "total": 3
+    },
+    "harness": {
+      "pass": 12,
+      "total": 12
+    }
+  },
+  "deviations": [
+    "Initial shell quoting left an incomplete registration and an attempted write to /confirm.json. The filesystem refused the write. The complete registration was recorded in a separate file before any gate.",
+    "The first SHIM-RUN lookup also named a nonexistent log in the round tree. The exact local lookup returned the launch stamp.",
+    "A discovery-only receipt shape read selected an arm JSON after the comparison JSON and exited with KeyError: 'unexpected'. The recount uses dedicated readers for those receipts.",
+    "The first merge retry probe reached the real merge failure but the production receipt path guard refused /tmp. The repaired probe delegated to the same create-only writer and used authorized scratch.",
+    "The first dispatch receipt used the parent directory for two input log paths and exited 1. The repeated source inspection completed successfully.",
+    "The output verification initially used the command subdirectory as its base, then exposed three alignment receipts stored in the parent directory. The check was pointed at the confirm directory and the receipts were moved into the command log directory."
+  ],
+  "probe_repairs": 1,
+  "scratch": [
+    "/tmp/bwd_rev4b_r7_probes_z9aypyab",
+    "/tmp/bwd_rev4b_r7_probes_9fm7077v",
+    "/tmp/bwd_rev4b_r7_probes_sc912bk4"
+  ],
+  "prior_art": [
+    "DeMillo, Lipton and Sayward (1978) supply fault injection on real retained controls. The probes and acceptance checks are specific to R4b. Meszaros (2007) supplies the test seam used for the receipt path boundary.",
+    "Bray\u2019s RFC 8259 (2017) distinguishes JSON numbers and booleans. The round writer supplies the integer convention for probe counts. Rundgren, Jordan and Erdtman\u2019s RFC 8785 (2020) is precedent for comparing canonical JSON. A type-preserving comparison here must keep integer and float representations distinct.",
+    "NIST FIPS 180-4 (2015) supplies SHA-256. Dolstra\u2019s Nix (2006) supplies precedent for content pins. Torres-Arias et al., in-toto (2019), supplies precedent for binding artifacts to a producing step. Attempt identity, launcher joins and receipt fields would be specific to R4b.",
+    "POSIX.1-2017 specifies CLOCK_MONOTONIC. The configured period and header checks come from the existing R4b sampling protocol. The Ant/JUnit XML format (circa 2001) and pytest\u2019s JUnit exporter supply the suite totals and test IDs. Requiring the four emitted totals here follows the existing pytest writer.",
+    "Unverified \u2014 lead to check `DeMillo Lipton Sayward 1978 mutation testing`, `Meszaros 2007 xUnit test patterns`, `RFC 8259 JSON value types`, `RFC 8785 JSON canonicalization number serialization`, `NIST FIPS 180-4 SHA-256`, `Dolstra Nix 2006`, `Torres-Arias in-toto 2019 provenance`, `POSIX CLOCK_MONOTONIC`, and `Apache Ant JUnit pytest junitxml tests failures errors skipped`."
+  ],
+  "evidence": [
+    "commands/01-diff.log",
+    "commands/04-map.log",
+    "commands/05-report.log",
+    "commands/06-selftests.log",
+    "commands/20-probes.log",
+    "commands/22-merge-retry.log",
+    "commands/24-recount.log",
+    "commands/26-dispatch.log",
+    "COMMANDS.md"
+  ]
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "B1",
+    "edit": "Make tensor, zeros, ones, rand and randn return a bf16 leaf after conversion.",
+    "tests": "Five host factory cases and explicit-cast/no-grad control, unchanged fp16/bf16 matmul GPU test, 15 bf16 core GPU IDs, and m09.",
+    "result": "Host smoke and m09 pass their gates. CUDA matmul correctness and core bf16 execution await the lead."
+  },
+  {
+    "id": "B2 / BWDR3-F01",
+    "edit": "Compile native_checks.cpp in pytest tmp_path and run its four named cases.",
+    "tests": "test_host_native_backward_checks[overlap,batch-mismatch] and test_gpu_native_backward_checks[current-device,zero-k].",
+    "result": "Both host IDs passed G2 and G6. The two CUDA IDs are staged in G4-determinism."
+  },
+  {
+    "id": "B3 / BWDR3-F03 / F07",
+    "edit": "Add the aligned two-batch canary, strided TF32 call-site mutant, five-run strided repeat and two independent workers.",
+    "tests": "test_gpu_strided_canary, test_gpu_matmul_repeat_five[strided], G5-m06b and G4-fresh-process.",
+    "result": "CPU witness is 6.365389× the sealed bound in both slots. Numeric mutant kill and repeat hashes await the lead."
+  },
+  {
+    "id": "B4 / F09",
+    "edit": "Document the detached value capture contract in attach_vjp and DESIGN_NOTES_R4.md.",
+    "tests": "test_host_saved_value_with_native_descendant[collect,backward].",
+    "result": "Both host IDs passed. GC collected the unreachable descendant arm, and the retained descendant produced the exact gradient."
+  }
+]

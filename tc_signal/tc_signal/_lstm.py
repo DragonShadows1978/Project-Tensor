@@ -107,6 +107,7 @@ def lstm(x, W, R, B=None, *, hidden_size, direction='forward', initial_h=None, i
             raise TypeError(f'tc_signal.lstm: out must be None or a 3-tuple (Y, Y_h, Y_c), got {type(out).__name__}')
         if len(out) != _N_OUTPUTS:
             raise ValueError(f'tc_signal.lstm: out must be a 3-tuple (Y, Y_h, Y_c), got {len(out)} entries')
+    _package()._refuse_no_backward("lstm", x, W, R, B, initial_h, initial_c, sequence_lens, out=out)
     code = _DIRECTIONS[direction]
     (xc, wc, rc, bc, hc, cc, y_shape, state_shape, scratch_numel, T, N) = _C.lstm_plan(
         x, W, R, B, initial_h, initial_c, H, code)
