@@ -40,6 +40,16 @@ Outside those two packages, the tree equals production plus the receipts listed 
 
 Harness scripts, staged packages and per-round GPU outputs stay in the fork.
 
+**Assembly correction (MAINCHK4 Amendment 2).**
+- The first assembly carried `artifacts/bwd_r1/TOLERANCES.json` and `TOLERANCES_BF16_R5.json` but not their seal files,
+  `TOLERANCES.sha256` and `TOLERANCES_BF16_SHA256_R5.txt`. The R1 tests read both seals: `bwd_r1_support/oracle.py`
+  `tolerances()` and `test_bwd_r1_bf16.py` `bf16_tolerances()`.
+- MAINCHK4's GPU comparison found 64 R1 tests failing on the promotion tree with FileNotFoundError on those two
+  paths, while passing on the lane: 45 in `test_bwd_r1_core.py`, 15 in `test_bwd_r1_bf16.py` and 4 in
+  `test_bwd_r1_matmul.py`.
+- Both seals are now carried byte for byte from the reviewed lane branch `bwd-r4b-full-chain`. No product or test
+  file changed.
+
 **Scope.**
 - **Covers:**
   - gradients through `tensor_cuda` ops, `tc_signal`'s small ops, norms, AdaIN and convolutions;
