@@ -1,0 +1,67 @@
+{
+  "new_findings": {
+    "BWDR4BR5-F01": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#r4bm10_omitted_crossings, #r4bm11_foreign_part (merged_oracle_not_stitched)",
+      "fix": "verify.registered_row: every evaluated triple maps each step factor to a crossing dict, the final halving's record equals T(1)'s; verify_bundle_r5: FD part identity (capture, index, count, wave, rows) and the stitched parts must equal the merged oracle",
+      "planted": "r4bm10_omitted_crossings"
+    },
+    "BWDR4BR5-F02": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#r4bm11_foreign_part (foreign_part, record_from_another_run), each by the sealed pin and by the rule alone",
+      "fix": "manifest sha256 vs the sealed inventory derived_from digest (634bf770) for this capture; part capture/wave binding; record wave array, crop and capture bound to live; g_c digest bound to the live cotangent (thread-pinned recomputation); the wave-capture receipt (sealed r4 pins, r4 packages) and its worker operand record must equal the manifest operands",
+      "planted": "r4bm11_foreign_part"
+    },
+    "BWDR4BR5-F03": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#r4bm12_nan_direction (nan_direction, float32_reference_tensor, g2_nan_direction)",
+      "fix": "dtype float64, exact shape and finiteness of every stored tensor and direction before any subtraction; NaN-safe `not x <= bound` comparisons; g2_registered refuses nonfinite directions",
+      "planted": "r4bm12_nan_direction"
+    },
+    "BWDR4BR5-F04": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#r4bm13_duplicate_key (duplicate_key, launcher_crop_value)",
+      "fix": "strict_json (object_pairs_hook refusing duplicate keys) for every bundle, part, inventory and capture read; explicit schemas (manifest, capture, operands, inventory file); preflight checks the registered crop values and the full operand record (crop and ordered source bases) against the wave-capture worker's",
+      "planted": "r4bm13_duplicate_key"
+    },
+    "BWDR4BR5-F05": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#r4bm14_missing_pid_interval (r5 rule accepted it), #r6_sampler_process",
+      "fix": "bwd_r4b_gpu_r6.coverage: brackets, phases and gaps from PID-valid samples only; median gap <= 5 ms restored; marks, gap series and query intervals (bwd_r4b_nvml_sampler_r6.py) persisted; G5 reported as a sampled estimate, bar unchanged",
+      "planted": "r4bm14_missing_pid_interval"
+    },
+    "BWDR4BR5-F06": {
+      "check": "tests test_host_alignment_rule, test_host_misaligned_operand_refused_before_needs_and_device (pytest path 37 host passed)",
+      "fix": "_conv_backward._check_alignment on Tensor.data_ptr (non-NULL, 4-byte aligned) before allocation and the all-off return; residency documented as the native run entry's check; no native change"
+    },
+    "BWDR4BR5-F07": {
+      "check": "GPU line g-api (restaged); one-GPU host: registered skip",
+      "fix": "test_gpu_public_mixed_and_noncurrent_devices_two_gpus: tc.empty on the intended current device, label asserted, cudaSetDevice status checked, prior device restored; still skips on one GPU with the registered reason"
+    },
+    "BWDR4BR5-F08": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#F08_superseded_labels_refused (4/4)",
+      "fix": "bwd_r4b_stage.py and bwd_r4b_stage_r5.py refuse superseded labels, naming the current launcher; earlier receipts stand"
+    },
+    "BWDR4BR5-F09": {
+      "check": "selftest-r6-verify-r3/SELFTEST_R4B_R6.json#F09_timeout_receipt",
+      "fix": "bwd_r4b_gpu_r6.pytest_run: after-census in a finally path; a timeout keeps a red receipt with the child's output"
+    }
+  },
+  "original_partly_fixed": {
+    "BWDR4BR-F02": {
+      "status": "closed by BWDR4BR5-F02 (sealed manifest digest, record/part/capture binding) and F04 (strict schema)"
+    },
+    "BWDR4BR-F03": {
+      "status": "closed by BWDR4BR5-F01 (complete crossing maps; stitched oracle equals the checked parts) within the threat model; slopes in a consistently forged oracle are out of scope by the lead's ruling, except the sealed manifest digest, which binds the oracle for this capture"
+    },
+    "BWDR4BR-F04": {
+      "status": "closed by BWDR4BR5-F05 (PID-valid gaps and brackets, median restored, marks persisted); the figure is reported as a sampled estimate, not a proven process bound"
+    },
+    "BWDR4BR-F08": {
+      "status": "closed by BWDR4BR5-F07 (mixed-device test corrected); the real two-device case still skips on this one-GPU host with the registered reason"
+    },
+    "BWDR4BR-F09": {
+      "status": "closed by BWDR4BR5-F09 (after-census in finally, red timeout receipt)"
+    },
+    "BWDR4BR-F10": {
+      "status": "closed by BWDR4BR5-F06 (alignment before allocation) and F07; label-vs-residency agreement is checked by the native run entry before computing (documented); no native change by the order"
+    }
+  },
+  "review": "BWD-REV4B re-check 2, recheck.json b241d5c6 (0c81834a)",
+  "threat_model": "stale, incomplete, inconsistent or corrupt outputs of our own tools; the sealed manifest digest wherever one exists"
+}

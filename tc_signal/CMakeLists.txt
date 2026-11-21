@@ -48,6 +48,7 @@ FetchContent_MakeAvailable(pybind11)
 
 pybind11_add_module(_tc_signal
   src/conv.cu
+  src/conv_backward.cu
   src/dlpack_operand.cpp
   src/bindings.cpp
   src/lstm.cu

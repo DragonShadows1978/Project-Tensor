@@ -1,0 +1,15 @@
+{
+  "scope": "The 15 small bf16 core-op cells in test_gpu_bf16_core_gradients",
+  "unit_roundoff": 0.00390625,
+  "reference": "Analytic NumPy fp64 VJPs using the actual bf16-stored operands, upstream seed, and tensor divisor. Python scalar attributes retain the values used by the engine.",
+  "rule": "abs(observed - reference) <= max(atol_floor, atol_scale * S) + rtol * abs(reference); check structural zero taps exactly",
+  "class_overrides": {"div_constant": "simple"},
+  "classes": {
+    "simple": {"atol_floor": 0.00000095367431640625, "atol_scale": 0, "rtol": 0.0078125, "reason": "2u for copies and a small number of products or divisions with one bf16 rounding per stored result."},
+    "unary_div": {"atol_floor": 0.00000095367431640625, "atol_scale": 0, "rtol": 0.0234375, "reason": "6u for saved-value rounding, squaring or division, and the tanh subtraction over the registered input range."},
+    "matmul_conv": {"atol_floor": 0.00000095367431640625, "atol_scale": 0.00390625, "rtol": 0.00390625, "reason": "1u relative for bf16 output rounding after cuBLAS fp32 accumulation, plus 1u times the unsigned dot magnitude for short cancellation-prone dots."},
+    "snake_dx": {"atol_floor": 0.00000095367431640625, "atol_scale": 0.015625, "rtol": 0.015625, "reason": "4u relative plus 4u times |g|*(1+|sin(2*a*x)|+2*|a*x|) for stored intermediates, phase error and cancellation against the identity path."},
+    "unbroadcast": {"atol_floor": 0.00000095367431640625, "atol_scale": 0.03125, "rtol": 0.015625, "reason": "4u relative plus 8u times the sum of absolute terms before reduction and cancellation of the two Snake alpha paths."}
+  },
+  "reason": "bf16 has seven fraction bits and one implicit leading bit (Google Brain, 2018). Round-to-nearest unit roundoff u = 2^-8. The floor is 8 * 2^-23 on these O(1) operands to accommodate fp32-level effects near zero. The budgets count stored results and allow sensitivity to cancellation for the named cells; they are fixture thresholds rather than universal error bounds."
+}

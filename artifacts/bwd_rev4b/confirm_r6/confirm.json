@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "review": "BWD-REV4B confirm r6",
+  "verdict": "RED for closure",
+  "start": "SHIM-RUN 20261119T204438Z-1254161",
+  "baseline": {
+    "receipts": "0c81834a",
+    "recheck_json_sha256": "b241d5c6402476d2ad471e8c5dd7d0a346bc1efffa2664a9ba54338afa9b9b54"
+  },
+  "source": {
+    "from": "a77e4fe5666d560edc2cb0de9390b85a7fbac11c",
+    "to": "63979c3803cb6aa21376ab7e0f66ea258102c511",
+    "lead_receipts": "48129faceb3f48078d69a83fbd7085ab262105f8",
+    "paths": ["tc_signal", "scripts"],
+    "files": 12,
+    "hunks_unified_0": 39
+  },
+  "scope": {
+    "cpu_only": true,
+    "threat_model": "Accidental stale, incomplete, inconsistent or corrupt harness artifacts, including duplicate keys and independent sealed pins.",
+    "excluded": ["deliberate consistent forgery except where an independent pin applies", "GPU execution during this confirm", "promotion"]
+  },
+  "assessment_counts": {
+    "closed": 4,
+    "partly closed": 5,
+    "open": 0,
+    "new_major": 3,
+    "new_minor": 2
+  },
+  "findings": [
+    {
+      "id": "BWDR4BR5-F01",
+      "status": "closed",
+      "source": ["scripts/bwd_r4b_verify.py:157", "scripts/bwd_r4b_verify.py:381"],
+      "evidence": ["retained r4bm10", "retained r4bm11 unstitched case", "commands/22-bundle-check.log ROW_FACTOR_OMITTED", "commands/25-recount.log BUNDLE_RECEIPTS"],
+      "reason": "G2 checks the final crossing records and the registered chosen factors. The consumer checks part identities and counts and requires the exact interleaved stitch. The sealed capture binds the complete oracle bytes."
+    },
+    {
+      "id": "BWDR4BR5-F02",
+      "status": "partly closed",
+      "source": ["scripts/bwd_r4b_verify.py:316", "scripts/bwd_r4b_verify.py:340", "scripts/bwd_r4b_verify.py:351", "scripts/bwd_r4b_verify.py:394", "scripts/bwd_r4b_verify.py:439"],
+      "evidence": ["retained r4bm11", "commands/22-bundle-check.log SEALED_MANIFEST_CONTROL", "commands/22-bundle-check.log VERDICT_MISSING_RECORDS and VERDICT_CONTRADICTORY_RECORDS"],
+      "reason": "The independent pin, worker operand and product joins catch the original bundle substitutions for the registered capture. A partial or contradictory merge verdict still passes with the sealed manifest untouched.",
+      "related": ["BWDR4BR6-F01"]
+    },
+    {
+      "id": "BWDR4BR5-F03",
+      "status": "closed",
+      "source": ["scripts/bwd_r4b_verify.py:405", "scripts/bwd_r4b_verify.py:418", "scripts/bwd_r4b_verify.py:426", "scripts/bwd_r4b_gpu_r6.py:245"],
+      "evidence": ["retained r4bm12", "commands/22-bundle-check.log BUNDLE_CLEAN"],
+      "reason": "The registered consumer checks finite float64 arrays and exact shapes before fresh-product subtraction. Preflight checks byte pins without a fresh recomputation."
+    },
+    {
+      "id": "BWDR4BR5-F04",
+      "status": "closed",
+      "source": ["scripts/bwd_r4b_verify.py:77", "scripts/bwd_r4b_verify.py:97", "scripts/bwd_r4b_verify.py:266", "scripts/bwd_r4b_verify.py:345", "scripts/bwd_r4b_stage_r6.py:179"],
+      "evidence": ["retained r4bm13", "commands/22-bundle-check.log BUNDLE_CLEAN"],
+      "reason": "The r6 admission verifier rejects duplicate inventory and manifest keys, checks their declared schemas and registered name sets, and checks crop values and ordered bases against the worker. The producer bypass is addressed under F08."
+    },
+    {
+      "id": "BWDR4BR5-F05",
+      "status": "partly closed",
+      "source": ["scripts/bwd_r4b_gpu_r6.py:45", "scripts/bwd_r4b_gpu_r6.py:87", "scripts/bwd_r4b_gpu_r6.py:101", "scripts/bwd_r4b_gpu_r6.py:133", "scripts/bwd_r4b_nvml_sampler_r6.py:96"],
+      "evidence": ["retained r4bm14", "commands/23-harness-check.log SAMPLER_*", "commands/25-recount.log G5"],
+      "reason": "PID-missing stretches drive gaps on well-formed traces and the median bar and timing records are restored. Wrong or missing PID metadata and an incomplete sample still pass. The estimate is expressly sampled.",
+      "related": ["BWDR4BR6-F03"]
+    },
+    {
+      "id": "BWDR4BR5-F06",
+      "status": "closed",
+      "source": ["tc_signal/tc_signal/_conv_backward.py:155", "tc_signal/tc_signal/_conv_backward.py:229", "tensor_cuda/src/bindings.cpp:666", "tensor_cuda/src/bindings.cpp:1906"],
+      "evidence": ["retained pytest_path_selftest-g-api", "tc_signal/tests/test_bwd_r4b_public_conv_backward.py:399"],
+      "reason": "Public alignment checks run before allocation and the all-off return. Active calls retain the documented native DLPack residency validation before compute."
+    },
+    {
+      "id": "BWDR4BR5-F07",
+      "status": "partly closed",
+      "source": ["tc_signal/tests/test_bwd_r4b_public_conv_backward.py:370", "tc_signal/tests/test_bwd_r4b_public_conv_backward.py:384"],
+      "evidence": ["commands/20-numbered-targets.log", "commands/25-recount.log G_API"],
+      "reason": "The test now creates and verifies a correctly labelled cuda:1 tensor. An assertion failure can leave the device on 0 when the prior device was 1 because the prior-device restoration is outside the finally block. Retained lead G-API skipped the two-device test."
+    },
+    {
+      "id": "BWDR4BR5-F08",
+      "status": "partly closed",
+      "source": ["scripts/bwd_r4b_stage.py:358", "scripts/bwd_r4b_stage_r5.py:250", "scripts/bwd_r4b_stage_r6.py:179", "scripts/bwd_r4b_refwave_r6.py:17", "scripts/bwd_r4b_refwave.py:156", "scripts/bwd_r4b_refwave.py:223"],
+      "evidence": ["retained F08_superseded_labels_refused", "commands/22-bundle-check.log PRODUCER_DUPLICATE_OPERAND", "commands/26-restaged-dispatch.log"],
+      "reason": "Superseded GPU labels refuse and restaged reference consumers use current checks. The active ref-at-wave producer still reads intermediate records with legacy loaders and can return green before the independent manifest check.",
+      "related": ["BWDR4BR6-F02"]
+    },
+    {
+      "id": "BWDR4BR5-F09",
+      "status": "partly closed",
+      "source": ["scripts/bwd_r4b_gpu_r6.py:176", "scripts/bwd_r4b_gpu_r6.py:188", "scripts/bwd_r4b_gpu_r6.py:206"],
+      "evidence": ["retained F09_timeout_receipt", "commands/23-harness-check.log GPYTEST_TIMEOUT*"],
+      "reason": "Both fixture censuses ran on all checked timeout exits. Partial UTF-8 and XML failures still suppress the detailed red receipt, and an incomplete UTF-8 code point can discard readable child output.",
+      "related": ["BWDR4BR6-F04", "BWDR4BR6-F05"]
+    }
+  ],
+  "new_findings": [
+    {
+      "id": "BWDR4BR6-F01",
+      "severity": "MINOR",
+      "source": ["scripts/bwd_r4b_verify.py:340", "scripts/bwd_r4b_verify.py:348", "scripts/bwd_r4b_refwave.py:229"],
+      "evidence": "commands/22-bundle-check.log VERDICT_MISSING_RECORDS and VERDICT_CONTRADICTORY_RECORDS",
+      "argument": "Both preflight and full worker verification accepted a verdict with wave and summary omitted or contradictory. Every covered file and the independently sealed manifest stayed byte-identical.",
+      "fix": "Require the exact verdict schema, literal passed=true, the live manifest wave digest, and equality with the manifest-covered FD summary file."
+    },
+    {
+      "id": "BWDR4BR6-F02",
+      "severity": "MAJOR",
+      "source": ["scripts/bwd_r4b_refwave_r6.py:17", "scripts/bwd_r4b_refwave.py:156", "scripts/bwd_r4b_refwave.py:205", "scripts/bwd_r4b_refwave.py:228", "scripts/bwd_r4b_refwave.py:313"],
+      "evidence": "commands/22-bundle-check.log PRODUCER_DUPLICATE_OPERAND",
+      "argument": "With one duplicate key introduced in the real copied OPERANDS record, the active producer merge returned true, wrote a passing verdict and emitted a new manifest. The downstream consumer refused that manifest against the seal.",
+      "fix": "Use strict shared readers for intermediates, then apply the registered manifest and bundle checks before the wrapper emits a passing merge result."
+    },
+    {
+      "id": "BWDR4BR6-F03",
+      "severity": "MAJOR",
+      "source": ["scripts/bwd_r4b_gpu.py:449", "scripts/bwd_r4b_gpu_r6.py:45", "scripts/bwd_r4b_gpu_r6.py:101", "scripts/bwd_r4b_gpu_r6.py:129", "scripts/bwd_r4b_nvml_sampler_r6.py:118"],
+      "evidence": "commands/23-harness-check.log SAMPLER_WRONG_PID, SAMPLER_MISSING_PID_HEADER and SAMPLER_TIMESTAMP_ONLY_ROW",
+      "argument": "Coverage accepted a record with a different PID, a missing PID and a timestamp-only sample as PID-valid. The active G5 gate uses that coverage as its validity predicate.",
+      "fix": "Require the expected worker PID and strict sample schema with finite monotonic query intervals and nonnegative integer byte values or null. Reject malformed rows and exclude explicit null readings from coverage."
+    },
+    {
+      "id": "BWDR4BR6-F04",
+      "severity": "MINOR",
+      "source": ["scripts/bwd_r4b_gpu_r6.py:176", "scripts/bwd_r4b_gpu_r6.py:188", "scripts/bwd_r4b_gpu_r6.py:206"],
+      "evidence": "commands/23-harness-check.log GPYTEST_TIMEOUT, GPYTEST_TIMEOUT_UTF8 and GPYTEST_TIMEOUT_XML",
+      "argument": "A timeout during a UTF-8 code point raises UnicodeDecodeError and drops readable partial output. A timeout with incomplete JUnit XML raises ParseError. Both run the after-census and fail to write the detailed G-API timeout receipt.",
+      "fix": "Retain raw output or decode with replacement, capture XML parse errors as receipt fields, and persist the detailed red result on every timeout."
+    },
+    {
+      "id": "BWDR4BR6-F05",
+      "severity": "MAJOR",
+      "source": ["scripts/bwd_r4b_gpu_r6.py:187", "scripts/bwd_r4b_gpu_r6.py:206", "scripts/bwd_r4b_gpu.py:852"],
+      "evidence": "commands/23-harness-check.log GPYTEST_CLEAN and GPYTEST_INCOMPLETE",
+      "argument": "A zero-exit child with the retained clean stdout and only one of its 103 JUnit cases yields a passing G-API receipt.",
+      "fix": "Require exact unique collected node IDs from the sealed suite or a pinned census, verify XML totals against that census, and fail on missing or duplicate IDs."
+    }
+  ],
+  "receipts": {
+    "command_index": "COMMANDS.md",
+    "sealed_manifest_sha256": "634bf770d0ea38ee76ae02d621780f26f3ab9ac9f0bf8e4ed2ca4227527e8b49",
+    "selftest": {"passing": 12, "total": 12},
+    "r6_staged_pins_verified": 52,
+    "dry_admissions_passing": 8,
+    "gpu_lines_passing": 8,
+    "gpu_launcher_attempts_exit_76_without_worker": 4,
+    "reference_steps_passing": 4,
+    "g5_checkpoint_estimate_bytes": 3605200896,
+    "g5_checkpoint_bar_bytes": 4000000000
+  },
+  "deviations": [
+    "The initial jq summary attempt printed command not found. The tee pipeline initially masked the nonzero status. Python produced the summary and the wrapper was corrected to propagate failures.",
+    "G-API diagnostic faults were injected at the subprocess boundary against actual retained child records and real fixture censuses. No real child was started.",
+    "No post-run check repairs were required."
+  ],
+  "scratch": ["/tmp/bwd_rev4b_r6_bundle_656ylg4g", "/tmp/bwd_rev4b_r6_harness_0l8iy910"],
+  "prior_art": [
+    "DeMillo, Lipton and Sayward (1978), mutation testing",
+    "NIST FIPS 180-4 (2015), SHA-256, and Dolstra (2006), Nix independent input pins",
+    "Bray (2017), RFC 8259 object names",
+    "NVIDIA NVML API documentation and DLPack (dmlc, 2017 onward), retained interface semantics",
+    "No specific prior art known to me for the exact R4b receipt joins and exception-path probes. Unverified — lead to check the search terms in CONFIRM.md."
+  ]
+}

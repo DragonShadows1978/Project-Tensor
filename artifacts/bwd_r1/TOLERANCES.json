@@ -1,0 +1,14 @@
+{
+  "source": "artifacts/bwd_d/DESIGN.public.md §6, adopted whole by BWD-R1",
+  "rule": "abs(got-ref) <= max(atol_floor, atol_scale*S) + rtol*abs(ref)",
+  "S": "Per-entry fp64 sum of absolute reduction terms from the same stored fp32 operands. For Snake dAlpha sum absolute contributions from both alpha paths before cancellation.",
+  "classes": {
+    "simple": {"atol_floor": 2e-7, "atol_scale": 0, "rtol": 2e-6, "reason": "Few fp32 roundings in same-shape add, mul, square, LeakyReLU and unbroadcasted mean. Check copies and integer fixtures exactly."},
+    "unary_div": {"atol_floor": 1e-6, "atol_scale": 0, "rtol": 8e-6, "reason": "Saved-value rounding and libdevice on finite nonsingular domains in div, reciprocal, sin, cos, exp, sqrt and tanh."},
+    "unbroadcast": {"atol_floor": 2e-6, "atol_scale": 8e-6, "rtol": 5e-5, "reason": "Long sums, reciprocal cancellation and ordered fan-in in add/mul/div unbroadcast and Snake dAlpha."},
+    "snake_dx": {"atol_floor": 3e-6, "atol_scale": 0, "rtol": 2e-5, "reason": "Multiple rounded core operations with finite, nonzero alpha."},
+    "nearest_reflection": {"atol_floor": 2e-7, "atol_scale": 0, "rtol": 2e-6, "reason": "At most three contributions, including scale 2 and legal reflect pads."},
+    "instance_norm_dx": {"atol_floor": 5e-5, "atol_scale": 0, "rtol": 3e-4, "reason": "Centering, variance and row reductions."},
+    "matmul_conv": {"atol_floor": 3e-6, "atol_scale": 1.5e-5, "rtol": 1e-4, "reason": "Different dot and partial-add orders at real length. Check cancellation and unit taps."}
+  }
+}

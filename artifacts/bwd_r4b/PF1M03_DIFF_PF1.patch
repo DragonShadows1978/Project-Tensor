@@ -1,0 +1,14 @@
+--- candidate/tc_signal/_norms.py
++++ pf1m03_scale_zero_frozen_x/tc_signal/_norms.py
+@@ -90,7 +90,10 @@
+                 z = centered * rstd
+                 del centered
+                 if needs_scale:
+-                    dscale = (dy * z).sum([-1]).sum([0])
++                    if needs_x:
++                        dscale = (dy * z).sum([-1]).sum([0])
++                    else:
++                        dscale = tc.zeros(*scale.shape, dtype=scale.dtype, device=scale.device)
+                 if needs_x:
+                     h = dy if scale is None else dy * scale.reshape([1, x.shape[1], 1])
+                     centered_h = h - h.mean([-1], keepdim=True)

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "BWDR3R-F01",
+    "severity": "MINOR",
+    "edit": "Grouped GEMM oracle cases for both ops, N=2, groups=2, 192 coefficients per group, 1,049 positions.",
+    "verification": "G3-special and r3m10. CPU reach check exceeds the sealed dW bound on both cases.",
+    "status": "GPU comparison and kill staged"
+  },
+  {
+    "id": "BWDR3R-F02",
+    "severity": "MINOR",
+    "edit": "Depthwise tree oracle cases for both ops, N=2 and 1,049 positions. ConvTranspose uses stride 2 and output_padding 1.",
+    "verification": "G3-special and r3m11. CPU reach check exceeds the sealed dW bound on both cases.",
+    "status": "GPU comparison and kill staged"
+  },
+  {
+    "id": "BWDR3R-F03",
+    "severity": "NIT",
+    "edit": "Four merge witnesses cover GEMM, depthwise K=1, cross-batch cancellation and a three-position tail tile.",
+    "verification": "G3-special carries all four. r3m09 retains the full-tile GEMM witness.",
+    "status": "GPU witnesses staged"
+  },
+  {
+    "id": "BWDR3R-F04",
+    "severity": "MINOR",
+    "edit": "First backward in a fresh process, one warm-up and five timed calls per row. Three matched first-GEMM diagnostic arms.",
+    "verification": "memory-conv1d and memory-convT emit medians, ranges, raw times, peaks and diagnostic phase costs.",
+    "status": "GPU timings and diagnosis staged"
+  },
+  {
+    "id": "BWDR3R-F05",
+    "severity": "NIT",
+    "edit": "Backward tuning constants centralized with reasons. README specifies the tree switch and pack caps.",
+    "verification": "G1 source pins, G10 diff and scratch-planner reach check.",
+    "status": "Edit verified"
+  },
+  {
+    "id": "BWDR3R-F06",
+    "severity": "NIT",
+    "edit": "Four F10 ops use the same out cannot require grad rule, including every LSTM tuple or list slot.",
+    "verification": "G2 smoke exercises nine destination cases, including no_grad and frozen destinations. G8 shows zero existing-ID outcome changes.",
+    "status": "Host pass"
+  },
+  {
+    "id": "BWDR3R-F07",
+    "severity": "NIT",
+    "edit": "verify() documents stream-before-workspace. README records the resident per-device 32 MiB and diagnostic allocation.",
+    "verification": "G10 diff. Existing configuration test is staged on the unmasked cuBLAS canary line.",
+    "status": "Edit verified"
+  },
+  {
+    "id": "BWDR3R-F08",
+    "severity": "NIT",
+    "edit": "README scopes backward bitwise reproducibility to the same shapes, strides and pointer alignment, plus cuBLAS and device identity.",
+    "verification": "Lead's cuBLAS documentation ruling and G10 diff. G5 reruns remain staged.",
+    "status": "Documentation ruling recorded"
+  },
+  {
+    "id": "BWDR3R-F09",
+    "severity": "NIT",
+    "edit": "Design notes record the review's 77, 99 and 554 G terms/s and the round 4 decision point.",
+    "verification": "DESIGN_NOTES_R3_R2.md cites the review's timing and term census.",
+    "status": "Round 4 candidate recorded"
+  }
+]

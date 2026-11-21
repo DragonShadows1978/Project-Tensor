@@ -137,17 +137,48 @@ Tensor checkpoint_py(py::function fn, std::vector<Tensor> inputs) {
     return obj.cast<Tensor>();
   }
 
+  // BWD-R4a r5b item 1, r5d BWDR5R-F01: snapshot every input's Storage revision BEFORE fn runs. Checkpoint saves the
+  // inputs themselves, not their values from before fn, so a forward that writes one of its own inputs (a TensorCUDA
+  // in-place op, or an external write plus mark_modified()) could never be reproduced by the replay: refuse it here,
+  // as soon as fn returns. Backward then refuses the recomputation if any input changed after this snapshot (an
+  // in-place op, an optimizer step, mark_modified() after an external write). Same mechanism and error style as
+  // Tensor::attach_vjp's check_revisions (autograd.cpp). Writes that do not bump the revision (a raw write without
+  // mark_modified(), a DLPack re-import, APA packed_append, tc_signal's untracked out= paths) and tensors fn captures
+  // in a closure instead of receiving them as inputs are outside this guard (documented contract).
+  // Prior art: PyTorch saved-tensor version counters (Paszke et al., 2019: a saved tensor's _version is recorded at
+  // save time and backward raises "modified by an inplace operation"), taken as the idea; PyTorch's reentrant
+  // torch.utils.checkpoint has the same input-only contract; gradient checkpointing (Chen et al., 2016) is the
+  // recomputation this guards. Ours: the pre-fn snapshot on TensorCUDA's per-Storage revision of the checkpoint's
+  // explicit input list, checked when fn returns and again before any recomputation.
+  auto input_revisions = [&inputs] {
+    std::vector<uint64_t> out;
+    out.reserve(inputs.size());
+    for (auto& t : inputs) out.push_back(t.data().revision());
+    return out;
+  };
+  std::vector<uint64_t> revisions = input_revisions();
+
   py::object obj;
   {
     NoGradGuard guard;
     obj = fn(*tensor_args(inputs));
   }
+  const std::vector<uint64_t> after_fn = input_revisions();
+  for (size_t i = 0; i < inputs.size(); ++i)
+    if (after_fn[i] != revisions[i])
+      throw std::runtime_error("checkpoint: fn modified input slot " + std::to_string(i) +
+                               " in place; a checkpointed function must not write its inputs");
   Tensor out0 = obj.cast<Tensor>();
   NDArray out_data = out0.data();
 
   return Tensor::from_op(out_data, inputs, "checkpoint",
-      [fn, inputs](const NDArray& g) {
+      [fn, inputs, revisions](const NDArray& g) {
         py::gil_scoped_acquire gil;
+
+        for (size_t i = 0; i < inputs.size(); ++i)
+          if (inputs[i].data().revision() != revisions[i])
+            throw std::runtime_error("checkpoint: saved input slot " + std::to_string(i) +
+                                     " was modified after the checkpointed forward");
 
         std::vector<Tensor> replay_inputs;
         replay_inputs.reserve(inputs.size());
@@ -166,8 +197,9 @@ Tensor checkpoint_py(py::function fn, std::vector<Tensor> inputs) {
           set_grad_enabled(prev);
           throw;
         }
-        Tensor replay_out = replay_obj.cast<Tensor>();
         try {
+          // Scope-based exception cleanup (Stroustrup, 1994): restore the incoming mode on cast errors too.
+          Tensor replay_out = replay_obj.cast<Tensor>();
           replay_out.backward(g);
         } catch (...) {
           set_grad_enabled(prev);
@@ -1800,12 +1832,47 @@ PyMethodDef kTestFailExitReportDef = {"_dlpack_test_fail_exit_report", &raw_dlpa
 PyMethodDef kExitRunnerDef = {"_dlpack_exit_hook_runner", reinterpret_cast<PyCFunction>(&raw_dlpack_exit_hook_runner),
                               METH_O, kExitRunnerDoc};
 
+// Prior art: CPython's cyclic GC protocol (Python 2.0, 2000) and
+// pybind11 custom_type_setup. The Tensor bridge exposes the callback edge
+// only when the native graph can attribute that reference to this wrapper.
+Tensor* tensor_gc_value(PyObject* self) {
+  auto* instance = reinterpret_cast<py::detail::instance*>(self);
+  const auto* info = py::detail::get_type_info(typeid(Tensor));
+  if (!info) return nullptr;
+  const auto holder = instance->get_value_and_holder(info, false);
+  return holder.vh && holder.holder_constructed() ? holder.value_ptr<Tensor>() : nullptr;
+}
+
+int tensor_gc_traverse(PyObject* self, visitproc visit, void* arg) {
+#if PY_VERSION_HEX >= 0x03090000
+  Py_VISIT(Py_TYPE(self));
+#endif
+  if (const auto* tensor = tensor_gc_value(self)) {
+    auto* callback = static_cast<PyObject*>(tensor->attached_vjp_gc_ref());
+    Py_VISIT(callback);
+  }
+  return 0;
+}
+
+int tensor_gc_clear(PyObject* self) {
+  if (auto* tensor = tensor_gc_value(self)) tensor->clear_attached_vjp_gc_ref();
+  return 0;
+}
+
 }  // namespace
+
+void bind_bwd_native_selftest(py::module_& module);
 
 PYBIND11_MODULE(_tensor_cuda, m) {
   m.doc() = "Project Tensor — standalone CUDA tensor engine (no PyTorch).";
+  bind_bwd_native_selftest(m);
 
-  py::class_<Tensor>(m, "Tensor")
+  py::class_<Tensor>(m, "Tensor", py::custom_type_setup([](PyHeapTypeObject* heap) {
+        auto& type = heap->ht_type;
+        type.tp_flags |= Py_TPFLAGS_HAVE_GC;
+        type.tp_traverse = tensor_gc_traverse;
+        type.tp_clear = tensor_gc_clear;
+      }))
       .def_property_readonly("shape", [](Tensor& t) {
         return py::tuple(py::cast(t.shape()));
       })
@@ -2629,6 +2696,57 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("is_grad_enabled", &grad_enabled);
   m.def("set_grad_enabled", &set_grad_enabled);
   m.def("checkpoint", &checkpoint_py, py::arg("fn"), py::arg("inputs"));
+  m.def("attach_vjp",
+        [](py::object value, const std::vector<Tensor>& inputs, py::object vjp, std::string name) -> py::object {
+          if (!PyCallable_Check(vjp.ptr())) throw py::type_error("attach_vjp: vjp must be callable");
+          const auto& output = value.cast<const Tensor&>();
+          // Both callback invocation and final DECREF need the GIL. The
+          // native node holds no engine lock across either operation.
+          auto callback = std::shared_ptr<py::object>(
+              new py::object(std::move(vjp)), [](py::object* object) {
+                py::gil_scoped_acquire gil;
+                delete object;
+              });
+          auto result = Tensor::attach_vjp(output, inputs,
+              [callback](const NDArray& dy, const std::vector<bool>& active) {
+                py::gil_scoped_acquire gil;
+                py::tuple mask(active.size());
+                for (size_t i = 0; i < active.size(); ++i) mask[i] = py::bool_(active[i]);
+                py::object returned = (*callback)(Tensor::make(dy, false), mask);
+                if (!py::isinstance<py::tuple>(returned))
+                  throw py::type_error("attach_vjp: vjp must return a tuple");
+                auto tuple = py::reinterpret_borrow<py::tuple>(returned);
+                std::vector<NDArray> gradients;
+                gradients.reserve(tuple.size());
+                for (py::handle item : tuple) {
+                  if (item.is_none()) gradients.emplace_back();
+                  else if (py::isinstance<Tensor>(item)) gradients.push_back(item.cast<const Tensor&>().data());
+                  else throw py::type_error("attach_vjp: each gradient must be a Tensor or None");
+                }
+                return gradients;
+              }, std::move(name), callback->ptr());
+          return result.v == output.v ? std::move(value) : py::cast(std::move(result));
+        }, py::arg("value"), py::arg("inputs"), py::arg("vjp"), py::kw_only(), py::arg("name") = "custom",
+        // Prior art: PyTorch PR #4437 (2018), sole-owner grad_fn traversal,
+        // and PyTorch Autograd mechanics, saved-output packing. Here the
+        // detached value already exists and shares storage with the result.
+        R"doc(Attach a first-order VJP to a fresh detached value, reusing its storage.
+
+The callback receives (dy, needs_input_grad) and returns a tuple in input
+order. Return None for frozen slots and structural zeros. Include saved
+tensors that do not already share a listed input's storage as frozen slots.
+If the VJP needs its output, capture the detached value passed to attach_vjp.
+Never capture the returned result. Capturing it, or a bound method of an
+object that caches graph-bearing outputs, can form a cycle the Python garbage
+collector cannot collect. PyTorch likewise saves a separate tensor sharing the
+output storage to avoid this cycle, and traverses grad_fn only for a sole owner.
+Finish writing the value, call mark_modified() on any tensor written outside
+the engine's in-place ops, and only then call attach_vjp. Keep saved tensors
+read-only afterwards. Writes through a DLPack re-import of an engine tensor
+and APA's packed_append do not update the original tensor's revision.
+A callback exception clears temporary gradients. Clear leaf gradients and
+register fresh callbacks for the consumed nodes before retrying. Backward
+rejects a consumed callback before accumulation. Use one host dispatch lane.)doc");
   m.def("synchronize", &cuda_sync);
   // P1T-M1: DLPack import of a capsule (tensor_cuda.from_dlpack wraps it), and
   // Amendment 1's device-side empty (tensor_cuda.empty wraps it).

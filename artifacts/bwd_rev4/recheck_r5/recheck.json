@@ -1,0 +1,174 @@
+{
+  "review": "BWD-REV4 re-check of BWD-R4a fix rounds r5b (5dee83b6) and r5c (a515439d), Claude Opus 5.5, CPU only",
+  "read": [
+    "tensor_fork_bwd_wt_r4@a515439d: git diff 541faa2d a515439d -- tensor_cuda tc_signal scripts",
+    "orders/BWD_R4A_R5_REVIEW_FIXES.md, BWD_R4A_R5B_RERUN.md, BWD_R4A_R5C_AMENDMENT3.md",
+    "artifacts/bwd_r4/REPORT_R5.md, REPORT_R5C.md, FINDINGS_MAP_R5.json, FINDINGS_MAP_R5C.json, DESIGN_NOTES_R4A_R5.md, AMENDMENT2_R5.md(+sha256 4f4c68ac.. verified), AMENDMENT3_R5C.md(+sha256 b2605789.. verified), MUTANT_R5M01_R5.json",
+    "tensor_cuda/src/core.h:124-127 (mark_modified), bindings.cpp:2725-2732 (attach_vjp undetected-write list), tensor_cuda/tests/test_bwd_r1_hook.py:286-301"
+  ],
+  "ran": {
+    "checks/r5_checkpoint_guard_probe.py --package candidate|r5m01": "checks/r5_checkpoint_guard_probe_{candidate,r5m01}.out, rc 0 both (packages_r5, CPU, CUDA hidden)",
+    "checks/r5_affine_test_power.py": "checks/r5_affine_test_power.out, rc 0 (trailing tc_signal exit-hook CUDA-absent message is expected on a GPU-less process)"
+  },
+  "per_finding": {
+    "F01": {
+      "verdict": "fixed (bar), with NITs BWDR5R-F04/F05/F06",
+      "where": "scripts/bwd_r4_r5.py:145-309 (select_probes, fd_rows, bar, power_rows), 349-395 (candidate_probe_rows); scripts/bwd_r4_r5c.py:57-173 (A3 floor, A3-2), 230-248 (g2_probes_r5c); AMENDMENT2_R5.md, AMENDMENT3_R5C.md",
+      "evidence": "bar |cand-fd|<=rho|fd| per probe, rho 1e-3/1e-4; r4 candidate per-probe relative errors were <=1.06e-4 (BWD-REV4 check 4), so ~9x margin with real power; candidate GPU line pending"
+    },
+    "F02": {
+      "verdict": "fixed (staged)",
+      "where": "scripts/bwd_r4_gpu.py:337-404 (segments per schedule), 475-504 (gates3to4 fine=); bwd_r4_r5.py:397-419 (g1_annotated, g0_fine); bwd_r4_stage_r5.py:49-73, 262, 307 (fine lines, fine G4 baseline)"
+    },
+    "F03": {
+      "verdict": "partly fixed: post-forward mutation refused (verified on CPU, r5m01 lets it through); two gaps BWDR5R-F01 (MAJOR), F02 (MINOR), doc NIT F03",
+      "where": "tensor_cuda/src/bindings.cpp:148-170; tensor_cuda/tensor_cuda/__init__.py:1462-1469; tensor_cuda/tests/test_bwd_r4_checkpoint_revision.py:1-144; MUTANT_R5M01_R5.json"
+    },
+    "F04": {
+      "verdict": "noted and flagged per Voice's decision (exclude from ranking and updates, no untie); correct",
+      "where": "bwd_r4_r5.py:47-142 (identity_norm_census, annotated_rows); REPORT_R5.md item 7 table"
+    },
+    "F05": {
+      "verdict": "fixed",
+      "where": "tc_signal/tests/test_bwd_r4_norm_affine.py:40-141",
+      "evidence": "check r5_affine_test_power: all 7 variants caught (dscale zero, dscale batch-0, r4m03, dbias batch-0, r2m03, dx ignores scale, dx zero); shipped rule worst ratio 4.7e-4 of bar. Residual: only the all-slots-active case at T>1; scale-only and bias-only with x frozen remain at T=1"
+    },
+    "F06": {
+      "verdict": "fixed, meaningful",
+      "where": "tc_signal/tests/test_bwd_r2_paths.py:70-81",
+      "evidence": "tracked out= ValueError is raised only by _recording, so it proves the tracked route; no_grad out= reaching the planner proves the untracked route; first assertion unchanged"
+    },
+    "F07": {
+      "verdict": "fixed (staged), NIT BWDR5R-F07",
+      "where": "scripts/bwd_r4_gpu.py:124-160 (output_digest, one_ulp_edit), 163-202 (digests in checkpoint_block), 328-335 (replay_identity); bwd_r4_r5.py:421-458"
+    },
+    "F08": {
+      "verdict": "noted (R4b), wording NIT BWDR5R-F10",
+      "where": "DESIGN_NOTES_R4A_R5.md F08"
+    },
+    "F09": {
+      "verdict": "fixed in new tables, NIT BWDR5R-F09 (old misleading log line still emitted)",
+      "where": "bwd_r4_r5.py:117-142, 397-406"
+    },
+    "F10": {
+      "verdict": "noted, correct",
+      "where": "DESIGN_NOTES_R4A_R5.md F10"
+    },
+    "F11": {
+      "verdict": "ruled (deferred strict mode), correct",
+      "where": "DESIGN_NOTES_R4A_R5.md F11"
+    },
+    "F12": {
+      "verdict": "fixed",
+      "where": "scripts/bwd_r4_gpu.py:94-121"
+    },
+    "F13": {
+      "verdict": "noted, not credited, correct",
+      "where": "DESIGN_NOTES_R4A_R5.md F13"
+    },
+    "F14": {
+      "verdict": "staged, NIT BWDR5R-F08 (skip guard is name-based)",
+      "where": "bwd_r4_r5.py:460-505; bwd_r4_stage_r5.py"
+    }
+  },
+  "findings": [
+    {
+      "id": "BWDR5R-F01",
+      "severity": "MAJOR",
+      "file": "tensor_cuda/src/bindings.cpp",
+      "line": "148-159 (comment at 151, record at 157-159); tensor_cuda/tensor_cuda/__init__.py:1462-1469",
+      "title": "Revisions are recorded after fn returns, so a checkpointed function that writes its own input in place yields a silently wrong gradient and the replay writes the caller's tensor a second time",
+      "argument": "The forward reads the input, fn bumps its revision, and the guard records the post-write revision; backward sees no change and replays fn on the written value. Check R1 case B on the shipped packages_r5 candidate: fn reads a=[1,2,3], then sets a[0]+=1 with mark_modified; b.grad is [2,2,3] (true [1,2,3]), no error, and a ends [3,2,3] because the replay repeats the write. The code comment and docstring assert the opposite ('fn's own in-place use of an input is part of the forward it saved'): checkpoint saves only the inputs, not their pre-fn values, so the replay cannot reproduce that forward. No test pins the timing (a mutant that records before fn passes all six tests), and r5m01 does not cover it. Not reachable in the R4a/R4b harness (segment inputs are fresh op outputs, and the F07 digest would flag it), but it is a silent-corruption path in the engine API.",
+      "fix": "Snapshot revisions before fn; after fn returns, raise at once if any changed ('checkpoint function modified input slot i in place'), or keep the pre-fn snapshot and refuse at backward. Fix the comment and docstring. Add case B as a host test and a mutant that records after fn."
+    },
+    {
+      "id": "BWDR5R-F02",
+      "severity": "MINOR",
+      "file": "tensor_cuda/src/bindings.cpp; tensor_cuda/tensor_cuda/__init__.py",
+      "line": "157-170; 1455-1471",
+      "title": "Tensors captured by fn's closure are outside the guard",
+      "argument": "Only the explicit input list is checked. Check R1 case C: w captured by the closure, changed with mark_modified after the forward; a.grad is [40,-5,6] (true [4,-5,6]), no error. The docstring says 'each input' and does not tell the caller that every tensor fn reads must be an input. The R4a harness passes all parameters explicitly and F12's census now refuses hidden containers, so it is not exposed.",
+      "fix": "Document the rule (every tensor fn reads must be passed as an input); optionally a debug mode that records the revisions of all leaves the forward touches."
+    },
+    {
+      "id": "BWDR5R-F03",
+      "severity": "NIT",
+      "file": "tensor_cuda/tensor_cuda/__init__.py",
+      "line": "1462-1469",
+      "title": "The checkpoint docstring's undetected-write list is narrower than attach_vjp's",
+      "argument": "attach_vjp's doc (bindings.cpp:2729-2732) also names writes through a DLPack re-import and APA packed_append. tc_signal's own untracked out= paths write through DLPack without mark_modified (_norms.py:111-115; __init__.py conv untracked paths), so a first-party API falls in the undetected class.",
+      "fix": "Copy attach_vjp's list into the checkpoint docstring and name tc_signal's out=."
+    },
+    {
+      "id": "BWDR5R-F04",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5.py",
+      "line": "275-309, 349-375",
+      "title": "The zero/sign-flip power check cannot fail once the clean value passes",
+      "argument": "With bar rho*|fd|, rho<=1e-3: zeroing gives error |fd| > rho|fd|, and flipping gives about 2|fd|, for any fd != 0. So '18/18 power' restates 'clean passes and fd is nonzero'. The bar's real power is rho itself: it rejects any probe error above 0.1% (parameters) or 0.01% (style) of the probe value, against r4 candidate per-probe errors of at most 1.06e-4 relative.",
+      "fix": "None required; describe power as a property of the bar (smallest detectable relative error = rho)."
+    },
+    {
+      "id": "BWDR5R-F05",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5c.py",
+      "line": "57-63",
+      "title": "A3-1's floor never binds on the selected probes",
+      "argument": "Probes are the top-3 |g_ref| entries, so |fd|/(0.1*max|g|) is 6.8 to 10 on all 18 coordinate rows (REPORT_R5C table). The floor is a sanity check that fd is not noise. It cannot hide a defect: it is a validity rule, not acceptance; selection, seed and rho are unchanged; pass_fp64 is still required; no row was dropped. Registering it after the fp64-only data is a disclosed deviation with no candidate exposure.",
+      "fix": "None; state that it is non-binding by construction."
+    },
+    {
+      "id": "BWDR5R-F06",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5c.py",
+      "line": "131-136, 152-158",
+      "title": "A3-2 picks the step triple partly by agreement with the fp64 VJP",
+      "argument": "'passes' includes max_error_ok against the VJP, so on the chosen row the FD is not independent of the VJP it checks. It is sound here: the plateaus 2.78e-4 / 6.95e-5 / 1.74e-5 for T(2)/T(1)/T(1/2) fall 4x per halving, the signature of O(h^2) truncation, and the chosen FD error 1.85e-5 is 300x below the candidate's rho*|fd| = 5.6e-3.",
+      "fix": "Choose by plateau among branch-free strong triples, then check max error separately."
+    },
+    {
+      "id": "BWDR5R-F07",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_gpu.py",
+      "line": "124-202",
+      "title": "The replay-identity probe digests segment outputs only",
+      "argument": "Output identity per segment, with deterministic kernels and the F03 input guard, is strong evidence of exact recomputation. But an input change absorbed by rounding before the output would pass, and r5m02's kill depends on propagation. The r5m02 line requires the mismatch to land on the edited tag, so a non-propagating edit shows up as a survivor, never a false kill. The -0.0 delta is a valid single-element one-ulp mutant: x + (-0.0) is bitwise x for every x including +/-0, and the edit counts changed elements and refuses anything other than one.",
+      "fix": "Also digest each segment's replay inputs against its forward inputs."
+    },
+    {
+      "id": "BWDR5R-F08",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5.py",
+      "line": "494",
+      "title": "The suite-gpu line's 'no GPU test may skip' rule is name-based",
+      "argument": "It flags skips only when '::test_gpu' is in the ID. tensor_cuda/tests/test_bwd_r1_core.py has four @gpu tests named test_core_* (test_core_matmul_geometries x5, test_core_leaky_ties x3, test_core_maximum_first_slot_on_equality, test_core_matmul_exact_cancellation_and_zero_taps); their skips would not fail the line.",
+      "fix": "Fail on any skip on the GPU line, or on any skip whose reason names CUDA."
+    },
+    {
+      "id": "BWDR5R-F09",
+      "severity": "NIT",
+      "file": "scripts/bwd_r4_r5.py",
+      "line": "397-406",
+      "title": "The misleading R4_G1 worst_parameter line is still emitted",
+      "argument": "g1_annotated calls gate.comparison, which still picks the worst relative L2 over floor rows (r4: 7.9e8 on a zero-gradient bias). The correct worst lives in G1_GROUPS.",
+      "fix": "Relabel or drop that field in the old summary."
+    },
+    {
+      "id": "BWDR5R-F10",
+      "severity": "NIT",
+      "file": "artifacts/bwd_r4/DESIGN_NOTES_R4A_R5.md",
+      "line": "F08 section",
+      "title": "G5's figure is called an upper bound on this process's use",
+      "argument": "It bounds the process's use only at the sampled instants; unsampled transients can exceed it, as the same note says NVML would catch.",
+      "fix": "Say 'upper bound at the sampled phases'."
+    }
+  ],
+  "answers_short": {
+    "Q2": "Correct for post-forward writes that bump the revision (case A refused on the candidate, accepted on r5m01). Recording after fn is wrong (BWDR5R-F01). Closure tensors are missed (F02). The documented raw-write class includes first-party tc_signal out= (F03). r5m01 is caught by the 3 host refusal tests, but nothing tests the timing.",
+    "Q3": "The bar is non-vacuous; power checks are tautological (F04). The A3-1 floor is sound and non-binding (F05). A3-2 is sound (F06).",
+    "Q4": "Output digests are strong but not complete evidence (F07); r5m02 is a valid mutant.",
+    "Q5": "No new test weakens an old one; the item 9 rename and out= witness are meaningful.",
+    "Q6": "New: F01 (MAJOR) and F02 (MINOR) in the core guard; NITs F03-F10."
+  },
+  "reviewer_deviation": "My BWD-REV4 final message counted severities as 4 MAJOR / 6 MINOR / 4 NIT; findings.json final (08d56016..) has 3 / 6 / 5, as the lead noted. The JSON is right."
+}

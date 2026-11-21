@@ -1,0 +1,139 @@
+{
+ "version": "final",
+ "review": "BWD-REV2",
+ "reviewer": "Claude Opus 5.5 (cross-model; author Codex)",
+ "base": "d4285023",
+ "tip": "facb2169",
+ "blind": "written before reading tensor_fork_bwd_wt_r2/artifacts/bwd_r2/ except TOLERANCES_R2.json and its .sha256 (a test input the tests load) and the candidate package paths (as the order's Method directs)",
+ "counts": {
+  "BLOCKER": 0,
+  "MAJOR": 0,
+  "MINOR": 3,
+  "NIT": 8
+ },
+ "checks": [
+  "checks/paths_candidate.json",
+  "checks/paths_prod.json",
+  "checks/paths_compare.log",
+  "checks/vjp_candidate.json",
+  "checks/boundary_mutants.json",
+  "checks/plain_run_no_fixtures.log",
+  "checks/plain_run_with_fixtures.log",
+  "checks/oracle_verbatim.log",
+  "checks/adain_ds.log"
+ ],
+ "findings": [
+  {
+   "id": "BWDR2R-F01",
+   "severity": "MINOR",
+   "file": "tc_signal/tests/test_bwd_r2_fd.py",
+   "line": "60 (refs = oracle_call(...)); 81, 90",
+   "title": "G4 (finite differences) never runs candidate code",
+   "argument": "check_cell compares Voice's fp64 oracle VJP (bwd_r2_support/oracle.py) with central differences of the same oracle's fp64 forward. No tc_signal or tensor_cuda call is made. The reported 'FD: 120 probes, worst 0.0017 of the bound' (reviewer recount: tiny 46 coordinates + Kokoro 74 projections = 120; worst 0.00169 at Kokoro reflection) validates the answer key, not the candidate VJPs. Candidate correctness rests on G3 alone (candidate vs the FD-validated key), which is sound transitively, but the gate cannot fail for a wrong candidate (L16: the cheapest pass). Evidence: plain run with fixtures (checks/plain_run_with_fixtures.log) passes these 8 tests on a host with no CUDA device and CUDA_VISIBLE_DEVICES empty.",
+   "fix": "Label G4 as answer-key validation in the report and acceptance text. If candidate-level FD is wanted, add a GPU line that projects the candidate gradient on the seeded directions and compares with the fp64 FD of the oracle forward.",
+   "post_v1": "Unchanged after reading the receipts. BWD-R2's REGISTRATION says G4 'uses verbatim Voice fp64 operators', and its LEDGER calls G4 'the registered fallback smoke'. So the seat labelled it honestly. REPORT.md's gate table still lists 'G4 PASS ... 120 probes', and the review order lists it among the gates that passed, which is the misreading this finding is about."
+  },
+  {
+   "id": "BWDR2R-F02",
+   "severity": "MINOR",
+   "file": "tc_signal/tests/bwd_r2_support/cases.py",
+   "line": "100-105 (gpu_args omit_affine)",
+   "title": "Kokoro and BP2 cells do not use the production caller's operand form for instance norm and AdaIN",
+   "argument": "gpu_args drops scale and bias when they are identity, so the Kokoro cell and all 12 BP2 cells call instance_norm1d(x, None, None). Voice's caller passes identity tensors: /mnt/ForgeRealm/Project-Voice/engine/kokoro_tc/model.py:751 `self.ts.instance_norm1d(x, self.f32(p['scale']), self.f32(p['bias']), eps=p['eps'])`. On the tracked path that is the 3-slot hook (x, scale, bias) and `h = dy * scale.reshape(...)`. That branch is exercised only at the BP1 small cells (at most [2, 8, 25]). With identity scale the product is exact (x1.0), so no numeric defect is predicted, but no Kokoro-geometry receipt runs the caller's form (house lesson: operand parity with the production caller). The round order's premise 'Kokoro uses scale=None and bias=None' contradicts model.py:751.",
+   "fix": "Run the Kokoro and BP2 instance-norm and AdaIN cells with the identity tensors passed (as model.py:751 does), in addition to or instead of the None spelling.",
+   "post_v1": "Unchanged. BWD-R2's LEDGER: 'BP1 Kokoro and BP2 use identity affine'. The seat spelled them None. The PROD forward guard (scripts/bwd_r2_gpu.py forward_guard, gpu_real_g2-forward_worker.json) uses the same gpu_args, so the None spelling is also what the Kokoro forward-byte receipt covers."
+  },
+  {
+   "id": "BWDR2R-F03",
+   "severity": "NIT",
+   "file": "tc_signal/tests/bwd_r2_support/cases.py",
+   "line": "22-26 (TOLERANCES, tolerances())",
+   "title": "Gate tolerances load from a receipts folder without checking their seal",
+   "argument": "tolerances() reads artifacts/bwd_r2/TOLERANCES_R2.json through a repo-relative path and never compares it with the sealed sha256 (0e99da33...e2 in TOLERANCES_R2.sha256). A later edit to that JSON silently loosens or tightens every G3/G4 bound, and the test package depends on a receipts directory outside tc_signal/. The values themselves match DESIGN section 6 (nearest/reflection 2e-7/2e-6; instance norm 5e-5/3e-4; matmul max(3e-6, 1.5e-5*S)/1e-4; broadcast max(2e-6, 8e-6*S)/5e-5; FD 1e-7 + 1e-5*|v|).",
+   "fix": "Assert the sealed sha256 in tolerances(), or move the constants with their seal into tests/bwd_r2_support/.",
+   "post_v1": "Downgraded from MINOR to NIT. The receipts show the seal predates every comparison: TOLERANCES_R2.json and .sha256 mtime 20:16:37.89; the first comparison, logs/bwd_r2_g4_fd.log, ends 20:26:28; GPU lines ran 21:20-21:21. The GPU launcher pins the file's sha256 (GPU_SOURCES.json lists 0e99da33...; scripts/bwd_r2_gpu.py:25 checks the TOLERANCES_R2 seal). The residual is plain pytest runs, which still load the JSON unchecked."
+  },
+  {
+   "id": "BWDR2R-F04",
+   "severity": "MINOR",
+   "file": "tc_signal/tc_signal/_small.py; tc_signal/tc_signal/_norms.py; tc_signal/README.md",
+   "line": "_small.py:3, 37, 82; _norms.py:50-52",
+   "title": "The public docstrings and README do not describe the new tracked-path behaviour",
+   "argument": "When a TensorCUDA operand requires grad and grad mode is on, the three ops now: return a new TensorCUDA tensor that does not come from the module allocator; raise ValueError for out=; raise TypeError for any non-TensorCUDA operand; and (for instance norm) raise ValueError for a trainable scale or bias. The docstrings still say 'Returns `out`' and 'the output comes from the module allocator unless `out` is given'. The README has no gradient section. Orchestrator rule 5: docs follow the code.",
+   "fix": "Add a short 'Gradients (BWD-R2)' paragraph to each docstring and to the README: the selection rule, the refusals, and that the tracked output bypasses set_allocator."
+  },
+  {
+   "id": "BWDR2R-F05",
+   "severity": "NIT",
+   "file": "tc_signal/tc_signal/_norms.py",
+   "line": "70",
+   "title": "Nothing checks that the instance-norm VJP reuses the forward's statistics scheme",
+   "argument": "The VJP replays the forward's scheme: shift by x[...,0], mean of the shifted row, centred biased variance, then rstd = 1/sqrt(var+eps). It does so with different reduction trees than src/norms.cu (core reduce_lastdim and mul by fp32(1/T), not block_tree_sum / Lf and fmaf). So it is a replay, not a bitwise reuse, which DESIGN section 5 allows. Reviewer mutant B7 (shift by the last sample instead of the first) survives every ported BWD-R2 test (checks/boundary_mutants.json). The variants are numerically equivalent in the tested regimes, so the 'reuse' property is unenforced, not violated.",
+   "fix": "Accept and record it as unenforced, or share the forward's per-row (mean, rstd) from the kernel if exact reuse is ever required."
+  },
+  {
+   "id": "BWDR2R-F06",
+   "severity": "NIT",
+   "file": "tc_signal/tests/bwd_r2_support/cases.py",
+   "line": "29-31 (require_gpu)",
+   "title": "GPU tests skip only when CUDA_VISIBLE_DEVICES is exactly the empty string",
+   "argument": "On a host without a usable GPU, these tests error instead of skipping when the variable is unset or set to -1. The fixture-absent skip, which BWD-R1 required, is correct.",
+   "fix": "Also skip when no CUDA device is usable (a device-count probe)."
+  },
+  {
+   "id": "BWDR2R-F07",
+   "severity": "NIT",
+   "file": "tc_signal/tc_signal/__init__.py",
+   "line": "59-73 (_recording)",
+   "title": "Version skew with a core that lacks attach_vjp fails after the forward has run",
+   "argument": "Production tensor_cuda (3138cf54 package) has Tensor.requires_grad, is_grad_enabled and mark_modified, but no attach_vjp. Pairing the new tc_signal with that core turns a previously silent detached result into an AttributeError, raised only after the forward kernel has run, for any caller that passes a requires_grad tensor in grad mode. Both ship from one repository, so this is low risk.",
+   "fix": "In _recording, check hasattr(tc, 'attach_vjp') and raise a clear error before any work, or document the minimum core."
+  },
+  {
+   "id": "BWDR2R-F08",
+   "severity": "NIT",
+   "file": "tc_signal/tc_signal/_norms.py",
+   "line": "64-76 (vjp)",
+   "title": "The instance-norm VJP keeps every intermediate alive until it returns",
+   "argument": "The locals shifted, centered, z and h, plus the expression temporaries, keep about 7 to 8 full-size fp32 tensors alive at peak. That is about 0.2 GB at the generator's [1,128,48000] AdaIN rows (DESIGN section 5 memory model: 24.6 MB per tensor). This is inside the design's 0.4 to 0.7 GB backward-temp allowance, but it adds to it.",
+   "fix": "Release shifted after centered, and so on (del), or fuse in a later round."
+  },
+  {
+   "id": "BWDR2R-F09",
+   "severity": "NIT",
+   "file": "tc_signal/tc_signal/_norms.py",
+   "line": "64-76",
+   "title": "The instance-norm closure captures graph-bearing x and scale, not detached copies",
+   "argument": "DESIGN section 3 says 'A closure keeps only detached saved tensors or small immutable metadata'. The closure keeps x (which may carry grad history) and scale. This is harmless here: the reviewer's closure census shows every captured tensor is a listed hook input, so it is revision-checked; the attached node already owns those Variables; there is no cycle; and the callback runs with grad off. It still departs from the design text.",
+   "fix": "Amend the design text to 'listed inputs or detached saved tensors', or capture detached aliases that share revision."
+  },
+  {
+   "id": "BWDR2R-F10",
+   "severity": "NIT",
+   "file": "tc_signal/tc_signal/__init__.py; _norms.py; _lstm.py; _small.py",
+   "line": "conv1d, conv_transpose1d, layer_norm, group_norm, lstm, rint",
+   "title": "Ops without a VJP still silently drop the gradient for operands that require grad",
+   "argument": "This behaviour predates BWD-R2 and is outside its scope (the convolutions are round 3). A training caller that routes through one of these ops gets no gradient upstream and no error. A production training path should refuse instead.",
+   "fix": "Register a successor: refuse requires_grad operands under grad mode in ops without a VJP, or document it, before round 4 integration."
+  },
+  {
+   "id": "BWDR2R-F11",
+   "severity": "NIT",
+   "file": "tc_signal/tests/test_bwd_r2_numeric.py",
+   "line": "kind selection in test_gpu_voice_vjps",
+   "title": "The AdaIN dB check uses the matmul class, which is looser than the design's broadcast class",
+   "argument": "dB is an add-unbroadcast sum. DESIGN section 6 places that kind of sum in the 'broadcast' class (max(2e-6, 8e-6*S)/5e-5). The round order put 'the AdaIN Gemm parts under the matmul class', so the test follows the order. For N=1 (every cell except small2), dB = dh with no reduction, so the difference matters only at small2.",
+   "fix": "None required. Optionally use the broadcast class for dB."
+  }
+ ],
+ "v1_seal": "findings_v1.json sha256 e8c3827c688fd04d5e1057013b2b3bd2e6bf901b378b068be43b383be51eff3b, 2026-11-18T21:37:53-05:00 (findings_v1.seal)",
+ "post_v1_receipts_read": [
+  "REPORT.md",
+  "LEDGER.md",
+  "REGISTRATION.md",
+  "r2m01..r2m05 .diff",
+  "gpu_real_*_worker.json (g2-forward, g3-numeric, g5-determinism, r2m01-r2m05)",
+  "scripts/bwd_r2_gpu.py forward_guard and seal check",
+  "file mtimes of seals and logs"
+ ]
+}

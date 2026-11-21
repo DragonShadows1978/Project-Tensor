@@ -1,0 +1,10 @@
+{
+  "source": "DESIGN.public.md section 6",
+  "nearest_reflection": {"atol": 2e-7, "rtol": 2e-6, "rationale": "At most three fp32 terms in the reference fixtures; fixed ordered and exact integer checks."},
+  "instance_norm_dx": {"atol": 5e-5, "rtol": 3e-4, "rationale": "Shifted centering, biased variance and fp32 row reductions."},
+  "broadcast": {"atol_floor": 2e-6, "sum_abs_factor": 8e-6, "rtol": 5e-5, "rationale": "Ordered broadcast accumulation and cancellation."},
+  "matmul": {"atol_floor": 3e-6, "sum_abs_factor": 1.5e-5, "rtol": 1e-4, "rationale": "Different fp32 product and partial sum orders; S is the fp64 sum of absolute terms."},
+  "row_sum": {"atol": 0, "sum_abs_factor": 3.814697265625e-6, "rationale": "Roundoff bound of 32 fp32 eps times sum(abs(h))*rstd per row, including centered cancellation."},
+  "finite_difference": {"h": "eps64**(1/3)", "step_multipliers": [0.5, 1, 2], "atol": 1e-7, "rtol": 1e-5, "tiny_objective_scale": 1, "real_objective_scale": 0.0009765625, "rationale": "Three central differences against the same analytic fp64 projection."},
+  "exact": "Compare same-width unsigned views for structural zeros and registered exact-integer, repeat and forward-byte checks."
+}

@@ -8,6 +8,13 @@
 #include "tc/ops.h"
 #include "tc/bp_op_timing.h"
 
+#include <cublas_v2.h>
+#include <algorithm>
+#include <climits>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -643,16 +650,203 @@ arena_row_pair_transaction(
   return std::make_tuple(raw_out, rope_out, std::get<2>(out));
 }
 
+namespace {
+// Prior art: NVIDIA cuBLAS 12.6 (2024) pedantic compute and reproducibility,
+// and Harris, Optimizing Parallel Reduction in CUDA (2007), fixed ordering.
+// Ours: one private backward handle and workspace per current device, with
+// checked settings shared with dispatch. Strided batches use one heuristic
+// pick, following cuBLAS strided-batched GEMM (CUDA 8, 2016).
+void check_backward_blas(cublasStatus_t status, const char* call) {
+  if (status != CUBLAS_STATUS_SUCCESS)
+    throw std::runtime_error(std::string("matmul backward: ") + call + ": " +
+                             cublasGetStatusString(status));
+}
+
+void check_backward_cuda(cudaError_t status, const char* call) {
+  if (status != cudaSuccess)
+    throw std::runtime_error(std::string("matmul backward: ") + call + ": " +
+                             cudaGetErrorString(status));
+}
+
+class BackwardGemm {
+ public:
+  explicit BackwardGemm(int device)
+      : device_(device), log_config_(std::getenv("TC_MATMUL_BWD_LOG_CONFIG") != nullptr) {}
+  BackwardGemm(const BackwardGemm&) = delete;
+  BackwardGemm& operator=(const BackwardGemm&) = delete;
+
+  void initialize() {
+    check_backward_blas(cublasCreate(&handle_), "cublasCreate");
+    set_legacy_stream();
+    check_backward_blas(cublasSetAtomicsMode(handle_, atomics_), "cublasSetAtomicsMode");
+    check_backward_blas(cublasSetMathMode(handle_, math_), "cublasSetMathMode");
+    check_backward_cuda(cudaMalloc(&workspace_, workspace_bytes), "workspace cudaMalloc");
+    check_backward_blas(cublasSetWorkspace(handle_, workspace_, workspace_bytes), "cublasSetWorkspace");
+    installed_workspace_ = workspace_;
+    installed_bytes_ = workspace_bytes;
+  }
+
+  ~BackwardGemm() {
+    // Best-effort release. CUDA may already be shutting down during static
+    // destruction, and a destructor cannot propagate CUDA cleanup errors.
+    if (!handle_ && !workspace_) return;
+    int previous;
+    if (cudaGetDevice(&previous) != cudaSuccess) return;
+    if (device_ != previous && cudaSetDevice(device_) != cudaSuccess) return;
+    if (handle_) cublasDestroy(handle_);
+    if (workspace_) cudaFree(workspace_);
+    if (device_ != previous) cudaSetDevice(previous);
+  }
+
+  void run(cublasOperation_t op_b, int n, int m, int k, float alpha, const float* b,
+           int ldb, int64_t stride_b, const float* a, float* out, int batches) {
+    // With a private handle all stream/workspace changes go through this
+    // class. cuBLAS has getters for the other settings but none for workspace.
+    cudaStream_t stream;
+    cublasAtomicsMode_t atomics;
+    cublasMath_t math;
+    cublasPointerMode_t pointer;
+    check_backward_blas(cublasGetStream(handle_, &stream), "cublasGetStream");
+    check_backward_blas(cublasGetAtomicsMode(handle_, &atomics), "cublasGetAtomicsMode");
+    check_backward_blas(cublasGetMathMode(handle_, &math), "cublasGetMathMode");
+    check_backward_blas(cublasGetPointerMode(handle_, &pointer), "cublasGetPointerMode");
+    if (log_config_) {
+      int version, sm_count;
+      check_backward_blas(cublasGetVersion(handle_, &version), "cublasGetVersion");
+      check_backward_cuda(cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device_),
+                          "cudaDeviceGetAttribute(MultiProcessorCount)");
+      std::fprintf(stderr, "bwd_r1_gemm device=%d stream_legacy=%d atomics_disabled=%d pedantic_math=%d "
+                   "host_pointer=%d workspace_bytes=%zu pedantic_compute=%d default_algo=%d "
+                   "cublas_version=%d sm_count=%d batches=%d\n",
+                   device_, stream == cudaStreamLegacy, atomics == CUBLAS_ATOMICS_NOT_ALLOWED,
+                   math == CUBLAS_PEDANTIC_MATH, pointer == CUBLAS_POINTER_MODE_HOST, installed_bytes_,
+                   compute_ == CUBLAS_COMPUTE_32F_PEDANTIC, algo_ == CUBLAS_GEMM_DEFAULT,
+                   version, sm_count, batches);
+    }
+    if (stream != cudaStreamLegacy || atomics != atomics_ || atomics_ != CUBLAS_ATOMICS_NOT_ALLOWED ||
+        math != math_ || math_ != CUBLAS_PEDANTIC_MATH || pointer != CUBLAS_POINTER_MODE_HOST ||
+        !workspace_ || installed_workspace_ != workspace_ || installed_bytes_ != workspace_bytes ||
+        compute_ != CUBLAS_COMPUTE_32F_PEDANTIC || algo_ != CUBLAS_GEMM_DEFAULT)
+      throw std::runtime_error("matmul backward: strict fp32 GEMM configuration mismatch");
+
+    const float beta = 0.0f;
+    if (batches == 1) {
+      check_backward_blas(cublasGemmEx(handle_, op_b, CUBLAS_OP_N, n, m, k,
+        &alpha, b, CUDA_R_32F, ldb, a, CUDA_R_32F, k,
+        &beta, out, CUDA_R_32F, n, compute_, algo_), "cublasGemmEx");
+      return;
+    }
+    const int64_t stride_a = static_cast<int64_t>(m) * k;
+    const int64_t stride_c = static_cast<int64_t>(m) * n;
+    check_backward_blas(cublasGemmStridedBatchedEx(handle_, op_b, CUBLAS_OP_N, n, m, k,
+        &alpha, b, CUDA_R_32F, ldb, stride_b, a, CUDA_R_32F, k, stride_a,
+        &beta, out, CUDA_R_32F, n, stride_c, batches, compute_, algo_),
+        "cublasGemmStridedBatchedEx");
+  }
+
+ private:
+  void set_legacy_stream() {
+    check_backward_blas(cublasSetStream(handle_, cudaStreamLegacy), "cublasSetStream");
+    // cublasSetStream resets the workspace association, even on the same stream.
+    installed_workspace_ = nullptr;
+    installed_bytes_ = 0;
+  }
+
+  static constexpr size_t workspace_bytes = 32 * 1024 * 1024;
+  const int device_;
+  const bool log_config_;
+  const cublasComputeType_t compute_ = CUBLAS_COMPUTE_32F_PEDANTIC;
+  const cublasGemmAlgo_t algo_ = CUBLAS_GEMM_DEFAULT;
+  const cublasMath_t math_ = CUBLAS_PEDANTIC_MATH;
+  const cublasAtomicsMode_t atomics_ = CUBLAS_ATOMICS_NOT_ALLOWED;
+  cublasHandle_t handle_ = nullptr;
+  void* workspace_ = nullptr;
+  void* installed_workspace_ = nullptr;
+  size_t installed_bytes_ = 0;
+};
+
+BackwardGemm& backward_gemm(int device) {
+  static std::mutex handles_mutex;
+  static std::map<int, std::unique_ptr<BackwardGemm>> handles;
+  std::lock_guard<std::mutex> lock(handles_mutex);
+  auto& handle = handles[device];
+  if (!handle) {
+    auto created = std::make_unique<BackwardGemm>(device);
+    created->initialize();
+    handle = std::move(created);
+  }
+  return *handle;
+}
+}  // namespace
+
+// The private build-integrated self-test calls this exact backward helper.
+NDArray matmul_backward(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
+  // Preserve the engine's existing lower-precision behavior.
+  if (a.dtype != DType::Float32) return tc::matmul(a, b, alpha, trans_b);
+  const int na = a.ndim(), nb = b.ndim();
+  if (na < 2 || nb < 2 || b.dtype != a.dtype || !a.device.is_cuda() ||
+      !b.device.is_cuda() || a.device.index != b.device.index)
+    throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices");
+
+  const int64_t m = a.shape[na - 2], k = a.shape[na - 1];
+  const int64_t n = b.shape[nb - (trans_b ? 2 : 1)];
+  if (m > INT_MAX || n > INT_MAX || k > INT_MAX || k != b.shape[nb - (trans_b ? 1 : 2)])
+    throw std::runtime_error("matmul backward: invalid GEMM dimensions");
+
+  Shape batch_shape(a.shape.begin(), a.shape.end() - 2);
+  const auto batches = numel_of(batch_shape);
+  if (batches > INT_MAX) throw std::runtime_error("matmul backward: invalid GEMM batch count");
+  const bool batched_b = na == nb;
+  if (batched_b && batches != numel_of(Shape(b.shape.begin(), b.shape.end() - 2)))
+    throw std::runtime_error("matmul backward: batch size mismatch");
+  Shape out_shape = std::move(batch_shape);
+  out_shape.push_back(m);
+  out_shape.push_back(n);
+
+  int device;
+  check_backward_cuda(cudaGetDevice(&device), "cudaGetDevice");
+  if (device != a.device.index)
+    throw std::runtime_error("matmul backward: operands must be on the current CUDA device");
+  if (!k) return NDArray::zeros(out_shape, a.dtype, a.device);
+  NDArray out(out_shape, a.dtype, a.device);
+  if (!out.numel()) return out;
+
+  const auto* ap = static_cast<const float*>(a.data_ptr());
+  const auto* bp = static_cast<const float*>(b.data_ptr());
+  auto* cp = static_cast<float*>(out.data_ptr());
+  const auto op_b = trans_b ? CUBLAS_OP_T : CUBLAS_OP_N;
+  const auto ldb = trans_b ? k : n;
+  const auto stride_b = batched_b ? k * n : 0;
+  backward_gemm(device).run(op_b, n, m, k, alpha, bp, ldb, stride_b, ap, cp, batches);
+  cuda_check_last("matmul backward");
+  return out;
+}
+
 Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
   NDArray out = tc::matmul(a.data(), b.data(), alpha, trans_b);
   return Tensor::from_op(out, {a, b}, "matmul", [a, b, alpha, trans_b](const NDArray& g) {
+    auto weight = b.data();
+    if (a.ndim() != b.ndim() && b.ndim() > 2) {
+      // Forward's rank-mismatch stride 0 selects the first stored B matrix.
+      // It is true broadcasting only if every leading B extent is one.
+      if (std::any_of(weight.shape.begin(), weight.shape.end() - 2,
+                      [](int64_t dim) { return dim != 1; }))
+        throw std::runtime_error("matmul backward: forward uses stride 0 and only the first B matrix "
+                                 "for unequal ranks with non-singleton B batch dimensions");
+      weight = weight.reshape(Shape(weight.shape.end() - 2, weight.shape.end()));
+    }
     // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
     // the no-copy OP_T read.  dB: non-trans alpha*A^T@g, trans alpha*g^T@A.
-    a.v->accumulate_grad(tc::matmul(g, b.data(), alpha, !trans_b));
-    if (trans_b)
-      b.v->accumulate_grad(tc::matmul(transpose2d_last(g), a.data(), alpha, false));
-    else
-      b.v->accumulate_grad(tc::matmul(transpose2d_last(a.data()), g, alpha, false));
+    a.v->accumulate_grad(matmul_backward(g, weight, alpha, !trans_b));
+    // Shared B contributes one dB per A batch. The existing reduce_to path in
+    // accumulate_grad sums these in the engine's fixed reduction order.
+    // Reduce against the rank-2 view before restoring any singleton B axes.
+    auto grad_b = trans_b
+        ? matmul_backward(transpose2d_last(g), a.data(), alpha, false)
+        : matmul_backward(transpose2d_last(a.data()), g, alpha, false);
+    if (weight.ndim() != b.ndim())
+      grad_b = reduce_to(grad_b, weight.shape).reshape(b.shape());
+    b.v->accumulate_grad(grad_b);
   });
 }
 

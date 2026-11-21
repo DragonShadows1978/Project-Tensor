@@ -1,0 +1,177 @@
+{
+ "order": "BWD-REV1",
+ "version": "final",
+ "reviewer": "Claude Opus 5.5 (cross-model; author Codex)",
+ "candidate_module_sha256": "78c2b99be540e6a925e708141090ab724bd1056f27fd469d175d216d1e0d0613",
+ "diff": "git diff d5c55d6c 4d844a05 -- tensor_cuda",
+ "blind": false,
+ "note": "v1 (sha256 70f0e7ac371af4ce94862ecc98c13ca053d8f8af9d00796763a090d5fb69f2dc, 2026-11-18T16:37:58-05:00) was written blind. Final adds evidence from BWD-R1's receipts to F01, F02, F05, F07 and F08, and adds F14-F16. No v1 finding was withdrawn or downgraded.",
+ "counts": {
+  "BLOCKER": 0,
+  "MAJOR": 3,
+  "MINOR": 8,
+  "NIT": 5
+ },
+ "findings": [
+  {
+   "id": "BWDR1-F01",
+   "severity": "MAJOR",
+   "file": "tensor_cuda/tests/test_bwd_r1_core.py; tensor_cuda/tests/test_bwd_r1_matmul.py",
+   "line": "9; 9",
+   "title": "Two tracked test files import bwd_r1_oracle, which lives in scripts/, so a plain pytest run of tensor_cuda/tests stops at collection",
+   "argument": "Both modules do `from bwd_r1_oracle import ...` at import time. bwd_r1_oracle.py is tracked only at scripts/bwd_r1_oracle.py, and nothing in tensor_cuda/tests (no conftest, no sys.path insert) puts scripts/ on the path. Run plainly, pytest reports 'ModuleNotFoundError: No module named bwd_r1_oracle' for both files and prints 'Interrupted: 2 errors during collection'. The module-level skipif cannot help, because the import fails before the skip is evaluated. Once promoted, any whole-suite run that does not add scripts/ to PYTHONPATH is interrupted, including the CPU lane. This is the same class as ENG3-F5: a shipped test that passes only under the round's harness environment.",
+   "suggested_fix": "Move the oracle into tensor_cuda/tests/support/ (the directory already exists), or into tests/ beside the tests, and import it from there. Add a fresh-tree collection check (`pytest --collect-only tensor_cuda/tests`, with no extra PYTHONPATH) to the gate.",
+   "evidence": "checks/pytest_plain.log (exit 2, 'Interrupted: 2 errors during collection'); checks/pytest_with_scripts.log (19 passed, 58 skipped, exit 0). Post-v1 receipt: every BWD-R1 GPU line exported PYTHONPATH=...:scripts (gpu_real_*.json env), and the R1 ledger's script repair 1 hit the same missing scripts/ path, so the harness masked it."
+  },
+  {
+   "id": "BWDR1-F02",
+   "severity": "MAJOR",
+   "file": "tensor_cuda/src/ops.cpp; tensor_cuda/tests/test_bwd_r1_matmul.py",
+   "line": "ops.cpp:707-725; test_bwd_r1_matmul.py:34,52-55",
+   "title": "The no-TF32 gate cannot observe a TF32 compute type at the actual cublasGemmEx call: the compute and algo parts of the configuration assert are tautological, and the canary runs under a mandatory NVIDIA_TF32_OVERRIDE=0",
+   "argument": "`compute` and `algo` are local constants (ops.cpp:707-708). The mismatch check (718-719) and the logged `pedantic_compute=1 default_algo=1` (709-716) compare those constants with themselves, so they cannot fail unless the edit changes the constant itself. The `installed_workspace_`/`installed_bytes_` comparison is likewise against shadow fields that only this class writes. Only stream, atomics, math and pointer mode are read back from the handle. test_gpu_canary_and_configuration asserts NVIDIA_TF32_OVERRIDE == '0' before it runs. NVIDIA documents that override as disabling TF32 for FP32 work in its libraries regardless of programmatic settings (unverified for an explicit CUBLAS_COMPUTE_32F_FAST_TF32 compute type: lead to check). If that holds, then in the registered environment a defect that writes CUBLAS_COMPUTE_32F_FAST_TF32 (or CUBLAS_GEMM_DEFAULT_TENSOR_OP) directly into the cublasGemmEx argument list, leaving the constants alone, is masked: the canary sees fp32 and the log still prints 1. Production does not set the override, so TF32 would run there. DESIGN \u00a75 requires a canary that distinguishes fp32 from TF32 even when the override masks a bad flag. The override's purpose was to neutralise the forward and default paths, but for the strict path it removes the only discriminating witness.",
+   "suggested_fix": "Run the canary in a process without NVIDIA_TF32_OVERRIDE (or with it =1, so a TF32 path would actually be taken), and keep the =0 environment only for the other lines. Make the call site consume the same member that the check reads (for example compute_/algo_ fields set in initialize() and passed to cublasGemmEx). Optionally capture cuBLAS's dispatch log (CUBLASLT_LOG_LEVEL / CUBLAS_LOGINFO_DBG) for the canary call as dispatch evidence, as \u00a75 asks.",
+   "evidence": "Post-v1 receipts confirm it. r1m04_matmul_tf32.diff edits only the constant at ops.cpp:707. logs/bwd_r1_r2_gpu_real_G5-m04.log (sha 6a931cd9...) shows 'pedantic_compute=0' and 'RuntimeError: matmul backward: strict fp32 GEMM configuration mismatch', thrown before cublasGemmEx runs. So the kill came from the constant comparing against itself; the canary never executed a TF32 GEMM in any receipt. G4-strict log (sha 0fd3254c...): the canary's fp32 bound ratio is 0.00048, against 6.18/5.95 for TF32-rounded operands, so the canary would discriminate if TF32 actually ran. The registration (REGISTRATION.md:9) calls this 'actual-call configuration evidence'; for compute and algo it is not. Read ops.cpp:700-726, test_bwd_r1_matmul.py:33-56. Whether NVIDIA_TF32_OVERRIDE=0 masks an explicit FAST_TF32 compute type is unverified (lead to check cuBLAS docs)."
+  },
+  {
+   "id": "BWDR1-F03",
+   "severity": "MAJOR",
+   "file": "tensor_cuda/src/autograd.cpp",
+   "line": "156-198 (engine), 121-123 (consumed callback), 132-145 (hook errors)",
+   "title": "A traversal that fails at a hook leaves stale gradients on non-leaf nodes; the next backward through those nodes adds them silently. The design's recovery rule (clear leaf grads, retry) does not remove them",
+   "argument": "Tensor::backward frees an op node's grad only after that node's grad_fn has run (line 196). When any node throws, every op node that already received a contribution but has not run keeps its partial grad. The hook turns throwing into a routine outcome: validation errors, stale revisions, a consumed callback, and any Python exception. Host receipt C1: R = attach(vR,[h,k]), with k's callback raising and h = x.reshape. After the error, h.grad = [1,1] (stale) while x.grad = None. The caller then follows DESIGN \u00a73 ('the caller clears its leaf grads before retrying'): it zeroes x and w and builds a new loss through h. That backward takes the ADD branch at autograd.cpp:57 (on host it reaches ew_binary and raises a CUDA error, which proves the stale grad is being summed). On GPU it would silently return x.grad = stale + new. This bites whenever an intermediate outlives one step, for example cached style or encoder features reused across losses.",
+   "suggested_fix": "In Tensor::backward, catch any exception, reset grad to undefined for every op node in `order` (nodes with grad_fn), and rethrow, so a failed traversal leaves no non-leaf state. Add a test: a failing hook, then a second loss through a shared intermediate, with an exact expected gradient.",
+   "evidence": "checks/rev1_host_checks.py C1a/C1b; read autograd.cpp:51-58,156-198"
+  },
+  {
+   "id": "BWDR1-F04",
+   "severity": "MINOR",
+   "file": "tensor_cuda/src/autograd.cpp",
+   "line": "121-123",
+   "title": "A second traversal through a consumed hook fails mid-walk, after earlier nodes have already accumulated into leaves; the engine's existing re-backward semantics become non-atomic",
+   "argument": "The engine keeps grad_fns after backward. Its comment at 193-195 says re-backward still accumulates correctly on leaves. A hook node is one-shot: a second traversal reaching it throws 'callback already consumed', but only when the walk gets there. Host receipt C2: P = attach(.., [x]), consumed by a first loss; then r2 = attach(.., [P, w]). r2.backward() raises at P after w.grad = [1,1] was accumulated, and P (an op node) keeps a stale grad. The docstring says to re-register, but a reused hooked intermediate gives a partial update before the error.",
+   "suggested_fix": "Make the failure atomic: before seeding, scan `order` for attach nodes whose callback is consumed (for example a flag on the Variable, or a probe on the state), and throw before any accumulation. Combined with F03's cleanup, no state changes on failure.",
+   "evidence": "checks/rev1_host_checks.py C2"
+  },
+  {
+   "id": "BWDR1-F05",
+   "severity": "MINOR",
+   "file": "tensor_cuda/tests/test_bwd_r1_hook.py",
+   "line": "test_bwd_r1_hook.py:85-116 (validation, slot 1 only), 143-161 (host revision: frozen slot 1 and value), 239-256 (GPU active slot 0)",
+   "title": "Hook tests fault only gradient slot 1, never test a mutation during the callback, and on host never test an active-slot revision change",
+   "argument": "Shape, dtype, frozen and device faults are all in slot 1 (two-slot inputs). A defect that skips slot 0 (a loop starting at 1), or that validates only i == 1 or the last slot, passes every hook test. The second check_revisions() (autograd.cpp:145), which guards against a callback mutating saved tensors, is reached by no test: deleting it passes. The host revision test covers the frozen slot 1 and value; active slot 0 is covered only on GPU (test_gpu_actual_write_rejected). The engine itself is correct on these paths (host receipts C3: slot 0 and slot 2 caught; C4: mutation during the callback caught). The tests would not notice a regression.",
+   "suggested_fix": "Parametrize the faulted slot over {0, 1, last} with three inputs, and assert that no grad is defined in any slot. Add a callback that calls saved.mark_modified() and expects 'was modified after attachment'. Add a host revision case on an active input.",
+   "evidence": "Census in REPORT.md Q3; checks C3/C4. Post-v1: r1m03_revision_check_off.diff removes BOTH check_revisions() calls together, so no registered mutant isolates the post-callback check, and no test reaches it on its own."
+  },
+  {
+   "id": "BWDR1-F06",
+   "severity": "MINOR",
+   "file": "tensor_cuda/src/autograd.cpp",
+   "line": "14-34, 117-118",
+   "title": "The single dispatch lane is documented but not enforced: grad mode and the re-entrancy flag are process-global, so another Python thread running during a callback silently records no graph, and its backward is refused with a misleading message",
+   "argument": "The callback runs Python, which can switch threads. During a callback, host receipt C6 shows that a second thread sees is_grad_enabled() == False; a forward it runs yields requires_grad == False, so its gradients are silently lost; and its unrelated backward() raises 'attach_vjp: re-entrant backward is not supported'. The docstring says 'Use a single host dispatch lane'. The DESIGN accepts one lane. Nothing detects a second lane, and the failure is silent for the forward thread.",
+   "suggested_fix": "Record the owning thread id when a traversal starts. While it runs, make attach_vjp, backward and set_grad_enabled from any other thread raise an explicit 'second dispatch lane' error. Or make the grad mode and the flag thread_local (a larger semantic change, so it needs a lead ruling).",
+   "evidence": "checks/rev1_host_checks.py C6"
+  },
+  {
+   "id": "BWDR1-F07",
+   "severity": "MINOR",
+   "file": "tensor_cuda/tests/test_bwd_r1_matmul.py",
+   "line": "59-70",
+   "title": "The determinism witness is a 5x7 @ 7x8 GEMM; K=7 cannot exercise the split-K, workspace or reduction paths that make GEMMs non-deterministic",
+   "argument": "test_gpu_matmul_repeat_five repeats only the canary case. cuBLAS chooses split-K or stream-K reductions, the paths where atomics or workspace order matter, for large K relative to M*N. At K=7 every algorithm is a single-pass dot, so byte equality over 5 runs holds for a non-strict handle too. DESIGN \u00a76 asks for 10 in-process reruns plus 3 fresh processes, at real geometry with cancellation. Order G4 says only '5 times'. The gate meets the order's letter, but it is not evidence of determinism under the conditions that threaten it.",
+   "suggested_fix": "Repeat the Kokoro adain matmul cell (dA K=1028, M=1, N=128) plus a K >= 8192, M,N <= 64 cell 5-10 times in-process and in 3 fresh processes, and hash the bytes.",
+   "evidence": "Read the test file. Post-v1: the G4-strict log shows 5 identical sha pairs for the 5x7x8 canary only. The Kokoro matmul cell in G3 (adain_kokoro.npz: s[1,128] @ W^T with W [1028,128]; dA has K=1028, M=1, N=128, a split-K-prone shape) was compared to fp64 once and never rerun for bytes. Re-running that exact cell is the cheapest fix."
+  },
+  {
+   "id": "BWDR1-F08",
+   "severity": "MINOR",
+   "file": "tensor_cuda/src/bindings.cpp (from_dlpack import); tc_signal/tc_signal/__init__.py",
+   "line": "test_bwd_r1_hook.py:241-250; tc_signal __init__.py:88-113",
+   "title": "The revision check misses writes through a TensorCUDA tensor re-imported via DLPack, and the named tc_signal writer does not bump the output's revision",
+   "argument": "tc.from_dlpack(x) of an engine tensor creates a separate Storage with its own revision counter. Engine in-place writes through the alias (fill_) bump only the alias. test_gpu_actual_write_rejected asserts that gap (`x.revision == rev`) and then calls x.mark_modified() by hand. DESIGN \u00a73 relies on producers calling mark_modified(); here the producer is TensorCUDA itself. Also, tc_signal's conv1d and conv_transpose1d write `out` through DLPack without bumping its revision. With a caller-provided `out=` buffer reused across steps, a hook that saved that output (for example a norm z) would read the overwritten bytes undetected. DESIGN \u00a74 rejects out= on the tracked path in R2/R3, so this is a forward warning. APA's packed_append (packed_launcher.cuh) also writes in place with no bump.",
+   "suggested_fix": "When importing a capsule produced by TensorCUDA, share the original Storage (or its revision counter). Have the tracked tc_signal wrappers call out.mark_modified() after the run, or refuse out= as designed. List the in-place writers without a revision bump in the docstring. Also state the ordering contract in the docstring: write value fully, and call mark_modified() if the write was external, BEFORE attach_vjp. Otherwise backward always fails with 'saved value was modified' (loud, not silent).",
+   "evidence": "read bindings.cpp:1329-1336,1848-1883; tc_signal __init__.py:88-113; test lines"
+  },
+  {
+   "id": "BWDR1-F09",
+   "severity": "MINOR",
+   "file": "tensor_cuda/src/bindings.cpp",
+   "line": "2639-2643",
+   "title": "A callback that captures the graph-bearing result is an uncollectable cycle: it leaks the callback and the whole graph if backward never runs",
+   "argument": "The cycle runs result Variable -> grad_fn -> AttachedVjp -> py::object callback -> closure -> result. Its C++ shared_ptr edges are invisible to Python's GC. Host receipt C5: after `del` and gc.collect(), the callback's weakref is still alive. The docstring forbids the capture, but nothing detects it. Voice's wrappers are methods whose `self` may cache outputs.",
+   "suggested_fix": "At minimum add a debug-mode check (for example TC_ATTACH_VJP_CHECK=1) that, after creating the result, walks gc.get_referents of the callback's closure and cells one level deep and refuses if the result is reachable. Add an R4 test that Voice's adapters do not capture results.",
+   "evidence": "checks/rev1_host_checks.py C5"
+  },
+  {
+   "id": "BWDR1-F10",
+   "severity": "NIT",
+   "file": "tensor_cuda/src/autograd.cpp",
+   "line": "104-106",
+   "title": "Value/input separation refuses only the same Storage or an equal base pointer, not a partial byte-range overlap between distinct Storages",
+   "argument": "Two DLPack imports of overlapping slices of one producer buffer are separate Storages with different data_ptrs, so they pass. Unreachable for the fresh outputs that DESIGN \u00a73 names. Host DLPack import is CUDA-only, so this is reasoning only.",
+   "suggested_fix": "When the devices match, compare [ptr, ptr+nbytes) ranges.",
+   "evidence": "reasoning; check C7 N/A"
+  },
+  {
+   "id": "BWDR1-F11",
+   "severity": "NIT",
+   "file": "tensor_cuda/src/ops.cpp",
+   "line": "700-716, 774-786, 685-693",
+   "title": "Product-code hygiene in the strict GEMM: a round-named debug env var is read on every GEMM, getters run per batch element, the handle map has no lock, and teardown runs at static destruction",
+   "argument": "Each batch element runs std::getenv('TC_BWD_R1_LOG_CONFIG') and 4 cuBLAS getters. The static std::map has no mutex, which is safe only because the backward binding holds the GIL (single lane). ~BackwardGemm runs at static teardown and calls cudaSetDevice/cublasDestroy/cudaFree, ignoring errors (acceptable, but PyTorch-style leak-at-exit is simpler).",
+   "suggested_fix": "Read the env var once, rename it out of the round namespace, check once per matmul_backward call, and add a mutex or a comment that ties the map to the GIL-held lane.",
+   "evidence": "read ops.cpp"
+  },
+  {
+   "id": "BWDR1-F12",
+   "severity": "NIT",
+   "file": "tensor_cuda/src/ops.cpp",
+   "line": "785-788",
+   "title": "The per-batch loop with CUBLAS_GEMM_DEFAULT can pick a different kernel per batch element when the element offsets change pointer alignment, so identical matrices can round differently by batch index",
+   "argument": "Run-to-run determinism still holds, because offsets are fixed by shape. A single strided-batched pedantic call (cublasGemmStridedBatchedEx) would use one heuristic pick and match the forward's structure.",
+   "suggested_fix": "Consider cublasGemmStridedBatchedEx with the same compute and algo.",
+   "evidence": "reasoning"
+  },
+  {
+   "id": "BWDR1-F13",
+   "severity": "NIT",
+   "file": "tensor_cuda/src/ops.cpp",
+   "line": "744-772",
+   "title": "New matmul_backward branches have no test in this round: fp16/bf16 fallback, batch-size mismatch, operand-not-on-current-device, K == 0",
+   "argument": "The new tests use fp32 only. The three error branches and the K == 0 zeros branch are not reached.",
+   "suggested_fix": "Add small CUDA tests for each branch (with K == 0 checked as exact zeros).",
+   "evidence": "census"
+  },
+  {
+   "id": "BWDR1-F14",
+   "severity": "MINOR",
+   "file": "Fork worktree tensor_fork_bwd_wt_r1: artifacts/bwd_r1/packages/*/tensor_cuda/_tensor_cuda*.so",
+   "line": "7 links",
+   "title": "BWD-R1's frozen packages are symlinks, against the standing no-symlink law; the PROD pin's link points into another fork's worktree",
+   "argument": "Every packages/<arm>/tensor_cuda/_tensor_cuda*.so (PROD, candidate, r1m01-r1m05) is a symlink: `ls -l` shows lrwxrwxrwx. PROD resolves to tensor_fork_apa_wt_mainchk2/artifacts/mainchk2/build_M2/...; the others resolve to build-bwd-r1/modules/. Standing law: 'NEVER create symlinks'. The lead held them back from the commit (HELD_BACK_lead.txt lists them as 'symlink'). The gates' module pins (sha 78c2b99b, a2f6a326) therefore depend on the targets surviving, and retiring mainchk2 breaks the G4-forward and G6 reproduction. The pinned PROD sources do equal 3138cf54: I recomputed 46/46 product-file sha256s against `git show 3138cf54`, with no difference.",
+   "suggested_fix": "Re-materialize the packages as real copies (cp -L) and re-pin; add a no-symlink check to G7's scope audit.",
+   "evidence": "ls -l of the package dirs; HELD_BACK_lead.txt; source-pin recomputation in REPORT.md"
+  },
+  {
+   "id": "BWDR1-F15",
+   "severity": "NIT",
+   "file": "tensor_cuda/src/ops.cpp",
+   "line": "757-762 (backward); matmul.cu:37-50 (forward, pre-existing)",
+   "title": "Rank mismatches the forward handles silently (na < nb, or na != nb with both > 2) are mirrored in the new backward instead of being rejected",
+   "argument": "The forward treats B as batched only when ndb == nda. Otherwise it uses stride 0, which means B's first matrix (pre-existing behaviour, outside this diff). The new backward adds a validation block (batch numel equality) but copies the same rule, so for a [m,k] @ [B,k,n] call both directions silently use B[0]. The backward's new checks are the cheap place to refuse it.",
+   "suggested_fix": "In matmul_backward, refuse nb > na and (nb != na && nb > 2). File the forward's silent stride-0 as a separate engine item.",
+   "evidence": "read ops.cpp:744-790, matmul.cu:25-83"
+  },
+  {
+   "id": "BWDR1-F16",
+   "severity": "MINOR",
+   "file": "tensor_cuda/tests/test_bwd_r1_matmul.py",
+   "line": "34",
+   "title": "test_gpu_canary_and_configuration raises KeyError, failing rather than skipping, on any GPU run that does not export NVIDIA_TF32_OVERRIDE",
+   "argument": "`assert os.environ[\"NVIDIA_TF32_OVERRIDE\"] == \"0\"` indexes the environment directly. A production GPU suite run without that variable reports a failure that has nothing to do with the product. The variable also masks the TF32 witness (F02).",
+   "suggested_fix": "Drop the requirement for the canary (see F02), or use os.environ.get with an explicit skip reason.",
+   "evidence": "read test line 34"
+  }
+ ]
+}

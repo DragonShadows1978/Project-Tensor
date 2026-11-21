@@ -1,0 +1,190 @@
+{
+  "audit": {
+    "both_ok": 59,
+    "check_ok": 62,
+    "complete": false,
+    "decision_rows": 77,
+    "distinct_receipts": 21,
+    "informational_rows": 10,
+    "new_claimed_checks": 30,
+    "omission_groups": 17,
+    "one_or_both_need_correction": 18,
+    "path": "audit_check.json",
+    "rows": 87,
+    "source_sha256": "eed07906633c4b6608ba89aaa8c13783a2fd258b15dce2676bd8af7ce586f5b5",
+    "writer_ok": 72
+  },
+  "blocking_findings": [
+    {
+      "consumer_path": [
+        "scripts/bwd_r4b_stage_r8.py:238",
+        "scripts/bwd_r4b_gpu_r8.py:327"
+      ],
+      "evidence": "commands/21-cpu-probes.out",
+      "fix": "Require launch IDs in the primary results each line writes. Use independent per-line result inventories, digest binding and auxiliary schemas for other files.",
+      "id": "BWDR4BR8-F01",
+      "producing_path": [
+        "scripts/bwd_r4b_stage_r8.py:273",
+        "scripts/bwd_r4b_stage_r8.py:276",
+        "scripts/bwd_r4_gate.py:172",
+        "scripts/bwd_r4b_nvml_sampler_r6.py:118",
+        "scripts/bwd_r4b_gpu_r6.py:270",
+        "scripts/bwd_r4b_gpu_r6.py:308",
+        "scripts/bwd_r4b_gpu_r6.py:323"
+      ],
+      "real_launch_receipts_refused": 8,
+      "severity": "MAJOR",
+      "title": "Generic receipt verification rejects all eight passing staged launches"
+    },
+    {
+      "consumer_path": [
+        "scripts/bwd_r4b_stage_r8.py:215",
+        "scripts/bwd_r4b_verify.py:532"
+      ],
+      "evidence": "commands/21-cpu-probes.out",
+      "fix": "Publish successful END after census completion. Digest and check the completed census as part of root verification.",
+      "id": "BWDR4BR8-F02",
+      "partial_census_bytes": 128,
+      "producer_error": "OSError: [Errno 27] File too large",
+      "producing_path": [
+        "scripts/bwd_r4b_refwave_r8.py:98",
+        "scripts/bwd_r4b_refwave.py:321",
+        "scripts/bwd_r4_gate.py:71",
+        "scripts/bwd_r4_gate.py:177"
+      ],
+      "severity": "MAJOR",
+      "title": "MFCC preflight accepts a root after the real census writer fails"
+    }
+  ],
+  "checked_utc": "2026-11-20T00:18:38+00:00",
+  "commands": "COMMANDS.md",
+  "confirm_2": [
+    {
+      "cpu_receipt": null,
+      "id": "BWDR4BR7-F01",
+      "note": "Merge summary type mismatch refused in both consumers.",
+      "original_case_refused": true,
+      "retained_selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r8-verify-final2_R4B_R8/SELFTEST_VERIFY_R4B_R8.json:23",
+      "source": "scripts/bwd_r4b_verify.py:440",
+      "status": "closed"
+    },
+    {
+      "cpu_receipt": "commands/21-cpu-probes.out",
+      "id": "BWDR4BR7-F02",
+      "note": "Original reused-root retries are refused. A failing census after END still qualifies the root.",
+      "original_case_refused": true,
+      "retained_selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r8-producer-final2_R4B_R8/SELFTEST_PRODUCER_R4B_R8.json:14",
+      "source": "scripts/bwd_r4b_refwave_r8.py:98",
+      "status": "partly_closed"
+    },
+    {
+      "cpu_receipt": "commands/21-cpu-probes.out",
+      "id": "BWDR4BR7-F03",
+      "note": "Worker-bound clock and period reject wrong inputs on retained real traces.",
+      "original_case_refused": true,
+      "retained_selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r8-harness-final2_R4B_R8/SELFTEST_HARNESS_R4B_R8.json:71",
+      "source": "scripts/bwd_r4b_gpu_r8.py:78",
+      "status": "closed"
+    },
+    {
+      "cpu_receipt": "commands/21-cpu-probes.out",
+      "id": "BWDR4BR7-F04",
+      "note": "All four totals must be present and integer before the census join.",
+      "original_case_refused": true,
+      "retained_selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r8-harness-final2_R4B_R8/SELFTEST_HARNESS_R4B_R8.json:125",
+      "source": "scripts/bwd_r4b_gpu_r8.py:175",
+      "status": "closed"
+    },
+    {
+      "cpu_receipt": "commands/21-cpu-probes.out",
+      "id": "BWDR4BR7-F05",
+      "note": "Original foreign G-API baseline is refused. Generic verification fails on valid staged results.",
+      "original_case_refused": true,
+      "retained_selftest": "../../../../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/selftest-r8-harness-final2_R4B_R8/SELFTEST_HARNESS_R4B_R8.json:170",
+      "source": "scripts/bwd_r4b_gpu_r8.py:343",
+      "status": "partly_closed"
+    }
+  ],
+  "confirm_2_status_counts": {
+    "closed": 3,
+    "partly_closed": 2
+  },
+  "hardening": [
+    {
+      "case": "Nested suite survives when the XML root is testsuite",
+      "evidence": "commands/21-cpu-probes.out",
+      "fix": "Count every testsuite for either allowed root tag.",
+      "id": "BWDR4BR8-H01"
+    },
+    {
+      "case": "Missing nullable G-API error fields pass as null",
+      "evidence": "commands/21-cpu-probes.out",
+      "fix": "Require child_error, junit_error and census_error keys before checking null.",
+      "id": "BWDR4BR8-H02"
+    },
+    {
+      "case": "Removing one file from a copied launcher map can hide it from the verifier",
+      "evidence": "commands/27-recount.out",
+      "fix": "Check the declared files against an independent required set and directory enumeration.",
+      "id": "BWDR4BR8-H03"
+    }
+  ],
+  "launch": "20261120T000701Z-1525133",
+  "ledger": "LEDGER.md",
+  "narrative": "CONFIRM.md",
+  "registration": "REGISTRATION.md",
+  "retained_lead": {
+    "dry_pass": 8,
+    "extra_linear_launcher_exit": 76,
+    "extra_linear_worker_started": false,
+    "fd_parts": 2,
+    "g5_checkpoint": {
+      "registered_bar_bytes": 4000000000,
+      "sampled_estimate_bytes": 3705864192,
+      "samples": 1530,
+      "valid_samples": 1530
+    },
+    "g6": {
+      "prod": {
+        "changes": 515,
+        "unexpected": 0,
+        "verdict": true
+      },
+      "r4a": {
+        "changes": 103,
+        "unexpected": 0,
+        "verdict": true
+      }
+    },
+    "g_api_totals": {
+      "errors": 0,
+      "failures": 0,
+      "passed": 102,
+      "skipped": 1,
+      "tests": 103
+    },
+    "gpu_worker_pass": 8,
+    "manifest_sha256": "634bf770d0ea38ee76ae02d621780f26f3ab9ac9f0bf8e4ed2ca4227527e8b49",
+    "oracle_rows": 40,
+    "pins": 66,
+    "ref_outputs": 7,
+    "ref_pass": 4,
+    "selftest": {
+      "harness": 13,
+      "producer": 3,
+      "verify": 8
+    }
+  },
+  "review": "BWD-REV4B confirm r8",
+  "source": {
+    "base": "d7c6c86e",
+    "diff_files": 9,
+    "diff_hunks": 23,
+    "lead": "b3fe4bbf74e2a6fde5c337a16d8b221f33fb8e32",
+    "prior": "64693028f75ef8e1fb30aa57131632579d4060007dc174b105643bb813d80dde",
+    "round": "2a9823cb80788195af23312de47671db5dd6ccb1",
+    "scripts_diff": "commands/01-diff.out"
+  },
+  "status": "complete",
+  "verdict": "RED"
+}

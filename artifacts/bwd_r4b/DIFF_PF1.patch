@@ -1,0 +1,112 @@
+--- a/tensor_cuda/src/bindings.cpp
++++ b/tensor_cuda/src/bindings.cpp
+@@ -197,8 +197,9 @@
+           set_grad_enabled(prev);
+           throw;
+         }
+-        Tensor replay_out = replay_obj.cast<Tensor>();
+         try {
++          // Scope-based exception cleanup (Stroustrup, 1994): restore the incoming mode on cast errors too.
++          Tensor replay_out = replay_obj.cast<Tensor>();
+           replay_out.backward(g);
+         } catch (...) {
+           set_grad_enabled(prev);
+--- a/tensor_cuda/tensor_cuda/__init__.py
++++ b/tensor_cuda/tensor_cuda/__init__.py
+@@ -1455,20 +1455,25 @@
+ def checkpoint(fn, *inputs):
+     """Gradient checkpointing.
+ 
+-    Runs `fn(*inputs)` under no_grad during the forward pass and replays it
++    When grad mode is enabled and at least one explicit input requires grad,
++    runs `fn(*inputs)` under no_grad during the forward pass and replays it
+     during backward, saving only the checkpoint inputs instead of the full
+-    interior activation graph. The function must return one Tensor.
++    interior activation graph. Otherwise (including empty inputs, all-frozen
++    inputs, or a call under no_grad), calls `fn` once in the current grad mode
++    without checkpointing or revision checks. The function must return one Tensor.
+ 
+     Input contract: every tensor ``fn`` reads must be passed in ``inputs``.
+     Only ``inputs`` are saved and guarded; a tensor ``fn`` captures in a
+     closure (or reaches through a global or an attribute) is neither saved nor
+     checked, and a change to it before backward silently changes the
+-    recomputation. ``fn`` must not write its inputs. (PyTorch's reentrant
+-    checkpoint has the same contract.)
++    recomputation. ``fn`` must not write its inputs. Keep replay-relevant
++    state stable between forward and backward, including which inputs
++    require grad. PyTorch's reentrant checkpoint likewise saves and version
++    checks the explicitly passed tensor inputs.
+ 
+     Revision guard (BWD-R4a r5b, r5d; same mechanism as ``attach_vjp``'s
+-    saved slots). Each input's Storage revision is recorded before ``fn``
+-    runs. If ``fn`` changes any input's revision, checkpoint raises
++    saved slots). When checkpointing is active, each input's Storage revision
++    is recorded before ``fn`` runs. If ``fn`` changes any input's revision, checkpoint raises
+     RuntimeError ("checkpoint: fn modified input slot <i> in place; a
+     checkpointed function must not write its inputs") as soon as ``fn``
+     returns. Before recomputing, backward raises RuntimeError ("checkpoint:
+@@ -1482,8 +1487,10 @@
+     writes through a DLPack re-import of an engine tensor; APA's
+     ``packed_append``; and tc_signal's untracked ``out=`` paths (for example
+     ``instance_norm1d(..., out=t)`` and the conv ops under ``no_grad``), which
+-    write ``out`` without ``mark_modified()``. Call ``mark_modified()`` on any
+-    tensor written outside the engine's in-place ops.
++    write ``out`` without ``mark_modified()``. After an external write to
++    checkpointed input storage, call ``mark_modified()`` on the saved input
++    or an alias sharing that same Storage. A DLPack re-import can share the
++    data pointer while carrying a different Storage revision.
+     """
+     return _C.checkpoint(fn, list(inputs))
+ 
+--- a/tensor_cuda/tests/test_bwd_r4_checkpoint_revision.py
++++ b/tensor_cuda/tests/test_bwd_r4_checkpoint_revision.py
+@@ -217,3 +217,21 @@
+     y.backward()  # no refusal
+     np.testing.assert_array_equal(checked(a.grad.numpy()), np.array([40.0, -5.0, 6.0], dtype=np.float32))
+     assert [mode for *_, mode in calls] == [False, True]
++
++
++def test_host_checkpoint_restores_grad_mode_after_invalid_replay_return():
++    x = host([1.0, 2.0, 3.0], True)
++    modes = []
++
++    # BWD-REV4AX F02 (2026): use the reviewed invalid-return probe through the shipped replay binding.
++    def fn(t):
++        modes.append(tc.is_grad_enabled())
++        return {"invalid": t} if modes[-1] else t
++
++    y = tc.checkpoint(fn, x)
++    with tc.no_grad():
++        assert not tc.is_grad_enabled()
++        with pytest.raises(RuntimeError, match=r"Unable to cast.*dict"):
++            y.backward()
++        assert modes == [False, True]
++        assert not tc.is_grad_enabled(), "checkpoint replay cast leaked grad mode"
+--- a/tc_signal/tests/test_bwd_r4_norm_affine.py
++++ b/tc_signal/tests/test_bwd_r4_norm_affine.py
+@@ -162,3 +162,25 @@
+     assert x.grad is not None and slot.grad is not None
+     within_g_aff("x", x.grad.numpy(), grads["x"], term_sums)
+     within_g_aff(supplied, slot.grad.numpy(), grads[supplied], term_sums)
++
++
++def test_gpu_norm_affine_scale_only_frozen_x_fp64_reference_n2_t7():
++    require_gpu()
++    # BWD-REV4AX F03 (2026): reuse R4a r5d’s scale-only fp64 case with x frozen.
++    # The affine derivative follows Ulyanov et al. (2016) and Ioffe & Szegedy (2015).
++    x_np, scale_np, bias_np, dy_np = affine_operands()
++    assert x_np.shape[0] == 2 and x_np.shape[-1] == 7
++    ref_bias = np.zeros_like(bias_np)
++    x = tc.tensor(x_np, requires_grad=False)
++    scale = tc.tensor(scale_np, requires_grad=True)
++    y = ts.instance_norm1d(x, scale=scale, eps=EPS)
++    assert y.requires_grad
++    y_ref, _, _ = norm_fp64(x_np, scale_np, ref_bias)
++    within_g_aff("x", y.numpy(), y_ref, None)
++    (y * tc.tensor(dy_np)).sum().backward()
++    assert x.grad is None
++    assert scale.grad is not None, "scale gradient missing for frozen x"
++    dscale = scale.grad.numpy()
++    assert np.any(dscale), "scale gradient is zero for frozen x"
++    grads, term_sums = vjp_fp64(x_np, scale_np, ref_bias, dy_np)
++    within_g_aff("scale", dscale, grads["scale"], term_sums)

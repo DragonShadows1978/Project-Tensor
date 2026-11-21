@@ -56,6 +56,38 @@ def _default_allocator(shape):
 _allocator = _default_allocator
 
 
+def _grad_context(inputs):
+    tc = sys.modules.get("tensor_cuda")
+    tensor_type = getattr(tc, "Tensor", ())
+    if any(issubclass(type(x), tensor_type) and x.requires_grad for x in inputs) and tc.is_grad_enabled():
+        return tc
+    return None
+
+
+def _refuse_no_backward(name, *inputs, out=None):
+    if _grad_context(inputs) is not None:
+        raise RuntimeError(f"tc_signal: {name}: no backward yet")
+    destinations = out if isinstance(out, (tuple, list)) else (out,)
+    if _grad_context(destinations) is not None:
+        raise RuntimeError(f"tc_signal: {name}: out cannot require grad")
+
+
+def _recording(name, out, *inputs):
+    # Reverse-mode recording (Linnainmaa, 1970) and saved-input checks
+    # (PyTorch autograd, 2019) through BWD-R1. Here the inference allocator
+    # stays independent and the tracked path owns its destination.
+    tc = _grad_context(inputs)
+    if tc is None:
+        return None
+    if out is not None:
+        raise ValueError(f"tc_signal: {name}: out= is unsupported when recording gradients")
+    if any(x is not None and not issubclass(type(x), tc.Tensor) for x in inputs):
+        raise TypeError(f"tc_signal: {name}: recording gradients requires TensorCUDA operands")
+    if not callable(getattr(tc, "attach_vjp", None)):
+        raise RuntimeError(f"tc_signal: {name}: recording gradients requires TensorCUDA with attach_vjp (BWD-R1)")
+    return tc
+
+
 def set_allocator(fn):
     """Set the allocator used for outputs (out=None) and im2col scratch: fn(shape: tuple) -> fp32 CUDA DLPack tensor of
     exactly that shape. Returns the previous allocator. `None` restores the default (tensor_cuda.empty)."""
@@ -85,14 +117,48 @@ def _pads(padding):
     return p, p
 
 
+def _attach_conv(tc, name, value, x, w, b, transposed, attrs):
+    # BWD-R2 (2026) and PyTorch autograd (Paszke et al., 2019): list saved
+    # operands for revision checks. Here a biasless call reserves slot 2
+    # with a frozen alias of an already listed input. The hook takes tensors.
+    inputs = (x, w, x.detach() if b is None else b)
+    value.mark_modified()
+
+    def vjp(dy, needs_input_grad):
+        dx, dw, db = (
+            tc.empty(*shape, dtype='float32', device=x.device) if active else None
+            for shape, active in zip((x.shape, w.shape, (dy.shape[1],)), needs_input_grad)
+        )
+        col, part = _C._conv_backward_scratch(transposed, x.shape, w.shape, dy.shape, attrs) if dw is not None else (0, 0)
+        scratch = [tc.empty(size, dtype='float32', device=x.device) if size else None for size in (col, part)]
+        _C._conv_backward_run(transposed, x, w, dy, dx, dw, db, *scratch, attrs)
+        for grad in (dx, dw, db):
+            if grad is not None:
+                grad.mark_modified()
+        return dx, dw, db
+
+    return tc.attach_vjp(value, inputs, vjp, name=name)
+
+
 def conv1d(x, w, b=None, *, stride=1, padding=0, dilation=1, groups=1, out=None):
     """ONNX Conv, 1-D: y[n, o, t] = b[o] + sum_{c in group(o), k} w[o, c, k] * x_pad[n, c, t*stride + k*dilation].
 
     x [N, C_in, T], w [C_out, C_in/groups, K], b [C_out] or None (fp32 CUDA DLPack producers or capsules).
     Output [N, C_out, (T + pb + pe - dilation*(K-1) - 1)//stride + 1], written into `out` if given, else allocated
-    through the module allocator. Returns `out`."""
+    through the module allocator. Returns `out`.
+
+    With grad mode enabled and any TensorCUDA operand requiring grad, returns a fresh TensorCUDA tensor with
+    first-order fp32 gradients for x, w and optional b. Tracked calls require TensorCUDA operands, refuse `out=`,
+    and allocate output and scratch on the operand device independently of `set_allocator`."""
     pb, pe = _pads(padding)
     s, d, g = _int('stride', stride), _int('dilation', dilation), _int('groups', groups)
+    tc = _recording("conv1d", out, x, w, b)
+    if tc is not None:
+        xc, wc, bc, shape, size = _C.conv1d_plan(x, w, b, s, pb, pe, d, g)
+        value = tc.empty(*shape, dtype='float32', device=x.device)
+        scratch = tc.empty(size, dtype='float32', device=x.device) if size else None
+        _C.conv1d_run(xc, wc, bc, value, scratch, s, pb, pe, d, g)
+        return _attach_conv(tc, "conv1d", value, x, w, b, False, (s, pb, pe, 0, d, g))
     xc, wc, bc, out_shape, scratch_numel = _C.conv1d_plan(x, w, b, s, pb, pe, d, g)
     if out is None:
         out = _allocator(tuple(out_shape))
@@ -104,10 +170,20 @@ def conv1d(x, w, b=None, *, stride=1, padding=0, dilation=1, groups=1, out=None)
 def conv_transpose1d(x, w, b=None, *, stride=1, padding=0, output_padding=0, dilation=1, groups=1, out=None):
     """ONNX ConvTranspose, 1-D (gather form, deterministic): x [N, C_in, T], w [C_in, C_out/groups, K] (ONNX layout),
     b [C_out] or None. Output [N, C_out, stride*(T-1) + output_padding + dilation*(K-1) + 1 - pb - pe], written into
-    `out` if given, else allocated through the module allocator. Returns `out`."""
+    `out` if given, else allocated through the module allocator. Returns `out`.
+
+    With grad mode enabled and any TensorCUDA operand requiring grad, returns a fresh TensorCUDA tensor with
+    first-order fp32 gradients for x, w and optional b, including the resolved output-padding extent. Tracked calls
+    require TensorCUDA operands, refuse `out=`, and allocate on the operand device independently of `set_allocator`."""
     pb, pe = _pads(padding)
     s, op, d, g = (_int('stride', stride), _int('output_padding', output_padding), _int('dilation', dilation),
                    _int('groups', groups))
+    tc = _recording("conv_transpose1d", out, x, w, b)
+    if tc is not None:
+        xc, wc, bc, shape = _C.conv_transpose1d_plan(x, w, b, s, pb, pe, op, d, g)
+        value = tc.empty(*shape, dtype='float32', device=x.device)
+        _C.conv_transpose1d_run(xc, wc, bc, value, s, pb, pe, op, d, g)
+        return _attach_conv(tc, "conv_transpose1d", value, x, w, b, True, (s, pb, pe, op, d, g))
     xc, wc, bc, out_shape = _C.conv_transpose1d_plan(x, w, b, s, pb, pe, op, d, g)
     if out is None:
         out = _allocator(tuple(out_shape))
@@ -289,3 +365,8 @@ __all__.append('lstm')
 from ._norms import group_norm, instance_norm1d, layer_norm  # noqa: E402  (P1T-M4, T5)
 from ._small import reflection_pad1d, rint, upsample_nearest1d  # noqa: E402  (P1T-M4, T6)
 __all__ += ['instance_norm1d', 'layer_norm', 'group_norm', 'upsample_nearest1d', 'reflection_pad1d', 'rint']
+
+
+# BWD-R4b item 2: public dX / dW / dB of both convolutions over BWD-R3's private kernels (tc_signal/_conv_backward.py).
+from ._conv_backward import conv1d_backward, conv_transpose1d_backward  # noqa: E402
+__all__ += ['conv1d_backward', 'conv_transpose1d_backward']

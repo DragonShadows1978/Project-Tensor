@@ -1,0 +1,26 @@
+# BWD-REV4AX implementation ledger
+
+- The order in the conversation is the immutable plan. The [registration](registration.json) and its [initial seal](review_initial.seal) precede the gates.
+- The first reads were the ForgeRealm house-rules mirror and Project-Tensor AGENTS, the memory keyword search, and REV4 REPORT.md with a listing of the re-check directories. Their original output is in the session transcript. The rules and mechanism receipts are also captured in the command directory.
+- Prior art for the existing verification method is mutation analysis (DeMillo, Lipton and Sayward, 1978). The order supplies both mutants. This review measures their test-level outcomes and adds no mutation algorithm. Unverified — lead to check. Search for “DeMillo Lipton Sayward 1978 mutation testing”.
+
+## Deviations
+
+- Inventory receipt 06 guessed a `*core*` basename and ended with exit 2. Receipt 07 found `_tensor_cuda*.so`, and receipt 11 verified the pinned digest before any package import.
+- Source index receipt 09 guessed header paths under `src` and ended with exit 2. Receipt 10 located them under `include/tc`.
+- The display in receipt headers 01–13 transposed the timeout duration and nice invocation. The tool transcript shows the actual wrapper `CUDA_VISIBLE_DEVICES='' timeout <duration> nice -n 19 …`. Corrected the formatter before the test runs. No execution setting or gate changed.
+- Receipt 20 stopped on a source search with no matches. Receipt 21 completed the source read with a broader search.
+- The first supplemental probe stopped at a replay returning `None`, which pybind surfaced as `TypeError` through the outer `backward()` binding. The assertion had expected a `RuntimeError`. The second probe records `None` and `dict` separately and accepts their two standard binding error classes. One repair of an authored check. The three required pytest runs were unchanged.
+- Receipt 31 expected pytest to set JUnit's class name from the file. With the isolated `-c /dev/null` configuration it left the field blank. Receipt 32 verified that case names were unique. The census now joins those names to the verbose log's file paths and checks the outcomes against both formats. Second repair of an authored check. The three required pytest runs were unchanged.
+
+## Results
+
+- Receipts 01–05 capture version checks (git 2.43.0, Python 3.12.3, pytest 9.0.2), mechanism and rules, scoped package discovery, every diff hunk, and the earlier re-check. Receipts 07–14 establish native source, complete test paths and copy provenance. The final census verifies five files, five hunks, +412/−2 and all three package manifests.
+- Receipts 15–17 ran candidate before both mutants. The candidate passed its CPU tests, and each mutant failed the expected assertion class with `Failed: DID NOT RAISE <class 'RuntimeError'>`. All GPU-only cases reported CUDA disabled. Each process displayed the hidden-CUDA exit diagnostic after its pytest results.
+- Receipts 18–30 compare storage, view, and autograd behavior with the parent, confirm the actual mutant source deltas and capture the supplemental observations. The `requires_grad` and invalid replay cast observations predate the diff. Storage, operand and GPU history claims are bounded in the synthesis.
+- Receipt 33 recomputes case counts from the three JUnit files and verbose logs, and recomputes the historical GPU outcome counts from the existing R5F receipt. No GPU was run during this review.
+- Prior art for the finding fixes: TensorCUDA's existing grad-mode cleanup and C++ scope-bound lifetime (Stroustrup, 1994) for F02. Instance normalization (Ulyanov, Vedaldi and Lempitsky, 2016) and the normalization affine chain rule (Ioffe and Szegedy, 2015) for reusing the existing F03 oracle while varying the activation's grad flag. PyTorch saved-tensor versions (Paszke et al., 2019) and checkpoint recomputation (Chen et al., 2016) for the reviewed mechanism. The PyTorch 2.11.0 comparison is from installed source, receipts 28–29. Historical references are unverified — lead to check “Stroustrup 1994 RAII”, “instance normalization affine backward”, “PyTorch autograd saved tensor version counters”, and “Chen Training Deep Nets with Sublinear Memory Cost”.
+- Findings and recommended fixes are in REVIEW.md and review.json. All product sources were read-only. Scratch remained at `/tmp/bwd_rev4ax_sD0lbp`.
+- Receipt 34 applies the existing fp64 oracle and bound to the proposed frozen-`x` scale-only numerical case. A zero dscale exceeds the bound in every channel, verifying the proposed test's sensitivity without a build or GPU execution. Ioffe and Szegedy (2015) for the affine gradient and Ulyanov, Vedaldi and Lempitsky (2016) for instance normalization. This review reuses the fixture, adding the frozen-activation condition.
+- Receipt 35 counts the final severities, writes the command index and review JSON, and seals the JSON digest and date in the same shell command.
+- Receipt 35 failed while indexing its own still-open log, which had no exit line yet. It did not write a seal. Receipt 36 excludes its one in-flight log from the finalized command census, links its receipt explicitly, and indexes receipt 35 with the original failure. This was the third repair of an authored check.

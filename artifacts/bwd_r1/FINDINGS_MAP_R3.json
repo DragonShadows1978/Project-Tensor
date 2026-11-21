@@ -1,0 +1,118 @@
+{
+  "review": "BWD-REV1",
+  "candidate": "BWD-R1 r3",
+  "findings": [
+    {
+      "finding": "F01",
+      "edit": "Moved the shared oracle into test support and added isolated collection.",
+      "test": "G_COLLECT_R3.json",
+      "r1_result": "Exit 2, ModuleNotFoundError: No module named 'bwd_r1_oracle'.",
+      "r3_result": "Exit 0, 110 IDs collected."
+    },
+    {
+      "finding": "F02",
+      "edit": "GEMM and the strict check share handle settings. The aligned canary runs unmasked.",
+      "test": "CANARY_REFERENCE log, G4-strict, G5-m06",
+      "r1_result": "Override masked a direct call-site TF32 edit. m04 tripped configuration.",
+      "r3_result": "Host sensitivity 6.365× in dA and dB. Numeric GPU kill staged."
+    },
+    {
+      "finding": "F03",
+      "edit": "Clear all traversal non-leaf grads on execution failure.",
+      "test": "C1a, C1b and C1c host regressions",
+      "r1_result": "Stale intermediate grad. The retry raised in ew_binary. Fresh control passed.",
+      "r3_result": "All three pass. Reused intermediate returns exact [2, -3]."
+    },
+    {
+      "finding": "F04",
+      "edit": "Preflight consumed callbacks before allocating the seed or accumulating grads.",
+      "test": "C2 consumed-ancestor host regression",
+      "r1_result": "The second callback ran and accumulated into a leaf before refusal.",
+      "r3_result": "Raises before the second callback or gradient writes."
+    },
+    {
+      "finding": "F05",
+      "edit": "Cover three validation slots and isolate post-callback and active revisions.",
+      "test": "G2 host, G2-hook, G5 m07 and m08",
+      "r1_result": "Expanded host validation and revision checks pass. Original coverage missed the two mutations.",
+      "r3_result": "Host matrix passes and both mutants are killed. Three device slots staged."
+    },
+    {
+      "finding": "F06",
+      "edit": "Thread-local callback grad scope and reentrancy state with a separate dispatch lane.",
+      "test": "C6 host thread and nested-backward tests",
+      "r1_result": "Second thread saw grad off, recorded no graph and received the re-entrant error.",
+      "r3_result": "Second thread records its graph and receives the single-lane error."
+    },
+    {
+      "finding": "F07",
+      "edit": "Repeat small and two Kokoro cells five times and record cuBLAS/SM metadata.",
+      "test": "G4-determinism",
+      "r1_result": "Five repeats covered only the small cell.",
+      "r3_result": "Three-cell dA/dB bitwise check and hardware receipt staged."
+    },
+    {
+      "finding": "F08",
+      "edit": "Document write → mark → attach, DLPack re-import, APA packed_append and leaf recovery.",
+      "test": "Host documentation/ordering test and DESIGN_NOTES_R3.md",
+      "r1_result": "Doc check failed. The known external-writer revision gaps existed.",
+      "r3_result": "Host test passes. tc_signal out= refusal carried to r2."
+    },
+    {
+      "finding": "F09",
+      "edit": "Tensor GC visits and clears its exclusively owned Python callback edge.",
+      "test": "C5, lifetime tests and F09_shared_graph log",
+      "r1_result": "Direct result-capturing callback survives collection.",
+      "r3_result": "C5 and lifetime controls pass. RED for a cycle also retaining a native descendant."
+    },
+    {
+      "finding": "F10",
+      "edit": "Reject partially overlapping distinct Storage byte ranges.",
+      "test": "NATIVE_HOST_R3.json overlap and adjacent controls",
+      "r1_result": "Native r1 control accepted partial overlap and exited 1.",
+      "r3_result": "Rejects both overlap directions and accepts adjacent ranges."
+    },
+    {
+      "finding": "F11",
+      "edit": "Sample TC_MATMUL_BWD_LOG_CONFIG at handle creation, guard the map and centralize checks.",
+      "test": "G7 source audit, G4-strict, G4-determinism and m05",
+      "r1_result": "Per-dispatch env read, per-batch getters and unlocked handle map.",
+      "r3_result": "Source checks complete. Config and workspace runtime receipts staged."
+    },
+    {
+      "finding": "F12",
+      "edit": "Use one strided-batched call for multi-matrix batches and retain shared-B reduction order.",
+      "test": "G3-core batched and shared-B cases, G4-forward",
+      "r1_result": "A separate GEMM and config reads per matrix.",
+      "r3_result": "Source has one batched call. Numeric and forward runtime checks staged."
+    },
+    {
+      "finding": "F13",
+      "edit": "Exercise fallback dtypes, batch mismatch, current device and K=0.",
+      "test": "NATIVE_HOST_R3.json and G4-determinism",
+      "r1_result": "Batch-mismatch guard passes the new native host test. Original suite omitted these branches.",
+      "r3_result": "Host mismatch passes. GPU fallback, device and exact structural zeros staged."
+    },
+    {
+      "finding": "F14",
+      "edit": "Freeze the candidate, eight mutants and PROD as regular files with SHA-256 pins.",
+      "test": "MODULES_R3.json, G7 and eight dry runs",
+      "r1_result": "Seven extension symlinks, including the external PROD symlink.",
+      "r3_result": "Ten module copies, no symlinks and the exact 3138cf54 PROD pin."
+    },
+    {
+      "finding": "F15",
+      "edit": "Refuse rank-mismatch stride-zero B unless every batch extent is one.",
+      "test": "FORWARD_RANK_CENSUS_R3.json and G4-determinism rank tests",
+      "r1_result": "Backward follows the first-matrix-only forward behavior.",
+      "r3_result": "49 rank pairs enumerated. Refusal and singleton broadcast GPU checks staged."
+    },
+    {
+      "finding": "F16",
+      "edit": "Read the TF32 environment with .get and enforce missing override on unmasked lanes.",
+      "test": "G4-strict and G5-m06 dry receipts",
+      "r1_result": "Absent NVIDIA_TF32_OVERRIDE raises KeyError on the canary path.",
+      "r3_result": "Unmasked launchers omit the key and the test can read it. GPU execution staged."
+    }
+  ]
+}

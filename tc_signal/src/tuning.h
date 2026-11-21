@@ -17,6 +17,15 @@ constexpr int kProbeBlock = 256;
 // Upper bound on blocks per launch; the kernels are grid-stride loops, so larger problems loop instead.
 constexpr long long kGridCap = 1LL << 20;
 
+// Backward tiling and tree width define the fp32 summation order. Inherited
+// from BWD-R3 (2026): im2col after Chellapilla, Puri and Simard (2006) and a
+// fixed block reduction after Harris (2007).
+constexpr int kConvBackwardBlock = 256;  // Power of two for the shared reduction.
+constexpr int kConvBackwardTile = 1024;  // Bound pack size while amortizing each GEMM.
+constexpr long long kConvBackwardScratchBytes = 32LL << 20;  // Cap each pack and partial buffer.
+constexpr long long kConvBackwardWorkspaceBytes = 32LL << 20;  // Private cuBLAS workspace per device.
+constexpr int kConvBackwardTreeCoefficients = 64;  // Avoid pack/GEMM overhead for small groups.
+
 // DLPack version this consumer asks producers for (`__dlpack__(max_version=...)`); the vendored header is v1.3.
 constexpr int kDlpackMaxMajor = 1;
 constexpr int kDlpackMaxMinor = 3;

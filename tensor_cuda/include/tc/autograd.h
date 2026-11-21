@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "tc/core.h"
@@ -22,10 +23,13 @@
 namespace tc {
 
 struct Variable;
+struct AttachedVjp;
 using VarPtr = std::shared_ptr<Variable>;
 
 // grad_fn receives the gradient flowing into this node's output.
 using GradFn = std::function<void(const NDArray& grad_out)>;
+// Undefined NDArrays represent frozen slots and structural zeros.
+using VjpFn = std::function<std::vector<NDArray>(const NDArray&, const std::vector<bool>&)>;
 
 struct Variable {
   struct TerrainDensityCacheEntry {
@@ -38,6 +42,7 @@ struct Variable {
   bool requires_grad = false;
   GradFn grad_fn;               // null for leaves
   std::vector<VarPtr> parents;  // inputs that this node depends on
+  std::shared_ptr<AttachedVjp> attached_vjp;
   const char* op = "leaf";
   // Render-only derived state.  Entries are level-specific so an A/B switch
   // does not rebuild either field; Storage::revision invalidates both after a
@@ -59,6 +64,11 @@ class Tensor {
   // Build an op output with its backward closure and parents.
   static Tensor from_op(NDArray data, std::vector<Tensor> parents,
                         const char* op, GradFn grad_fn);
+  static Tensor attach_vjp(const Tensor& value, const std::vector<Tensor>& inputs,
+                           VjpFn vjp, std::string name, void* callback_gc_ref = nullptr);
+  // Borrowed GC edge, available only when this wrapper owns the native node.
+  void* attached_vjp_gc_ref() const noexcept;
+  void clear_attached_vjp_gc_ref() noexcept;
 
   // accessors
   const NDArray& data() const { return v->data; }
@@ -75,6 +85,9 @@ class Tensor {
   void backward();                 // seed grad = ones, run engine
   void backward(const NDArray& seed);
   void zero_grad();
+
+ private:
+  void backward_impl(const NDArray* seed);
 };
 
 // Global no_grad flag (mirrors is_grad_enabled / no_grad).

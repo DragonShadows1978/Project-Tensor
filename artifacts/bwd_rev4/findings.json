@@ -1,0 +1,160 @@
+{
+  "review": "BWD-REV4 (blind cross-model review of BWD-R4a at 541faa2d), Claude Opus 5.5",
+  "version": "final (v1 sealed 2026-11-19 04:01:10 EST, sha256 70f732cf778dcdd16ecf3f96a698d03896834b36538804052222afaa14d1e821; final adds post-v1 receipt evidence, marked 'post-v1')",
+  "read_before_v1": [
+    "git diff baea226b 541faa2d -- tc_signal (every hunk)",
+    "scripts/bwd_r4_gate.py, bwd_r4_gpu.py, bwd_r4_worker_r2.py, bwd_r4_affine_r2.py, bwd_r4_common_r2.py (code, not outputs)",
+    "orders/BWD_R4_DECODER_SIDE.md, BWD_R4A_R2_NORM_AFFINE.md, BWD_R4A_R3_GPU_RLIMIT.md, BWD_R4A_R4_AMENDMENTS.md",
+    "artifacts/bwd_d/DESIGN.public.md",
+    "tensor_cuda/src/autograd.cpp:120-180 (attach_vjp hook contract), bindings.cpp:131-183 (checkpoint), kernels.cu:100-190,1225-1380 (pool, trim, reductions)",
+    "Voice (read-only) engine/kokoro_tc/model.py:395-430,500-700,719-780,878-939; artifacts/bp1/bp1_reference.py; research/backward64/ops.py:280-470; BP1/BP2 fixture manifests"
+  ],
+  "own_checks_before_v1": {
+    "checks/rev4_affine_vjp.py": "checks/rev4_affine_vjp.out (rc 0)",
+    "checks/rev4_reference_crop.py --seed 20261119": "checks/rev4_reference_crop_seed20261119.json/.out (rc 0; Voice census 76 reads, 0 changed, 0 writes)",
+    "checks/rev4_mirror_trace.py": "checks/rev4_mirror_trace.json/.out (rc 0; Voice census 80 reads, 0 changed, 0 writes)"
+  },
+  "findings": [
+    {
+      "id": "BWDR4R-F01",
+      "severity": "MAJOR",
+      "title": "Amendment 1 A2 makes G2's parameter probes near-vacuous and logically implied by G1",
+      "file": "scripts/bwd_r4_gate.py",
+      "line": "474-498 (bar at 484-493); probes 52-59, 372-386",
+      "argument": "A2 sets |cand - fd| <= 1e-3 * ||g_ref||_2 * ||v||_2. The inequality is valid, but the parameter probes are single coordinates (v = e_i) of tensors with 256 to 393,216 entries, where |g_i| is typically ||g||/sqrt(N). Check 2 (fp64 key on the crop, reviewer seed): the bar divided by |g_i|, median over all entries of each probed tensor, is 2.07 for ups.1 ConvTranspose weight (393,216 entries), 1.59 for encode.norm1.fc.weight, 1.31 for resblocks.0 convs1.0 weight, 0.50 for noise_convs.1 weight, 0.076 for the encode norm1 scale and 0.052 for resblocks.0 alpha1.0. A zero candidate entry would pass on 74%, 61%, 57% and 43% of entries of the four large tensors; a sign-flipped entry on 51%, 45%, 40% and 35%. Also |cand_i - fd_i| <= ||cand - ref|| + |ref_i - fd_i|, so G1's 1e-3 relative-L2 pass plus the oracle's own FD pass (pass_fp64, still required) implies A2 for every parameter probe: G2 adds no independent evidence about the candidate's parameter gradients. It did not hide a defect (G1 is independent and passed), but the registered L16 exclusion 'G2 projects onto weight entries' no longer excludes anything. The style slot is fine (median bar/projection 1.6e-3 for random unit directions).",
+      "fix": "For parameter slots use directions on which Cauchy-Schwarz is tight or near-tight: v = g_ref/||g_ref|| (bar is then exactly 1e-3 relative), plus dense random directions with a bar scaled by sqrt(N), or coordinates chosen among the largest |g_ref| entries. Register before data; keep the r3 data as RED evidence.",
+      "post_v1": "Confirmed on the registered probes (seed 2833673569, upstream seed 81073). For the 18 parameter probes, bar / |candidate projection| is >= 1 on 9 (a zero entry would pass) and >= 2 on 7 (a sign flip would pass); the largest is 18.57 (encode.norm1.fc.weight[73943]), then 15.96 (onnx::Conv_7766[126090]) and 12.46 (noise_convs.1.weight[1746]). The candidate itself is accurate: its worst per-probe error relative to its own projection is 1.06e-4, and r3's eight misses were 1.4e-5 to 6.6e-5 relative and step-invariant (spread across h, h/2, 2h at most 1.5% of the error). So the amendment hid no defect; its bar form discarded G2's power. A per-probe bar at G1's class relative to |fd| (with an absolute floor) would have passed both the r3 misses and all r4 data and would be up to 18.6x tighter; any such bar must be registered before fresh data, never applied to these receipts."
+    },
+    {
+      "id": "BWDR4R-F02",
+      "severity": "MINOR",
+      "title": "The 31-segment schedule behind the 10 s figure is gated only by A3; G0, G1 and G4 run the 8-segment schedule",
+      "file": "scripts/bwd_r4_gpu.py; scripts/bwd_r4_worker_r2.py",
+      "line": "gpu.py 288-289 (G0 requires 8 checkpoint calls), 308-311, 372-394 (only amended_gate3 and gate5 pass fine=True); worker_r2.py 119-159",
+      "argument": "fine=True (31 segments plus the allocator trim) is used only by A3 (fine vs plain, chain class) and G5. G0's bitwise forward, G1's fp64 comparison and G4's determinism all run fine=False. The fine path re-codes model.py:880-885 and moves LeakyRelu 908 into the upsample segment, so its forward bytes are not covered by G0. Check 3 shows the fine mirror computes the same expression DAG as Voice's decoder+generator (fp64 bitwise equal, 313/313 names reached, 31 checkpoint calls), so no structural defect; what is ungated is fp32 forward bit-parity, fine-mode determinism and fine-vs-fp64 directly (only a triangle bound through the plain arm, which itself is not compared with fp64 in r4).",
+      "fix": "Run G0 (crop and full), G1 and G4 with fine=True, the schedule the 10 s claim uses; pin the mirror to model.py (source hash of decoder/generator, or the check-3 DAG census as a CPU test) so a Voice edit cannot silently diverge from the fine re-coding.",
+      "post_v1": "Receipts confirm: G0 crop/full, G1 and G4 (session, fresh-a, fresh-b, 314/314 each, 0 mismatches) ran the 8-segment schedule; only G3, r4m01 and G5-checkpoint ran 31 segments."
+    },
+    {
+      "id": "BWDR4R-F03",
+      "severity": "MAJOR",
+      "title": "tc.checkpoint replays whatever its saved inputs hold at backward time; no revision check (core, pre-existing; blocks R4b training loops)",
+      "file": "tensor_cuda/src/bindings.cpp",
+      "line": "131-183 (replay wraps t.data() at 155); compare autograd.cpp 142, 158-166",
+      "argument": "attach_vjp snapshots each input's Storage revision and refuses a mutated input; checkpoint_py captures Tensor handles and at backward wraps their current data. A checkpoint input written in place between forward and backward (a TensorCUDA in-place op, a DLPack write followed by mark_modified, or an optimizer step on a weight passed as a checkpoint input) is replayed silently with the new values, and the replay's own attach_vjp nodes snapshot the new revision, so nothing downstream detects it. DESIGN 3 asked to fail explicitly on mutation and DESIGN 6 lists 'accept a stale storage revision' as a hook-and-checkpoint mutant. r4m01 does not test this: it perturbs the activation inside the replay function, not a saved input. In R4a's harness no checkpoint input is mutated (all are fresh op outputs; weights and style are untouched until after backward; zero_grad touches grads only), so R4a's gate results are not affected.",
+      "fix": "In checkpoint_py snapshot input revisions at forward and raise before replay on mismatch; add a tensor_cuda test that mutates a checkpoint input (in-place op and mark_modified) between forward and backward and expects RuntimeError, with a mutant that disables the check. Product change in core: needs its own order (R4a's scope allowed checkpoint changes only if the harness proved them necessary)."
+    },
+    {
+      "id": "BWDR4R-F04",
+      "severity": "MAJOR",
+      "title": "The 12 'trainable' instance-norm affine initializers are ONNX identity constants shared across unrelated sites, including the F0/N predictor",
+      "file": "Voice engine/kokoro_tc/model.py (read-only); scripts/bwd_r4_gpu.py:80-84",
+      "line": "model.py:552-566 (_adain: '(identity) affine from the graph'), 401-417 (P caches by resolved name)",
+      "argument": "Check 2: all 6 scales are exactly ones and all 6 biases exactly zeros; together they serve 58 decoder norm sites (sharing counts 1, 1, 4, 4, 24, 24). A whole-graph ONNX census shows two of them, kmodel.predictor.F0.0.norm1.norm.weight and kmodel.predictor.F0.1.norm2.norm.weight (and their biases), also serve 12 predictor sites in F0.0-F0.2 and N.0-N.2. KokoroTC.P returns one tensor per resolved name, so the predictor and the decoder use the same leaf. Their 'gradients' are sums over unrelated sites; a training step on them changes every tied site, and the predictor. That is fine for R4a (Voice's key defines them and the VJP is correct), but R4b and any trainer that optimizes 'all 313' would change the model's structure. Corollary: because scale is identity, the chain gates cannot see a dx that ignores scale (check 1: max |diff| 0.0); only G-AFF's non-identity fixtures can.",
+      "fix": "R4b: freeze these 12 by default (requires_grad False) or untie them per site with an explicit copy; exclude them from weight ranking; record which choice Voice wants (a scope question for the owner via the lead if Voice cannot settle it)."
+    },
+    {
+      "id": "BWDR4R-F05",
+      "severity": "MINOR",
+      "title": "The new GPU unit test is degenerate (T=1): it cannot tell dscale or dx from zero",
+      "file": "tc_signal/tests/test_bwd_r4_norm_affine.py",
+      "line": "21-37",
+      "argument": "With T=1, xhat is identically 0, so the shipped rule gives dscale=0 and dx=0. Check 1: variants 'dscale = 0', 'dscale from batch 0 only', 'dx drops covariance (r2m03)' and 'dx = 0' all pass the test; only r4m03 (dscale uses x) and dbias errors fail it. The package's own test suite therefore carries no non-degenerate check of the new affine VJP; that evidence lives only in the harness gate scripts (G-AFF), which are not part of the shipped tests.",
+      "fix": "Add a tc_signal test with T>=3, N=2, non-identity scale, all three slots active and each alone, against a small NumPy fp64 reference (atol/rtol from DESIGN 6's class)."
+    },
+    {
+      "id": "BWDR4R-F06",
+      "severity": "NIT",
+      "title": "The one changed BWD-R2 assertion no longer tests routing; the test's name now misdescribes it",
+      "file": "tc_signal/tests/test_bwd_r2_paths.py",
+      "line": "70-74",
+      "argument": "BufferError('...CUDA...') for a host tensor is raised by _C.instance_norm1d_plan on both the tracked and the untracked path, so the assertion would pass even if routing to the tracked path broke. It does catch a reinstated refusal (ValueError), which is weakly meaningful. It duplicates the first assertion of test_host_norm_affine_only_reaches_planner, which adds the out= witness that actually proves the tracked route.",
+      "fix": "Rename (e.g. ..._trainable_affine_reaches_planner) and add the out= routing witness, or drop it as a duplicate."
+    },
+    {
+      "id": "BWDR4R-F07",
+      "severity": "MINOR",
+      "title": "A3 is justified, but it trades away ulp-level sensitivity to a stale or perturbed replay",
+      "file": "scripts/bwd_r4_gpu.py",
+      "line": "106-134, 351-394",
+      "argument": "Fan-in association is a real cause: a fp32 sum of six terms (plain: three resblocks x {skip, AdaIN path} at the stage input) is not bit-equal to the sum of three pre-summed terms (checkpoint). Prediction from that model, written before reading receipts: the byte-identical set should be exactly the per-iteration parameters of resblocks 3-5 (adain1/adain2 fc W and b, alpha1, alpha2, convs1 and convs2 w and b: 10 x 3 x 3 = 90), because each iteration input has exactly two fan-in terms (exact under commutation) and everything upstream of the stage-1 input, plus style and the shared norm affines, sees a re-associated sum. A3's bar (1e-3 relative) can only see a replay error at about 1e-3 relative; r4m01 (+/-3/32 added to the resblock.5 activation) is gross. A stale replay that differs at 1e-6 relative would pass A3.",
+      "fix": "Add a replay-identity probe: hash each segment's replayed output (and inputs) in backward and compare bitwise with the forward's no-grad output for that segment. That restores ulp sensitivity without needing cross-mode gradient bit-identity.",
+      "post_v1": "Prediction confirmed exactly: G3's 90 byte-identical tensors are the 72 named per-iteration parameters of generator resblocks 3-5 plus 18 onnx::Conv_7942..8061 weights, which the ONNX graph maps one-to-one to resblocks.3-5 convs1/convs2 0-2. This supports A3's fan-in diagnosis and shows the replayed forward was bit-exact for those nine segments. r4m01 left 81 identical (the 9 lost are in the perturbed resblock.5 iteration 0) and failed at 1,383.67x on style. A replay error below about 1e-3 relative elsewhere would still pass A3."
+    },
+    {
+      "id": "BWDR4R-F08",
+      "severity": "MINOR",
+      "title": "G5's basis samples non-pool memory device-wide at four synchronized points only",
+      "file": "scripts/bwd_r4_gpu.py",
+      "line": "23-65, 292-307, 427-453",
+      "argument": "peak = pool reserved high-water (exact, driver attribute) + max of (total - free - pool reserved) at resident_weights, after_forward, after_allocator_trim, after_backward. The non-pool term is device-wide (it includes any other process) and misses transient non-pool allocations between samples (cuBLAS workspace growth, Voice native cudaMalloc inside an op). Summing two maxima taken at different times is conservative; the sampling gap can under-count. As the footprint competing with GRAPA it is the right quantity (reserved, not live) if the device was otherwise idle. The 10 s input (modular tiling of the 212-frame reference: asr 212->400, F0/N 424->800, har 127,200->240,000, phase-aligned at 300 samples per F0 frame) is sound for a shape-driven measurement. empty_cache() there is safe: both libraries synchronize first, and cudaMemPoolTrimTo releases only memory not backing live allocations.",
+      "fix": "Cross-check with per-process NVML (or nvidia-smi --query-compute-apps) polled during forward and backward; record that the device held no other process; R4b re-measures with Voice's tail VJP and with GRAPA resident (DESIGN 6), and makes the forward/backward trim part of the training recipe.",
+      "post_v1": "Phases (10 s, 31 segments): non-pool 1,065,615,360 at load, 1,315,176,448 after forward, 1,399,062,528 after backward; pool reserved high-water 2,214,592,512; sum 3,613,655,040 (bar 4,000,000,000). Live basis 2,906,964,584. Plain arm reserved basis 10,190,323,712. Forward 2.21 s, backward 0.896 s. See F13 for the trim."
+    },
+    {
+      "id": "BWDR4R-F09",
+      "severity": "MINOR",
+      "title": "29 of the 313 compared gradients are analytic zeros and pass G1 through the absolute floor only",
+      "file": "scripts/bwd_r4_gate.py",
+      "line": "326-354 (small = norm < 1e-6 x largest)",
+      "argument": "Check 2: 29 tensors fall under the floor: every convs1.k bias of the 8 generator blocks (24) and conv1 bias of encode and decode.0-3 (5). Each feeds an instance norm, which removes a per-channel constant, so the true gradient is 0 and the fp64 key holds only rounding (largest norm 269.66 on the reviewer seed, floor 2.7e-4 L2). '313 within bars' therefore includes 29 checks of smallness only. Not a defect. Weight ranking (Voice's use) should know these are structurally zero.",
+      "fix": "Report the floor population separately in the G1 summary and give Voice the list for ranking.",
+      "post_v1": "Confirmed on the receipts: 29 floor rows; their fp64 norms are at most 1.56e-14 (true zeros); candidate absolute L2 at most 1.71e-6 against the floor 2.41e-4. Reporting defect: R4_G1's 'worst_parameter' (bwd_r4_gate.py:360-364 picks max relative_l2 over all rows) names a floor row, resblocks.3.convs1.0.bias, at relative L2 785,817,802, while the meaningful worst, encode.norm1.norm.bias at 4.93e-5 (0.049 of its bar), is not surfaced. Fix: exclude floor rows from the relative 'worst' and report worst error-to-bound."
+    },
+    {
+      "id": "BWDR4R-F10",
+      "severity": "NIT",
+      "title": "G1's chain bars are sound for fp32 depth but cannot see eps-scale VJP defects; that coverage rests on G-AFF",
+      "file": "artifacts/bwd_r4/TOLERANCES_R4.json (bars as stated in the order)",
+      "line": "n/a",
+      "argument": "1e-4 (style) and 1e-3 (parameters) relative L2 sit 10x and more above the measured fp32 chain error (style 1.03e-5) for reduction lengths up to about 1e4-1e5 over about 30 rounded stages, so they are not loose by orders of magnitude and not tight enough to flake. A norm replay that dropped eps would change dx by about eps/(2 var), well under 1e-3 for typical variances, so the chain gate cannot detect it; the op-level G-AFF bars must. Stated so the layering is explicit, not as a defect.",
+      "fix": "None required; say in the report that eps- and identity-scale-blind defects are G-AFF's responsibility."
+    },
+    {
+      "id": "BWDR4R-F11",
+      "severity": "NIT",
+      "title": "attach_vjp silently accepts None for an active slot",
+      "file": "tensor_cuda/src/autograd.cpp",
+      "line": "172",
+      "argument": "A VJP that drops an active slot's gradient (exactly r4m04) leaves the leaf grad None without error; the gates catch it only because they check presence. Pre-existing and by design ('None for structural zeros').",
+      "fix": "Optional strict mode or a debug counter for active slots returned as None, for training use."
+    },
+    {
+      "id": "BWDR4R-F12",
+      "severity": "NIT",
+      "title": "checkpoint_block's input walk skips tuples",
+      "file": "scripts/bwd_r4_gpu.py",
+      "line": "90-97",
+      "argument": "rebuild_inputs descends dicts and lists only. Today no tensor sits in a tuple (check 3 reaches all 313 names), and a closure-captured leaf would still receive gradient through the nested replay backward, but a future tuple-held leaf would silently not be a checkpoint input.",
+      "fix": "Descend tuples too, or assert that every TensorCUDA tensor reachable from params was collected."
+    },
+    {
+      "id": "BWDR4R-F13",
+      "severity": "MINOR",
+      "post_v1": true,
+      "title": "A4's allocator trim released nothing in the measured 10 s run; the 4.32 to 3.61 GB drop comes from the 31-segment schedule",
+      "file": "scripts/bwd_r4_gpu.py; worker_g5-checkpoint_*_R4/MEASUREMENT_R4.json",
+      "line": "292-299",
+      "argument": "after_forward and after_allocator_trim report identical free bytes (10,129,113,088) and pool reserved bytes (1,006,632,960) with 660,132,452 live: cudaMemPoolTrimTo(0) found nothing it could release (live pooled blocks pin their chunks, as kernels.cu's allocator note says). The trim is harmless and cost 0.17 ms, but REPORT_R4 and the ledger present it as part of the A4 recipe, and the phase receipt shows its effect is zero.",
+      "fix": "State in the R4a record that the trim measured no effect; R4b neither relies on it nor drops the 31-segment schedule on its account."
+    },
+    {
+      "id": "BWDR4R-F14",
+      "severity": "NIT",
+      "post_v1": true,
+      "title": "The new GPU unit test never ran as a pytest ID",
+      "file": "artifacts/bwd_r4/REPORT_R2.md (G6); tc_signal/tests/test_bwd_r4_norm_affine.py:21-37",
+      "line": "n/a",
+      "argument": "G6 ran CPU-only: the three test_gpu_norm_affine_optional_slots IDs were skipped. The same operands did run on GPU inside G-AFF's structural_cases (bwd_r4_affine_r2.py:170-192; all 3 role sets passed in G_AFF_R4.json), so the logic was exercised, but the shipped test file's GPU IDs have no passing receipt.",
+      "fix": "Run the tc_signal GPU tests once on the lead's GPU line (with F05's non-degenerate case added)."
+    }
+  ],
+  "read_after_v1": [
+    "tensor_fork_bwd_wt_r4/artifacts/bwd_r4: REPORT_R2.md, REPORT_R4.md, LEDGER_R4.md, AMENDMENT1_R4.md(+.sha256), TOLERANCES_R4.json, FD_PROBES_R4.json, worker_*_R4 receipts, worker_g1-g2_*_R3/FINITE_DIFFERENCE_R2.json, host-chain_R2/FD_PROJECTIONS_R2.json",
+    "tensor_fork_bwd_wt_r4/logs/bwd_r4_r4_gpu_*_R4.log (verdict, G1, G2, G3, mutant lines)"
+  ],
+  "own_checks_after_v1": {
+    "checks/rev4_reference_crop.py --seed 81073 --probes FD_PROBES_R4.json": "checks/rev4_reference_crop_seed81073_registered.json/.out (rc 0; Voice census 0 changed, 0 writes)",
+    "checks/rev4_receipts.py": "checks/rev4_receipts.out (rc 0)"
+  }
+}

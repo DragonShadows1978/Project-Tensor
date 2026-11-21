@@ -55,6 +55,7 @@ pybind11_add_module(_tensor_cuda
   src/autograd.cpp
   src/ops.cpp
   src/bindings.cpp
+  src/bwd_selftest.cpp
 )
 
 target_include_directories(_tensor_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

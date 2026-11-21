@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "stage": "final",
+  "reviewed_tip": "7490aba3",
+  "baseline": "cd7d7d4d",
+  "blind_sha256": "86714961b0886a61fd209e12150aa2a721c2cf27158b1fdf62118b398363e743",
+  "disposition": "Retain bounded crop and fixture findings, reopen G5, hold production promotion",
+  "findings": [
+    {
+      "id": "BWDR4BR-F01",
+      "severity": "MAJOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 125,
+      "title": "G5 disables checkpoint digests only while building the forward",
+      "argument": "The patch at lines 128–131 ends when the mirror returns. R4a checkpoint replay resolves both module-level digest functions at backward time, so replay still copies tensors to the host, hashes them, and introduces synchronization. The check executed the actual checkpoint closure with forward and replay markers. This is a different measurement configuration from the registered one.",
+      "suggested_fix": "Keep the option in effect for both passes or capture an explicit per-segment instrumentation flag. Re-run G5 and record replay digest call counts.",
+      "evidence": [
+        "checks/source_probes_retry.log#DIGEST_SCOPE",
+        "scripts/bwd_r4_gpu.py:179",
+        "checks/recount_retry.log#G5"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F02",
+      "severity": "MAJOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 263,
+      "title": "MFCC provenance binds wave bytes and files but not the run or operands",
+      "argument": "The live array hash rejects different wave bytes. However, both consumers choose the newest passing capture by filename without binding its stage/candidate pins, and a same-wave bundle can carry stale target, pairs, frozen operands, model or reference code. The MFCC record itself is unpinned, and FD parts carry only the wave hash and part indices. A CPU probe changed the explicit crop and cotangent metadata while preserving all joined file hashes, and the actual consumer accepted it. The recorded lead run matches a fresh numeric recomputation.",
+      "suggested_fix": "Pin an explicit capture ID and immutable reference manifest with full operand and source digests, including each FD part and output. Recompute and compare live consumer operand pins before using any reference.",
+      "evidence": [
+        "checks/source_probes_retry.log#SELF_CONSISTENT_WRONG_BUNDLE_ACCEPTED",
+        "checks/recount_retry.log#PROVENANCE",
+        "checks/fp64_crop_retry.log#CHAIN",
+        "scripts/bwd_r4b_refwave.py:128",
+        "../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_stage.py:201"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F03",
+      "severity": "MAJOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 232,
+      "title": "The GPU G2 check can pass without the registered probes",
+      "argument": "G2 checks success against the supplied oracle length and tests slopes with all(), without requiring the exact 40-row inventory or three valid slopes per row. The scorer accepts zero rows and empty slopes. The lead stage pins the linear oracle and directions with full SHA-256, which guards the recorded line against accidental edits. A self-consistent MFCC verdict can still present an oracle that omits probes or slopes. The actual receipts had every registered row and slope.",
+      "suggested_fix": "Fail closed on the exact probe keys and directions for each loss, including uniqueness and 40 registered rows, three finite branch-free slopes per row, and their registered bounds. Retain sealed file digests and check them on every authorized invocation.",
+      "evidence": [
+        "checks/source_probes_retry.log#EMPTY_G2_ACCEPTED",
+        "checks/source_probes_retry.log#EMPTY_SLOPES_ACCEPTED",
+        "checks/recount_retry.log#LOSS",
+        "scripts/bwd_r4_r5.py:274",
+        "../tensor_fork_bwd_wt_r4b/scripts/bwd_r4b_stage.py:75"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F04",
+      "severity": "MAJOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 600,
+      "title": "Median polling cadence cannot establish the physical memory peak",
+      "argument": "The median validity test permits missing-PID samples, unsampled phases, and arbitrary gaps above the median. The checkpoint run had 71 intervals over 5 ms, including a 2.116 s gap spanning the first 2.107 s of the 2.335 s forward. The recomputed 3,030,384,640 B is the maximum observed. There is no evidence that transient usage crossed the bar, and the recorded cadence leaves that possible.",
+      "suggested_fix": "Measure with independently scheduled sampling and require valid first/last and per-phase coverage and bounded worst-case gaps. Corroborate the sampled maximum with driver high-water and nonpool allocation accounting before claiming a hard cap.",
+      "evidence": [
+        "checks/recount_retry.log#G5",
+        "scripts/bwd_r4b_gpu.py:346"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F05",
+      "severity": "MINOR",
+      "file": "tc_signal/tc_signal/_conv_backward.py",
+      "line": 154,
+      "title": "Python preflight omits native geometry and integer limits",
+      "argument": "The all-off path bypasses native shape and int64/range checks. An oversized stride with a length-one input can pass Python planning, so CUDA tensors can get an all-None result for attributes the forward rejects. Active masks can allocate outputs before native geometry validation and surface differing errors.",
+      "suggested_fix": "Reuse a no-allocation native preflight for validated geometry before output allocation and the all-off return.",
+      "evidence": [
+        "checks/source_probes_retry.log#OVERFLOW_MASK_ALL_OFF",
+        "tc_signal/src/bindings.cpp:339"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F06",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 242,
+      "title": "A1-2 residual subtracts norms",
+      "argument": "Total error norm minus the forward-induced shift norm can be zero or negative despite a nonzero backward discrepancy. The quantity is a signed norm difference, not the norm of the residual vector.",
+      "suggested_fix": "Report the norm of g_candidate - g_ref_at_wave with a stated denominator and keep the signed difference only if labeled.",
+      "evidence": [
+        "checks/recount_retry.log#LOSS"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F07",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 523,
+      "title": "A2-2 displays different probes from the A2-1 gate",
+      "argument": "The nonlinear finite differences and stored shifts are taken on the round-1 fp64-wave probe set. A2-1 selects anew at the captured wave. The actual run changed eight aligned directions, by up to 9.09e-5 in L2, and kept all coordinate positions. The author disclosed the round-1 interpretation, but it leaves the same-probe comparison incomplete.",
+      "suggested_fix": "Evaluate the nonlinear fp64-wave function on the actual A2-1 directions for same-probe comparisons, or label the old and new probe reports explicitly and correct the amendment deliverable.",
+      "evidence": [
+        "checks/fp64_crop_retry.log#A2_PROBES",
+        "checks/fp64_crop_retry.log#DIRECT_DIFFERENCES",
+        "../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/REPORT_R4B_R3_FILED.md:143"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F08",
+      "severity": "MINOR",
+      "file": "tc_signal/tests/test_bwd_r4b_public_conv_backward.py",
+      "line": 105,
+      "title": "Mask, device and ABI boundary test coverage is incomplete",
+      "argument": "The suite covers every pinned Voice convolution case, including six asymmetric BP1 geometries, and reaches the public wrappers. It exercises six of the eight masks, no mixed-device CUDA inputs, and no transposed output_padding >= stride with dilation > stride. The noncontiguous ndarray assertion exercises the foreign-type rejection. The planted edits leave these boundaries, as well as receipt identity, untested.",
+      "suggested_fix": "Add the two missing masks, mixed and non-current devices when available, and the dilation-dominant output-padding corner. Plant an end-padding/extent defect and a stale-bundle defect.",
+      "evidence": [
+        "checks/source_probes_retry.log#FIXTURE_EDGE_COVERAGE",
+        "checks/recount_retry.log#G_API",
+        "checks/recount_retry.log#MUTANT"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F09",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 653,
+      "title": "Public pytest subprocess reads escape the parent Voice census",
+      "argument": "The subprocess runs with bytecode writes disabled and opens fixture paths for reads. Python audit hooks are process-local. The parent mtime records for G-API and r4bm01 each have 82 Voice paths but zero fixture paths. The receipts show no changes in the observed set, which does not certify this child's fixture read set.",
+      "suggested_fix": "Have the child record its read-set census or explicitly verify the pinned fixture inventory before and after each child run.",
+      "evidence": [
+        "checks/recount_retry.log#MTIMES",
+        "tc_signal/tests/bwd_r3_support/cases.py:55"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F10",
+      "severity": "MINOR",
+      "file": "tc_signal/tc_signal/_conv_backward.py",
+      "line": 169,
+      "title": "Public allocation requires the operands' device to be current",
+      "argument": "The wrapper checks only that all three operands share a CUDA label. Active masks allocate with tc.empty(device=x.device), which rejects an explicit CUDA index different from the current device. The native call with preallocated buffers enters a DeviceGuard. The tracked forward has the same allocator constraint. The wrapper's documented contract omits it.",
+      "suggested_fix": "Document and validate the current-device requirement before allocations, or allocate under a supported scoped device guard and restore the caller's device. Add a two-device test.",
+      "evidence": [
+        "tensor_cuda/src/bindings.cpp:1277",
+        "tc_signal/src/conv_backward.cu:245",
+        "tc_signal/tc_signal/__init__.py:155"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F11",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_gpu.py",
+      "line": 211,
+      "title": "Absolute-class G1 can reject correct exact-zero gradients",
+      "argument": "The inherited comparator refuses constant candidate arrays before choosing a class. It also divides by the reference norm before applying the absolute floor. The CPU check reproduced rejection of an exact-zero output and ZeroDivisionError with a zero reference and tiny nonconstant candidate. The 29 stored rows happened to be nonconstant near-zero arrays.",
+      "suggested_fix": "Apply finite, dtype, shape and absolute error checks to registered structural-zero rows without a nonconstant requirement. Only divide by a nonzero reference norm for relative comparisons.",
+      "evidence": [
+        "scripts/bwd_r4_gate.py:290",
+        "scripts/bwd_r4_gate.py:339",
+        "checks/source_probes_retry.log#EXACT_ZERO_CANDIDATE_REJECTED"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F12",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_host.py",
+      "line": 368,
+      "title": "A2 cast-floor breach raises before recording its red receipt",
+      "argument": "The row stores name, kind and index under probe, but the stop-list expression reads them at top level. A row at or above 0.1 of its bar raises KeyError('name') before writing the floor result. The actual floor stayed below the threshold.",
+      "suggested_fix": "Read the identifiers from row['probe'] and exercise a synthetic over-bar path that writes a failed rail receipt before returning red.",
+      "evidence": [
+        "checks/source_probes_retry.log#A2_RED_RAIL_ROW_ERROR"
+      ]
+    },
+    {
+      "id": "BWDR4BR-F13",
+      "severity": "MINOR",
+      "file": "scripts/bwd_r4b_register.py",
+      "line": 15,
+      "title": "The reviewed tip lacks the launcher and suite used by acceptance",
+      "argument": "The pinned lead scripts bwd_r4b_stage.py and bwd_r4b_suite.py exist in the round worktree but are absent from 7490aba3 and untracked in that worktree. The registration imports the launcher, so the committed tip alone cannot reproduce sealing or the staged and suite entry points. The retained scripts match the actual staged pins.",
+      "suggested_fix": "Archive both exact scripts with the qualification source and sealed hashes, or track them as review tooling outside the production package.",
+      "evidence": [
+        "checks/source_provenance.log",
+        "checks/recount_retry.log#PROVENANCE",
+        "../tensor_fork_bwd_wt_r4b/artifacts/bwd_r4b/STAGED_PINS_R4B.json"
+      ]
+    }
+  ]
+}
