@@ -101,6 +101,15 @@ Every finding is fixed or closed with a recorded reason. See `review_receipt.jso
 
 **Before push:** a merged-tree check (MAINCHK4) builds this tree and compares it per test ID with both parents, on CPU
 and on GPU.
+- **Result:** PASS on both, against production `952c6b0e` and the lane.
+  - **CPU:** 4,343 IDs, 0 mismatches.
+  - **GPU:** 5,110 IDs, 0 mismatches, and 1 noise ID that flaked on the lane arm only.
+- **Tree:** the GPU comparison covers this exact tip, `a230d888`, through the scoped re-run of Amendment 2. The CPU
+  comparison ran before the seal correction. Amendment 2's census shows that no CPU test reads either seal file.
+- **The check tree** is `a230d888` plus the check's own orders, scripts and receipts. It adds files only and modifies
+  none.
 
-**Approval:** pending. It goes to the owner as a decision request after MAINCHK4 passes. The engine binary install is
-not part of this merge.
+**Approval:** the owner approved this merge via Ember on 2026-11-21 (21:14 UTC). The reply was A to the decision
+request `20261120-235827_Project-Tensor_bwd-merge-decision.md`: merge into production main and push. The verbatim
+text is in the local promotion ticket and the lead's register. The engine binary install is not part of this merge and
+remains a separate request.
