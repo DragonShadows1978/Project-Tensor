@@ -229,6 +229,10 @@ struct MatmulOperandPlan {
   Shape out_shape;         // A's batch shape + [M, N]
 };
 MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool trans_b);
+// ENG4-F3 Z1: zeros of `shape` with the fill's own status checked (cudaMemset's return value; host: memset; zero
+// bytes: no fill, no CUDA call). It never reads or clears the CUDA last-error slot; a failed fill raises naming
+// `where` and the status. Used by the matmul forward's K = 0 path and its gradient's empty-batch zero dB.
+NDArray zeros_checked(const Shape& shape, DType dtype, Device device, const char* where);
 
 // Enable/disable the transients pool (call AFTER weight loading; see Storage
 // in kernels.cu — persistents must stay raw or they pin pool chunks at walls).

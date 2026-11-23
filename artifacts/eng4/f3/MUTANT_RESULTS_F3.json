@@ -1,0 +1,17 @@
+{
+ "written_utc": "2026-11-23T15:48:25.716415+00:00",
+ "MUTANTS_F3.json_sha256": "c3c5821a9e50c19f8054bea0265790f1e6586e489d46dc9a3898a079a9bd446d",
+ "m11_f3_status_ignored": {
+  "module_sha256": "6624bc64cae5d350d4a61eb6edd44917fa558ca0b191283ad8ec65de91e8e604",
+  "registered_as": "UNKILLABLE BY TEST (MUTANTS_F3.json, written before the build)",
+  "cpu_run": {
+   "junit": "artifacts/eng4/f3/mutants/runs/m11_cpu.xml",
+   "log": "artifacts/eng4/f3/mutants/runs/m11_cpu.log",
+   "result": "157 passed, 83 skipped: survives, as registered",
+   "marker_lines_in_log": 0,
+   "why_no_marker": "the mutated line is in zeros_checked's CUDA branch; host operands take the memset branch, so the line never runs on the CPU lane"
+  },
+  "gpu": "no line registered to kill it (a cudaMemset on a fresh valid allocation fails only under a sticky context error); K4's pending-error witness returns zeros on F3 and on this mutant alike",
+  "verdict": "SURVIVED, as registered"
+ }
+}

@@ -857,8 +857,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
     if (a.ndim() != b.ndim() &&
         std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
       const NDArray& b_data = b.data();
-      NDArray zero_b = NDArray::zeros(b_data.shape, b_data.dtype, b_data.device);
-      if (zero_b.device.is_cuda()) cuda_check_last("matmul backward zero gradient");
+      // ENG4-F3 Z2: the fill's own status is checked (zeros_checked, matmul.cu); the last-error slot is not read,
+      // and an empty B makes no fill and no CUDA call.
+      NDArray zero_b = zeros_checked(b_data.shape, b_data.dtype, b_data.device, "matmul backward zero gradient");
       b.v->accumulate_grad(zero_b);
       return;
     }

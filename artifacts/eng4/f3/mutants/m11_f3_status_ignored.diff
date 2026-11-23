@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4f3/tensor_cuda/src/matmul.cu	2026-11-23 10:43:53.886738542 -0500
++++ /tmp/eng4f3_src_m11/tensor_cuda/src/matmul.cu	2026-11-23 10:45:04.149529133 -0500
+@@ -76,7 +76,8 @@
+   const size_t bytes = static_cast<size_t>(n) * dtype_size(dtype);
+   if (device.is_cuda()) {
+     const cudaError_t status = cudaMemset(out.data_ptr(), 0, bytes);
+-    if (status != cudaSuccess)
++    std::fprintf(stderr, "ENG4-MUTANT m11_f3_status_ignored executed\n"); std::fflush(stderr);
++    if (false && status != cudaSuccess)
+       throw std::runtime_error(std::string(where) + ": cudaMemset failed: " + cudaGetErrorName(status) + ": " +
+                                cudaGetErrorString(status));
+   } else {
