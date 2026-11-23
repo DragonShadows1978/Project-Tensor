@@ -11,6 +11,7 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <climits>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -59,6 +60,30 @@ MatmulOperandPlan refuse(MatmulOperandPlan p, MatmulOperandIssue issue, const st
   return p;
 }
 }  // namespace
+
+// ENG4-F3 Z1 (ENG4-REV3 F01): NDArray::zeros (kernels.cu, unchanged) discards cudaMemset's returned status, and F2
+// read the thread's last-error slot afterwards instead, so a failed fill was seen only through the slot and an
+// unrelated earlier error left pending there could be raised under the fill's label. This helper allocates exactly as
+// NDArray::zeros does (the NDArray constructor), fills with cudaMemset (CUDA) or std::memset (host), and checks the
+// fill's own return status; zero bytes make no fill and no CUDA call. It never reads or clears the slot.
+// Prior art: the CUDA Runtime API's per-call return status, separate from its last-error slot (cudaGetLastError /
+// cudaPeekAtLastError; CUDA 12.6 Runtime API); TensorCUDA's per-call status checks (ops.cpp check_backward_cuda).
+// Ours: the helper and its two call sites.
+NDArray zeros_checked(const Shape& shape, DType dtype, Device device, const char* where) {
+  NDArray out(shape, dtype, device);
+  const int64_t n = out.numel();
+  if (n == 0) return out;
+  const size_t bytes = static_cast<size_t>(n) * dtype_size(dtype);
+  if (device.is_cuda()) {
+    const cudaError_t status = cudaMemset(out.data_ptr(), 0, bytes);
+    if (status != cudaSuccess)
+      throw std::runtime_error(std::string(where) + ": cudaMemset failed: " + cudaGetErrorName(status) + ": " +
+                               cudaGetErrorString(status));
+  } else {
+    std::memset(out.data_ptr(), 0, bytes);
+  }
+  return out;
+}
 
 MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool trans_b) {
   MatmulOperandPlan p;
@@ -162,15 +187,9 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   // result, or zeros when the contracted dimension is 0, the empty sum); the BLAS reference xGEMM quick-return
   // (M = 0 or N = 0 returns; K = 0 with beta = 0 sets C = 0). Ours: placement after the predicate.
   if (numel_of(plan.out_shape) == 0) return NDArray(plan.out_shape, a.dtype, a.device);  // 0 bytes: no allocation
-  if (plan.k == 0) {
-    NDArray zeros = NDArray::zeros(plan.out_shape, a.dtype, a.device);
-    // ENG4-F2 Y3 (ENG4R2-F03): NDArray::zeros discards cudaMemset's status; the fill is checked here with the
-    // engine's checked CUDA error handling, so a failed fill raises instead of returning unverified memory. Host
-    // outputs make no CUDA call (memset). Prior art: the CUDA runtime's sticky last-error API (cudaGetLastError);
-    // the engine's cuda_check_last convention (kernels.cu). Ours: the placement.
-    if (a.device.is_cuda()) cuda_check_last("matmul zero fill");
-    return zeros;
-  }
+  // ENG4-F2 Y3 / ENG4-F3 Z2: the K = 0 zeros come from zeros_checked, which checks cudaMemset's own return status
+  // (a failed fill raises "matmul zero fill: cudaMemset failed: ...") and never reads the last-error slot.
+  if (plan.k == 0) return zeros_checked(plan.out_shape, a.dtype, a.device, "matmul zero fill");
 
   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).

@@ -1,0 +1,22 @@
+# L55: both zero-fill call sites, F2 (9b7eb1796) vs F3
+## F2 forward K=0
+166:    NDArray zeros = NDArray::zeros(plan.out_shape, a.dtype, a.device);
+171:    if (a.device.is_cuda()) cuda_check_last("matmul zero fill");
+## F3 forward K=0
+192:  if (plan.k == 0) return zeros_checked(plan.out_shape, a.dtype, a.device, "matmul zero fill");
+## F2 gradient empty batch
+860:      NDArray zero_b = NDArray::zeros(b_data.shape, b_data.dtype, b_data.device);
+861:      if (zero_b.device.is_cuda()) cuda_check_last("matmul backward zero gradient");
+## F3 gradient empty batch
+862:      NDArray zero_b = zeros_checked(b_data.shape, b_data.dtype, b_data.device, "matmul backward zero gradient");
+## helper allocation vs NDArray::zeros allocation
+73:  NDArray out(shape, dtype, device);
+770:NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
+771-  NDArray a(shape, dtype, device);
+## every caller of zeros_checked (L118)
+tensor_cuda/src/ops.cpp:860:      // ENG4-F3 Z2: the fill's own status is checked (zeros_checked, matmul.cu); the last-error slot is not read,
+tensor_cuda/src/ops.cpp:862:      NDArray zero_b = zeros_checked(b_data.shape, b_data.dtype, b_data.device, "matmul backward zero gradient");
+tensor_cuda/src/matmul.cu:72:NDArray zeros_checked(const Shape& shape, DType dtype, Device device, const char* where) {
+tensor_cuda/src/matmul.cu:190:  // ENG4-F2 Y3 / ENG4-F3 Z2: the K = 0 zeros come from zeros_checked, which checks cudaMemset's own return status
+tensor_cuda/src/matmul.cu:192:  if (plan.k == 0) return zeros_checked(plan.out_shape, a.dtype, a.device, "matmul zero fill");
+tensor_cuda/include/tc/core.h:235:NDArray zeros_checked(const Shape& shape, DType dtype, Device device, const char* where);

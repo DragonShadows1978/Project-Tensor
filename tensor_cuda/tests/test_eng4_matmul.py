@@ -25,6 +25,10 @@ with the BatchCount message before any product could overflow, including naive p
 zero gradient of its own shape (test_j1_y2_empty_batch_shared_b_zero_gradient, host float16/bfloat16; the float32
 backward needs CUDA and is in test_gpu_bwd0_zero_gradient, m10's GPU line).
 
+ENG4-F3 K1 (CPU): both zero fills use zeros_checked; an empty B under an empty batch makes no fill
+(test_k1_empty_b_no_fill). K4 on the GPU: a pending CUDA error left by a failed output allocation is not reported by
+the K = 0 fill (test_gpu_k4_pending_error_not_raised_by_fill).
+
 This file is self-contained (ENG4-F1 X4): it imports only os, re, numpy, pytest and tensor_cuda, and reads no file.
 
 Prior art: NumPy's matmul shape rule (numpy.matmul docs) for which pairs are meaningful; the cuBLAS strided-batched
@@ -482,3 +486,41 @@ def test_gpu_bwd0_zero_gradient(dtype, case, tb):
     """Y2 on CUDA operands, float32 included (m10's GPU line: it must fail on the zero-gradient check)."""
     a, b = bwd0(dtype, case, tb, "cuda")
     check_zero_gradient(a, b, dtype)
+
+
+# ------------------------------------------------------------------------------------------- ENG4-F3 K1 / K4
+# Prior art: the CUDA Runtime API's per-call return status, separate from its last-error slot (CUDA 12.6 Runtime API).
+@pytest.mark.parametrize("tb", [False, True], ids=["N", "T"])
+@pytest.mark.parametrize("dtype", Y2_CPU_DTYPES)
+def test_k1_empty_b_no_fill(dtype, tb):
+    """Z2 on host operands: a shared B with no elements under an empty batch (K = 0) gets an empty gradient of its
+    own shape; zeros_checked makes no fill for zero bytes."""
+    a = tc.tensor(np.zeros((0, 2, 0), np.float32), dtype=dtype, device="cpu", requires_grad=True)
+    b = tc.tensor(np.zeros((4, 0) if tb else (0, 4), np.float32), dtype=dtype, device="cpu", requires_grad=True)
+    out = tc.matmul(a, b, trans_b=tb)
+    assert tuple(out.shape) == (0, 2, 4)
+    out.backward()
+    assert b.grad is not None and tuple(b.grad.shape) == tuple(b.shape) and b.grad.dtype == dtype
+    assert b.grad.numpy().size == 0 and tuple(a.grad.shape) == (0, 2, 0)
+
+
+@gpu
+def test_gpu_k4_pending_error_not_raised_by_fill():
+    """K4 (F3): a K = 0 forward whose output cannot be allocated (2^19 x 2^19 float32, 1 TiB) raises the allocation
+    failure and leaves it pending in the CUDA last-error slot (the Storage constructor does not consume it). A small
+    K = 0 matmul then returns positive zeros: its fill checks cudaMemset's own status and does not read the slot (F2
+    raised the stale error here as 'matmul zero fill'). The stale error is drained afterwards by tc.synchronize()."""
+    a = tc.tensor(np.zeros((2 ** 19, 0), np.float32))
+    b = tc.tensor(np.zeros((0, 2 ** 19), np.float32))
+    with pytest.raises(RuntimeError, match="cudaMalloc failed"):
+        tc.matmul(a, b)
+    small_a, small_b = tc.tensor(np.zeros((2, 0), np.float32)), tc.tensor(np.zeros((0, 3), np.float32))
+    try:
+        r = tc.matmul(small_a, small_b)
+    finally:
+        try:
+            tc.synchronize()  # drains the stale allocation error (expected to raise it once)
+        except RuntimeError:
+            pass
+    out = r.numpy()
+    assert out.shape == (2, 3) and not np.any(out.view(np.uint32))
