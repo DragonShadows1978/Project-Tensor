@@ -1,0 +1,31 @@
+{
+ "gate": "K4 forward: F2 raises 'matmul zero fill', F3 returns zeros",
+ "verdict": "PASS",
+ "gradient_variant": "recorded with the same rule (F2 raises 'matmul backward zero gradient', F3 zeros)",
+ "rows": [
+  {
+   "arm": "F2",
+   "variant": "forward",
+   "verdict": "PASS",
+   "reason": "F2 must raise the stale error under 'matmul zero fill': {'raised': {'type': 'RuntimeError', 'message': 'CUDA error at matmul zero fill: out of memory'}}"
+  },
+  {
+   "arm": "F2",
+   "variant": "gradient",
+   "verdict": "PASS",
+   "reason": "F2 must raise the stale error under 'matmul backward zero gradient': {'raised': {'type': 'RuntimeError', 'message': 'CUDA error at matmul backward zero gradient: out of memory'}}"
+  },
+  {
+   "arm": "F3",
+   "variant": "forward",
+   "verdict": "PASS",
+   "reason": "F3 returns positive zeros; drain: {'raised': {'type': 'RuntimeError', 'message': 'CUDA error at sync: out of memory'}}"
+  },
+  {
+   "arm": "F3",
+   "variant": "gradient",
+   "verdict": "PASS",
+   "reason": "F3 returns positive zeros; drain: {'raised': {'type': 'RuntimeError', 'message': 'CUDA error at sync: out of memory'}}"
+  }
+ ]
+}
