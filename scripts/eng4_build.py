@@ -4,6 +4,7 @@ receipt with the module sha256 and a sha256 map of the engine sources the arm wa
 
 Usage (from the worktree root):
   python3 -B -P scripts/eng4_build.py <arm> <source tree: the directory holding CMakeLists.txt> [--reconfigure]
+      [--receipts <dir under the worktree>]   (ENG4-F1: default artifacts/eng4/build; F1 uses artifacts/eng4/f1/build)
 
 - The build directory is tensor_cuda/build-eng4/<arm>; the module is copied to tensor_cuda/build-eng4/<arm>/module/.
 - Refuses to start a step with MemAvailable < 12 GB or /mnt/ForgeRealm free < 40 GB (order: Machine rules, L67).
@@ -29,7 +30,9 @@ SO = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
 SCOPE = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=12G", "-p", "OOMPolicy=continue",
          "-p", "CPUWeight=50", "--setenv=TMPDIR=/tmp/eng4_tmp", "--setenv=CUDACXX=/usr/local/cuda-12.6/bin/nvcc",
          "nice", "-n", "19"]
-RECEIPTS = os.path.join(ROOT, "artifacts/eng4/build/build_receipts.json")
+RDIR = os.path.join(ROOT, sys.argv[sys.argv.index("--receipts") + 1] if "--receipts" in sys.argv
+                    else "artifacts/eng4/build")
+RECEIPTS = os.path.join(RDIR, "build_receipts.json")
 SRC_ROOTS = ("src", "include", "tensor_cuda")
 
 
@@ -59,7 +62,7 @@ def guard(step):
 def run(name, argv, bound):
     avail, free = guard(name)
     os.makedirs(os.path.dirname(RECEIPTS), exist_ok=True)
-    log_path = os.path.join(ROOT, "artifacts/eng4/build", f"build_receipts_{name}.log")
+    log_path = os.path.join(RDIR, f"build_receipts_{name}.log")
     start = now()
     with open(log_path, "ab") as log:
         log.write(f"\n=== {name} {start}\n".encode())
@@ -121,7 +124,7 @@ def main():
     rec = {"arm": arm, "time": now(), "source_tree": tree, "built_module": built, "module_copy": dst,
            "module_sha256": sha(dst), "module_bytes": os.path.getsize(dst), "source_files": len(files),
            "source_map_sha256": combined, "sources": files}
-    out = os.path.join(ROOT, "artifacts/eng4/build", f"BUILD_{arm}.json")
+    out = os.path.join(RDIR, f"BUILD_{arm}.json")
     if os.path.exists(out):
         os.replace(out, out[:-5] + "_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S") + ".json")
     with open(out, "w") as f:

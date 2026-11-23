@@ -1,0 +1,19 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 08:56:32.842828976 -0500
++++ /tmp/eng4_src_m04_f1/tensor_cuda/src/matmul.cu	2026-11-23 08:57:00.038256328 -0500
+@@ -109,11 +109,14 @@
+     // (b) equal ranks: the batch shapes must be equal dimension by dimension (a count match is not enough: equal
+     // counts with different shapes pair matrices that NumPy would not pair). An all-ones B batch under a larger A
+     // batch is refused too: no new broadcasting this round.
+-    for (int d = 0; d < nda - 2; ++d)
++    bool eng4_ones = true;
++    for (int d = 0; d < ndb - 2; ++d) eng4_ones = eng4_ones && b.shape[d] == 1;
++    if (eng4_ones) { std::fprintf(stderr, "ENG4-MUTANT m04_f1 executed\n"); std::fflush(stderr); }
++    for (int d = 0; d < nda - 2 && !eng4_ones; ++d)
+       if (a.shape[d] != b.shape[d])
+         return refuse(p, MatmulOperandIssue::BatchShape,
+                       "equal ranks need equal batch shapes, dimension by dimension", a, b, trans_b);
+-    p.batched_b = true;
++    p.batched_b = !eng4_ones;
+   } else if (ndb > 2) {
+     // (c) unequal ranks with a batched B: B is one matrix only if every leading extent is 1.
+     for (int d = 0; d < ndb - 2; ++d)

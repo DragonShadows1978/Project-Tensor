@@ -216,7 +216,11 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha = 1.f, bool trans
 //   (c) unequal ranks, B rank > 2 and every leading B extent 1: one matrix (B stride 0).
 // Everything else is refused (M3), as are operands on different devices and M, N, K or the batch count above
 // INT_MAX (M4). Definitions and prior art: src/matmul.cu.
-enum class MatmulOperandIssue : int8_t { None, Rank, Dtype, InnerDim, Device, Dim, BatchCount, BatchShape };
+// ENG4-F1 X1: UnsupportedDtype (a pair of equal dtypes outside float32/float16/bfloat16) is refused here, before
+// any allocation.
+enum class MatmulOperandIssue : int8_t {
+  None, Rank, Dtype, InnerDim, Device, Dim, BatchCount, BatchShape, UnsupportedDtype
+};
 struct MatmulOperandPlan {
   MatmulOperandIssue issue = MatmulOperandIssue::None;
   std::string detail;  // empty when accepted; otherwise the issue with both shapes, devices and trans_b

@@ -76,6 +76,14 @@ namespace {
 
 DType numpy_dtype(const py::array& a) {
   auto dt = a.dtype();
+  // ENG4-F1 X3 (ENG4R1-F03): kind and itemsize alone also matched a non-native byte order of a listed dtype (for
+  // example '>f4'), whose bytes from_host then copied unswapped. Such a dtype is refused, naming it; the public
+  // tensor_cuda.tensor casts to a native dtype first, so it is unaffected. Prior art: NumPy's dtype.isnative (and
+  // dtype.byteorder); ours: the refusal at the C++ entry.
+  if (!dt.attr("isnative").cast<bool>())
+    throw py::type_error("tensor: non-native byte order NumPy dtype " + py::str(py::object(dt)).cast<std::string>() +
+                         " (byteorder '" + py::str(dt.attr("byteorder")).cast<std::string>() +
+                         "'); convert it first, for example with arr.astype(arr.dtype.newbyteorder('='))");
   if (dt.kind() == 'f' && dt.itemsize() == 4) return DType::Float32;
   if (dt.kind() == 'f' && dt.itemsize() == 2) return DType::Float16;
   if (dt.kind() == 'i' && dt.itemsize() == 8) return DType::Int64;

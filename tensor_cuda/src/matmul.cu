@@ -68,6 +68,11 @@ MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool t
     return refuse(p, MatmulOperandIssue::Dtype,
                   std::string("dtypes differ: A ") + dtype_name(a.dtype) + ", B " + dtype_name(b.dtype), a, b,
                   trans_b);
+  // ENG4-F1 X1 (ENG4R1-F01): the GEMM below supports these three dtypes only. The check sits here, before the
+  // forward allocates its output (a CUDA allocation for CUDA operands), instead of in the dispatch's final else.
+  if (a.dtype != DType::Float32 && a.dtype != DType::Float16 && a.dtype != DType::BFloat16)
+    return refuse(p, MatmulOperandIssue::UnsupportedDtype, std::string("operand dtype ") + dtype_name(a.dtype), a,
+                  b, trans_b);
   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K).
   p.m = a.shape[nda - 2];
   p.k = a.shape[nda - 1];
@@ -131,8 +136,21 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
     case MatmulOperandIssue::Rank: throw std::runtime_error("matmul needs >=2D inputs: " + plan.detail);
     case MatmulOperandIssue::Dtype: throw std::runtime_error("matmul dtype mismatch: " + plan.detail);
     case MatmulOperandIssue::InnerDim: throw std::runtime_error("matmul inner dim mismatch: " + plan.detail);
+    case MatmulOperandIssue::UnsupportedDtype:
+      throw std::runtime_error("matmul supports float32/float16/bfloat16 only: " + plan.detail);
     default: throw std::runtime_error("matmul refused: " + plan.detail);
   }
+
+  // ENG4-F1 X2 (ENG4R1-F02): zero-size GEMMs never reach cuBLAS. Before, they did: K = 0 passed lda = 0 and N = 0
+  // passed ldc = 0, both invalid (cuBLAS requires every leading dimension >= max(1, rows)); the status was discarded
+  // and a nonempty K = 0 output was left unwritten. Now an empty output (M, N or the batch count 0) is returned as
+  // is, and K = 0 with a nonempty output returns zeros, which is NumPy's matmul result for these shapes and what the
+  // fp32 backward already returns (ops.cpp, `if (!k)`). Both use the predicate's own out_shape and K.
+  // Prior art: cuBLAS documentation (lda/ldb/ldc >= max(1, rows)); NumPy's matmul on zero-size operands (an empty
+  // result, or zeros when the contracted dimension is 0, the empty sum); the BLAS reference xGEMM quick-return
+  // (M = 0 or N = 0 returns; K = 0 with beta = 0 sets C = 0). Ours: placement after the predicate.
+  if (numel_of(plan.out_shape) == 0) return NDArray(plan.out_shape, a.dtype, a.device);  // 0 bytes: no allocation
+  if (plan.k == 0) return NDArray::zeros(plan.out_shape, a.dtype, a.device);
 
   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).
@@ -161,28 +179,35 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   cublasOperation_t opB = trans_b ? CUBLAS_OP_T : CUBLAS_OP_N;
   int ldb = trans_b ? (int)K : (int)N;
 
+  cublasStatus_t status = CUBLAS_STATUS_NOT_SUPPORTED;
   if (a.dtype == DType::Float32) {
-    cublasSgemmStridedBatched(
+    status = cublasSgemmStridedBatched(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
         &alpha, reinterpret_cast<const float*>(bp), ldb, sB,
         reinterpret_cast<const float*>(ap), (int)K, strideA,
         &beta, reinterpret_cast<float*>(cp), (int)N, strideC, (int)batch);
   } else if (a.dtype == DType::Float16) {
-    cublasGemmStridedBatchedEx(
+    status = cublasGemmStridedBatchedEx(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
         &alpha, bp, CUDA_R_16F, ldb, sB, ap, CUDA_R_16F, (int)K, strideA,
         &beta, cp, CUDA_R_16F, (int)N, strideC, (int)batch,
         CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
   } else if (a.dtype == DType::BFloat16) {
-    cublasGemmStridedBatchedEx(
+    status = cublasGemmStridedBatchedEx(
         handle(), opB, CUBLAS_OP_N, (int)N, (int)M, (int)K,
         &alpha, bp, CUDA_R_16BF, ldb, sB, ap, CUDA_R_16BF, (int)K, strideA,
         &beta, cp, CUDA_R_16BF, (int)N, strideC, (int)batch,
         CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
   } else {
+    // unreachable since ENG4-F1 X1 (the predicate refuses other dtypes before the allocation); kept as a guard
     throw std::runtime_error("matmul supports float32/float16/bfloat16 only");
   }
   cuda_check_last("matmul");
+  // ENG4-F1 X2: the GEMM's own status is no longer discarded. (The CUDA error check above runs first, so a missing
+  // device keeps its pre-F1 message.) Prior art: cuBLAS documentation, cublasStatus_t and cublasGetStatusName.
+  if (status != CUBLAS_STATUS_SUCCESS)
+    throw std::runtime_error(std::string("matmul: cuBLAS GEMM returned ") + cublasGetStatusName(status) + " (" +
+                             std::to_string(static_cast<int>(status)) + ")");
   return out;
 }
 
