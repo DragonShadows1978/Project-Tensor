@@ -1,0 +1,28 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 10:04:04.228755944 -0500
++++ /tmp/eng4_src_m09_f2_naive_product/tensor_cuda/src/matmul.cu	2026-11-23 10:04:29.367623022 -0500
+@@ -102,19 +102,12 @@
+   for (int d = 0; d < nda - 2; ++d) p.out_shape.push_back(a.shape[d]);
+   p.out_shape.push_back(p.m);
+   p.out_shape.push_back(p.n);
+-  bool zero_leading = false;
+-  for (int d = 0; d < nda - 2; ++d) zero_leading = zero_leading || a.shape[d] == 0;
+-  p.batch = zero_leading ? 0 : 1;
+-  for (int d = 0; d < nda - 2 && !zero_leading; ++d) {
+-    const int64_t extent = a.shape[d];  // >= 1 here (no zero; NDArray extents are never negative)
+-    if (extent > INT_MAX / p.batch)
+-      return refuse(p, MatmulOperandIssue::BatchCount,
+-                    "GEMM batch count above INT_MAX: the product of A's leading extents exceeds " +
+-                        std::to_string(INT_MAX) + " at leading dimension " + std::to_string(d) + " (" +
+-                        std::to_string(p.batch) + " x " + std::to_string(extent) + ")",
+-                    a, b, trans_b);
+-    p.batch *= extent;
+-  }
++  std::fprintf(stderr, "ENG4-MUTANT m09_f2_naive_product executed\n"); std::fflush(stderr); 
++  p.batch = 1;
++  for (int d = 0; d < nda - 2; ++d) p.batch *= a.shape[d];
++  if (p.batch > INT_MAX)
++    return refuse(p, MatmulOperandIssue::BatchCount,
++                  "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
+   // M2/M3: the batch classes. The stride rule is the forward's original one, (ndb == nda) -> B stride K*N, else 0,
+   // so every accepted pair keeps its pre-ENG4 strides (rank 2 x rank 2 is class (b) with an empty batch shape).
+   if (nda == ndb) {

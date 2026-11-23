@@ -5,14 +5,16 @@ except where marked LEAD; rows and bullets merged for length. Receipts: LEDGER_F
 
 Seat: Claude Opus 5.5 (Agent tool). Order `orders/ENG4_F1_REV1_FIXES.md` at 80b8c4cb3 (sha256 2d990927…).
 
-> **LEAD correction to the incident's cause (verified in the code).** The seat attributed the GPU use below to
-> compute-sanitizer not honouring `CUDA_VISIBLE_DEVICES=""`. That is not what happened. The step helper
-> `pyenv()` in `scripts/eng4_gpu_line.py:206-208` pops `CUDA_VISIBLE_DEVICES` from the child environment, by design,
-> so a step sees the GPU inside the lease. The seat's "CPU smokes" called those step functions directly, outside
-> `forge-gpu-run`, so the variable was removed and the GPU was visible. Plain-python smoke children that did not go
-> through `pyenv()` did honour the hidden GPU, which is consistent with this. GRAPA run 9's log shows the 08:20:16–22
-> window fell inside its leg 44 (08:03:20–08:21:19, which ended rc=0, peak 10,728 MiB, in line with the neighbouring
-> legs); the 09:18:19–21 window fell in its cooldown.
+> **LEAD note on the incident's cause (revised 2026-11-23 10:15 EST; it replaces an earlier lead note that was
+> wrong).** The seat's diagnosis is right. Its smoke harness replaced `pyenv()` with one that set
+> `CUDA_VISIBLE_DEVICES=""` (ENG4 `LEDGER.md` line 131, written at the time), and compute-sanitizer removes that
+> variable from the program it launches. The lead measured it inside a forge lease (label `tensor-cvd-probe`; receipt in
+> the lead ledger): with `CUDA_VISIBLE_DEVICES=""`, plain python3 saw no device (rc 100), while under
+> `compute-sanitizer --tool memcheck` the target had no `CUDA_VISIBLE_DEVICES` at all and saw 1 device. The staged
+> step helper `pyenv()` (`scripts/eng4_gpu_line.py:206-208`) also pops the variable, by design for use inside the
+> lease. That is a second route, not the one that fired here. GRAPA run 9's log shows the 08:20:16-22 window inside
+> leg 44 (08:03:20-08:21:19, rc=0, peak 10,728 MiB, in line with its neighbours; GRAPA confirmed no harm). The
+> 09:18:19-21 window fell in a cooldown.
 
 ## Incident: GPU use outside the lease (makes H6 FAIL and corrects ENG4's G6 "no GPU use" to false)
 

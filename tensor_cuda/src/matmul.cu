@@ -91,18 +91,30 @@ MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool t
                   "GEMM dimension above INT_MAX: M " + std::to_string(p.m) + ", N " + std::to_string(p.n) + ", K " +
                       std::to_string(p.k),
                   a, b, trans_b);
-  // Batch = product of A's leading dims, the arithmetic the forward has always used. Every NDArray's nonzero
-  // extents multiply to at most INT64_MAX bytes (NDArray constructor), so this product cannot overflow.
-  p.batch = 1;
-  for (int d = 0; d < nda - 2; ++d) {
-    p.batch *= a.shape[d];
-    p.out_shape.push_back(a.shape[d]);
-  }
+  // Batch = product of A's leading dims. ENG4-F2 Y1 (ENG4R2-F01): a metadata reshape of a zero-element tensor can
+  // carry leading extents whose plain product overflows int64 (for example 2^32 x 2^32 x 0), so the product is no
+  // longer formed blindly. If any leading extent is 0 the batch is 0 (and passes the INT_MAX check); otherwise the
+  // extents are multiplied one at a time and the pair is refused (BatchCount) as soon as the next product would
+  // exceed INT_MAX, which keeps every intermediate product <= INT_MAX: no signed overflow is reachable. Values are
+  // unchanged wherever the old product did not overflow (the same extents, multiplied in the same order).
+  // Prior art: checked multiplication before overflow (CERT C INT32-C; GCC/Clang __builtin_mul_overflow, GCC 5,
+  // 2015); the division-before-multiplication bound is the INT32-C form. Ours: the zero-first rule and the placement.
+  for (int d = 0; d < nda - 2; ++d) p.out_shape.push_back(a.shape[d]);
   p.out_shape.push_back(p.m);
   p.out_shape.push_back(p.n);
-  if (p.batch > INT_MAX)
-    return refuse(p, MatmulOperandIssue::BatchCount,
-                  "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
+  bool zero_leading = false;
+  for (int d = 0; d < nda - 2; ++d) zero_leading = zero_leading || a.shape[d] == 0;
+  p.batch = zero_leading ? 0 : 1;
+  for (int d = 0; d < nda - 2 && !zero_leading; ++d) {
+    const int64_t extent = a.shape[d];  // >= 1 here (no zero; NDArray extents are never negative)
+    if (extent > INT_MAX / p.batch)
+      return refuse(p, MatmulOperandIssue::BatchCount,
+                    "GEMM batch count above INT_MAX: the product of A's leading extents exceeds " +
+                        std::to_string(INT_MAX) + " at leading dimension " + std::to_string(d) + " (" +
+                        std::to_string(p.batch) + " x " + std::to_string(extent) + ")",
+                    a, b, trans_b);
+    p.batch *= extent;
+  }
   // M2/M3: the batch classes. The stride rule is the forward's original one, (ndb == nda) -> B stride K*N, else 0,
   // so every accepted pair keeps its pre-ENG4 strides (rank 2 x rank 2 is class (b) with an empty batch shape).
   if (nda == ndb) {
@@ -150,7 +162,15 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
   // result, or zeros when the contracted dimension is 0, the empty sum); the BLAS reference xGEMM quick-return
   // (M = 0 or N = 0 returns; K = 0 with beta = 0 sets C = 0). Ours: placement after the predicate.
   if (numel_of(plan.out_shape) == 0) return NDArray(plan.out_shape, a.dtype, a.device);  // 0 bytes: no allocation
-  if (plan.k == 0) return NDArray::zeros(plan.out_shape, a.dtype, a.device);
+  if (plan.k == 0) {
+    NDArray zeros = NDArray::zeros(plan.out_shape, a.dtype, a.device);
+    // ENG4-F2 Y3 (ENG4R2-F03): NDArray::zeros discards cudaMemset's status; the fill is checked here with the
+    // engine's checked CUDA error handling, so a failed fill raises instead of returning unverified memory. Host
+    // outputs make no CUDA call (memset). Prior art: the CUDA runtime's sticky last-error API (cudaGetLastError);
+    // the engine's cuda_check_last convention (kernels.cu). Ours: the placement.
+    if (a.device.is_cuda()) cuda_check_last("matmul zero fill");
+    return zeros;
+  }
 
   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).

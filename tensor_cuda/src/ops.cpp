@@ -847,6 +847,21 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
     // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
     // the no-copy OP_T read.  dB: non-trans alpha*A^T@g, trans alpha*g^T@A.
     a.v->accumulate_grad(matmul_backward(g, weight, alpha, !trans_b));
+    // ENG4-F2 Y2 (ENG4R2-F02): a shared B (classes a and c: unequal ranks) under an empty A batch (a zero leading
+    // extent) gets the gradient its forward implies, the empty sum over the batch, i.e. zeros of B's own shape and
+    // dtype. Before, the zero-batch dB intermediate reached reduce_to, whose reshape to B's nonempty shape raised.
+    // A's (empty) gradient is accumulated above as before; reduce_to is unchanged. The zero fill is checked like the
+    // forward's K = 0 fill. Prior art: the gradient of a broadcast operand is the sum over the broadcast axes, zero
+    // over an empty axis (reverse-mode autodiff; PyTorch's sum_to_size); NumPy's empty sum is 0. Ours: the placement.
+    const auto& a_shape = a.data().shape;
+    if (a.ndim() != b.ndim() &&
+        std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
+      const NDArray& b_data = b.data();
+      NDArray zero_b = NDArray::zeros(b_data.shape, b_data.dtype, b_data.device);
+      if (zero_b.device.is_cuda()) cuda_check_last("matmul backward zero gradient");
+      b.v->accumulate_grad(zero_b);
+      return;
+    }
     // Shared B contributes one dB per A batch. The existing reduce_to path in
     // accumulate_grad sums these in the engine's fixed reduction order.
     // Reduce against the rank-2 view before restoring any singleton B axes.
