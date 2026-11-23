@@ -788,20 +788,26 @@ NDArray matmul_backward(const NDArray& a, const NDArray& b, float alpha, bool tr
       !b.device.is_cuda() || a.device.index != b.device.index)
     throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices");
 
-  const int64_t m = a.shape[na - 2], k = a.shape[na - 1];
-  const int64_t n = b.shape[nb - (trans_b ? 2 : 1)];
-  if (m > INT_MAX || n > INT_MAX || k > INT_MAX || k != b.shape[nb - (trans_b ? 1 : 2)])
-    throw std::runtime_error("matmul backward: invalid GEMM dimensions");
-
-  Shape batch_shape(a.shape.begin(), a.shape.end() - 2);
-  const auto batches = numel_of(batch_shape);
-  if (batches > INT_MAX) throw std::runtime_error("matmul backward: invalid GEMM batch count");
-  const bool batched_b = na == nb;
-  if (batched_b && batches != numel_of(Shape(b.shape.begin(), b.shape.end() - 2)))
-    throw std::runtime_error("matmul backward: batch size mismatch");
-  Shape out_shape = std::move(batch_shape);
-  out_shape.push_back(m);
-  out_shape.push_back(n);
+  // ENG4 (M5): one operand predicate with the forward (tc::matmul_operand_plan, matmul.cu). The count-based batch
+  // check this replaced accepted equal counts with different batch shapes; the predicate requires equal shapes at
+  // equal ranks (M2(b)) and every leading B extent 1 at unequal ranks (M2(c)). The messages keep their BWD text.
+  // Prior art: as matmul.cu (cuBLAS strided-batched contract; NumPy matmul); ours: sharing one predicate.
+  const MatmulOperandPlan plan = matmul_operand_plan(a, b, trans_b);
+  switch (plan.issue) {
+    case MatmulOperandIssue::None: break;
+    case MatmulOperandIssue::InnerDim:
+    case MatmulOperandIssue::Dim: throw std::runtime_error("matmul backward: invalid GEMM dimensions: " + plan.detail);
+    case MatmulOperandIssue::BatchCount:
+      throw std::runtime_error("matmul backward: invalid GEMM batch count: " + plan.detail);
+    case MatmulOperandIssue::BatchShape:
+      throw std::runtime_error("matmul backward: batch size mismatch: " + plan.detail);
+    default:  // rank, dtype and device were refused above; kept so no issue can pass silently
+      throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices: " + plan.detail);
+  }
+  const int64_t m = plan.m, k = plan.k, n = plan.n;
+  const auto batches = plan.batch;
+  const bool batched_b = plan.batched_b;  // == (na == nb) for every accepted pair, as before
+  Shape out_shape = plan.out_shape;
 
   int device;
   check_backward_cuda(cudaGetDevice(&device), "cudaGetDevice");
@@ -829,6 +835,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
     if (a.ndim() != b.ndim() && b.ndim() > 2) {
       // Forward's rank-mismatch stride 0 selects the first stored B matrix.
       // It is true broadcasting only if every leading B extent is one.
+      // ENG4 (M5): since the forward's operand predicate (tc::matmul_operand_plan) refuses unequal ranks with a
+      // non-singleton B batch before any CUDA call, this refusal is unreachable through the forward. It stays as a
+      // guard in case the forward's contract ever changes.
       if (std::any_of(weight.shape.begin(), weight.shape.end() - 2,
                       [](int64_t dim) { return dim != 1; }))
         throw std::runtime_error("matmul backward: forward uses stride 0 and only the first B matrix "

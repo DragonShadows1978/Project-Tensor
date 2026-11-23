@@ -10,7 +10,9 @@
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <climits>
 #include <stdexcept>
+#include <string>
 
 namespace tc {
 
@@ -22,24 +24,126 @@ cublasHandle_t handle() {
 }
 }  // namespace
 
+// ENG4 (ENG-MM1, M2-M5): the operand predicate shared by this forward and ops::matmul_backward (ops.cpp).
+// It reads shapes, dtypes and devices only; it makes no CUDA call, so every refusal below happens before the
+// output allocation, the cuBLAS handle and the GEMM.
+//
+// Prior art: the strided-batched GEMM contract (cuBLAS documentation, cublas<t>gemmStridedBatched and
+// cublasGemmStridedBatchedEx: matrix i of B starts at B + i * strideB, so strideB = 0 reuses one matrix, and the
+// caller must make every batchCount-strided matrix lie inside its buffer; the batched BLAS proposal, Dongarra et
+// al., 2017 -- year and title unverified, lead to check: "batched BLAS standard strided").
+// NumPy's matmul broadcasting rule (numpy.matmul docs: leading dimensions broadcast, the result takes the broadcast
+// batch shape) is the reference for which pairs are meaningful; this predicate accepts only the subset the GEMM
+// below computes as written (equal batch shapes, or a single B matrix) and adds no broadcasting. Ours: the class
+// split (a)/(b)/(c) that matches the backward the engine already differentiates, the refusal set, and the shared
+// placement. The INT_MAX checks mirror the fp32 backward's (ops.cpp, BWD) for the int arguments of the cuBLAS API.
+namespace {
+std::string shape_text(const Shape& s) {
+  std::string t = "[";
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (i) t += ", ";
+    t += std::to_string(s[i]);
+  }
+  return t + "]";
+}
+
+std::string operand_text(const NDArray& a, const NDArray& b, bool trans_b) {
+  return "A " + shape_text(a.shape) + " on " + a.device.str() + ", B " + shape_text(b.shape) + " on " +
+         b.device.str() + ", trans_b=" + (trans_b ? "true" : "false");
+}
+
+MatmulOperandPlan refuse(MatmulOperandPlan p, MatmulOperandIssue issue, const std::string& what, const NDArray& a,
+                         const NDArray& b, bool trans_b) {
+  p.issue = issue;
+  p.detail = what + " (" + operand_text(a, b, trans_b) + ")";
+  return p;
+}
+}  // namespace
+
+MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool trans_b) {
+  MatmulOperandPlan p;
+  const int nda = a.ndim(), ndb = b.ndim();
+  if (nda < 2 || ndb < 2) return refuse(p, MatmulOperandIssue::Rank, "both operands need rank >= 2", a, b, trans_b);
+  if (a.dtype != b.dtype)
+    return refuse(p, MatmulOperandIssue::Dtype,
+                  std::string("dtypes differ: A ") + dtype_name(a.dtype) + ", B " + dtype_name(b.dtype), a, b,
+                  trans_b);
+  // trans_b: C = alpha * A @ B^T with B stored row-major (N, K).
+  p.m = a.shape[nda - 2];
+  p.k = a.shape[nda - 1];
+  p.kb = trans_b ? b.shape[ndb - 1] : b.shape[ndb - 2];
+  p.n = trans_b ? b.shape[ndb - 2] : b.shape[ndb - 1];
+  if (p.k != p.kb)
+    return refuse(p, MatmulOperandIssue::InnerDim,
+                  "inner dimensions differ: A's K " + std::to_string(p.k) + ", B's K " + std::to_string(p.kb), a, b,
+                  trans_b);
+  // M4: one device for both operands (a host and a CUDA operand, or two CUDA indices, are refused).
+  if (a.device.type != b.device.type || a.device.index != b.device.index)
+    return refuse(p, MatmulOperandIssue::Device, "operands are on different devices", a, b, trans_b);
+  // M4: the cuBLAS API takes M, N, K, the leading dimensions (K or N) and the batch count as int.
+  if (p.m > INT_MAX || p.n > INT_MAX || p.k > INT_MAX)
+    return refuse(p, MatmulOperandIssue::Dim,
+                  "GEMM dimension above INT_MAX: M " + std::to_string(p.m) + ", N " + std::to_string(p.n) + ", K " +
+                      std::to_string(p.k),
+                  a, b, trans_b);
+  // Batch = product of A's leading dims, the arithmetic the forward has always used. Every NDArray's nonzero
+  // extents multiply to at most INT64_MAX bytes (NDArray constructor), so this product cannot overflow.
+  p.batch = 1;
+  for (int d = 0; d < nda - 2; ++d) {
+    p.batch *= a.shape[d];
+    p.out_shape.push_back(a.shape[d]);
+  }
+  p.out_shape.push_back(p.m);
+  p.out_shape.push_back(p.n);
+  if (p.batch > INT_MAX)
+    return refuse(p, MatmulOperandIssue::BatchCount,
+                  "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
+  // M2/M3: the batch classes. The stride rule is the forward's original one, (ndb == nda) -> B stride K*N, else 0,
+  // so every accepted pair keeps its pre-ENG4 strides (rank 2 x rank 2 is class (b) with an empty batch shape).
+  if (nda == ndb) {
+    // (b) equal ranks: the batch shapes must be equal dimension by dimension (a count match is not enough: equal
+    // counts with different shapes pair matrices that NumPy would not pair). An all-ones B batch under a larger A
+    // batch is refused too: no new broadcasting this round.
+    for (int d = 0; d < nda - 2; ++d)
+      if (a.shape[d] != b.shape[d])
+        return refuse(p, MatmulOperandIssue::BatchShape,
+                      "equal ranks need equal batch shapes, dimension by dimension", a, b, trans_b);
+    p.batched_b = true;
+  } else if (ndb > 2) {
+    // (c) unequal ranks with a batched B: B is one matrix only if every leading extent is 1.
+    for (int d = 0; d < ndb - 2; ++d)
+      if (b.shape[d] != 1)
+        return refuse(p, MatmulOperandIssue::BatchShape,
+                      "unequal ranks need B rank 2 or a B batch of ones (every leading B extent 1)", a, b, trans_b);
+    p.batched_b = false;
+  } else {
+    p.batched_b = false;  // (a) B rank 2 under a batched A
+  }
+  return p;
+}
+
 NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
-  int nda = a.ndim(), ndb = b.ndim();
-  if (nda < 2 || ndb < 2) throw std::runtime_error("matmul needs >=2D inputs");
-  if (a.dtype != b.dtype) throw std::runtime_error("matmul dtype mismatch");
+  // ENG4: every operand check runs here, before any CUDA call (allocation, handle, GEMM). The first three messages
+  // keep their pre-ENG4 text as a prefix.
+  const MatmulOperandPlan plan = matmul_operand_plan(a, b, trans_b);
+  switch (plan.issue) {
+    case MatmulOperandIssue::None: break;
+    case MatmulOperandIssue::Rank: throw std::runtime_error("matmul needs >=2D inputs: " + plan.detail);
+    case MatmulOperandIssue::Dtype: throw std::runtime_error("matmul dtype mismatch: " + plan.detail);
+    case MatmulOperandIssue::InnerDim: throw std::runtime_error("matmul inner dim mismatch: " + plan.detail);
+    default: throw std::runtime_error("matmul refused: " + plan.detail);
+  }
 
   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).
-  int64_t M = a.shape[nda - 2], K = a.shape[nda - 1];
-  int64_t Kb = trans_b ? b.shape[ndb - 1] : b.shape[ndb - 2];
-  int64_t N  = trans_b ? b.shape[ndb - 2] : b.shape[ndb - 1];
-  if (K != Kb) throw std::runtime_error("matmul inner dim mismatch");
+  int64_t M = plan.m, K = plan.k;
+  int64_t Kb = plan.kb;
+  int64_t N  = plan.n;
 
-  // Batch = product of a's leading dims (b must match or be 2D broadcast).
-  int64_t batch = 1;
-  Shape out_shape;
-  for (int d = 0; d < nda - 2; ++d) { batch *= a.shape[d]; out_shape.push_back(a.shape[d]); }
-  out_shape.push_back(M); out_shape.push_back(N);
-  bool b_batched = (ndb == nda);
+  // Batch = product of a's leading dims (b matches it or is one matrix: the predicate above).
+  int64_t batch = plan.batch;
+  Shape out_shape = plan.out_shape;
+  bool b_batched = plan.batched_b;  // == (ndb == nda) for every accepted pair
 
   NDArray out(out_shape, a.dtype, a.device);
   int64_t strideA = M * K, strideB = Kb * N, strideC = M * N;

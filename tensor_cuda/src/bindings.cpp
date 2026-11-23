@@ -81,7 +81,14 @@ DType numpy_dtype(const py::array& a) {
   if (dt.kind() == 'i' && dt.itemsize() == 8) return DType::Int64;
   if (dt.kind() == 'u' && dt.itemsize() == 1) return DType::Uint8;  // packed int4
   if (dt.kind() == 'b') return DType::Bool;
-  return DType::Float32;  // others are force-cast to float32 by the wrapper
+  // ENG4 N1: an unlisted dtype is refused, naming it. Before: it returned Float32 and from_host read the buffer's
+  // bytes as float32 (a float64 array gave garbage values, an int32 array its bit patterns). tensor_cuda.tensor and
+  // the factories cast to a listed dtype before this call; tensor_cuda.from_numpy and direct _C.tensor callers do
+  // not. Prior art: NumPy's own TypeError for an unknown dtype and ENG2 F1's Python-side refusal (__init__.py
+  // _np_dtype, this repo); ours: the refusal at the C++ entry.
+  throw py::type_error("tensor: unsupported NumPy dtype " + py::str(py::object(dt)).cast<std::string>() +
+                       " (kind '" + std::string(1, dt.kind()) + "', itemsize " + std::to_string(dt.itemsize()) +
+                       "); supported: float32, float16, int64, uint8, bool");
 }
 
 Tensor tensor_from_numpy(py::array arr, const std::string& device, bool requires_grad) {

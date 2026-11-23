@@ -1,0 +1,221 @@
+{
+ "written_utc": "2026-11-23T13:08:54.649451+00:00",
+ "MUTANTS.json_sha256": "691431377ce60c9dc307fba44ca30a081e26e7a3c5777c98e27074a1c5e406a4",
+ "mutants": {
+  "m01_count_not_shape": {
+   "module_sha256": "6ee509b1fc8fe309d5289f51ce9991932dbcd7f8572488bf8fd901c26f62d14b",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 3, 2, 3] on ..., B [3, 2, 3, 4] on ...') -- the mutant accepts the equal-count pair, so the call reaches the GEMM and raises the no-device CUDA error instead (regex does not match)",
+   "rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_count_diff_shape]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 3,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[3,\\\\ 2,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m01_count_not_shape_0.xml"
+    }
+   ],
+   "killed_on_cpu": true
+  },
+  "m02_no_device_check": {
+   "module_sha256": "0e2bc4064eb410b72ff31f472974b2f641b8cde95e93ce2e4b89ea96f9feb184",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: operands are on different devices (A ... on <dev>, B ... on <dev>') -- CPU: the zero-element CUDA operand lets the call reach the output allocation / GEMM (CUDA error); GPU line: nonzero host + CUDA operands reach cuBLAS (any outcome other than the refusal fails the regex or 'DID NOT RAISE')",
+   "rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[host_a_cuda_b]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: operands are on different devices \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m02_no_device_check_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[cuda_a_host_b]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: operands are on different devices \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'cudaMalloc failed: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m02_no_device_check_1.xml"
+    }
+   ],
+   "killed_on_cpu": true
+  },
+  "m03_no_intmax": {
+   "module_sha256": "e47d2d49cad743055b28352d56944fb271b256a3cc36a08d8b727f2af558ce87",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: GEMM (dimension|batch count) above INT_MAX.*(A ..., B ...') -- the mutant lets the call reach the GEMM (no-device CUDA error)",
+   "rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[M_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[2147483648,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 2147483648\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax_trans]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[2147483648,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[0,\\\\ 2147483648\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[2147483648,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax_trans]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[0,\\\\ 2147483648\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 2147483648\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_b2d]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[2147483648,\\\\ 0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_5.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_eq_rank]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: GEMM (dimension|batch count) above INT_MAX.*\\\\(A\\\\ \\\\[65536,\\\\ 32768,\\\\ 0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[65536,\\\\ 32768,\\\\ 0,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m03_no_intmax_6.xml"
+    }
+   ],
+   "killed_on_cpu": true
+  },
+  "m04_ones_any_rank": {
+   "module_sha256": "c37db25c68d29d5e1a8899dc3905e1749da8bfcf714e8c0604852f07b0ada940",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 2, 3] ..., B [1, 3, 4] ...') (and the rank-4 case) -- the mutant accepts, the call reaches the GEMM",
+   "rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[1,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m04_ones_any_rank_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a_rank4]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 3,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[1,\\\\ 1,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m04_ones_any_rank_1.xml"
+    }
+   ],
+   "killed_on_cpu": true
+  },
+  "m05_numpy_dtype_fallback": {
+   "module_sha256": "1aa8b722340c74324460b9c305f542058162e80bac98c5e2e4a410404cc855a8",
+   "named_assertion": "pytest.raises(TypeError, match='unsupported NumPy dtype <name>') -- the mutant returns a float32 tensor: 'DID NOT RAISE'",
+   "rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/mutants/runs/m05_numpy_dtype_fallback_5.xml"
+    }
+   ],
+   "killed_on_cpu": true
+  }
+ }
+}

@@ -209,6 +209,23 @@ NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t 
 // folded into the GEMM (applied in the fp32 accumulator, before the 16-bit store).
 NDArray matmul(const NDArray& a, const NDArray& b, float alpha = 1.f, bool trans_b = false);
 
+// ENG4 (M5): the one operand predicate of the matmul forward (tc::matmul) and the fp32 backward
+// (ops::matmul_backward). It reads only shapes, dtypes and devices (no CUDA call). Accepted (M2):
+//   (a) B rank 2: one matrix broadcast over A's batch (B stride 0);
+//   (b) equal ranks and equal batch shapes, dimension by dimension (B stride K*N; rank 2 x rank 2 is this class);
+//   (c) unequal ranks, B rank > 2 and every leading B extent 1: one matrix (B stride 0).
+// Everything else is refused (M3), as are operands on different devices and M, N, K or the batch count above
+// INT_MAX (M4). Definitions and prior art: src/matmul.cu.
+enum class MatmulOperandIssue : int8_t { None, Rank, Dtype, InnerDim, Device, Dim, BatchCount, BatchShape };
+struct MatmulOperandPlan {
+  MatmulOperandIssue issue = MatmulOperandIssue::None;
+  std::string detail;  // empty when accepted; otherwise the issue with both shapes, devices and trans_b
+  int64_t m = 0, n = 0, k = 0, kb = 0, batch = 1;
+  bool batched_b = false;  // B advances one matrix per batch (class b); false: B stride 0 (classes a, c)
+  Shape out_shape;         // A's batch shape + [M, N]
+};
+MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool trans_b);
+
 // Enable/disable the transients pool (call AFTER weight loading; see Storage
 // in kernels.cu — persistents must stay raw or they pin pool chunks at walls).
 void set_alloc_pooling(bool enabled);
