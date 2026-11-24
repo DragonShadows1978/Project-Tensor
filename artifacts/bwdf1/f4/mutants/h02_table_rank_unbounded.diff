@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8802,7 +8802,7 @@
+   // BWD-F4 H2 (review BWDF1R3-F02): a table above the engine's rank ceiling is refused (ruling D1: TC_MAX_DIMS = 8),
+   // so [T, D, 1, 1, 1, 1, 1, 1, 1] (rank 9) is no longer accepted by the trailing-singleton rule. Rank 8 and below
+   // are unchanged. No prior art known to me (the ceiling is this engine's own D1 ruling).
+-  if (t.ndim() < 2 || t.ndim() > TC_MAX_DIMS || t.shape[1] != D) return false;
++  if (t.ndim() < 2 || t.shape[1] != D) return false;  // MUTANT h02_table_rank_unbounded
+   for (int i = 2; i < t.ndim(); ++i)
+     if (t.shape[i] != 1) return false;
+   return true;

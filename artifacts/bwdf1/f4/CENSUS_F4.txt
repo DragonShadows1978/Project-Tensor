@@ -1,0 +1,30 @@
+# L82 callers
+tensor_cuda/src/ops.cpp:1055:Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+tensor_cuda/src/kernels.cu:8801:static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
+tensor_cuda/src/kernels.cu:8817:  if (!rope_table_layout_ok(cs, D) || !rope_table_layout_ok(sn, D))
+# mean( callers in src and python
+tensor_cuda/src/ops.cpp:1055:Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+tensor_cuda/src/ops.cpp:1118:  return mean(mul(d, d), {}, false);
+tensor_cuda/src/ops.cpp:1212:  Tensor m = mean(a, axes, /*keepdim=*/true);
+tensor_cuda/src/ops.cpp:1359:  return mul_scalar(mean(per, {}, false), -1.0);
+tensor_cuda/src/bindings.cpp:1984:      .def("mean", [](Tensor& t, std::vector<int> axes, bool keepdim) { return ops::mean(t, axes, keepdim); },
+# python
+tensor_cuda/tensor_cuda/nn.py:143:        mean = x.mean([-1], True)
+tensor_cuda/tensor_cuda/nn.py:145:        var = (xc * xc).mean([-1], True)
+tensor_cuda/tensor_cuda/nn.py:308:        ms = (x * x).mean([-1], True)
+tensor_cuda/tensor_cuda/nn.py:495:            mean = x.mean([0, 2, 3], True)
+tensor_cuda/tensor_cuda/nn.py:533:            mean = x.mean(axes, True); var = x.var(axes, True)
+tensor_cuda/tensor_cuda/nn.py:613:        mean = g.mean([2], True); var = g.var([2], True)
+tensor_cuda/tensor_cuda/nn.py:642:        mean = x.mean([2, 3], True); var = x.var([2, 3], True)
+tensor_cuda/tensor_cuda/nn.py:672:            return x.mean([2, 3], True)
+tensor_cuda/tensor_cuda/nn.py:771:        return (pred - target).abs().mean()
+tensor_cuda/tensor_cuda/nn.py:778:        return term.mean()
+tensor_cuda/tensor_cuda/nn.py:791:        return tc.where(small, quad, lin).mean()
+tensor_cuda/tensor_cuda/nn.py:807:        return tc.where(mask, pos, neg).mean()
+tensor_cuda/tensor_cuda/nn.py:818:        return (d_ap - d_an + self.margin).relu().mean()
+tensor_cuda/tensor_cuda/nn.py:829:        return term.sum([-1]).mean()
+tensor_cuda/src/bindings.cpp:1984:      .def("mean", [](Tensor& t, std::vector<int> axes, bool keepdim) { return ops::mean(t, axes, keepdim); },
+# rope_tables_check callers
+8811:static void rope_tables_check(const char* op, const char* xname, DType xdtype, const Device& xdevice, int64_t D,
+8839:  rope_tables_check("rope_apply", "x", x.dtype, x.device, D, L, pos0, cs, sn, x.numel() > 0,
+8913:  rope_tables_check("export_rope_rows", "cache", cache.dtype, cache.device, D, len, pos0, cs, sn,

@@ -1,0 +1,898 @@
+{
+ "order": "BWD-F4 G1",
+ "all_rows_as_registered": true,
+ "rows_total": 24,
+ "rows_as_registered": 24,
+ "builds": {
+  "F3": {
+   "pkg_parent": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/F3/pkg",
+   "module_sha256": "36d023b3ce2b474907f1fd33c2e1b0906e2048314c7e59abdf4711ff351a04fb",
+   "control_calls": 4,
+   "tensor_cuda_file": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/F3/pkg/tensor_cuda/__init__.py",
+   "child_exits": {
+    "h1-overflow-2pow32-pair": 0,
+    "h1-overflow-2pow21-triple": 0,
+    "h1-overflow-negative-axes": 0,
+    "h1-overflow-edge-2pow62-times-2": 0,
+    "h1u-reviewer-empty-case": 0,
+    "h1u-reviewer-empty-case-negative-axes": 0,
+    "h1c-product-fits-2pow31-pair": 0,
+    "h1c-product-fits-edge-2pow62": 0,
+    "h1c-empty-selected-axis-first": 0,
+    "h1c-mean-rank1": 0,
+    "h1c-mean-rank2": 0,
+    "h1c-mean-rank3-negative": 0,
+    "h1c-mean-rank4": 0,
+    "h2-rope_apply-sin-rank9-empty": 0,
+    "h2-rope_apply-cos-rank9-empty": 0,
+    "h2-rope_apply-sin-rank9-reading": 0,
+    "h2-export_rope_rows-sin-rank9": 0,
+    "h2-swap-sin-rank9": 0,
+    "h2c-rope_apply-sin-rank8-empty": 0,
+    "h2c-rope_apply-both-rank8-reading": 0,
+    "h2c-rope_apply-sin-T-D-1": 0,
+    "h2c-export_rope_rows-sin-rank8": 0,
+    "h2c-rank1-table-still-refused": 0,
+    "h3-export_rows-empty-view-fires-bound": 0,
+    "__control__": 0
+   }
+  },
+  "F4": {
+   "pkg_parent": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf4/tensor_cuda/build-bwdf4/F4/pkg",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "control_calls": 4,
+   "tensor_cuda_file": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf4/tensor_cuda/build-bwdf4/F4/pkg/tensor_cuda/__init__.py",
+   "child_exits": {
+    "h1-overflow-2pow32-pair": 0,
+    "h1-overflow-2pow21-triple": 0,
+    "h1-overflow-negative-axes": 0,
+    "h1-overflow-edge-2pow62-times-2": 0,
+    "h1u-reviewer-empty-case": 0,
+    "h1u-reviewer-empty-case-negative-axes": 0,
+    "h1c-product-fits-2pow31-pair": 0,
+    "h1c-product-fits-edge-2pow62": 0,
+    "h1c-empty-selected-axis-first": 0,
+    "h1c-mean-rank1": 0,
+    "h1c-mean-rank2": 0,
+    "h1c-mean-rank3-negative": 0,
+    "h1c-mean-rank4": 0,
+    "h2-rope_apply-sin-rank9-empty": 0,
+    "h2-rope_apply-cos-rank9-empty": 0,
+    "h2-rope_apply-sin-rank9-reading": 0,
+    "h2-export_rope_rows-sin-rank9": 0,
+    "h2-swap-sin-rank9": 0,
+    "h2c-rope_apply-sin-rank8-empty": 0,
+    "h2c-rope_apply-both-rank8-reading": 0,
+    "h2c-rope_apply-sin-T-D-1": 0,
+    "h2c-export_rope_rows-sin-rank8": 0,
+    "h2c-rank1-table-still-refused": 0,
+    "h3-export_rows-empty-view-fires-bound": 0,
+    "__control__": 0
+   }
+  }
+ },
+ "rows": [
+  {
+   "id": "h1-overflow-2pow32-pair",
+   "class": "H1",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([2**32,2**32,1,0])",
+   "call": "a.mean([0,1])",
+   "want": [
+    "mean: the reduced element count of",
+    "[4294967296, 4294967296, 1, 0] overflows int64",
+    "(axes [0, 1])",
+    "refused before any allocation"
+   ],
+   "f3_expected": "refuses, in the reducer: 'reduce: the reduced element count of [...]' (signed overflow first)",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "message lacks 'mean: the reduced element count of': reduce: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": "OverflowError",
+    "message": "reduce: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "OverflowError",
+    "message": "mean: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64 (axes [0, 1]); refused before any allocation",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1-overflow-2pow21-triple",
+   "class": "H1",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([2**21,2**21,2**21,0])",
+   "call": "a.mean([0,1,2])",
+   "want": [
+    "mean: the reduced element count of",
+    "[2097152, 2097152, 2097152, 0] overflows int64",
+    "(axes [0, 1, 2])"
+   ],
+   "f3_expected": "refuses, in the reducer (the product 2^63 is one past int64)",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "message lacks 'mean: the reduced element count of': reduce: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": "OverflowError",
+    "message": "reduce: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "OverflowError",
+    "message": "mean: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64 (axes [0, 1, 2]); refused before any allocation",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1-overflow-negative-axes",
+   "class": "H1",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([2**32,2**32,1,0])",
+   "call": "a.mean([-4,-3])",
+   "want": [
+    "mean: the reduced element count of",
+    "(axes [-4, -3])"
+   ],
+   "f3_expected": "refuses, in the reducer",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "message lacks 'mean: the reduced element count of': reduce: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": "OverflowError",
+    "message": "reduce: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "OverflowError",
+    "message": "mean: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64 (axes [-4, -3]); refused before any allocation",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1-overflow-edge-2pow62-times-2",
+   "class": "H1",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([2**62,2,1,0])",
+   "call": "a.mean([0,1])",
+   "want": [
+    "mean: the reduced element count of",
+    "[4611686018427387904, 2, 1, 0] overflows int64"
+   ],
+   "f3_expected": "refuses, in the reducer (2^63 is one past int64)",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "message lacks 'mean: the reduced element count of': reduce: the reduced element count of [4611686018427387904, 2, 1, 0] overflows int64",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": "OverflowError",
+    "message": "reduce: the reduced element count of [4611686018427387904, 2, 1, 0] overflows int64",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "OverflowError",
+    "message": "mean: the reduced element count of [4611686018427387904, 2, 1, 0] overflows int64 (axes [0, 1]); refused before any allocation",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1u-reviewer-empty-case",
+   "class": "H1 (UB only)",
+   "kind": "accept",
+   "setup": "a=C((0,)).reshape([2**32,2**32,0,0])",
+   "call": "a.mean([0,1,2])",
+   "want": [
+    0
+   ],
+   "f3_expected": "same result [0] (the product wraps to 0; the signed overflow is not observable without a sanitizer)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1u-reviewer-empty-case-negative-axes",
+   "class": "H1 (UB only)",
+   "kind": "accept",
+   "setup": "a=C((0,)).reshape([2**32,2**32,0,0])",
+   "call": "a.mean([-4,-3,-2])",
+   "want": [
+    0
+   ],
+   "f3_expected": "same result [0]",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-product-fits-2pow31-pair",
+   "class": "H1 control",
+   "kind": "accept",
+   "setup": "a=C((0,)).reshape([2**31,2**31,1,0])",
+   "call": "a.mean([0,1])",
+   "want": [
+    1,
+    0
+   ],
+   "f3_expected": "same (the product 2^62 fits)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     1,
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     1,
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-product-fits-edge-2pow62",
+   "class": "H1 control",
+   "kind": "accept",
+   "setup": "a=C((0,)).reshape([2**62,1,1,0])",
+   "call": "a.mean([0,1])",
+   "want": [
+    1,
+    0
+   ],
+   "f3_expected": "same (the product 2^62 fits)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     1,
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     1,
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-empty-selected-axis-first",
+   "class": "H1 control",
+   "kind": "accept",
+   "setup": "a=C((0,)).reshape([0,2**32,2**32,0])",
+   "call": "a.mean([0,1,2])",
+   "want": [
+    0
+   ],
+   "f3_expected": "same (a zero extent first: the old product reached 0 before overflowing)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     0
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-mean-rank1",
+   "class": "H1 control",
+   "kind": "preflight",
+   "setup": "a=H((3,))",
+   "call": "a.mean([0])",
+   "want": [
+    "CUDA error at reduce"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-mean-rank2",
+   "class": "H1 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3))",
+   "call": "a.mean([0,1])",
+   "want": [
+    "CUDA error at reduce"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-mean-rank3-negative",
+   "class": "H1 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3,4))",
+   "call": "a.mean([-1,0])",
+   "want": [
+    "CUDA error at reduce"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h1c-mean-rank4",
+   "class": "H1 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3,4,5))",
+   "call": "a.mean([1,3])",
+   "want": [
+    "CUDA error at reduce"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at reduce: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2-rope_apply-sin-rank9-empty",
+   "class": "H2",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   "f3_expected": "accepts, returns [0, 2, 2] (the review's case)",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "raised None (want RuntimeError): None",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": null,
+    "result": [
+     0,
+     2,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2-rope_apply-cos-rank9-empty",
+   "class": "H2",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2)).reshape([2,2,1,1,1,1,1,1,1]); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "rope_apply: tables must be (T, D)",
+    "cos [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   "f3_expected": "accepts, returns [0, 2, 2]",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "raised None (want RuntimeError): None",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": null,
+    "result": [
+     0,
+     2,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2-rope_apply-sin-rank9-reading",
+   "class": "H2",
+   "kind": "refuse",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   "f3_expected": "reaches the kernel ('CUDA error at rope_apply')",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "message lacks 'rope_apply: tables must be (T, D)': CUDA error at rope_apply: no CUDA-capable device is detected",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2-export_rope_rows-sin-rank9",
+   "class": "H2",
+   "kind": "refuse",
+   "setup": "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2)).reshape([8,2]+[1]*7)",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   "want": [
+    "export_rope_rows: tables must be (T, D)",
+    "sin [8, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   "f3_expected": "accepts, returns [0, 1, 2]",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "raised None (want RuntimeError): None",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": null,
+    "result": [
+     0,
+     1,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2-swap-sin-rank9",
+   "class": "H2",
+   "kind": "refuse",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "want": [
+    "rope_apply: tables must be (T, D)",
+    "[pair 0 of 1]"
+   ],
+   "f3_expected": "accepts, returns a tuple",
+   "rule": "fails on F3, passes on F4 (0 CUDA calls on F4)",
+   "F3_verdict": "raised None (want RuntimeError): None",
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": false,
+   "F3": {
+    "raised": null,
+    "result": "tuple",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0) [pair 0 of 1]",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2c-rope_apply-sin-rank8-empty",
+   "class": "H2 control",
+   "kind": "accept",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1])",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    0,
+    2,
+    2
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     0,
+     2,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     0,
+     2,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2c-rope_apply-both-rank8-reading",
+   "class": "H2 control",
+   "kind": "preflight",
+   "setup": "x=H((1,2,2)); cs=H((2,2)).reshape([2,2,1,1,1,1,1,1]); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1])",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "CUDA error at rope_apply"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2c-rope_apply-sin-T-D-1",
+   "class": "H2 control",
+   "kind": "preflight",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "CUDA error at rope_apply"
+   ],
+   "f3_expected": "same (BWD-F3 E2)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+    "calls": 5,
+    "by_function": {
+     "cudaGetErrorString": 1,
+     "cudaGetLastError": 1,
+     "cudaLaunchKernel": 1,
+     "__cudaPopCallConfiguration": 1,
+     "__cudaPushCallConfiguration": 1
+    }
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2c-export_rope_rows-sin-rank8",
+   "class": "H2 control",
+   "kind": "accept",
+   "setup": "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2)).reshape([8,2]+[1]*6)",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   "want": [
+    0,
+    1,
+    2
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": null,
+    "result": [
+     0,
+     1,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": null,
+    "result": [
+     0,
+     1,
+     2
+    ],
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h2c-rank1-table-still-refused",
+   "class": "H2 control",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "want": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2]"
+   ],
+   "f3_expected": "same",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "RuntimeError",
+    "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  },
+  {
+   "id": "h3-export_rows-empty-view-fires-bound",
+   "class": "H3",
+   "kind": "refuse",
+   "setup": "c=C((0,),'uint8').reshape([0,2**62,2])",
+   "call": "tc.export_rows(c, 1, 0, 2**62)",
+   "want": [
+    "export_rows: the output NDArray: byte size overflows int64",
+    "[0, 4611686018427387904, 2]"
+   ],
+   "f3_expected": "same (the comment's claim: the bound fires for export_rows, not only splice)",
+   "rule": "passes on both, identical results",
+   "F3_verdict": null,
+   "F4_verdict": null,
+   "identical_on_F3_and_F4": true,
+   "F3": {
+    "raised": "OverflowError",
+    "message": "export_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 cache [0, 4611686018427387904, 2] uint8 on cuda:0, dim 1, start 0, length 4611686018427387904)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "F4": {
+    "raised": "OverflowError",
+    "message": "export_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 cache [0, 4611686018427387904, 2] uint8 on cuda:0, dim 1, start 0, length 4611686018427387904)",
+    "calls": 0,
+    "by_function": {}
+   },
+   "as_registered": true
+  }
+ ]
+}

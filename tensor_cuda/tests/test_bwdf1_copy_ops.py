@@ -267,7 +267,9 @@ def test_cpu_r1_no_op_member_not_refused(r1_results, rid):
 
 # BWD-F3 E1 (artifacts/bwdf1/f3/INTENDED_CHANGES_F3.json): two BWD-F1 refusal rows whose export has no output rows
 # (an empty cache). The validator bounds the read span only when the kernel reads, so each returns its empty result
-# with 0 CUDA calls (export_rope_rows-pos-negative: Build B's result; export_rope_rows-past-cos: Build B refused it).
+# with 0 CUDA calls. Build B refused both (its export_rope_rows checked `pos0 < 0 || pos0 + len > cs.shape[0]` on every
+# call, empty or not); only Build B's rope_apply lacked the `pos0 < 0` check. BWD-F4 H3 (review BWDF1R3-F04): this
+# comment said "Build B's result" for export_rope_rows-pos-negative; the accepted empty result is BWD-F3's ruling E1.
 E1_ROWS = [
     ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", (0, 0, 2)),
