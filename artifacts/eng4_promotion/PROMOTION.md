@@ -68,7 +68,18 @@ device work. `numpy_dtype` refuses dtypes it does not list. The diff from produc
   - ENG4's own tests pass on F3.
 - **Build F3 module:** `f005d765e3aed86b537c9660bea4a2bfffc86a121d724c6d7086ec399baeae96`.
 
-**Before push:** a merged-tree check (MAINCHK5) builds this tree from its own commit. It compares it with production
-per test ID, on CPU and on GPU. Pending.
+**Before push:** a merged-tree check (MAINCHK5) built this tree from its own commit (Build M5, module
+`ee95a64f7cd4c1152252982ae8105b114c3d5e72bc1a71c9cfd860236ea35da8`, sources equal to F3's). It compared the tree with
+production per test ID.
+- **Result:** PASS, against production `f7282b1d`.
+  - **CPU:** 4,278 IDs on this tree against 4,038 on production, two runs per arm. 0 mismatches, 0 noise.
+  - **GPU:** 4,035 IDs match, 0 mismatch, 0 noise; the 240 IDs of the new test file and the 3 intended-change IDs are
+    as expected. ENG4's own test file on the GPU gave 234 passed; its 6 host-operand controls skip by design with a
+    GPU visible (they run on the CPU lane).
+- **Note:** the check's comparator printed FAIL because its own-tests rule required all 240 of that file's IDs to pass
+  on the GPU. The registered acceptance (no mismatch against production) holds; the ruling is in MAINCHK5's receipts
+  (`artifacts/mainchk5/LEAD_RULING_G3.md` on its check branch).
+- **The tree** is ENG4's lane tip plus this record. It adds files only to production's tree, apart from the six
+  product and test files.
 
 **Approval:** pending.
