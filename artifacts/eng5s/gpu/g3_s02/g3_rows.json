@@ -1,0 +1,370 @@
+[
+ {
+  "case": "synchronize",
+  "control": {
+   "armed": [],
+   "value": null,
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaDeviceSynchronize"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "cuda_sync: cudaDeviceSynchronize failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaDeviceSynchronize": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "oom_drain",
+  "control": {
+   "armed": [
+    "cudaMalloc"
+   ],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {
+    "cudaMalloc": 1
+   }
+  },
+  "injected": {
+   "armed": [
+    "cudaMalloc",
+    "cudaStreamSynchronize"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "Storage (cudaMalloc OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMalloc": 1,
+    "cudaStreamSynchronize": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "oom_drain_pooled",
+  "control": {
+   "armed": [
+    "cudaMallocAsync"
+   ],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {
+    "cudaMallocAsync": 1
+   }
+  },
+  "injected": {
+   "armed": [
+    "cudaMallocAsync",
+    "cudaStreamSynchronize"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "Storage (cudaMallocAsync OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMallocAsync": 1,
+    "cudaStreamSynchronize": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "zeros",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+    "equals_expected": true,
+    "informative": false,
+    "expected_informative": false
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemset"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "NDArray::zeros: cudaMemset failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMemset": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "from_host",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "NDArray::from_host: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMemcpy": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "to_host",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "NDArray::to_host: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMemcpy": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "clone",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "NDArray::clone: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMemcpy": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "to_d2h",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "c09a80471130104ba843a1ef28243436eace4efe3d8e52d212afe4a0a77b2bd0",
+    "equals_expected": false,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {
+    "cudaMemcpy": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "to_h2d",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+    "equals_expected": false,
+    "informative": false,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {
+    "cudaMemcpy": 1
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "axpy_",
+  "control": {
+   "armed": [],
+   "value": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "1308335fe897bdf50573fbb47e534ef14db42f6091f6fd15ddbccfa05a83319b",
+    "equals_expected": true,
+    "informative": true,
+    "expected_informative": true
+   },
+   "outcome": "ok",
+   "fired": {}
+  },
+  "injected": {
+   "armed": [
+    "cudaMemcpy"
+   ],
+   "outcome": "raised",
+   "exc_type": "RuntimeError",
+   "message": "axpy_: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "fired": {
+    "cudaMemcpy": 1
+   },
+   "param_after": {
+    "shape": [
+     4096
+    ],
+    "dtype": "float32",
+    "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+    "equals_expected": false,
+    "informative": true,
+    "expected_informative": true
+   }
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ },
+ {
+  "case": "packed_prefill_dump",
+  "outcome": "not_applicable",
+  "why": "site 9 runs only in a hooks build; the mutant arms have none"
+ },
+ {
+  "case": "axpy_empty",
+  "control": {
+   "armed": [],
+   "value": [
+    0
+   ],
+   "outcome": "ok",
+   "fired": {}
+  },
+  "synchronize_after": "ok",
+  "child_returncode": 0,
+  "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg"
+ }
+]
