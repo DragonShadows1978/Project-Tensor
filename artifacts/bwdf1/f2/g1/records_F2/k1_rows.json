@@ -1,0 +1,998 @@
+{
+ "rows": [
+  [
+   "f01-rope_apply-short-sin",
+   "F01",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: position past table end",
+    "sin [1, 2]"
+   ],
+   {},
+   "returns (only cos's span was checked)"
+  ],
+  [
+   "f01-swap-short-sin",
+   "F01",
+   "refuse",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   [
+    "rope_apply: position past table end",
+    "sin [1, 2]",
+    "[pair 0 of 1]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "returns (the preflight checked cos only)"
+  ],
+  [
+   "f01-arena-short-sin",
+   "F01",
+   "refuse",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 4)",
+   [
+    "rope_apply: position past table end",
+    "sin [1, 2]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "returns (delegates to the swap preflight)"
+  ],
+  [
+   "f01-rope_apply-negative-pos0",
+   "F01",
+   "refuse",
+   "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "tc.rope_apply(x, cs, sn, -1)",
+   [
+    "rope_apply: position past table end",
+    "pos0 -1"
+   ],
+   {},
+   "returns (pos0 + L <= cos rows passed)"
+  ],
+  [
+   "f01-rope_apply-tables-cover",
+   "F01 control",
+   "accept",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f05-rope_apply-uint8-launch-dtype",
+   "F05",
+   "refuse",
+   "x=H((1,2,2),'uint8'); cs=H((2,2),'uint8'); sn=H((2,2),'uint8')",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: op supports float32/float16/bfloat16 only",
+    "x [1, 2, 2] uint8"
+   ],
+   {},
+   "refuses after allocating the output, with the bare dispatch text"
+  ],
+  [
+   "f05-export_row_pair-rope-side",
+   "F05",
+   "refuse",
+   "r=C((0,4,2)); p=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 1, 0)",
+   [
+    "export_rope_rows: position past table end"
+   ],
+   {
+    "no_grad": 1
+   },
+   "same on the CPU (the raw export of an empty cache makes no call); the work-before-refusal is a GPU row"
+  ],
+  [
+   "f02-stack-rank8-to-9",
+   "F02",
+   "refuse",
+   "a=C((1,1,1,1,1,1,1,0)); b=C((1,1,1,1,1,1,1,0))",
+   "tc.stack([a, b], 0)",
+   [
+    "stack: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes DimCopySpec slot 8, then cat's status check fails"
+  ],
+  [
+   "f02-cat-rank9-empty",
+   "F02",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes slot 8 for each operand"
+  ],
+  [
+   "f02-slice-rank9",
+   "F02",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "a.slice(0, 0, 1)",
+   [
+    "slice: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes slot 8"
+  ],
+  [
+   "f02-binary-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9); b=H((1,)).reshape([1]*9)",
+   "a + b",
+   [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes DimSpec slot 8 and launches"
+  ],
+  [
+   "f02-binary-rank9-empty",
+   "F02",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "a + b",
+   [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "returns the empty result (R2 refuses empty operands too)"
+  ],
+  [
+   "f02-compare-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9); b=H((1,)).reshape([1]*9)",
+   "a.gt(b)",
+   [
+    "compare: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes DimSpec slot 8 and launches"
+  ],
+  [
+   "f02-where-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9)",
+   "tc.where(a, a, a)",
+   [
+    "where: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes Dim3Spec slot 8 and launches"
+  ],
+  [
+   "f02-masked_fill-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9)",
+   "a.masked_fill(a, 0.0)",
+   [
+    "masked_fill: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "builds the fill, writes Dim3Spec slot 8, launches"
+  ],
+  [
+   "f02-reduce-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9)",
+   "a.sum()",
+   [
+    "reduce: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes ReduceSpec slot 8 and launches"
+  ],
+  [
+   "f02-permute-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,)).reshape([1]*9)",
+   "a.permute([8,7,6,5,4,3,2,1,0])",
+   [
+    "permute: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "writes PermSpec slot 8 and launches"
+  ],
+  [
+   "f02-expand-rank9",
+   "F02",
+   "refuse",
+   "a=H((1,))",
+   "a.expand([1]*9)",
+   [
+    "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "allocates the zeros, then ew_binary writes slot 8"
+  ],
+  [
+   "f02-rank8-control",
+   "F02 control",
+   "preflight",
+   "a=H((1,)).reshape([1]*8); b=H((1,)).reshape([1]*8)",
+   "a + b",
+   [
+    "CUDA error at ew_binary"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f03-cat-named-case",
+   "F03",
+   "preflight",
+   "a=H((2,3)); b=H((0,3),'float16')",
+   "tc.cat([a, b], 0)",
+   [
+    "CUDA error at cat"
+   ],
+   {},
+   "refuses: operand 1 has dtype float16"
+  ],
+  [
+   "f03-cat-empty-later-device",
+   "F03",
+   "preflight",
+   "a=H((2,3)); b=C((0,3))",
+   "tc.cat([a, b], 0)",
+   [
+    "CUDA error at cat"
+   ],
+   {},
+   "refuses: operand 1 is on cuda:0"
+  ],
+  [
+   "f03-stack-empty-mixed-dtype",
+   "F03 / R9",
+   "preflight",
+   "a=C((0,3)); b=C((0,3),'float16')",
+   "tc.stack([a, b], 0)",
+   [
+    "CUDA error at cat"
+   ],
+   {
+    "no_alloc": 1
+   },
+   "refuses: operand 1 has dtype float16"
+  ],
+  [
+   "f03-cat-empty-mixed-device-dtype",
+   "F03 / R9",
+   "preflight",
+   "a=C((0,3)); b=H((0,3),'bfloat16')",
+   "tc.cat([a, b], 0)",
+   [
+    "CUDA error at cat"
+   ],
+   {
+    "no_alloc": 1
+   },
+   "refuses: operand 1 has dtype bfloat16"
+  ],
+  [
+   "f03-write_rows-empty-device",
+   "F03",
+   "accept",
+   "b=C((0,4,2)); s=H((0,1,2))",
+   "tc.write_rows(b, s, 0)",
+   null,
+   {
+    "no_grad": 1
+   },
+   "refuses: device mismatch"
+  ],
+  [
+   "f03-export_rope_rows-empty-host-cos",
+   "F03",
+   "accept",
+   "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+   [
+    0,
+    0,
+    2
+   ],
+   {
+    "no_grad": 1
+   },
+   "refuses: tables must be on the cache's device"
+  ],
+  [
+   "f03-cat-copied-dtype-still-refused",
+   "F03 control",
+   "refuse",
+   "a=H((0,3),'float16'); b=H((2,3))",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 has dtype float32 but operand 0 has float16",
+    "[2, 3]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f03-cat-copied-device-still-refused",
+   "F03 control",
+   "refuse",
+   "a=C((0,3)); b=H((2,3))",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 is on cpu but operand 0 is on cuda:0"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f07-where-data-dtype",
+   "F07",
+   "refuse",
+   "c=H((2,)); x=H((2,)); y=H((2,),'float16')",
+   "tc.where(c, x, y)",
+   [
+    "where: x has dtype float32 but y has float16"
+   ],
+   {},
+   "allocates and launches, reading y as float32"
+  ],
+  [
+   "f07-where-bool-cond",
+   "F07 control",
+   "preflight",
+   "c=B([0,1,1,1]); x=H((4,)); y=H((4,))",
+   "tc.where(c, x, y)",
+   [
+    "CUDA error at where"
+   ],
+   {},
+   "same on the CPU; the condition read is a GPU row"
+  ],
+  [
+   "f07-masked_fill-bool-mask",
+   "F07 control",
+   "preflight",
+   "m=B([0,1,1,1]); a=H((4,))",
+   "a.masked_fill(m, 2.0)",
+   [
+    "CUDA error at where"
+   ],
+   {},
+   "same on the CPU; the mask read is a GPU row"
+  ],
+  [
+   "f07-where-empty-mixed-data",
+   "F07 control",
+   "accept",
+   "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+   "tc.where(c, x, y)",
+   [
+    0
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f08-cat-sum-overflow",
+   "F08",
+   "refuse",
+   "a=C((0,4611686018427387904),'uint8'); b=C((0,4611686018427387904),'uint8')",
+   "tc.cat([a, b], 1)",
+   [
+    "cat: the concatenated extent at dim 1 overflows int64"
+   ],
+   {
+    "raises": "OverflowError"
+   },
+   "the sum wraps negative; the constructor refuses 'negative extent' (ValueError)"
+  ],
+  [
+   "f08-splice-sum-overflow",
+   "F08",
+   "refuse",
+   "o=C((0,4611686018427387904,1),'uint8'); i=C((0,4611686018427387904,1),'uint8')",
+   "tc.splice_rows(o, i, 1, 4611686018427387904, 4611686018427387904)",
+   [
+    "splice_rows: the output extent",
+    "overflows int64"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "the sum wraps negative; 'negative extent' (ValueError)"
+  ],
+  [
+   "f08-arena-span-overflow",
+   "F08",
+   "refuse",
+   "r0=C((0,4,2)); p0=C((0,4,2)); i0=C((0,1,2)); j0=C((0,1,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 4611686018427387904, 6917529027641081856, 4)",
+   [
+    "arena_row_pair_transaction: sink_tokens",
+    "overflows int64"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "sink + mount wraps negative; refused as 'invalid head/tail'"
+  ],
+  [
+   "f08-write_rows-empty-leading-product",
+   "F08",
+   "accept",
+   "b=C((0,)).reshape([2**32,2**32,0,3,1]); s=C((0,)).reshape([2**32,2**32,0,2,1])",
+   "tc.write_rows(b, s, 0)",
+   null,
+   {
+    "no_grad": 1
+   },
+   "same result through a wrapped product (signed overflow; not visible without a sanitizer)"
+  ],
+  [
+   "f09-slice-uint8",
+   "F09",
+   "refuse",
+   "a=H((2,2),'uint8')",
+   "a.slice(0, 0, 1)",
+   [
+    "slice: op supports float32/float16/bfloat16 only",
+    "refused before any allocation"
+   ],
+   {},
+   "allocates the output, then the dispatch text (no context)"
+  ],
+  [
+   "f09-getitem-rank0",
+   "F09",
+   "refuse",
+   "a=H((1,)).reshape([])",
+   "a[0]",
+   [
+    "getitem: too many indices",
+    "shape []"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "reads shape()[0] of an empty shape vector, then slice refuses 'dim 0 out of range'"
+  ],
+  [
+   "f11-export_rows-dim-context",
+   "F11",
+   "refuse",
+   "c=C((0,4,2))",
+   "tc.export_rows(c, 3, 0, 1)",
+   [
+    "export_rows: dim out of range: dim 3 for rank 3",
+    "cache [0, 4, 2]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "bare 'dim out of range'"
+  ],
+  [
+   "f11-evict_row_pairs-pair-index",
+   "F11",
+   "refuse",
+   "r0=C((0,4,2)); p0=C((0,4,2)); r1=C((0,4,2)); p1=C((0,2,2))",
+   "tc.evict_row_pairs([r0, r1], [p0, p1], 1, 1, 1, 2)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[pair 1 of 2]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "no pair index"
+  ],
+  [
+   "f11-swap-pair-index",
+   "F11",
+   "refuse",
+   "r0=C((0,4,2)); p0=C((1,4,0)); r1=C((0,4,2)); p1=C((1,4,0)); i0=C((0,1,2)); j0=C((1,1,0)); i1=C((0,1,3)); j1=C((1,1,0)); cs=C((1,0)); sn=C((1,0))",
+   "tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 1, 0)",
+   [
+    "splice_rows: shape mismatch outside splice dim",
+    "[pair 1 of 2]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "no pair index"
+  ],
+  [
+   "f11-arena-layer-dim",
+   "F11",
+   "refuse",
+   "r0=C((0,4,2)); p0=C((0,4,2)); i0=C((0,1,2)); j0=C((0,1,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 5, 1, 0, 0, 4)",
+   [
+    "arena_row_pair_transaction raw: dim out of range: dim 5 for rank 3",
+    "layer 0 of 1",
+    "[0, 1, 2]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "bare 'dim out of range'"
+  ],
+  [
+   "f12-axpy-named-case",
+   "F12",
+   "refuse",
+   "p=H((2,1)); o=H((2,2))",
+   "tc._C.axpy_(p, o, 1.0)",
+   [
+    "axpy_: the update of param [2, 1] by other [2, 2] broadcasts to [2, 2]",
+    "does not map element for element onto param"
+   ],
+   {},
+   "launches (installs the wrong rows on a GPU)"
+  ],
+  [
+   "f12-axpy-trailing-broadcast",
+   "F12",
+   "refuse",
+   "p=H((3,1)); o=H((1,4))",
+   "tc._C.axpy_(p, o, 1.0)",
+   [
+    "broadcasts to [3, 4]",
+    "does not map element for element"
+   ],
+   {},
+   "launches"
+  ],
+  [
+   "f12-axpy-leading-one-other",
+   "F12 control",
+   "preflight",
+   "p=H((3,)); o=H((1,3))",
+   "tc._C.axpy_(p, o, 1.0)",
+   [
+    "CUDA error at ew_scalar"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f12-axpy-leading-one-param",
+   "F12 control",
+   "preflight",
+   "p=H((1,3)); o=H((3,))",
+   "tc._C.axpy_(p, o, 1.0)",
+   [
+    "CUDA error at ew_scalar"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "f13-einsum-shorter-term",
+   "F13",
+   "refuse",
+   "a=H((2,0,1)); b=H((4,3))",
+   "tc.einsum('ij,kj->ik', a, b)",
+   [
+    "shapes not broadcastable: einsum index 'j'",
+    "[2, 0, 1]",
+    "[4, 3]"
+   ],
+   {},
+   "permutes b (a launch) first"
+  ]
+ ],
+ "results": {
+  "f01-rope_apply-short-sin": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f01-swap-short-sin": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f01-arena-short-sin": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f01-rope_apply-negative-pos0": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f01-rope_apply-tables-cover": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "f05-rope_apply-uint8-launch-dtype": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: op supports float32/float16/bfloat16 only (x [1, 2, 2] uint8 on cpu, cos [2, 2] uint8 on cpu, sin [2, 2] uint8 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f05-export_row_pair-rope-side": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 1, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-stack-rank8-to-9": {
+   "raised": "RuntimeError",
+   "message": "stack: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand 0 [1, 1, 1, 1, 1, 1, 1, 0] float32 on cuda:0); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-cat-rank9-empty": {
+   "raised": "RuntimeError",
+   "message": "cat: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand 0 [1, 1, 1, 1, 1, 1, 1, 1, 0] float32 on cuda:0); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-slice-rank9": {
+   "raised": "RuntimeError",
+   "message": "slice: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand 0 [1, 1, 1, 1, 1, 1, 1, 1, 0] float32 on cuda:0); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-binary-rank9": {
+   "raised": "RuntimeError",
+   "message": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 1], operand b [1, 1, 1, 1, 1, 1, 1, 1, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-binary-rank9-empty": {
+   "raised": "RuntimeError",
+   "message": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-compare-rank9": {
+   "raised": "RuntimeError",
+   "message": "compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 1], operand b [1, 1, 1, 1, 1, 1, 1, 1, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-where-rank9": {
+   "raised": "RuntimeError",
+   "message": "where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 1] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 1] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 1] float32); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-masked_fill-rank9": {
+   "raised": "RuntimeError",
+   "message": "masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 1], a [1, 1, 1, 1, 1, 1, 1, 1, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-reduce-rank9": {
+   "raised": "RuntimeError",
+   "message": "reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-permute-rank9": {
+   "raised": "RuntimeError",
+   "message": "permute: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-expand-rank9": {
+   "raised": "RuntimeError",
+   "message": "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 1], operand [1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f02-rank8-control": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at ew_binary: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f03-cat-named-case": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at cat: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f03-cat-empty-later-device": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at cat: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f03-stack-empty-mixed-dtype": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at cat: no CUDA-capable device is detected",
+   "calls": 2,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1
+   }
+  },
+  "f03-cat-empty-mixed-device-dtype": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at cat: no CUDA-capable device is detected",
+   "calls": 2,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1
+   }
+  },
+  "f03-write_rows-empty-device": {
+   "raised": null,
+   "result": null,
+   "calls": 0,
+   "by_function": {}
+  },
+  "f03-export_rope_rows-empty-host-cos": {
+   "raised": null,
+   "result": [
+    0,
+    0,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "f03-cat-copied-dtype-still-refused": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has dtype float32 but operand 0 has float16 (the output's dtype; operand 1 has elements to copy) (operand 1 [2, 3] float32 on cpu, operand 0 [0, 3] float16 on cpu)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f03-cat-copied-device-still-refused": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 is on cpu but operand 0 is on cuda:0 (the output's device; operand 1 has elements to copy) (operand 1 [2, 3] float32 on cpu, operand 0 [0, 3] float32 on cuda:0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f07-where-data-dtype": {
+   "raised": "RuntimeError",
+   "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f07-where-bool-cond": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at where: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f07-masked_fill-bool-mask": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at where: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f07-where-empty-mixed-data": {
+   "raised": null,
+   "result": [
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "f08-cat-sum-overflow": {
+   "raised": "OverflowError",
+   "message": "cat: the concatenated extent at dim 1 overflows int64 at operand 1 [0, 4611686018427387904] uint8 on cuda:0",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f08-splice-sum-overflow": {
+   "raised": "OverflowError",
+   "message": "splice_rows: the output extent (operand 0 old_cache [0, 4611686018427387904, 1] uint8 on cuda:0, operand 1 insert [0, 4611686018427387904, 1] uint8 on cuda:0, dim 1, head 4611686018427387904, tail_start 4611686018427387904) overflows int64",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f08-arena-span-overflow": {
+   "raised": "OverflowError",
+   "message": "arena_row_pair_transaction: sink_tokens 4611686018427387904 + current_mount_tokens 6917529027641081856 overflows int64",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f08-write_rows-empty-leading-product": {
+   "raised": null,
+   "result": null,
+   "calls": 0,
+   "by_function": {}
+  },
+  "f09-slice-uint8": {
+   "raised": "RuntimeError",
+   "message": "slice: op supports float32/float16/bfloat16 only (operand 0 [2, 2] uint8 on cpu); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f09-getitem-rank0": {
+   "raised": "IndexError",
+   "message": "getitem: too many indices: index 0 of 1 has no axis left in a tensor of shape []",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f11-export_rows-dim-context": {
+   "raised": "RuntimeError",
+   "message": "export_rows: dim out of range: dim 3 for rank 3 (operand 0 cache [0, 4, 2] float32 on cuda:0, dim 3, start 0, length 1)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f11-evict_row_pairs-pair-index": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 2, 2] float32 on cuda:0, dim 1, head 1, drop 2) [pair 1 of 2]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f11-swap-pair-index": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: shape mismatch outside splice dim (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1) [pair 1 of 2]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f11-arena-layer-dim": {
+   "raised": "RuntimeError",
+   "message": "arena_row_pair_transaction raw: dim out of range: dim 5 for rank 3 (layer 0 of 1, raw insert [0, 1, 2] float32 on cuda:0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f12-axpy-named-case": {
+   "raised": "RuntimeError",
+   "message": "axpy_: the update of param [2, 1] by other [2, 2] broadcasts to [2, 2], which does not map element for element onto param; refused before any launch",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f12-axpy-trailing-broadcast": {
+   "raised": "RuntimeError",
+   "message": "axpy_: the update of param [3, 1] by other [1, 4] broadcasts to [3, 4], which does not map element for element onto param; refused before any launch",
+   "calls": 0,
+   "by_function": {}
+  },
+  "f12-axpy-leading-one-other": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f12-axpy-leading-one-param": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "f13-einsum-shorter-term": {
+   "raised": "RuntimeError",
+   "message": "shapes not broadcastable: einsum index 'j' has extent 0 in operand 0 (shape [2, 0, 1]) and 3 in operand 1 (shape [4, 3])",
+   "calls": 0,
+   "by_function": {}
+  }
+ },
+ "child_exits": {
+  "f01-rope_apply-short-sin": 0,
+  "f01-swap-short-sin": 0,
+  "f01-arena-short-sin": 0,
+  "f01-rope_apply-negative-pos0": 0,
+  "f01-rope_apply-tables-cover": 0,
+  "f05-rope_apply-uint8-launch-dtype": 0,
+  "f05-export_row_pair-rope-side": 0,
+  "f02-stack-rank8-to-9": 0,
+  "f02-cat-rank9-empty": 0,
+  "f02-slice-rank9": 0,
+  "f02-binary-rank9": 0,
+  "f02-binary-rank9-empty": 0,
+  "f02-compare-rank9": 0,
+  "f02-where-rank9": 0,
+  "f02-masked_fill-rank9": 0,
+  "f02-reduce-rank9": 0,
+  "f02-permute-rank9": 0,
+  "f02-expand-rank9": 0,
+  "f02-rank8-control": 0,
+  "f03-cat-named-case": 0,
+  "f03-cat-empty-later-device": 0,
+  "f03-stack-empty-mixed-dtype": 0,
+  "f03-cat-empty-mixed-device-dtype": 0,
+  "f03-write_rows-empty-device": 0,
+  "f03-export_rope_rows-empty-host-cos": 0,
+  "f03-cat-copied-dtype-still-refused": 0,
+  "f03-cat-copied-device-still-refused": 0,
+  "f07-where-data-dtype": 0,
+  "f07-where-bool-cond": 0,
+  "f07-masked_fill-bool-mask": 0,
+  "f07-where-empty-mixed-data": 0,
+  "f08-cat-sum-overflow": 0,
+  "f08-splice-sum-overflow": 0,
+  "f08-arena-span-overflow": 0,
+  "f08-write_rows-empty-leading-product": 0,
+  "f09-slice-uint8": 0,
+  "f09-getitem-rank0": 0,
+  "f11-export_rows-dim-context": 0,
+  "f11-evict_row_pairs-pair-index": 0,
+  "f11-swap-pair-index": 0,
+  "f11-arena-layer-dim": 0,
+  "f12-axpy-named-case": 0,
+  "f12-axpy-trailing-broadcast": 0,
+  "f12-axpy-leading-one-other": 0,
+  "f12-axpy-leading-one-param": 0,
+  "f13-einsum-shorter-term": 0,
+  "__control__": 0
+ },
+ "control_calls": 4,
+ "tensor_cuda_file": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/F2/pkg/tensor_cuda/__init__.py",
+ "child_exit": 0
+}

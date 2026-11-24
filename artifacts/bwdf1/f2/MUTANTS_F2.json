@@ -1,0 +1,87 @@
+{
+ "order": "BWD-F2 K4",
+ "written": "2026-11-24T03:18:24.897120+00:00",
+ "written_before_any_mutant_tree_or_run": true,
+ "base": "Build F2's tree (/tmp/bwdf2_src_F2)",
+ "rule": "each mutant = Build F2 + exactly one edit (the `old` text occurs once); KILLED when every listed killing assertion fails on the mutant (CPU rows), or when its staged GPU line's verdict fails",
+ "mutants": {
+  "n01_dtype_check_all_members": {
+   "ruling": "R1",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "    if (a.numel() > 0 && a.dtype != a0.dtype)\n",
+   "new": "    if (a.dtype != a0.dtype)  // MUTANT n01_dtype_check_all_members\n",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-named-case]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-stack-empty-mixed-dtype]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-empty-mixed-device-dtype]"
+   ],
+   "assertion": "verdict(row, r) is None: the row expects the call to pass the host checks and reach the device step ('CUDA error at cat: no CUDA-capable device'); the mutant refuses with 'operand 1 has dtype float16/bfloat16' (did not reach the device step)",
+   "gpu_line": null
+  },
+  "n02_no_rank_ceiling_stack": {
+   "ruling": "R2",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  check_meta_rank(op, nd + (all_extents ? 1 : 0), \"operand 0 \" + copy_operand_text(a0));\n",
+   "new": "  // MUTANT n02_no_rank_ceiling_stack: the copy ops' rank ceiling (stack's post-unsqueeze rank) is deleted\n",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-stack-rank8-to-9]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-cat-rank9-empty]"
+   ],
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'stack: rank 9 exceeds TC_MAX_DIMS=8' with 0 CUDA calls; the mutant writes DimCopySpec slot 8 and reaches cat's status check ('CUDA error at cat') or dies",
+   "gpu_line": null
+  },
+  "n03_sin_span_unchecked": {
+   "ruling": "R3",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": " || pos0 > sn.shape[0] ||\n      rows > sn.shape[0] - pos0)",
+   "new": ")  // MUTANT n03_sin_span_unchecked",
+   "where": "CPU (and the staged K2 memory line k2_mem_n03 for the GPU read)",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-short-sin]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-swap-short-sin]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-arena-short-sin]"
+   ],
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'rope_apply: position past table end' naming 'sin [1, 2]'; the mutant returns",
+   "gpu_line": "k2_mem_n03: F01 rows (swap with sin [1, 2] on [2, 2] inserts) not refused; memcheck reports the read past sin"
+  },
+  "n04_ring_no_modulo": {
+   "ruling": "R4",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  if (n) start %= CAP;\n",
+   "new": "  // MUTANT n04_ring_no_modulo: start is not reduced modulo CAP on the host\n",
+   "where": "GPU (staged line k2_mem_n04; the kernel arithmetic is device-only)",
+   "kills": [
+    "scripts/bwdf2_step_k2.py mem rows f04-start-int64max and f04-start-cap-plus-2"
+   ],
+   "assertion": "the row's verdict: buf after the write equals NumPy's ring write at (start + l) % CAP, and memcheck reports 0 errors; the mutant's wrap leaves [0, CAP) (writes outside buf: memcheck errors and/or wrong rows)",
+   "gpu_line": "k2_mem_n04"
+  },
+  "n05_condition_as_data_dtype": {
+   "ruling": "R5",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  st<T>(out, idx, cond_at<C>(c, co) ? ld<T>(x, xo) : ld<T>(y, yo));\n",
+   "new": "  st<T>(out, idx, ld<T>(reinterpret_cast<const T*>(c), co) != 0.f ? ld<T>(x, xo) : ld<T>(y, yo));  // MUTANT n05_condition_as_data_dtype\n",
+   "where": "GPU (staged line k2_mem_n05; the condition load is device-only)",
+   "kills": [
+    "scripts/bwdf2_step_k2.py mem rows f07-where-bool-cond and f07-masked_fill-bool-mask"
+   ],
+   "assertion": "the row's verdict: the result equals np.where(cond, x, y) bitwise (cond [False, True, True, True] bool); the mutant reads the 4-byte bool condition as float32 values (element 0 takes x: bytes 00 01 01 01 are a nonzero float32), and memcheck reports the read past the condition",
+   "gpu_line": "k2_mem_n05"
+  },
+  "n06_axpy_broadcast_accepted": {
+   "ruling": "R6",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "    if (strip(upd_shape) != strip(param.shape))\n",
+   "new": "    if (false)  // MUTANT n06_axpy_broadcast_accepted\n",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-named-case]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-trailing-broadcast]"
+   ],
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'does not map element for element onto param' with 0 CUDA calls; the mutant launches ew_scalar ('CUDA error at ew_scalar')",
+   "gpu_line": null
+  }
+ }
+}

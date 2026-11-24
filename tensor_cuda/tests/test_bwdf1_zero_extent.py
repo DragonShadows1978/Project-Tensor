@@ -13,8 +13,10 @@ with the host C++ compiler as its exact text and driven directly: an operand wit
 elements is refused, naming the operand and both shapes. A source check shows each dispatch (ew_binary, compare,
 where_nd) calls it before its output allocation. No public path reaches the guard once the shape rule is right.
 Z3 (m03, CPU part): the gradient of a [4, 1] operand under a [4, 0] output reaches reduce_sum (without a device its
-launch fails with the no-device CUDA error); Build B's `> 1` rule raised reshape's "element count mismatch" before
-any device work. The GPU lines (G3) check the zeros themselves.
+launch fails with the no-device CUDA error). The CPU reshape failure ("element count mismatch") belongs to m03 on
+Build E's corrected forward (BWD-F2 R10, review BWDF1R1-F10): Build B never reaches this backward on the CPU, its
+forward already launches over the max-rule output [4, 1] and fails there. Build B's old `> 1` predicate is shown by
+its source and by the G3 GPU line, not by this row. The GPU lines (G3) check the zeros themselves.
 H3 (core): attach_vjp's value error and matmul backward's first refusal name the operand(s) and shapes.
 
 Environment: BWDF1_PKG_PARENT (the directory holding the tensor_cuda package; default this tests directory's
@@ -100,17 +102,24 @@ def refuse_cases():
                        ("bij,bjk->bik", (2, 1, 0), (2, 3, 4)), ("bij,bjk->bik", (0, 1, 2), (3, 2, 4))):
         cases.append({"id": f"einsum-float32-{eq}-{sa}-{sb}", "op": "einsum", "dtype": "float32", "eq": eq,
                       "shapes": [list(sa), list(sb)], "names": [sa, sb]})
-    # axpy_: an update with fewer elements than param (only a zero extent in `other` can give it)
-    for p, o in (((4, 1), (4, 0)), ((1,), (0,)), ((2, 1, 3), (2, 0, 3))):
-        cases.append({"id": f"axpy_fewer-float32-{p}-{o}", "op": "axpy_", "dtype": "float32",
-                      "shapes": [list(p), list(o)], "names": [p, o], "fewer": True})
     return cases
+
+
+def axpy_size_cases():
+    """BWD-F2 R10 (BWDF1R1-F10): axpy_'s destination-size refusals, labelled apart from the zero-against-larger
+    broadcast refusals (their shapes ARE broadcast-compatible: an update with fewer elements than param, which only a
+    zero extent in `other` can give)."""
+    return [{"id": f"axpy_fewer-float32-{p}-{o}", "op": "axpy_", "dtype": "float32", "shapes": [list(p), list(o)],
+             "names": [p, o], "fewer": True}
+            for p, o in (((4, 1), (4, 0)), ((1,), (0,)), ((2, 1, 3), (2, 0, 3)))]
 
 
 def zero_cases():
     cases = []
     for a, b in ZERO_PAIRS:
-        for first, second in ((a, b), (b, a)):
+        # BWD-F2 R10 (review BWDF1R1-F10): an equal pair is generated once (both directions were the same case, and
+        # its 39 IDs were duplicated).
+        for first, second in (((a, b), (b, a)) if a != b else ((a, b),)):
             for dt in DTYPES:
                 for op in BIN_OPS:
                     cases.append({"id": f"{op}-{dt}-{first}-{second}", "op": op, "dtype": dt,
@@ -129,6 +138,7 @@ def zero_cases():
 
 
 REFUSE = refuse_cases()
+AXPY_SIZE = axpy_size_cases()
 ZERO = zero_cases()
 
 # The child runs every case with the counter preloaded and prints one JSON object. The op table is shared text.
@@ -225,7 +235,7 @@ def _run_child(tmp_path_factory, cases, tag):
 
 @pytest.fixture(scope="module")
 def refuse_results(tmp_path_factory):
-    return _run_child(tmp_path_factory, REFUSE, "refuse")
+    return _run_child(tmp_path_factory, REFUSE + AXPY_SIZE, "refuse")
 
 
 @pytest.fixture(scope="module")
@@ -240,11 +250,19 @@ def test_cpu_g1_refusal_names_both_shapes_no_cuda_call(refuse_results, case):
     msg = r["message"]
     for s in case["names"]:
         assert _shape_text(s) in msg, (msg, case["names"])
-    if case.get("fewer"):
-        assert "fewer elements than param" in msg, msg
-    else:
-        assert msg.startswith("shapes not broadcastable"), msg
+    assert msg.startswith("shapes not broadcastable"), msg
     assert r["calls"] == 0, r   # refused before any CUDA call
+
+
+@pytest.mark.parametrize("case", AXPY_SIZE, ids=[c["id"] for c in AXPY_SIZE])
+def test_cpu_g1_axpy_size_refusal(refuse_results, case):
+    """axpy_ refuses an update with fewer elements than param (compatible shapes; BWD-F2 R10 labels these apart)."""
+    r = refuse_results["results"][case["id"]]
+    assert r["raised"] == "RuntimeError", r
+    for s in case["names"]:
+        assert _shape_text(s) in r["message"], (r["message"], case["names"])
+    assert "fewer elements than param" in r["message"], r["message"]
+    assert r["calls"] == 0, r
 
 
 @pytest.mark.parametrize("case", ZERO, ids=[c["id"] for c in ZERO])
@@ -377,8 +395,9 @@ def test_cpu_each_dispatch_calls_the_guard_before_allocating(fn):
 # --------------------------------------------------------------------------------------------------- Z3 (CPU)
 def test_cpu_z3_zero_axis_gradient_reaches_the_sum():
     """x [4, 0] + y [4, 1]: y's gradient sums the zero-extent axis. Without a device that sum's launch fails with the
-    no-device CUDA error; Build B's `> 1` rule (and m03) skipped the axis and raised reshape's element-count mismatch
-    on the host. The zeros themselves are checked on the GPU (G3)."""
+    no-device CUDA error. m03 (the `> 1` rule on Build E's corrected forward) skips the axis and raises reshape's
+    element-count mismatch on the host; Build B fails earlier, in its forward launch (BWD-F2 R10, BWDF1R1-F10). The
+    zeros themselves are checked on the GPU (G3)."""
     if os.environ.get("CUDA_VISIBLE_DEVICES", None) != "":
         pytest.skip("CPU lane only (CUDA_VISIBLE_DEVICES must be empty)")
     x = tc.tensor(np.zeros((4, 0), np.float32), device="cpu", requires_grad=True)

@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8415,7 +8415,7 @@
+   // BWD-F2 R4 (BWDF1R1-F04): reduce start modulo CAP on the host when a copy will run (n > 0 gives Ls >= 1 and
+   // CAP >= Ls, so CAP > 0); the kernel's wrap then stays inside [0, CAP) without overflow. (start % CAP + l) % CAP
+   // equals (start + l) % CAP wherever the latter did not overflow, so accepted writes land on the same rows.
+-  if (n) start %= CAP;
++  // MUTANT n04_ring_no_modulo: start is not reduced modulo CAP on the host
+   if (n) {
+     // write_rows is a raw row copy — works for any POD type. uint8 is
+     // dispatched explicitly (the float-only DISPATCH_FLOAT macro throws

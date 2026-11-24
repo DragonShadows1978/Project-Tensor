@@ -7,6 +7,8 @@ Operands are host tensors, or CUDA tensors with zero elements (built with no dev
 without a GPU; the terms that need a CUDA operand with elements (export_rows / export_rope_rows on a rank-0 or
 rank-1 cache) are in the staged memcheck line. Accepted results are G4's (Build B against Build E, bitwise).
 m05 (cat's extent check removed) fails the cat extent rows; m06 (the dtype check removed) fails the cat dtype row.
+BWD-F2 (R1, R9, R12): four rows whose differing operand is empty moved to R1_ROWS (not refused: Build B's behaviour);
+the later-pair rows make no ordering claim (the ordering witnesses are GPU rows in scripts/bwdf2_step_k2.py).
 
 Environment: BWDF1_PKG_PARENT selects the tensor_cuda package under test (mutant runs).
 Prior art: numpy.concatenate / numpy.stack rules (the reference for cat and stack); ENG3's call counter; DeMillo,
@@ -21,6 +23,7 @@ import sys
 import pytest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 PKG_PARENT = os.environ.get("BWDF1_PKG_PARENT", os.path.dirname(HERE))
 SHIM = os.path.join(HERE, "support", "cudart_count.c")
 
@@ -42,8 +45,6 @@ ROWS = [
      ["cat: operand 1 has extent 2 at dim 1", "[2, 2]", "[4, 3]"]),
     ("cat-dtype", "cat", "a=H((2,3)); b=H((2,3),'float16')", "tc.cat([a, b], 0)",
      ["cat: operand 1 has dtype float16", "[2, 3]"]),
-    ("cat-device", "cat", "a=H((0,3)); b=C((0,3))", "tc.cat([a, b], 0)",
-     ["cat: operand 1 is on cuda:0 but operand 0 is on cpu", "[0, 3]"]),
     ("cat-dtype-class", "cat", "a=H((2,3),'uint8'); b=H((2,3),'uint8')", "tc.cat([a, b], 0)",
      ["cat: op supports float32/float16/bfloat16 only", "[2, 3]"]),
     # stack (ops::stack): list, dim range, rank, shape, dtype, device
@@ -55,9 +56,6 @@ ROWS = [
      ["stack: operand 1 has extent 4 at dim 1", "every shape must be equal", "[2, 4]", "[2, 3]"]),
     ("stack-dtype", "stack", "a=H((2,3)); b=H((2,3),'bfloat16')", "tc.stack([a, b], 0)",
      ["stack: operand 1 has dtype bfloat16", "[2, 3]"]),
-    ("stack-device", "stack", "a=C((0,3)); b=H((0,3))", "tc.stack([a, b], 0)",
-     ["stack: operand 1 is on cpu but operand 0 is on cuda:0", "[0, 3]"]),
-    # slice (slice_nd): dim range, start, length, span
     ("slice-dim-high", "slice", "a=H((4,3))", "a.slice(2, 0, 1)", ["slice: dim 2 out of range", "[4, 3]"]),
     ("slice-dim-low", "slice", "a=H((4,3))", "a.slice(-3, 0, 1)", ["slice: dim -3 out of range", "[4, 3]"]),
     ("slice-start-negative", "slice", "a=H((4,3))", "a.slice(1, -1, 1)", ["slice: start -1 and length 1", "[4, 3]"]),
@@ -69,8 +67,6 @@ ROWS = [
      ["write_rows: dtype mismatch", "[0, 4, 2]", "[0, 1, 2]"]),
     ("write_rows-rank", "write_rows", "b=C((0,)); s=C((0,2))", "tc.write_rows(b, s, 0)",
      ["write_rows: need >=2D buf and src", "buf [0] ", "[0, 2]"]),
-    ("write_rows-device", "write_rows", "b=C((0,4,2)); s=H((0,1,2))", "tc.write_rows(b, s, 0)",
-     ["write_rows: device mismatch", "[0, 4, 2]", "[0, 1, 2]"]),
     ("write_rows-last-dim", "write_rows", "b=C((0,4,2)); s=C((0,1,3))", "tc.write_rows(b, s, 0)",
      ["write_rows: last-dim mismatch", "[0, 1, 3]"]),
     ("write_rows-leading", "write_rows", "b=C((0,4,2)); s=C((2,0,2))", "tc.write_rows(b, s, 0)",
@@ -140,14 +136,15 @@ ROWS = [
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0, 3]"]),
     ("export_rope_rows-sin-rank", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,))",
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0]"]),
-    ("export_rope_rows-table-device", "export_rope_rows", "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
-     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
-     ["export_rope_rows: tables must be on the cache's device", "[0, 2] float32 on cpu"]),
     ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", ["export_rope_rows: position past table end", "pos0 -1"]),
     ("export_rope_rows-past-cos", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
      "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)", ["export_rope_rows: position past table end", "[0, 2]"]),
-    # the batched pair ops: pair 1 is the bad one; refused before pair 0's work
+    # the batched pair ops: pair 1 is the bad one. BWD-F2 R9 (review BWDF1R1-F06): these are refusal rows only; they
+    # make no ordering claim. Pair 0 here has no elements, so Build B's serial loop also made no CUDA call before
+    # refusing pair 1, and on the CPU no pair can be built that would allocate or launch (a CUDA operand with
+    # elements needs a device). The ordering witnesses (a first pair that allocates and launches, a bad later pair,
+    # 0 CUDA calls; Build B's serial loop as the counter-control) are GPU rows: scripts/bwdf2_step_k2.py (count line).
     ("export_row_pairs-pair1", "export_row_pairs",
      "r0=C((0,4,2)); p0=C((0,4,2)); r1=C((0,4,2)); p1=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
      "tc.export_row_pairs([r0, r1], [p0, p1], cs, sn, 1, 1, [0, 5], [0, 0], 0, 0)",
@@ -234,6 +231,40 @@ def results(tmp_path_factory):
         with open(os.path.join(rec, "g1_copy_ops.json"), "w") as f:
             json.dump({"rows": ROWS, **res}, f, indent=1)
     return res["results"]
+
+
+# BWD-F2 R1 / R12 (artifacts/bwdf1/f2/INTENDED_CHANGES_F2.json): four BWD-F1 refusal rows whose differing operand
+# has no elements. R1 checks dtype and device only where bytes are read, so each now gets Build B's behaviour:
+# (id, op, setup, call, expected): "preflight" = no host refusal, the call reaches cat's closing CUDA status check
+# (on the CPU: "CUDA error at cat: no CUDA-capable device") with no allocation and no launch; a tuple = the shape
+# returned with 0 CUDA calls; None = returns None with 0 CUDA calls. Their GPU values are rows in bwdf2_step_k2.py.
+R1_ROWS = [
+    ("cat-device", "cat", "a=H((0,3)); b=C((0,3))", "tc.cat([a, b], 0)", "preflight"),
+    ("stack-device", "stack", "a=C((0,3)); b=H((0,3))", "tc.stack([a, b], 0)", "preflight"),
+    ("write_rows-device", "write_rows", "b=C((0,4,2)); s=H((0,1,2))", "tc.write_rows(b, s, 0)", None),
+    ("export_rope_rows-table-device", "export_rope_rows", "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
+     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", (0, 0, 2)),
+]
+
+
+@pytest.fixture(scope="module")
+def r1_results(tmp_path_factory):
+    import test_bwdf2_fixes as T2  # the BWD-F2 K1 harness (one child per row, per-function counts)
+    rows = [(rid, "R1", "preflight" if want == "preflight" else "accept", setup, call,
+             ["CUDA error at cat"] if want == "preflight" else (None if want is None else list(want)),
+             {"no_alloc": 1} if want == "preflight" else {"no_grad": 1}, "refuses (BWD-F1)")
+            for rid, op, setup, call, want in R1_ROWS]
+    res = T2.run_rows(PKG_PARENT, str(tmp_path_factory.mktemp("bwdf1_copy_r1")), rows)
+    assert res["control_calls"] > 0, res
+    return {r[0]: (r, res["results"].get(r[0])) for r in rows}
+
+
+@pytest.mark.parametrize("rid", [r[0] for r in R1_ROWS])
+def test_cpu_r1_no_op_member_not_refused(r1_results, rid):
+    import test_bwdf2_fixes as T2
+    row, r = r1_results[rid]
+    why = T2.verdict(row, r)
+    assert why is None, (rid, why)
 
 
 @pytest.mark.parametrize("row", ROWS, ids=[r[0] for r in ROWS])

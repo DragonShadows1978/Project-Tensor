@@ -205,6 +205,9 @@ Shape broadcast_shapes(const Shape& a, const Shape& b);
 // operand 0; a non-float dtype refused when a launch would follow. Returns the normalized dim (cat) or -1 (stack).
 // Throws runtime_error naming the op, the operand index and the shapes, before any allocation or CUDA call.
 int check_copy_operands(const char* op, const std::vector<NDArray>& arrs, int dim, bool all_extents);
+// BWD-F2 R2: refuses, with a runtime_error naming the op and `operands`, a rank above TC_MAX_DIMS (the size of every
+// axis-indexed launch spec). Called by each such consumer before any allocation, metadata write or CUDA call.
+void check_meta_rank(const char* op, int rank, const std::string& operands);
 
 // Concatenate along `dim`; slice [start, start+len) along `dim` (cat backward).
 NDArray cat_nd(const std::vector<NDArray>& arrs, int dim);

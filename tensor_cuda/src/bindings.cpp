@@ -241,7 +241,19 @@ Tensor getitem(Tensor& t, py::object key) {
 
   Tensor cur = t;
   int dim = 0;
+  size_t pos = 0;
   for (auto& k : keys) {
+    // BWD-F2 R8 (review BWDF1R1-F09): check the axis before reading its extent. Before, an index past the rank (t[0, 0,
+    // 0] on a 2-D tensor) read cur.shape()[dim] past the end of the shape vector. The refusal names the index position
+    // and the shape. Prior art: NumPy's IndexError "too many indices for array" (taken: the error class and meaning);
+    // ours: the text and its placement.
+    if (dim >= cur.ndim()) {
+      std::string st = "[";
+      for (size_t i = 0; i < t.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(t.shape()[i]);
+      throw py::index_error("getitem: too many indices: index " + std::to_string(pos) + " of " +
+                            std::to_string(keys.size()) + " has no axis left in a tensor of shape " + st + "]");
+    }
+    ++pos;
     if (py::isinstance<py::int_>(k)) {
       int64_t i = k.cast<int64_t>();
       int64_t sz = cur.shape()[dim];

@@ -1,0 +1,212 @@
+diff --git a/tensor_cuda/tests/test_bwdf1_copy_ops.py b/tensor_cuda/tests/test_bwdf1_copy_ops.py
+index 6a4bc8a13..a0338599e 100644
+--- a/tensor_cuda/tests/test_bwdf1_copy_ops.py
++++ b/tensor_cuda/tests/test_bwdf1_copy_ops.py
+@@ -7,6 +7,8 @@ Operands are host tensors, or CUDA tensors with zero elements (built with no dev
+ without a GPU; the terms that need a CUDA operand with elements (export_rows / export_rope_rows on a rank-0 or
+ rank-1 cache) are in the staged memcheck line. Accepted results are G4's (Build B against Build E, bitwise).
+ m05 (cat's extent check removed) fails the cat extent rows; m06 (the dtype check removed) fails the cat dtype row.
++BWD-F2 (R1, R9, R12): four rows whose differing operand is empty moved to R1_ROWS (not refused: Build B's behaviour);
++the later-pair rows make no ordering claim (the ordering witnesses are GPU rows in scripts/bwdf2_step_k2.py).
+ 
+ Environment: BWDF1_PKG_PARENT selects the tensor_cuda package under test (mutant runs).
+ Prior art: numpy.concatenate / numpy.stack rules (the reference for cat and stack); ENG3's call counter; DeMillo,
+@@ -21,6 +23,7 @@ import sys
+ import pytest
+ 
+ HERE = os.path.dirname(os.path.abspath(__file__))
++sys.path.insert(0, HERE)
+ PKG_PARENT = os.environ.get("BWDF1_PKG_PARENT", os.path.dirname(HERE))
+ SHIM = os.path.join(HERE, "support", "cudart_count.c")
+ 
+@@ -42,8 +45,6 @@ ROWS = [
+      ["cat: operand 1 has extent 2 at dim 1", "[2, 2]", "[4, 3]"]),
+     ("cat-dtype", "cat", "a=H((2,3)); b=H((2,3),'float16')", "tc.cat([a, b], 0)",
+      ["cat: operand 1 has dtype float16", "[2, 3]"]),
+-    ("cat-device", "cat", "a=H((0,3)); b=C((0,3))", "tc.cat([a, b], 0)",
+-     ["cat: operand 1 is on cuda:0 but operand 0 is on cpu", "[0, 3]"]),
+     ("cat-dtype-class", "cat", "a=H((2,3),'uint8'); b=H((2,3),'uint8')", "tc.cat([a, b], 0)",
+      ["cat: op supports float32/float16/bfloat16 only", "[2, 3]"]),
+     # stack (ops::stack): list, dim range, rank, shape, dtype, device
+@@ -55,9 +56,6 @@ ROWS = [
+      ["stack: operand 1 has extent 4 at dim 1", "every shape must be equal", "[2, 4]", "[2, 3]"]),
+     ("stack-dtype", "stack", "a=H((2,3)); b=H((2,3),'bfloat16')", "tc.stack([a, b], 0)",
+      ["stack: operand 1 has dtype bfloat16", "[2, 3]"]),
+-    ("stack-device", "stack", "a=C((0,3)); b=H((0,3))", "tc.stack([a, b], 0)",
+-     ["stack: operand 1 is on cpu but operand 0 is on cuda:0", "[0, 3]"]),
+-    # slice (slice_nd): dim range, start, length, span
+     ("slice-dim-high", "slice", "a=H((4,3))", "a.slice(2, 0, 1)", ["slice: dim 2 out of range", "[4, 3]"]),
+     ("slice-dim-low", "slice", "a=H((4,3))", "a.slice(-3, 0, 1)", ["slice: dim -3 out of range", "[4, 3]"]),
+     ("slice-start-negative", "slice", "a=H((4,3))", "a.slice(1, -1, 1)", ["slice: start -1 and length 1", "[4, 3]"]),
+@@ -69,8 +67,6 @@ ROWS = [
+      ["write_rows: dtype mismatch", "[0, 4, 2]", "[0, 1, 2]"]),
+     ("write_rows-rank", "write_rows", "b=C((0,)); s=C((0,2))", "tc.write_rows(b, s, 0)",
+      ["write_rows: need >=2D buf and src", "buf [0] ", "[0, 2]"]),
+-    ("write_rows-device", "write_rows", "b=C((0,4,2)); s=H((0,1,2))", "tc.write_rows(b, s, 0)",
+-     ["write_rows: device mismatch", "[0, 4, 2]", "[0, 1, 2]"]),
+     ("write_rows-last-dim", "write_rows", "b=C((0,4,2)); s=C((0,1,3))", "tc.write_rows(b, s, 0)",
+      ["write_rows: last-dim mismatch", "[0, 1, 3]"]),
+     ("write_rows-leading", "write_rows", "b=C((0,4,2)); s=C((2,0,2))", "tc.write_rows(b, s, 0)",
+@@ -140,14 +136,15 @@ ROWS = [
+      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0, 3]"]),
+     ("export_rope_rows-sin-rank", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,))",
+      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0]"]),
+-    ("export_rope_rows-table-device", "export_rope_rows", "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
+-     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+-     ["export_rope_rows: tables must be on the cache's device", "[0, 2] float32 on cpu"]),
+     ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", ["export_rope_rows: position past table end", "pos0 -1"]),
+     ("export_rope_rows-past-cos", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+      "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)", ["export_rope_rows: position past table end", "[0, 2]"]),
+-    # the batched pair ops: pair 1 is the bad one; refused before pair 0's work
++    # the batched pair ops: pair 1 is the bad one. BWD-F2 R9 (review BWDF1R1-F06): these are refusal rows only; they
++    # make no ordering claim. Pair 0 here has no elements, so Build B's serial loop also made no CUDA call before
++    # refusing pair 1, and on the CPU no pair can be built that would allocate or launch (a CUDA operand with
++    # elements needs a device). The ordering witnesses (a first pair that allocates and launches, a bad later pair,
++    # 0 CUDA calls; Build B's serial loop as the counter-control) are GPU rows: scripts/bwdf2_step_k2.py (count line).
+     ("export_row_pairs-pair1", "export_row_pairs",
+      "r0=C((0,4,2)); p0=C((0,4,2)); r1=C((0,4,2)); p1=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+      "tc.export_row_pairs([r0, r1], [p0, p1], cs, sn, 1, 1, [0, 5], [0, 0], 0, 0)",
+@@ -236,6 +233,40 @@ def results(tmp_path_factory):
+     return res["results"]
+ 
+ 
++# BWD-F2 R1 / R12 (artifacts/bwdf1/f2/INTENDED_CHANGES_F2.json): four BWD-F1 refusal rows whose differing operand
++# has no elements. R1 checks dtype and device only where bytes are read, so each now gets Build B's behaviour:
++# (id, op, setup, call, expected): "preflight" = no host refusal, the call reaches cat's closing CUDA status check
++# (on the CPU: "CUDA error at cat: no CUDA-capable device") with no allocation and no launch; a tuple = the shape
++# returned with 0 CUDA calls; None = returns None with 0 CUDA calls. Their GPU values are rows in bwdf2_step_k2.py.
++R1_ROWS = [
++    ("cat-device", "cat", "a=H((0,3)); b=C((0,3))", "tc.cat([a, b], 0)", "preflight"),
++    ("stack-device", "stack", "a=C((0,3)); b=H((0,3))", "tc.stack([a, b], 0)", "preflight"),
++    ("write_rows-device", "write_rows", "b=C((0,4,2)); s=H((0,1,2))", "tc.write_rows(b, s, 0)", None),
++    ("export_rope_rows-table-device", "export_rope_rows", "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
++     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", (0, 0, 2)),
++]
++
++
++@pytest.fixture(scope="module")
++def r1_results(tmp_path_factory):
++    import test_bwdf2_fixes as T2  # the BWD-F2 K1 harness (one child per row, per-function counts)
++    rows = [(rid, "R1", "preflight" if want == "preflight" else "accept", setup, call,
++             ["CUDA error at cat"] if want == "preflight" else (None if want is None else list(want)),
++             {"no_alloc": 1} if want == "preflight" else {"no_grad": 1}, "refuses (BWD-F1)")
++            for rid, op, setup, call, want in R1_ROWS]
++    res = T2.run_rows(PKG_PARENT, str(tmp_path_factory.mktemp("bwdf1_copy_r1")), rows)
++    assert res["control_calls"] > 0, res
++    return {r[0]: (r, res["results"].get(r[0])) for r in rows}
++
++
++@pytest.mark.parametrize("rid", [r[0] for r in R1_ROWS])
++def test_cpu_r1_no_op_member_not_refused(r1_results, rid):
++    import test_bwdf2_fixes as T2
++    row, r = r1_results[rid]
++    why = T2.verdict(row, r)
++    assert why is None, (rid, why)
++
++
+ @pytest.mark.parametrize("row", ROWS, ids=[r[0] for r in ROWS])
+ def test_cpu_c3_copy_op_refusal_no_cuda_call(results, row):
+     rid, op, _, _, wants = row
+diff --git a/tensor_cuda/tests/test_bwdf1_zero_extent.py b/tensor_cuda/tests/test_bwdf1_zero_extent.py
+index ea28cd173..0cbb10fbd 100644
+--- a/tensor_cuda/tests/test_bwdf1_zero_extent.py
++++ b/tensor_cuda/tests/test_bwdf1_zero_extent.py
+@@ -13,8 +13,10 @@ with the host C++ compiler as its exact text and driven directly: an operand wit
+ elements is refused, naming the operand and both shapes. A source check shows each dispatch (ew_binary, compare,
+ where_nd) calls it before its output allocation. No public path reaches the guard once the shape rule is right.
+ Z3 (m03, CPU part): the gradient of a [4, 1] operand under a [4, 0] output reaches reduce_sum (without a device its
+-launch fails with the no-device CUDA error); Build B's `> 1` rule raised reshape's "element count mismatch" before
+-any device work. The GPU lines (G3) check the zeros themselves.
++launch fails with the no-device CUDA error). The CPU reshape failure ("element count mismatch") belongs to m03 on
++Build E's corrected forward (BWD-F2 R10, review BWDF1R1-F10): Build B never reaches this backward on the CPU, its
++forward already launches over the max-rule output [4, 1] and fails there. Build B's old `> 1` predicate is shown by
++its source and by the G3 GPU line, not by this row. The GPU lines (G3) check the zeros themselves.
+ H3 (core): attach_vjp's value error and matmul backward's first refusal name the operand(s) and shapes.
+ 
+ Environment: BWDF1_PKG_PARENT (the directory holding the tensor_cuda package; default this tests directory's
+@@ -100,17 +102,24 @@ def refuse_cases():
+                        ("bij,bjk->bik", (2, 1, 0), (2, 3, 4)), ("bij,bjk->bik", (0, 1, 2), (3, 2, 4))):
+         cases.append({"id": f"einsum-float32-{eq}-{sa}-{sb}", "op": "einsum", "dtype": "float32", "eq": eq,
+                       "shapes": [list(sa), list(sb)], "names": [sa, sb]})
+-    # axpy_: an update with fewer elements than param (only a zero extent in `other` can give it)
+-    for p, o in (((4, 1), (4, 0)), ((1,), (0,)), ((2, 1, 3), (2, 0, 3))):
+-        cases.append({"id": f"axpy_fewer-float32-{p}-{o}", "op": "axpy_", "dtype": "float32",
+-                      "shapes": [list(p), list(o)], "names": [p, o], "fewer": True})
+     return cases
+ 
+ 
++def axpy_size_cases():
++    """BWD-F2 R10 (BWDF1R1-F10): axpy_'s destination-size refusals, labelled apart from the zero-against-larger
++    broadcast refusals (their shapes ARE broadcast-compatible: an update with fewer elements than param, which only a
++    zero extent in `other` can give)."""
++    return [{"id": f"axpy_fewer-float32-{p}-{o}", "op": "axpy_", "dtype": "float32", "shapes": [list(p), list(o)],
++             "names": [p, o], "fewer": True}
++            for p, o in (((4, 1), (4, 0)), ((1,), (0,)), ((2, 1, 3), (2, 0, 3)))]
++
++
+ def zero_cases():
+     cases = []
+     for a, b in ZERO_PAIRS:
+-        for first, second in ((a, b), (b, a)):
++        # BWD-F2 R10 (review BWDF1R1-F10): an equal pair is generated once (both directions were the same case, and
++        # its 39 IDs were duplicated).
++        for first, second in (((a, b), (b, a)) if a != b else ((a, b),)):
+             for dt in DTYPES:
+                 for op in BIN_OPS:
+                     cases.append({"id": f"{op}-{dt}-{first}-{second}", "op": op, "dtype": dt,
+@@ -129,6 +138,7 @@ def zero_cases():
+ 
+ 
+ REFUSE = refuse_cases()
++AXPY_SIZE = axpy_size_cases()
+ ZERO = zero_cases()
+ 
+ # The child runs every case with the counter preloaded and prints one JSON object. The op table is shared text.
+@@ -225,7 +235,7 @@ def _run_child(tmp_path_factory, cases, tag):
+ 
+ @pytest.fixture(scope="module")
+ def refuse_results(tmp_path_factory):
+-    return _run_child(tmp_path_factory, REFUSE, "refuse")
++    return _run_child(tmp_path_factory, REFUSE + AXPY_SIZE, "refuse")
+ 
+ 
+ @pytest.fixture(scope="module")
+@@ -240,13 +250,21 @@ def test_cpu_g1_refusal_names_both_shapes_no_cuda_call(refuse_results, case):
+     msg = r["message"]
+     for s in case["names"]:
+         assert _shape_text(s) in msg, (msg, case["names"])
+-    if case.get("fewer"):
+-        assert "fewer elements than param" in msg, msg
+-    else:
+-        assert msg.startswith("shapes not broadcastable"), msg
++    assert msg.startswith("shapes not broadcastable"), msg
+     assert r["calls"] == 0, r   # refused before any CUDA call
+ 
+ 
++@pytest.mark.parametrize("case", AXPY_SIZE, ids=[c["id"] for c in AXPY_SIZE])
++def test_cpu_g1_axpy_size_refusal(refuse_results, case):
++    """axpy_ refuses an update with fewer elements than param (compatible shapes; BWD-F2 R10 labels these apart)."""
++    r = refuse_results["results"][case["id"]]
++    assert r["raised"] == "RuntimeError", r
++    for s in case["names"]:
++        assert _shape_text(s) in r["message"], (r["message"], case["names"])
++    assert "fewer elements than param" in r["message"], r["message"]
++    assert r["calls"] == 0, r
++
++
+ @pytest.mark.parametrize("case", ZERO, ids=[c["id"] for c in ZERO])
+ def test_cpu_g1_zero_against_one_numpy_shape(zero_results, case):
+     r = zero_results["results"][case["id"]]
+@@ -377,8 +395,9 @@ def test_cpu_each_dispatch_calls_the_guard_before_allocating(fn):
+ # --------------------------------------------------------------------------------------------------- Z3 (CPU)
+ def test_cpu_z3_zero_axis_gradient_reaches_the_sum():
+     """x [4, 0] + y [4, 1]: y's gradient sums the zero-extent axis. Without a device that sum's launch fails with the
+-    no-device CUDA error; Build B's `> 1` rule (and m03) skipped the axis and raised reshape's element-count mismatch
+-    on the host. The zeros themselves are checked on the GPU (G3)."""
++    no-device CUDA error. m03 (the `> 1` rule on Build E's corrected forward) skips the axis and raises reshape's
++    element-count mismatch on the host; Build B fails earlier, in its forward launch (BWD-F2 R10, BWDF1R1-F10). The
++    zeros themselves are checked on the GPU (G3)."""
+     if os.environ.get("CUDA_VISIBLE_DEVICES", None) != "":
+         pytest.skip("CPU lane only (CUDA_VISIBLE_DEVICES must be empty)")
+     x = tc.tensor(np.zeros((4, 0), np.float32), device="cpu", requires_grad=True)

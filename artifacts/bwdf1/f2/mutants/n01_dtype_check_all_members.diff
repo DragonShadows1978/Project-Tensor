@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -1725,7 +1725,7 @@
+     // checked for every operand (they decide the output shape). Prior art: NumPy's numpy.concatenate (shapes checked
+     // for every operand, empty ones included); ours: the bytes-read condition on the dtype and device terms (NumPy
+     // promotes dtypes instead and has no device).
+-    if (a.numel() > 0 && a.dtype != a0.dtype)
++    if (a.dtype != a0.dtype)  // MUTANT n01_dtype_check_all_members
+       throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " has dtype " +
+                                dtype_name(a.dtype) + " but operand 0 has " + dtype_name(a0.dtype) +
+                                " (the output's dtype; operand " + std::to_string(i) + " has elements to copy)" + pair);

@@ -1,0 +1,3151 @@
+{
+ "order": "BWD-F2 R2 census",
+ "method": [
+  "  python3 -B -P scripts/bwdf2_census.py     -> artifacts/bwdf1/f2/CENSUS_F2.json",
+  "Scan: every declaration `<type> <name>[<SIZE>]` in tensor_cuda/src/*.cu, *.cuh, *.cpp (recursive), tensor_cuda/include,",
+  "tc_signal/src, tc_signal/include. Arrays sized TC_MAX_DIMS are indexed by axis (rank-bound); every other size is",
+  "listed with its reason for being rank-independent. Consumers of each TC_MAX_DIMS spec: every function that declares"
+ ],
+ "TC_MAX_DIMS": 8,
+ "axis_indexed_specs": {
+  "PermSpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1493,
+   "arrays": [
+    "out_shape",
+    "out_str",
+    "in_str_perm"
+   ],
+   "consumers": [
+    {
+     "function": "permute",
+     "decl_line": 1509,
+     "function_line": 1504,
+     "check_meta_rank_lines": [
+      1506
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "Dim3Spec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1555,
+   "arrays": [
+    "out_str",
+    "c_str",
+    "x_str",
+    "y_str"
+   ],
+   "consumers": [
+    {
+     "function": "where_nd",
+     "decl_line": 1622,
+     "function_line": 1605,
+     "check_meta_rank_lines": [
+      1609
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "DimCopySpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1656,
+   "arrays": [
+    "iter_shape",
+    "iter_str",
+    "big_str"
+   ],
+   "consumers": [
+    {
+     "function": "cat_nd",
+     "decl_line": 1768,
+     "function_line": 1744,
+     "check_meta_rank_lines": [
+      1746
+     ],
+     "check_before_decl": true
+    },
+    {
+     "function": "slice_nd",
+     "decl_line": 5735,
+     "function_line": 5710,
+     "check_meta_rank_lines": [
+      5728
+     ],
+     "check_before_decl": true
+    },
+    {
+     "function": "pad_into",
+     "decl_line": 6040,
+     "function_line": 6013,
+     "check_meta_rank_lines": [
+      6033
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "GatherSpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5770,
+   "arrays": [
+    "idx_str",
+    "a_str",
+    "idx_shape"
+   ],
+   "consumers": [
+    {
+     "function": "gather_nd",
+     "decl_line": 5841,
+     "function_line": 5835,
+     "check_meta_rank_lines": [
+      5838
+     ],
+     "check_before_decl": true
+    },
+    {
+     "function": "scatter_add_nd",
+     "decl_line": 5854,
+     "function_line": 5848,
+     "check_meta_rank_lines": [
+      5851
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "FlipSpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5795,
+   "arrays": [
+    "shape",
+    "str",
+    "flip"
+   ],
+   "consumers": [
+    {
+     "function": "flip_nd",
+     "decl_line": 6003,
+     "function_line": 6000,
+     "check_meta_rank_lines": [
+      6002
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "DimSpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1023,
+   "arrays": [
+    "out_shape",
+    "out_str",
+    "a_str",
+    "b_str"
+   ],
+   "consumers": [
+    {
+     "function": "ew_binary",
+     "decl_line": 1243,
+     "function_line": 1234,
+     "check_meta_rank_lines": [
+      1236
+     ],
+     "check_before_decl": true
+    },
+    {
+     "function": "compare",
+     "decl_line": 1591,
+     "function_line": 1582,
+     "check_meta_rank_lines": [
+      1584
+     ],
+     "check_before_decl": true
+    }
+   ]
+  },
+  "ReduceSpec": {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1310,
+   "arrays": [
+    "in_shape",
+    "in_str",
+    "out_str",
+    "reduced"
+   ],
+   "consumers": [
+    {
+     "function": "reduce_impl",
+     "decl_line": 1397,
+     "function_line": 1393,
+     "check_meta_rank_lines": [
+      1395
+     ],
+     "check_before_decl": true
+    }
+   ]
+  }
+ },
+ "pre_dispatch_callers_checked_before_their_own_first_cuda_call": {
+  "axpy_ (ew_scalar launches before ew_binary)": [
+   5646
+  ],
+  "broadcast_to (zeros before ew_binary)": [
+   1648
+  ],
+  "masked_fill (fill before where_nd)": [
+   1143
+  ],
+  "check_copy_operands (cat_nd; ops.cpp stack calls it before its unsqueeze, rank nd + 1)": [
+   1705
+  ]
+ },
+ "rank_independent_arrays": [
+  {
+   "file": "tensor_cuda/src/apa_sp1_1.cuh",
+   "line": 25,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX], warp_max[4], red[256], wpart[4][DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_sp1_1.cuh",
+   "line": 29,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/bindings.cpp",
+   "line": 1532,
+   "name": "params_",
+   "size": "kMax",
+   "struct": null,
+   "text": "CoreParam params_[kMax] = {};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 51,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 53,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "const float direction[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 56,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 61,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 62,
+   "name": "far_t",
+   "size": "3",
+   "struct": null,
+   "text": "float far_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 99,
+   "name": "step",
+   "size": "3",
+   "struct": null,
+   "text": "const int step[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 107,
+   "name": "start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float start_position[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 119,
+   "name": "current",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t current[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 154,
+   "name": "delta_t",
+   "size": "3",
+   "struct": null,
+   "text": "float delta_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/dda.cu",
+   "line": 155,
+   "name": "next_t",
+   "size": "3",
+   "struct": null,
+   "text": "float next_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 135,
+   "name": "red",
+   "size": "kThreads",
+   "struct": null,
+   "text": "__shared__ float red[kThreads];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 220,
+   "name": "heur",
+   "size": "8",
+   "struct": null,
+   "text": "cublasLtMatmulHeuristicResult_t heur[8];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 299,
+   "name": "red",
+   "size": "kThreads",
+   "struct": null,
+   "text": "__shared__ float red[kThreads];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 321,
+   "name": "ired",
+   "size": "kThreads",
+   "struct": null,
+   "text": "__shared__ int ired[kThreads];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 544,
+   "name": "red",
+   "size": "kThreads",
+   "struct": null,
+   "text": "__shared__ float red[kThreads];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/gemm_apa.cu",
+   "line": 792,
+   "name": "host_counters",
+   "size": "4",
+   "struct": null,
+   "text": "unsigned long long host_counters[4] = {};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1130,
+   "name": "dst",
+   "size": "d",
+   "struct": null,
+   "text": "else dst[d] = ist[id];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1343,
+   "name": "sh",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float sh[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1657,
+   "name": "small",
+   "size": "i",
+   "struct": null,
+   "text": "template <typename T, int FORWARD>  // FORWARD: big[bigoff]=small[i]; else small[i]=big[bigoff]",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2102,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2113,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2163,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2252,
+   "name": "osh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float osh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2376,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2381,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2479,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2488,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2559,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2615,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2628,
+   "name": "osh",
+   "size": "VDMAX",
+   "struct": null,
+   "text": "__shared__ float osh[VDMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2975,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 2980,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3030,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3154,
+   "name": "osh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float osh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3295,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3300,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3343,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3415,
+   "name": "osh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float osh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3476,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3477,
+   "name": "dOsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float dOsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3485,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3511,
+   "name": "dq_acc",
+   "size": "DMAX",
+   "struct": null,
+   "text": "float dq_acc[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3675,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3676,
+   "name": "dOsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float dOsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3684,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3720,
+   "name": "dq_acc",
+   "size": "DMAX",
+   "struct": null,
+   "text": "float dq_acc[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3832,
+   "name": "ks",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float ks[DMAX], kqs[DMAX], vs[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3840,
+   "name": "ak",
+   "size": "DMAX",
+   "struct": null,
+   "text": "float ak[DMAX], av[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3897,
+   "name": "events",
+   "size": "3",
+   "struct": null,
+   "text": "cudaEvent_t events[3]{};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3991,
+   "name": "rd",
+   "size": "T",
+   "struct": null,
+   "text": "__shared__ float rd[T];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 3992,
+   "name": "accum",
+   "size": "2",
+   "struct": null,
+   "text": "CF accum[2], accumv[2];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 4117,
+   "name": "events",
+   "size": "3",
+   "struct": null,
+   "text": "cudaEvent_t events[3]{};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 4220,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 4383,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5961,
+   "name": "sval",
+   "size": "32",
+   "struct": null,
+   "text": "__shared__ float sval[32];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5962,
+   "name": "sidx",
+   "size": "32",
+   "struct": null,
+   "text": "__shared__ int64_t sidx[32];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6072,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6090,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6125,
+   "name": "red",
+   "size": "128",
+   "struct": null,
+   "text": "__shared__ float red[128];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6537,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6538,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6582,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6703,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6704,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6756,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6808,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6809,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6901,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6907,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 6958,
+   "name": "red",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ float red[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 7131,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 7135,
+   "name": "red",
+   "size": "128",
+   "struct": null,
+   "text": "__shared__ float red[128];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 7222,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 7637,
+   "name": "o",
+   "size": "32",
+   "struct": null,
+   "text": "float o[32];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 7663,
+   "name": "sv",
+   "size": "16",
+   "struct": null,
+   "text": "float sv[16];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 8231,
+   "name": "sh",
+   "size": "kT",
+   "struct": null,
+   "text": "__shared__ double sh[kT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 8267,
+   "name": "shm",
+   "size": "kT",
+   "struct": null,
+   "text": "__shared__ float shm[kT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 8268,
+   "name": "shd",
+   "size": "kT",
+   "struct": null,
+   "text": "__shared__ double shd[kT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 9045,
+   "name": "kl",
+   "size": "8",
+   "struct": null,
+   "text": "float kl[8], ql[8], sl[8];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 9143,
+   "name": "qr",
+   "size": "N",
+   "struct": null,
+   "text": "float qr[N], acc[N];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 9303,
+   "name": "sums",
+   "size": "16",
+   "struct": null,
+   "text": "__shared__ float sums[16],squares[16],th[16],m[16],den[16],corr[16];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 9304,
+   "name": "phase",
+   "size": "7",
+   "struct": null,
+   "text": "unsigned long long tick=0;float phase[7]={0,0,0,0,0,0,0};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/paint_bake.cu",
+   "line": 72,
+   "name": "camera",
+   "size": "4",
+   "struct": null,
+   "text": "const float camera[4], const float* __restrict__ matrix,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/paint_bake.cu",
+   "line": 104,
+   "name": "camera",
+   "size": "4",
+   "struct": null,
+   "text": "float camera[4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/paint_bake.cu",
+   "line": 207,
+   "name": "accumulated",
+   "size": "Channels",
+   "struct": null,
+   "text": "float accumulated[Channels] = {};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 53,
+   "name": "voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 64,
+   "name": "voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 86,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {static_cast<float>(dim_x),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 89,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 90,
+   "name": "far_t",
+   "size": "3",
+   "struct": null,
+   "text": "float far_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 125,
+   "name": "step",
+   "size": "3",
+   "struct": null,
+   "text": "const int step[3] = {terrain_sign(direction[0]), terrain_sign(direction[1]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 127,
+   "name": "start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float start_position[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 138,
+   "name": "current",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t current[3] = {static_cast<int64_t>(floorf(start_position[0])),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 170,
+   "name": "delta_t",
+   "size": "3",
+   "struct": null,
+   "text": "float delta_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 171,
+   "name": "next_t",
+   "size": "3",
+   "struct": null,
+   "text": "float next_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 231,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t base[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 232,
+   "name": "fraction",
+   "size": "3",
+   "struct": null,
+   "text": "float fraction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 270,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t base[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 271,
+   "name": "fraction",
+   "size": "3",
+   "struct": null,
+   "text": "float fraction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 349,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3], const float direction[3], float distance,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 350,
+   "name": "position",
+   "size": "3",
+   "struct": null,
+   "text": "float position[3]) {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 377,
+   "name": "candidate_position",
+   "size": "3",
+   "struct": null,
+   "text": "float candidate_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 408,
+   "name": "candidate_position",
+   "size": "3",
+   "struct": null,
+   "text": "float candidate_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 427,
+   "name": "sample_position",
+   "size": "3",
+   "struct": null,
+   "text": "float sample_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 461,
+   "name": "sample_position",
+   "size": "3",
+   "struct": null,
+   "text": "float sample_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 496,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t base[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 537,
+   "name": "voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t voxel[3], uint8_t* material) {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 538,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t base[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 612,
+   "name": "outward_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "float outward_gradient[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 615,
+   "name": "lower",
+   "size": "3",
+   "struct": null,
+   "text": "float lower[3] = {position[0], position[1], position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 616,
+   "name": "upper",
+   "size": "3",
+   "struct": null,
+   "text": "float upper[3] = {position[0], position[1], position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 638,
+   "name": "blocky_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "const float blocky_gradient[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 676,
+   "name": "outward_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "float outward_gradient[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 679,
+   "name": "lower",
+   "size": "3",
+   "struct": null,
+   "text": "float lower[3] = {position[0], position[1], position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 680,
+   "name": "upper",
+   "size": "3",
+   "struct": null,
+   "text": "float upper[3] = {position[0], position[1], position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 703,
+   "name": "blocky_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "const float blocky_gradient[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 749,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {static_cast<float>(dim_x),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 752,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 753,
+   "name": "far_t",
+   "size": "3",
+   "struct": null,
+   "text": "float far_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 786,
+   "name": "step",
+   "size": "3",
+   "struct": null,
+   "text": "const int step[3] = {terrain_sign(direction[0]), terrain_sign(direction[1]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 788,
+   "name": "start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float start_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 796,
+   "name": "current",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t current[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 818,
+   "name": "exact_start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float exact_start_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 823,
+   "name": "nearest_voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t nearest_voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 839,
+   "name": "shifted_origin",
+   "size": "3",
+   "struct": null,
+   "text": "float shifted_origin[3] = {origin[0] - 0.5f, origin[1] - 0.5f,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 841,
+   "name": "delta_t",
+   "size": "3",
+   "struct": null,
+   "text": "float delta_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 842,
+   "name": "next_t",
+   "size": "3",
+   "struct": null,
+   "text": "float next_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 874,
+   "name": "hit_position",
+   "size": "3",
+   "struct": null,
+   "text": "float hit_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 877,
+   "name": "nearest_voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t nearest_voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 921,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {static_cast<float>(dim_x),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 924,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 925,
+   "name": "far_t",
+   "size": "3",
+   "struct": null,
+   "text": "float far_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 958,
+   "name": "step",
+   "size": "3",
+   "struct": null,
+   "text": "const int step[3] = {terrain_sign(direction[0]), terrain_sign(direction[1]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 960,
+   "name": "start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float start_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 969,
+   "name": "current",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t current[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 988,
+   "name": "exact_start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float exact_start_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 994,
+   "name": "nearest_voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t nearest_voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1011,
+   "name": "shifted_origin",
+   "size": "3",
+   "struct": null,
+   "text": "float shifted_origin[3] = {origin[0] - 0.5f, origin[1] - 0.5f,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1013,
+   "name": "delta_t",
+   "size": "3",
+   "struct": null,
+   "text": "float delta_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1014,
+   "name": "next_t",
+   "size": "3",
+   "struct": null,
+   "text": "float next_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1047,
+   "name": "hit_position",
+   "size": "3",
+   "struct": null,
+   "text": "float hit_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1050,
+   "name": "nearest_voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t nearest_voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1146,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3], const float direction[3], float hit_distance,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1149,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {static_cast<float>(dim_x),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1157,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1189,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "const float normal[3], TerrainRenderLight light, float fog,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1190,
+   "name": "color",
+   "size": "3",
+   "struct": null,
+   "text": "uint8_t color[3]) {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1199,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "const float base[3] = {kBedrockRed, kBedrockGreen, kBedrockBlue};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1219,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1221,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {camera.position[0], camera.position[1],",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1231,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3] = {0.0f, 0.0f, 0.0f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1233,
+   "name": "bedrock",
+   "size": "3",
+   "struct": null,
+   "text": "uint8_t bedrock[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1258,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "const float normal[3] = {0.0f, 0.0f,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1260,
+   "name": "bedrock",
+   "size": "3",
+   "struct": null,
+   "text": "uint8_t bedrock[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1310,
+   "name": "position",
+   "size": "3",
+   "struct": null,
+   "text": "const float position[3], float wavelength, float* value,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1311,
+   "name": "gradient",
+   "size": "3",
+   "struct": null,
+   "text": "float gradient[3]) {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1312,
+   "name": "base",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t base[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1313,
+   "name": "fade",
+   "size": "3",
+   "struct": null,
+   "text": "float fade[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1314,
+   "name": "fade_derivative",
+   "size": "3",
+   "struct": null,
+   "text": "float fade_derivative[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1372,
+   "name": "position",
+   "size": "3",
+   "struct": null,
+   "text": "const float position[3], float depth, float vertical_projection_pixels,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1374,
+   "name": "octave_value",
+   "size": "kDetailOctaves",
+   "struct": null,
+   "text": "float octave_value[kDetailOctaves] = {};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1375,
+   "name": "octave_lod",
+   "size": "kDetailOctaves",
+   "struct": null,
+   "text": "float octave_lod[kDetailOctaves] = {};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1376,
+   "name": "detail_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "float detail_gradient[3] = {0.0f, 0.0f, 0.0f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1386,
+   "name": "octave_gradient",
+   "size": "3",
+   "struct": null,
+   "text": "float octave_gradient[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1403,
+   "name": "tangent",
+   "size": "3",
+   "struct": null,
+   "text": "float tangent[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1415,
+   "name": "perturbed",
+   "size": "3",
+   "struct": null,
+   "text": "float perturbed[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1451,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3]) {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1455,
+   "name": "gradient",
+   "size": "3",
+   "struct": null,
+   "text": "const float gradient[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1513,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1530,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {camera.position[0], camera.position[1], camera.position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1548,
+   "name": "gradient",
+   "size": "3",
+   "struct": null,
+   "text": "const float gradient[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1565,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3] = {0.0f, 0.0f, 1.0f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1596,
+   "name": "color",
+   "size": "3",
+   "struct": null,
+   "text": "float color[3] = {static_cast<float>(palette[palette_index * 3 + 0]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1608,
+   "name": "mixed_color",
+   "size": "3",
+   "struct": null,
+   "text": "const float mixed_color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1643,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1660,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {camera.position[0], camera.position[1], camera.position[2]};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1672,
+   "name": "hit_position",
+   "size": "3",
+   "struct": null,
+   "text": "float hit_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1674,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1701,
+   "name": "color",
+   "size": "3",
+   "struct": null,
+   "text": "float color[3] = {static_cast<float>(palette[palette_index * 3 + 0]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1713,
+   "name": "mixed_color",
+   "size": "3",
+   "struct": null,
+   "text": "const float mixed_color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1754,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1772,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {camera.position[0], camera.position[1],",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1786,
+   "name": "hit_position",
+   "size": "3",
+   "struct": null,
+   "text": "float hit_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1788,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1822,
+   "name": "color",
+   "size": "3",
+   "struct": null,
+   "text": "float color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1836,
+   "name": "mixed_color",
+   "size": "3",
+   "struct": null,
+   "text": "const float mixed_color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1880,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1897,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float origin[3] = {camera.position[0], camera.position[1],",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1900,
+   "name": "voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t voxel[3] = {-1, -1, -1};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1944,
+   "name": "hit_position",
+   "size": "3",
+   "struct": null,
+   "text": "float hit_position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1946,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 1995,
+   "name": "color",
+   "size": "3",
+   "struct": null,
+   "text": "const float color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain.cu",
+   "line": 2010,
+   "name": "mixed_color",
+   "size": "3",
+   "struct": null,
+   "text": "const float mixed_color[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 34,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "float origin[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 38,
+   "name": "values",
+   "size": "kMaxTerrainObjects",
+   "struct": null,
+   "text": "TerrainObjectKernelView values[kMaxTerrainObjects];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 45,
+   "name": "voxel",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t voxel[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 76,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "const float direction[3], int max_steps, float distance_limit,",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 87,
+   "name": "dims",
+   "size": "3",
+   "struct": null,
+   "text": "const float dims[3] = {static_cast<float>(object.dim_x),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 90,
+   "name": "near_t",
+   "size": "3",
+   "struct": null,
+   "text": "float near_t[3] = {-INFINITY, -INFINITY, -INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 91,
+   "name": "far_t",
+   "size": "3",
+   "struct": null,
+   "text": "float far_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 128,
+   "name": "step",
+   "size": "3",
+   "struct": null,
+   "text": "const int step[3] = {object_sign(direction[0]), object_sign(direction[1]),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 145,
+   "name": "start_position",
+   "size": "3",
+   "struct": null,
+   "text": "float start_position[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 150,
+   "name": "current",
+   "size": "3",
+   "struct": null,
+   "text": "int64_t current[3] = {static_cast<int64_t>(floorf(start_position[0])),",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 185,
+   "name": "delta_t",
+   "size": "3",
+   "struct": null,
+   "text": "float delta_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 186,
+   "name": "next_t",
+   "size": "3",
+   "struct": null,
+   "text": "float next_t[3] = {INFINITY, INFINITY, INFINITY};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 269,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 292,
+   "name": "local_origin",
+   "size": "3",
+   "struct": null,
+   "text": "const float local_origin[3] = {",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/terrain_objects.cu",
+   "line": 308,
+   "name": "normal",
+   "size": "3",
+   "struct": null,
+   "text": "float normal[3] = {0.0f, 0.0f, 1.0f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/baseline_dump.cuh",
+   "line": 27,
+   "name": "qsh",
+   "size": "DMAX",
+   "struct": null,
+   "text": "__shared__ float qsh[DMAX], warp_max[4], red[256], wpart[4][DMAX];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/baseline_dump.cuh",
+   "line": 31,
+   "name": "acc",
+   "size": "ACCN",
+   "struct": null,
+   "text": "float acc[ACCN];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/d1.cuh",
+   "line": 55,
+   "name": "red",
+   "size": "NT",
+   "struct": null,
+   "text": "__shared__ float red[NT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/d1.cuh",
+   "line": 99,
+   "name": "tmp",
+   "size": "C",
+   "struct": null,
+   "text": "__shared__ float tmp[C],red[NT],wm[4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/d1.cuh",
+   "line": 100,
+   "name": "any",
+   "size": "C",
+   "struct": null,
+   "text": "__shared__ int any[C];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/d1.cuh",
+   "line": 105,
+   "name": "sum_red",
+   "size": "NT",
+   "struct": null,
+   "text": "__shared__ Acc sum_red[NT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+   "line": 16,
+   "name": "m",
+   "size": "4",
+   "struct": null,
+   "text": "__shared__ float m[4];if((tid&31)==0)m[tid>>5]=a;__syncthreads();",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+   "line": 43,
+   "name": "zs",
+   "size": "4",
+   "struct": null,
+   "text": "__shared__ float zs[4];if(lane==0){",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+   "line": 55,
+   "name": "lz",
+   "size": "8",
+   "struct": null,
+   "text": "__shared__ float lz[8],ss[1024];__shared__ int ids[1024];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb2b.cuh",
+   "line": 55,
+   "name": "ids",
+   "size": "1024",
+   "struct": null,
+   "text": "__shared__ float lz[8],ss[1024];__shared__ int ids[1024];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 157,
+   "name": "state",
+   "size": "2",
+   "struct": null,
+   "text": "unsigned state[2]={0,0};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 241,
+   "name": "ctab",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctab[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 242,
+   "name": "ctlo",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctlo[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 252,
+   "name": "qh",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qh[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 253,
+   "name": "ql",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 ql[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 291,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 333,
+   "name": "ctab",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctab[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 334,
+   "name": "ctlo",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctlo[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 348,
+   "name": "qh",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qh[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 349,
+   "name": "ql",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 ql[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 364,
+   "name": "k0",
+   "size": "MT",
+   "struct": null,
+   "text": "float k0[MT],k1[MT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 379,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 431,
+   "name": "lsum",
+   "size": "SG",
+   "struct": null,
+   "text": "__shared__ float lsum[SG];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 476,
+   "name": "qa",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qa[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 488,
+   "name": "kw",
+   "size": "NU4",
+   "struct": null,
+   "text": "uint4 kw[NU4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 496,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 585,
+   "name": "mxs",
+   "size": "GT",
+   "struct": null,
+   "text": "__shared__ float mxs[GT],dens[GT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 611,
+   "name": "macc",
+   "size": "QPT",
+   "struct": null,
+   "text": "float4 macc[QPT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 680,
+   "name": "bb",
+   "size": "MB",
+   "struct": null,
+   "text": "float4 bb[MB];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb3.cuh",
+   "line": 745,
+   "name": "bb",
+   "size": "MB",
+   "struct": null,
+   "text": "float4 bb[MB];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 108,
+   "name": "ctab",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctab[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 109,
+   "name": "ctlo",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctlo[256];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 111,
+   "name": "msh",
+   "size": "MAXG",
+   "struct": null,
+   "text": "__shared__ float msh[MAXG],zs[MAXG][BPC],lz[MAXG];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 127,
+   "name": "qh",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qh[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 128,
+   "name": "ql",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 ql[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 143,
+   "name": "k0",
+   "size": "MT",
+   "struct": null,
+   "text": "float k0[MT],k1[MT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 158,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 285,
+   "name": "lsum",
+   "size": "SG",
+   "struct": null,
+   "text": "__shared__ float lsum[SG];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 286,
+   "name": "hf",
+   "size": "BPC",
+   "struct": null,
+   "text": "__shared__ uint8_t hf[BPC];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 295,
+   "name": "own",
+   "size": "BPC",
+   "struct": null,
+   "text": "uint8_t own[BPC]={0,0,0,0};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 301,
+   "name": "lzs",
+   "size": "GT",
+   "struct": null,
+   "text": "__shared__ float lzs[GT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 322,
+   "name": "si",
+   "size": "BPC",
+   "struct": null,
+   "text": "float si[BPC];int cnt[BPC];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 322,
+   "name": "cnt",
+   "size": "BPC",
+   "struct": null,
+   "text": "float si[BPC];int cnt[BPC];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 359,
+   "name": "f4",
+   "size": "BPC",
+   "struct": null,
+   "text": "uint8_t f4[BPC];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 403,
+   "name": "qa",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qa[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 415,
+   "name": "kw",
+   "size": "NU4",
+   "struct": null,
+   "text": "uint4 kw[NU4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 423,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 511,
+   "name": "mxs",
+   "size": "GT",
+   "struct": null,
+   "text": "__shared__ float mxs[GT],dens[GT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 529,
+   "name": "macc",
+   "size": "QPT",
+   "struct": null,
+   "text": "float4 macc[QPT];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 577,
+   "name": "bb",
+   "size": "MB",
+   "struct": null,
+   "text": "float4 bb[MB];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/eb4.cuh",
+   "line": 621,
+   "name": "bb",
+   "size": "MB",
+   "struct": null,
+   "text": "float4 bb[MB];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed.cuh",
+   "line": 120,
+   "name": "unit",
+   "size": "128",
+   "struct": null,
+   "text": "__shared__ float unit[128],norm;",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed.cuh",
+   "line": 143,
+   "name": "mx",
+   "size": "G",
+   "struct": null,
+   "text": "float mx[G];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed.cuh",
+   "line": 152,
+   "name": "acc",
+   "size": "G",
+   "struct": null,
+   "text": "float acc[G]={};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed.cuh",
+   "line": 197,
+   "name": "norms",
+   "size": "TILE",
+   "struct": null,
+   "text": "__shared__ uint8_t codes[TILE*CAP/2];__shared__ float norms[TILE],table[16],red[128];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+   "line": 58,
+   "name": "qrot",
+   "size": "128",
+   "struct": null,
+   "text": "__shared__ float qrot[128], table[16];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+   "line": 69,
+   "name": "qd",
+   "size": "4",
+   "struct": null,
+   "text": "float qd[4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/packed_prefill.cuh",
+   "line": 76,
+   "name": "qr",
+   "size": "N",
+   "struct": null,
+   "text": "float qr[N], acc[N];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/parallel.cuh",
+   "line": 54,
+   "name": "x",
+   "size": "4",
+   "struct": null,
+   "text": "float x[4];dot4(Q,K,D,j,count,scale,x);",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/parallel.cuh",
+   "line": 87,
+   "name": "scores",
+   "size": "C",
+   "struct": null,
+   "text": "__shared__ float scores[C],wm[4],red[4],trans[W?1:64*65];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/parallel.cuh",
+   "line": 88,
+   "name": "use",
+   "size": "C",
+   "struct": null,
+   "text": "__shared__ uint8_t use[C];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/parallel.cuh",
+   "line": 89,
+   "name": "sums",
+   "size": "NT",
+   "struct": null,
+   "text": "__shared__ Acc sums[NT],pv[4*CAP];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/parallel.cuh",
+   "line": 110,
+   "name": "x",
+   "size": "4",
+   "struct": null,
+   "text": "float x[4];dot4(Q,K,D,j,count,scale,x,use);",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 77,
+   "name": "qa",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qa[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 122,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 168,
+   "name": "lsum",
+   "size": "MAXG",
+   "struct": null,
+   "text": "__shared__ float lsum[MAXG];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 220,
+   "name": "qa",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qa[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 232,
+   "name": "kw",
+   "size": "NU4",
+   "struct": null,
+   "text": "uint4 kw[NU4];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq4.cuh",
+   "line": 240,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+   "line": 68,
+   "name": "ctab",
+   "size": "256",
+   "struct": null,
+   "text": "__shared__ unsigned ctab[256];   // byte (two nibbles, even dim low) -> bf16x2 of the two centroids (hi part)",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+   "line": 95,
+   "name": "qh",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 qh[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+   "line": 96,
+   "name": "ql",
+   "size": "NS",
+   "struct": null,
+   "text": "uint2 ql[NS];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/spq6.cuh",
+   "line": 154,
+   "name": "acc",
+   "size": "4",
+   "struct": null,
+   "text": "float acc[4]={0.f,0.f,0.f,0.f};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/src/apa_spo/tensor.cuh",
+   "line": 82,
+   "name": "any",
+   "size": "C",
+   "struct": null,
+   "text": "__shared__ int any[C];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/autograd.h",
+   "line": 51,
+   "name": "terrain_density_cache",
+   "size": "2",
+   "struct": null,
+   "text": "mutable TerrainDensityCacheEntry terrain_density_cache[2];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 311,
+   "name": "position",
+   "size": "3",
+   "struct": null,
+   "text": "float position[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 312,
+   "name": "forward",
+   "size": "3",
+   "struct": null,
+   "text": "float forward[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 313,
+   "name": "right",
+   "size": "3",
+   "struct": null,
+   "text": "float right[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 314,
+   "name": "up",
+   "size": "3",
+   "struct": null,
+   "text": "float up[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 324,
+   "name": "direction",
+   "size": "3",
+   "struct": null,
+   "text": "float direction[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tensor_cuda/include/tc/core.h",
+   "line": 349,
+   "name": "origin",
+   "size": "3",
+   "struct": null,
+   "text": "float origin[3];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/conv_backward.cu",
+   "line": 194,
+   "name": "scratch",
+   "size": "block",
+   "struct": null,
+   "text": "__shared__ float scratch[block];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/conv_backward.cu",
+   "line": 220,
+   "name": "scratch",
+   "size": "block",
+   "struct": null,
+   "text": "__shared__ float scratch[block];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/dlpack_operand.cpp",
+   "line": 162,
+   "name": "in_flight",
+   "size": "kKinds",
+   "struct": null,
+   "text": "std::atomic<long long> in_flight[kKinds];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/dlpack_operand.cpp",
+   "line": 175,
+   "name": "t_depth",
+   "size": "kKinds",
+   "struct": null,
+   "text": "thread_local long long t_depth[kKinds] = {0, 0};",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/dlpack_operand.cpp",
+   "line": 178,
+   "name": "g_admitted",
+   "size": "kKinds",
+   "struct": null,
+   "text": "std::atomic<unsigned long long> g_admitted[kKinds];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/dlpack_operand.cpp",
+   "line": 256,
+   "name": "own",
+   "size": "kKinds",
+   "struct": null,
+   "text": "long long own[kKinds] = {0, 0};  // this thread's own (excluded)",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/norms.cu",
+   "line": 97,
+   "name": "red",
+   "size": "B",
+   "struct": null,
+   "text": "__shared__ float red[B];",
+   "class": "rank-independent"
+  },
+  {
+   "file": "tc_signal/src/py_args.h",
+   "line": 128,
+   "name": "params_",
+   "size": "kMaxParams",
+   "struct": null,
+   "text": "Param params_[kMaxParams] = {};",
+   "class": "rank-independent"
+  }
+ ],
+ "rank_independent_reason": "sized by a geometry constant (3 = xyz in terrain / dda / paint), a fixed operand count (gated_delta_step's 8 inputs; kl/ql/sl[8] = Dk/32 rows per lane, Dk <= 256 checked at its entry), a cuBLASLt heuristic request count (heur[8]), an accumulator width (ACCN, kDetailOctaves, Channels) or the shared-memory reduction width: none is indexed by an operand's rank",
+ "axis_indexed_arrays_all": [
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1023,
+   "name": "out_shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimSpec",
+   "text": "int64_t out_shape[TC_MAX_DIMS];",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "reshape"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1024,
+   "name": "out_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimSpec",
+   "text": "int64_t out_str[TC_MAX_DIMS];   // contiguous strides of output",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "reshape"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1025,
+   "name": "a_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimSpec",
+   "text": "int64_t a_str[TC_MAX_DIMS];     // broadcast strides into a (0 = broadcast)",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "reshape"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1026,
+   "name": "b_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimSpec",
+   "text": "int64_t b_str[TC_MAX_DIMS];",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "reshape"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1310,
+   "name": "in_shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "ReduceSpec",
+   "text": "int64_t in_shape[TC_MAX_DIMS];",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "ge_scalar"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1311,
+   "name": "in_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "ReduceSpec",
+   "text": "int64_t in_str[TC_MAX_DIMS];    // contiguous strides of input",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "ge_scalar"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1312,
+   "name": "out_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "ReduceSpec",
+   "text": "int64_t out_str[TC_MAX_DIMS];   // contiguous strides of keepdim output",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "ge_scalar"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1313,
+   "name": "reduced",
+   "size": "TC_MAX_DIMS",
+   "struct": "ReduceSpec",
+   "text": "int reduced[TC_MAX_DIMS];       // 1 if dim is reduced",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "ge_scalar"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1367,
+   "name": "coord",
+   "size": "TC_MAX_DIMS",
+   "struct": null,
+   "text": "int64_t coord[TC_MAX_DIMS];",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8",
+   "enclosing_function": "reduce_kernel"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1493,
+   "name": "out_shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "PermSpec",
+   "text": "struct PermSpec { int ndim; int64_t out_shape[TC_MAX_DIMS]; int64_t out_str[TC_MAX_DIMS]; int64_t in_str_perm[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1493,
+   "name": "out_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "PermSpec",
+   "text": "struct PermSpec { int ndim; int64_t out_shape[TC_MAX_DIMS]; int64_t out_str[TC_MAX_DIMS]; int64_t in_str_perm[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1493,
+   "name": "in_str_perm",
+   "size": "TC_MAX_DIMS",
+   "struct": "PermSpec",
+   "text": "struct PermSpec { int ndim; int64_t out_shape[TC_MAX_DIMS]; int64_t out_str[TC_MAX_DIMS]; int64_t in_str_perm[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1555,
+   "name": "out_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "Dim3Spec",
+   "text": "struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1555,
+   "name": "c_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "Dim3Spec",
+   "text": "struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1555,
+   "name": "x_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "Dim3Spec",
+   "text": "struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1555,
+   "name": "y_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "Dim3Spec",
+   "text": "struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1656,
+   "name": "iter_shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimCopySpec",
+   "text": "struct DimCopySpec { int ndim; int64_t iter_shape[TC_MAX_DIMS]; int64_t iter_str[TC_MAX_DIMS]; int64_t big_str[TC_MAX_DIMS]; int dim; int64_t off; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1656,
+   "name": "iter_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimCopySpec",
+   "text": "struct DimCopySpec { int ndim; int64_t iter_shape[TC_MAX_DIMS]; int64_t iter_str[TC_MAX_DIMS]; int64_t big_str[TC_MAX_DIMS]; int dim; int64_t off; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 1656,
+   "name": "big_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "DimCopySpec",
+   "text": "struct DimCopySpec { int ndim; int64_t iter_shape[TC_MAX_DIMS]; int64_t iter_str[TC_MAX_DIMS]; int64_t big_str[TC_MAX_DIMS]; int dim; int64_t off; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5770,
+   "name": "idx_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "GatherSpec",
+   "text": "struct GatherSpec { int ndim; int64_t idx_str[TC_MAX_DIMS]; int64_t a_str[TC_MAX_DIMS]; int64_t idx_shape[TC_MAX_DIMS]; int dim; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5770,
+   "name": "a_str",
+   "size": "TC_MAX_DIMS",
+   "struct": "GatherSpec",
+   "text": "struct GatherSpec { int ndim; int64_t idx_str[TC_MAX_DIMS]; int64_t a_str[TC_MAX_DIMS]; int64_t idx_shape[TC_MAX_DIMS]; int dim; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5770,
+   "name": "idx_shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "GatherSpec",
+   "text": "struct GatherSpec { int ndim; int64_t idx_str[TC_MAX_DIMS]; int64_t a_str[TC_MAX_DIMS]; int64_t idx_shape[TC_MAX_DIMS]; int dim; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5795,
+   "name": "shape",
+   "size": "TC_MAX_DIMS",
+   "struct": "FlipSpec",
+   "text": "struct FlipSpec { int ndim; int64_t shape[TC_MAX_DIMS]; int64_t str[TC_MAX_DIMS]; int flip[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5795,
+   "name": "str",
+   "size": "TC_MAX_DIMS",
+   "struct": "FlipSpec",
+   "text": "struct FlipSpec { int ndim; int64_t shape[TC_MAX_DIMS]; int64_t str[TC_MAX_DIMS]; int flip[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  },
+  {
+   "file": "tensor_cuda/src/kernels.cu",
+   "line": 5795,
+   "name": "flip",
+   "size": "TC_MAX_DIMS",
+   "struct": "FlipSpec",
+   "text": "struct FlipSpec { int ndim; int64_t shape[TC_MAX_DIMS]; int64_t str[TC_MAX_DIMS]; int flip[TC_MAX_DIMS]; };",
+   "class": "axis-indexed (rank-bound): TC_MAX_DIMS = 8"
+  }
+ ],
+ "roles_count": {
+  "product (engine)": 15,
+  "test": 1,
+  "consumer (report-only)": 0,
+  "harness": 18
+ },
+ "consumer_roots_grep": "Voice engine and GRAPA: no rank-9 tensor construction found (grep 'reshape(' with 9 extents not attempted; consumers are report-only)"
+}

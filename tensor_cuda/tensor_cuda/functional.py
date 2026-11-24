@@ -229,9 +229,16 @@ def einsum(equation, *operands):
     # before the permutes below launch anything, naming both operands' shapes. Only well-formed terms are checked
     # (one extent per letter, as the code below reads them); the message keeps the multiply's prefix. Results are
     # unchanged. Prior art: NumPy's broadcasting rule and numpy.einsum's per-label extent check; ours: the placement.
+    # BWD-F2 R10 (review BWDF1R1-F13): check the extents the factor construction below actually reads. It reads
+    # t.shape[s.index(ch)] for each letter, which exists whenever the term has no more letters than the operand has
+    # axes; a shorter term is a legacy reshapeable case the API keeps accepting (a [2, 0, 1] operand for 'ij' factors
+    # to [2, 0, 1]). BWD-F1 skipped every term whose length differed from the rank, so 'ij,kj->ik' with a [2, 0, 1]
+    # and b [4, 3] permuted b (a launch) before the multiply refused j (0 against 3). A term longer than the rank is
+    # left to the construction's own failure, as before. Prior art: numpy.einsum's per-label extent check; ours: the
+    # placement against the construction's reads.
     seen = {}
     for pos, (t, s) in enumerate(zip(operands, terms)):
-        if len(s) != len(t.shape):
+        if len(s) > len(t.shape):
             continue
         for ch in s:
             e = int(t.shape[s.index(ch)])

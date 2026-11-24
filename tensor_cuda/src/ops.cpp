@@ -1132,6 +1132,17 @@ Tensor masked_fill(const Tensor& a, const Tensor& mask, double value) {
   // BWD-F1 Z2: the where below broadcasts mask against a; check it with NumPy's rule before the fill's allocation (a
   // CUDA call), so a refusal comes first. Prior art: NumPy's broadcasting rule (kernels.cu broadcast_shape).
   (void)tc::broadcast_shapes(mask.data().shape, a.data().shape);
+  // BWD-F2 R2: where_nd's Dim3Spec rank, checked before the fill's allocation too. R5 needs nothing here: where_nd
+  // loads the mask in its own dtype (a bool mask is no longer read as a's dtype), and fill and a share a's dtype.
+  {
+    auto text = [](const Shape& s) {
+      std::string t = "[";
+      for (size_t i = 0; i < s.size(); ++i) t += (i ? ", " : "") + std::to_string(s[i]);
+      return t + "]";
+    };
+    tc::check_meta_rank("masked_fill", std::max(mask.data().ndim(), a.data().ndim()),
+                        "mask " + text(mask.data().shape) + ", a " + text(a.data().shape));
+  }
   NDArray fill = NDArray::full(a.shape(), value, a.dtype(), a.device());
   NDArray out = where_nd(mask.data(), fill, a.data());
   NDArray m = mask.data();

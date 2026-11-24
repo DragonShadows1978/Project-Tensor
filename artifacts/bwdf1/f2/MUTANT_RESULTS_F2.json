@@ -1,0 +1,117 @@
+{
+ "cuda_visible_devices": "",
+ "mutants": {
+  "n01_dtype_check_all_members": {
+   "ruling": "R1",
+   "where": "CPU",
+   "module_sha256": "ec8f6504a3d1a956a44347eb5c48e4dd43b3b772abb61c679886878eb6dcbcef",
+   "assertion": "verdict(row, r) is None: the row expects the call to pass the host checks and reach the device step ('CUDA error at cat: no CUDA-capable device'); the mutant refuses with 'operand 1 has dtype float16/bfloat16' (did not reach the device step)",
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-named-case]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f03-cat-named-case', \"did not reach the device step: RuntimeError: cat: operand 1 has dtype float16 but operand 0 ha...he output's dtype; operand 1 has elements to copy) (operand 1 [0, 3] float16 on cpu, operand 0 [2, 3] float32 on cpu)\")\nassert \"did not reach the device step: RuntimeError: cat: operand 1 has dtype float16 but operand 0 has float32 (the output's dtype; operand 1 has elements to copy) (operand 1 [0, 3] float16 on cpu, operand 0 [2, 3] float32 on cpu)\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-stack-empty-mixed-dtype]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f03-stack-empty-mixed-dtype', \"did not reach the device step: RuntimeError: stack: operand 1 has dtype float16 but o...put's dtype; operand 1 has elements to copy) (operand 1 [0, 3] float16 on cuda:0, operand 0 [0, 3] float32 on cuda:0)\")\nassert \"did not reach the device step: RuntimeError: stack: operand 1 has dtype float16 but operand 0 has float32 (the output's dtype; operand 1 has elements to copy) (operand 1 [0, 3] float16 on cuda:0, operand 0 [0, 3] float32 on cuda:0)\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-empty-mixed-device-dtype]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f03-cat-empty-mixed-device-dtype', \"did not reach the device step: RuntimeError: cat: operand 1 has dtype bfloat16 b...utput's dtype; operand 1 has elements to copy) (operand 1 [0, 3] bfloat16 on cpu, operand 0 [0, 3] float32 on cuda:0)\")\nassert \"did not reach the device step: RuntimeError: cat: operand 1 has dtype bfloat16 but operand 0 has float32 (the output's dtype; operand 1 has elements to copy) (operand 1 [0, 3] bfloat16 on cpu, operand 0 [0, 3] float32 on cuda:0)\" is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-empty-mixed-device-dtype]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-cat-named-case]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f03-stack-empty-mixed-dtype]"
+   ],
+   "result": "KILLED"
+  },
+  "n02_no_rank_ceiling_stack": {
+   "ruling": "R2",
+   "where": "CPU",
+   "module_sha256": "23dbe20115a4ec936a1bd86f1ddb34859054ea59bdcf3dd9fbb48996281a20a6",
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'stack: rank 9 exceeds TC_MAX_DIMS=8' with 0 CUDA calls; the mutant writes DimCopySpec slot 8 and reaches cat's status check ('CUDA error at cat') or dies",
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-stack-rank8-to-9]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f02-stack-rank8-to-9', \"message lacks 'stack: rank 9 exceeds TC_MAX_DIMS=8': CUDA error at cat: no CUDA-capable device is detected\")\nassert \"message lacks 'stack: rank 9 exceeds TC_MAX_DIMS=8': CUDA error at cat: no CUDA-capable device is detected\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-cat-rank9-empty]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f02-cat-rank9-empty', \"message lacks 'cat: rank 9 exceeds TC_MAX_DIMS=8': CUDA error at cat: no CUDA-capable device is detected\")\nassert \"message lacks 'cat: rank 9 exceeds TC_MAX_DIMS=8': CUDA error at cat: no CUDA-capable device is detected\" is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-cat-rank9-empty]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f02-stack-rank8-to-9]"
+   ],
+   "result": "KILLED"
+  },
+  "n03_sin_span_unchecked": {
+   "ruling": "R3",
+   "where": "CPU (and the staged K2 memory line k2_mem_n03 for the GPU read)",
+   "module_sha256": "ea4636216c24e0b176dcb6b5e0405dd2a25078d4e30b26f279bf90600d2a5e0c",
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'rope_apply: position past table end' naming 'sin [1, 2]'; the mutant returns",
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f01-rope_apply-short-sin', 'raised None (want RuntimeError): None')\nassert 'raised None (want RuntimeError): None' is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-swap-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f01-swap-short-sin', 'raised None (want RuntimeError): None')\nassert 'raised None (want RuntimeError): None' is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-arena-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f01-arena-short-sin', 'raised None (want RuntimeError): None')\nassert 'raised None (want RuntimeError): None' is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-arena-short-sin]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-short-sin]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-swap-short-sin]"
+   ],
+   "result": "KILLED"
+  },
+  "n04_ring_no_modulo": {
+   "ruling": "R4",
+   "where": "GPU (staged line k2_mem_n04; the kernel arithmetic is device-only)",
+   "module_sha256": "0c3e7fa285a285c8474560c2437e216a838ac739826b0e6bdee2d3df30d613e1",
+   "assertion": "the row's verdict: buf after the write equals NumPy's ring write at (start + l) % CAP, and memcheck reports 0 errors; the mutant's wrap leaves [0, CAP) (writes outside buf: memcheck errors and/or wrong rows)",
+   "result": "STAGED (GPU line k2_mem_n04)"
+  },
+  "n05_condition_as_data_dtype": {
+   "ruling": "R5",
+   "where": "GPU (staged line k2_mem_n05; the condition load is device-only)",
+   "module_sha256": "b93271da2a964212092f2cec1432a558dfbd30109d54df8f676bfe2aafc8c995",
+   "assertion": "the row's verdict: the result equals np.where(cond, x, y) bitwise (cond [False, True, True, True] bool); the mutant reads the 4-byte bool condition as float32 values (element 0 takes x: bytes 00 01 01 01 are a nonzero float32), and memcheck reports the read past the condition",
+   "result": "STAGED (GPU line k2_mem_n05)"
+  },
+  "n06_axpy_broadcast_accepted": {
+   "ruling": "R6",
+   "where": "CPU",
+   "module_sha256": "d5d2edeb57210c81c45c9c62a0fc9f375a8dd681b3a8d5380161165c9a6503d7",
+   "assertion": "verdict(row, r) is None: the row expects RuntimeError 'does not map element for element onto param' with 0 CUDA calls; the mutant launches ew_scalar ('CUDA error at ew_scalar')",
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-named-case]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f12-axpy-named-case', \"message lacks 'axpy_: the update of param [2, 1] by other [2, 2] broadcasts to [2, 2]': CUDA error at ew_scalar: no CUDA-capable device is detected\")\nassert \"message lacks 'axpy_: the update of param [2, 1] by other [2, 2] broadcasts to [2, 2]': CUDA error at ew_scalar: no CUDA-capable device is detected\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-trailing-broadcast]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('f12-axpy-trailing-broadcast', \"message lacks 'broadcasts to [3, 4]': CUDA error at ew_scalar: no CUDA-capable device is detected\")\nassert \"message lacks 'broadcasts to [3, 4]': CUDA error at ew_scalar: no CUDA-capable device is detected\" is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-named-case]",
+    "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f12-axpy-trailing-broadcast]"
+   ],
+   "result": "KILLED"
+  }
+ }
+}
