@@ -1,0 +1,67 @@
+{
+ "copies": [
+  {
+   "from": "scripts/bwdf3_gpu_common.py",
+   "from_sha256": "9271e992afc26c025c55196b4781177887bab3e835f0d097b45f8404e5f6f741",
+   "to": "scripts/bwdf5_gpu_common.py",
+   "to_sha256": "b0e223d974a362319960e9bd6f0a6a43cfbf2fd0ca5856ef4c72c8b0bca62213",
+   "changed": "arm table and loader: arms B, F2, F4 only; B and F2 modules read from the sibling BWD-F1 worktree, F4 from this worktree's tensor_cuda/build-bwdf4/F4; receipts from artifacts/bwdf1/{build,f2/build,f4/build}; GPU output dir artifacts/bwdf1/f5/gpu; BWD-F1's bwdf1_gpu_common is still imported unchanged for PKGS and data()"
+  },
+  {
+   "from": "scripts/bwdf3_p2_cases.py",
+   "from_sha256": "a922944889d8e7fa8cc9aacd4b0303f4638dadbfa376dd58e356c0d126bf87e2",
+   "to": "scripts/bwdf5_p2_cases.py",
+   "to_sha256": "af9a243acfb47e34cae3b0c7a096eabbe38031b204f48a1aa3770a74743f8672",
+   "changed": "import line (bwdf3_gpu_common -> bwdf5_gpu_common) and the docstring only; the case table, operands and run_row are byte-identical (diff is 8 lines, all in the docstring and the import)"
+  },
+  {
+   "from": "scripts/bwdf3_step_p2.py",
+   "from_sha256": "a8018b88bb057f475936d9de05f18dacf0df9c3bd9d4dfc26f8a3f59b892959b",
+   "to": "scripts/bwdf5_step_p2.py",
+   "to_sha256": "0f6b1aa8cf4c89e58d8fb08ad801d3ee4713b3ea81adcf36240dd88704e72603",
+   "changed": "the repair: the step runs OUTSIDE the sanitizer and starts one `compute-sanitizer --tool memcheck --log-file <row log>` per row child (library scripts/bwdf5_p2_run.py); child writes <rid>.row.json and prints ROW; SIGTERM handler; modes e1|e2|e3|canary (count dropped: exited 0 in BWD-F3); child logic otherwise as BWD-F3 minus the count-mode counter"
+  },
+  {
+   "from": "scripts/bwdf3_gpu_lines.py",
+   "from_sha256": "dc9bc75ac0f382baa7a524eb60cfb7fc65008842624b2d487fe4f63f0521a544",
+   "to": "scripts/bwdf5_gpu_lines.py",
+   "to_sha256": "d8a955f76b867ec2e00ea3402dd7fddef8540dda0351b306643ef44561adc39b",
+   "changed": "P2 lines only (canary_F4 first, then e1/e2/e3 on B, F2, F4); no sanitizer in the line command; gate/write/dryrun kept; dryrun rewrites GPU_LINES_F5.json with the exits"
+  },
+  {
+   "from": "scripts/bwdf3_gpu_post.py",
+   "from_sha256": "c196a28c7b04448af96ac84aa9615c397474a73bffb750f002a2d2de49d44e46",
+   "to": "scripts/bwdf5_gpu_post.py",
+   "to_sha256": "abe76a7e6404e55da7583a559d23eb3a13e88fcb86a551b4b62fccd663ab7097",
+   "changed": "P2 parts only (bits_equal, p2_verdict, line_verdict, controls, selftest); memcheck read per row from the row's own log; harness-failure class (child died, timeout, not run, log missing/empty/no-API-call/unparsed); canary verdict; BAR_ARM F4"
+  },
+  {
+   "from": "scripts/bwdf3_p2_drive.py",
+   "from_sha256": "a228a2045d59bf483a9341c4aaf2a4a77dd0f5c9ae9675a013cd70920cfe170d",
+   "to": null,
+   "to_sha256": null,
+   "changed": "not copied: BWD-F3's host-tensor geometry drive is not needed for the harness repair"
+  }
+ ],
+ "new_files": [
+  {
+   "file": "scripts/bwdf5_p2_run.py",
+   "sha256": "f7924a53f8f7ced18b227eabcfa365d4b38145ac0b95cbbf65ec637a5fbdced2",
+   "what": "new: per-row runner library (child end record, process-group kill, log classification)"
+  },
+  {
+   "file": "scripts/bwdf5_cpu_drive.py",
+   "sha256": "9d92fa1607f3811016c8f44cbf9460e618537180924f1c855c8f334004e7f406",
+   "what": "new: A4 CPU drive (53 checks)"
+  },
+  {
+   "file": "scripts/bwdf5_drive_stub.py",
+   "sha256": "827a1fefab68feada279382678a65fbdc65bacfa5385fc109a335f318b7c1d13",
+   "what": "new: stand-in sanitizer and child for the drive; never staged"
+  }
+ ],
+ "read_only_imports_not_copied": [
+  "scripts/bwdf1_gpu_common.py (PKGS, data), unchanged"
+ ],
+ "staged_step_for_lease_check": "scripts/bwdf5_step_p2.py:2 (step and child)"
+}

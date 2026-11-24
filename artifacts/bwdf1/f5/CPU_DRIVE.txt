@@ -1,0 +1,61 @@
+ok   A e1: one recorded row per case-table id (11)
+ok   A e1: every child started and refused with exit 1
+ok   A e1: every row carries the child's refusal text
+ok   A e1: plain run has no sanitizer log
+ok   A e1: no CUDA work, no row files
+ok   A e1: verdict on dead children is FAIL
+ok   A e2: one recorded row per case-table id (5)
+ok   A e2: every child started and refused with exit 1
+ok   A e2: every row carries the child's refusal text
+ok   A e2: plain run has no sanitizer log
+ok   A e2: no CUDA work, no row files
+ok   A e2: verdict on dead children is FAIL
+ok   A e3: one recorded row per case-table id (9)
+ok   A e3: every child started and refused with exit 1
+ok   A e3: every row carries the child's refusal text
+ok   A e3: plain run has no sanitizer log
+ok   A e3: no CUDA work, no row files
+ok   A e3: verdict on dead children is FAIL
+ok   A canary: one recorded row per case-table id (1)
+ok   A canary: every child started and refused with exit 1
+ok   A canary: every row carries the child's refusal text
+ok   A canary: plain run has no sanitizer log
+ok   A canary: no CUDA work, no row files
+ok   A canary: verdict on dead children is FAIL
+ok   A: 26 rows in all (canary 1, e1 11, e2 5, e3 9)
+ok   B: sanitizer prefix and per-row log
+ok   B: the child follows the log, no --target-processes
+ok   B: row timeout bounded
+ok   C: ok child, 0-error log
+ok   C: dead child exit 255 + no-API log (BWD-F3's failure) recorded with the log head
+ok   C: SIGSEGV child recorded as a signal end
+ok   C: hanging child recorded as a timeout
+ok   C: the timed-out child's process group is gone (no orphan)
+ok   C: errors log counts 2
+ok   C: empty log
+ok   C: missing log
+ok   C: no ROW line, exit 1
+ok   C: exit 0 with no row is still a dead child
+ok   C: post_line reads the row logs from the files
+ok   C: per-row log states in the verdict file
+ok   C: dead and timed-out rows are listed as harness-incomplete
+ok   C: F2 with unusable rows is recorded as harness incomplete
+ok   C: B with unusable rows is recorded as harness incomplete
+ok   C: canary ok -> PASS
+ok   C: canary dead -> FAIL
+ok   C: canary errors -> FAIL
+ok   D: 2 rows run, 7 NOT-RUN
+ok   D: NOT-RUN rows fail the line
+ok   E: the hanging child is running before SIGTERM
+ok   E: step exits 143 and its child group is gone
+bwdf5 gate p2_canary_F4: tc F4 sha256 8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1 matches its receipt
+bwdf5 gate p2_e1_B: tc B sha256 70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45 matches its receipt
+bwdf5 gate p2_e3_F2: tc F2 sha256 5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a matches its receipt
+ok   F: gate passes on B, F2, F4
+bwdf5 gate p2_e2_F4: tc F4 sha256 8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1 matches its receipt
+bwdf5 gate p2_e2_F4: artifacts/bwdf1/f5/gpu/p2_e2_F4 exists; move it aside before a retry
+bwdf5 gate p2_e2_B: tc B sha256 70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45 matches its receipt
+ok   F: gate refuses an existing write-once directory (and only that line)
+ok   F: nothing under artifacts/bwdf1/f5/gpu was created
+{"checks": 53, "failed": []}
+CPU-DRIVE PASS

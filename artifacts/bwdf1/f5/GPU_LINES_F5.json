@@ -1,0 +1,630 @@
+{
+ "order": "BWD-F5 (repair of BWD-F3's P2 harness: per-row sanitizer; P2 rows restaged on Builds B, F2, F4; canary first)",
+ "cwd": "worktree root",
+ "lines": {
+  "p2_canary_F4": {
+   "gate": "P2 repaired harness (canary)",
+   "arm": "F4",
+   "mode": "canary",
+   "mods": [
+    [
+     "tc",
+     "F4"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "canary",
+    "F4"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_canary_F4",
+   "rows": [
+    "e1-control-rope_apply-covering"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_canary_F4 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_canary_F4 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py canary F4",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_canary_F4"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_canary_F4/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_canary_F4/e1-control-rope_apply-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_canary_F4/e1-control-rope_apply-covering.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e1_B": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "B",
+   "mode": "e1",
+   "mods": [
+    [
+     "tc",
+     "B"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e1",
+    "B"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e1_B",
+   "rows": [
+    "e1-control-rope_apply-covering",
+    "e1-control-export-covering",
+    "e1-export-reading-short-sin",
+    "e1-export-reading-negative-pos0",
+    "e1-export-reading-short-cos",
+    "e1-export_row_pairs-reading-short-sin",
+    "e1-swap-reading-short-sin",
+    "e1-arena-reading-short-sin",
+    "e1-rope_apply-empty-cuda-short-sin",
+    "e1-export-empty-cuda-short-sin",
+    "e1-swap-empty-cuda-short-sin"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e1_B && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e1_B -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e1 B",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_B"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-control-rope_apply-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-control-rope_apply-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-control-export-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-control-export-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-negative-pos0.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-negative-pos0.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-short-cos.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-reading-short-cos.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export_row_pairs-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export_row_pairs-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-swap-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-swap-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-arena-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-arena-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-rope_apply-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-rope_apply-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-export-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-swap-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_B/e1-swap-empty-cuda-short-sin.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e1_F2": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F2",
+   "mode": "e1",
+   "mods": [
+    [
+     "tc",
+     "F2"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e1",
+    "F2"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e1_F2",
+   "rows": [
+    "e1-control-rope_apply-covering",
+    "e1-control-export-covering",
+    "e1-export-reading-short-sin",
+    "e1-export-reading-negative-pos0",
+    "e1-export-reading-short-cos",
+    "e1-export_row_pairs-reading-short-sin",
+    "e1-swap-reading-short-sin",
+    "e1-arena-reading-short-sin",
+    "e1-rope_apply-empty-cuda-short-sin",
+    "e1-export-empty-cuda-short-sin",
+    "e1-swap-empty-cuda-short-sin"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e1_F2 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e1_F2 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e1 F2",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-control-rope_apply-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-control-rope_apply-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-control-export-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-control-export-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-negative-pos0.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-negative-pos0.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-short-cos.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-reading-short-cos.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export_row_pairs-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export_row_pairs-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-swap-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-swap-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-arena-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-arena-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-rope_apply-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-rope_apply-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-export-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-swap-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F2/e1-swap-empty-cuda-short-sin.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e1_F4": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F4",
+   "mode": "e1",
+   "mods": [
+    [
+     "tc",
+     "F4"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e1",
+    "F4"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e1_F4",
+   "rows": [
+    "e1-control-rope_apply-covering",
+    "e1-control-export-covering",
+    "e1-export-reading-short-sin",
+    "e1-export-reading-negative-pos0",
+    "e1-export-reading-short-cos",
+    "e1-export_row_pairs-reading-short-sin",
+    "e1-swap-reading-short-sin",
+    "e1-arena-reading-short-sin",
+    "e1-rope_apply-empty-cuda-short-sin",
+    "e1-export-empty-cuda-short-sin",
+    "e1-swap-empty-cuda-short-sin"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e1_F4 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e1_F4 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e1 F4",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-control-rope_apply-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-control-rope_apply-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-control-export-covering.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-control-export-covering.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-negative-pos0.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-negative-pos0.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-short-cos.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-reading-short-cos.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export_row_pairs-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export_row_pairs-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-swap-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-swap-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-arena-reading-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-arena-reading-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-rope_apply-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-rope_apply-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-export-empty-cuda-short-sin.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-swap-empty-cuda-short-sin.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e1_F4/e1-swap-empty-cuda-short-sin.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e2_B": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "B",
+   "mode": "e2",
+   "mods": [
+    [
+     "tc",
+     "B"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e2",
+    "B"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e2_B",
+   "rows": [
+    "e2-rope_apply-sin-T-D-1",
+    "e2-rope_apply-cos-T-D-1-1",
+    "e2-export-sin-T-D-1",
+    "e2-swap-tables-T-D-1",
+    "e2-refused-sin-T-D-2"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e2_B && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e2_B -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e2 B",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_B"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-rope_apply-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-rope_apply-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-rope_apply-cos-T-D-1-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-rope_apply-cos-T-D-1-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-export-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-export-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-swap-tables-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-swap-tables-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-refused-sin-T-D-2.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_B/e2-refused-sin-T-D-2.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e2_F2": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F2",
+   "mode": "e2",
+   "mods": [
+    [
+     "tc",
+     "F2"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e2",
+    "F2"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e2_F2",
+   "rows": [
+    "e2-rope_apply-sin-T-D-1",
+    "e2-rope_apply-cos-T-D-1-1",
+    "e2-export-sin-T-D-1",
+    "e2-swap-tables-T-D-1",
+    "e2-refused-sin-T-D-2"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e2_F2 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e2_F2 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e2 F2",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-rope_apply-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-rope_apply-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-rope_apply-cos-T-D-1-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-rope_apply-cos-T-D-1-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-export-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-export-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-swap-tables-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-swap-tables-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-refused-sin-T-D-2.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F2/e2-refused-sin-T-D-2.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e2_F4": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F4",
+   "mode": "e2",
+   "mods": [
+    [
+     "tc",
+     "F4"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e2",
+    "F4"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e2_F4",
+   "rows": [
+    "e2-rope_apply-sin-T-D-1",
+    "e2-rope_apply-cos-T-D-1-1",
+    "e2-export-sin-T-D-1",
+    "e2-swap-tables-T-D-1",
+    "e2-refused-sin-T-D-2"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e2_F4 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e2_F4 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e2 F4",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-rope_apply-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-rope_apply-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-rope_apply-cos-T-D-1-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-rope_apply-cos-T-D-1-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-export-sin-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-export-sin-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-swap-tables-T-D-1.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-swap-tables-T-D-1.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-refused-sin-T-D-2.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e2_F4/e2-refused-sin-T-D-2.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e3_B": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "B",
+   "mode": "e3",
+   "mods": [
+    [
+     "tc",
+     "B"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e3",
+    "B"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e3_B",
+   "rows": [
+    "e3-control-sum-last",
+    "e3-control-sum-two-distinct",
+    "e3-control-mean",
+    "e3-control-argmax",
+    "e3-sum-duplicate",
+    "e3-sum-out-of-range",
+    "e3-mean-duplicate",
+    "e3-softmax-out-of-range",
+    "e3-argmax-out-of-range"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e3_B && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e3_B -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e3 B",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_B"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-sum-last.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-sum-last.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-sum-two-distinct.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-sum-two-distinct.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-mean.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-mean.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-argmax.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-control-argmax.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-sum-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-sum-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-sum-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-sum-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-mean-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-mean-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-softmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-softmax-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-argmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_B/e3-argmax-out-of-range.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e3_F2": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F2",
+   "mode": "e3",
+   "mods": [
+    [
+     "tc",
+     "F2"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e3",
+    "F2"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e3_F2",
+   "rows": [
+    "e3-control-sum-last",
+    "e3-control-sum-two-distinct",
+    "e3-control-mean",
+    "e3-control-argmax",
+    "e3-sum-duplicate",
+    "e3-sum-out-of-range",
+    "e3-mean-duplicate",
+    "e3-softmax-out-of-range",
+    "e3-argmax-out-of-range"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e3_F2 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e3_F2 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e3 F2",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-sum-last.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-sum-last.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-sum-two-distinct.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-sum-two-distinct.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-mean.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-mean.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-argmax.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-control-argmax.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-sum-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-sum-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-sum-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-sum-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-mean-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-mean-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-softmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-softmax-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-argmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F2/e3-argmax-out-of-range.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  },
+  "p2_e3_F4": {
+   "gate": "P2 (BWD-F3, restaged)",
+   "arm": "F4",
+   "mode": "e3",
+   "mods": [
+    [
+     "tc",
+     "F4"
+    ]
+   ],
+   "min": 240,
+   "timeout": 500,
+   "argv": [
+    "scripts/bwdf5_step_p2.py",
+    "e3",
+    "F4"
+   ],
+   "out": "artifacts/bwdf1/f5/gpu/p2_e3_F4",
+   "rows": [
+    "e3-control-sum-last",
+    "e3-control-sum-two-distinct",
+    "e3-control-mean",
+    "e3-control-argmax",
+    "e3-sum-duplicate",
+    "e3-sum-out-of-range",
+    "e3-mean-duplicate",
+    "e3-softmax-out-of-range",
+    "e3-argmax-out-of-range"
+   ],
+   "peak_host_bytes": 3221225472,
+   "command": "python3 -B -P scripts/bwdf5_gpu_lines.py gate p2_e3_F4 && forge-gpu-run --min 240 --max 540 --label bwdf5-p2_e3_F4 -- timeout 500s python3 -B -P scripts/bwdf5_step_p2.py e3 F4",
+   "write_once": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4"
+   ],
+   "write_once_inside": [
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/results.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-sum-last.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-sum-last.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-sum-two-distinct.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-sum-two-distinct.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-mean.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-mean.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-argmax.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-control-argmax.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-sum-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-sum-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-sum-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-sum-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-mean-duplicate.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-mean-duplicate.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-softmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-softmax-out-of-range.row.json",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-argmax-out-of-range.memcheck.log",
+    "artifacts/bwdf1/f5/gpu/p2_e3_F4/e3-argmax-out-of-range.row.json"
+   ],
+   "dry_run": {
+    "exit": 78
+   }
+  }
+ },
+ "n_lines": 10,
+ "run_order": [
+  "p2_canary_F4",
+  "p2_e1_B",
+  "p2_e1_F2",
+  "p2_e1_F4",
+  "p2_e2_B",
+  "p2_e2_F2",
+  "p2_e2_F4",
+  "p2_e3_B",
+  "p2_e3_F2",
+  "p2_e3_F4"
+ ],
+ "lead_records_per_line": "forge-gpu-run exit, the inner timeout exit (124 = timeout, never a pass), the run log's sha256, and each row's memcheck log sha256 (results.json rows: memcheck_log_sha256) (L45)",
+ "exit_semantics": "gate 3 = refused before the lease (module sha or write-once path); forge-gpu-run 75/76 = no window or lease (nothing ran); 78 = FORGE_GPU_DRY_RUN; 124 = timeout; step 0 = completed, verdicts from scripts/bwdf5_gpu_post.py",
+ "rlimit_as": "none set (L114); the lead runs each line in a scope with MemoryMax=12G, OOMPolicy=continue",
+ "post_device_followups_cpu": [
+  "python3 -B -P scripts/bwdf5_gpu_post.py line <line>   (each line -> artifacts/bwdf1/f5/gpu/<line>.post.json)",
+  "python3 -B -P scripts/bwdf5_gpu_post.py controls      (accepted results, Build B vs Build F4 bitwise)"
+ ],
+ "lease_check_lines": {
+  "scripts/bwdf5_step_p2.py": [
+   "scripts/bwdf5_step_p2.py:2"
+  ],
+  "child": "scripts/bwdf5_step_p2.py:2 (the child is this same file started with --child; it checks first)"
+ },
+ "write_once_paths": {
+  "p2_canary_F4": [
+   "artifacts/bwdf1/f5/gpu/p2_canary_F4"
+  ],
+  "p2_e1_B": [
+   "artifacts/bwdf1/f5/gpu/p2_e1_B"
+  ],
+  "p2_e1_F2": [
+   "artifacts/bwdf1/f5/gpu/p2_e1_F2"
+  ],
+  "p2_e1_F4": [
+   "artifacts/bwdf1/f5/gpu/p2_e1_F4"
+  ],
+  "p2_e2_B": [
+   "artifacts/bwdf1/f5/gpu/p2_e2_B"
+  ],
+  "p2_e2_F2": [
+   "artifacts/bwdf1/f5/gpu/p2_e2_F2"
+  ],
+  "p2_e2_F4": [
+   "artifacts/bwdf1/f5/gpu/p2_e2_F4"
+  ],
+  "p2_e3_B": [
+   "artifacts/bwdf1/f5/gpu/p2_e3_B"
+  ],
+  "p2_e3_F2": [
+   "artifacts/bwdf1/f5/gpu/p2_e3_F2"
+  ],
+  "p2_e3_F4": [
+   "artifacts/bwdf1/f5/gpu/p2_e3_F4"
+  ]
+ },
+ "modules": {
+  "B": {
+   "receipt": "artifacts/bwdf1/build/BUILD_tc_B.json",
+   "build_dir": "tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/B",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45"
+  },
+  "F2": {
+   "receipt": "artifacts/bwdf1/f2/build/BUILD_tc_F2.json",
+   "build_dir": "tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/F2",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a"
+  },
+  "F4": {
+   "receipt": "artifacts/bwdf1/f4/build/BUILD_tc_F4.json",
+   "build_dir": "tensor_fork_apa_wt_bwdf4/tensor_cuda/build-bwdf4/F4",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1"
+  }
+ },
+ "note": "BWD-F3's count lines (no sanitizer) exited 0 and are not restaged; the canary runs first."
+}
