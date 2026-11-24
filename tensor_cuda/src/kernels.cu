@@ -8595,9 +8595,13 @@ static int64_t checked_add3(int64_t a, int64_t b, int64_t c, const std::string& 
 // pair's output ([0, 2^62, 2] uint8: 2^63 bytes, counting the zero as 1) was refused. The text keeps the
 // constructor's, after "<op>: the output " and before the operands. Called by export_rows_check, splice_rows_check,
 // evict_rows_check, export_rope_rows_check and rope_apply_check, i.e. by every pair preflight (export_row_pair,
-// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Only splice can
-// grow an extent; the others' outputs are no larger than an operand, so their call cannot fire and is kept for one
-// rule at every preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
+// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Splice is the
+// op that grows an extent past its operands'; the others' outputs have no larger extents than an operand's, but an
+// operand can itself lie beyond the byte bound: an empty tensor reshaped to [0, 2^62, 2] (uint8) is a valid view
+// (no bytes are allocated for it), and export_rows of its whole span has the same output shape, which this check
+// refuses (BWD-F4 H3, review BWDF1R3-F03; before, this text said only splice can fire it). For an operand that was
+// built by the constructor, the bound holds already and the call cannot fire. It is kept for one rule at every
+// preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
 // known to me. Ours: running the constructor's bound in the preflight.
 static void preflight_out_bound(const char* op, const Shape& out_shape, DType dtype, const std::string& ctx) {
   try {
@@ -8795,7 +8799,10 @@ __global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
 // size-one axes leaves the same contiguous buffer (no specific prior art known to me for its use here). Ours: the
 // shared validator, its term order and the reads condition on the span.
 static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
-  if (t.ndim() < 2 || t.shape[1] != D) return false;
+  // BWD-F4 H2 (review BWDF1R3-F02): a table above the engine's rank ceiling is refused (ruling D1: TC_MAX_DIMS = 8),
+  // so [T, D, 1, 1, 1, 1, 1, 1, 1] (rank 9) is no longer accepted by the trailing-singleton rule. Rank 8 and below
+  // are unchanged. No prior art known to me (the ceiling is this engine's own D1 ruling).
+  if (t.ndim() < 2 || t.ndim() > TC_MAX_DIMS || t.shape[1] != D) return false;
   for (int i = 2; i < t.ndim(); ++i)
     if (t.shape[i] != 1) return false;
   return true;

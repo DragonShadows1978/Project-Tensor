@@ -1060,8 +1060,33 @@ Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
   // the axis twice, before sum's own checks ran. Valid, distinct axes give the same normalized values, so the count
   // and the result are unchanged. Prior art: NumPy's normalize_axis_tuple ("duplicate value in axis").
   const std::vector<int> nax = tc::normalize_reduce_axes("mean", axes, a.shape());
-  if (axes.empty()) cnt = a.data().numel();
-  else for (int d : nax) cnt *= a.shape()[d];
+  // BWD-F4 H1 (review BWDF1R3-F01): the count is computed without signed overflow. Before, the selected extents were
+  // multiplied in axis order in int64, so an empty tensor reshaped to [2^32, 2^32, 0, 0] made mean([0, 1, 2])
+  // multiply 2^32 by 2^32 (2^64, signed overflow) before the 0 was reached. Now: decide emptiness first (any
+  // selected extent 0 gives count 0, the value the old product gave whenever it did not overflow), then multiply
+  // with a checked product and refuse an overflowing one before any work (sum below has not run). Every input
+  // whose product does not overflow gets the same count as before. Prior art: GCC's __builtin_mul_overflow (2015);
+  // NumPy's rule that an empty reduction axis gives count 0; the same decide-emptiness-first rule in the reducer
+  // (kernels.cu, BWD-F2 R7) and in P1T-FIX2's numel_of. No other prior art known to me.
+  if (axes.empty()) {
+    cnt = a.data().numel();
+  } else {
+    bool selected_empty = false;
+    for (int d : nax) selected_empty = selected_empty || a.shape()[d] == 0;
+    if (selected_empty) {
+      cnt = 0;
+    } else {
+      for (int d : nax) {
+        if (__builtin_mul_overflow(cnt, a.shape()[d], &cnt)) {
+          std::string st = "[", at = "[";
+          for (size_t i = 0; i < a.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(a.shape()[i]);
+          for (size_t i = 0; i < nax.size(); ++i) at += (i ? ", " : "") + std::to_string(axes[i]);
+          throw std::overflow_error("mean: the reduced element count of " + st + "] overflows int64 (axes " + at +
+                                    "]); refused before any allocation");
+        }
+      }
+    }
+  }
   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
 }
 

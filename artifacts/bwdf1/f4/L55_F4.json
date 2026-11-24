@@ -1,0 +1,30 @@
+{
+ "order": "BWD-F4 L55 (H1)",
+ "evidence": "G1 rows on the modules (artifacts/bwdf1/f4/BOUNDARY_F4.json) + replica (artifacts/bwdf1/f4/COUNT_REPLICA.log: UBSan, a copy of the two count rules, not the module)",
+ "cases": [
+  {
+   "shape": "[2^32, 2^32, 0, 0]",
+   "axes": "[0, 1, 2]",
+   "F3_count": "0 (2^32*2^32 is signed overflow, 2^64, undefined behaviour; wraps to 0 on this target; UBSan: 'signed integer overflow: 4294967296 * 4294967296 cannot be represented in type long int')",
+   "F4_count": "0 (a selected extent is 0: count 0 without multiplying)",
+   "F4_refusal_point": "none (not an overflow of the count; result empty tensor [0], 0 CUDA calls, same as F3)",
+   "row": "h1u-reviewer-empty-case"
+  },
+  {
+   "shape": "[2^32, 2^32, 1, 0]",
+   "axes": "[0, 1]",
+   "F3_count": "0 (2^64 wrapped; signed overflow); the refusal then comes from the reducer: reduce: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64",
+   "F4_count": "none: refused",
+   "F4_refusal_point": "ops::mean, before sum: mean: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64 (axes [0, 1]); refused before any allocation",
+   "row": "h1-overflow-2pow32-pair"
+  },
+  {
+   "shape": "[2^21, 2^21, 2^21, 0]",
+   "axes": "[0, 1, 2]",
+   "F3_count": "-2^63 (2^63 wrapped); then the reducer refuses: reduce: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64",
+   "F4_count": "none: refused",
+   "F4_refusal_point": "ops::mean, before sum: mean: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64 (axes [0, 1, 2]); refused before any allocation",
+   "row": "h1-overflow-2pow21-triple"
+  }
+ ]
+}

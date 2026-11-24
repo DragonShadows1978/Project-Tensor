@@ -1,0 +1,561 @@
+{
+ "rows": [
+  [
+   "h1-overflow-2pow32-pair",
+   "H1",
+   "refuse",
+   "a=C((0,)).reshape([2**32,2**32,1,0])",
+   "a.mean([0,1])",
+   [
+    "mean: the reduced element count of",
+    "[4294967296, 4294967296, 1, 0] overflows int64",
+    "(axes [0, 1])",
+    "refused before any allocation"
+   ],
+   {
+    "raises": "OverflowError"
+   },
+   "refuses, in the reducer: 'reduce: the reduced element count of [...]' (signed overflow first)"
+  ],
+  [
+   "h1-overflow-2pow21-triple",
+   "H1",
+   "refuse",
+   "a=C((0,)).reshape([2**21,2**21,2**21,0])",
+   "a.mean([0,1,2])",
+   [
+    "mean: the reduced element count of",
+    "[2097152, 2097152, 2097152, 0] overflows int64",
+    "(axes [0, 1, 2])"
+   ],
+   {
+    "raises": "OverflowError"
+   },
+   "refuses, in the reducer (the product 2^63 is one past int64)"
+  ],
+  [
+   "h1-overflow-negative-axes",
+   "H1",
+   "refuse",
+   "a=C((0,)).reshape([2**32,2**32,1,0])",
+   "a.mean([-4,-3])",
+   [
+    "mean: the reduced element count of",
+    "(axes [-4, -3])"
+   ],
+   {
+    "raises": "OverflowError"
+   },
+   "refuses, in the reducer"
+  ],
+  [
+   "h1-overflow-edge-2pow62-times-2",
+   "H1",
+   "refuse",
+   "a=C((0,)).reshape([2**62,2,1,0])",
+   "a.mean([0,1])",
+   [
+    "mean: the reduced element count of",
+    "[4611686018427387904, 2, 1, 0] overflows int64"
+   ],
+   {
+    "raises": "OverflowError"
+   },
+   "refuses, in the reducer (2^63 is one past int64)"
+  ],
+  [
+   "h1u-reviewer-empty-case",
+   "H1 (UB only)",
+   "accept",
+   "a=C((0,)).reshape([2**32,2**32,0,0])",
+   "a.mean([0,1,2])",
+   [
+    0
+   ],
+   {},
+   "same result [0] (the product wraps to 0; the signed overflow is not observable without a sanitizer)"
+  ],
+  [
+   "h1u-reviewer-empty-case-negative-axes",
+   "H1 (UB only)",
+   "accept",
+   "a=C((0,)).reshape([2**32,2**32,0,0])",
+   "a.mean([-4,-3,-2])",
+   [
+    0
+   ],
+   {},
+   "same result [0]"
+  ],
+  [
+   "h1c-product-fits-2pow31-pair",
+   "H1 control",
+   "accept",
+   "a=C((0,)).reshape([2**31,2**31,1,0])",
+   "a.mean([0,1])",
+   [
+    1,
+    0
+   ],
+   {},
+   "same (the product 2^62 fits)"
+  ],
+  [
+   "h1c-product-fits-edge-2pow62",
+   "H1 control",
+   "accept",
+   "a=C((0,)).reshape([2**62,1,1,0])",
+   "a.mean([0,1])",
+   [
+    1,
+    0
+   ],
+   {},
+   "same (the product 2^62 fits)"
+  ],
+  [
+   "h1c-empty-selected-axis-first",
+   "H1 control",
+   "accept",
+   "a=C((0,)).reshape([0,2**32,2**32,0])",
+   "a.mean([0,1,2])",
+   [
+    0
+   ],
+   {},
+   "same (a zero extent first: the old product reached 0 before overflowing)"
+  ],
+  [
+   "h1c-mean-rank1",
+   "H1 control",
+   "preflight",
+   "a=H((3,))",
+   "a.mean([0])",
+   [
+    "CUDA error at reduce"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h1c-mean-rank2",
+   "H1 control",
+   "preflight",
+   "a=H((2,3))",
+   "a.mean([0,1])",
+   [
+    "CUDA error at reduce"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h1c-mean-rank3-negative",
+   "H1 control",
+   "preflight",
+   "a=H((2,3,4))",
+   "a.mean([-1,0])",
+   [
+    "CUDA error at reduce"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h1c-mean-rank4",
+   "H1 control",
+   "preflight",
+   "a=H((2,3,4,5))",
+   "a.mean([1,3])",
+   [
+    "CUDA error at reduce"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h2-rope_apply-sin-rank9-empty",
+   "H2",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   {},
+   "accepts, returns [0, 2, 2] (the review's case)"
+  ],
+  [
+   "h2-rope_apply-cos-rank9-empty",
+   "H2",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)).reshape([2,2,1,1,1,1,1,1,1]); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "cos [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   {},
+   "accepts, returns [0, 2, 2]"
+  ],
+  [
+   "h2-rope_apply-sin-rank9-reading",
+   "H2",
+   "refuse",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   {},
+   "reaches the kernel ('CUDA error at rope_apply')"
+  ],
+  [
+   "h2-export_rope_rows-sin-rank9",
+   "H2",
+   "refuse",
+   "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2)).reshape([8,2]+[1]*7)",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    "export_rope_rows: tables must be (T, D)",
+    "sin [8, 2, 1, 1, 1, 1, 1, 1, 1]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "accepts, returns [0, 1, 2]"
+  ],
+  [
+   "h2-swap-sin-rank9",
+   "H2",
+   "refuse",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1,1])",
+   "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "[pair 0 of 1]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "accepts, returns a tuple"
+  ],
+  [
+   "h2c-rope_apply-sin-rank8-empty",
+   "H2 control",
+   "accept",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1])",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h2c-rope_apply-both-rank8-reading",
+   "H2 control",
+   "preflight",
+   "x=H((1,2,2)); cs=H((2,2)).reshape([2,2,1,1,1,1,1,1]); sn=H((2,2)).reshape([2,2,1,1,1,1,1,1])",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "CUDA error at rope_apply"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h2c-rope_apply-sin-T-D-1",
+   "H2 control",
+   "preflight",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "CUDA error at rope_apply"
+   ],
+   {},
+   "same (BWD-F3 E2)"
+  ],
+  [
+   "h2c-export_rope_rows-sin-rank8",
+   "H2 control",
+   "accept",
+   "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2)).reshape([8,2]+[1]*6)",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    0,
+    1,
+    2
+   ],
+   {
+    "no_grad": 1
+   },
+   "same"
+  ],
+  [
+   "h2c-rank1-table-still-refused",
+   "H2 control",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "h3-export_rows-empty-view-fires-bound",
+   "H3",
+   "refuse",
+   "c=C((0,),'uint8').reshape([0,2**62,2])",
+   "tc.export_rows(c, 1, 0, 2**62)",
+   [
+    "export_rows: the output NDArray: byte size overflows int64",
+    "[0, 4611686018427387904, 2]"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "same (the comment's claim: the bound fires for export_rows, not only splice)"
+  ]
+ ],
+ "results": {
+  "h1-overflow-2pow32-pair": {
+   "raised": "OverflowError",
+   "message": "mean: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64 (axes [0, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1-overflow-2pow21-triple": {
+   "raised": "OverflowError",
+   "message": "mean: the reduced element count of [2097152, 2097152, 2097152, 0] overflows int64 (axes [0, 1, 2]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1-overflow-negative-axes": {
+   "raised": "OverflowError",
+   "message": "mean: the reduced element count of [4294967296, 4294967296, 1, 0] overflows int64 (axes [-4, -3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1-overflow-edge-2pow62-times-2": {
+   "raised": "OverflowError",
+   "message": "mean: the reduced element count of [4611686018427387904, 2, 1, 0] overflows int64 (axes [0, 1]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1u-reviewer-empty-case": {
+   "raised": null,
+   "result": [
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1u-reviewer-empty-case-negative-axes": {
+   "raised": null,
+   "result": [
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1c-product-fits-2pow31-pair": {
+   "raised": null,
+   "result": [
+    1,
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1c-product-fits-edge-2pow62": {
+   "raised": null,
+   "result": [
+    1,
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1c-empty-selected-axis-first": {
+   "raised": null,
+   "result": [
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h1c-mean-rank1": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h1c-mean-rank2": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h1c-mean-rank3-negative": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h1c-mean-rank4": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h2-rope_apply-sin-rank9-empty": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2-rope_apply-cos-rank9-empty": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2-rope_apply-sin-rank9-reading": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2-export_rope_rows-sin-rank9": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2-swap-sin-rank9": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1, 1, 1, 1, 1, 1, 1] float32 on cpu, pos0 0) [pair 0 of 1]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2c-rope_apply-sin-rank8-empty": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2c-rope_apply-both-rank8-reading": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h2c-rope_apply-sin-T-D-1": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "h2c-export_rope_rows-sin-rank8": {
+   "raised": null,
+   "result": [
+    0,
+    1,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "h2c-rank1-table-still-refused": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "h3-export_rows-empty-view-fires-bound": {
+   "raised": "OverflowError",
+   "message": "export_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 cache [0, 4611686018427387904, 2] uint8 on cuda:0, dim 1, start 0, length 4611686018427387904)",
+   "calls": 0,
+   "by_function": {}
+  }
+ },
+ "child_exits": {
+  "h1-overflow-2pow32-pair": 0,
+  "h1-overflow-2pow21-triple": 0,
+  "h1-overflow-negative-axes": 0,
+  "h1-overflow-edge-2pow62-times-2": 0,
+  "h1u-reviewer-empty-case": 0,
+  "h1u-reviewer-empty-case-negative-axes": 0,
+  "h1c-product-fits-2pow31-pair": 0,
+  "h1c-product-fits-edge-2pow62": 0,
+  "h1c-empty-selected-axis-first": 0,
+  "h1c-mean-rank1": 0,
+  "h1c-mean-rank2": 0,
+  "h1c-mean-rank3-negative": 0,
+  "h1c-mean-rank4": 0,
+  "h2-rope_apply-sin-rank9-empty": 0,
+  "h2-rope_apply-cos-rank9-empty": 0,
+  "h2-rope_apply-sin-rank9-reading": 0,
+  "h2-export_rope_rows-sin-rank9": 0,
+  "h2-swap-sin-rank9": 0,
+  "h2c-rope_apply-sin-rank8-empty": 0,
+  "h2c-rope_apply-both-rank8-reading": 0,
+  "h2c-rope_apply-sin-T-D-1": 0,
+  "h2c-export_rope_rows-sin-rank8": 0,
+  "h2c-rank1-table-still-refused": 0,
+  "h3-export_rows-empty-view-fires-bound": 0,
+  "__control__": 0
+ },
+ "control_calls": 4,
+ "tensor_cuda_file": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf4/tensor_cuda/tensor_cuda/__init__.py",
+ "child_exit": 0
+}

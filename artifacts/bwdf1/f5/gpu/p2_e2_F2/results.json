@@ -1,0 +1,95 @@
+{
+ "line": "p2_e2_F2",
+ "mode": "e2",
+ "arm": "F2",
+ "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+ "sanitizer": [
+  "compute-sanitizer",
+  "--tool",
+  "memcheck",
+  "--log-file",
+  "<row log>"
+ ],
+ "rows": [
+  {
+   "id": "e2-rope_apply-sin-T-D-1",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: tables must be (T, D) (x [3, 2, 4] float32 on cuda:0, cos [6, 4] float32 on cuda:0, sin [6, 4, 1] float32 on cuda:0, pos0 1)",
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-rope_apply-sin-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-rope_apply-cos-T-D-1-1",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: tables must be (T, D) (x [3, 2, 4] float32 on cuda:0, cos [6, 4, 1, 1] float32 on cuda:0, sin [6, 4] float32 on cuda:0, pos0 1)",
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-rope_apply-cos-T-D-1-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-export-sin-T-D-1",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rope_rows: tables must be (T, D) (operand 0 cache [2, 5, 4] float32 on cuda:0, operand 1 cos [8, 4] float32 on cuda:0, operand 2 sin [8, 4, 1] float32 on cuda:0, dim 1, start 1, length 3, pos0 2)",
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-export-sin-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-swap-tables-T-D-1",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cuda:0, cos [8, 2, 1] float32 on cuda:0, sin [8, 2, 1, 1] float32 on cuda:0, pos0 1) [pair 0 of 1]",
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-swap-tables-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-refused-sin-T-D-2",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 4] float32 on cuda:0, cos [4, 4] float32 on cuda:0, sin [4, 4, 2] float32 on cuda:0, pos0 0)",
+   "kind": "refuse",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-refused-sin-T-D-2.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  }
+ ]
+}

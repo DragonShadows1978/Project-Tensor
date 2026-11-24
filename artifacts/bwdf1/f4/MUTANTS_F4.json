@@ -1,0 +1,40 @@
+{
+ "order": "BWD-F4 G3",
+ "written": "2026-11-24T05:52:45.154486+00:00",
+ "written_before_any_mutant_tree_or_run": true,
+ "base": "Build F4's tree (/tmp/bwdf4_src_F4)",
+ "rule": "each mutant = Build F4 + exactly one edit (the `old` text occurs once); KILLED when every listed CPU killing row fails on the mutant (and passes on Build F4)",
+ "names_from_order": [
+  "h01_mean_unchecked_product (H1)",
+  "h02_table_rank_unbounded (H2)"
+ ],
+ "mutants": {
+  "h01_mean_unchecked_product": {
+   "ruling": "H1",
+   "file": "tensor_cuda/src/ops.cpp",
+   "old": "        if (__builtin_mul_overflow(cnt, a.shape()[d], &cnt)) {\n",
+   "new": "        cnt *= a.shape()[d]; if (false /* MUTANT h01_mean_unchecked_product */) {\n",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h1-overflow-2pow32-pair]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h1-overflow-2pow21-triple]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h1-overflow-negative-axes]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h1-overflow-edge-2pow62-times-2]"
+   ],
+   "assertion": "verdict(row, r) is None: each row expects OverflowError whose message starts at 'mean: the reduced element count of [...] overflows int64 (axes [...]); refused before any allocation' with 0 CUDA calls; the mutant multiplies the selected extents unchecked (signed overflow, as Build F3), so the refusal comes from the reducer with 'reduce: the reduced element count of ...' and the row fails on the text"
+  },
+  "h02_table_rank_unbounded": {
+   "ruling": "H2",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  if (t.ndim() < 2 || t.ndim() > TC_MAX_DIMS || t.shape[1] != D) return false;\n",
+   "new": "  if (t.ndim() < 2 || t.shape[1] != D) return false;  // MUTANT h02_table_rank_unbounded\n",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h2-rope_apply-sin-rank9-empty]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h2-rope_apply-cos-rank9-empty]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h2-rope_apply-sin-rank9-reading]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h2-export_rope_rows-sin-rank9]",
+    "tensor_cuda/tests/test_bwdf4_hardening.py::test_cpu_g1_row[h2-swap-sin-rank9]"
+   ],
+   "assertion": "verdict(row, r) is None: each row expects RuntimeError 'tables must be (T, D)' with 0 CUDA calls for a rank-9 table; the mutant accepts the trailing-singleton table at any rank (empty launches return their shapes; the reading launch reaches 'CUDA error at rope_apply')"
+  }
+ }
+}
