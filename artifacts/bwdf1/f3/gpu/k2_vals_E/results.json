@@ -1,0 +1,161 @@
+{
+ "line": "k2_vals_E",
+ "mode": "vals",
+ "arm": "E",
+ "module_sha256": "8b84e5d872e382d3f29360bdf7b7cb253978d41c8a450ee250d168e9999d7f30",
+ "rows": [
+  {
+   "id": "f12-axpy-named-case",
+   "result": "RETURNED",
+   "arrays": {
+    "param": {
+     "shape": [
+      2,
+      1
+     ],
+     "dtype": "float32"
+    },
+    "want": {
+     "shape": [
+      0
+     ],
+     "dtype": "float32"
+    },
+    "before": {
+     "shape": [
+      2,
+      1
+     ],
+     "dtype": "float32"
+    },
+    "other": {
+     "shape": [
+      2,
+      2
+     ],
+     "dtype": "float32"
+    }
+   }
+  },
+  {
+   "id": "f12-axpy-leading-one-other",
+   "result": "RETURNED",
+   "arrays": {
+    "param": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    },
+    "want": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    },
+    "before": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    },
+    "other": {
+     "shape": [
+      1,
+      3
+     ],
+     "dtype": "float32"
+    }
+   }
+  },
+  {
+   "id": "f12-axpy-equal-control",
+   "result": "RETURNED",
+   "arrays": {
+    "param": {
+     "shape": [
+      2,
+      3
+     ],
+     "dtype": "float32"
+    },
+    "want": {
+     "shape": [
+      2,
+      3
+     ],
+     "dtype": "float32"
+    },
+    "before": {
+     "shape": [
+      2,
+      3
+     ],
+     "dtype": "float32"
+    },
+    "other": {
+     "shape": [
+      2,
+      3
+     ],
+     "dtype": "float32"
+    }
+   }
+  },
+  {
+   "id": "f03-cat-named-case",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 has dtype float16 but operand 0 has float32 (operand 1 [0, 3] float16 on cuda:0, operand 0 [2, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "r9-zero-size-cat-mixed-dtype",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 has dtype float16 but operand 0 has float32 (operand 1 [0, 3] float16 on cuda:0, operand 0 [0, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "r9-zero-size-stack-mixed-dtype",
+   "result": "RAISED",
+   "error": "RuntimeError: stack: operand 1 has dtype bfloat16 but operand 0 has float32 (operand 1 [0, 3] bfloat16 on cuda:0, operand 0 [0, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "r9-zero-size-cat-host-later",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 is on cpu but operand 0 is on cuda:0 (operand 1 [0, 3] float32 on cpu, operand 0 [2, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "r9-zero-size-stack-host-later",
+   "result": "RAISED",
+   "error": "RuntimeError: stack: operand 1 is on cpu but operand 0 is on cuda:0 (operand 1 [0, 3] float32 on cpu, operand 0 [0, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "r1-write_rows-empty-host-src",
+   "result": "RAISED",
+   "error": "RuntimeError: write_rows: device mismatch (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [0, 1, 2] float32 on cpu)"
+  },
+  {
+   "id": "r1-export_rope_rows-empty-host-cos",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rope_rows: tables must be on the cache's device (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cpu, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 0, pos0 0)"
+  },
+  {
+   "id": "f02-rank9-cuda-with-elements",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "dtype": "float32"
+    }
+   }
+  }
+ ]
+}

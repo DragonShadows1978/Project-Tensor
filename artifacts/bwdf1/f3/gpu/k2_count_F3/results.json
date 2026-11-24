@@ -1,0 +1,141 @@
+{
+ "line": "k2_count_F3",
+ "mode": "count",
+ "arm": "F3",
+ "module_sha256": "36d023b3ce2b474907f1fd33c2e1b0906e2048314c7e59abdf4711ff351a04fb",
+ "rows": [
+  {
+   "id": "control-export_row_pairs-all-valid",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 4,
+    "cudaGetLastError": 5,
+    "cudaLaunchKernel": 4,
+    "cudaMalloc": 4,
+    "__cudaPopCallConfiguration": 4,
+    "__cudaPushCallConfiguration": 4
+   },
+   "calls": 26
+  },
+  {
+   "id": "f06-export_row_pairs-later-bad",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rows: invalid span (operand 0 cache [1, 4, 2] float32 on cuda:0, dim 1, start 5, length 2) [pair 1 of 2]",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "control-swap-all-valid",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 6,
+    "cudaGetLastError": 7,
+    "cudaLaunchKernel": 6,
+    "cudaMalloc": 6,
+    "__cudaPopCallConfiguration": 6,
+    "__cudaPushCallConfiguration": 6
+   },
+   "calls": 38
+  },
+  {
+   "id": "f06-swap-later-bad",
+   "result": "RAISED",
+   "error": "RuntimeError: splice_rows: shape mismatch outside splice dim (operand 0 old_cache [1, 4, 2] float32 on cuda:0, operand 1 insert [1, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1) [pair 1 of 2]",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "control-evict-all-valid",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 4,
+    "cudaGetLastError": 5,
+    "cudaLaunchKernel": 4,
+    "cudaMalloc": 4,
+    "__cudaPopCallConfiguration": 4,
+    "__cudaPushCallConfiguration": 4
+   },
+   "calls": 26
+  },
+  {
+   "id": "f06-evict-later-bad",
+   "result": "RAISED",
+   "error": "RuntimeError: evict_rows: drop exceeds live tail (operand 0 old_cache [1, 2, 2] float32 on cuda:0, dim 1, head 1, drop 2) [pair 1 of 2]",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "control-arena-all-valid",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 6,
+    "cudaGetLastError": 7,
+    "cudaLaunchKernel": 6,
+    "cudaMalloc": 6,
+    "__cudaPopCallConfiguration": 6,
+    "__cudaPushCallConfiguration": 6
+   },
+   "calls": 38
+  },
+  {
+   "id": "f06-arena-later-bad",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: table/x dtype mismatch (x [1, 1, 2] float16 on cuda:0, cos [8, 2] float32 on cuda:0, sin [8, 2] float32 on cuda:0, pos0 0) [pair 1 of 2]",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "control-export_row_pair-valid",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 2,
+    "cudaGetLastError": 3,
+    "cudaLaunchKernel": 2,
+    "cudaMalloc": 2,
+    "__cudaPopCallConfiguration": 2,
+    "__cudaPushCallConfiguration": 2
+   },
+   "calls": 14
+  },
+  {
+   "id": "f05-export_row_pair-rope-bad",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rope_rows: position past table end (operand 0 cache [1, 4, 2] float32 on cuda:0, operand 1 cos [1, 2] float32 on cuda:0, operand 2 sin [1, 2] float32 on cuda:0, dim 1, start 0, length 2, pos0 0)",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "f05-swap-uint8-late-dispatch",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: op supports float32/float16/bfloat16 only (x [1, 1, 2] uint8 on cuda:0, cos [8, 2] uint8 on cuda:0, sin [8, 2] uint8 on cuda:0, pos0 0) [pair 1 of 2]",
+   "by_function": {},
+   "calls": 0
+  },
+  {
+   "id": "control-slice-float32",
+   "result": "RETURNED",
+   "by_function": {
+    "cudaDeviceSynchronize": 1,
+    "cudaFree": 1,
+    "cudaGetLastError": 2,
+    "cudaLaunchKernel": 1,
+    "cudaMalloc": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   },
+   "calls": 8
+  },
+  {
+   "id": "f09-slice-uint8",
+   "result": "RAISED",
+   "error": "RuntimeError: slice: op supports float32/float16/bfloat16 only (operand 0 [2, 2] uint8 on cuda:0); refused before any allocation",
+   "by_function": {},
+   "calls": 0
+  }
+ ]
+}

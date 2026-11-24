@@ -1,0 +1,59 @@
+{
+ "line": "k2_f01_F3",
+ "mode": "f01",
+ "arm": "F3",
+ "module_sha256": "36d023b3ce2b474907f1fd33c2e1b0906e2048314c7e59abdf4711ff351a04fb",
+ "rows": [
+  {
+   "id": "f01-control-covering-tables",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "x": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "cos": {
+     "shape": [
+      6,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "sin": {
+     "shape": [
+      6,
+      4
+     ],
+     "dtype": "float32"
+    }
+   }
+  },
+  {
+   "id": "f01-swap-named-case",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: position past table end (x [2, 2] float32 on cuda:0, cos [2, 2] float32 on cuda:0, sin [1, 2] float32 on cuda:0, pos0 0) [pair 0 of 1]"
+  },
+  {
+   "id": "f01-rope_apply-short-sin",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: position past table end (x [2, 2] float32 on cuda:0, cos [2, 2] float32 on cuda:0, sin [1, 2] float32 on cuda:0, pos0 0)"
+  },
+  {
+   "id": "f01-rope_apply-negative-pos0",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: position past table end (x [1, 2] float32 on cuda:0, cos [4, 2] float32 on cuda:0, sin [4, 2] float32 on cuda:0, pos0 -1)"
+  }
+ ]
+}
