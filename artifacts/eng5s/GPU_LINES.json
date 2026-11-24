@@ -1,0 +1,714 @@
+{
+ "written_utc": "2026-11-24T07:14:26.331723+00:00",
+ "order": "orders/ENG5S_STATUS_CHECKS.md (G2, G3's GPU half, G4's mutant lines)",
+ "cwd": "this worktree's root (tensor_fork_apa_wt_eng5s)",
+ "run_each_with": "python3 -B -P scripts/eng5s_gpu_line.py run <line>",
+ "environment": "the lead's environment with the GPU visible; no ENG5-S script removes or overrides CUDA_VISIBLE_DEVICES (the step refuses with exit 7 if it is empty)",
+ "scope": "the lead runs each line in a systemd scope with MemoryMax=12G and OOMPolicy=continue; no line sets RLIMIT_AS / ulimit -v / prlimit; no line runs compute-sanitizer",
+ "lease_check": "scripts/eng5s_gpu_step.py:2 (forge-gpu-lease-check --require-held), repeated as the first statement of each child (G2_CHILD, its line 3)",
+ "post_device_steps": "scripts/eng5s_gpu_verdict.py (written by the step as VERDICT.json); self-test on constructed rows: artifacts/eng5s/gpu_dry/VERDICT_SELFTEST.json; CPU drive of the children: artifacts/eng5s/gpu_dry/G2_CPU_DRIVE.json",
+ "order_of_lines": "g3_* first (they read the per-arm packages, not the worktree), then the suite series last (each chunk installs its arm's three engine files and module into the worktree and restores Build S's, sha-checked: L128); run each series' chunks in order until progress.json says complete (later chunks then exit at once)",
+ "after_lines_cpu": [
+  "python3 -B -P scripts/eng5s_compare.py artifacts/eng5s/h3/gpu_B/outcomes.json artifacts/eng5s/h3/gpu_S/outcomes.json artifacts/eng5s/G3_GPU_COMPARE.json",
+  "python3 -B -P scripts/eng5s_arms.py results (MUTANT_RESULTS.json from the verdicts)"
+ ],
+ "expected": {
+  "g3_S": "VERDICT PASS",
+  "g3_B": "RECORDED (each injected row returns under its fired injection)",
+  "g3_s01": "VERDICT KILLED (clone)",
+  "g3_s02": "VERDICT KILLED (to_d2h and to_h2d)",
+  "g3_s03": "VERDICT KILLED (zeros)",
+  "g3_s04": "VERDICT KILLED (from_host)",
+  "suite": "per-ID outcomes identical between gpu_B and gpu_S"
+ },
+ "semantic_verdict": "each line's VERDICT.json decides it; RESULT.json ran_clean only records the exits",
+ "multi_device": "NOT COVERED (one GPU)",
+ "lines": [
+  {
+   "line": "g3_B",
+   "description": "G2 failure injection on B: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 on B_H",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_B",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_B -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_B",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb",
+    "B_H": "6c64129cf3d4c6532686cfc07f23e03f2318a15a3468cee67a83980dff19c48b"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_B/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_B/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_B.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "g3_S",
+   "description": "G2 failure injection on S: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 on S_H",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_S",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_S -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_S",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44",
+    "S_H": "0038f7e1338eeea668d98cdbdd90f6b27045e2d3696d9d67f893543484ee6181"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_S/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_S/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_S.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "g3_s01",
+   "description": "G2 failure injection on s01_clone_status_dropped: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 not applicable",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_s01",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_s01 -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_s01",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "s01_clone_status_dropped": "3ef192348976f4f5a32cce770a86ce30df8e8d5291b71a1efdf64ae0128632b9"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_s01/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_s01/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_s01.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "g3_s02",
+   "description": "G2 failure injection on s02_to_status_dropped: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 not applicable",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_s02",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_s02 -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_s02",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "s02_to_status_dropped": "592400d56081aa2e3cfd66ecd005b3986c4fb825b03e51e94924dd7255e4e2c0"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_s02/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_s02/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_s02.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "g3_s03",
+   "description": "G2 failure injection on s03_zeros_status_dropped: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 not applicable",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_s03",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_s03 -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_s03",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "s03_zeros_status_dropped": "344e7a1f775683eaa53bf4ad329d69f39d056dbbb54ef2b78514a441ef297cf9"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_s03/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_s03/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_s03.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "g3_s04",
+   "description": "G2 failure injection on s04_from_host_last_error_only: the nine sites (to in both directions, the OOM drain through cudaMalloc and cudaMallocAsync), each after its uninjected success control, plus axpy_ on empty operands; one child per case; site 9 not applicable",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run g3_s04",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5s-g3_s04 -- timeout 480s python3 -B -P scripts/eng5s_gpu_step.py g3_s04",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "s04_from_host_last_error_only": "9e83c5b6914c59711ab3cccd74c829082888ef07305109c52833adc6aa7f4071"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/g3_s04/",
+    "/tmp/eng5s_gpu_shim/eng5s_inject.so (rebuilt each run)",
+    "/tmp/eng5s_tmp (child cwd)",
+    "artifacts/eng5s/gpu/g3_s04/mutant_marker.txt (mutant arms only)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/g3_s04.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_01",
+   "description": "G3 production suite on B, chunk 1 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_01",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_01 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_01",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_01/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_01.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_02",
+   "description": "G3 production suite on B, chunk 2 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_02",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_02 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_02",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_02/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_02.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_03",
+   "description": "G3 production suite on B, chunk 3 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_03",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_03 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_03",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_03/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_03.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_04",
+   "description": "G3 production suite on B, chunk 4 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_04",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_04 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_04",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_04/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_04.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_05",
+   "description": "G3 production suite on B, chunk 5 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_05",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_05 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_05",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_05/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_05.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_06",
+   "description": "G3 production suite on B, chunk 6 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_06",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_06 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_06",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_06/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_06.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_07",
+   "description": "G3 production suite on B, chunk 7 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_07",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_07 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_07",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_07/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_07.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_08",
+   "description": "G3 production suite on B, chunk 8 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_08",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_08 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_08",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_08/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_08.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_09",
+   "description": "G3 production suite on B, chunk 9 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_09",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_09 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_09",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_09/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_09.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_10",
+   "description": "G3 production suite on B, chunk 10 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_10",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_10 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_10",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_10/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_10.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_11",
+   "description": "G3 production suite on B, chunk 11 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_11",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_11 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_11",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_11/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_11.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_B_12",
+   "description": "G3 production suite on B, chunk 12 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_B_12",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_B_12 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_B_12",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_B_12/",
+    "artifacts/eng5s/h3/gpu_B/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_B_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_B/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_B_12.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_01",
+   "description": "G3 production suite on S, chunk 1 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_01",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_01 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_01",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_01/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_01.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_02",
+   "description": "G3 production suite on S, chunk 2 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_02",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_02 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_02",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_02/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_02.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_03",
+   "description": "G3 production suite on S, chunk 3 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_03",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_03 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_03",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_03/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_03.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_04",
+   "description": "G3 production suite on S, chunk 4 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_04",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_04 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_04",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_04/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_04.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_05",
+   "description": "G3 production suite on S, chunk 5 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_05",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_05 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_05",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_05/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_05.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_06",
+   "description": "G3 production suite on S, chunk 6 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_06",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_06 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_06",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_06/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_06.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_07",
+   "description": "G3 production suite on S, chunk 7 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_07",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_07 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_07",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_07/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_07.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_08",
+   "description": "G3 production suite on S, chunk 8 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_08",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_08 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_08",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_08/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_08.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_09",
+   "description": "G3 production suite on S, chunk 9 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_09",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_09 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_09",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_09/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_09.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_10",
+   "description": "G3 production suite on S, chunk 10 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_10",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_10 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_10",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_10/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_10.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_11",
+   "description": "G3 production suite on S, chunk 11 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_11",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_11 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_11",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_11/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_11.json",
+   "module_check_at_staging": "ok"
+  },
+  {
+   "line": "suite_S_12",
+   "description": "G3 production suite on S, chunk 12 of at most 12 (330 s test budget; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng5s_gpu_line.py run suite_S_12",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng5s-suite_S_12 -- timeout 500s python3 -B -P scripts/eng5s_gpu_step.py suite_S_12",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "S": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng5s/gpu/suite_S_12/",
+    "artifacts/eng5s/h3/gpu_S/part_<n>/ (one per chunk that runs)",
+    "/tmp/eng5s_tmp/pt/gpu_S_<n> (pytest basetemp)",
+    "artifacts/eng5s/h3/gpu_S/progress.json and outcomes.json (updated per chunk)",
+    "the worktree's three engine files and module while a chunk runs (installed, then Build S's restored and sha-checked against BUILD_S.json: L128)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/gpu_dry/suite_S_12.json",
+   "module_check_at_staging": "ok"
+  }
+ ]
+}

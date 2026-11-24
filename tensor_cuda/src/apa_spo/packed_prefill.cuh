@@ -241,7 +241,10 @@ inline std::tuple<NDArray,NDArray,NDArray> apa_spq_prefill_run(
   NDArray out({B,H,L,VD},q.dtype,q.device),mask,bulk;
   if(diagnostics)mask=NDArray({B,H,L,S},DType::Uint8,q.device);
   if(dump){bulk=NDArray({B,H,L,S},DType::Float32,q.device);
-    cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float));}   // NaN fill outside each row's visible keys
+    // ENG5-S site 9 (ENG5-F1 P4, ENG5-REV1 F10): the fill's own returned status is checked before the launch (a failed
+    // fill left the masked scores unwritten in the returned dump while the later slot check could miss it).
+    check_cuda_status(cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float)),"apa_spq_packed_prefill",
+                      "cudaMemset (bulk NaN fill)");}   // NaN fill outside each row's visible keys
   auto launch=[&](auto tag,auto cap_tag,auto diag_tag,auto seq_tag){
     using TT=typename decltype(tag)::type;
     constexpr int CAP=decltype(cap_tag)::value;constexpr bool DG=decltype(diag_tag)::value,SQ=decltype(seq_tag)::value;

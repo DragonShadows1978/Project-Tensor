@@ -1,0 +1,55 @@
+{
+ "order": "orders/ENG5S_STATUS_CHECKS.md (G4, L41, L47, L77)",
+ "written": "2026-11-24T06:21:31.918610+00:00",
+ "base": "Build S sources (this tree); each hunk is applied to a copy in /tmp/eng5s_src_<arm>",
+ "source_sha256": {
+  "tensor_cuda/src/kernels.cu": "d224aa3226ba9e8d4ae88ec011523f1ff3b5c65a09fa5f2ae8973e9efa4e7dd5"
+ },
+ "kill_rule": "KILLED when the named G2 row's injection fired and the call returned (outcome ok) on the mutant arm, so the row's Build S assertion fails; SURVIVED otherwise. Each mutant is run as its staged GPU line (L77); its executed marker is recorded.",
+ "mutants": [
+  {
+   "id": "s01_clone_status_dropped",
+   "arm": "s01_clone_status_dropped",
+   "file": "tensor_cuda/src/kernels.cu",
+   "site": "site 6, NDArray::clone",
+   "old": "    if (device.is_cuda())\n      check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice), \"NDArray::clone\",\n                        \"cudaMemcpy\");\n",
+   "new": "    if (device.is_cuda()) { { if (const char* p_ = ::getenv(\"ENG5S_MUTANT_MARKER\")) { if (FILE* f_ = ::fopen(p_, \"a\")) { ::fputs(\"s01_clone_status_dropped\\n\", f_); ::fclose(f_); } } } cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice); }\n",
+   "killing_row": "clone",
+   "killing_line": "g3_s01",
+   "named_assertion": "G2 row `clone`: with the injected cudaMemcpy failure fired, the call must raise RuntimeError starting 'NDArray::clone: cudaMemcpy failed: cudaError'; the mutant returns (scripts/eng5s_gpu_verdict.py, row_pass)"
+  },
+  {
+   "id": "s02_to_status_dropped",
+   "arm": "s02_to_status_dropped",
+   "file": "tensor_cuda/src/kernels.cu",
+   "site": "site 7, NDArray::to",
+   "old": "  if (bytes) check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k), \"NDArray::to\", \"cudaMemcpy\");\n",
+   "new": "  if (bytes) { { if (const char* p_ = ::getenv(\"ENG5S_MUTANT_MARKER\")) { if (FILE* f_ = ::fopen(p_, \"a\")) { ::fputs(\"s02_to_status_dropped\\n\", f_); ::fclose(f_); } } } cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k); }\n",
+   "killing_row": "to_d2h and to_h2d",
+   "killing_line": "g3_s02",
+   "named_assertion": "G2 rows `to_d2h` and `to_h2d`: with the injected cudaMemcpy failure fired, each must raise RuntimeError starting 'NDArray::to: cudaMemcpy failed: cudaError'; the mutant returns"
+  },
+  {
+   "id": "s03_zeros_status_dropped",
+   "arm": "s03_zeros_status_dropped",
+   "file": "tensor_cuda/src/kernels.cu",
+   "site": "site 3, NDArray::zeros",
+   "old": "      check_cuda_status(cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)), \"NDArray::zeros\", \"cudaMemset\");\n",
+   "new": "      { { if (const char* p_ = ::getenv(\"ENG5S_MUTANT_MARKER\")) { if (FILE* f_ = ::fopen(p_, \"a\")) { ::fputs(\"s03_zeros_status_dropped\\n\", f_); ::fclose(f_); } } } cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)); }\n",
+   "killing_row": "zeros",
+   "killing_line": "g3_s03",
+   "named_assertion": "G2 row `zeros`: with the injected cudaMemset failure fired, the call must raise RuntimeError starting 'NDArray::zeros: cudaMemset failed: cudaError'; the mutant returns"
+  },
+  {
+   "id": "s04_from_host_last_error_only",
+   "arm": "s04_from_host_last_error_only",
+   "file": "tensor_cuda/src/kernels.cu",
+   "site": "site 4, NDArray::from_host",
+   "old": "    check_cuda_status(cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice), \"NDArray::from_host\", \"cudaMemcpy\");\n    cuda_check_last(\"from_host\");\n",
+   "new": "    { if (const char* p_ = ::getenv(\"ENG5S_MUTANT_MARKER\")) { if (FILE* f_ = ::fopen(p_, \"a\")) { ::fputs(\"s04_from_host_last_error_only\\n\", f_); ::fclose(f_); } } }\n    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);\n    cuda_check_last(\"from_host\");\n",
+   "killing_row": "from_host",
+   "killing_line": "g3_s04",
+   "named_assertion": "G2 row `from_host`: the injected cudaMemcpy failure records nothing in the last-error slot, so a slot-only check misses it: the call must raise RuntimeError starting 'NDArray::from_host: cudaMemcpy failed: cudaError'; the mutant returns"
+  }
+ ]
+}

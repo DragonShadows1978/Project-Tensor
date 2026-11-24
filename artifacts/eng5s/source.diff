@@ -1,0 +1,141 @@
+diff --git a/tensor_cuda/include/tc/core.h b/tensor_cuda/include/tc/core.h
+index 9908f3ef3..d29ba306d 100644
+--- a/tensor_cuda/include/tc/core.h
++++ b/tensor_cuda/include/tc/core.h
+@@ -691,6 +691,10 @@ void fill_(NDArray& a, double value);
+ // CUDA bookkeeping.
+ void cuda_sync();
+ void cuda_check_last(const char* where);
++// ENG5-S (ENG5 S2): raise std::runtime_error naming `entry`, the CUDA call and its returned status
++// (cudaGetErrorName) when `status` is not cudaSuccess. It checks the call's OWN returned status; it never reads or
++// clears the last-error slot (cudaGetLastError could report an earlier error under this call's name: ENG4-F3).
++void check_cuda_status(int status, const char* entry, const char* call);
+ 
+ // Release all device blocks held idle by the caching allocator back to the
+ // driver. Live tensors are unaffected. Call under memory pressure or to measure
+diff --git a/tensor_cuda/src/apa_spo/packed_prefill.cuh b/tensor_cuda/src/apa_spo/packed_prefill.cuh
+index 0608da8fa..c10ea7f91 100644
+--- a/tensor_cuda/src/apa_spo/packed_prefill.cuh
++++ b/tensor_cuda/src/apa_spo/packed_prefill.cuh
+@@ -241,7 +241,10 @@ inline std::tuple<NDArray,NDArray,NDArray> apa_spq_prefill_run(
+   NDArray out({B,H,L,VD},q.dtype,q.device),mask,bulk;
+   if(diagnostics)mask=NDArray({B,H,L,S},DType::Uint8,q.device);
+   if(dump){bulk=NDArray({B,H,L,S},DType::Float32,q.device);
+-    cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float));}   // NaN fill outside each row's visible keys
++    // ENG5-S site 9 (ENG5-F1 P4, ENG5-REV1 F10): the fill's own returned status is checked before the launch (a failed
++    // fill left the masked scores unwritten in the returned dump while the later slot check could miss it).
++    check_cuda_status(cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float)),"apa_spq_packed_prefill",
++                      "cudaMemset (bulk NaN fill)");}   // NaN fill outside each row's visible keys
+   auto launch=[&](auto tag,auto cap_tag,auto diag_tag,auto seq_tag){
+     using TT=typename decltype(tag)::type;
+     constexpr int CAP=decltype(cap_tag)::value;constexpr bool DG=decltype(diag_tag)::value,SQ=decltype(seq_tag)::value;
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 5bfa97c24..88f852cb8 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -104,8 +104,21 @@ void cuda_check_last(const char* where) {
+                              cudaGetErrorString(e));
+   }
+ }
++// ENG5-S (ENG5 S2, ENG5-F1 form): a CUDA call whose failure would let its entry return as if it succeeded checks its
++// own returned status here. Prior art: the CUDA runtime's error model (each API call returns its cudaError_t;
++// cudaGetLastError returns and clears the thread's last error, which can belong to an earlier call -- CUDA Runtime API
++// docs, "Error Handling"); the check-the-return idiom of NVIDIA's samples (checkCudaErrors). Taken: test the returned
++// status at the call. Ours: the message format and never touching the last-error slot here (ENG4-F3).
++void check_cuda_status(int status, const char* entry, const char* call) {
++  if (status == 0) return;
++  const cudaError_t e = static_cast<cudaError_t>(status);
++  throw std::runtime_error(std::string(entry) + ": " + call + " failed: " + cudaGetErrorName(e) + ": " +
++                           cudaGetErrorString(e));
++}
+ void cuda_sync() {
+-  cudaDeviceSynchronize();
++  // ENG5-S site 1 (ENG5-F1 P4, ENG5-REV1 F10): the synchronize's own returned status is checked (a later
++  // cudaGetLastError reads the thread's slot, which cannot stand in for it); Build B's slot check after it is kept.
++  check_cuda_status(cudaDeviceSynchronize(), "cuda_sync", "cudaDeviceSynchronize");
+   cuda_check_last("sync");
+ }
+ 
+@@ -182,7 +195,12 @@ Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(devic
+       // Near the wall: sync materializes every pending cudaFreeAsync, trim
+       // returns all idle pool reservations to the driver, then retry once.
+       cudaGetLastError();  // clear sticky error
+-      cudaStreamSynchronize(0);
++      // ENG5-S site 2 (ENG5-F1 P4, ENG5-REV1 F10): the drain is result-bearing (the retry relies on every pending free
++      // having been materialized), so its own status is checked and a failed drain raises instead of retrying; the
++      // trim below is cleanup and is not changed.
++      check_cuda_status(cudaStreamSynchronize(0), pooled ? "Storage (cudaMallocAsync OOM retry)"
++                                                         : "Storage (cudaMalloc OOM retry)",
++                        "cudaStreamSynchronize (drain)");
+       empty_cache();
+       e = pooled ? cudaMallocAsync(&ptr, nbytes, 0) : cudaMalloc(&ptr, nbytes);
+     }
+@@ -770,7 +788,10 @@ void host_astype_into(const NDArray& src, NDArray& out) {
+ NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
+   NDArray a(shape, dtype, device);
+   if (a.numel() > 0) {
+-    if (device.is_cuda()) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
++    // ENG5-S site 3 (ENG5 S2): the fill's own returned status is checked (it was discarded: a failed fill returned
++    // unwritten memory).
++    if (device.is_cuda())
++      check_cuda_status(cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)), "NDArray::zeros", "cudaMemset");
+     else std::memset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));  // ENG3 E2: host path, no CUDA call
+   }
+   return a;
+@@ -888,7 +909,9 @@ NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Dev
+   if (bytes == 0) return a;
+   // ENG3 E2 (HOST-TENSOR-NEEDS-DEVICE): the error check belongs to the device copy only; a host copy calls no CUDA API.
+   if (device.is_cuda()) {
+-    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
++    // ENG5-S site 4 (ENG5-F1 P4, ENG5-REV1 F10): the copy's own returned status is checked; Build B's slot check is
++    // kept after it.
++    check_cuda_status(cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice), "NDArray::from_host", "cudaMemcpy");
+     cuda_check_last("from_host");
+   } else {
+     std::memcpy(a.data_ptr(), src, bytes);
+@@ -900,7 +923,9 @@ void NDArray::to_host(void* dst) const {
+   if (bytes == 0) return;
+   // ENG3 E2: as from_host.
+   if (device.is_cuda()) {
+-    cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
++    // ENG5-S site 5 (ENG5-F1 P4, ENG5-REV1 F10): the copy's own returned status is checked; Build B's slot check is
++    // kept after it.
++    check_cuda_status(cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost), "NDArray::to_host", "cudaMemcpy");
+     cuda_check_last("to_host");
+   } else {
+     std::memcpy(dst, data_ptr(), bytes);
+@@ -910,7 +935,11 @@ NDArray NDArray::clone() const {
+   NDArray out(shape, dtype, device);
+   size_t bytes = numel() * dtype_size(dtype);
+   if (bytes) {
+-    if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
++    // ENG5-S site 6 (ENG5 S2, CLONE-MEMCPY-UNCHECKED): the copy's own returned status is checked; a failed copy raised
++    // nothing and returned an unwritten tensor before.
++    if (device.is_cuda())
++      check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice), "NDArray::clone",
++                        "cudaMemcpy");
+     else std::memcpy(out.data_ptr(), data_ptr(), bytes);  // ENG3 E2: host clone, no CUDA call
+   }
+   return out;
+@@ -920,7 +949,8 @@ NDArray NDArray::to(Device dev) const {
+   NDArray out(shape, dtype, dev);
+   size_t bytes = numel() * dtype_size(dtype);
+   cudaMemcpyKind k = device.is_cuda() ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice;
+-  if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k);
++  // ENG5-S site 7 (ENG5 S2): the copy's own returned status is checked (both directions), as in clone.
++  if (bytes) check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k), "NDArray::to", "cudaMemcpy");
+   return out;
+ }
+ namespace {
+@@ -5396,7 +5426,10 @@ void axpy_(NDArray& param, const NDArray& other, double alpha) {
+   // param += alpha*other  (shapes equal)
+   NDArray upd = ew_binary(param, ew_scalar(other, alpha, 2, false), 0);
+   size_t bytes = param.numel() * dtype_size(param.dtype);
+-  cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);
++  // ENG5-S site 8 (ENG5 S2): the in-place copy's own returned status is checked (a failed copy left `param` unchanged
++  // silently).
++  check_cuda_status(cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice), "axpy_",
++                    "cudaMemcpy");
+   if (bytes) param.mark_modified();
+ }
+ void sgd_step(NDArray& param, const NDArray& grad, NDArray& buf, double lr,
