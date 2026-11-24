@@ -1,0 +1,71 @@
+{
+ "files": {
+  "tensor_cuda/src/kernels.cu": {
+   "statements_here": [
+    "check_cuda_status(cudaDeviceSynchronize(), \"cuda_sync\", \"cudaDeviceSynchronize\");",
+    "check_cuda_status(cudaStreamSynchronize(0), pooled ? \"Storage (cudaMallocAsync OOM retry)\" : \"Storage (cudaMalloc OOM retry)\", \"cudaStreamSynchronize (drain)\");",
+    "check_cuda_status(cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)), \"NDArray::zeros\", \"cudaMemset\");",
+    "check_cuda_status(cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice), \"NDArray::from_host\", \"cudaMemcpy\");",
+    "check_cuda_status(cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost), \"NDArray::to_host\", \"cudaMemcpy\");",
+    "check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice), \"NDArray::clone\", \"cudaMemcpy\");",
+    "check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k), \"NDArray::to\", \"cudaMemcpy\");",
+    "check_cuda_status(cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice), \"axpy_\", \"cudaMemcpy\");"
+   ],
+   "here_not_in_eng5_f2": [],
+   "eng5_f2_not_here": []
+  },
+  "tensor_cuda/src/apa_spo/packed_prefill.cuh": {
+   "statements_here": [
+    "check_cuda_status(cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float)),\"apa_spq_packed_prefill\", \"cudaMemset (bulk NaN fill)\");"
+   ],
+   "here_not_in_eng5_f2": [],
+   "eng5_f2_not_here": []
+  },
+  "tensor_cuda/include/tc/core.h": {
+   "statements_here": [],
+   "here_not_in_eng5_f2": [],
+   "eng5_f2_not_here": []
+  }
+ },
+ "helper_equal": true,
+ "declaration_in_both": true,
+ "statement_count_here": 9,
+ "every_statement_here_in_eng5_f2": true,
+ "added_code_lines": [
+  "void check_cuda_status(int status, const char* entry, const char* call);",
+  "    check_cuda_status(cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float)),\"apa_spq_packed_prefill\",",
+  "                      \"cudaMemset (bulk NaN fill)\");}   // NaN fill outside each row's visible keys",
+  "void check_cuda_status(int status, const char* entry, const char* call) {",
+  "  if (status == 0) return;",
+  "  const cudaError_t e = static_cast<cudaError_t>(status);",
+  "  throw std::runtime_error(std::string(entry) + \": \" + call + \" failed: \" + cudaGetErrorName(e) + \": \" +",
+  "                           cudaGetErrorString(e));",
+  "}",
+  "  check_cuda_status(cudaDeviceSynchronize(), \"cuda_sync\", \"cudaDeviceSynchronize\");",
+  "      check_cuda_status(cudaStreamSynchronize(0), pooled ? \"Storage (cudaMallocAsync OOM retry)\"",
+  "                                                         : \"Storage (cudaMalloc OOM retry)\",",
+  "                        \"cudaStreamSynchronize (drain)\");",
+  "    if (device.is_cuda())",
+  "      check_cuda_status(cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)), \"NDArray::zeros\", \"cudaMemset\");",
+  "    check_cuda_status(cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice), \"NDArray::from_host\", \"cudaMemcpy\");",
+  "    check_cuda_status(cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost), \"NDArray::to_host\", \"cudaMemcpy\");",
+  "    if (device.is_cuda())",
+  "      check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice), \"NDArray::clone\",",
+  "                        \"cudaMemcpy\");",
+  "  if (bytes) check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k), \"NDArray::to\", \"cudaMemcpy\");",
+  "  check_cuda_status(cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice), \"axpy_\",",
+  "                    \"cudaMemcpy\");"
+ ],
+ "removed_lines": [
+  "    cudaMemset(bulk.data_ptr(),0xff,bulk.numel()*sizeof(float));}   // NaN fill outside each row's visible keys",
+  "  cudaDeviceSynchronize();",
+  "      cudaStreamSynchronize(0);",
+  "    if (device.is_cuda()) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));",
+  "    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);",
+  "    cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);",
+  "    if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);",
+  "  if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k);",
+  "  cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);"
+ ],
+ "pass": true
+}

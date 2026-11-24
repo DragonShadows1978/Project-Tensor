@@ -714,6 +714,10 @@ void fill_(NDArray& a, double value);
 // CUDA bookkeeping.
 void cuda_sync();
 void cuda_check_last(const char* where);
+// ENG5-S (ENG5 S2): raise std::runtime_error naming `entry`, the CUDA call and its returned status
+// (cudaGetErrorName) when `status` is not cudaSuccess. It checks the call's OWN returned status; it never reads or
+// clears the last-error slot (cudaGetLastError could report an earlier error under this call's name: ENG4-F3).
+void check_cuda_status(int status, const char* entry, const char* call);
 
 // Release all device blocks held idle by the caching allocator back to the
 // driver. Live tensors are unaffected. Call under memory pressure or to measure
