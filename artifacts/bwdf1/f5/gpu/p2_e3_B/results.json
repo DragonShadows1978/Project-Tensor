@@ -1,0 +1,200 @@
+{
+ "line": "p2_e3_B",
+ "mode": "e3",
+ "arm": "B",
+ "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+ "sanitizer": [
+  "compute-sanitizer",
+  "--tool",
+  "memcheck",
+  "--log-file",
+  "<row log>"
+ ],
+ "rows": [
+  {
+   "id": "e3-control-sum-last",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "control",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-control-sum-last.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e3-control-sum-two-distinct",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "control",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-control-sum-two-distinct.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e3-control-mean",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      1
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "control",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-control-mean.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e3-control-argmax",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "control",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-control-argmax.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e3-sum-duplicate",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RAISED",
+   "error": "RuntimeError: CUDA error at to_host: unspecified launch failure",
+   "kind": "refuse",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 6,
+   "memcheck_log": "e3-sum-duplicate.memcheck.log",
+   "memcheck_log_sha256": "9be9d9cea317a69f223029bc0d21c28eca98126847491560dc59b4afa0e6fd35"
+  },
+  {
+   "id": "e3-sum-out-of-range",
+   "result": "CHILD-DIED",
+   "error": "child exit 6: stderr 'malloc(): unaligned tcache chunk detected\\n' stdout ''",
+   "kind": "refuse",
+   "child_exit": 6,
+   "child_end": {
+    "kind": "exit",
+    "code": 6
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-sum-out-of-range.memcheck.log",
+   "memcheck_log_sha256": "9cdf49d4de52c1886d96ae196db0ecbf5a59b185616c9758c7adab518019d1bf"
+  },
+  {
+   "id": "e3-mean-duplicate",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "refuse",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-mean-duplicate.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e3-softmax-out-of-range",
+   "result": "CHILD-DIED",
+   "error": "child exit 6: stderr 'free(): invalid pointer\\n' stdout ''",
+   "kind": "refuse",
+   "child_exit": 6,
+   "child_end": {
+    "kind": "exit",
+    "code": 6
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-softmax-out-of-range.memcheck.log",
+   "memcheck_log_sha256": "9cdf49d4de52c1886d96ae196db0ecbf5a59b185616c9758c7adab518019d1bf"
+  },
+  {
+   "id": "e3-argmax-out-of-range",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      2,
+      3
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "refuse",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e3-argmax-out-of-range.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  }
+ ]
+}

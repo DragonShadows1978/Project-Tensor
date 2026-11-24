@@ -1,0 +1,159 @@
+{
+ "line": "p2_e2_F4",
+ "mode": "e2",
+ "arm": "F4",
+ "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+ "sanitizer": [
+  "compute-sanitizer",
+  "--tool",
+  "memcheck",
+  "--log-file",
+  "<row log>"
+ ],
+ "rows": [
+  {
+   "id": "e2-rope_apply-sin-T-D-1",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "ref": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-rope_apply-sin-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-rope_apply-cos-T-D-1-1",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "ref": {
+     "shape": [
+      3,
+      2,
+      4
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-rope_apply-cos-T-D-1-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-export-sin-T-D-1",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      2,
+      3,
+      4
+     ],
+     "dtype": "float32"
+    },
+    "ref": {
+     "shape": [
+      2,
+      3,
+      4
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-export-sin-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-swap-tables-T-D-1",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "result": "RETURNED",
+   "arrays": {
+    "out": {
+     "shape": [
+      20
+     ],
+     "dtype": "float32"
+    },
+    "ref": {
+     "shape": [
+      20
+     ],
+     "dtype": "float32"
+    }
+   },
+   "kind": "accept",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-swap-tables-T-D-1.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  },
+  {
+   "id": "e2-refused-sin-T-D-2",
+   "module_sha256": "8061f980133350fde37941c786444ce186097d05a26151da4d7dfa85681470e1",
+   "result": "RAISED",
+   "error": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 4] float32 on cuda:0, cos [4, 4] float32 on cuda:0, sin [4, 4, 2] float32 on cuda:0, pos0 0)",
+   "kind": "refuse",
+   "child_exit": 0,
+   "child_end": {
+    "kind": "exit",
+    "code": 0
+   },
+   "memcheck_state": "SUMMARY",
+   "memcheck_errors": 0,
+   "memcheck_log": "e2-refused-sin-T-D-2.memcheck.log",
+   "memcheck_log_sha256": "a9d061cee538182f762e132abeea7bac7bddb844338f25751bbbb043f242c425"
+  }
+ ]
+}
