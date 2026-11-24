@@ -144,11 +144,20 @@ compared the two per test ID.
   - 6,321 IDs on this tree against 4,657 on production. 4,655 match, with 0 mismatches and 0 noise.
   - The 2 intended IDs pass.
   - The 1,664 new-file IDs pass, or skip with the GPU-lane reason (11 rows).
-- **GPU:** pending. Three reruns close the gaps the lead found in BWD-F3's GPU receipts:
-  - the whole suite per test ID;
-  - production's comparison values against this tree, one process per row, bitwise;
-  - a real rank-0 `export_rows`;
-  - BWD-F3's two call-count lines.
+- **GPU:** PASS.
+  - **The whole suite per test ID:** 7,089 IDs on this tree against 5,425 on production. 5,423 match, with 0 mismatches
+    and 0 noise. The 1,664 new-file IDs and the 2 intended IDs are as expected.
+  - **Three reruns** close the gaps the lead found in BWD-F3's GPU receipts:
+    - **Production's accepted results against this tree, one process per row, bitwise:** 174 of 180 keys passed as
+      registered. The other six were the `eq` outputs, which were all zeros on both builds because the inherited
+      control inputs never tie, and the check does not accept a constant output. An amendment reran those six with
+      sealed inputs that tie. All six are bitwise equal between the builds, in the input dtype, not constant, and equal
+      to NumPy's result.
+    - **A real rank-0 `export_rows`,** with the operand's shape asserted `[]` before the call: refused with "export_rows:
+      rank must be nonzero", while the rank-3 control launches.
+    - **BWD-F3's two call-count lines:** PASS on this tree. Production's build shows the defects.
+- **Receipts:** on the check's branch `mainchk7` in the fork (`45ca2af13`, `87cef3126`, `9d5a16c5d`). Logs and arrays
+  are held back, listed with sha256 in `artifacts/mainchk7/LEAD_HELD_BACK.tsv`.
 
 **The tree** is BWD's lane tip, merged with production `75c85de6` and with ENG5-S's tip. It leaves out ENG5-S's
 fork-only differential test (`git rm --cached`; no test content edited). Apart from the 18 product and test files, it
